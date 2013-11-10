@@ -3,6 +3,7 @@ from numpy import array, zeros
 import numba
 from numba import float64, int64, autojit, jit
 from . import fastmath
+from .jacobian import Jacobian, _jacobian
 
 class GMixRangeError(Exception):
     """
@@ -185,9 +186,12 @@ class GMix(object):
         """
         _render_fast3(self._data, image, nsub, _exp3_ivals[0], _exp3_lookup)
 
-    def get_loglike(self, image, weight, get_s2nsums=False):
+    def get_loglike(self, image, weight, jacobian=None, get_s2nsums=False):
         """
         Calculate the log likelihood
+
+        If the function calls and checks are bottlenecks, make the calls
+        to _loglike* directly.
 
         parameters
         ----------
@@ -198,11 +202,22 @@ class GMix(object):
         """
         if image.size != weight.size:
             raise ValueError("image and weight must be same shape")
-        loglike,s2n_numer,s2n_denom=_loglike_fast3(self._data,
-                                                   image,
-                                                   weight,
-                                                   _exp3_ivals[0],
-                                                   _exp3_lookup)
+
+        if jacobian is not None:
+            if not isinstance(jacobian,Jacobian):
+                raise ValueError("jacobian must be instance of Jacobian")
+            loglike,s2n_numer,s2n_denom=_loglike_jacob_fast3(self._data,
+                                                             image,
+                                                             weight,
+                                                             jacobian._data,
+                                                             _exp3_ivals[0],
+                                                             _exp3_lookup)
+        else:
+            loglike,s2n_numer,s2n_denom=_loglike_fast3(self._data,
+                                                       image,
+                                                       weight,
+                                                       _exp3_ivals[0],
+                                                       _exp3_lookup)
         if get_s2nsums:
             return loglike,s2n_numer,s2n_denom
         else:
@@ -219,7 +234,6 @@ class GMix(object):
 
     def __repr__(self):
         rep=[]
-        #fmt="p: %10.5g row: %10.5g col: %10.5g irr: %10.5g irc: %10.5g icc: %10.5g"
         fmt="p: %-10.5g row: %-10.5g col: %-10.5g irr: %-10.5g irc: %-10.5g icc: %-10.5g"
         for i in xrange(self._ngauss):
             t=self._data[i]
@@ -379,8 +393,8 @@ def _g1g2_to_e1e2(g1, g2):
 
     e = numpy.tanh(2*numpy.arctanh(g))
     if e >= 1.:
-        #
-        e = 0.99999999;
+        # round off?
+        e = 0.99999999
 
     fac = e/g
 
@@ -657,7 +671,7 @@ def _render_fast3(self, image, nsub, i0, expvals):
     Uses 3rd order approximation to exponential function, only for negative
     arguments or zero
 
-    This code is a mess because we can't to inlining in numba
+    This code is a mess because we can't do inlining in numba
     """
     ngauss=self.size
     nrows=image.shape[0]
@@ -714,7 +728,9 @@ def _render_fast3(self, image, nsub, i0, expvals):
 @jit(argtypes=[ _gauss2d[:], float64[:,:], float64[:,:], int64, float64[:] ])
 def _loglike_fast3(self, image, weight, i0, expvals):
     """
-    This code is a mess because we can't to inlining in numba
+    using 3rd order approximation to the exponential function
+
+    This code is a mess because we can't do inlining in numba
     """
     ngauss=self.size
     nrows=image.shape[0]
@@ -729,7 +745,6 @@ def _loglike_fast3(self, image, weight, i0, expvals):
             ivar = weight[row,col]
             if ivar <= 0.0:
                 continue
-            pixval = image[row,col]
 
             model_val=0.0
             for i in xrange(ngauss):
@@ -757,10 +772,72 @@ def _loglike_fast3(self, image, weight, i0, expvals):
 
                     model_val += pnorm*expval
 
+            pixval = image[row,col]
             diff = model_val-pixval
             loglike += diff*diff*ivar
             s2n_numer += pixval*model_val*ivar
             s2n_denom += model_val*model_val*ivar
+
+    loglike *= (-0.5)
+
+    return loglike, s2n_numer, s2n_denom
+
+@jit(argtypes=[ _gauss2d[:], float64[:,:], float64[:,:], _jacobian[:], int64, float64[:] ])
+def _loglike_jacob_fast3(self, image, weight, j, i0, expvals):
+    """
+    using 3rd order approximation to the exponential function
+
+    This code is a mess because we can't do inlining in numba
+    """
+    ngauss=self.size
+    nrows=image.shape[0]
+    ncols=image.shape[1]
+
+    s2n_numer=0.0
+    s2n_denom=0.0
+    loglike = 0.0
+    for row in xrange(nrows):
+        u=j[0].dudrow*(row - j[0].row0) + j[0].dudcol*(0 - j[0].col0)
+        v=j[0].dvdrow*(row - j[0].row0) + j[0].dvdcol*(0 - j[0].col0)
+
+        for col in xrange(ncols):
+
+            ivar = weight[row,col]
+            if ivar <= 0.0:
+                continue
+
+            model_val=0.0
+            for i in xrange(ngauss):
+                u2 = u*u
+                v2 = v*v
+                uv=u*v
+
+                chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv;
+
+                if chi2 < 25.0:
+                    pnorm = self[i].pnorm
+                    x = -0.5*chi2
+
+                    # 3rd order approximation to exp
+                    ival = int64(x-0.5)
+                    f = x - ival
+                    index = ival-i0
+
+                    expval = expvals[index]
+                    fexp = (6+f*(6+f*(3+f)))*0.16666666
+                    expval *= fexp
+
+                    model_val += pnorm*expval
+            
+            pixval = image[row,col]
+            diff = model_val-pixval
+            loglike += diff*diff*ivar
+            s2n_numer += pixval*model_val*ivar
+            s2n_denom += model_val*model_val*ivar
+
+            u += j[0].dudcol
+            v += j[0].dvdcol
+
     loglike *= (-0.5)
 
     return loglike, s2n_numer, s2n_denom
