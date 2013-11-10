@@ -185,6 +185,29 @@ class GMix(object):
         """
         _render_fast3(self._data, image, nsub, _exp3_ivals[0], _exp3_lookup)
 
+    def get_loglike(self, image, weight, get_s2nsums=False):
+        """
+        Calculate the log likelihood
+
+        parameters
+        ----------
+        image: 2-d array
+            the image to fill
+        nsub: integer, optional
+            Defines a grid for sub-pixel integration 
+        """
+        if image.size != weight.size:
+            raise ValueError("image and weight must be same shape")
+        loglike,s2n_numer,s2n_denom=_loglike_fast3(self._data,
+                                                   image,
+                                                   weight,
+                                                   _exp3_ivals[0],
+                                                   _exp3_lookup)
+        if get_s2nsums:
+            return loglike,s2n_numer,s2n_denom
+        else:
+            return loglike
+
     def reset(self):
         """
         Replace the data array with a zeroed one.
@@ -687,3 +710,58 @@ def _render_fast3(self, image, nsub, i0, expvals):
             tval *= areafac
             model_val += tval
             image[row,col] = model_val
+
+@jit(argtypes=[ _gauss2d[:], float64[:,:], float64[:,:], int64, float64[:] ])
+def _loglike_fast3(self, image, weight, i0, expvals):
+    """
+    This code is a mess because we can't to inlining in numba
+    """
+    ngauss=self.size
+    nrows=image.shape[0]
+    ncols=image.shape[1]
+
+    s2n_numer=0.0
+    s2n_denom=0.0
+    loglike = 0.0
+    for row in xrange(nrows):
+        for col in xrange(ncols):
+
+            ivar = weight[row,col]
+            if ivar <= 0.0:
+                continue
+            pixval = image[row,col]
+
+            model_val=0.0
+            for i in xrange(ngauss):
+                u = row - self[i].row
+                u2 = u*u
+                v = col - self[i].col
+                v2 = v*v
+
+                uv=u*v
+
+                chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv;
+
+                if chi2 < 25.0:
+                    pnorm = self[i].pnorm
+                    x = -0.5*chi2
+
+                    # 3rd order approximation to exp
+                    ival = int64(x-0.5)
+                    f = x - ival
+                    index = ival-i0
+
+                    expval = expvals[index]
+                    fexp = (6+f*(6+f*(3+f)))*0.16666666
+                    expval *= fexp
+
+                    model_val += pnorm*expval
+
+            diff = model_val-pixval
+            loglike += diff*diff*ivar
+            s2n_numer += pixval*model_val*ivar
+            s2n_denom += model_val*model_val*ivar
+    loglike *= (-0.5)
+
+    return loglike, s2n_numer, s2n_denom
+
