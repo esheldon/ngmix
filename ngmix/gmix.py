@@ -3,66 +3,21 @@ from numpy import array, zeros
 import numba
 from numba import float64, int64, autojit, jit
 
-GMIX_FULL=0
-GMIX_GAUSS=1
-GMIX_TURB=2
-GMIX_EXP=3
-GMIX_DEV=4
-GMIX_BDC=5
-
-_gmix_model_dict={'full':       GMIX_FULL,
-                  GMIX_FULL:    GMIX_FULL,
-                  'gauss':      GMIX_GAUSS,
-                  'turb':       GMIX_TURB,
-                  GMIX_TURB:    GMIX_TURB,
-                  'exp':        GMIX_EXP,
-                  GMIX_EXP:     GMIX_EXP,
-                  'dev':        GMIX_DEV,
-                  GMIX_DEV:     GMIX_DEV,
-                  'bdc':        GMIX_BDC,
-                  GMIX_BDC:     GMIX_BDC}
-
-_gmix_string_dict={GMIX_FULL:'full',
-                   GMIX_GAUSS:'gauss',
-                   GMIX_TURB:'turb',
-                   GMIX_EXP:'exp',
-                   GMIX_DEV:'dev',
-                   GMIX_BDC:'bdc'}
-
-_gmix_npars_dict={GMIX_GAUSS:6,
-                  GMIX_TURB:6,
-                  GMIX_EXP:6,
-                  GMIX_DEV:6,
-                  GMIX_BDC:8}
-_gmix_ngauss_dict={GMIX_GAUSS:1,
-                   GMIX_TURB:3,
-                   GMIX_EXP:6,
-                   GMIX_DEV:10,
-                   GMIX_BDC:16}
-
-
-_gauss2d=numba.struct([('p',float64),
-                       ('row',float64),
-                       ('col',float64),
-                       ('irr',float64),
-                       ('irc',float64),
-                       ('icc',float64),
-                       ('det',float64),
-                       ('drr',float64),
-                       ('drc',float64),
-                       ('dcc',float64),
-                       ('norm',float64),
-                       ('pnorm',float64)])
-
-_gauss2d_dtype=_gauss2d.get_dtype()
-
 class GMixRangeError(Exception):
+    """
+    Error for ranges, e.g. ellipticity out of range
+    
+    We usually want to recover gracefully from this error
+    """
     def __init__(self, value):
          self.value = value
     def __str__(self):
         return repr(self.value)
 
 class GMixFatalError(Exception):
+    """
+    Represents an irrecoverable error
+    """
     def __init__(self, value):
          self.value = value
     def __str__(self):
@@ -72,10 +27,16 @@ class GMix(object):
     """
     A two-dimensional gaussian mixture.
 
+    To create a specific model, use GMixModel
+
     parameters
     ----------
-    ngauss: number
-        number of gaussians
+    Send either ngauss= or pars=
+
+    ngauss: number, optional
+        number of gaussians.  data will be zeroed
+    pars: array-like, optional
+        6*ngauss elements to fill the gaussian mixture.
 
     methods
     -------
@@ -268,10 +229,67 @@ class GMixModel(GMix):
             elif self._model==GMIX_TURB:
                 _fill_turb(self._data, self._pars)
             elif self._model==GMIX_BDC:
-                _fill_bdc(self._data, self._pars)
+                raise ValueError("bdc not yet implemented")
             else:
                 raise GMixFatalError("unsupported model: "
                                      "'%s'" % self._model_name)
+
+
+GMIX_FULL=0
+GMIX_GAUSS=1
+GMIX_TURB=2
+GMIX_EXP=3
+GMIX_DEV=4
+GMIX_BDC=5
+
+_gmix_model_dict={'full':       GMIX_FULL,
+                  GMIX_FULL:    GMIX_FULL,
+                  'gauss':      GMIX_GAUSS,
+                  'turb':       GMIX_TURB,
+                  GMIX_TURB:    GMIX_TURB,
+                  'exp':        GMIX_EXP,
+                  GMIX_EXP:     GMIX_EXP,
+                  'dev':        GMIX_DEV,
+                  GMIX_DEV:     GMIX_DEV,
+                  'bdc':        GMIX_BDC,
+                  GMIX_BDC:     GMIX_BDC}
+
+_gmix_string_dict={GMIX_FULL:'full',
+                   GMIX_GAUSS:'gauss',
+                   GMIX_TURB:'turb',
+                   GMIX_EXP:'exp',
+                   GMIX_DEV:'dev',
+                   GMIX_BDC:'bdc'}
+
+_gmix_npars_dict={GMIX_GAUSS:6,
+                  GMIX_TURB:6,
+                  GMIX_EXP:6,
+                  GMIX_DEV:6,
+                  GMIX_BDC:8}
+_gmix_ngauss_dict={GMIX_GAUSS:1,
+                   GMIX_TURB:3,
+                   GMIX_EXP:6,
+                   GMIX_DEV:10,
+                   GMIX_BDC:16}
+
+
+_gauss2d=numba.struct([('p',float64),
+                       ('row',float64),
+                       ('col',float64),
+                       ('irr',float64),
+                       ('irc',float64),
+                       ('icc',float64),
+                       ('det',float64),
+                       ('drr',float64),
+                       ('drc',float64),
+                       ('dcc',float64),
+                       ('norm',float64),
+                       ('pnorm',float64)])
+
+_gauss2d_dtype=_gauss2d.get_dtype()
+
+
+
 
 # have to send whole array
 @jit(argtypes=[_gauss2d[:], int64, float64, float64, float64, float64, float64, float64])
