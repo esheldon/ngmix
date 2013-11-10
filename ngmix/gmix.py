@@ -2,6 +2,7 @@ import numpy
 from numpy import array, zeros
 import numba
 from numba import float64, int64, autojit, jit
+from . import fastmath
 
 class GMixRangeError(Exception):
     """
@@ -154,6 +155,35 @@ class GMix(object):
         gmix = GMix(ngauss=ng)
         convolve_fill(gmix, self, psf)
         return gmix
+
+    def render(self, dims, nsub=1):
+        """
+        Render the mixture into a new image
+
+        parameters
+        ----------
+        dims: 2-element sequence
+            dimensions [nrows, ncols]
+        nsub: integer, optional
+            Defines a grid for sub-pixel integration 
+        """
+        image=numpy.zeros(dims, dtype='f8')
+        _render_fast3(self._data, image, nsub, _exp3_ivals[0], _exp3_lookup)
+
+        return image
+
+    def fill_image(self, image, nsub=1):
+        """
+        Render the mixture into the input image
+
+        parameters
+        ----------
+        image: 2-d array
+            the image to fill
+        nsub: integer, optional
+            Defines a grid for sub-pixel integration 
+        """
+        _render_fast3(self._data, image, nsub, _exp3_ivals[0], _exp3_lookup)
 
     def reset(self):
         """
@@ -549,3 +579,111 @@ def _convolve_fill(self, obj_gmix, psf_gmix):
 
 """
 
+@jit(argtypes=[ _gauss2d[:], float64[:,:], int64 ])
+def _render_slow(self, image, nsub):
+    """
+    Adds to image; make sure to zero the iamge first if that is what you want
+    """
+    ngauss=self.size
+    nrows=image.shape[0]
+    ncols=image.shape[1]
+
+    stepsize = 1./nsub
+    offset = (nsub-1)*stepsize/2.
+    areafac = 1./(nsub*nsub)
+
+    for row in xrange(nrows):
+        for col in xrange(ncols):
+
+            # we add to existing value
+            model_val=image[row,col]
+
+            tval = 0.0
+            trow = row-offset
+            for irowsub in xrange(nsub):
+                tcol = col-offset
+                for icolsub in xrange(nsub):
+
+                    for i in xrange(ngauss):
+                        u = trow - self[i].row
+                        u2 = u*u
+                        v = tcol - self[i].col
+                        v2 = v*v
+
+                        uv=u*v
+
+                        chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv;
+
+                        if chi2 < 25.0:
+                            pnorm = self[i].pnorm
+                            tval += pnorm*numpy.exp( -0.5*chi2 )
+                    tcol += stepsize
+                trow += stepsize
+
+            tval *= areafac
+            model_val += tval
+            image[row,col] = model_val
+
+_exp3_ivals, _exp3_lookup = fastmath.make_exp_lookup(-25, 0)
+
+@jit(argtypes=[ _gauss2d[:], float64[:,:], int64, int64, float64[:] ])
+def _render_fast3(self, image, nsub, i0, expvals):
+    """
+    Adds to image; make sure to zero the iamge first if that is what you want
+
+    Uses 3rd order approximation to exponential function, only for negative
+    arguments or zero
+
+    This code is a mess because we can't to inlining in numba
+    """
+    ngauss=self.size
+    nrows=image.shape[0]
+    ncols=image.shape[1]
+
+    stepsize = 1./nsub
+    offset = (nsub-1)*stepsize/2.
+    areafac = 1./(nsub*nsub)
+
+    for row in xrange(nrows):
+        for col in xrange(ncols):
+
+            # we add to existing value
+            model_val=image[row,col]
+
+            tval = 0.0
+            trow = row-offset
+            for irowsub in xrange(nsub):
+                tcol = col-offset
+                for icolsub in xrange(nsub):
+
+                    for i in xrange(ngauss):
+                        u = trow - self[i].row
+                        u2 = u*u
+                        v = tcol - self[i].col
+                        v2 = v*v
+
+                        uv=u*v
+
+                        chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv;
+
+                        if chi2 < 25.0:
+                            pnorm = self[i].pnorm
+                            x = -0.5*chi2
+
+                            # 3rd order approximation to exp
+                            ival = int64(x-0.5)
+                            f = x - ival
+                            index = ival-i0
+
+                            expval = expvals[index]
+                            fexp = (6+f*(6+f*(3+f)))*0.16666666
+                            expval *= fexp
+
+                            tval += pnorm*expval
+
+                    tcol += stepsize
+                trow += stepsize
+
+            tval *= areafac
+            model_val += tval
+            image[row,col] = model_val

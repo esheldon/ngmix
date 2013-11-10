@@ -1,3 +1,4 @@
+import numpy
 def make_exp_lookup(minval=-100, maxval=100, dtype='f8'):
     """
     lookup array in range [minval,0] inclusive
