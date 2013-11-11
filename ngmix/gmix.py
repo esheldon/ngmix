@@ -4,26 +4,9 @@ import numba
 from numba import float64, int64, autojit, jit
 from . import fastmath
 from .jacobian import Jacobian, _jacobian
+from .shape import g1g2_to_e1e2
 
-class GMixRangeError(Exception):
-    """
-    Error for ranges, e.g. ellipticity out of range
-    
-    We usually want to recover gracefully from this error
-    """
-    def __init__(self, value):
-         self.value = value
-    def __str__(self):
-        return repr(self.value)
-
-class GMixFatalError(Exception):
-    """
-    Represents an irrecoverable error
-    """
-    def __init__(self, value):
-         self.value = value
-    def __str__(self):
-        return repr(self.value)
+from .gexceptions import GMixRangeError, GMixFatalError
 
 class GMix(object):
     """
@@ -385,24 +368,6 @@ def _gauss2d_set(self, i, p, row, col, irr, irc, icc):
 
     self[i].pnorm = self[i].p*self[i].norm
 
-@jit(argtypes=[ float64, float64 ])
-def _g1g2_to_e1e2(g1, g2):
-    g=numpy.sqrt(g1*g1 + g2*g2)
-
-    if g >= 1.:
-        raise GMixRangeError("g out of bounds: %s" % g)
-
-    e = numpy.tanh(2*numpy.arctanh(g))
-    if e >= 1.:
-        # round off?
-        e = 0.99999999
-
-    fac = e/g
-
-    e1 = fac*g1
-    e2 = fac*g2
-    
-    return e1,e2
 
 @jit(argtypes=[ _gauss2d[:], float64[:], float64[:], float64[:] ] )
 def _fill_simple(self, pars, fvals, pvals):
@@ -413,7 +378,7 @@ def _fill_simple(self, pars, fvals, pvals):
     T=pars[4]
     counts=pars[5]
 
-    e1,e2 = _g1g2_to_e1e2(g1, g2)
+    e1,e2 = g1g2_to_e1e2(g1, g2)
 
     ngauss=self.size
     for i in xrange(ngauss):
@@ -842,4 +807,5 @@ def _loglike_jacob_fast3(self, image, weight, j, i0, expvals):
     loglike *= (-0.5)
 
     return loglike, s2n_numer, s2n_denom
+
 
