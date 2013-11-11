@@ -190,15 +190,16 @@ class GMix(object):
         """
         Calculate the log likelihood
 
-        If the function calls and checks are bottlenecks, make the calls
-        to _loglike* directly.
+        If the function calls and error checking are bottlenecks, make the
+        calls to the _loglike* functions directly.  But looks to be only
+        1%% slower
 
         parameters
         ----------
         image: 2-d array
             the image to fill
-        nsub: integer, optional
-            Defines a grid for sub-pixel integration 
+        weight: 2-d array
+            the weight image
         """
         if image.size != weight.size:
             raise ValueError("image and weight must be same shape")
