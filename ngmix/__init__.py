@@ -5,3 +5,5 @@ from .gmix import GMixModel
 from . import jacobian
 from .jacobian import Jacobian
 from . import fastmath
+
+from . import priors
