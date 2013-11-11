@@ -1,7 +1,427 @@
-import math
 import numpy
+from numpy.random import random as randu
 import numba
 from numba import jit, autojit, float64
+
+class GPrior(object):
+    """
+    This is the base class.  You need to over-ride a few of
+    the functions, see below
+    """
+    def __init__(self, pars):
+        self.pars = numpy.array(pars, dtype='f8')
+
+        # sub-class may want to over-ride this, see GPriorExp
+        self.gmax=numpy.float64(1.0)
+
+    def get_lnprob_scalar2d(self, g1, g2):
+        raise RuntimeError("over-ride me")
+    def get_lnprob_array2d(self, g1, g2):
+        raise RuntimeError("over-ride me")
+
+    def get_prob_scalar2d(self, g1, g2):
+        raise RuntimeError("over-ride me")
+    def get_prob_scalar1d(self, g):
+        raise RuntimeError("over-ride me")
+    def get_prob_array2d(self, g1, g2):
+        raise RuntimeError("over-ride me")
+
+    def dbyg1(self, g1, g2, h=1.e-6):
+        """
+        Derivative with respect to g1 at the input g1,g2 location
+
+        Uses central difference and a small enough step size
+        to use just two points
+        """
+        ff = self.get_prob_scalar2d(g1+h/2, g2)
+        fb = self.get_prob_scalar2d(g1-h/2, g2)
+
+        return (ff - fb)/h
+
+    def dbyg2(self, g1, g2, h=1.e-6):
+        """
+        Derivative with respect to g2 at the input g1,g2 location
+
+        Uses central difference and a small enough step size
+        to use just two points
+        """
+        ff = self.get_prob_scalar2d(g1, g2+h/2)
+        fb = self.get_prob_scalar2d(g1, g2-h/2)
+        return (ff - fb)/h
+
+
+ 
+    def get_pqr_num(self, g1in, g2in, h=1.e-6):
+        """
+        Evaluate 
+            P
+            Q
+            R
+        From Bernstein & Armstrong
+
+        P is this prior times the jacobian at shear==0
+
+        Q is the gradient of P*J evaluated at shear==0
+
+            [ d(P*J)/dg1, d(P*J)/dg2]_{g=0}
+
+        R is grad of grad of P*J at shear==0
+            [ d(P*J)/dg1dg1  d(P*J)/dg1dg2 ]
+            [ d(P*J)/dg1dg2  d(P*J)/dg2dg2 ]_{g=0}
+
+        Derivatives are calculated using finite differencing
+        """
+        if numpy.isscalar(g1in):
+            isscalar=True
+        else:
+            isscalar=False
+
+        g1 = numpy.array(g1in, dtype='f8', ndmin=1, copy=False)
+        g2 = numpy.array(g2in, dtype='f8', ndmin=1, copy=False)
+        h2=1./(2.*h)
+        hsq=1./h**2
+
+        P=self.get_pj(g1, g2, 0.0, 0.0)
+
+        Q1_p = self.get_pj(g1, g2, +h, 0.0)
+        Q1_m = self.get_pj(g1, g2, -h, 0.0)
+        Q2_p = self.get_pj(g1, g2, 0.0, +h)
+        Q2_m = self.get_pj(g1, g2, 0.0, -h)
+        R12_pp = self.get_pj(g1, g2, +h, +h)
+        R12_mm = self.get_pj(g1, g2, -h, -h)
+
+        Q1 = (Q1_p - Q1_m)*h2
+        Q2 = (Q2_p - Q2_m)*h2
+
+        R11 = (Q1_p - 2*P + Q1_m)*hsq
+        R22 = (Q2_p - 2*P + Q2_m)*hsq
+        R12 = (R12_pp - Q1_p - Q2_p + 2*P - Q1_m - Q2_m + R12_mm)*hsq*0.5
+
+        np=g1.size
+        Q = numpy.zeros( (np,2) )
+        R = numpy.zeros( (np,2,2) )
+
+        Q[:,0] = Q1
+        Q[:,1] = Q2
+        R[:,0,0] = R11
+        R[:,0,1] = R12
+        R[:,1,0] = R12
+        R[:,1,1] = R22
+
+        if isscalar:
+            P = P[0]
+            Q = Q[0,:]
+            R = R[0,:,:]
+
+        return P, Q, R
+
+    def get_pj(self, g1, g2, s1, s2):
+        """
+        PJ = p(g,-shear)*jacob
+
+        where jacob is d(es)/d(eo) and
+        es=eo(+)(-g)
+        """
+        import lensing
+
+        # note sending negative shear to jacob
+        s1m=-s1
+        s2m=-s2
+        J=lensing.shear.dgs_by_dgo_jacob(g1, g2, s1m, s2m)
+
+        # evaluating at negative shear
+        g1new,g2new=lensing.shear.gadd(g1, g2, s1m, s2m)
+        P=self.get_prob_scalar2d(g1new,g2new)
+
+        return P*J
+
+    def sample2d_pj(self, nrand, s1, s2):
+        """
+        Get random g1,g2 values from an approximate
+        sheared distribution
+
+        parameters
+        ----------
+        nrand: int
+            Number to generate
+        """
+
+        maxval2d = self.get_prob_scalar2d(0.0,0.0)
+        g1,g2=numpy.zeros(nrand),numpy.zeros(nrand)
+
+        ngood=0
+        nleft=nrand
+        while ngood < nrand:
+
+            # generate on cube [-1,1,h]
+            g1rand=srandu(nleft)
+            g2rand=srandu(nleft)
+
+            # a bit of padding since we are modifying the distribution
+            fac=1.3
+            h = fac*maxval2d*randu(nleft)
+
+            pjvals = self.get_pj(g1rand,g2rand,s1,s2)
+            
+            w,=numpy.where(h < pjvals)
+            if w.size > 0:
+                g1[ngood:ngood+w.size] = g1rand[w]
+                g2[ngood:ngood+w.size] = g2rand[w]
+                ngood += w.size
+                nleft -= w.size
+   
+        return g1,g2
+
+
+
+    def sample1d(self, nrand):
+        """
+        Get random |g| from the 1d distribution
+
+        Set self.gmax appropriately
+
+        parameters
+        ----------
+        nrand: int
+            Number to generate
+        """
+
+        if not hasattr(self,'maxval1d'):
+            self.set_maxval1d()
+
+        g = numpy.zeros(nrand)
+
+        ngood=0
+        nleft=nrand
+        while ngood < nrand:
+
+            # generate total g in [0,1)
+            grand = self.gmax*randu(nleft)
+
+            # now the height from [0,maxval)
+            h = self.maxval1d*randu(nleft)
+
+            pvals = self.get_prob_array1d(grand)
+
+            w,=numpy.where(h < pvals)
+            if w.size > 0:
+                g[ngood:ngood+w.size] = grand[w]
+                ngood += w.size
+                nleft -= w.size
+   
+        return g
+
+
+    def sample2d(self, nrand):
+        """
+        Get random g1,g2 values by first drawing
+        from the 1-d distribution
+
+        parameters
+        ----------
+        nrand: int
+            Number to generate
+        """
+
+        grand=self.sample1d(nrand)
+        rangle = randu(nrand)*2*numpy.pi
+        g1rand = grand*numpy.cos(rangle)
+        g2rand = grand*numpy.sin(rangle)
+        return g1rand, g2rand
+
+    def sample2d_brute(self, nrand):
+        """
+        Get random g1,g2 values using 2-d brute
+        force method
+
+        parameters
+        ----------
+        nrand: int
+            Number to generate
+        """
+
+        maxval2d = self.get_prob_scalar2d(0.0,0.0)
+        g1,g2=numpy.zeros(nrand),numpy.zeros(nrand)
+
+        ngood=0
+        nleft=nrand
+        while ngood < nrand:
+            
+            # generate on cube [-1,1,h]
+            g1rand=srandu(nleft)
+            g2rand=srandu(nleft)
+
+            # a bit of padding since we are modifying the distribution
+            h = maxval2d*randu(nleft)
+
+            vals = self.get_prob_array2d(g1rand,g2rand)
+
+            w,=numpy.where(h < vals)
+            if w.size > 0:
+                g1[ngood:ngood+w.size] = g1rand[w]
+                g2[ngood:ngood+w.size] = g2rand[w]
+                ngood += w.size
+                nleft -= w.size
+   
+        return g1,g2
+
+
+
+    def set_maxval1d(self):
+        """
+        Use a simple minimizer to find the max value of the 1d 
+        distribution
+        """
+        import scipy.optimize
+
+        (minvalx, fval, iterations, fcalls, warnflag) \
+                = scipy.optimize.fmin(self.get_prob_scalar1d_neg,
+                                      0.1,
+                                      full_output=True, 
+                                      disp=False)
+        if warnflag != 0:
+            raise ValueError("failed to find min: warnflag %d" % warnflag)
+        self.maxval1d = -fval
+
+    def get_prob_scalar1d_neg(self, g, *args):
+        """
+        So we can use the minimizer
+        """
+        return -self.get_prob_scalar1d(g)
+
+
+class GPriorBA(GPrior):
+    """
+    g prior from Bernstein & Armstrong 2013
+    """
+    def __init__(self, sigma):
+        """
+        pars are scalar gsigma from B&A 
+        """
+        self.sigma=numpy.float64(sigma)
+        self.sig2inv = numpy.float64( 1./sigma**2 )
+        self.gmax=numpy.float64(1.0)
+
+    def get_max(self):
+        return 1.0
+
+    def get_prob_scalar2d(self, g1, g2):
+        """
+        Get the 2d prior for the input g1,g2 value
+        """
+        return _ba13_prob_scalar2d(self.sig2inv, g1, g2)
+
+    def get_prob_array2d(self, g1, g2):
+        """
+        Get the 2d prior for the input g1,g2 value(s)
+        """
+        output=numpy.zeros(g1.size)
+        _ba13_prob_array2d(self.sig2inv, g1, g2, output)
+        return output
+
+    def get_prob_scalar1d(self, g):
+        """
+        Get the 1d prior for the input |g| value
+        """
+        return _ba13_prob_scalar1d(self.sig2inv, g)
+    def get_prob_array1d(self, g):
+        """
+        Get the 1d prior for the input |g| value(s)
+        """
+        output=numpy.zeros(g.size)
+        _ba13_prob_array1d(self.sig2inv, g, output)
+        return output
+
+
+
+    def get_lnprob_scalar2d(self, g1, g2):
+        """
+        Get the 2d prior for the input |g| value(s)
+        """
+        
+        return _ba13_lnprob_scalar2d(self.sig2inv, g1, g2)
+
+
+
+@jit(argtypes=[float64,float64,float64],restype=float64)
+def _ba13_prob_scalar2d(sig2inv, g1, g2):
+    """
+    (1-gsq)**2*exp(-0.5*gsq/sigma**2)
+    """
+    gsq=g1*g1 + g2*g2
+    fac=1.0-gsq
+    fac *= fac
+
+    expval = numpy.exp(-0.5*gsq*sig2inv)
+
+    p = fac*expval
+    return p
+
+@jit(argtypes=[ float64,float64[:],float64[:],float64[:] ])
+def _ba13_prob_array2d(sig2inv, g1arr, g2arr, output):
+    """
+    (1-gsq)**2*exp(-0.5*gsq/sigma**2)
+    """
+
+    n=g1arr.size
+    for i in xrange(n):
+        g1=g1arr[i]
+        g2=g2arr[i]
+
+        gsq=g1*g1 + g2*g2
+        fac=1.0-gsq
+        fac *= fac
+
+        expval = numpy.exp(-0.5*gsq*sig2inv)
+
+        output[i] = fac*expval
+
+@jit(argtypes=[float64,float64],restype=float64)
+def _ba13_prob_scalar1d(sig2inv, g):
+    gsq=g*g
+    fac=1.0-gsq
+    fac *= fac
+
+    expval = numpy.exp(-0.5*gsq*sig2inv)
+
+    p = fac*expval
+
+    p *= 2*numpy.pi*g
+    return p
+
+@jit(argtypes=[ float64,float64[:],float64[:] ])
+def _ba13_prob_array1d(sig2inv, garr, output):
+    """
+    (1-gsq)**2*exp(-0.5*gsq/sigma**2)
+    """
+
+    n=garr.size
+    for i in xrange(n):
+        g=garr[i]
+
+        gsq=g*g
+        fac=1.0-gsq
+        fac *= fac
+
+        expval = numpy.exp(-0.5*gsq*sig2inv)
+
+        p = fac*expval
+        p *= 2*numpy.pi*g
+        output[i] = p
+
+
+@jit(argtypes=[float64,float64,float64],restype=float64)
+def _ba13_lnprob_scalar2d(sig2inv, g1, g2):
+    """
+    p = (1-gsq)**2*exp(-0.5*gsq/sigma**2)
+
+    log(p) = 2*log(1-gsq) -0.5*gsq/sigma**2
+    """
+    gsq = g1*g1 + g2*g2
+    omgsq = 1.0 - gsq
+    lnp = 2*numpy.log(omgsq) -0.5*gsq*sig2inv
+    return lnp
+
 
 class LogNormal(object):
     """
@@ -127,7 +547,7 @@ class LogNormal(object):
         if x <= 0:
             raise ValueError("values of x must be > 0")
         lnp=self.get_lnprob_scalar(x)
-        return math.exp(lnp)
+        return numpy.exp(lnp)
 
     def get_prob_array(self, x):
         """
@@ -170,7 +590,10 @@ def _lognorm_lnprob(logmean, logivar, x):
     return lnp
 
 
-class CenPrior:
+class CenPrior(object):
+    """
+    Independent gaussians in each dimension
+    """
     def __init__(self, cen, sigma):
         self.cen=numpy.array(cen, dtype='f8')
         self.sigma=numpy.array(sigma, dtype='f8')
@@ -221,3 +644,11 @@ def _cen_lnprob(cen1,cen2,s2inv1,s2inv2,p1,p2):
     lnp -= 0.5*d2*d2*s2inv2
 
     return lnp
+
+def srandu(num=None):
+    """
+    Generate random numbers in the symmetric distribution [-1,1]
+    """
+    return 2*(numpy.random.random(num)-0.5)
+
+
