@@ -10,5 +10,7 @@ from . import fastmath
 from . import priors
 
 from . import shape
+from .shape import Shape
 
 from . import gexceptions
+from .gexceptions import GMixRangeError, GMixFatalError
