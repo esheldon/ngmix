@@ -400,6 +400,10 @@ def _extract_weighted_stats(data, weights):
 
 def test_gauss_psf(counts=100.0, noise=0.1):
     import pylab
+    import time
+
+    t0=time.time()
+
     dims=[25,25]
     cen=Point2D(dims[0]/2., dims[1]/2.)
 
@@ -417,6 +421,7 @@ def test_gauss_psf(counts=100.0, noise=0.1):
 
     #pylab.imshow(im, cmap=pylab.gray(), interpolation='nearest')
     #pylab.show()
+    print time.time()-t0,'seconds prep'
 
     mc=MCMCGaussPSF(im, wt, cen=cen)
     mc.go()
@@ -424,3 +429,5 @@ def test_gauss_psf(counts=100.0, noise=0.1):
     res=mc.get_result()
 
     print res['g']
+
+    print time.time()-t0,'seconds tot'
