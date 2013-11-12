@@ -91,7 +91,7 @@ class FitterBase(object):
 
             gmix_list=[]
             for psf in self.psf_list:
-                gm=gmix0.convolve(psf)
+                gm=gm0.convolve(psf)
                 gmix_list.append(gm)
 
         else:
