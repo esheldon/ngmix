@@ -12,7 +12,7 @@ class GPrior(object):
         self.pars = numpy.array(pars, dtype='f8')
 
         # sub-class may want to over-ride this, see GPriorExp
-        self.gmax=numpy.float64(1.0)
+        self.gmax=1.0
 
     def get_lnprob_scalar2d(self, g1, g2):
         """
@@ -331,14 +331,14 @@ class GPriorBA(GPrior):
         """
         pars are scalar gsigma from B&A 
         """
-        self.sigma=sigma
-        self.sig2inv = 1./sigma**2
+        self.sigma   = sigma
+        self.sig2inv = 1./self.sigma**2
 
-        self.gmax=numpy.float64(1.0)
+        self.gmax=1.0
 
-        self.h=numpy.float64(1.e-6)
-        self.hhalf=numpy.float64(0.5*self.h)
-        self.hinv = numpy.float64(1./self.h)
+        self.h=1.e-6
+        self.hhalf=0.5*self.h
+        self.hinv = 1./self.h
 
     @float64(float64,float64)
     def get_lnprob_scalar2d(self, g1, g2):
@@ -462,138 +462,47 @@ class GPriorBA(GPrior):
 
         return (ff - fb)*self.hinv
 
-'''
-class GPriorBAOld(GPrior):
+
+class LogNormalBase(object):
     """
-    g prior from Bernstein & Armstrong 2013
+    Lognormal distribution Base, holds non-jitted methods
     """
-    def __init__(self, sigma):
+    def get_lnprob_array(self, x):
         """
-        pars are scalar gsigma from B&A 
+        This one no error checking
         """
-        self.sigma=numpy.float64(sigma)
-        self.sig2inv = numpy.float64( 1./sigma**2 )
-        self.gmax=numpy.float64(1.0)
+        logx = numpy.log(x)
 
-    def get_max(self):
-        return 1.0
+        chi2 = self.logivar*(logx-self.logmean)**2
 
-    def get_prob_scalar2d(self, g1, g2):
+        lnprob = -0.5*chi2 - logx
+        return lnprob
+
+    def get_prob_array(self, x):
         """
-        Get the 2d prior for the input g1,g2 value
+        Get the probability of x.  x can be an array
         """
-        return _ba13_prob_scalar2d(self.sig2inv, g1, g2)
+        if numpy.any(x <= 0):
+            raise ValueError("values of x must be > 0")
+        lnp=self.get_lnprob_array(x)
+        return numpy.exp(lnp)
 
-    def get_prob_array2d(self, g1, g2):
+    def sample(self, nrand=None):
         """
-        Get the 2d prior for the input g1,g2 value(s)
+        Get nrand random deviates from the distribution
+
+        If z is drawn from a normal random distribution, then exp(logmean+logsigma*z)
+        is drawn from lognormal
         """
-        output=numpy.zeros(g1.size)
-        _ba13_prob_array2d(self.sig2inv, g1, g2, output)
-        return output
-
-    def get_prob_scalar1d(self, g):
-        """
-        Get the 1d prior for the input |g| value
-        """
-        return _ba13_prob_scalar1d(self.sig2inv, g)
-    def get_prob_array1d(self, g):
-        """
-        Get the 1d prior for the input |g| value(s)
-        """
-        output=numpy.zeros(g.size)
-        _ba13_prob_array1d(self.sig2inv, g, output)
-        return output
-     
-    def get_lnprob_scalar2d(self, g1, g2):
-        """
-        Get the 2d prior for the input |g| value(s)
-        """
-        
-        return _ba13_lnprob_scalar2d(self.sig2inv, g1, g2)
+        if nrand is None:
+            z=numpy.random.randn()
+        else:
+            z=numpy.random.randn(nrand)
+        return exp(self.logmean + self.logsigma*z)
 
 
-@jit(argtypes=[float64,float64,float64],restype=float64)
-def _ba13_prob_scalar2d(sig2inv, g1, g2):
-    """
-    (1-gsq)**2*exp(-0.5*gsq/sigma**2)
-    """
-    gsq=g1*g1 + g2*g2
-    fac=1.0-gsq
-    fac *= fac
-
-    expval = numpy.exp(-0.5*gsq*sig2inv)
-
-    p = fac*expval
-    return p
-
-@jit(argtypes=[ float64,float64[:],float64[:],float64[:] ])
-def _ba13_prob_array2d(sig2inv, g1arr, g2arr, output):
-    """
-    (1-gsq)**2*exp(-0.5*gsq/sigma**2)
-    """
-
-    n=g1arr.size
-    for i in xrange(n):
-        g1=g1arr[i]
-        g2=g2arr[i]
-
-        gsq=g1*g1 + g2*g2
-        fac=1.0-gsq
-        fac *= fac
-
-        expval = numpy.exp(-0.5*gsq*sig2inv)
-
-        output[i] = fac*expval
-
-@jit(argtypes=[float64,float64],restype=float64)
-def _ba13_prob_scalar1d(sig2inv, g):
-    gsq=g*g
-    fac=1.0-gsq
-    fac *= fac
-
-    expval = numpy.exp(-0.5*gsq*sig2inv)
-
-    p = fac*expval
-
-    p *= 2*numpy.pi*g
-    return p
-
-@jit(argtypes=[ float64,float64[:],float64[:] ])
-def _ba13_prob_array1d(sig2inv, garr, output):
-    """
-    (1-gsq)**2*exp(-0.5*gsq/sigma**2)
-    """
-
-    n=garr.size
-    for i in xrange(n):
-        g=garr[i]
-
-        gsq=g*g
-        fac=1.0-gsq
-        fac *= fac
-
-        expval = numpy.exp(-0.5*gsq*sig2inv)
-
-        p = fac*expval
-        p *= 2*numpy.pi*g
-        output[i] = p
-
-
-@jit(argtypes=[float64,float64,float64],restype=float64)
-def _ba13_lnprob_scalar2d(sig2inv, g1, g2):
-    """
-    p = (1-gsq)**2*exp(-0.5*gsq/sigma**2)
-
-    log(p) = 2*log(1-gsq) -0.5*gsq/sigma**2
-    """
-    gsq = g1*g1 + g2*g2
-    omgsq = 1.0 - gsq
-    lnp = 2*numpy.log(omgsq) -0.5*gsq*sig2inv
-    return lnp
-'''
-
-class LogNormal(object):
+@jit
+class LogNormal(LogNormalBase):
     """
     Lognormal distribution
 
@@ -621,12 +530,8 @@ class LogNormal(object):
     prob(x):
         Get the probability of x.  x can be an array
     """
+    @void(float64,float64)
     def __init__(self, mean, sigma):
-        from numpy import log,exp,sqrt,pi
-        mean=numpy.float64(mean)
-        sigma=numpy.float64(sigma)
-
-        self.dist="LogNormal"
 
         if mean <= 0:
             raise ValueError("mean %s is < 0" % mean)
@@ -634,186 +539,94 @@ class LogNormal(object):
         self.mean=mean
         self.sigma=sigma
 
-        self.logmean = numpy.float64( log(mean) - 0.5*log( 1 + sigma**2/mean**2 ) )
-        self.logvar = numpy.float64( log(1 + sigma**2/mean**2 ) )
-        self.logsigma = sqrt(self.logvar)
-        self.logivar = numpy.float64( 1./self.logvar )
+        logmean  = numpy.log(self.mean) - 0.5*numpy.log( 1 + self.sigma**2/self.mean**2 )
+        logvar   = numpy.log(1 + self.sigma**2/self.mean**2 )
+        logsigma = numpy.sqrt(logvar)
+        logivar  = 1./logvar
 
-        #self.nconst = numpy.float64( 1/sqrt(2*pi*self.logvar) )
-        #self.logofnconst = log(self.nconst)
+        self.logmean  = logmean
+        self.logvar   = logvar
+        self.logsigma = logsigma
+        self.logivar  = logivar
 
-        self.mode=exp(self.logmean - self.logvar)
-        self.maxval_lnprob = self.get_lnprob_scalar(self.mode)
-        self.maxval = exp(self.maxval_lnprob)
-
-    def get_dist_name(self):
-        """
-        Get the name of this distribution
-        """
-        return self.dist
- 
-    def get_mean(self):
-        """
-        Get the mean of the distribution
-        """
-        return self.mean
-
-    def get_sigma(self):
-        """
-        Get the width sigma of the distribution
-        """
-        return self.sigma
-
-    def get_mode(self):
-        """
-        Get the location of the peak
-        """
-        return self.mode
-
-    def get_max(self):
-        """
-        Get maximum value of this distribution
-        """
-        return self.maxval
-
-    def get_max_lnprob(self):
-        """
-        Get maximum value ln(prob) of this distribution
-        """
-        return self.maxval_lnprob
-
+    @float64(float64)
     def get_lnprob_scalar(self, x):
         """
         This one no error checking
         """
-        return _lognorm_lnprob(self.logmean, self.logivar, x)
-
-    def get_lnprob_array(self, x):
-        """
-        This one no error checking
-        """
+        #if x <= 0:
+        #    raise ValueError("values of x must be > 0")
         logx = numpy.log(x)
+        lnp = logx
+        lnp -= self.logmean 
+        lnp *= lnp
+        lnp *= self.logivar
+        lnp *= (-0.5)
+        lnp -= logx
 
-        chi2 = self.logivar*(logx-self.logmean)**2
+        return lnp
 
-        #lnprob = self.logofnconst - 0.5*chi2 - logx
-        lnprob = -0.5*chi2 - logx
-        return lnprob
-
-
-    def get_prob(self, x):
+    @float64(float64)
+    def get_prob_scalar(self, x):
         """
         Get the probability of x.
         """
-        if isinstance(x,numpy.ndarray):
-            return self.get_prob_array(x)
-        else:
-            return self.get_prob_scalar(x)
-
-    def get_prob_scalar(self, x):
-        """
-        Get the probability of x.  x can be an array
-        """
-        if x <= 0:
-            raise ValueError("values of x must be > 0")
-        lnp=self.get_lnprob_scalar(x)
-        return numpy.exp(lnp)
-
-    def get_prob_array(self, x):
-        """
-        Get the probability of x.  x can be an array
-        """
-        if numpy.any(x <= 0):
-            raise ValueError("values of x must be > 0")
-        lnp=self.get_lnprob_array(x)
-        return numpy.exp(lnp)
+        #if x <= 0:
+        #    raise ValueError("values of x must be > 0")
+        logx = numpy.log(x)
+        lnp = logx
+        lnp -= self.logmean 
+        lnp *= lnp
+        lnp *= self.logivar
+        lnp *= (-0.5)
+        lnp -= logx
+        p=numpy.exp(lnp)
+        return p
 
 
-    def sample(self, nrand=None):
-        """
-        Get nrand random deviates from the distribution
-
-        If z is drawn from a normal random distribution, then exp(logmean+logsigma*z)
-        is drawn from lognormal
-        """
-        if nrand is None:
-            z=numpy.random.randn()
-        else:
-            z=numpy.random.randn(nrand)
-        return exp(self.logmean + self.logsigma*z)
-
-@jit(argtypes=[float64,float64,float64],
-     restype=float64)
-def _lognorm_lnprob(logmean, logivar, x):
+class CenPriorBase(object):
     """
-    chi2 = self.logivar*(logx-self.logmean)**2
-    lnprob = - 0.5*chi2 - logx
+    Base class provides non-jitted methods
     """
-    logx = numpy.log(x)
-    lnp = logx
-    lnp -= logmean 
-    lnp *= lnp
-    lnp *= logivar
-    lnp *= (-0.5)
-    lnp -= logx
+    def sample(self, n=None):
+        """
+        Get a single sample or arrays
+        """
+        if n is None:
+            rand1=self.cen1 + self.sigma1*numpy.random.randn()
+            rand2=self.cen2 + self.sigma2*numpy.random.randn()
+        else:
+            rand1=self.cen1 + self.sigma1*numpy.random.randn(n)
+            rand2=self.cen2 + self.sigma2*numpy.random.randn(n)
 
-    return lnp
+        return rand1, rand2
 
 
-class CenPrior(object):
+@jit
+class CenPrior(CenPriorBase):
     """
     Independent gaussians in each dimension
     """
-    def __init__(self, cen, sigma):
-        self.cen=numpy.array(cen, dtype='f8')
-        self.sigma=numpy.array(sigma, dtype='f8')
+    @void(float64, float64, float64, float64)
+    def __init__(self, cen1, cen2, sigma1, sigma2):
 
-        one=numpy.float64(1.0)
-        self.cen1 = numpy.float64(cen[0])
-        self.cen2 = numpy.float64(cen[1])
-        self.sigma1=numpy.float64(sigma[0])
-        self.sigma2=numpy.float64(sigma[1])
-        self.s2inv1=one/self.sigma1**2
-        self.s2inv2=one/self.sigma2**2
+        self.cen1 = cen1
+        self.cen2 = cen2
+        self.sigma1 = sigma1
+        self.sigma2 = sigma2
+        self.s2inv1 = 1./self.sigma1**2
+        self.s2inv2 = 1./self.sigma2**2
 
-        self.minusofive = numpy.float64(-0.5)
 
-    def get_max(self):
-        return 1.0
+    @float64(float64,float64)
+    def get_lnprob(self,p1,p2):
+        d1 = self.cen1-p1
+        d2 = self.cen2-p2
+        lnp = -0.5*d1*d1*self.s2inv1
+        lnp -= 0.5*d2*d2*self.s2inv2
 
-    def get_lnprob(self,pos):
-        return _cen_lnprob(self.cen1,
-                           self.cen2,
-                           self.s2inv1,
-                           self.s2inv2,
-                           pos[0],
-                           pos[1])
+        return lnp
 
-    def sample(self, n=None):
-        """
-        Get a single sample
-        """
-        if n is None:
-            rand=self.cen + self.sigma*numpy.random.randn(2)
-        else:
-            rand = numpy.random.randn(n,2).reshape(n,2)
-            rand[:,0] *= self.sigma[0]
-            rand[:,0] += self.cen[0]
-
-            rand[:,1] *= self.sigma[1]
-            rand[:,1] += self.cen[1]
-
-        return rand
-
-@jit(argtypes=[float64,float64,float64,float64,float64,float64],
-     restype=float64)
-def _cen_lnprob(cen1,cen2,s2inv1,s2inv2,p1,p2):
-    d1=cen1-p1
-    d2=cen2-p2
-    lnp = -0.5*d1*d1*s2inv1
-    lnp -= 0.5*d2*d2*s2inv2
-
-    return lnp
 
 def srandu(num=None):
     """
