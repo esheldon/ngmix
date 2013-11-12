@@ -3,6 +3,8 @@ from numpy.random import random as randu
 import numba
 from numba import jit, autojit, float64, void
 
+from .gexceptions import GMixRangeError
+
 class GPrior(object):
     """
     This is the base class.  You need to over-ride a few of
@@ -471,6 +473,8 @@ class LogNormalBase(object):
         """
         This one no error checking
         """
+        if numpy.any(x <= 0):
+            raise GMixRangeError("values of x must be > 0")
         logx = numpy.log(x)
 
         chi2 = self.logivar*(logx-self.logmean)**2
@@ -483,7 +487,7 @@ class LogNormalBase(object):
         Get the probability of x.  x can be an array
         """
         if numpy.any(x <= 0):
-            raise ValueError("values of x must be > 0")
+            raise GMixRangeError("values of x must be > 0")
         lnp=self.get_lnprob_array(x)
         return numpy.exp(lnp)
 
@@ -554,8 +558,8 @@ class LogNormal(LogNormalBase):
         """
         This one no error checking
         """
-        #if x <= 0:
-        #    raise ValueError("values of x must be > 0")
+        if x <= 0:
+            raise GMixRangeError("values of x must be > 0")
         logx = numpy.log(x)
         lnp = logx
         lnp -= self.logmean 
@@ -571,8 +575,8 @@ class LogNormal(LogNormalBase):
         """
         Get the probability of x.
         """
-        #if x <= 0:
-        #    raise ValueError("values of x must be > 0")
+        if x <= 0:
+            raise GMixRangeError("values of x must be > 0")
         logx = numpy.log(x)
         lnp = logx
         lnp -= self.logmean 
