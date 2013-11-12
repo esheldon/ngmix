@@ -8,6 +8,8 @@ from .priors import srandu
 
 from .gexceptions import GMixRangeError
 
+import time
+
 LOWVAL=-9999.0e47
 
 class FitterBase(object):
@@ -33,6 +35,8 @@ class FitterBase(object):
         self.totpix=self.verify()
 
         self.make_plots=keys.get('make_plots',False)
+
+        self._gmix_list=None
 
     def verify(self):
         """
@@ -81,22 +85,46 @@ class FitterBase(object):
 
         self.jacob_list=jlist        
 
-    def _get_gmix_list(self, pars):
+    def _init_gmix_list(self, pars):
+        if self.psf_list is not None:
+
+            self._gmix_list0 = []
+            self._gmix_list  = []
+            for psf in self.psf_list:
+                gm0=gmix.GMixModel(pars, self.model)
+                gm=gm0.convolve(psf)
+
+                self._gmix_list0.append(gm0)
+                self._gmix_list.append(gm)
+
+        else:
+            self._gmix_list = []
+            for i in xrange(self.nimages):
+                gm=gmix.GMixModel(pars, self.model)
+                self._gmix_list.append(gm)
+
+
+    def _fill_gmix_list(self, pars):
         """
         Get a list of gmix objects, potentially convolved with
         the psf in the individual images
         """
-        gm0=gmix.GMixModel(pars, self.model)
-        if self.psf_list is not None:
-
-            gmix_list=[]
-            for psf in self.psf_list:
-                gm=gm0.convolve(psf)
-                gmix_list.append(gm)
-
+        if self._gmix_list is None:
+            self._init_gmix_list(pars)
         else:
-            gmix_list=[gm0]*self.nimages
-        return gmix_list 
+            if self.psf_list is not None:
+
+                for i,psf in enumerate(self.psf_list):
+                    gm0=self._gmix_list0[i]
+                    gm=self._gmix_list[i]
+
+                    gm0.fill(pars)
+                    gmix.convolve_fill(gm, gm0, psf)
+
+            else:
+                for gm in self._gmix_list:
+                    gm.fill(pars)
+
 
 
 class MCMCBase(FitterBase):
@@ -132,6 +160,7 @@ class MCMCBase(FitterBase):
         guess=self._get_guess()
 
         sampler = self._get_sampler()
+
         pos, prob, state = sampler.run_mcmc(guess, self.burnin)
         sampler.reset()
         pos, prob, state = sampler.run_mcmc(pos, self.nstep)
@@ -146,27 +175,38 @@ class MCMCBase(FitterBase):
                                         a=self.mca_a)
         return sampler
 
+    def _get_from_lists(self, i, gmix_list):
+        return gmix_list[i], self.im_list[i], self.wt_list[i], self.jacob_list[i]
+
+
+    def _get_priors(self, pars):
+        """
+        Basically a placeholder for no priors
+        """
+        return 0.0
+
     def _calc_lnprob(self, pars):
 
         try:
 
-            gmix_list=self._get_gmix_list(pars)
-            lnprob=0.0
+            lnprob = self._get_priors(pars)
+
+            self._fill_gmix_list(pars)
+
             for i in xrange(self.nimages):
-                gm=gmix_list[i]
+                gm=self._gmix_list[i]
                 im=self.im_list[i]
                 wt=self.wt_list[i]
                 j=self.jacob_list[i]
 
                 lnprob += gm.get_loglike(im, wt, jacobian=j)
 
-                # over-ridden
-                lnprob += self._get_priors(pars)
 
         except GMixRangeError:
             lnprob = LOWVAL
 
         return lnprob
+
 
     def _calc_result(self):
         """
@@ -278,12 +318,6 @@ class MCMCGaussPSF(MCMCBase):
             clist[i] = im.sum()
         
         return numpy.median(clist)
-
-    def _get_priors(self, pars):
-        """
-        Trying with no priors for now
-        """
-        return 0.0
 
     def _get_guess(self):
         """
@@ -398,11 +432,19 @@ def _extract_weighted_stats(data, weights):
     return means, cov
 
 
-def test_gauss_psf(counts=100.0, noise=0.1):
+def test_gauss_psf_graph(counts=100.0, noise=0.1, nimages=10, n=10, groups=True):
     import pylab
-    import time
+    import cProfile
 
-    t0=time.time()
+    import pycallgraph
+    from pycallgraph import PyCallGraph
+    from pycallgraph.output import GraphvizOutput
+
+    graphviz = GraphvizOutput()
+    output='profile-nimages%02d.png' % nimages
+    print 'profile image:',output
+    graphviz.output_file = output
+    config=pycallgraph.Config(groups=groups)
 
     dims=[25,25]
     cen=Point2D(dims[0]/2., dims[1]/2.)
@@ -419,15 +461,67 @@ def test_gauss_psf(counts=100.0, noise=0.1):
     im[:,:] += noise*numpy.random.randn(im.size).reshape(im.shape)
     wt=numpy.zeros(im.shape) + 1./noise**2
 
-    #pylab.imshow(im, cmap=pylab.gray(), interpolation='nearest')
-    #pylab.show()
-    print time.time()-t0,'seconds prep'
+    imlist=[im]*nimages
+    wtlist=[wt]*nimages
+    cenlist=[cen]*nimages
 
+    # one run to warm up the jit compiler
     mc=MCMCGaussPSF(im, wt, cen=cen)
     mc.go()
 
-    res=mc.get_result()
+    with PyCallGraph(config=config, output=graphviz):
+        for i in xrange(n):
+            #mc=MCMCGaussPSF(im, wt, cen=cen)
+            mc=MCMCGaussPSF(imlist, wtlist, cen=cenlist)
+            mc.go()
 
-    print res['g']
+            res=mc.get_result()
 
-    print time.time()-t0,'seconds tot'
+            print res['g']
+
+def test_gauss_psf(counts=100.0, noise=0.001, n=10, nimages=10):
+    #import pylab
+    import time
+
+
+    dims=[25,25]
+    cen=Point2D(dims[0]/2., dims[1]/2.)
+
+    g1=0.1
+    g2=0.05
+    T=8.0
+
+    pars = [cen.row, cen.col, g1, g2, T, counts]
+    gm=gmix.GMixModel(pars, "gauss")
+
+    im=gm.make_image(dims)
+
+    im[:,:] += noise*numpy.random.randn(im.size).reshape(im.shape)
+    wt=numpy.zeros(im.shape) + 1./noise**2
+
+    imlist=[im]*nimages
+    wtlist=[wt]*nimages
+    cenlist=[cen]*nimages
+
+
+    #pylab.imshow(im, cmap=pylab.gray(), interpolation='nearest')
+    #pylab.show()
+
+    # one run to warm up the jit compiler
+    mc=MCMCGaussPSF(im, wt, cen=cen)
+    mc.go()
+
+    t0=time.time()
+    for i in xrange(n):
+        mc=MCMCGaussPSF(imlist, wtlist, cen=cenlist)
+        mc.go()
+
+        res=mc.get_result()
+
+        print res['g']
+
+    sec=time.time()-t0
+    secper=sec/n
+    print secper,'seconds per'
+
+    return sec,secper
