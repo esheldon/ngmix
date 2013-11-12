@@ -9,6 +9,7 @@ _jacobian=struct([('row0',float64),
                   ('dvdcol',float64)])
 _jacobian_dtype=_jacobian.get_dtype()
 
+
 class Jacobian(object):
     def __init__(self, row0, col0, dudrow, dudcol, dvdrow, dvdcol):
         self._data = zeros(1, dtype=_jacobian_dtype)
@@ -30,12 +31,6 @@ class Jacobian(object):
                       self._data['dvdrow'][0],
                       self._data['dvdcol'][0])
 
-@autojit
-def test_numba_jacobian(self):
-    print 'row0:',self[0].row0
-def test():
-    j=Jacobian(25.0, 24.0, 1.0, 0.0, 0.0, 1.0)
-
-    print j
-    test_numba_jacobian(j._data)
-
+class UnitJacobian(Jacobian):
+    def __init__(self, cen1, cen2):
+        super(UnitJacobian,self).__init__(cen1, cen2, 1., 0., 0., 1.)

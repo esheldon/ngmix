@@ -14,3 +14,7 @@ from .shape import Shape
 
 from . import gexceptions
 from .gexceptions import GMixRangeError, GMixFatalError
+
+from . import fitting
+
+from . import point2d

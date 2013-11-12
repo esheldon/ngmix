@@ -51,7 +51,7 @@ class GPrior(object):
         return output
 
 
-    def dbyg1(self, g1, g2, h=1.e-6):
+    def dbyg1_array(self, g1, g2, h=1.e-6):
         """
         Derivative with respect to g1 at the input g1,g2 location
         Used for lensfit.
@@ -61,12 +61,12 @@ class GPrior(object):
 
         Can over-ride with a jit method for speed
         """
-        ff = self.get_prob_scalar2d(g1+h/2, g2)
-        fb = self.get_prob_scalar2d(g1-h/2, g2)
+        ff = self.get_prob_array2d(g1+self.hhalf, g2)
+        fb = self.get_prob_array2d(g1-self.hhalf, g2)
 
-        return (ff - fb)/h
+        return (ff - fb)*self.hinv
 
-    def dbyg2(self, g1, g2, h=1.e-6):
+    def dbyg2_array(self, g1, g2, h=1.e-6):
         """
         Derivative with respect to g2 at the input g1,g2 location
 
@@ -75,9 +75,9 @@ class GPrior(object):
 
         Can over-ride with a jit method for speed
         """
-        ff = self.get_prob_scalar2d(g1, g2+h/2)
-        fb = self.get_prob_scalar2d(g1, g2-h/2)
-        return (ff - fb)/h
+        ff = self.get_prob_array2d(g1, g2+h/2)
+        fb = self.get_prob_array2d(g1, g2-h/2)
+        return (ff - fb)*self.hinv
 
 
  
@@ -347,11 +347,11 @@ class GPriorBA(GPrior):
         """
         Get the 2d log prob for the input g value
         """
-        lnp=-9999.e9
         gsq = g1*g1 + g2*g2
         omgsq = 1.0 - gsq
-        if omgsq > 0.0:
-            lnp = 2*numpy.log(omgsq) -0.5*gsq*self.sig2inv
+        if omgsq <= 0.0:
+            raise GMixRangeError("g^2 too big: %s" % gsq)
+        lnp = 2*numpy.log(omgsq) -0.5*gsq*self.sig2inv
         return lnp
 
     @float64(float64,float64)
@@ -437,7 +437,7 @@ class GPriorBA(GPrior):
             output[i] = 2*numpy.pi*p
 
     @float64(float64,float64)
-    def dbyg1(self, g1, g2):
+    def dbyg1_scalar(self, g1, g2):
         """
         Derivative with respect to g1 at the input g1,g2 location
         Used for lensfit.
@@ -451,7 +451,7 @@ class GPriorBA(GPrior):
         return (ff - fb)*self.hinv
 
     @float64(float64,float64)
-    def dbyg2(self, g1, g2):
+    def dbyg2_scalar(self, g1, g2):
         """
         Derivative with respect to g2 at the input g1,g2 location
         Used for lensfit.

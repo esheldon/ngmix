@@ -140,7 +140,7 @@ class GMix(object):
         convolve_fill(gmix, self, psf)
         return gmix
 
-    def render(self, dims, nsub=1):
+    def make_image(self, dims, nsub=1):
         """
         Render the mixture into a new image
 
@@ -297,6 +297,7 @@ GMIX_BDC=5
 _gmix_model_dict={'full':       GMIX_FULL,
                   GMIX_FULL:    GMIX_FULL,
                   'gauss':      GMIX_GAUSS,
+                  GMIX_GAUSS:   GMIX_GAUSS,
                   'turb':       GMIX_TURB,
                   GMIX_TURB:    GMIX_TURB,
                   'exp':        GMIX_EXP,
@@ -341,7 +342,11 @@ _gauss2d=numba.struct([('p',float64),
 _gauss2d_dtype=_gauss2d.get_dtype()
 
 
-
+def get_model_num(model):
+    return _gmix_model_dict[model]
+def get_model_npars(model):
+    mi=_gmix_model_dict[model]
+    return _gmix_npars_dict[mi]
 
 # have to send whole array
 @jit(argtypes=[_gauss2d[:], int64, float64, float64, float64, float64, float64, float64])
