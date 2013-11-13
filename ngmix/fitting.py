@@ -21,6 +21,12 @@ class FitterBase(object):
     points to the common center used by all transformation objects; the
     row0,col0 in pixels for each should correspond to that center in the
     common coordinates (e.g. sky coords)
+
+    Fluxes and sizes will also be in the transformed system.  You can use the
+    method get_flux_scaling to get the average scaling from the input images.
+    This only makes sense for comparing to fluxes measured in the image system,
+    for example zeropoints.  If you are using very many different cameras then
+    you should just work in sky coordinates.
     
     """
     def __init__(self, image, weight, jacobian, model, **keys):
