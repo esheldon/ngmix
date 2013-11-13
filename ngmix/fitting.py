@@ -678,7 +678,7 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
     # simulation
     #
 
-    # PSF
+    # PSF pars
     counts_sky_psf=100.0
     counts_pix_psf=counts_sky_psf/jfac2
     noise_sky_psf=0.01
@@ -688,7 +688,7 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
     Tpix_psf=4.0
     Tsky_psf=Tpix_psf*jfac2
 
-    # object
+    # object pars
     g1_obj=0.1
     g2_obj=0.05
     Tpix_obj=16.0
@@ -728,6 +728,7 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
     res_psf=mc_psf.get_result()
     print_pars(res_psf['pars'], front='pars_psf:', stream=stderr)
     print_pars(res_psf['perr'], front='perr_psf:', stream=stderr)
+    print 'Tpix: %.4g +/- %.4g' % (res_psf['pars'][4]/jfac2, res_psf['perr'][4]/jfac2)
 
     imfit_psf=psf_fit.make_image(im_psf.shape, jacobian=j)
     images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
@@ -748,6 +749,7 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
 
     print_pars(res_obj['pars'], front='pars_obj:', stream=stderr)
     print_pars(res_obj['perr'], front='perr_obj:', stream=stderr)
+    print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['perr'][4]/jfac2)
 
     gmfit0=mc_obj.get_gmix()
     gmfit=gmfit0.convolve(psf_fit)
