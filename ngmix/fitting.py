@@ -610,7 +610,7 @@ def test_gauss_psf(counts=100.0, noise=0.001, n=10, nimages=10, jfac=0.27):
 
     return sec,secper
 
-def test_gauss_psf_jacob(counts=100.0, noise=0.001, nimages=10, jfac=10.0):
+def test_gauss_psf_jacob(counts_sky=100.0, noise_sky=0.001, nimages=10, jfac=10.0):
     """
     testing jacobian stuff
     """
@@ -626,7 +626,8 @@ def test_gauss_psf_jacob(counts=100.0, noise=0.001, nimages=10, jfac=10.0):
     # in pixel coords
     Tpix=8.0
     Tsky=8.0*jfac**2
-    counts_sky=counts*jfac**2
+    counts_pix=counts_sky/jfac**2
+    noise_pix=noise_sky/jfac**2
 
 
     pars = [0.0, 0.0, g1, g2, Tsky, counts_sky]
@@ -634,8 +635,8 @@ def test_gauss_psf_jacob(counts=100.0, noise=0.001, nimages=10, jfac=10.0):
 
     im=gm.make_image(dims, jacobian=j)
 
-    im[:,:] += noise*numpy.random.randn(im.size).reshape(im.shape)
-    wt=numpy.zeros(im.shape) + 1./noise**2
+    im[:,:] += noise_pix*numpy.random.randn(im.size).reshape(im.shape)
+    wt=numpy.zeros(im.shape) + 1./noise_pix**2
 
     imlist=[im]*nimages
     wtlist=[wt]*nimages
@@ -650,7 +651,7 @@ def test_gauss_psf_jacob(counts=100.0, noise=0.001, nimages=10, jfac=10.0):
     print_pars(res['pars'], front='pars:', stream=stderr)
     print_pars(res['perr'], front='perr:', stream=stderr)
     s=mc.get_flux_scaling()
-    print 'flux in image coords: %.4g +/- %.4g' % (res['pars'][-1]*s,res['perr'][-1]*s)
+    #print 'flux in image coords: %.4g +/- %.4g' % (res['pars'][-1]*s,res['perr'][-1]*s)
 
     gmfit=mc.get_gmix()
     imfit=gmfit.make_image(im.shape, jacobian=j)
@@ -659,4 +660,99 @@ def test_gauss_psf_jacob(counts=100.0, noise=0.001, nimages=10, jfac=10.0):
     images.compare_images(im, imfit, label1='data',label2='fit')
     
     mcmc.plot_results(mc.get_trials())
+
+def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
+    """
+    testing jacobian stuff
+    """
+    import images
+    import mcmc
+
+    dims=[25,25]
+    cen=[dims[0]/2., dims[1]/2.]
+
+    jfac2=jfac**2
+    j=Jacobian(cen[0],cen[1], jfac, 0.0, 0.0, jfac)
+
+    #
+    # simulation
+    #
+
+    # PSF
+    counts_sky_psf=100.0
+    counts_pix_psf=counts_sky_psf/jfac2
+    noise_sky_psf=0.01
+    noise_pix_psf=noise_sky_psf/jfac2
+    g1_psf=0.05
+    g2_psf=-0.01
+    Tpix_psf=4.0
+    Tsky_psf=Tpix_psf*jfac2
+
+    # object
+    g1_obj=0.1
+    g2_obj=0.05
+    Tpix_obj=16.0
+    Tsky_obj=Tpix_obj*jfac2
+
+    counts_sky_obj=counts_sky
+    noise_sky_obj=noise_sky
+    counts_pix_obj=counts_sky_obj/jfac2
+    noise_pix_obj=noise_sky_obj/jfac2
+
+    pars_psf = [0.0, 0.0, g1_psf, g2_psf, Tsky_psf, counts_sky_psf]
+    gm_psf=gmix.GMixModel(pars_psf, "gauss")
+
+    pars_obj = [0.0, 0.0, g1_obj, g2_obj, Tsky_obj, counts_sky_obj]
+    gm_obj0=gmix.GMixModel(pars_obj, model)
+
+    gm=gm_obj0.convolve(gm_psf)
+
+    im_psf=gm_psf.make_image(dims, jacobian=j)
+    im_psf[:,:] += noise_pix_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
+    wt_psf=numpy.zeros(im_psf.shape) + 1./noise_pix_psf**2
+
+    im_obj=gm.make_image(dims, jacobian=j)
+    im_obj[:,:] += noise_pix_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
+    wt_obj=numpy.zeros(im_obj.shape) + 1./noise_pix_obj**2
+
+    #
+    # fitting
+    #
+
+    # psf
+    mc_psf=MCMCGaussPSF(im_psf, wt_psf, j,
+                        T=Tsky_psf, counts=counts_sky_psf)
+    mc_psf.go()
+
+    psf_fit=mc_psf.get_gmix()
+    res_psf=mc_psf.get_result()
+    print_pars(res_psf['pars'], front='pars_psf:', stream=stderr)
+    print_pars(res_psf['perr'], front='perr_psf:', stream=stderr)
+
+    imfit_psf=psf_fit.make_image(im_psf.shape, jacobian=j)
+    images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
+    mcmc.plot_results(mc_psf.get_trials())
+
+    # obj
+    jlist=[j]*nimages
+    imlist_obj=[im_obj]*nimages
+    wtlist_obj=[wt_obj]*nimages
+    psf_fit_list=[psf_fit]*nimages
+
+    mc_obj=MCMCSimple(imlist_obj, wtlist_obj, jlist, model,
+                      psf=psf_fit_list,
+                      T=Tsky_obj, counts=counts_sky_obj)
+    mc_obj.go()
+
+    res_obj=mc_obj.get_result()
+
+    print_pars(res_obj['pars'], front='pars_obj:', stream=stderr)
+    print_pars(res_obj['perr'], front='perr_obj:', stream=stderr)
+
+    gmfit0=mc_obj.get_gmix()
+    gmfit=gmfit0.convolve(psf_fit)
+    imfit_obj=gmfit.make_image(im_obj.shape, jacobian=j)
+
+    images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
+    mcmc.plot_results(mc_obj.get_trials())
 
