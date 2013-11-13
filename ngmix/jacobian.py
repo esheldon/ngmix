@@ -6,7 +6,8 @@ _jacobian=struct([('row0',float64),
                   ('dudrow',float64),
                   ('dudcol',float64),
                   ('dvdrow',float64),
-                  ('dvdcol',float64)])
+                  ('dvdcol',float64),
+                  ('jacob',float64)])
 _jacobian_dtype=_jacobian.get_dtype()
 
 
@@ -21,6 +22,9 @@ class Jacobian(object):
 
         self._data['dvdrow']=dvdrow
         self._data['dvdcol']=dvdcol
+
+        self._data['jacob'] = dudrow*dvdcol-dudcol*dvdrow
+
 
     def __repr__(self):
         fmt="row0: %-10.5g col0: %-10.5g dudrow: %-10.5g dudcol: %-10.5g dvdrow: %-10.5g dvdcol: %-10.5g"

@@ -1,3 +1,4 @@
+from sys import stdout, stderr
 import numpy
 from . import gmix
 from . import jacobian
@@ -15,6 +16,10 @@ LOWVAL=-9999.0e47
 class FitterBase(object):
     """
     Base for other fitters
+
+    cen is only used if jacobian is not sent; the jacobian centers are
+    essentially the "guess" and centroids are relative to that center
+
     """
     def __init__(self, image, weight, model, **keys):
         self.keys=keys
@@ -37,6 +42,7 @@ class FitterBase(object):
         self.make_plots=keys.get('make_plots',False)
 
         self._gmix_list=None
+        self._result=None
 
     def verify(self):
         """
@@ -70,12 +76,25 @@ class FitterBase(object):
 
 
         return totpix
+
     def get_result(self):
+        """
+        Result will not be non-None until go() is run
+        """
         return self._result
+
+    def get_gmix(self):
+        """
+        Get a gaussian mixture at the "best" parameter set, which
+        definition depends on the sub-class
+        """
+        pars=self._result['pars']
+        gm=gmix.GMixModel(pars, self.model)
+        return gm
 
     def _set_jacob_list(self):
         from copy import copy
-        jlist = _get_as_list(self.keys.get('jacob',None))
+        jlist = _get_as_list(self.keys.get('jacobian',None))
         if jlist is None:
             cenlist=_get_as_list(self.keys.get('cen',None))
             if cenlist is None:
@@ -131,6 +150,7 @@ class MCMCBase(FitterBase):
     def __init__(self, image, weight, model, **keys):
         super(MCMCBase,self).__init__(image, weight, model, **keys)
 
+        self.doiter=keys.get('iter',True)
         self.nwalkers=keys.get('nwalkers',20)
         self.nstep=keys.get('nstep',200)
         self.burnin=keys.get('burnin',400)
@@ -138,6 +158,17 @@ class MCMCBase(FitterBase):
 
         self.draw_g_prior=keys.get('draw_g_prior',True)
 
+        self.T_guess=keys.get('T',4.0)
+        self.counts_guess=self._get_counts_guess(**keys)
+
+        self.trials=None
+
+
+    def get_trials(self):
+        """
+        Get the set of trials from the production run
+        """
+        return self.trials
 
     def go(self):
         self.sampler=self._do_trials()
@@ -165,6 +196,21 @@ class MCMCBase(FitterBase):
         sampler.reset()
         pos, prob, state = sampler.run_mcmc(pos, self.nstep)
 
+        if self.doiter:
+            while True:
+                try:
+                    acor=sampler.acor
+                    tau = (acor/self.nstep).max()
+                    if tau > 0.1:
+                        print "tau",tau,"greater than 0.1"
+                    else:
+                        break
+                except:
+                    # something went wrong with acor, run some more
+                    pass
+                pos, prob, state = sampler.run_mcmc(pos, self.nstep)
+
+
         return sampler
 
     def _get_sampler(self):
@@ -174,10 +220,6 @@ class MCMCBase(FitterBase):
                                         self._calc_lnprob,
                                         a=self.mca_a)
         return sampler
-
-    def _get_from_lists(self, i, gmix_list):
-        return gmix_list[i], self.im_list[i], self.wt_list[i], self.jacob_list[i]
-
 
     def _get_priors(self, pars):
         """
@@ -301,23 +343,30 @@ class MCMCBase(FitterBase):
     def _get_guess(self):
         raise RuntimeError("over-ride me")
 
-class MCMCGaussPSF(MCMCBase):
-    def __init__(self, image, weight, **keys):
-        """
-        We demand a good centroid guess
-        """
-        model=gmix.GMIX_GAUSS
-        super(MCMCGaussPSF,self).__init__(image, weight, model, **keys)
+    def _get_counts_guess(self, **keys):
+        cguess=keys.get('counts',None)
+        if cguess is None:
+            cguess = self._get_median_counts()
+        return cguess
 
     def _get_median_counts(self):
         """
         median of the counts across all input images
         """
         clist=numpy.zeros(self.nimages)
-        for i,im in enumerate(self.im_list):
-            clist[i] = im.sum()
+        for i in xrange(self.nimages):
+            im=self.im_list[i]
+            j=self.jacob_list[i]
+            clist[i] = im.sum()*numpy.sqrt( j._data['jacob'] )
         
         return numpy.median(clist)
+
+
+class MCMCGaussPSF(MCMCBase):
+    def __init__(self, image, weight, **keys):
+        model=gmix.GMIX_GAUSS
+        super(MCMCGaussPSF,self).__init__(image, weight, model, **keys)
+
 
     def _get_guess(self):
         """
@@ -325,8 +374,6 @@ class MCMCGaussPSF(MCMCBase):
         PSF image
         """
         
-        counts_guess=self._get_median_counts()
-        T_guess=4.0
 
         guess=numpy.zeros( (self.nwalkers,self.npars) )
 
@@ -337,8 +384,8 @@ class MCMCGaussPSF(MCMCBase):
         guess[:,2]=0.1*srandu(self.nwalkers)
         guess[:,3]=0.1*srandu(self.nwalkers)
 
-        guess[:,4] = T_guess*(1 + 0.1*srandu(self.nwalkers))
-        guess[:,5] = counts_guess*(1 + 0.1*srandu(self.nwalkers))
+        guess[:,4] = self.T_guess*(1 + 0.1*srandu(self.nwalkers))
+        guess[:,5] = self.counts_guess*(1 + 0.1*srandu(self.nwalkers))
 
         self._guess=guess
         return guess
@@ -354,6 +401,20 @@ class MCMCGaussPSF(MCMCBase):
         """
         return pars[5], sqrt(pcov[5,5])
 
+
+def print_pars(pars, stream=stdout, fmt='%10.6g',front=None):
+    """
+    print the parameters with a uniform width
+    """
+    if front is not None:
+        stream.write(front)
+        stream.write(' ')
+    if pars is None:
+        stream.write('%s\n' % None)
+    else:
+        fmt = ' '.join( [fmt+' ']*len(pars) )
+        stream.write(fmt % tuple(pars))
+        stream.write('\n')
 
 
 def _get_as_list(arg):
@@ -480,7 +541,7 @@ def test_gauss_psf_graph(counts=100.0, noise=0.1, nimages=10, n=10, groups=True)
             print res['g']
 
 def test_gauss_psf(counts=100.0, noise=0.001, n=10, nimages=10):
-    #import pylab
+    import pylab
     import time
 
 
@@ -503,10 +564,6 @@ def test_gauss_psf(counts=100.0, noise=0.001, n=10, nimages=10):
     wtlist=[wt]*nimages
     cenlist=[cen]*nimages
 
-
-    #pylab.imshow(im, cmap=pylab.gray(), interpolation='nearest')
-    #pylab.show()
-
     # one run to warm up the jit compiler
     mc=MCMCGaussPSF(im, wt, cen=cen)
     mc.go()
@@ -518,10 +575,63 @@ def test_gauss_psf(counts=100.0, noise=0.001, n=10, nimages=10):
 
         res=mc.get_result()
 
-        print res['g']
+        print res['pars']
 
     sec=time.time()-t0
     secper=sec/n
     print secper,'seconds per'
 
     return sec,secper
+
+def test_gauss_psf_jacob(counts=100.0, noise=0.001, nimages=10, jfac=10.0):
+    import images
+    import mcmc
+    dims=[25,25]
+    cen=Point2D(dims[0]/2., dims[1]/2.)
+
+    j=jacobian.Jacobian(cen.row, cen.col, jfac, 0.0, 0.0, jfac)
+
+    g1=0.1
+    g2=0.05
+    # in pixel coords
+    Tpix=8.0
+    Tsky=8.0*jfac**2
+    counts_sky=counts*jfac**2
+
+
+    pars = [0.0, 0.0, g1, g2, Tsky, counts_sky]
+    gm=gmix.GMixModel(pars, "gauss")
+
+    im=gm.make_image(dims, jacobian=j)
+
+    im[:,:] += noise*numpy.random.randn(im.size).reshape(im.shape)
+    wt=numpy.zeros(im.shape) + 1./noise**2
+
+    imlist=[im]*nimages
+    wtlist=[wt]*nimages
+    cenlist=[cen]*nimages
+    jlist=[j]*nimages
+
+
+    mc=MCMCGaussPSF(imlist, wtlist, cen=cenlist, jacobian=jlist,
+                    T=Tsky, counts=counts_sky, burnin=400)
+    mc.go()
+
+    res=mc.get_result()
+
+    print_pars(res['pars'], front='pars:', stream=stderr)
+    print_pars(res['perr'], front='perr:', stream=stderr)
+
+    gmfit=mc.get_gmix()
+    imfit=gmfit.make_image(im.shape, jacobian=j)
+    #imfit=gmfit.make_image(im.shape)
+
+    #print imfit[0:10,0:10]
+    #return
+    imdiff=im-imfit
+    #print imdiff
+    #images.view(imdiff)
+    images.compare_images(im, imfit, label1='data',label2='fit')
+    
+    mcmc.plot_results(mc.get_trials())
+

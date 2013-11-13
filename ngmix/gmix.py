@@ -1,3 +1,4 @@
+from sys import stderr,stdout
 import numpy
 from numpy import array, zeros
 import numba
@@ -140,7 +141,7 @@ class GMix(object):
         convolve_fill(gmix, self, psf)
         return gmix
 
-    def make_image(self, dims, nsub=1):
+    def make_image(self, dims, nsub=1, jacobian=None):
         """
         Render the mixture into a new image
 
@@ -152,11 +153,19 @@ class GMix(object):
             Defines a grid for sub-pixel integration 
         """
         image=numpy.zeros(dims, dtype='f8')
-        _render_fast3(self._data, image, nsub, _exp3_ivals[0], _exp3_lookup)
+        if jacobian is not None:
+            _render_jacob_fast3(self._data,
+                                image,
+                                nsub,
+                                jacobian._data,
+                                _exp3_ivals[0],
+                                _exp3_lookup)
+        else:
+            _render_fast3(self._data, image, nsub, _exp3_ivals[0], _exp3_lookup)
 
         return image
 
-    def fill_image(self, image, nsub=1):
+    def fill_image(self, image, nsub=1, jacobian=None):
         """
         Render the mixture into the input image
 
@@ -167,7 +176,15 @@ class GMix(object):
         nsub: integer, optional
             Defines a grid for sub-pixel integration 
         """
-        _render_fast3(self._data, image, nsub, _exp3_ivals[0], _exp3_lookup)
+        if jacobian is not None:
+            _render_jacob_fast3(self._data,
+                                image,
+                                nsub,
+                                jacobian._data,
+                                _exp3_ivals[0],
+                                _exp3_lookup)
+        else:
+            _render_fast3(self._data, image, nsub, _exp3_ivals[0], _exp3_lookup)
 
     def get_loglike(self, image, weight, jacobian=None, get_s2nsums=False):
         """
@@ -620,9 +637,9 @@ def _render_slow(self, image, nsub):
 
                         uv=u*v
 
-                        chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv;
+                        chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
 
-                        if chi2 < 25.0:
+                        if chi2 < 25.0 and chi2 >= 0.0:
                             pnorm = self[i].pnorm
                             tval += pnorm*numpy.exp( -0.5*chi2 )
                     tcol += stepsize
@@ -632,7 +649,10 @@ def _render_slow(self, image, nsub):
             model_val += tval
             image[row,col] = model_val
 
-_exp3_ivals, _exp3_lookup = fastmath.make_exp_lookup(-25, 0)
+#
+# create the fast lookup table for exponentials
+
+_exp3_ivals, _exp3_lookup = fastmath.make_exp_lookup(-26, 0)
 
 @jit(argtypes=[ _gauss2d[:], float64[:,:], int64, int64, float64[:] ])
 def _render_fast3(self, image, nsub, i0, expvals):
@@ -672,13 +692,17 @@ def _render_fast3(self, image, nsub, i0, expvals):
 
                         uv=u*v
 
-                        chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv;
+                        chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
 
-                        if chi2 < 25.0:
+                        if chi2 < 25.0 and chi2 >= 0.0:
                             pnorm = self[i].pnorm
                             x = -0.5*chi2
 
                             # 3rd order approximation to exp
+                            #if x < 0.0:
+                            #    ival = int64(x-0.5)
+                            #else:
+                            #    ival = int64(x+0.5)
                             ival = int64(x-0.5)
                             f = x - ival
                             index = ival-i0
@@ -695,6 +719,91 @@ def _render_fast3(self, image, nsub, i0, expvals):
             tval *= areafac
             model_val += tval
             image[row,col] = model_val
+
+@jit(argtypes=[ _gauss2d[:], float64[:,:], int64, _jacobian[:], int64, float64[:] ])
+def _render_jacob_fast3(self, image, nsub, j, i0, expvals):
+    """
+    Adds to image; make sure to zero the iamge first if that is what you want
+
+    Uses 3rd order approximation to exponential function, only for negative
+    arguments or zero
+
+    This code is a mess because we can't do inlining in numba
+    """
+    ngauss=self.size
+    nrows=image.shape[0]
+    ncols=image.shape[1]
+
+    col0=j[0].col0
+    row0=j[0].row0
+    dudrow=j[0].dudrow
+    dudcol=j[0].dudcol
+    dvdrow=j[0].dvdrow
+    dvdcol=j[0].dvdcol
+
+    stepsize = 1./nsub
+    offset = (nsub-1)*stepsize/2.
+    areafac = 1./(nsub*nsub)
+
+    ustepsize = stepsize*dudcol
+    vstepsize = stepsize*dvdcol
+
+    for row in xrange(nrows):
+        for col in xrange(ncols):
+
+            # we add to existing value
+            model_val=image[row,col]
+
+            tval = 0.0
+            trow = row-offset
+            lowcol = col-offset
+
+            for irowsub in xrange(nsub):
+                # always start from lowcol position, then step u,v later
+                u=dudrow*(trow - row0) + dudcol*(lowcol - col0)
+                v=dvdrow*(trow - row0) + dvdcol*(lowcol - col0)
+                for icolsub in xrange(nsub):
+
+                    for i in xrange(ngauss):
+                        udiff=u-self[i].row
+                        vdiff=v-self[i].col
+
+                        u2 = udiff*udiff
+                        v2 = vdiff*vdiff
+                        uv=udiff*vdiff
+
+                        chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
+
+                        if chi2 < 25.0 and chi2 >= 0.0:
+                            pnorm = self[i].pnorm
+                            x = -0.5*chi2
+
+                            # 3rd order approximation to exp
+                            #if x < 0.0:
+                            #    ival = int64(x-0.5)
+                            #else:
+                            #    ival = int64(x+0.5)
+                            ival = int64(x-0.5)
+                            f = x - ival
+                            index = ival-i0
+
+                            expval = expvals[index]
+                            fexp = (6+f*(6+f*(3+f)))*0.16666666
+                            expval *= fexp
+
+                            #print chi2,pnorm,expval,pnorm*expval
+                            tval += pnorm*expval
+                    #print 'render:',u,v
+                    # move u and v for each "column" step
+                    u += ustepsize
+                    v += vstepsize
+                # step to next sub-row
+                trow += stepsize
+
+            tval *= areafac
+            model_val += tval
+            image[row,col] = model_val
+
 
 @jit(argtypes=[ _gauss2d[:], float64[:,:], float64[:,:], int64, float64[:] ])
 def _loglike_fast3(self, image, weight, i0, expvals):
@@ -726,13 +835,17 @@ def _loglike_fast3(self, image, weight, i0, expvals):
 
                 uv=u*v
 
-                chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv;
+                chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
 
-                if chi2 < 25.0:
+                if chi2 < 25.0 and chi2 >= 0.0:
                     pnorm = self[i].pnorm
                     x = -0.5*chi2
 
                     # 3rd order approximation to exp
+                    #if x < 0.0:
+                    #    ival = int64(x-0.5)
+                    #else:
+                    #    ival = int64(x+0.5)
                     ival = int64(x-0.5)
                     f = x - ival
                     index = ival-i0
@@ -779,21 +892,29 @@ def _loglike_jacob_fast3(self, image, weight, j, i0, expvals):
 
             model_val=0.0
             for i in xrange(ngauss):
-                u2 = u*u
-                v2 = v*v
-                uv=u*v
+                udiff=u-self[i].row
+                vdiff=v-self[i].col
 
-                chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv;
+                u2 = udiff*udiff
+                v2 = vdiff*vdiff
+                uv=udiff*vdiff
 
-                if chi2 < 25.0:
+                chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
+
+                if chi2 < 25.0 and chi2 >= 0.0:
                     pnorm = self[i].pnorm
                     x = -0.5*chi2
 
                     # 3rd order approximation to exp
+                    #if x < 0.0:
+                    #    ival = int64(x-0.5)
+                    #else:
+                    #    ival = int64(x+0.5)
                     ival = int64(x-0.5)
                     f = x - ival
                     index = ival-i0
-
+                    
+                    #print >>stderr,'chi2:',chi2,'x:',x,'ival:',ival,'index:',index
                     expval = expvals[index]
                     fexp = (6+f*(6+f*(3+f)))*0.16666666
                     expval *= fexp
