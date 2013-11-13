@@ -377,18 +377,15 @@ class MCMCBase(FitterBase):
     def _get_guess(self):
         raise RuntimeError("over-ride me")
 
-class MCMCGaussPSF(MCMCBase):
-    def __init__(self, image, weight, jacobian, **keys):
-        model=gmix.GMIX_GAUSS
-        super(MCMCGaussPSF,self).__init__(image, weight, jacobian, model, **keys)
-
+class MCMCSimple(MCMCBase):
+    def __init__(self, image, weight, jacobian, model, **keys):
+        super(MCMCSimple,self).__init__(image, weight, jacobian, model, **keys)
 
     def _get_guess(self):
         """
         The counts guess is stupid unless you have a well-trimmed
         PSF image
         """
-        
 
         guess=numpy.zeros( (self.nwalkers,self.npars) )
 
@@ -415,6 +412,14 @@ class MCMCGaussPSF(MCMCBase):
         Simple model only
         """
         return pars[5], sqrt(pcov[5,5])
+
+
+class MCMCGaussPSF(MCMCSimple):
+    def __init__(self, image, weight, jacobian, **keys):
+        model=gmix.GMIX_GAUSS
+        if 'psf' in keys:
+            raise RuntimeError("don't send psf= when fitting a psf")
+        super(MCMCGaussPSF,self).__init__(image, weight, jacobian, model, **keys)
 
 
 def print_pars(pars, stream=stdout, fmt='%10.6g',front=None):
