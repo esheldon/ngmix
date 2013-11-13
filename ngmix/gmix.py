@@ -325,11 +325,17 @@ _gmix_model_dict={'full':       GMIX_FULL,
                   GMIX_BDC:     GMIX_BDC}
 
 _gmix_string_dict={GMIX_FULL:'full',
+                   'full':'full',
                    GMIX_GAUSS:'gauss',
+                   'gauss':'gauss',
                    GMIX_TURB:'turb',
+                   'turb':'turb',
                    GMIX_EXP:'exp',
+                   'exp':'exp',
                    GMIX_DEV:'dev',
-                   GMIX_BDC:'bdc'}
+                   'dev':'dev',
+                   GMIX_BDC:'bdc',
+                   'bdc':'bdc'}
 
 _gmix_npars_dict={GMIX_GAUSS:6,
                   GMIX_TURB:6,
@@ -360,8 +366,22 @@ _gauss2d_dtype=_gauss2d.get_dtype()
 
 
 def get_model_num(model):
+    """
+    Get the numerical identifier for the input model,
+    which could be string or number
+    """
     return _gmix_model_dict[model]
+def get_model_name(model):
+    """
+    Get the string identifier for the input model,
+    which could be string or number
+    """
+    return _gmix_string_dict[model]
 def get_model_npars(model):
+    """
+    Get the number of parameters for the input model,
+    which could be string or number
+    """
     mi=_gmix_model_dict[model]
     return _gmix_npars_dict[mi]
 
@@ -791,12 +811,12 @@ def _render_jacob_fast3(self, image, nsub, j, i0, expvals):
                             fexp = (6+f*(6+f*(3+f)))*0.16666666
                             expval *= fexp
 
-                            #print chi2,pnorm,expval,pnorm*expval
                             tval += pnorm*expval
-                    #print 'render:',u,v
+
                     # move u and v for each "column" step
                     u += ustepsize
                     v += vstepsize
+
                 # step to next sub-row
                 trow += stepsize
 
@@ -914,7 +934,6 @@ def _loglike_jacob_fast3(self, image, weight, j, i0, expvals):
                     f = x - ival
                     index = ival-i0
                     
-                    #print >>stderr,'chi2:',chi2,'x:',x,'ival:',ival,'index:',index
                     expval = expvals[index]
                     fexp = (6+f*(6+f*(3+f)))*0.16666666
                     expval *= fexp

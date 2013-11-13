@@ -1,4 +1,4 @@
-from numpy import zeros
+from numpy import zeros, sqrt
 from numba import float64, struct, jit, autojit
 
 _jacobian=struct([('row0',float64),
@@ -7,7 +7,8 @@ _jacobian=struct([('row0',float64),
                   ('dudcol',float64),
                   ('dvdrow',float64),
                   ('dvdcol',float64),
-                  ('jacob',float64)])
+                  ('det',float64),
+                  ('sdet',float64)])
 _jacobian_dtype=_jacobian.get_dtype()
 
 
@@ -23,7 +24,8 @@ class Jacobian(object):
         self._data['dvdrow']=dvdrow
         self._data['dvdcol']=dvdcol
 
-        self._data['jacob'] = dudrow*dvdcol-dudcol*dvdrow
+        self._data['det'] = dudrow*dvdcol-dudcol*dvdrow
+        self._data['sdet'] = sqrt(self._data['det'])
 
 
     def __repr__(self):
