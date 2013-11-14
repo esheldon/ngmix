@@ -1,7 +1,10 @@
-from copy import copy
+"""
+Fit an image with a gaussian mixture using the EM algorithm
+"""
+
 import numpy
 import numba
-from numba import autojit, float64
+from numba import autojit, float64, int64
 from . import gmix
 from .gmix import GMix, _gauss2d_set, _gauss2d, _get_wmomsum, _gauss2d_verify
 from .gexceptions import GMixRangeError, GMixMaxIterEM
@@ -39,7 +42,7 @@ class GMixEM(object):
         self._result={'numiter':numiter,
                       'fdiff':fdiff}
 
-        if numiter == maxiter:
+        if numiter >= maxiter:
             raise GMixMaxIterEM("reached max iter: %s" % maxiter)
 
 
@@ -160,8 +163,7 @@ def _run_em(image, gmix, sums, sky, maxiter, tol):
         wmomlast = wmom
         iiter += 1
 
-    numiter=iiter+1
-    return numiter, fdiff
+    return iiter, fdiff
 
 
 def _prep_image(im0):
@@ -194,8 +196,8 @@ _sums=numba.struct([('gi',float64),
 
 _sums_dtype=_sums.get_dtype()
 
-def test_1gauss(counts=100.0, noise=0.0, maxiter=5000):
-
+def test_1gauss(counts=100.0, noise=0.0, maxiter=500, show=False):
+    import time
     dims=[25,25]
     cen=[dims[0]/2., dims[1]/2.]
 
@@ -210,9 +212,9 @@ def test_1gauss(counts=100.0, noise=0.0, maxiter=5000):
 
     im0=gm.make_image(dims)
 
-    im0[:,:] += noise*numpy.random.randn(im0.size).reshape(dims)
+    im = im0 + noise*numpy.random.randn(im0.size).reshape(dims)
 
-    im,sky = _prep_image(im0) 
+    imsky,sky = _prep_image(im) 
 
     gm_guess=gm.copy()
     gm_guess._data['p']=1.0
@@ -224,10 +226,11 @@ def test_1gauss(counts=100.0, noise=0.0, maxiter=5000):
 
     print 'guess:'
     print gm_guess
-
-    #em=GMixEMPy(im, sky)
-    em=GMixEM(im, sky, gm_guess)
+    
+    tm0=time.time()
+    em=GMixEM(imsky, sky, gm_guess)
     em.go(maxiter)
+    print 'time:',time.time()-tm0,'seconds'
 
     gmfit=em.get_gmix()
     res=em.get_result()
@@ -236,7 +239,13 @@ def test_1gauss(counts=100.0, noise=0.0, maxiter=5000):
     print 'results'
     print res
 
-def test_2gauss(counts=100.0, noise=0.0, maxiter=5000,show=False):
+    if show:
+        import images
+        imfit=gmfit.make_image(im.shape)
+        imfit *= (im0.sum()/imfit.sum())
+
+        images.compare_images(im, imfit)
+def test_2gauss(counts=100.0, noise=0.0, maxiter=500,show=False):
     import time
     dims=[25,25]
     cen1=[ 0.35*dims[0], 0.35*dims[1] ]
