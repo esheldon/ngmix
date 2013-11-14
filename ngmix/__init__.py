@@ -18,3 +18,5 @@ from .gexceptions import GMixRangeError, GMixFatalError
 from . import fitting
 
 from . import point2d
+
+from . import em

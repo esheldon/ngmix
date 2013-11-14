@@ -385,6 +385,14 @@ def get_model_npars(model):
     mi=_gmix_model_dict[model]
     return _gmix_npars_dict[mi]
 
+
+@autojit
+def _gauss2d_verify(self):
+    ngauss=self.size
+    for i in xrange(ngauss):
+        if self[i].det <= 0:
+            raise GMixRangeError("det <= 0: %s" % self[i].det)
+
 # have to send whole array
 @jit(argtypes=[_gauss2d[:], int64, float64, float64, float64, float64, float64, float64])
 def _gauss2d_set(self, i, p, row, col, irr, irc, icc):
@@ -545,6 +553,14 @@ def _get_T(self):
 
     return T, psum
 
+
+@jit(argtypes=[ _gauss2d[:] ])
+def _get_wmomsum(self):
+    ngauss=self.size
+    wmom=0.0
+    for i in xrange(ngauss):
+        wmom += self[i].p*(self[i].irr + self[i].icc)
+    return wmom
 
 
 @jit(argtypes=[_gauss2d[:], float64[:]] )
