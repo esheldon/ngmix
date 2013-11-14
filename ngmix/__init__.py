@@ -1,3 +1,8 @@
+"""
+todo:
+    - test jacobian em
+    - add ability to have priors
+"""
 from . import gmix
 from .gmix import GMix
 from .gmix import GMixModel
@@ -16,7 +21,5 @@ from . import gexceptions
 from .gexceptions import GMixRangeError, GMixFatalError
 
 from . import fitting
-
-from . import point2d
 
 from . import em
