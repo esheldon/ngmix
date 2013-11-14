@@ -237,7 +237,7 @@ def test_1gauss(counts=100.0, noise=0.0, maxiter=5000):
 def test_2gauss(counts=100.0, noise=0.0, maxiter=5000,show=False):
     import time
     dims=[25,25]
-    cen1=[ 0.3*dims[0], 0.3*dims[1] ]
+    cen1=[ 0.35*dims[0], 0.35*dims[1] ]
     cen2=[ 0.6*dims[0], 0.5*dims[1] ]
 
     e1_1=0.1
