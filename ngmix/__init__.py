@@ -1,6 +1,5 @@
 """
 todo:
-    - test jacobian em
     - add ability to have priors
 """
 from . import gmix

@@ -3,6 +3,7 @@ import numpy
 from . import gmix
 from .jacobian import Jacobian, UnitJacobian
 
+from . import priors
 from .priors import srandu
 
 from .gexceptions import GMixRangeError
@@ -195,6 +196,19 @@ class MCMCBase(FitterBase):
         self.T_guess=keys.get('T',4.0)
         self.counts_guess=self._get_counts_guess(**keys)
 
+        self.do_pqr=keys.get('do_pqr',False)
+        self.do_lensfit=keys.get('do_lensfit',False)
+
+        if (self.do_lensfit or self.do_pqr) and self.g_prior is None:
+            raise ValueError("send g_prior for lensfit or pqr")
+
+        # we don't apply the prior during the likelihood exploration to avoid
+        # possibly dividing by zero during the lensfit and pqr calculations
+        if self.do_pqr or self.do_lensfit:
+            self.g_prior_during=False
+        else:
+            self.g_prior_during=True
+
         self.trials=None
 
 
@@ -289,16 +303,13 @@ class MCMCBase(FitterBase):
         Will probably over-ride this
         """
 
-        pars,pcov,g,gcov,gsens=self._get_trial_stats_with_lensfit()
+        pars,pcov=self._get_trial_stats()
  
         arates = self.sampler.acceptance_fraction
         arate = arates.mean()
 
         self._result={'flags':0,
                       'model':self.model,
-                      'g':g,
-                      'gcov':gcov,
-                      'gsens':gsens,
                       'pars':pars,
                       'pcov':pcov,
                       'perr':numpy.sqrt(numpy.diag(pcov)),
@@ -310,68 +321,20 @@ class MCMCBase(FitterBase):
             stats={}
         else:
             stats=self._get_fit_stats(gmix_list)
-        Tmean,Terr=self._get_T_stats(pars,pcov)
-        Ts2n=Tmean/Terr
-
-        flux,flux_err=self._get_flux_stats(pars,pcov)
-        Fs2n=flux/flux_err
-
-        self._result={'flags':0,
-                      'model':self.model_name,
-                      'g':g,
-                      'gcov':gcov,
-                      'gsens':gsens,
-                      'pars':pars,
-                      'perr':sqrt(diag(pcov)),
-                      'pcov':pcov,
-                      'Tmean':Tmean,
-                      'Terr':Terr,
-                      'Ts2n':Ts2n,
-                      'flux':flux,
-                      'flux_err':flux_err,
-                      'flux_s2n':Fs2n,
-                      'arate':arate}
-
-        if self.do_pqr:
-            P,Q,R = self._get_PQR()
-            self._result['P']=P
-            self._result['Q']=Q
-            self._result['R']=R
-
-        self._result.update(stats)
         '''
 
-
-    def _get_trial_stats_with_lensfit(self):
-
-        if self.g_prior is not None:
-            prior = self.g_prior.get_prob_array2d(g1vals,g2vals)
-            pars,pcov = extract_mcmc_stats(self.trials,weights=prior)
-            g = pars[2:4].copy()
-            gcov = pcov[2:4, 2:4].copy()
-
-            g1vals=self.trials[:,2]
-            g2vals=self.trials[:,3]
-
-            dpri_by_g1 = self.g_prior.dbyg1_array(g1vals,g2vals)
-            dpri_by_g2 = self.g_prior.dbyg2_array(g1vals,g2vals)
-
-            psum = prior.sum()
-
-            g1diff = g[0]-g1vals
-            g2diff = g[1]-g2vals
-
-            gsens = numpy.zeros(2)
-            gsens[0]= 1.-(g1diff*dpri_by_g1).sum()/psum
-            gsens[1]= 1.-(g2diff*dpri_by_g2).sum()/psum
+    def _get_trial_stats(self):
+        """
+        hmm.... really only know g1,g2 are in 2,3 for simple
+        and some other models...
+        """
+        if self.g_prior is not None and not self.g_prior_during:
+            raise RuntimeError("don't know how to get g1,g2 "
+                               "values in general. You need to over-ride")
         else:
             pars,pcov = extract_mcmc_stats(self.trials)
-            g = pars[2:4].copy()
-            gcov = pcov[2:4, 2:4].copy()
-
-            gsens=numpy.array([1.,1.])
-
-        return pars, pcov, g, gcov, gsens
+        
+        return pars,pcov
 
 
     def _get_guess(self):
@@ -380,6 +343,29 @@ class MCMCBase(FitterBase):
 class MCMCSimple(MCMCBase):
     def __init__(self, image, weight, jacobian, model, **keys):
         super(MCMCSimple,self).__init__(image, weight, jacobian, model, **keys)
+
+
+    def _get_priors(self, pars):
+        """
+        add any priors that were sent on construction
+        
+        note g prior is *not* applied during the likelihood exploration
+        if do_lensfit=True or do_pqr=True
+        """
+        lnp=0.0
+        if self.cen_prior is not None:
+            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+
+        if self.g_prior is not None and self.g_prior_during:
+            lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+        
+        if self.T_prior is not None:
+            lnp += self.T_prior.get_lnprob_scalar(pars[4])
+
+        if self.counts_prior is not None:
+            lnp += self.counts_prior.get_lnprob_scalar(pars[5])
+
+        return lnp
 
     def _get_guess(self):
         """
@@ -402,16 +388,96 @@ class MCMCSimple(MCMCBase):
         self._guess=guess
         return guess
 
+    def _calc_result(self):
+        """
+        Some extra stats for simple models
+        """
+        super(MCMCSimple,self)._calc_result()
+
+        self._result['g'] = self._result['pars'][2:2+2].copy()
+        self._result['gcov'] = self._result['pcov'][2:2+2, 2:2+2].copy()
+
+        if self.do_lensfit:
+            gsens=self._get_lensfit_gsens(pars)
+            self._result['gsens']=gsens
+
+        if self.do_pqr:
+            P,Q,R = self._get_PQR()
+            self._result['P']=P
+            self._result['Q']=Q
+            self._result['R']=R
+
+        T,T_err,T_s2n=self._get_T_stats(self._result['pars'],
+                                        self._result['pcov'])
+        self._result['T'] = T
+        self._result['T_err'] = T_err
+        self._result['T_s2n'] = T_s2n
+
+        flux,flux_err,flux_s2n=self._get_flux_stats(self._result['pars'],
+                                                    self._result['pcov'])
+        Fs2n=flux/flux_err
+        self._result['flux'] = flux
+        self._result['flux_err'] = flux_err
+        self._result['flux_s2n'] = flux_s2n
+
+
+    def _get_trial_stats(self):
+        """
+        Get the stats from the trials
+        """
+        if self.g_prior is not None and not self.g_prior_during:
+            g1vals = self.trials[:,2]
+            g2vals = self.trials[:,3]
+            gprior  = self.g_prior.get_prob_array2d(g1vals,g2vals)
+            pars,pcov = extract_mcmc_stats(self.trials,weights=gprior)
+        else:
+            pars,pcov = extract_mcmc_stats(self.trials)
+        
+        return pars,pcov
+
+    def _get_lensfit_gsens(self, pars, gprior=None):
+
+        if self.g_prior is not None:
+            g1vals=self.trials[:,2]
+            g2vals=self.trials[:,3]
+
+            gprior = self.g_prior.get_prob_array2d(g1vals,g2vals)
+
+            dpri_by_g1 = self.g_prior.dbyg1_array(g1vals,g2vals)
+            dpri_by_g2 = self.g_prior.dbyg2_array(g1vals,g2vals)
+
+            psum = gprior.sum()
+
+            g=pars[2:2+2]
+            g1diff = g[0]-g1vals
+            g2diff = g[1]-g2vals
+
+            gsens = numpy.zeros(2)
+            gsens[0]= 1.-(g1diff*dpri_by_g1).sum()/psum
+            gsens[1]= 1.-(g2diff*dpri_by_g2).sum()/psum
+        else:
+            gsens=numpy.array([1.,1.])
+
+        return gsens
+
+
     def _get_T_stats(self, pars, pcov):
         """
         Simple model only
         """
-        return pars[4], sqrt(pcov[4,4])
+        T     = pars[4]
+        T_err = numpy.sqrt(pcov[4,4])
+        T_s2n = T/T_err
+        return T, T_err, T_s2n
+
     def _get_flux_stats(self, pars, pcov):
         """
         Simple model only
         """
-        return pars[5], sqrt(pcov[5,5])
+        counts     = pars[5]
+        counts_err = numpy.sqrt(pcov[5,5])
+        counts_s2n = counts/counts_err
+        return counts, counts_err, counts_s2n
 
 
 class MCMCGaussPSF(MCMCSimple):
@@ -743,6 +809,118 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
     mc_obj=MCMCSimple(imlist_obj, wtlist_obj, jlist, model,
                       psf=psf_fit_list,
                       T=Tsky_obj, counts=counts_sky_obj)
+    mc_obj.go()
+
+    res_obj=mc_obj.get_result()
+
+    print_pars(res_obj['pars'], front='pars_obj:', stream=stderr)
+    print_pars(res_obj['perr'], front='perr_obj:', stream=stderr)
+    print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['perr'][4]/jfac2)
+
+    gmfit0=mc_obj.get_gmix()
+    gmfit=gmfit0.convolve(psf_fit)
+    imfit_obj=gmfit.make_image(im_obj.shape, jacobian=j)
+
+    images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
+    mcmc.plot_results(mc_obj.get_trials())
+
+
+def test_model_priors(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
+    """
+    testing jacobian stuff
+    """
+    import images
+    import mcmc
+
+    dims=[25,25]
+    cen=[dims[0]/2., dims[1]/2.]
+
+    jfac2=jfac**2
+    j=Jacobian(cen[0],cen[1], jfac, 0.0, 0.0, jfac)
+
+    #
+    # simulation
+    #
+
+    # PSF pars
+    counts_sky_psf=100.0
+    counts_pix_psf=counts_sky_psf/jfac2
+    noise_sky_psf=0.01
+    noise_pix_psf=noise_sky_psf/jfac2
+    g1_psf=0.05
+    g2_psf=-0.01
+    Tpix_psf=4.0
+    Tsky_psf=Tpix_psf*jfac2
+
+    # object pars
+    g1_obj=0.1
+    g2_obj=0.05
+    Tpix_obj=16.0
+    Tsky_obj=Tpix_obj*jfac2
+
+    counts_sky_obj=counts_sky
+    noise_sky_obj=noise_sky
+    counts_pix_obj=counts_sky_obj/jfac2
+    noise_pix_obj=noise_sky_obj/jfac2
+
+    pars_psf = [0.0, 0.0, g1_psf, g2_psf, Tsky_psf, counts_sky_psf]
+    gm_psf=gmix.GMixModel(pars_psf, "gauss")
+
+    pars_obj = [0.0, 0.0, g1_obj, g2_obj, Tsky_obj, counts_sky_obj]
+    gm_obj0=gmix.GMixModel(pars_obj, model)
+
+    gm=gm_obj0.convolve(gm_psf)
+
+    im_psf=gm_psf.make_image(dims, jacobian=j)
+    im_psf[:,:] += noise_pix_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
+    wt_psf=numpy.zeros(im_psf.shape) + 1./noise_pix_psf**2
+
+    im_obj=gm.make_image(dims, jacobian=j)
+    im_obj[:,:] += noise_pix_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
+    wt_obj=numpy.zeros(im_obj.shape) + 1./noise_pix_obj**2
+
+    #
+    # priors
+    #
+
+    cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
+    T_prior=priors.LogNormal(Tsky_obj, 0.1*Tsky_obj)
+    counts_prior=priors.LogNormal(counts_sky_obj, 0.1*counts_sky_obj)
+    g_prior = priors.GPriorBA(0.3)
+
+    #
+    # fitting
+    #
+
+    # psf
+    mc_psf=MCMCGaussPSF(im_psf, wt_psf, j,
+                        T=Tsky_psf, counts=counts_sky_psf)
+    mc_psf.go()
+
+    psf_fit=mc_psf.get_gmix()
+    res_psf=mc_psf.get_result()
+    print_pars(res_psf['pars'], front='pars_psf:', stream=stderr)
+    print_pars(res_psf['perr'], front='perr_psf:', stream=stderr)
+    print 'Tpix: %.4g +/- %.4g' % (res_psf['pars'][4]/jfac2, res_psf['perr'][4]/jfac2)
+
+    imfit_psf=psf_fit.make_image(im_psf.shape, jacobian=j)
+    images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
+    mcmc.plot_results(mc_psf.get_trials())
+
+    # obj
+    jlist=[j]*nimages
+    imlist_obj=[im_obj]*nimages
+    wtlist_obj=[wt_obj]*nimages
+    psf_fit_list=[psf_fit]*nimages
+
+    mc_obj=MCMCSimple(imlist_obj, wtlist_obj, jlist, model,
+                      psf=psf_fit_list,
+                      T=Tsky_obj,
+                      counts=counts_sky_obj,
+                      cen_prior=cen_prior,
+                      T_prior=T_prior,
+                      counts_prior=counts_prior,
+                      g_prior=g_prior)
     mc_obj.go()
 
     res_obj=mc_obj.get_result()
