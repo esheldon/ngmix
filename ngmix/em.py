@@ -9,12 +9,14 @@ from .priors import srandu
 
 class GMixEM(object):
     """
-    Pure python implementation
+    Fit an image with a gaussian mixture using the EM algorithm
+
+    todo: jacobian
     """
-    def __init__(self, image, sky, gmix_guess, jacobian=None):
+    def __init__(self, image, sky_guess, gmix_guess, jacobian=None):
 
         self._image=numpy.array(image, dtype='f8', copy=False)
-        self._sky_guess=numpy.float64(sky)
+        self._sky_guess=sky_guess
 
         self._gm=gmix_guess.copy()
         self._ngauss=len(self._gm)
@@ -30,9 +32,9 @@ class GMixEM(object):
         numiter, fdiff = _run_em(self._image,
                                  self._gm._data,
                                  self._sums,
-                                 self._sky_guess,
-                                 maxiter,
-                                 tol)
+                                 numpy.float64(self._sky_guess),
+                                 numpy.int64(maxiter),
+                                 numpy.float64(tol))
 
         self._result={'numiter':numiter,
                       'fdiff':fdiff}
@@ -88,7 +90,7 @@ def _run_em(image, gmix, sums, sky, maxiter, tol):
     nsky = sky/counts
     psky = sky/(counts/area)
 
-    wmomlast=-9999
+    wmomlast=-9999.0
     fdiff=9999.0
 
     iiter=0
@@ -271,8 +273,8 @@ def test_2gauss(counts=100.0, noise=0.0, maxiter=5000,show=False):
 
     gm_guess=gm.copy()
     gm_guess._data['p']=[0.5,0.5]
-    gm_guess._data['row'] += 1*srandu(2)
-    gm_guess._data['col'] += 1*srandu(2)
+    gm_guess._data['row'] += 4*srandu(2)
+    gm_guess._data['col'] += 4*srandu(2)
     gm_guess._data['irr'] += 0.5*srandu(2)
     gm_guess._data['irc'] += 0.5*srandu(2)
     gm_guess._data['icc'] += 0.5*srandu(2)
