@@ -398,7 +398,7 @@ class MCMCSimple(MCMCBase):
         self._result['gcov'] = self._result['pcov'][2:2+2, 2:2+2].copy()
 
         if self.do_lensfit:
-            gsens=self._get_lensfit_gsens(pars)
+            gsens=self._get_lensfit_gsens(self._result['pars'])
             self._result['gsens']=gsens
 
         if self.do_pqr:
@@ -459,6 +459,27 @@ class MCMCSimple(MCMCBase):
             gsens=numpy.array([1.,1.])
 
         return gsens
+
+    def _get_PQR(self):
+        """
+        get the marginalized P,Q,R from Bernstein & Armstrong
+
+        Note if the prior is already in our mcmc chain, so we need to divide by
+        the prior everywhere.  Because P*J=P at shear==0 this means P is always
+        1
+
+        """
+
+        g1=self.trials[:,2]
+        g2=self.trials[:,3]
+
+        P,Q,R = self.g_prior.get_pqr(g1,g2)
+
+        P = P.mean()
+        Q = Q.mean(axis=0)
+        R = R.mean(axis=0)
+
+        return P,Q,R
 
 
     def _get_T_stats(self, pars, pcov):
@@ -733,6 +754,7 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
     """
     import images
     import mcmc
+    from . import em
 
     dims=[25,25]
     cen=[dims[0]/2., dims[1]/2.]
@@ -785,20 +807,26 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
     # fitting
     #
 
-    # psf
-    mc_psf=MCMCGaussPSF(im_psf, wt_psf, j,
-                        T=Tsky_psf, counts=counts_sky_psf)
-    mc_psf.go()
+
+    # psf using EM
+    im_psf_sky,sky=em.prep_image(im_psf)
+    mc_psf=em.GMixEM(im_psf_sky, jacobian=j)
+    emo_guess=gm_psf.copy()
+    emo_guess._data['p'] = 1.0
+    emo_guess._data['row'] += 0.1*srandu()
+    emo_guess._data['col'] += 0.1*srandu()
+    emo_guess._data['irr'] += 0.5*srandu()
+    emo_guess._data['irc'] += 0.1*srandu()
+    emo_guess._data['icc'] += 0.5*srandu()
+    mc_psf.go(emo_guess, sky)
+    res_psf=mc_psf.get_result()
+    print 'psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff']
 
     psf_fit=mc_psf.get_gmix()
-    res_psf=mc_psf.get_result()
-    print_pars(res_psf['pars'], front='pars_psf:', stream=stderr)
-    print_pars(res_psf['perr'], front='perr_psf:', stream=stderr)
-    print 'Tpix: %.4g +/- %.4g' % (res_psf['pars'][4]/jfac2, res_psf['perr'][4]/jfac2)
-
-    imfit_psf=psf_fit.make_image(im_psf.shape, jacobian=j)
+    imfit_psf=mc_psf.make_image(counts=im_psf.sum())
     images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
-    mcmc.plot_results(mc_psf.get_trials())
+
+
 
     # obj
     jlist=[j]*nimages
@@ -825,12 +853,19 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
     mcmc.plot_results(mc_obj.get_trials())
 
 
-def test_model_priors(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
+def test_model_priors(model,
+                      counts_sky=100.0,
+                      noise_sky=0.01,
+                      nimages=1,
+                      jfac=0.27,
+                      do_lensfit=False,
+                      do_pqr=False):
     """
     testing jacobian stuff
     """
     import images
     import mcmc
+    from . import em
 
     dims=[25,25]
     cen=[dims[0]/2., dims[1]/2.]
@@ -845,8 +880,6 @@ def test_model_priors(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=
     # PSF pars
     counts_sky_psf=100.0
     counts_pix_psf=counts_sky_psf/jfac2
-    noise_sky_psf=0.01
-    noise_pix_psf=noise_sky_psf/jfac2
     g1_psf=0.05
     g2_psf=-0.01
     Tpix_psf=4.0
@@ -872,10 +905,8 @@ def test_model_priors(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=
     gm=gm_obj0.convolve(gm_psf)
 
     im_psf=gm_psf.make_image(dims, jacobian=j)
-    im_psf[:,:] += noise_pix_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
-    wt_psf=numpy.zeros(im_psf.shape) + 1./noise_pix_psf**2
-
     im_obj=gm.make_image(dims, jacobian=j)
+
     im_obj[:,:] += noise_pix_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
     wt_obj=numpy.zeros(im_obj.shape) + 1./noise_pix_obj**2
 
@@ -892,20 +923,23 @@ def test_model_priors(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=
     # fitting
     #
 
-    # psf
-    mc_psf=MCMCGaussPSF(im_psf, wt_psf, j,
-                        T=Tsky_psf, counts=counts_sky_psf)
-    mc_psf.go()
+    # psf using EM
+    im_psf_sky,sky=em.prep_image(im_psf)
+    mc_psf=em.GMixEM(im_psf_sky, jacobian=j)
+    emo_guess=gm_psf.copy()
+    emo_guess._data['p'] = 1.0
+    emo_guess._data['row'] += 0.1*srandu()
+    emo_guess._data['col'] += 0.1*srandu()
+    emo_guess._data['irr'] += 0.5*srandu()
+    emo_guess._data['irc'] += 0.1*srandu()
+    emo_guess._data['icc'] += 0.5*srandu()
+    mc_psf.go(emo_guess, sky)
+    res_psf=mc_psf.get_result()
+    print 'psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff']
 
     psf_fit=mc_psf.get_gmix()
-    res_psf=mc_psf.get_result()
-    print_pars(res_psf['pars'], front='pars_psf:', stream=stderr)
-    print_pars(res_psf['perr'], front='perr_psf:', stream=stderr)
-    print 'Tpix: %.4g +/- %.4g' % (res_psf['pars'][4]/jfac2, res_psf['perr'][4]/jfac2)
-
-    imfit_psf=psf_fit.make_image(im_psf.shape, jacobian=j)
+    imfit_psf=mc_psf.make_image(counts=im_psf.sum())
     images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
-    mcmc.plot_results(mc_psf.get_trials())
 
     # obj
     jlist=[j]*nimages
@@ -920,7 +954,9 @@ def test_model_priors(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=
                       cen_prior=cen_prior,
                       T_prior=T_prior,
                       counts_prior=counts_prior,
-                      g_prior=g_prior)
+                      g_prior=g_prior,
+                      do_lensfit=do_lensfit,
+                      do_pqr=do_pqr)
     mc_obj.go()
 
     res_obj=mc_obj.get_result()
@@ -928,6 +964,12 @@ def test_model_priors(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=
     print_pars(res_obj['pars'], front='pars_obj:', stream=stderr)
     print_pars(res_obj['perr'], front='perr_obj:', stream=stderr)
     print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['perr'][4]/jfac2)
+    if do_lensfit:
+        print 'gsens:',res_obj['gsens']
+    if do_pqr:
+        print 'P:',res_obj['P']
+        print 'Q:',res_obj['Q']
+        print 'R:',res_obj['R']
 
     gmfit0=mc_obj.get_gmix()
     gmfit=gmfit0.convolve(psf_fit)

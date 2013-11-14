@@ -5,7 +5,7 @@ from numba import jit, autojit, float64, void
 
 from .gexceptions import GMixRangeError
 
-class GPrior(object):
+class GPriorBase(object):
     """
     This is the base class.  You need to over-ride a few of
     the functions, see below
@@ -32,7 +32,7 @@ class GPrior(object):
         """
         Get the 2d prior for the array inputs
         """
-        output=numpy.zeros(garr1.size)
+        output=numpy.zeros(g1arr.size)
         self.fill_prob_array2d(g1arr, g2arr, output)
         return output
 
@@ -321,10 +321,84 @@ class GPrior(object):
 
 
 
+class GPriorBABase(GPriorBase):
+    """
+    non-jitted methods
+    """
+    def get_pqr(self, g1in, g2in):
+        """
+        Evaluate 
+            P
+            Q
+            R
+        From Bernstein & Armstrong
+
+        P is this prior times the jacobian at shear==0
+
+        Q is the gradient of P*J evaluated at shear==0
+
+            [ d(P*J)/dg1, d(P*J)/dg2]_{g=0}
+
+        R is grad of grad of P*J at shear==0
+            [ d(P*J)/dg1dg1  d(P*J)/dg1dg2 ]
+            [ d(P*J)/dg1dg2  d(P*J)/dg2dg2 ]_{g=0}
+        """
+
+        if numpy.isscalar(g1in):
+            isscalar=True
+        else:
+            isscalar=False
+
+        g1 = numpy.array(g1in, dtype='f8', ndmin=1, copy=False)
+        g2 = numpy.array(g2in, dtype='f8', ndmin=1, copy=False)
+
+        # these are the same
+        #P=self.get_pj(g1, g2, 0.0, 0.0)
+        P=self.get_prob_array2d(g1, g2)
+
+        sig2 = self.sig2
+        sig4 = self.sig4
+        sig2inv = self.sig2inv
+        sig4inv = self.sig4inv
+
+        gsq = g1**2 + g2**2
+        omgsq = 1. - gsq
+
+        fac = numpy.exp(-0.5*gsq*sig2inv)*omgsq**2
+
+        Qf = fac*(omgsq + 8*sig2)*sig2inv
+
+        Q1 = g1*Qf
+        Q2 = g2*Qf
+
+        R11 = (fac * (g1**6 + g1**4*(-2 + 2*g2**2 - 19*sig2) + (1 + g2**2)*sig2*(-1 + g2**2 - 8*sig2) + g1**2*(1 + g2**4 + 20*sig2 + 72*sig4 - 2*g2**2*(1 + 9*sig2))))*sig4inv
+        R22 = (fac * (g2**6 + g2**4*(-2 + 2*g1**2 - 19*sig2) + (1 + g1**2)*sig2*(-1 + g1**2 - 8*sig2) + g2**2*(1 + g1**4 + 20*sig2 + 72*sig4 - 2*g1**2*(1 + 9*sig2))))*sig4inv
+
+        R12 = fac * g1*g2 * (80 + omgsq**2*sig4inv + 20*omgsq*sig2inv)
+
+        np=g1.size
+        Q = numpy.zeros( (np,2) )
+        R = numpy.zeros( (np,2,2) )
+
+        Q[:,0] = Q1
+        Q[:,1] = Q2
+        R[:,0,0] = R11
+        R[:,0,1] = R12
+        R[:,1,0] = R12
+        R[:,1,1] = R22
+
+        if isscalar:
+            P = P[0]
+            Q = Q[0,:]
+            R = R[0,:,:]
+
+        return P, Q, R
+
+
 
 
 @jit
-class GPriorBA(GPrior):
+class GPriorBA(GPriorBABase):
     """
     g prior from Bernstein & Armstrong 2013
     """
@@ -334,7 +408,10 @@ class GPriorBA(GPrior):
         pars are scalar gsigma from B&A 
         """
         self.sigma   = sigma
-        self.sig2inv = 1./self.sigma**2
+        self.sig2 = self.sigma**2
+        self.sig4 = self.sigma**4
+        self.sig2inv = 1./self.sig2
+        self.sig4inv = 1./self.sig4
 
         self.gmax=1.0
 
@@ -463,6 +540,7 @@ class GPriorBA(GPrior):
         fb = self.get_prob_scalar2d(g1,g2-self.hhalf)
 
         return (ff - fb)*self.hinv
+
 
 
 class LogNormalBase(object):

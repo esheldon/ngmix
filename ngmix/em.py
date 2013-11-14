@@ -50,6 +50,15 @@ class GMixEM(object):
         """
         return self._result
 
+    def make_image(self, counts=None):
+        """
+        Get an image of the best fit mixture
+        """
+        im=self._gm.make_image(self._image.shape, jacobian=self._jacobian)
+        if counts is not None:
+            im *= (counts/im.sum())
+        return im
+
     def go(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
         """
         Run the em algorithm from the input starting guesses
