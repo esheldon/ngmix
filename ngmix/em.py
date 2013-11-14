@@ -4,7 +4,7 @@ Fit an image with a gaussian mixture using the EM algorithm
 
 import numpy
 import numba
-from numba import autojit, float64, int64
+from numba import jit, autojit, float64, int64
 from . import gmix
 from .gmix import GMix, _gauss2d_set, _gauss2d, _get_wmomsum, _gauss2d_verify
 from .gexceptions import GMixRangeError, GMixMaxIterEM
@@ -166,7 +166,7 @@ def _run_em(image, gmix, sums, sky, maxiter, tol):
     return iiter, fdiff
 
 
-def _prep_image(im0):
+def prep_image(im0):
 
     im=im0.copy()
 
@@ -214,7 +214,7 @@ def test_1gauss(counts=100.0, noise=0.0, maxiter=500, show=False):
 
     im = im0 + noise*numpy.random.randn(im0.size).reshape(dims)
 
-    imsky,sky = _prep_image(im) 
+    imsky,sky = prep_image(im) 
 
     gm_guess=gm.copy()
     gm_guess._data['p']=1.0
@@ -278,7 +278,7 @@ def test_2gauss(counts=100.0, noise=0.0, maxiter=500,show=False):
     im0=gm.make_image(dims)
     im = im0 + noise*numpy.random.randn(im0.size).reshape(dims)
 
-    imsky,sky = _prep_image(im) 
+    imsky,sky = prep_image(im) 
 
     gm_guess=gm.copy()
     gm_guess._data['p']=[0.5,0.5]
@@ -294,7 +294,8 @@ def test_2gauss(counts=100.0, noise=0.0, maxiter=500,show=False):
     tm0=time.time()
     em=GMixEM(imsky, sky, gm_guess)
     em.go(maxiter)
-    print 'time:',time.time()-tm0,'seconds'
+    tm=time.time()-tm0
+    print 'time:',tm,'seconds'
 
     gmfit=em.get_gmix()
     res=em.get_result()
@@ -309,3 +310,5 @@ def test_2gauss(counts=100.0, noise=0.0, maxiter=500,show=False):
         imfit *= (im0.sum()/imfit.sum())
 
         images.compare_images(im, imfit)
+
+    return tm
