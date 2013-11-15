@@ -27,24 +27,22 @@ class FitterBase(object):
     method get_flux_scaling to get the average scaling from the input images.
     This only makes sense for comparing to fluxes measured in the image system,
     for example zeropoints.  If you are using very many different cameras then
-    you should just work in sky coordinates.
+    you should just work in sky coordinates, or scale the images by the zero
+    point corrections.
     
     """
     def __init__(self, image, weight, jacobian, model, **keys):
         self.keys=keys
 
+        # in this case, image, weight, jacobian, psf are going to
+        # be lists of lists.
+
+        # call this first, others depend on it
+        self._set_lists(image, weight, jacobian, **keys)
+
         self.model=gmix.get_model_num(model)
         self.model_name=gmix.get_model_name(self.model)
-        self.npars=gmix.get_model_npars(self.model)
-
-        self.im_list=_get_as_list(image,"image")
-        self.wt_list=_get_as_list(weight,"weight")
-        self._set_jacob_list(jacobian) # set jacob_list and mean_jacob_det
-
-        self.psf_list=_get_as_list(keys.get('psf',None),
-                                   "psf",
-                                   allow_none=True)
-        self.nimages=len(self.im_list)
+        self._set_npars()
 
         self.g_prior = keys.get('g_prior',None)
         self.cen_prior = keys.get('cen_prior',None)
@@ -58,10 +56,35 @@ class FitterBase(object):
         self._gmix_list=None
         self._result=None
 
+    def _set_npars(self):
+        self.npars=gmix.get_model_npars(self.model)
+
+    def _set_lists(self, image, weight, jacobian, **keys):
+        """
+        We expect images or lists thereof
+        """
+        self.im_list=_get_as_list(image,"image")
+        self.wt_list=_get_as_list(weight,"weight")
+
+        self.psf_list=_get_as_list(keys.get('psf',None),
+                                   "psf",
+                                   allow_none=True)
+
+        self.jacob_list = _get_as_list(jacobian,"jacobian")
+        mean_det=0.0
+        for j in self.jacob_list:
+            mean_det += j._data['det']
+        self.mean_jacob_det=mean_det/len(self.jacob_list)
+
+        self.nimages=len(self.im_list)
+
+
     def verify(self):
         """
-        Make sure lists are equal length, image and weight
+
+        Make sure lists (or lists of lists) are equal length, image and weight
         maps same size, etc.
+
         """
         nim=len(self.im_list)
         nwt=len(self.wt_list)
@@ -113,6 +136,80 @@ class FitterBase(object):
         gm=gmix.GMixModel(pars, self.model)
         return gm
 
+    def get_dof(self):
+        """
+        Effective def based on effective number of pixels
+        """
+        eff_npix=self.get_effective_npix()
+        dof = eff_npix-self.npars
+        if dof <= 0:
+            dof = 1.e-6
+        return dof
+
+    def get_effective_npix(self):
+        """
+        Because of the weight map, each pixel gets a different weight in the
+        chi^2.  This changes the effective degrees of freedom.  The extreme
+        case is when the weight is zero; these pixels are essentially not used.
+
+        We replace the number of pixels with
+
+            eff_npix = sum(weights)maxweight
+        """
+        if not hasattr(self, 'eff_npix'):
+            wtmax = 0.0
+            wtsum = 0.0
+            for wt in self.wt_list:
+                this_wtmax = wt.max()
+                if this_wtmax > wtmax:
+                    wtmax = this_wtmax
+
+                wtsum += wt.sum()
+
+            self.eff_npix=wtsum/wtmax
+
+        if self.eff_npix <= 0:
+            self.eff_npix=1.e-6
+
+        return self.eff_npix
+
+
+
+    def calc_lnprob(self, pars, get_s2nsums=False):
+        """
+        This is all we use for mcmc approaches.  For the max likelihood
+        fitter we also have a _get_ydiff method
+        """
+        try:
+
+            lnprob = self._get_priors(pars)
+            s2n_numer=0.0
+            s2n_denom=0.0
+
+            self._fill_gmix_list(pars)
+
+            for i in xrange(self.nimages):
+                gm=self._gmix_list[i]
+                im=self.im_list[i]
+                wt=self.wt_list[i]
+                j=self.jacob_list[i]
+
+                res = gm.get_loglike(im, wt, jacobian=j,
+                                     get_s2nsums=True)
+                lnprob += res[0]
+                s2n_numer += res[1]
+                s2n_denom += res[2]
+
+        except GMixRangeError:
+            lnprob = LOWVAL
+
+        if get_s2nsums:
+            return lnprob, s2n_numer, s2n_denom
+        else:
+            return lnprob
+
+
+
     def _init_gmix_list(self, pars):
         if self.psf_list is not None:
 
@@ -134,7 +231,7 @@ class FitterBase(object):
 
     def _fill_gmix_list(self, pars):
         """
-        Get a list of gmix objects, potentially convolved with
+        Fill the list of gmix objects, potentially convolved with
         the psf in the individual images
         """
         if self._gmix_list is None:
@@ -171,14 +268,6 @@ class FitterBase(object):
             clist[i] = im.sum()*j._data['det']
         
         return numpy.median(clist)
-
-    def _set_jacob_list(self, jacobian):
-        self.jacob_list = _get_as_list(jacobian,"jacobian")
-        mean_det=0.0
-        for j in self.jacob_list:
-            mean_det += j._data['det']
-        self.mean_jacob_det=mean_det/len(self.jacob_list)
-
 
 
 class MCMCBase(FitterBase):
@@ -265,7 +354,7 @@ class MCMCBase(FitterBase):
         import emcee
         sampler = emcee.EnsembleSampler(self.nwalkers, 
                                         self.npars, 
-                                        self._calc_lnprob,
+                                        self.calc_lnprob,
                                         a=self.mca_a)
         return sampler
 
@@ -274,28 +363,6 @@ class MCMCBase(FitterBase):
         Basically a placeholder for no priors
         """
         return 0.0
-
-    def _calc_lnprob(self, pars):
-
-        try:
-
-            lnprob = self._get_priors(pars)
-
-            self._fill_gmix_list(pars)
-
-            for i in xrange(self.nimages):
-                gm=self._gmix_list[i]
-                im=self.im_list[i]
-                wt=self.wt_list[i]
-                j=self.jacob_list[i]
-
-                lnprob += gm.get_loglike(im, wt, jacobian=j)
-
-
-        except GMixRangeError:
-            lnprob = LOWVAL
-
-        return lnprob
 
 
     def _calc_result(self):
@@ -315,18 +382,42 @@ class MCMCBase(FitterBase):
                       'perr':numpy.sqrt(numpy.diag(pcov)),
                       'arate':arate}
 
-        '''
-        gmix_list=self._get_gmix_list(pars)
-        if gmix_list is None:
-            stats={}
+        stats = self.get_fit_stats(pars)
+        self._result.update(stats)
+
+    def get_fit_stats(self, pars):
+        """
+        Get some statistics for the best fit.
+        """
+        npars=self.npars
+
+        lnprob,s2n_numer,s2n_denom=self.calc_lnprob(pars, get_s2nsums=True)
+
+        if s2n_denom > 0:
+            s2n=s2n_numer/numpy.sqrt(s2n_denom)
         else:
-            stats=self._get_fit_stats(gmix_list)
-        '''
+            s2n=0.0
+
+        dof=self.get_dof()
+        eff_npix=self.get_effective_npix()
+
+        chi2=lnprob/(-0.5)
+        chi2per = chi2/dof
+
+        aic = -2*lnprob + 2*npars
+        bic = -2*lnprob + npars*numpy.log(eff_npix)
+
+        return {'s2n_w':s2n,
+                'lnprob':lnprob,
+                'chi2per':chi2per,
+                'dof':dof,
+                'aic':aic,
+                'bic':bic}
+
 
     def _get_trial_stats(self):
         """
-        hmm.... really only know g1,g2 are in 2,3 for simple
-        and some other models...
+        Get the means and covariance for the trials
         """
         if self.g_prior is not None and not self.g_prior_during:
             raise RuntimeError("don't know how to get g1,g2 "
@@ -415,7 +506,6 @@ class MCMCSimple(MCMCBase):
 
         flux,flux_err,flux_s2n=self._get_flux_stats(self._result['pars'],
                                                     self._result['pcov'])
-        Fs2n=flux/flux_err
         self._result['flux'] = flux
         self._result['flux_err'] = flux_err
         self._result['flux_s2n'] = flux_s2n
@@ -499,6 +589,552 @@ class MCMCSimple(MCMCBase):
         counts_err = numpy.sqrt(pcov[5,5])
         counts_s2n = counts/counts_err
         return counts, counts_err, counts_s2n
+
+class MCMCSimpleMB(MCMCSimple):
+    """
+    Almost everything re-writting here.
+
+    Maybe we should write the main code this way.  Make sure we always convert
+    to lists of lists even if only lists are entered.
+    """
+    def __init__(self, image, weight, jacobian, model, **keys):
+        super(MCMCSimpleMB,self).__init__(image, weight, jacobian, model, **keys)
+
+    def _set_npars(self):
+        """
+        nband should be set in set_lists, called before this
+        """
+        self.npars=gmix.get_model_npars(self.model) + self.nband-1
+
+    def _set_lists(self, im_lol, wt_lol, j_lol, **keys):
+        """
+        We expect lists of lists
+        """
+        psf_lol=keys.get('psf',None)
+        if psf_lol is None:
+            raise ValueError("send psf for mcmc simple mb")
+
+        if (not isinstance(im_lol,list)
+                or not isinstance(wt_lol,list)
+                or not isinstance(j_lol,list)
+                or not isinstance(psf_lol)):
+            raise ValueError("for multi-band, inputs must be lists")
+        if (not isinstance(im_lol[0],list)
+                or not isinstance(wt_lol[0],list)
+                or not isinstance(j_lol[0],list)
+                or not isinstance(psf_lol[0],list) ):
+            raise ValueError("for multi-band, inputs must be lists of lists")
+
+        self.nband=len(im_lol)
+        nimages = numpy.array( [len(l) for l in image], dtype='i4')
+
+        self.im_lol=im_lol
+        self.wt_lol=wt_lol
+        self.psf_lol=psf_lol
+
+        self.jacob_lol = jacobian
+        mean_det=numpy.zeros(self.nband)
+        for band in xrange(self.nband):
+            jlist=self.jacob_lol[band]
+            for j in jlist:
+                mean_det[band] += j._data['det']
+            mean_det[band] /= len(jlist)
+
+        self.mean_det=mean_det
+
+    def verify(self):
+        """
+        lists of lists.
+
+        Make sure the main lists are the same length (same number of bands)
+        and that within each band the lists are the same size
+        """
+        nb=self.nband
+        wt_nb = len(self.wt_lol)
+        j_nb  = len(self.jacob_lol)
+        psf_nb=len(self.psf_lol)
+        if (wt_nb != nb or j_nb != nb or psf_nb != nb):
+
+            nbt=(nb,wt_nb,j_nb,psf_nb)
+            raise ValueError("lists of lists not all same size: "
+                             "im: %s wt: %s jacob: %s psf: %s" % nbt)
+        
+        totpix=0
+        for i in xrange(self.nband):
+            nim=len(self.im_lol[i])
+
+            wt_n=len(self.wt_lol[i])
+            j_n=len(self.jacob_lol[i])
+            psf_n = len(self.psf_lol[i])
+            if wt_n != nim or j_n != nim or psf_n != nim:
+                nt=(i,nim,wt_n,j_n,psf_n)
+                raise ValueError("lists for band %s not same length: "
+                                 "im: %s wt: %s jacob: psf: %s" % nt)
+
+
+            for j in xrange(nim):
+                imsh=self.im_lol[i][j].shape
+                wtsh=self.wt_lol[i][j].shape
+                if imsh != wtsh:
+                    raise ValueError("im.shape != wt.shape "
+                                     "(%s != %s)" % (imsh,wtsh))
+
+                totpix += imsh[0]*imsh[1]
+
+        if self.counts_priors is not None:
+            if not isinstance(self.counts_prior,list):
+                raise ValueError("counts_prior must be a list, "
+                                 "got %s" % type(self.counts_prior))
+            nc=len(self.counts_prior)
+            if nc != self.nband:
+                raise ValueError("counts_prior list %s doesn't match "
+                                 "number of bands %s" % (nc,self.nband))
+        ncg=self.counts_guess.size
+        if ncg != self.nband:
+                raise ValueError("counts_guess size %s doesn't match "
+                                 "number of bands %s" % (ncg,self.nband))
+
+            
+        return totpix
+
+    def _get_counts_guess(self, **keys):
+        cguess=keys.get('counts',None)
+        if cguess is None:
+            cguess = self._get_median_counts()
+        return cguess
+
+    def _get_median_counts(self):
+        """
+        median of the counts across all input images, for each band
+        """
+        cguess=numpy.zeros(self.nband)
+        for band in xrange(self.nband):
+
+            im_list=self.im_lol[band]
+            jacob_list=self.jacob_lol[band]
+
+            nim=len(im_list)
+            clist=numpy.zeros(nim)
+
+            for i in xrange(nim):
+                im=im_list[i]
+                j=jacob_list[i]
+                clist[i] = im.sum()*j._data['det']
+            cguess[band] = numpy.median(clist) 
+        return cguess
+
+
+    def calc_lnprob(self, pars, get_s2nsums=False):
+        """
+        This is all we use for mcmc approaches.  For the max likelihood
+        fitter we also have a _get_ydiff method
+        """
+        try:
+
+            lnprob = self._get_priors(pars)
+            s2n_numer=0.0
+            s2n_denom=0.0
+
+            self._fill_gmix_lol(pars)
+            for band in xrange(self.nband):
+
+                gmix_list=self._gmix_lol[band]
+                im_list=self.im_lol[band]
+                wt_list=self.wt_lol[band]
+                jacob_list=self.jacob_lol[band]
+
+                for i in xrange(self.nimages):
+                    gm=gmix_list[i]
+                    im=im_list[i]
+                    wt=wt_list[i]
+                    j=jacob_list[i]
+
+                    res = gm.get_loglike(im, wt, jacobian=j,
+                                         get_s2nsums=True)
+                    lnprob += res[0]
+                    s2n_numer += res[1]
+                    s2n_denom += res[2]
+
+        except GMixRangeError:
+            lnprob = LOWVAL
+
+        if get_s2nsums:
+            return lnprob, s2n_numer, s2n_denom
+        else:
+            return lnprob
+
+
+
+
+    def _get_priors(self, pars):
+        """
+        add any priors that were sent on construction
+        
+        note g prior is *not* applied during the likelihood exploration
+        if do_lensfit=True or do_pqr=True
+        """
+        lnp=0.0
+        
+        if self.cen_prior is not None:
+            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+
+        if self.g_prior is not None and self.g_prior_during:
+            lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+        
+        if self.T_prior is not None:
+            lnp += self.T_prior.get_lnprob_scalar(pars[4])
+
+        # for multi-band, counts prior must be a list
+        if self.counts_prior is not None:
+            for i,cp in enumerate(self.counts_prior):
+                counts=pars[5+i]
+                lnp += cp.get_lnprob_scalar(counts)
+
+        return lnp
+
+    def _get_guess(self):
+        """
+        The counts guess is stupid unless you have a well-trimmed
+        PSF image
+        """
+
+        guess=numpy.zeros( (self.nwalkers,self.npars) )
+
+        # center
+        guess[:,0]=0.1*srandu(self.nwalkers)
+        guess[:,1]=0.1*srandu(self.nwalkers)
+
+        guess[:,2]=0.1*srandu(self.nwalkers)
+        guess[:,3]=0.1*srandu(self.nwalkers)
+
+        guess[:,4] = self.T_guess*(1 + 0.1*srandu(self.nwalkers))
+
+        for band in xrange(self.nband):
+            guess[:,5+band] = self.counts_guess[band]*(1 + 0.1*srandu(self.nwalkers))
+
+        self._guess=guess
+        return guess
+
+    def _calc_result(self):
+        """
+        Some extra stats for simple models
+        """
+        super(MCMCSimple,self)._calc_result()
+
+        self._result['g'] = self._result['pars'][2:2+2].copy()
+        self._result['gcov'] = self._result['pcov'][2:2+2, 2:2+2].copy()
+
+        if self.do_lensfit:
+            gsens=self._get_lensfit_gsens(self._result['pars'])
+            self._result['gsens']=gsens
+
+        if self.do_pqr:
+            P,Q,R = self._get_PQR()
+            self._result['P']=P
+            self._result['Q']=Q
+            self._result['R']=R
+
+        T,T_err,T_s2n=self._get_T_stats(self._result['pars'],
+                                        self._result['pcov'])
+        self._result['T'] = T
+        self._result['T_err'] = T_err
+        self._result['T_s2n'] = T_s2n
+
+        flux,flux_err,flux_s2n=self._get_flux_stats(self._result['pars'],
+                                                    self._result['pcov'])
+        self._result['flux'] = flux
+        self._result['flux_err'] = flux_err
+        self._result['flux_s2n'] = flux_s2n
+
+    def _get_flux_stats(self, pars, pcov):
+        """
+        Simple model only
+        """
+        counts     = pars[5:]
+        counts_err = numpy.sqrt(numpy.diag(pcov[5:,5:]))
+        counts_s2n = counts/counts_err
+        return counts, counts_err, counts_s2n
+
+    def _get_band_pars(self, pars, band):
+        return pars[ [0,1,2,3,4,5+band] ]
+
+    def _init_gmix_lol(self, pars):
+        """
+        initialize the list of lists of gmix
+        """
+        self._gmix_lol0 = []
+        self._gmix_lol  = []
+
+        for band in xrange(self.nband):
+            gmix_list0=[]
+            gmix_list=[]
+
+            band_pars=self._get_band_pars(pars, band)
+            psf_list=self.psf_lol[band]
+
+            for psf in psf_list:
+                gm0=gmix.GMixModel(band_pars, self.model)
+                gm=gm0.convolve(psf)
+
+                gmix_list0.append(gm0)
+                gmix_list.append(gm)
+
+            self._gmix_lol0.append(gmix_list0)
+            self._gmix_lol.append(gmix_list)
+
+    def _fill_gmix_lol(self, pars):
+        """
+        Fill the list of lists of gmix objects, potentially convolved with the
+        psf in the individual images
+        """
+        if self._gmix_lol is None:
+            self._init_gmix_lol(pars)
+        else:
+            for band in xrange(self.nband):
+                gmix_list0=self._gmix_lol0[band]
+                gmix_list=self._gmix_lol[band]
+
+                band_pars=self._get_band_pars(pars, band)
+                psf_list=self.psf_lol[band]
+
+                for i,psf in enumerate(psf_list):
+                    gm0=gmix_list0[i]
+                    gm=gmix_list[i]
+
+                    gm0.fill(band_pars)
+                    gmix.convolve_fill(gm, gm0, psf)
+
+
+
+class MCMCSimpleAnze(MCMCBase):
+    def __init__(self, image, weight, jacobian, model, **keys):
+        super(MCMCSimpleAnze,self).__init__(image, weight, jacobian, model, **keys)
+
+    def go(self):
+        import game
+        import esutil as eu
+
+        guess=self._get_guess()
+        guess1=guess[0,:]
+        sampler=game.Game(self.lnprob_many, guess1,
+                          sigreg=[0.01, 0.01, 0.1, 0.1, 0.1, 0.1])
+
+        sampler.N1=50
+        sampler.N1f=0
+        sampler.blow=1.3
+        sampler.mineffsamp=500
+        sampler.maxiter=1000
+        sampler.wemin=1.e-4
+
+        sampler.run()
+
+        print sampler.sample_list[-1]
+
+        npars=guess1.size
+        m=numpy.zeros(npars)
+        m2=numpy.zeros(npars)
+        sw=0.0
+
+        nsamp=len(sampler.sample_list)
+        trials=numpy.zeros( (nsamp, npars) )
+        weights=numpy.zeros(nsamp)
+        for i,sa in enumerate(sampler.sample_list):
+            trials[i,:] = sa.pars
+            weights[i] = sa.we
+
+        #mcmc.plot_results(mc_obj.get_trials(), weights=weights)
+
+        eu.plotting.bhist( trials[:, 0], weights=weights, binsize=0.0005,title='row')
+        eu.plotting.bhist( trials[:, 1], weights=weights, binsize=0.0005,title='col')
+        eu.plotting.bhist( trials[:, 2], weights=weights, binsize=0.001,title='g1')
+        eu.plotting.bhist( trials[:, 3], weights=weights, binsize=0.001,title='g2')
+        eu.plotting.bhist( trials[:, 4], weights=weights, binsize=0.01,title='T')
+        eu.plotting.bhist( trials[:, 5], weights=weights, binsize=1.0,title='counts')
+        #print 'mean:',(trials*we).sum(axis=1)/we.sum()
+
+        """
+        for sa in sampler.sample_list:
+            m+=sa.pars*sa.we
+            m2+=sa.pars**2*sa.we
+            sw+=sa.we
+        m/=sw
+        m2/=sw
+        m2-=m*m
+        print m
+        print numpy.sqrt(m2)
+        """
+ 
+        """
+        self.trials  = self.sampler.flatchain
+
+        self.lnprobs = self.sampler.lnprobability.reshape(self.nwalkers*self.nstep)
+        self.lnprobs -= self.lnprobs.max()
+
+        # get the expectation values, sensitivity and errors
+        self._calc_result()
+
+        if self.make_plots:
+            self._doplots()
+        """
+
+    def lnprob_many(self, list_of_pars):
+        return map(self.calc_lnprob, list_of_pars)
+
+    def _get_priors(self, pars):
+        """
+        add any priors that were sent on construction
+        
+        note g prior is *not* applied during the likelihood exploration
+        if do_lensfit=True or do_pqr=True
+        """
+        lnp=0.0
+        if self.cen_prior is not None:
+            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+
+        if self.g_prior is not None and self.g_prior_during:
+            lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+        
+        if self.T_prior is not None:
+            lnp += self.T_prior.get_lnprob_scalar(pars[4])
+
+        if self.counts_prior is not None:
+            lnp += self.counts_prior.get_lnprob_scalar(pars[5])
+
+        return lnp
+
+    def _get_guess(self):
+        """
+        The counts guess is stupid unless you have a well-trimmed
+        PSF image
+        """
+
+        guess=numpy.zeros( (self.nwalkers,self.npars) )
+
+        # center
+        guess[:,0]=0.1*srandu(self.nwalkers)
+        guess[:,1]=0.1*srandu(self.nwalkers)
+
+        guess[:,2]=0.1*srandu(self.nwalkers)
+        guess[:,3]=0.1*srandu(self.nwalkers)
+
+        guess[:,4] = self.T_guess*(1 + 0.1*srandu(self.nwalkers))
+        guess[:,5] = self.counts_guess*(1 + 0.1*srandu(self.nwalkers))
+
+        self._guess=guess
+        return guess
+
+    def _calc_result(self):
+        """
+        Some extra stats for simple models
+        """
+        super(MCMCSimple,self)._calc_result()
+
+        self._result['g'] = self._result['pars'][2:2+2].copy()
+        self._result['gcov'] = self._result['pcov'][2:2+2, 2:2+2].copy()
+
+        if self.do_lensfit:
+            gsens=self._get_lensfit_gsens(self._result['pars'])
+            self._result['gsens']=gsens
+
+        if self.do_pqr:
+            P,Q,R = self._get_PQR()
+            self._result['P']=P
+            self._result['Q']=Q
+            self._result['R']=R
+
+        T,T_err,T_s2n=self._get_T_stats(self._result['pars'],
+                                        self._result['pcov'])
+        self._result['T'] = T
+        self._result['T_err'] = T_err
+        self._result['T_s2n'] = T_s2n
+
+        flux,flux_err,flux_s2n=self._get_flux_stats(self._result['pars'],
+                                                    self._result['pcov'])
+        self._result['flux'] = flux
+        self._result['flux_err'] = flux_err
+        self._result['flux_s2n'] = flux_s2n
+
+
+    def _get_trial_stats(self):
+        """
+        Get the stats from the trials
+        """
+        if self.g_prior is not None and not self.g_prior_during:
+            g1vals = self.trials[:,2]
+            g2vals = self.trials[:,3]
+            gprior  = self.g_prior.get_prob_array2d(g1vals,g2vals)
+            pars,pcov = extract_mcmc_stats(self.trials,weights=gprior)
+        else:
+            pars,pcov = extract_mcmc_stats(self.trials)
+        
+        return pars,pcov
+
+    def _get_lensfit_gsens(self, pars, gprior=None):
+
+        if self.g_prior is not None:
+            g1vals=self.trials[:,2]
+            g2vals=self.trials[:,3]
+
+            gprior = self.g_prior.get_prob_array2d(g1vals,g2vals)
+
+            dpri_by_g1 = self.g_prior.dbyg1_array(g1vals,g2vals)
+            dpri_by_g2 = self.g_prior.dbyg2_array(g1vals,g2vals)
+
+            psum = gprior.sum()
+
+            g=pars[2:2+2]
+            g1diff = g[0]-g1vals
+            g2diff = g[1]-g2vals
+
+            gsens = numpy.zeros(2)
+            gsens[0]= 1.-(g1diff*dpri_by_g1).sum()/psum
+            gsens[1]= 1.-(g2diff*dpri_by_g2).sum()/psum
+        else:
+            gsens=numpy.array([1.,1.])
+
+        return gsens
+
+    def _get_PQR(self):
+        """
+        get the marginalized P,Q,R from Bernstein & Armstrong
+
+        Note if the prior is already in our mcmc chain, so we need to divide by
+        the prior everywhere.  Because P*J=P at shear==0 this means P is always
+        1
+
+        """
+
+        g1=self.trials[:,2]
+        g2=self.trials[:,3]
+
+        P,Q,R = self.g_prior.get_pqr(g1,g2)
+
+        P = P.mean()
+        Q = Q.mean(axis=0)
+        R = R.mean(axis=0)
+
+        return P,Q,R
+
+
+    def _get_T_stats(self, pars, pcov):
+        """
+        Simple model only
+        """
+        T     = pars[4]
+        T_err = numpy.sqrt(pcov[4,4])
+        T_s2n = T/T_err
+        return T, T_err, T_s2n
+
+    def _get_flux_stats(self, pars, pcov):
+        """
+        Simple model only
+        """
+        counts     = pars[5]
+        counts_err = numpy.sqrt(pcov[5,5])
+        counts_s2n = counts/counts_err
+        return counts, counts_err, counts_s2n
+
+
 
 
 class MCMCGaussPSF(MCMCSimple):
@@ -863,6 +1499,7 @@ def test_model_priors(model,
     """
     testing jacobian stuff
     """
+    import pprint
     import images
     import mcmc
     from . import em
@@ -961,6 +1598,7 @@ def test_model_priors(model,
 
     res_obj=mc_obj.get_result()
 
+    pprint.pprint(res_obj)
     print_pars(res_obj['pars'], front='pars_obj:', stream=stderr)
     print_pars(res_obj['perr'], front='perr_obj:', stream=stderr)
     print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['perr'][4]/jfac2)
@@ -978,3 +1616,263 @@ def test_model_priors(model,
     images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
     mcmc.plot_results(mc_obj.get_trials())
 
+
+def test_model_mb(model,
+                  counts_sky=[100.0,88.5, 77.6], # true counts each band
+                  noise_sky=[0.01,0.01,0.01],
+                  nimages=4, # in each band
+                  jfac=0.27,
+                  do_lensfit=False,
+                  do_pqr=False):
+    """
+    testing mb stuff
+    """
+    import pprint
+    import images
+    import mcmc
+    from . import em
+
+    dims=[25,25]
+    cen=[dims[0]/2., dims[1]/2.]
+
+    jfac2=jfac**2
+    j=Jacobian(cen[0],cen[1], jfac, 0.0, 0.0, jfac)
+
+    #
+    # simulation
+    #
+
+    # PSF pars
+    counts_sky_psf=100.0
+    counts_pix_psf=counts_sky_psf/jfac2
+    g1_psf=0.05
+    g2_psf=-0.01
+    Tpix_psf=4.0
+    Tsky_psf=Tpix_psf*jfac2
+
+    # object pars
+    g1_obj=0.1
+    g2_obj=0.05
+    Tpix_obj=16.0
+    Tsky_obj=Tpix_obj*jfac2
+
+    counts_sky_obj=counts_sky
+    noise_sky_obj=noise_sky
+    counts_pix_obj=counts_sky_obj/jfac2
+    noise_pix_obj=noise_sky_obj/jfac2
+
+    pars_psf = [0.0, 0.0, g1_psf, g2_psf, Tsky_psf, counts_sky_psf]
+    gm_psf=gmix.GMixModel(pars_psf, "gauss")
+
+    pars_obj = [0.0, 0.0, g1_obj, g2_obj, Tsky_obj, counts_sky_obj]
+    gm_obj0=gmix.GMixModel(pars_obj, model)
+
+    gm=gm_obj0.convolve(gm_psf)
+
+    im_psf=gm_psf.make_image(dims, jacobian=j)
+    im_obj=gm.make_image(dims, jacobian=j)
+
+    im_obj[:,:] += noise_pix_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
+    wt_obj=numpy.zeros(im_obj.shape) + 1./noise_pix_obj**2
+
+    #
+    # priors
+    #
+
+    cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
+    T_prior=priors.LogNormal(Tsky_obj, 0.1*Tsky_obj)
+    counts_prior=priors.LogNormal(counts_sky_obj, 0.1*counts_sky_obj)
+    g_prior = priors.GPriorBA(0.3)
+
+    #
+    # fitting
+    #
+
+    # psf using EM
+    im_psf_sky,sky=em.prep_image(im_psf)
+    mc_psf=em.GMixEM(im_psf_sky, jacobian=j)
+    emo_guess=gm_psf.copy()
+    emo_guess._data['p'] = 1.0
+    emo_guess._data['row'] += 0.1*srandu()
+    emo_guess._data['col'] += 0.1*srandu()
+    emo_guess._data['irr'] += 0.5*srandu()
+    emo_guess._data['irc'] += 0.1*srandu()
+    emo_guess._data['icc'] += 0.5*srandu()
+    mc_psf.go(emo_guess, sky)
+    res_psf=mc_psf.get_result()
+    print 'psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff']
+
+    psf_fit=mc_psf.get_gmix()
+    imfit_psf=mc_psf.make_image(counts=im_psf.sum())
+    images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
+
+    # obj
+    jlist=[j]*nimages
+    imlist_obj=[im_obj]*nimages
+    wtlist_obj=[wt_obj]*nimages
+    psf_fit_list=[psf_fit]*nimages
+
+    mc_obj=MCMCSimple(imlist_obj, wtlist_obj, jlist, model,
+                      psf=psf_fit_list,
+                      T=Tsky_obj,
+                      counts=counts_sky_obj,
+                      cen_prior=cen_prior,
+                      T_prior=T_prior,
+                      counts_prior=counts_prior,
+                      g_prior=g_prior,
+                      do_lensfit=do_lensfit,
+                      do_pqr=do_pqr)
+    mc_obj.go()
+
+    res_obj=mc_obj.get_result()
+
+    pprint.pprint(res_obj)
+    print_pars(res_obj['pars'], front='pars_obj:', stream=stderr)
+    print_pars(res_obj['perr'], front='perr_obj:', stream=stderr)
+    print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['perr'][4]/jfac2)
+    if do_lensfit:
+        print 'gsens:',res_obj['gsens']
+    if do_pqr:
+        print 'P:',res_obj['P']
+        print 'Q:',res_obj['Q']
+        print 'R:',res_obj['R']
+
+    gmfit0=mc_obj.get_gmix()
+    gmfit=gmfit0.convolve(psf_fit)
+    imfit_obj=gmfit.make_image(im_obj.shape, jacobian=j)
+
+    images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
+    mcmc.plot_results(mc_obj.get_trials())
+
+
+
+
+
+def test_model_priors_anze(model,
+                      counts_sky=100.0,
+                      noise_sky=0.01,
+                      nimages=1,
+                      jfac=0.27,
+                      do_lensfit=False,
+                      do_pqr=False):
+    """
+    testing jacobian stuff
+    """
+    import pprint
+    import images
+    import mcmc
+    from . import em
+
+    dims=[25,25]
+    cen=[dims[0]/2., dims[1]/2.]
+
+    jfac2=jfac**2
+    j=Jacobian(cen[0],cen[1], jfac, 0.0, 0.0, jfac)
+
+    #
+    # simulation
+    #
+
+    # PSF pars
+    counts_sky_psf=100.0
+    counts_pix_psf=counts_sky_psf/jfac2
+    g1_psf=0.05
+    g2_psf=-0.01
+    Tpix_psf=4.0
+    Tsky_psf=Tpix_psf*jfac2
+
+    # object pars
+    g1_obj=0.1
+    g2_obj=0.05
+    Tpix_obj=16.0
+    Tsky_obj=Tpix_obj*jfac2
+
+    counts_sky_obj=counts_sky
+    noise_sky_obj=noise_sky
+    counts_pix_obj=counts_sky_obj/jfac2
+    noise_pix_obj=noise_sky_obj/jfac2
+
+    pars_psf = [0.0, 0.0, g1_psf, g2_psf, Tsky_psf, counts_sky_psf]
+    gm_psf=gmix.GMixModel(pars_psf, "gauss")
+
+    pars_obj = [0.0, 0.0, g1_obj, g2_obj, Tsky_obj, counts_sky_obj]
+    gm_obj0=gmix.GMixModel(pars_obj, model)
+
+    gm=gm_obj0.convolve(gm_psf)
+
+    im_psf=gm_psf.make_image(dims, jacobian=j)
+    im_obj=gm.make_image(dims, jacobian=j)
+
+    im_obj[:,:] += noise_pix_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
+    wt_obj=numpy.zeros(im_obj.shape) + 1./noise_pix_obj**2
+
+    #
+    # priors
+    #
+
+    cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
+    T_prior=priors.LogNormal(Tsky_obj, 0.1*Tsky_obj)
+    counts_prior=priors.LogNormal(counts_sky_obj, 0.1*counts_sky_obj)
+    g_prior = priors.GPriorBA(0.3)
+
+    #
+    # fitting
+    #
+
+    # psf using EM
+    im_psf_sky,sky=em.prep_image(im_psf)
+    mc_psf=em.GMixEM(im_psf_sky, jacobian=j)
+    emo_guess=gm_psf.copy()
+    emo_guess._data['p'] = 1.0
+    emo_guess._data['row'] += 0.1*srandu()
+    emo_guess._data['col'] += 0.1*srandu()
+    emo_guess._data['irr'] += 0.5*srandu()
+    emo_guess._data['irc'] += 0.1*srandu()
+    emo_guess._data['icc'] += 0.5*srandu()
+    mc_psf.go(emo_guess, sky)
+    res_psf=mc_psf.get_result()
+    print 'psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff']
+
+    psf_fit=mc_psf.get_gmix()
+    imfit_psf=mc_psf.make_image(counts=im_psf.sum())
+    #images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
+
+    # obj
+    jlist=[j]*nimages
+    imlist_obj=[im_obj]*nimages
+    wtlist_obj=[wt_obj]*nimages
+    psf_fit_list=[psf_fit]*nimages
+
+    mc_obj=MCMCSimpleAnze(imlist_obj, wtlist_obj, jlist, model,
+                      psf=psf_fit_list,
+                      T=Tsky_obj,
+                      counts=counts_sky_obj,
+                      cen_prior=cen_prior,
+                      T_prior=T_prior,
+                      counts_prior=counts_prior,
+                      g_prior=g_prior,
+                      do_lensfit=do_lensfit,
+                      do_pqr=do_pqr)
+    mc_obj.go()
+
+    """
+    res_obj=mc_obj.get_result()
+
+    pprint.pprint(res_obj)
+    print_pars(res_obj['pars'], front='pars_obj:', stream=stderr)
+    print_pars(res_obj['perr'], front='perr_obj:', stream=stderr)
+    print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['perr'][4]/jfac2)
+    if do_lensfit:
+        print 'gsens:',res_obj['gsens']
+    if do_pqr:
+        print 'P:',res_obj['P']
+        print 'Q:',res_obj['Q']
+        print 'R:',res_obj['R']
+
+    gmfit0=mc_obj.get_gmix()
+    gmfit=gmfit0.convolve(psf_fit)
+    imfit_obj=gmfit.make_image(im_obj.shape, jacobian=j)
+
+    images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
+    mcmc.plot_results(mc_obj.get_trials())
+    """
