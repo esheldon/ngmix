@@ -44,6 +44,9 @@ class FitterBase(object):
         self.model_name=gmix.get_model_name(self.model)
         self._set_npars()
 
+        # the function to be called to fill a gaussian mixture
+        self._set_fill_call()
+
         self.g_prior = keys.get('g_prior',None)
         self.cen_prior = keys.get('cen_prior',None)
         self.T_prior = keys.get('T_prior',None)
@@ -77,6 +80,27 @@ class FitterBase(object):
         self.mean_jacob_det=mean_det/len(self.jacob_list)
 
         self.nimages=len(self.im_list)
+
+    def _set_fill_call(self):
+        """
+        making the call directly to the jitted function saves
+        huge time
+        """
+        if self.model==gmix.GMIX_FULL:
+            self._fill_gmix_func=gmix._fill_full
+        elif self.model==gmix.GMIX_GAUSS:
+            self._fill_gmix_func=gmix._fill_gauss
+        elif self.model==gmix.GMIX_EXP:
+            self._fill_gmix_func=gmix._fill_exp
+        elif self.model==gmix.GMIX_DEV:
+            self._fill_gmix_func=gmix._fill_dev
+        elif self.model==gmix.GMIX_TURB:
+            self._fill_gmix_func=gmix._fill_turb
+        elif self.model==gmix.GMIX_BDC:
+            raise ValueError("bdc not yet implemented")
+        else:
+            raise GMixFatalError("unsupported model: "
+                                 "'%s'" % self.model_name)
 
 
     def verify(self):
@@ -243,8 +267,11 @@ class FitterBase(object):
                     gm0=self._gmix_list0[i]
                     gm=self._gmix_list[i]
 
-                    gm0.fill(pars)
-                    gmix.convolve_fill(gm, gm0, psf)
+                    # Calling the python versions was a huge time sync!
+                    #gm0.fill(pars)
+                    self._fill_gmix_func(gm0._data, band_pars)
+                    #gmix.convolve_fill(gm, gm0, psf)
+                    gmix._convolve_fill(gm._data, gm0._data, psf._data)
 
             else:
                 for gm in self._gmix_list:
@@ -906,8 +933,12 @@ class MCMCSimpleMB(MCMCSimple):
                     gm0=gmix_list0[i]
                     gm=gmix_list[i]
 
-                    gm0.fill(band_pars)
-                    gmix.convolve_fill(gm, gm0, psf)
+                    # Calling the python versions was a huge time sync!
+                    #gm0.fill(band_pars)
+                    self._fill_gmix_func(gm0._data, band_pars)
+                    # Calling the python version was a huge time sync!
+                    #gmix.convolve_fill(gm, gm0, psf)
+                    gmix._convolve_fill(gm._data, gm0._data, psf._data)
 
     def get_effective_npix(self):
         """
@@ -1652,12 +1683,14 @@ def test_model_priors(model,
 
 
 def test_model_mb(model,
-                  counts_sky=[100.0,88., 77.], # true counts each band
-                  noise_sky=[0.1,0.1,0.1],
-                  nimages=4, # in each band
+                  counts_sky=[100.0,88., 77., 95.0], # true counts each band
+                  noise_sky=[0.1,0.1,0.1,0.1],
+                  nimages=10, # in each band
                   jfac=0.27,
                   do_lensfit=False,
-                  do_pqr=False):
+                  do_pqr=False,
+                  profile=False, groups=False,
+                  show=False):
     """
     testing mb stuff
     """
@@ -1665,7 +1698,13 @@ def test_model_mb(model,
     import images
     import mcmc
     from . import em
+    import time
 
+    import pycallgraph
+    from pycallgraph import PyCallGraph
+    from pycallgraph.output import GraphvizOutput
+
+ 
     jfac2=jfac**2
 
     dims=[25,25]
@@ -1696,6 +1735,7 @@ def test_model_mb(model,
     j_lol = []
     psf_lol = []
 
+    tmpsf=0.0
     for band in xrange(nband):
 
         im_list=[]
@@ -1740,13 +1780,17 @@ def test_model_mb(model,
             wt_obj=numpy.zeros(im_obj.shape) + 1./noise_pix_obj**2
 
             # psf using EM
+            tmpsf0=time.time()
+
             im_psf_sky,sky=em.prep_image(im_psf)
             mc_psf=em.GMixEM(im_psf_sky, jacobian=j)
             emo_guess=gm_psf.copy()
             emo_guess._data['p'] = 1.0
             mc_psf.go(emo_guess, sky)
             res_psf=mc_psf.get_result()
-            print 'psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff']
+
+            tmpsf+=time.time()-tmpsf0
+            #print 'psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff']
 
             psf_fit=mc_psf.get_gmix()
 
@@ -1758,6 +1802,8 @@ def test_model_mb(model,
         wt_lol.append( wt_list )
         j_lol.append( j_list )
         psf_lol.append( psf_list )
+
+    tmrest=time.time()
     #
     # priors
     # not really accurate since we are not varying the input
@@ -1772,19 +1818,40 @@ def test_model_mb(model,
     # fitting
     #
 
-    mc_obj=MCMCSimpleMB(im_lol, wt_lol, j_lol, model,
-                        psf=psf_lol,
-                        T=Tsky_obj*(1. + 0.1*srandu()),
-                        counts=counts_sky*(1. + 0.1*srandu(nband)),
-                        cen_prior=cen_prior,
-                        T_prior=T_prior,
-                        counts_prior=counts_prior,
-                        g_prior=g_prior,
-                        do_lensfit=do_lensfit,
-                        do_pqr=do_pqr, mca_a=3.)
-    mc_obj.go()
+    if profile:
+        name='profile-mb-%s-%dbands-%iimages.png' % (model,nband,nimages)
+        graphviz = GraphvizOutput()
+        print 'profile image:',name
+        graphviz.output_file = name
+        config=pycallgraph.Config(groups=groups)
+
+        with PyCallGraph(config=config, output=graphviz):
+            mc_obj=MCMCSimpleMB(im_lol, wt_lol, j_lol, model,
+                                psf=psf_lol,
+                                T=Tsky_obj*(1. + 0.1*srandu()),
+                                counts=counts_sky*(1. + 0.1*srandu(nband)),
+                                cen_prior=cen_prior,
+                                T_prior=T_prior,
+                                counts_prior=counts_prior,
+                                g_prior=g_prior,
+                                do_lensfit=do_lensfit,
+                                do_pqr=do_pqr, mca_a=3.)
+            mc_obj.go()
+    else:
+        mc_obj=MCMCSimpleMB(im_lol, wt_lol, j_lol, model,
+                            psf=psf_lol,
+                            T=Tsky_obj*(1. + 0.1*srandu()),
+                            counts=counts_sky*(1. + 0.1*srandu(nband)),
+                            cen_prior=cen_prior,
+                            T_prior=T_prior,
+                            counts_prior=counts_prior,
+                            g_prior=g_prior,
+                            do_lensfit=do_lensfit,
+                            do_pqr=do_pqr, mca_a=3.)
+        mc_obj.go()
 
     res_obj=mc_obj.get_result()
+    tmrest = time.time()-tmrest
 
     #pprint.pprint(res_obj)
     print 'arate:',res_obj['arate']
@@ -1805,11 +1872,17 @@ def test_model_mb(model,
 
     #images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
 
-    names=['cen1','cen2','g1','g2','T'] + ['counts%s' % (i+1) for i in xrange(nband)]
            
-    mcmc.plot_results(mc_obj.get_trials(),names=names)
+    if show:
+        names=['cen1','cen2','g1','g2','T'] + ['counts%s' % (i+1) for i in xrange(nband)]
+        mcmc.plot_results(mc_obj.get_trials(),names=names)
 
+    tmtot=tmrest + tmpsf
+    print 'time total:',tmtot
+    print 'time psf:  ',tmpsf
+    print 'time rest: ',tmrest
 
+    return tmtot
 
 
 
