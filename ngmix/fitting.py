@@ -259,8 +259,9 @@ class FitterBase(object):
 
     def calc_lnprob(self, pars, get_s2nsums=False):
         """
-        This is all we use for mcmc approaches.  For the max likelihood
-        fitter we also have a _get_ydiff method
+        This is all we use for mcmc approaches, but also used generally for the
+        "get_fit_stats" method.  For the max likelihood fitter we also have a
+        _get_ydiff method
         """
         try:
 
@@ -296,6 +297,36 @@ class FitterBase(object):
             return lnprob, s2n_numer, s2n_denom
         else:
             return lnprob
+
+    def get_fit_stats(self, pars):
+        """
+        Get some statistics for the best fit.
+        """
+        npars=self.npars
+
+        lnprob,s2n_numer,s2n_denom=self.calc_lnprob(pars, get_s2nsums=True)
+
+        if s2n_denom > 0:
+            s2n=s2n_numer/numpy.sqrt(s2n_denom)
+        else:
+            s2n=0.0
+
+        dof=self.get_dof()
+        eff_npix=self.get_effective_npix()
+
+        chi2=lnprob/(-0.5)
+        chi2per = chi2/dof
+
+        aic = -2*lnprob + 2*npars
+        bic = -2*lnprob + npars*numpy.log(eff_npix)
+
+        return {'s2n_w':s2n,
+                'lnprob':lnprob,
+                'chi2per':chi2per,
+                'dof':dof,
+                'aic':aic,
+                'bic':bic}
+
 
 
 
@@ -383,6 +414,9 @@ class FitterBase(object):
 
 
 class MCMCBase(FitterBase):
+    """
+    A base class for MCMC runs.  Inherits from overall fitter base class.
+    """
     def __init__(self, image, weight, jacobian, model, **keys):
         super(MCMCBase,self).__init__(image, weight, jacobian, model, **keys)
 
@@ -417,6 +451,9 @@ class MCMCBase(FitterBase):
         return self.trials
 
     def go(self):
+        """
+        Run the mcmc sampler and calculate some statistics
+        """
         self.sampler=self._do_trials()
 
         self.trials  = self.sampler.flatchain
@@ -432,7 +469,9 @@ class MCMCBase(FitterBase):
 
 
     def _do_trials(self):
-
+        """
+        Actually run the sampler
+        """
         # over-ridden
         guess=self._get_guess()
 
@@ -460,6 +499,9 @@ class MCMCBase(FitterBase):
         return sampler
 
     def _get_sampler(self):
+        """
+        Instantiate the sampler
+        """
         import emcee
         sampler = emcee.EnsembleSampler(self.nwalkers, 
                                         self.npars, 
@@ -494,42 +536,12 @@ class MCMCBase(FitterBase):
         stats = self.get_fit_stats(pars)
         self._result.update(stats)
 
-    def get_fit_stats(self, pars):
-        """
-        Get some statistics for the best fit.
-        """
-        npars=self.npars
-
-        lnprob,s2n_numer,s2n_denom=self.calc_lnprob(pars, get_s2nsums=True)
-
-        if s2n_denom > 0:
-            s2n=s2n_numer/numpy.sqrt(s2n_denom)
-        else:
-            s2n=0.0
-
-        dof=self.get_dof()
-        eff_npix=self.get_effective_npix()
-
-        chi2=lnprob/(-0.5)
-        chi2per = chi2/dof
-
-        aic = -2*lnprob + 2*npars
-        bic = -2*lnprob + npars*numpy.log(eff_npix)
-
-        return {'s2n_w':s2n,
-                'lnprob':lnprob,
-                'chi2per':chi2per,
-                'dof':dof,
-                'aic':aic,
-                'bic':bic}
-
-
     def _get_trial_stats(self):
         """
         Get the means and covariance for the trials
         """
         if self.g_prior is not None and not self.g_prior_during:
-            raise RuntimeError("don't know how to get g1,g2 "
+            raise RuntimeError("prior during: don't know how to get g1,g2 "
                                "values in general. You need to over-ride")
         else:
             pars,pcov = extract_mcmc_stats(self.trials)
