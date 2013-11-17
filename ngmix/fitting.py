@@ -1,6 +1,7 @@
 from sys import stdout, stderr
 import numpy
 from . import gmix
+from .gmix import _exp3_ivals,_exp3_lookup
 from .jacobian import Jacobian, UnitJacobian
 
 from . import priors
@@ -61,7 +62,8 @@ class FitterBase(object):
 
     def _set_lists(self, im_lol, wt_lol, j_lol, **keys):
         """
-        We expect images or lists thereof
+        Internally we store everything as lists of lists.  The outer
+        list is the bands, the inner is the list of images in the band.
         """
 
         psf_lol=keys.get('psf',None)
@@ -114,6 +116,9 @@ class FitterBase(object):
         self.mean_det=mean_det
 
     def verify(self):
+        """
+        Make sure the data are consistent.
+        """
         nb=self.nband
         wt_nb = len(self.wt_lol)
         j_nb  = len(self.jacob_lol)
@@ -284,8 +289,15 @@ class FitterBase(object):
                     wt=wt_list[i]
                     j=jacob_list[i]
 
-                    res = gm.get_loglike(im, wt, jacobian=j,
-                                         get_s2nsums=True)
+                    #res = gm.get_loglike(im, wt, jacobian=j,
+                    #                     get_s2nsums=True)
+                    res = gmix._loglike_jacob_fast3(gm._data,
+                                                    im,
+                                                    wt,
+                                                    j._data,
+                                                    _exp3_ivals[0],
+                                                    _exp3_lookup)
+
                     lnprob += res[0]
                     s2n_numer += res[1]
                     s2n_denom += res[2]
@@ -1272,6 +1284,10 @@ def test_model_mb(model,
     from pycallgraph import PyCallGraph
     from pycallgraph.output import GraphvizOutput
 
+    if groups:
+        gstr='grouped'
+    else:
+        gstr='nogroup'
  
     jfac2=jfac**2
 
@@ -1387,7 +1403,7 @@ def test_model_mb(model,
     #
 
     if profile:
-        name='profile-mb-%s-%dbands-%iimages.png' % (model,nband,nimages)
+        name='profile-mb-%s-%dbands-%iimages-%s.png' % (model,nband,nimages,gstr)
         graphviz = GraphvizOutput()
         print 'profile image:',name
         graphviz.output_file = name
