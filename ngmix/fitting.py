@@ -56,30 +56,123 @@ class FitterBase(object):
 
         self.make_plots=keys.get('make_plots',False)
 
-        self._gmix_list=None
+        self._gmix_lol=None
         self._result=None
 
-    def _set_npars(self):
-        self.npars=gmix.get_model_npars(self.model)
-
-    def _set_lists(self, image, weight, jacobian, **keys):
+    def _set_lists(self, im_lol, wt_lol, j_lol, **keys):
         """
         We expect images or lists thereof
         """
-        self.im_list=_get_as_list(image,"image")
-        self.wt_list=_get_as_list(weight,"weight")
 
-        self.psf_list=_get_as_list(keys.get('psf',None),
-                                   "psf",
-                                   allow_none=True)
+        psf_lol=keys.get('psf',None)
 
-        self.jacob_list = _get_as_list(jacobian,"jacobian")
-        mean_det=0.0
-        for j in self.jacob_list:
-            mean_det += j._data['det']
-        self.mean_jacob_det=mean_det/len(self.jacob_list)
+        if isinstance(im_lol,numpy.ndarray):
+            # lists-of-lists for generic, including multi-band
+            im_lol=[[im_lol]]
+            wt_lol=[[wt_lol]]
+            j_lol=[[j_lol]]
 
-        self.nimages=len(self.im_list)
+            if psf_lol is not None:
+                psf_lol=[[psf_lol]]
+
+            if self.counts_prior is not None:
+                self.counts_prior=[self.counts_prior]
+
+        elif isinstance(im_lol,list) and isinstance(im_lol[0],numpy.ndarray):
+            im_lol=[im_lol]
+            wt_lol=[wt_lol]
+            j_lol=[j_lol]
+
+            if psf_lol is not None:
+                psf_lol=[psf_lol]
+        elif (isinstance(im_lol,list) 
+                and isinstance(im_lol[0],list)
+                and isinstance(im_lol[0][0],numpy.ndarray)):
+            # OK, good
+            pass
+        else:
+            raise ValueError("images should be input as array, "
+                             "list of arrays, or lists-of lists "
+                             "of arrays")
+
+        # can be 1
+        self.nband=len(im_lol)
+        nimages = numpy.array( [len(l) for l in im_lol], dtype='i4')
+
+        self.im_lol=im_lol
+        self.wt_lol=wt_lol
+        self.psf_lol=psf_lol
+
+        self.jacob_lol = j_lol
+        mean_det=numpy.zeros(self.nband)
+        for band in xrange(self.nband):
+            jlist=self.jacob_lol[band]
+            for j in jlist:
+                mean_det[band] += j._data['det']
+            mean_det[band] /= len(jlist)
+
+        self.mean_det=mean_det
+
+    def verify(self):
+        nb=self.nband
+        wt_nb = len(self.wt_lol)
+        j_nb  = len(self.jacob_lol)
+        if (wt_nb != nb or j_nb != nb):
+            nbt=(nb,wt_nb,j_nb)
+            raise ValueError("lists of lists not all same size: "
+                             "im: %s wt: %s jacob: %s" % nbt)
+        if self.psf_lol is not None:
+            psf_nb=len(self.psf_lol)
+            if psf_nb != nb:
+                nbt=(nb,psf_nb)
+                raise ValueError("lists of lists not all same size: "
+                                 "im: %s psf: %s" % nbt)
+
+
+        totpix=0
+        for i in xrange(self.nband):
+            nim=len(self.im_lol[i])
+
+            wt_n=len(self.wt_lol[i])
+            j_n=len(self.jacob_lol[i])
+            if wt_n != nim or j_n != nim:
+                nt=(i,nim,wt_n,j_n)
+                raise ValueError("lists for band %s not same length: "
+                                 "im: %s wt: %s jacob: " % nt)
+            if self.psf_lol is not None:
+                psf_n = len(self.psf_lol[i])
+                if psf_n != nim:
+                    nt=(i,nim,psf_n)
+                    raise ValueError("lists for band %s not same length: "
+                                     "im: %s psf: " % nt)
+
+
+            for j in xrange(nim):
+                imsh=self.im_lol[i][j].shape
+                wtsh=self.wt_lol[i][j].shape
+                if imsh != wtsh:
+                    raise ValueError("im.shape != wt.shape "
+                                     "(%s != %s)" % (imsh,wtsh))
+
+                totpix += imsh[0]*imsh[1]
+
+        if self.counts_prior is not None:
+            if not isinstance(self.counts_prior,list):
+                raise ValueError("counts_prior must be a list, "
+                                 "got %s" % type(self.counts_prior))
+            nc=len(self.counts_prior)
+            if nc != self.nband:
+                raise ValueError("counts_prior list %s doesn't match "
+                                 "number of bands %s" % (nc,self.nband))
+            
+        return totpix
+
+    def _set_npars(self):
+        """
+        nband should be set in set_lists, called before this
+        """
+        self.npars=gmix.get_model_npars(self.model) + self.nband-1
+
 
     def _set_fill_call(self):
         """
@@ -102,41 +195,6 @@ class FitterBase(object):
             raise GMixFatalError("unsupported model: "
                                  "'%s'" % self.model_name)
 
-
-    def verify(self):
-        """
-
-        Make sure lists (or lists of lists) are equal length, image and weight
-        maps same size, etc.
-
-        """
-        nim=len(self.im_list)
-        nwt=len(self.wt_list)
-        if nim != nwt:
-            raise ValueError("len(im_list) != len(wt_list) "
-                             "(%d != %d)" % (nim,nwt))
-        if self.psf_list is not None:
-            npsf=len(self.psf_list)
-            if npsf != nim:
-                raise ValueError("len(im_list) != len(psf_list) "
-                                 "(%d != %d)" % (nim,npsf))
-
-        njacob=len(self.jacob_list)
-        if njacob != nim:
-            raise ValueError("len(im_list) != len(jacob_list) "
-                             "(%d != %d)" % (nim,njacob))
-
-        totpix=0
-        for i in xrange(nim):
-            imsh=self.im_list[i].shape
-            wtsh=self.wt_list[i].shape
-            if imsh != wtsh:
-                raise ValueError("im.shape != wt.shape "
-                                 "(%s != %s)" % (imsh,wtsh))
-            totpix += self.im_list[i].size
-
-
-        return totpix
 
     def get_result(self):
         """
@@ -183,12 +241,13 @@ class FitterBase(object):
         if not hasattr(self, 'eff_npix'):
             wtmax = 0.0
             wtsum = 0.0
-            for wt in self.wt_list:
-                this_wtmax = wt.max()
-                if this_wtmax > wtmax:
-                    wtmax = this_wtmax
+            for wt_list in self.wt_lol:
+                for wt in wt_list:
+                    this_wtmax = wt.max()
+                    if this_wtmax > wtmax:
+                        wtmax = this_wtmax
 
-                wtsum += wt.sum()
+                    wtsum += wt.sum()
 
             self.eff_npix=wtsum/wtmax
 
@@ -196,7 +255,6 @@ class FitterBase(object):
             self.eff_npix=1.e-6
 
         return self.eff_npix
-
 
 
     def calc_lnprob(self, pars, get_s2nsums=False):
@@ -210,19 +268,26 @@ class FitterBase(object):
             s2n_numer=0.0
             s2n_denom=0.0
 
-            self._fill_gmix_list(pars)
+            self._fill_gmix_lol(pars)
+            for band in xrange(self.nband):
 
-            for i in xrange(self.nimages):
-                gm=self._gmix_list[i]
-                im=self.im_list[i]
-                wt=self.wt_list[i]
-                j=self.jacob_list[i]
+                gmix_list=self._gmix_lol[band]
+                im_list=self.im_lol[band]
+                wt_list=self.wt_lol[band]
+                jacob_list=self.jacob_lol[band]
 
-                res = gm.get_loglike(im, wt, jacobian=j,
-                                     get_s2nsums=True)
-                lnprob += res[0]
-                s2n_numer += res[1]
-                s2n_denom += res[2]
+                nim=len(im_list)
+                for i in xrange(nim):
+                    gm=gmix_list[i]
+                    im=im_list[i]
+                    wt=wt_list[i]
+                    j=jacob_list[i]
+
+                    res = gm.get_loglike(im, wt, jacobian=j,
+                                         get_s2nsums=True)
+                    lnprob += res[0]
+                    s2n_numer += res[1]
+                    s2n_denom += res[2]
 
         except GMixRangeError:
             lnprob = LOWVAL
@@ -234,67 +299,87 @@ class FitterBase(object):
 
 
 
-    def _init_gmix_list(self, pars):
-        if self.psf_list is not None:
+    def _get_band_pars(self, pars, band):
+        return pars[ [0,1,2,3,4,5+band] ]
 
-            self._gmix_list0 = []
-            self._gmix_list  = []
-            for psf in self.psf_list:
-                gm0=gmix.GMixModel(pars, self.model)
+
+    def _init_gmix_lol(self, pars):
+        """
+        initialize the list of lists of gmix
+        """
+        self._gmix_lol0 = []
+        self._gmix_lol  = []
+
+        for band in xrange(self.nband):
+            gmix_list0=[]
+            gmix_list=[]
+
+            band_pars=self._get_band_pars(pars, band)
+            psf_list=self.psf_lol[band]
+
+            for psf in psf_list:
+                gm0=gmix.GMixModel(band_pars, self.model)
                 gm=gm0.convolve(psf)
 
-                self._gmix_list0.append(gm0)
-                self._gmix_list.append(gm)
+                gmix_list0.append(gm0)
+                gmix_list.append(gm)
 
-        else:
-            self._gmix_list = []
-            for i in xrange(self.nimages):
-                gm=gmix.GMixModel(pars, self.model)
-                self._gmix_list.append(gm)
+            self._gmix_lol0.append(gmix_list0)
+            self._gmix_lol.append(gmix_list)
 
-
-    def _fill_gmix_list(self, pars):
+    def _fill_gmix_lol(self, pars):
         """
-        Fill the list of gmix objects, potentially convolved with
-        the psf in the individual images
+        Fill the list of lists of gmix objects, potentially convolved with the
+        psf in the individual images
         """
-        if self._gmix_list is None:
-            self._init_gmix_list(pars)
+        if self._gmix_lol is None:
+            self._init_gmix_lol(pars)
         else:
-            if self.psf_list is not None:
+            for band in xrange(self.nband):
+                gmix_list0=self._gmix_lol0[band]
+                gmix_list=self._gmix_lol[band]
 
-                for i,psf in enumerate(self.psf_list):
-                    gm0=self._gmix_list0[i]
-                    gm=self._gmix_list[i]
+                band_pars=self._get_band_pars(pars, band)
+                psf_list=self.psf_lol[band]
+
+                for i,psf in enumerate(psf_list):
+                    gm0=gmix_list0[i]
+                    gm=gmix_list[i]
 
                     # Calling the python versions was a huge time sync!
-                    #gm0.fill(pars)
+                    #gm0.fill(band_pars)
                     self._fill_gmix_func(gm0._data, band_pars)
+                    # Calling the python version was a huge time sync!
                     #gmix.convolve_fill(gm, gm0, psf)
                     gmix._convolve_fill(gm._data, gm0._data, psf._data)
-
-            else:
-                for gm in self._gmix_list:
-                    gm.fill(pars)
-
 
     def _get_counts_guess(self, **keys):
         cguess=keys.get('counts',None)
         if cguess is None:
             cguess = self._get_median_counts()
+        else:
+            cguess=numpy.array(cguess)
         return cguess
 
     def _get_median_counts(self):
         """
-        median of the counts across all input images
+        median of the counts across all input images, for each band
         """
-        clist=numpy.zeros(self.nimages)
-        for i in xrange(self.nimages):
-            im=self.im_list[i]
-            j=self.jacob_list[i]
-            clist[i] = im.sum()*j._data['det']
-        
-        return numpy.median(clist)
+        cguess=numpy.zeros(self.nband)
+        for band in xrange(self.nband):
+
+            im_list=self.im_lol[band]
+            jacob_list=self.jacob_lol[band]
+
+            nim=len(im_list)
+            clist=numpy.zeros(nim)
+
+            for i in xrange(nim):
+                im=im_list[i]
+                j=jacob_list[i]
+                clist[i] = im.sum()*j._data['det']
+            cguess[band] = numpy.median(clist) 
+        return cguess
 
 
 class MCMCBase(FitterBase):
@@ -467,15 +552,16 @@ class MCMCSimple(MCMCBase):
                 raise ValueError("counts_guess size %s doesn't match "
                                  "number of bands %s" % (ncg,self.nband))
 
-
     def _get_priors(self, pars):
         """
+        # go in simple
         add any priors that were sent on construction
         
         note g prior is *not* applied during the likelihood exploration
         if do_lensfit=True or do_pqr=True
         """
         lnp=0.0
+        
         if self.cen_prior is not None:
             lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
 
@@ -486,12 +572,16 @@ class MCMCSimple(MCMCBase):
             lnp += self.T_prior.get_lnprob_scalar(pars[4])
 
         if self.counts_prior is not None:
-            lnp += self.counts_prior.get_lnprob_scalar(pars[5])
+            for i,cp in enumerate(self.counts_prior):
+                counts=pars[5+i]
+                lnp += cp.get_lnprob_scalar(counts)
 
         return lnp
 
+
     def _get_guess(self):
         """
+        # go in simple
         The counts guess is stupid unless you have a well-trimmed
         PSF image
         """
@@ -506,10 +596,13 @@ class MCMCSimple(MCMCBase):
         guess[:,3]=0.1*srandu(self.nwalkers)
 
         guess[:,4] = self.T_guess*(1 + 0.1*srandu(self.nwalkers))
-        guess[:,5] = self.counts_guess*(1 + 0.1*srandu(self.nwalkers))
+
+        for band in xrange(self.nband):
+            guess[:,5+band] = self.counts_guess[band]*(1 + 0.1*srandu(self.nwalkers))
 
         self._guess=guess
         return guess
+
 
     def _calc_result(self):
         """
@@ -615,10 +708,11 @@ class MCMCSimple(MCMCBase):
 
     def _get_flux_stats(self, pars, pcov):
         """
+        # go in simple
         Simple model only
         """
-        counts     = pars[5]
-        counts_err = numpy.sqrt(pcov[5,5])
+        counts     = pars[5:]
+        counts_err = numpy.sqrt(numpy.diag(pcov[5:,5:]))
         counts_s2n = counts/counts_err
         return counts, counts_err, counts_s2n
 
@@ -800,6 +894,7 @@ class MCMCSimpleMB(MCMCSimple):
 
     def _get_priors(self, pars):
         """
+        # go in simple
         add any priors that were sent on construction
         
         note g prior is *not* applied during the likelihood exploration
@@ -826,6 +921,7 @@ class MCMCSimpleMB(MCMCSimple):
 
     def _get_guess(self):
         """
+        # go in simple
         The counts guess is stupid unless you have a well-trimmed
         PSF image
         """
@@ -849,6 +945,7 @@ class MCMCSimpleMB(MCMCSimple):
 
     def _calc_result(self):
         """
+        # go in simple
         Some extra stats for simple models
         """
         super(MCMCSimple,self)._calc_result()
@@ -880,6 +977,7 @@ class MCMCSimpleMB(MCMCSimple):
 
     def _get_flux_stats(self, pars, pcov):
         """
+        # go in simple
         Simple model only
         """
         counts     = pars[5:]
@@ -887,8 +985,6 @@ class MCMCSimpleMB(MCMCSimple):
         counts_s2n = counts/counts_err
         return counts, counts_err, counts_s2n
 
-    def _get_band_pars(self, pars, band):
-        return pars[ [0,1,2,3,4,5+band] ]
 
     def _init_gmix_lol(self, pars):
         """
@@ -1826,7 +1922,7 @@ def test_model_mb(model,
         config=pycallgraph.Config(groups=groups)
 
         with PyCallGraph(config=config, output=graphviz):
-            mc_obj=MCMCSimpleMB(im_lol, wt_lol, j_lol, model,
+            mc_obj=MCMCSimple(im_lol, wt_lol, j_lol, model,
                                 psf=psf_lol,
                                 T=Tsky_obj*(1. + 0.1*srandu()),
                                 counts=counts_sky*(1. + 0.1*srandu(nband)),
@@ -1838,7 +1934,7 @@ def test_model_mb(model,
                                 do_pqr=do_pqr, mca_a=3.)
             mc_obj.go()
     else:
-        mc_obj=MCMCSimpleMB(im_lol, wt_lol, j_lol, model,
+        mc_obj=MCMCSimple(im_lol, wt_lol, j_lol, model,
                             psf=psf_lol,
                             T=Tsky_obj*(1. + 0.1*srandu()),
                             counts=counts_sky*(1. + 0.1*srandu(nband)),
