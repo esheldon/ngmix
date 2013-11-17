@@ -684,7 +684,7 @@ class MCMCSimple(MCMCBase):
 
         return P,Q,R
 
-class MCMCSimpleAnze(MCMCBase):
+class MCMCSimpleAnze(MCMCSimple):
     def __init__(self, image, weight, jacobian, model, **keys):
         super(MCMCSimpleAnze,self).__init__(image, weight, jacobian, model, **keys)
 
@@ -757,130 +757,6 @@ class MCMCSimpleAnze(MCMCBase):
 
     def lnprob_many(self, list_of_pars):
         return map(self.calc_lnprob, list_of_pars)
-
-    def _get_priors(self, pars):
-        """
-        add any priors that were sent on construction
-        
-        note g prior is *not* applied during the likelihood exploration
-        if do_lensfit=True or do_pqr=True
-        """
-        lnp=0.0
-        if self.cen_prior is not None:
-            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
-
-        if self.g_prior is not None and self.g_prior_during:
-            lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
-        
-        if self.T_prior is not None:
-            lnp += self.T_prior.get_lnprob_scalar(pars[4])
-
-        if self.counts_prior is not None:
-            lnp += self.counts_prior.get_lnprob_scalar(pars[5])
-
-        return lnp
-
-    def _get_guess(self):
-        """
-        The counts guess is stupid unless you have a well-trimmed
-        PSF image
-        """
-
-        guess=numpy.zeros( (self.nwalkers,self.npars) )
-
-        # center
-        guess[:,0]=0.1*srandu(self.nwalkers)
-        guess[:,1]=0.1*srandu(self.nwalkers)
-
-        guess[:,2]=0.1*srandu(self.nwalkers)
-        guess[:,3]=0.1*srandu(self.nwalkers)
-
-        guess[:,4] = self.T_guess*(1 + 0.1*srandu(self.nwalkers))
-        guess[:,5] = self.counts_guess*(1 + 0.1*srandu(self.nwalkers))
-
-        self._guess=guess
-        return guess
-
-    def _calc_result(self):
-        """
-        Some extra stats for simple models
-        """
-        super(MCMCSimple,self)._calc_result()
-
-        self._result['g'] = self._result['pars'][2:2+2].copy()
-        self._result['gcov'] = self._result['pcov'][2:2+2, 2:2+2].copy()
-
-        if self.do_lensfit:
-            gsens=self._get_lensfit_gsens(self._result['pars'])
-            self._result['gsens']=gsens
-
-        if self.do_pqr:
-            P,Q,R = self._get_PQR()
-            self._result['P']=P
-            self._result['Q']=Q
-            self._result['R']=R
-
-
-    def _get_trial_stats(self):
-        """
-        Get the stats from the trials
-        """
-        if self.g_prior is not None and not self.g_prior_during:
-            g1vals = self.trials[:,2]
-            g2vals = self.trials[:,3]
-            gprior  = self.g_prior.get_prob_array2d(g1vals,g2vals)
-            pars,pcov = extract_mcmc_stats(self.trials,weights=gprior)
-        else:
-            pars,pcov = extract_mcmc_stats(self.trials)
-        
-        return pars,pcov
-
-    def _get_lensfit_gsens(self, pars, gprior=None):
-
-        if self.g_prior is not None:
-            g1vals=self.trials[:,2]
-            g2vals=self.trials[:,3]
-
-            gprior = self.g_prior.get_prob_array2d(g1vals,g2vals)
-
-            dpri_by_g1 = self.g_prior.dbyg1_array(g1vals,g2vals)
-            dpri_by_g2 = self.g_prior.dbyg2_array(g1vals,g2vals)
-
-            psum = gprior.sum()
-
-            g=pars[2:2+2]
-            g1diff = g[0]-g1vals
-            g2diff = g[1]-g2vals
-
-            gsens = numpy.zeros(2)
-            gsens[0]= 1.-(g1diff*dpri_by_g1).sum()/psum
-            gsens[1]= 1.-(g2diff*dpri_by_g2).sum()/psum
-        else:
-            gsens=numpy.array([1.,1.])
-
-        return gsens
-
-    def _get_PQR(self):
-        """
-        get the marginalized P,Q,R from Bernstein & Armstrong
-
-        Note if the prior is already in our mcmc chain, so we need to divide by
-        the prior everywhere.  Because P*J=P at shear==0 this means P is always
-        1
-
-        """
-
-        g1=self.trials[:,2]
-        g2=self.trials[:,3]
-
-        P,Q,R = self.g_prior.get_pqr(g1,g2)
-
-        P = P.mean()
-        Q = Q.mean(axis=0)
-        R = R.mean(axis=0)
-
-        return P,Q,R
-
 
 class MCMCGaussPSF(MCMCSimple):
     def __init__(self, image, weight, jacobian, **keys):
