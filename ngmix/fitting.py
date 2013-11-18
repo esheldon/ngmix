@@ -291,6 +291,7 @@ class FitterBase(object):
 
                     #res = gm.get_loglike(im, wt, jacobian=j,
                     #                     get_s2nsums=True)
+                    # this saves tons of time (28%)
                     res = gmix._loglike_jacob_fast3(gm._data,
                                                     im,
                                                     wt,
@@ -616,8 +617,11 @@ class MCMCSimple(MCMCBase):
         guess[:,0]=0.1*srandu(self.nwalkers)
         guess[:,1]=0.1*srandu(self.nwalkers)
 
-        guess[:,2]=0.1*srandu(self.nwalkers)
-        guess[:,3]=0.1*srandu(self.nwalkers)
+        if self.draw_g_prior:
+            guess[:,2],guess[:,3]=self.g_prior.sample2d(self.nwalkers)
+        else:
+            guess[:,2]=0.1*srandu(self.nwalkers)
+            guess[:,3]=0.1*srandu(self.nwalkers)
 
         guess[:,4] = self.T_guess*(1 + 0.1*srandu(self.nwalkers))
 
@@ -1270,6 +1274,9 @@ def test_model_mb(model,
                   do_lensfit=False,
                   do_pqr=False,
                   profile=False, groups=False,
+                  burnin=400,
+                  draw_g_prior=False,
+                  png=None,
                   show=False):
     """
     testing mb stuff
@@ -1411,27 +1418,31 @@ def test_model_mb(model,
 
         with PyCallGraph(config=config, output=graphviz):
             mc_obj=MCMCSimple(im_lol, wt_lol, j_lol, model,
-                                psf=psf_lol,
-                                T=Tsky_obj*(1. + 0.1*srandu()),
-                                counts=counts_sky*(1. + 0.1*srandu(nband)),
-                                cen_prior=cen_prior,
-                                T_prior=T_prior,
-                                counts_prior=counts_prior,
-                                g_prior=g_prior,
-                                do_lensfit=do_lensfit,
-                                do_pqr=do_pqr, mca_a=3.)
+                              psf=psf_lol,
+                              T=Tsky_obj*(1. + 0.1*srandu()),
+                              counts=counts_sky*(1. + 0.1*srandu(nband)),
+                              cen_prior=cen_prior,
+                              T_prior=T_prior,
+                              counts_prior=counts_prior,
+                              g_prior=g_prior,
+                              do_lensfit=do_lensfit,
+                              do_pqr=do_pqr, mca_a=3.,
+                              draw_g_prior=draw_g_prior,
+                              burnin=burnin)
             mc_obj.go()
     else:
         mc_obj=MCMCSimple(im_lol, wt_lol, j_lol, model,
-                            psf=psf_lol,
-                            T=Tsky_obj*(1. + 0.1*srandu()),
-                            counts=counts_sky*(1. + 0.1*srandu(nband)),
-                            cen_prior=cen_prior,
-                            T_prior=T_prior,
-                            counts_prior=counts_prior,
-                            g_prior=g_prior,
-                            do_lensfit=do_lensfit,
-                            do_pqr=do_pqr, mca_a=3.)
+                          psf=psf_lol,
+                          T=Tsky_obj*(1. + 0.1*srandu()),
+                          counts=counts_sky*(1. + 0.1*srandu(nband)),
+                          cen_prior=cen_prior,
+                          T_prior=T_prior,
+                          counts_prior=counts_prior,
+                          g_prior=g_prior,
+                          do_lensfit=do_lensfit,
+                          do_pqr=do_pqr, mca_a=3.,
+                          draw_g_prior=draw_g_prior,
+                          burnin=burnin)
         mc_obj.go()
 
     res_obj=mc_obj.get_result()
@@ -1457,16 +1468,19 @@ def test_model_mb(model,
     #images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
 
            
+    names=['cen1','cen2','g1','g2','T'] + ['counts%s' % (i+1) for i in xrange(nband)]
+    plt=mcmc.plot_results(mc_obj.get_trials(),names=names,show=show)
     if show:
-        names=['cen1','cen2','g1','g2','T'] + ['counts%s' % (i+1) for i in xrange(nband)]
-        mcmc.plot_results(mc_obj.get_trials(),names=names)
+        plt.show()
+    elif png is not None:
+        plt.write_img(800,800,png)
 
     tmtot=tmrest + tmpsf
     print 'time total:',tmtot
     print 'time psf:  ',tmpsf
     print 'time rest: ',tmrest
 
-    return tmtot
+    return tmtot,res_obj
 
 
 
