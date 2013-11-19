@@ -425,6 +425,109 @@ class FitterBase(object):
             cguess[band] = numpy.median(clist) 
         return cguess
 
+class PSFFluxFitter(FitterBase):
+    """
+    We fix the center, so this is linear.  Just cross-correlations
+    between model and data.
+    """
+    def __init__(self, image, weight, jacobian, gm, **keys):
+        self.keys=keys
+
+        self.gmix=gm.copy()
+        self.gmix.set_psum(1.0)
+
+        # in this case, image, weight, jacobian, psf are going to
+        # be lists of lists.
+
+        # call this first, others depend on it
+        self._set_lists(image, weight, jacobian, **keys)
+
+        self.model_name='psf'
+        self.npars=1
+
+        self.totpix=self.verify()
+
+        self.make_plots=keys.get('make_plots',False)
+
+        self._result=None
+
+    def go(self):
+        model_list=[]
+        xcorr_sum=0.0
+        msq_sum=0.0
+
+        for i in xrange(self.nimages):
+            im=self.im_list[i]
+            wt=self.wt_list[i]
+            j=self.jacob_list[i]
+
+            model=self.gmix.make_image(im.shape, jacobian=j)
+            
+            xcorr_sum += (model*im*wt).sum()
+            msq_sum += (model*model*wt).sum()
+        
+        self.flux = xcorr_sum/msq_sum
+
+    def _set_lists(self, im_list, wt_list, j_list, **keys):
+        """
+        Internally we store everything as lists of lists.  The outer
+        list is the bands, the inner is the list of images in the band.
+        """
+
+        if isinstance(im_list,numpy.ndarray):
+            # lists-of-lists for generic, including multi-band
+            im_list=[im_list]
+            wt_list=[wt_list]
+            j_list=[j_list]
+
+        elif (isinstance(im_list,list) 
+                and isinstance(im_list[0],numpy.ndarray)):
+            # OK, good
+            pass
+        else:
+            raise ValueError("images should be input as array or "
+                             "list of arrays")
+
+        self.nimages = len(im_list)
+
+        self.im_list=im_list
+        self.wt_list=wt_list
+
+        self.jacob_list = j_list
+        mean_det=0.0
+        for j in j_list:
+            mean_det += j._data['det']
+        mean_det /= len(jlist)
+
+        self.mean_det=mean_det
+
+    def verify(self):
+        """
+        Make sure the data are consistent.
+        """
+        n_im=self.nimages
+        n_wt = len(self.wt_list)
+        n_j  = len(self.jacob_list)
+        if n_wt != n_im or n_wt != n_j:
+            nl=(n_im,n_wt,n_j)
+            raise ValueError("lists not all same size: "
+                             "im: %s wt: %s jacob: %s" % nl)
+
+
+        totpix=0
+
+
+        for j in xrange(nim):
+            imsh=self.im_list[j].shape
+            wtsh=self.wt_list[j].shape
+            if imsh != wtsh:
+                raise ValueError("im.shape != wt.shape "
+                                 "(%s != %s)" % (imsh,wtsh))
+
+            totpix += imsh[0]*imsh[1]
+
+            
+        return totpix
 
 class MCMCBase(FitterBase):
     """
