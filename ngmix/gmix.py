@@ -58,6 +58,12 @@ class GMix(object):
             self._ngauss=ngauss
             self.reset()
 
+    def get_data(self):
+        """
+        Get the underlying array
+        """
+        return self._data
+
     def get_cen(self):
         """
         get the center position (row,col)

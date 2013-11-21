@@ -1,3 +1,4 @@
+import numpy
 from numpy import zeros, sqrt
 from numba import float64, struct, jit, autojit
 
@@ -24,10 +25,17 @@ class Jacobian(object):
         self._data['dvdrow']=dvdrow
         self._data['dvdcol']=dvdcol
 
-        self._data['det'] = dudrow*dvdcol-dudcol*dvdrow
+        self._data['det'] = numpy.abs( dudrow*dvdcol-dudcol*dvdrow )
         self._data['sdet'] = sqrt(self._data['det'])
 
 
+    def copy(self):
+        return Jacobian(self._data['row0'][0],
+                        self._data['col0'][0],
+                        self._data['dudrow'][0],
+                        self._data['dudcol'][0],
+                        self._data['dvdrow'][0],
+                        self._data['dvdcol'][0])
     def __repr__(self):
         fmt="row0: %-10.5g col0: %-10.5g dudrow: %-10.5g dudcol: %-10.5g dvdrow: %-10.5g dvdcol: %-10.5g"
         return fmt % (self._data['row0'][0],
