@@ -452,9 +452,12 @@ class PSFFluxFitter(FitterBase):
         msq_sum=0.0
 
         loglike=0.0
+        chi2=0.0
         s2n_numer=0.0
         s2n_denom=0.0
 
+        # the fast and slow end up being the same speed, why?
+        # need to profile
         for ipass in [1,2]:
             for i in xrange(self.nimages):
                 im=self.im_list[i]
@@ -462,6 +465,7 @@ class PSFFluxFitter(FitterBase):
                 j=self.jacob_list[i]
                 psf=self.psf_list[i]
 
+                """
                 if ipass==1:
                     psf.set_psum(1.0)
 
@@ -486,9 +490,8 @@ class PSFFluxFitter(FitterBase):
                     loglike += res[0]
                     s2n_numer += res[1]
                     s2n_denom += res[2]
-
-
                 """
+
                 model=psf.make_image(im.shape, jacobian=j)
                 
                 if ipass==1:
@@ -496,11 +499,10 @@ class PSFFluxFitter(FitterBase):
                     msq_sum += (model*model*wt).sum()
                 else:
                     chi2 +=( (model-im)**2 *wt ).sum()
-                """ 
             if ipass==1:
                 flux = xcorr_sum/msq_sum
         
-        chi2 = -2*loglike
+        #chi2 = -2*loglike
 
         if s2n_denom > 0.0:
             s2n=s2n_numer/s2n_denom
