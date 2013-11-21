@@ -970,6 +970,7 @@ def _loglike_jacob_fast3(self, image, weight, j, i0, expvals):
 
     return loglike, s2n_numer, s2n_denom
 
+'''
 @jit(argtypes=[ _gauss2d[:], float64[:,:], float64[:,:], _jacobian[:], int64, float64[:] ])
 def _fluxcorr_jacob_fast3(self, image, weight, j, i0, expvals):
     """
@@ -1031,5 +1032,5 @@ def _fluxcorr_jacob_fast3(self, image, weight, j, i0, expvals):
 
 
     return xcorr_sum, msq_sum
-
+'''
 
