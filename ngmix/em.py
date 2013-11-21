@@ -11,7 +11,7 @@ from .gmix import _exp3_ivals, _exp3_lookup
 from .gexceptions import GMixRangeError, GMixMaxIterEM
 from .priors import srandu
 
-from .jacobian import Jacobian, UnitJacobian
+from .jacobian import Jacobian, UnitJacobian, _jacobian
 
 class GMixEM(object):
     """
@@ -101,6 +101,23 @@ class GMixEM(object):
         if numiter >= maxiter:
             raise GMixMaxIterEM("reached max iter: %s" % maxiter)
 
+_sums=numba.struct([('gi',float64),
+                    # scratch on a given pixel
+                    ('trowsum',float64),
+                    ('tcolsum',float64),
+                    ('tu2sum',float64),
+                    ('tuvsum',float64),
+                    ('tv2sum',float64),
+                    # sums over all pixels
+                    ('pnew',float64),
+                    ('rowsum',float64),
+                    ('colsum',float64),
+                    ('u2sum',float64),
+                    ('uvsum',float64),
+                    ('v2sum',float64)])
+
+_sums_dtype=_sums.get_dtype()
+
 
 @autojit
 def _clear_sums(sums):
@@ -133,6 +150,8 @@ def _set_gmix_from_sums(gmix, sums):
                      sums[i].uvsum/p,
                      sums[i].v2sum/p)
 
+#@jit(argtypes=[float64[:,:],_gauss2d[:],_sums[:],_jacobian[:],float64,int64,float64,int64,float64[:]],
+#     locals=dict(psum=float64, skysum=float64))
 @autojit(locals=dict(psum=float64, skysum=float64))
 def _run_em(image, gmix, sums, j, sky, maxiter, tol, i0, expvals):
     """
@@ -155,11 +174,11 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol, i0, expvals):
     iiter=0
     while iiter < maxiter:
         _gauss2d_verify(gmix)
-        #print gmix[0].p,gmix[0].row,gmix[0].col,gmix[0].irr,gmix[0].irc,gmix[0].icc
 
         psum=0.0
         skysum=0.0
         _clear_sums(sums)
+
 
         for row in xrange(nrows):
             u=j[0].dudrow*(row - j[0].row0) + j[0].dudcol*(0 - j[0].col0)
@@ -254,23 +273,6 @@ def prep_image(im0):
     im += (sky-im_min)
 
     return im, sky
-
-_sums=numba.struct([('gi',float64),
-                    # scratch on a given pixel
-                    ('trowsum',float64),
-                    ('tcolsum',float64),
-                    ('tu2sum',float64),
-                    ('tuvsum',float64),
-                    ('tv2sum',float64),
-                    # sums over all pixels
-                    ('pnew',float64),
-                    ('rowsum',float64),
-                    ('colsum',float64),
-                    ('u2sum',float64),
-                    ('uvsum',float64),
-                    ('v2sum',float64)])
-
-_sums_dtype=_sums.get_dtype()
 
 def test_1gauss(counts=100.0, noise=0.0, maxiter=100, show=False):
     import time

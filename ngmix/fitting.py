@@ -451,10 +451,10 @@ class PSFFluxFitter(FitterBase):
         xcorr_sum=0.0
         msq_sum=0.0
 
-        loglike=0.0
+        #loglike=0.0
         chi2=0.0
-        s2n_numer=0.0
-        s2n_denom=0.0
+        #s2n_numer=0.0
+        #s2n_denom=0.0
 
         # the fast and slow end up being the same speed, why?
         # need to profile
@@ -468,6 +468,7 @@ class PSFFluxFitter(FitterBase):
                 """
                 if ipass==1:
                     psf.set_psum(1.0)
+                    psf.set_cen(0.0, 0.0)
 
                     txcorr_sum,tmsq_sum=gmix._fluxcorr_jacob_fast3(psf._data,
                                                                    im,
@@ -492,28 +493,32 @@ class PSFFluxFitter(FitterBase):
                     s2n_denom += res[2]
                 """
 
-                model=psf.make_image(im.shape, jacobian=j)
                 
                 if ipass==1:
+                    psf.set_psum(1.0)
+                    psf.set_cen(0.0, 0.0)
+                    model=psf.make_image(im.shape, jacobian=j)
                     xcorr_sum += (model*im*wt).sum()
                     msq_sum += (model*model*wt).sum()
                 else:
+                    psf.set_psum(flux)
+                    model=psf.make_image(im.shape, jacobian=j)
                     chi2 +=( (model-im)**2 *wt ).sum()
             if ipass==1:
                 flux = xcorr_sum/msq_sum
         
         #chi2 = -2*loglike
 
-        if s2n_denom > 0.0:
-            s2n=s2n_numer/s2n_denom
-        else:
-            s2n=0.0
+        #if s2n_denom > 0.0:
+        #    s2n=s2n_numer/s2n_denom
+        #else:
+        #    s2n=0.0
 
         flux_err = numpy.sqrt( chi2/msq_sum/(self.totpix-1) )
         self._result={'flags':0,
-                      'loglike':loglike,
+                      #'loglike':loglike,
                       'chi2':chi2,
-                      's2n':s2n,
+                      #'s2n':s2n,
                       'flux':flux,
                       'flux_err':flux_err}
 
@@ -554,11 +559,11 @@ class PSFFluxFitter(FitterBase):
 
         psf_list=[]
         for psf_in in self.psf_list_in:
-            psfnorm1 = psf_in.copy()
+            psf = psf_in.copy()
 
-            psfnorm1.set_psum(1.0)
-            psfnorm1.set_cen(0.0, 0.0)
-            psf_list.append(psfnorm1)
+            #psfnorm1.set_psum(1.0)
+            #psfnorm1.set_cen(0.0, 0.0)
+            psf_list.append(psf)
 
         self.psf_list=psf_list
 
@@ -1880,6 +1885,7 @@ def test_psf_flux(ngauss,
         for k in xrange(ntry):
             try:
                 mc.go(gm_guess, sky, tol=1.e-5)
+                break
             except GMixMaxIterEM:
                 if (k==ntry-1):
                     raise
@@ -1916,3 +1922,29 @@ def test_psf_flux(ngauss,
     #print res
 
     return res['flux'], res['flux_err'], tm_fit, tm_em
+
+def profile_test_psf_flux(ngauss,
+                          counts_sky=100.0,
+                          noise_sky=0.01,
+                          nimages=1,
+                          jfac=0.27,
+                          groups=False):
+
+    import pycallgraph
+    from pycallgraph import PyCallGraph
+    from pycallgraph.output import GraphvizOutput
+
+    graphviz = GraphvizOutput()
+    output='profile-psfflux-ngauss%02d-%02d.png' % (ngauss,nimages)
+    print 'profile image:',output
+    graphviz.output_file = output
+    config=pycallgraph.Config(groups=groups)
+
+
+    with PyCallGraph(config=config, output=graphviz):
+        for i in xrange(10):
+            test_psf_flux(ngauss,
+                          counts_sky=counts_sky,
+                          noise_sky=noise_sky,
+                          nimages=nimages,
+                          jfac=jfac)
