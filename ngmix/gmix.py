@@ -91,6 +91,7 @@ class GMix(object):
         psum0 = self._data['p'].sum()
         rat = psum/psum0
         self._data['p'] *= rat
+        self._data['pnorm'] = self._data['p']*self._data['norm']
 
     def fill(self, pars):
         """
@@ -968,5 +969,67 @@ def _loglike_jacob_fast3(self, image, weight, j, i0, expvals):
     loglike *= (-0.5)
 
     return loglike, s2n_numer, s2n_denom
+
+@jit(argtypes=[ _gauss2d[:], float64[:,:], float64[:,:], _jacobian[:], int64, float64[:] ])
+def _fluxcorr_jacob_fast3(self, image, weight, j, i0, expvals):
+    """
+    using 3rd order approximation to the exponential function
+
+    This code is a mess because we can't do inlining in numba
+    """
+    ngauss=self.size
+    nrows=image.shape[0]
+    ncols=image.shape[1]
+
+    xcorr_sum=0.0
+    msq_sum=0.0
+
+
+    for row in xrange(nrows):
+        u=j[0].dudrow*(row - j[0].row0) + j[0].dudcol*(0 - j[0].col0)
+        v=j[0].dvdrow*(row - j[0].row0) + j[0].dvdcol*(0 - j[0].col0)
+
+        for col in xrange(ncols):
+
+            ivar = weight[row,col]
+            if ivar <= 0.0:
+                continue
+
+            model_val=0.0
+            for i in xrange(ngauss):
+                udiff=u-self[i].row
+                vdiff=v-self[i].col
+
+                u2 = udiff*udiff
+                v2 = vdiff*vdiff
+                uv=udiff*vdiff
+
+                chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
+
+                if chi2 < 25.0 and chi2 >= 0.0:
+                    pnorm = self[i].pnorm
+                    x = -0.5*chi2
+
+                    # 3rd order approximation to exp
+                    ival = int64(x-0.5)
+                    f = x - ival
+                    index = ival-i0
+                    
+                    expval = expvals[index]
+                    fexp = (6+f*(6+f*(3+f)))*0.16666666
+                    expval *= fexp
+
+                    model_val += pnorm*expval
+
+            pixval = image[row,col]
+
+            xcorr_sum += model_val*pixval*ivar
+            msq_sum += model_val*model_val*ivar
+
+            u += j[0].dudcol
+            v += j[0].dvdcol
+
+
+    return xcorr_sum, msq_sum
 
 

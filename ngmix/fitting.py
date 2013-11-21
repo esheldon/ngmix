@@ -291,7 +291,6 @@ class FitterBase(object):
 
                     #res = gm.get_loglike(im, wt, jacobian=j,
                     #                     get_s2nsums=True)
-                    # this saves tons of time (28%)
                     res = gmix._loglike_jacob_fast3(gm._data,
                                                     im,
                                                     wt,
@@ -430,17 +429,14 @@ class PSFFluxFitter(FitterBase):
     We fix the center, so this is linear.  Just cross-correlations
     between model and data.
     """
-    def __init__(self, image, weight, jacobian, gm, **keys):
+    def __init__(self, image, weight, jacobian, psf, **keys):
         self.keys=keys
-
-        self.gmix=gm.copy()
-        self.gmix.set_psum(1.0)
 
         # in this case, image, weight, jacobian, psf are going to
         # be lists of lists.
 
         # call this first, others depend on it
-        self._set_lists(image, weight, jacobian, **keys)
+        self._set_lists(image, weight, jacobian, psf, **keys)
 
         self.model_name='psf'
         self.npars=1
@@ -452,23 +448,74 @@ class PSFFluxFitter(FitterBase):
         self._result=None
 
     def go(self):
-        model_list=[]
         xcorr_sum=0.0
         msq_sum=0.0
 
-        for i in xrange(self.nimages):
-            im=self.im_list[i]
-            wt=self.wt_list[i]
-            j=self.jacob_list[i]
+        loglike=0.0
+        s2n_numer=0.0
+        s2n_denom=0.0
 
-            model=self.gmix.make_image(im.shape, jacobian=j)
-            
-            xcorr_sum += (model*im*wt).sum()
-            msq_sum += (model*model*wt).sum()
+        for ipass in [1,2]:
+            for i in xrange(self.nimages):
+                im=self.im_list[i]
+                wt=self.wt_list[i]
+                j=self.jacob_list[i]
+                psf=self.psf_list[i]
+
+                if ipass==1:
+                    psf.set_psum(1.0)
+
+                    txcorr_sum,tmsq_sum=gmix._fluxcorr_jacob_fast3(psf._data,
+                                                                   im,
+                                                                   wt,
+                                                                   j._data, 
+                                                                   _exp3_ivals[0],
+                                                                   _exp3_lookup)
+                    xcorr_sum += txcorr_sum
+                    msq_sum += tmsq_sum
+
+                else:
+                    psf.set_psum(flux)
+                    res = gmix._loglike_jacob_fast3(psf._data,
+                                                    im,
+                                                    wt,
+                                                    j._data,
+                                                    _exp3_ivals[0],
+                                                    _exp3_lookup)
+
+                    loglike += res[0]
+                    s2n_numer += res[1]
+                    s2n_denom += res[2]
+
+
+                """
+                model=psf.make_image(im.shape, jacobian=j)
+                
+                if ipass==1:
+                    xcorr_sum += (model*im*wt).sum()
+                    msq_sum += (model*model*wt).sum()
+                else:
+                    chi2 +=( (model-im)**2 *wt ).sum()
+                """ 
+            if ipass==1:
+                flux = xcorr_sum/msq_sum
         
-        self.flux = xcorr_sum/msq_sum
+        chi2 = -2*loglike
 
-    def _set_lists(self, im_list, wt_list, j_list, **keys):
+        if s2n_denom > 0.0:
+            s2n=s2n_numer/s2n_denom
+        else:
+            s2n=0.0
+
+        flux_err = numpy.sqrt( chi2/msq_sum/(self.totpix-1) )
+        self._result={'flags':0,
+                      'loglike':loglike,
+                      'chi2':chi2,
+                      's2n':s2n,
+                      'flux':flux,
+                      'flux_err':flux_err}
+
+    def _set_lists(self, im_list, wt_list, j_list, psf_list_in, **keys):
         """
         Internally we store everything as lists of lists.  The outer
         list is the bands, the inner is the list of images in the band.
@@ -479,6 +526,7 @@ class PSFFluxFitter(FitterBase):
             im_list=[im_list]
             wt_list=[wt_list]
             j_list=[j_list]
+            psf_list_in=[psf_list_in]
 
         elif (isinstance(im_list,list) 
                 and isinstance(im_list[0],numpy.ndarray)):
@@ -492,14 +540,25 @@ class PSFFluxFitter(FitterBase):
 
         self.im_list=im_list
         self.wt_list=wt_list
-
         self.jacob_list = j_list
+        self.psf_list_in=psf_list_in
+
         mean_det=0.0
         for j in j_list:
             mean_det += j._data['det']
-        mean_det /= len(jlist)
+        mean_det /= len(j_list)
 
         self.mean_det=mean_det
+
+        psf_list=[]
+        for psf_in in self.psf_list_in:
+            psfnorm1 = psf_in.copy()
+
+            psfnorm1.set_psum(1.0)
+            psfnorm1.set_cen(0.0, 0.0)
+            psf_list.append(psfnorm1)
+
+        self.psf_list=psf_list
 
     def verify(self):
         """
@@ -508,16 +567,16 @@ class PSFFluxFitter(FitterBase):
         n_im=self.nimages
         n_wt = len(self.wt_list)
         n_j  = len(self.jacob_list)
-        if n_wt != n_im or n_wt != n_j:
-            nl=(n_im,n_wt,n_j)
+        n_psf  = len(self.psf_list)
+        if n_wt != n_im or n_wt != n_j or n_psf != n_im:
+            nl=(n_im,n_wt,n_j,n_psf)
             raise ValueError("lists not all same size: "
-                             "im: %s wt: %s jacob: %s" % nl)
+                             "im: %s wt: %s jacob: %s psf: %s" % nl)
 
 
         totpix=0
 
-
-        for j in xrange(nim):
+        for j in xrange(n_im):
             imsh=self.im_list[j].shape
             wtsh=self.wt_list[j].shape
             if imsh != wtsh:
@@ -1715,3 +1774,143 @@ def test_model_priors_anze(model,
     images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
     mcmc.plot_results(mc_obj.get_trials())
     """
+
+
+
+def _get_test_psf_flux_pars(ngauss, jfac, counts_sky):
+
+    jfac2=jfac**2
+    if ngauss==1:
+        e1=0.1*srandu()
+        e2=0.1*srandu()
+        Tpix=4.0*(1.0 + 0.2*srandu())
+
+        Tsky=Tpix*jfac2
+        pars=numpy.array([counts_sky,
+                          0.0,
+                          0.0,
+                          (Tsky/2.)*(1-e1),
+                          (Tsky/2.)*e2,
+                          (Tsky/2.)*(1+e1)],dtype='f8')
+
+    elif ngauss==2:
+        e1_1=0.1*srandu()
+        e2_1=0.1*srandu()
+        e1_2=0.1*srandu()
+        e2_2=0.1*srandu()
+
+        counts_frac1 = 0.6*(1.0 + 0.1*srandu())
+        counts_frac2 = 1.0 - counts_frac1
+        T1pix=4.0*(1.0 + 0.2*srandu())
+        T2pix=8.0*(1.0 + 0.2*srandu())
+
+        T1sky=T1pix*jfac2
+        T2sky=T2pix*jfac2
+        pars=numpy.array([counts_frac1*counts_sky,
+                          0.0,
+                          0.0,
+                          (T1sky/2.)*(1-e1_1),
+                          (T1sky/2.)*e2_1,
+                          (T1sky/2.)*(1+e1_1),
+
+                          counts_frac2*counts_sky,
+                          0.0,
+                          0.0,
+                          (T2sky/2.)*(1-e1_2),
+                          (T2sky/2.)*e2_2,
+                          (T2sky/2.)*(1+e1_2)])
+
+
+    else:
+        raise ValueError("bad ngauss: %s" % ngauss)
+
+    gm=gmix.GMix(pars=pars)
+    return gm
+
+def test_psf_flux(ngauss,
+                  counts_sky=100.0,
+                  noise_sky=0.01,
+                  nimages=1,
+                  jfac=0.27):
+    """
+    testing jacobian stuff
+
+    flux fit time is negligible, EM fitting dominates
+    """
+    from .em import GMixMaxIterEM
+    import pprint
+    import images
+    import mcmc
+    from . import em
+
+    dims=[25,25]
+    cen=[dims[0]/2., dims[1]/2.]
+    cenfac=0.0
+    jfac2=jfac**2
+    noise_pix=noise_sky/jfac2
+
+    im_list=[]
+    wt_list=[]
+    j_list=[]
+    psf_list=[]
+
+    ntry=10
+
+    tm_em=0.0
+    for i in xrange(nimages):
+        # gmix is in sky coords
+        gm=_get_test_psf_flux_pars(ngauss, jfac, counts_sky)
+        j=Jacobian(cen[0]+cenfac*srandu(),cen[1]+cenfac*srandu(), jfac, 0.0, 0.0, jfac)
+
+        im0=gm.make_image(dims, jacobian=j)
+        im = im0 + noise_pix*numpy.random.randn(im0.size).reshape(dims)
+
+        im0_skyset,sky=em.prep_image(im0)
+        mc=em.GMixEM(im0_skyset, jacobian=j)
+
+        print 'true:'
+        print gm
+        # gm is also guess
+        gm_guess=gm.copy()
+        gm_guess.set_psum(1.0)
+        gm_guess.set_cen(0.0, 0.0)
+        tm0_em=time.time()
+        for k in xrange(ntry):
+            try:
+                mc.go(gm_guess, sky, tol=1.e-5)
+            except GMixMaxIterEM:
+                if (k==ntry-1):
+                    raise
+                else:
+                    res=mc.get_result()
+                    print 'try:',k,'fdiff:',res['fdiff'],'numiter:',res['numiter']
+                    print mc.get_gmix()
+                    gm_guess.set_cen(0.1*srandu(), 0.1*srandu())
+                    gm_guess._data['irr'] = gm._data['irr']*(1.0 + 0.1*srandu(ngauss))
+                    gm_guess._data['icc'] = gm._data['icc']*(1.0 + 0.1*srandu(ngauss))
+        psf_fit=mc.get_gmix()
+        tm_em += time.time()-tm0_em
+
+        wt=0.0*im.copy() + 1./noise_pix**2
+
+        im_list.append(im)
+        wt_list.append(wt)
+        j_list.append(j)
+        psf_list.append(psf_fit)
+        #psf_list.append(gm)
+
+        #print 'fit: ',psf_fit
+        res=mc.get_result()
+        print i+1,res['numiter']
+
+
+    tm_fit=time.time()
+    fitter=PSFFluxFitter(im_list, wt_list, j_list, psf_list)
+    fitter.go()
+    tm_fit=time.time()-tm_fit
+
+    res=fitter.get_result()
+
+    #print res
+
+    return res['flux'], res['flux_err'], tm_fit, tm_em

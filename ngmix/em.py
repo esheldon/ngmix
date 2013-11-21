@@ -7,6 +7,7 @@ import numba
 from numba import jit, autojit, float64, int64
 from . import gmix
 from .gmix import GMix, _gauss2d_set, _gauss2d, _get_wmomsum, _gauss2d_verify
+from .gmix import _exp3_ivals, _exp3_lookup
 from .gexceptions import GMixRangeError, GMixMaxIterEM
 from .priors import srandu
 
@@ -90,7 +91,9 @@ class GMixEM(object):
                                  self._jacobian._data,
                                  numpy.float64(self._sky_guess),
                                  numpy.int64(self._maxiter),
-                                 numpy.float64(self._tol))
+                                 numpy.float64(self._tol),
+                                 _exp3_ivals[0],
+                                 _exp3_lookup)
 
         self._result={'numiter':numiter,
                       'fdiff':fdiff}
@@ -131,7 +134,7 @@ def _set_gmix_from_sums(gmix, sums):
                      sums[i].v2sum/p)
 
 @autojit(locals=dict(psum=float64, skysum=float64))
-def _run_em(image, gmix, sums, j, sky, maxiter, tol):
+def _run_em(image, gmix, sums, j, sky, maxiter, tol, i0, expvals):
     """
     this is a mess until we get inlining in numba
     """
@@ -175,8 +178,23 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol):
                     uv = udiff*vdiff
 
                     chi2=gmix[i].dcc*u2 + gmix[i].drr*v2 - 2.0*gmix[i].drc*uv
-                    sums[i].gi = gmix[i].norm*gmix[i].p*numpy.exp( -0.5*chi2 )
+                    #sums[i].gi = gmix[i].norm*gmix[i].p*numpy.exp( -0.5*chi2 )
+                    # note a bigger range is needed than for rendering since we
+                    # need to sample the space
+                    if chi2 < 50.0 and chi2 >= 0.0:
+                        pnorm = gmix[i].pnorm
+                        x = -0.5*chi2
 
+                        # 3rd order approximation to exp
+                        ival = int64(x-0.5)
+                        f = x - ival
+                        index = ival-i0
+                        
+                        expval = expvals[index]
+                        fexp = (6+f*(6+f*(3+f)))*0.16666666
+                        expval *= fexp
+
+                        sums[i].gi = pnorm*expval
                     gtot += sums[i].gi
 
                     sums[i].trowsum = u*sums[i].gi
