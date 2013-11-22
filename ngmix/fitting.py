@@ -60,7 +60,6 @@ class FitterBase(object):
         self.make_plots=keys.get('make_plots',False)
 
         self._gmix_lol=None
-        self._result=None
 
     def _set_lists(self, im_lol, wt_lol, j_lol, **keys):
         """
@@ -207,6 +206,9 @@ class FitterBase(object):
         """
         Result will not be non-None until go() is run
         """
+        if not hasattr(self, '_result'):
+            raise ValueError("No result, you must run go()!")
+
         return self._result
     
     def get_flux_scaling(self):
@@ -335,7 +337,6 @@ class FitterBase(object):
         bic = -2*lnprob + npars*numpy.log(eff_npix)
 
         return {'s2n_w':s2n,
-                'lnprob':lnprob,
                 'chi2per':chi2per,
                 'dof':dof,
                 'aic':aic,
@@ -447,8 +448,6 @@ class PSFFluxFitter(FitterBase):
 
         self.make_plots=keys.get('make_plots',False)
 
-        self._result=None
-
     def go(self):
         """
         calculate the flux using zero-lag cross-correlation
@@ -490,7 +489,9 @@ class PSFFluxFitter(FitterBase):
         else:
             flags=BAD_VAR
             flux_err=9999.0
-        self._result={'flags':flags,
+
+        self._result={'model':self.model_name,
+                      'flags':flags,
                       'chi2per':chi2per,
                       'dof':dof,
                       'flux':flux,
@@ -705,16 +706,16 @@ class MCMCBase(FitterBase):
         Will probably over-ride this
         """
 
-        pars,pcov=self._get_trial_stats()
+        pars,pars_cov=self._get_trial_stats()
  
         arates = self.sampler.acceptance_fraction
         arate = arates.mean()
 
-        self._result={'flags':0,
-                      'model':self.model,
+        self._result={'model':self.model_name,
+                      'flags':0,
                       'pars':pars,
-                      'pcov':pcov,
-                      'perr':numpy.sqrt(numpy.diag(pcov)),
+                      'pars_cov':pars_cov,
+                      'perr':numpy.sqrt(numpy.diag(pars_cov)),
                       'arate':arate}
 
         stats = self.get_fit_stats(pars)
@@ -728,9 +729,9 @@ class MCMCBase(FitterBase):
             raise RuntimeError("prior during: don't know how to get g1,g2 "
                                "values in general. You need to over-ride")
         else:
-            pars,pcov = extract_mcmc_stats(self.trials)
+            pars,pars_cov = extract_mcmc_stats(self.trials)
         
-        return pars,pcov
+        return pars,pars_cov
 
 
     def _get_guess(self):
@@ -788,7 +789,7 @@ class MCMCSimple(MCMCBase):
         guess[:,0]=0.1*srandu(self.nwalkers)
         guess[:,1]=0.1*srandu(self.nwalkers)
 
-        if self.draw_g_prior:
+        if self.g_prior is not None and self.draw_g_prior:
             guess[:,2],guess[:,3]=self.g_prior.sample2d(self.nwalkers)
         else:
             guess[:,2]=0.1*srandu(self.nwalkers)
@@ -810,11 +811,11 @@ class MCMCSimple(MCMCBase):
         super(MCMCSimple,self)._calc_result()
 
         self._result['g'] = self._result['pars'][2:2+2].copy()
-        self._result['gcov'] = self._result['pcov'][2:2+2, 2:2+2].copy()
+        self._result['g_cov'] = self._result['pars_cov'][2:2+2, 2:2+2].copy()
 
         if self.do_lensfit:
-            gsens=self._get_lensfit_gsens(self._result['pars'])
-            self._result['gsens']=gsens
+            g_sens=self._get_lensfit_gsens(self._result['pars'])
+            self._result['g_sens']=g_sens
 
         if self.do_pqr:
             P,Q,R = self._get_PQR()
@@ -831,11 +832,11 @@ class MCMCSimple(MCMCBase):
             g1vals = self.trials[:,2]
             g2vals = self.trials[:,3]
             gprior  = self.g_prior.get_prob_array2d(g1vals,g2vals)
-            pars,pcov = extract_mcmc_stats(self.trials,weights=gprior)
+            pars,pars_cov = extract_mcmc_stats(self.trials,weights=gprior)
         else:
-            pars,pcov = extract_mcmc_stats(self.trials)
+            pars,pars_cov = extract_mcmc_stats(self.trials)
         
-        return pars,pcov
+        return pars,pars_cov
 
     def _get_lensfit_gsens(self, pars, gprior=None):
 
@@ -1423,7 +1424,7 @@ def test_model_priors(model,
     print_pars(res_obj['perr'], front='perr_obj:', stream=stderr)
     print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['perr'][4]/jfac2)
     if do_lensfit:
-        print 'gsens:',res_obj['gsens']
+        print 'gsens:',res_obj['g_sens']
     if do_pqr:
         print 'P:',res_obj['P']
         print 'Q:',res_obj['Q']
@@ -1626,7 +1627,7 @@ def test_model_mb(model,
     print_pars(res_obj['perr'], front='perr_obj:', stream=stderr)
     #print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['perr'][4]/jfac2)
     if do_lensfit:
-        print 'gsens:',res_obj['gsens']
+        print 'gsens:',res_obj['g_sens']
     if do_pqr:
         print 'P:',res_obj['P']
         print 'Q:',res_obj['Q']
@@ -1770,7 +1771,7 @@ def test_model_priors_anze(model,
     print_pars(res_obj['perr'], front='perr_obj:', stream=stderr)
     print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['perr'][4]/jfac2)
     if do_lensfit:
-        print 'gsens:',res_obj['gsens']
+        print 'gsens:',res_obj['g_sens']
     if do_pqr:
         print 'P:',res_obj['P']
         print 'Q:',res_obj['Q']
