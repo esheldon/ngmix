@@ -395,6 +395,146 @@ class GPriorBABase(GPriorBase):
         return P, Q, R
 
 
+#@jit(argtypes=[float64, float64, float64, float64, float64, float64])
+@autojit
+def _gprior2d_exp_scalar(A, a, g0sq, gmax, g, gsq):
+
+    if g > gmax:
+        return 0.0
+
+    numer = A*(1-numpy.exp( (g-gmax)/a ))
+    denom = (1+g)*numpy.sqrt(gsq + g0sq)
+
+    prior=numer/denom
+
+    return prior
+
+
+@autojit
+class GPriorExp(GPriorBase):
+    def __init__(self, pars):
+        """
+        [A, a, g0, gmax]
+        """
+        self.pars=pars
+
+        self.A    = pars[0]
+        self.a    = pars[1]
+        self.g0   = pars[2]
+        self.g0sq = self.g0**2
+        self.gmax = pars[3]
+
+        self.h     = 1.e-6
+        self.hhalf = 0.5*self.h
+        self.hinv  = 1./self.h
+
+    @float64(float64, float64)
+    def get_prob_scalar2d(self, g1, g2):
+        """
+        Get the 2d prob for the input g value
+        (1-g^2)^2 * exp(-0.5*g^2/sigma^2)
+        """
+
+        gsq = g1**2 + g2**2
+        g = numpy.sqrt(gsq)
+        return _gprior2d_exp_scalar(self.A, self.a, self.g0sq, self.gmax, g, gsq)
+
+    @float64(float64, float64)
+    def get_lnprob_scalar2d(self, g1, g2):
+        """
+        Get the 2d prob for the input g value
+        (1-g^2)^2 * exp(-0.5*g^2/sigma^2)
+        """
+
+        gsq = g1**2 + g2**2
+        g = numpy.sqrt(gsq)
+        p=_gprior2d_exp_scalar(self.A, self.a, self.g0sq, self.gmax, g, gsq)
+
+        if p <= 0.0:
+            raise GMixRangeError("g too big: %s" % g)
+
+        lnp=numpy.log(p)
+        return lnp
+
+
+    def fill_prob_array2d(self, g1arr, g2arr, output):
+        """
+        Fill the output with the 2d prob for the input g value
+        """
+        n=g1arr.size
+        for i in xrange(n):
+            p=0.0
+
+            g1=g1arr[i]
+            g2=g2arr[i]
+
+            gsq=g1*g1 + g2*g2
+            g = numpy.sqrt(gsq)
+
+            p=_gprior2d_exp_scalar(self.A, self.a, self.g0sq, self.gmax, g, gsq)
+            output[i] = p
+
+
+    @float64(float64)
+    def get_prob_scalar1d(self, g):
+        """
+        Get the 1d prior for the input |g| value
+        """
+
+        gsq=g**2
+
+        p=_gprior2d_exp_scalar(self.A, self.a, self.g0sq, self.gmax, g, gsq)
+
+        p *= 2*numpy.pi*g
+        
+        return p
+
+
+    def fill_prob_array1d(self, garr, output):
+        """
+        Fill the output with the 1d prob for the input g value
+        """
+        n=garr.size
+        for i in xrange(n):
+            p=0.0
+
+            g=garr[i]
+            gsq=g**2
+
+            p=_gprior2d_exp_scalar(self.A, self.a, self.g0sq, self.gmax, g, gsq)
+
+            p *= 2*numpy.pi*g
+
+            output[i] = p
+
+    @float64(float64,float64)
+    def dbyg1_scalar(self, g1, g2):
+        """
+        Derivative with respect to g1 at the input g1,g2 location
+        Used for lensfit.
+
+        Uses central difference and a small enough step size
+        to use just two points
+        """
+        ff = self.get_prob_scalar2d(g1+self.hhalf, g2)
+        fb = self.get_prob_scalar2d(g1-self.hhalf, g2)
+
+        return (ff - fb)*self.hinv
+
+    @float64(float64,float64)
+    def dbyg2_scalar(self, g1, g2):
+        """
+        Derivative with respect to g2 at the input g1,g2 location
+        Used for lensfit.
+
+        Uses central difference and a small enough step size
+        to use just two points
+        """
+        ff = self.get_prob_scalar2d(g1,g2+self.hhalf)
+        fb = self.get_prob_scalar2d(g1,g2-self.hhalf)
+
+        return (ff - fb)*self.hinv
+
 
 
 @jit
