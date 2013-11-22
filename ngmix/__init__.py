@@ -21,5 +21,6 @@ from . import gexceptions
 from .gexceptions import GMixRangeError, GMixFatalError, GMixMaxIterEM
 
 from . import fitting
+from .fitting import print_pars
 
 from . import em
