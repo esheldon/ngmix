@@ -13,6 +13,8 @@ import time
 
 LOWVAL=-9999.0e47
 
+BAD_VAR=2**0
+
 class FitterBase(object):
     """
     Base for other fitters
@@ -448,6 +450,9 @@ class PSFFluxFitter(FitterBase):
         self._result=None
 
     def go(self):
+        """
+        calculate the flux using zero-lag cross-correlation
+        """
         xcorr_sum=0.0
         msq_sum=0.0
 
@@ -473,9 +478,21 @@ class PSFFluxFitter(FitterBase):
             if ipass==1:
                 flux = xcorr_sum/msq_sum
 
-        flux_err = numpy.sqrt( chi2/msq_sum/(self.totpix-1) )
-        self._result={'flags':0,
-                      'chi2':chi2,
+        dof=self.get_dof()
+        chi2per=9999.0
+        if dof > 0:
+            chi2per=chi2/dof
+
+        flags=0
+        arg=chi2/msq_sum/(self.totpix-1) 
+        if arg >= 0.0:
+            flux_err = numpy.sqrt(arg)
+        else:
+            flags=BAD_VAR
+            flux_err=9999.0
+        self._result={'flags':flags,
+                      'chi2per':chi2per,
+                      'dof':dof,
                       'flux':flux,
                       'flux_err':flux_err}
 
@@ -551,6 +568,34 @@ class PSFFluxFitter(FitterBase):
 
             
         return totpix
+
+    def get_effective_npix(self):
+        """
+        Because of the weight map, each pixel gets a different weight in the
+        chi^2.  This changes the effective degrees of freedom.  The extreme
+        case is when the weight is zero; these pixels are essentially not used.
+
+        We replace the number of pixels with
+
+            eff_npix = sum(weights)maxweight
+        """
+        if not hasattr(self, 'eff_npix'):
+            wtmax = 0.0
+            wtsum = 0.0
+            for wt in self.wt_list:
+                this_wtmax = wt.max()
+                if this_wtmax > wtmax:
+                    wtmax = this_wtmax
+
+                wtsum += wt.sum()
+
+            self.eff_npix=wtsum/wtmax
+
+        if self.eff_npix <= 0:
+            self.eff_npix=1.e-6
+
+        return self.eff_npix
+
 
 class MCMCBase(FitterBase):
     """

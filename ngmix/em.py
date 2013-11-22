@@ -150,9 +150,9 @@ def _set_gmix_from_sums(gmix, sums):
                      sums[i].uvsum/p,
                      sums[i].v2sum/p)
 
-#@jit(argtypes=[float64[:,:],_gauss2d[:],_sums[:],_jacobian[:],float64,int64,float64,int64,float64[:]],
-#     locals=dict(psum=float64, skysum=float64))
-@autojit(locals=dict(psum=float64, skysum=float64))
+#@autojit(locals=dict(psum=float64, skysum=float64))
+@jit(argtypes=[float64[:,:],_gauss2d[:],_sums[:],_jacobian[:],float64,int64,float64,int64,float64[:]],
+     locals=dict(psum=float64, skysum=float64))
 def _run_em(image, gmix, sums, j, sky, maxiter, tol, i0, expvals):
     """
     this is a mess until we get inlining in numba
