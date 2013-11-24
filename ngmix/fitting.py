@@ -57,8 +57,6 @@ class FitterBase(object):
 
         self.totpix=self.verify()
 
-        self.make_plots=keys.get('make_plots',False)
-
         self._gmix_lol=None
 
     def _set_lists(self, im_lol, wt_lol, j_lol, **keys):
@@ -400,7 +398,7 @@ class FitterBase(object):
                     gmix._convolve_fill(gm._data, gm0._data, psf._data)
 
     def _get_counts_guess(self, **keys):
-        cguess=keys.get('counts',None)
+        cguess=keys.get('counts_guess',None)
         if cguess is None:
             cguess = self._get_median_counts()
         else:
@@ -445,8 +443,6 @@ class PSFFluxFitter(FitterBase):
         self.npars=1
 
         self.totpix=self.verify()
-
-        self.make_plots=keys.get('make_plots',False)
 
     def go(self):
         """
@@ -619,13 +615,6 @@ class MCMCBase(FitterBase):
         if (self.do_lensfit or self.do_pqr) and self.g_prior is None:
             raise ValueError("send g_prior for lensfit or pqr")
 
-        # we don't apply the prior during the likelihood exploration to avoid
-        # possibly dividing by zero during the lensfit and pqr calculations
-        if self.do_pqr or self.do_lensfit:
-            self.g_prior_during=False
-        else:
-            self.g_prior_during=True
-
         self.trials=None
 
 
@@ -648,10 +637,6 @@ class MCMCBase(FitterBase):
 
         # get the expectation values, sensitivity and errors
         self._calc_result()
-
-        if self.make_plots:
-            self._doplots()
-
 
     def _do_trials(self):
         """
@@ -725,23 +710,119 @@ class MCMCBase(FitterBase):
         """
         Get the means and covariance for the trials
         """
-        if self.g_prior is not None and not self.g_prior_during:
-            raise RuntimeError("prior during: don't know how to get g1,g2 "
-                               "values in general. You need to over-ride")
-        else:
-            pars,pars_cov = extract_mcmc_stats(self.trials)
-        
+        pars,pars_cov = extract_mcmc_stats(self.trials)
         return pars,pars_cov
 
 
     def _get_guess(self):
         raise RuntimeError("over-ride me")
 
+    def make_plots(self,
+                   show=False,
+                   do_residual=False,
+                   title=None):
+        """
+        Plot the mcmc chain and some residual plots
+        """
+        import mcmc
+        import biggles
+
+        biggles.configure('screen','width', 1200)
+        biggles.configure('screen','height', 1200)
+
+        names=['cen1','cen2', 'g1','g2', 'T']
+        if self.nband==1:
+            names.append('flux')
+        else:
+            bnames=['flux_%s' % band for band in xrange(self.nband)]
+            names += bnames
+        plt=mcmc.plot_results(self.trials,
+                              names=names,
+                              title=title, show=show)
+
+        if do_residual:
+            pltlist=self._plot_residuals(title=title,show=show)
+            plots=(plt, pltlist)
+        else:
+            plots=plt
+
+        if show:
+            key=raw_input('hit a key: ')
+            if key=='q':
+                stop
+
+        return plots
+
+    def _plot_residuals(self, title=None, show=False):
+        import images
+        import biggles
+
+        biggles.configure('screen','width', 1920)
+        biggles.configure('screen','height', 1200)
+
+        self._fill_gmix_lol(self._result['pars'])
+
+        tablist=[]
+        for band in xrange(self.nband):
+            gmix_list=self._gmix_lol[band]
+            im_list=self.im_lol[band]
+            wt_list=self.wt_lol[band]
+            jacob_list=self.jacob_lol[band]
+            
+            nim=len(im_list)
+
+            nrows,ncols=images.get_grid(nim)
+            #tab=biggles.Table(nim,1)
+            tab=biggles.Table(nrows,ncols)
+            ttitle='band: %s' % band
+            if title is not None:
+                ttitle='%s %s' % (title, ttitle)
+            tab.title=ttitle
+            #imtot_list=[]
+            for i in xrange(nim):
+                row=i/ncols
+                col=i % ncols
+
+                im=im_list[i]
+                wt=wt_list[i]
+                j=jacob_list[i]
+                gm=gmix_list[i]
+
+                model=gm.make_image(im.shape,jacobian=j)
+
+                # don't care about masked pixels
+                residual=(model-im)*wt
+
+                subtab=biggles.Table(1,3)
+                imshow=im*wt
+                subtab[0,0] = images.view(imshow, show=False)
+                subtab[0,1] = images.view(model, show=False)
+                subtab[0,2] = images.view(residual, show=False)
+
+                #tab[i,0] = subtab
+                tab[row,col] = subtab
+
+                # might want them to have different stretches
+                #imcols=im.shape[1]
+                #imtot=numpy.zeros( (im.shape[0], 3*imcols ) )
+                #imtot[:, 0:imcols]=im
+                #imtot[:, imcols:2*imcols]=model
+                #imtot[:, 2*imcols:]=residual
+
+                #imtot_list.append(imtot)
+            #images.view_mosaic(imtot_list, title='band: %s' % band)
+            if show:
+                tab.show()
+
+            tablist.append(tab)
+        return tablist
+
 class MCMCSimple(MCMCBase):
     def __init__(self, image, weight, jacobian, model, **keys):
         super(MCMCSimple,self).__init__(image, weight, jacobian, model, **keys)
 
-        self.T_guess=keys.get('T',4.0)
+        self.full_guess=keys.get('full_guess',None)
+        self.T_guess=keys.get('T_guess',4.0)
         self.counts_guess=self._get_counts_guess(**keys)
 
         ncg=self.counts_guess.size
@@ -762,7 +843,7 @@ class MCMCSimple(MCMCBase):
         if self.cen_prior is not None:
             lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
 
-        if self.g_prior is not None and self.g_prior_during:
+        if self.g_prior is not None:
             lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
         
         if self.T_prior is not None:
@@ -783,6 +864,19 @@ class MCMCSimple(MCMCBase):
         PSF image
         """
 
+        if self.full_guess is not None:
+            return self._get_guess_from_full()
+        else:
+            return self._get_random_guess()
+    
+    def _get_guess_from_full(self):
+        """
+        Return the last ``nwalkers'' entries
+        """
+        ntrial=self.full_guess.shape[0]
+        return self.full_guess[ntrial-self.nwalkers:, :]
+
+    def _get_random_guess(self):
         guess=numpy.zeros( (self.nwalkers,self.npars) )
 
         # center
@@ -823,41 +917,31 @@ class MCMCSimple(MCMCBase):
             self._result['Q']=Q
             self._result['R']=R
 
-
-    def _get_trial_stats(self):
-        """
-        Get the stats from the trials
-        """
-        if self.g_prior is not None and not self.g_prior_during:
-            g1vals = self.trials[:,2]
-            g2vals = self.trials[:,3]
-            gprior  = self.g_prior.get_prob_array2d(g1vals,g2vals)
-            pars,pars_cov = extract_mcmc_stats(self.trials,weights=gprior)
-        else:
-            pars,pars_cov = extract_mcmc_stats(self.trials)
-        
-        return pars,pars_cov
-
     def _get_lensfit_gsens(self, pars, gprior=None):
 
         if self.g_prior is not None:
             g1vals=self.trials[:,2]
             g2vals=self.trials[:,3]
 
-            gprior = self.g_prior.get_prob_array2d(g1vals,g2vals)
+            g_prior = self.g_prior.get_prob_array2d(g1vals,g2vals)
+            w,=numpy.where(g_prior > 0)
+            if w.size == 0:
+                raise ValueError("no prior values > 0!")
+            gpinv = 1.0/g_prior[w]
 
             dpri_by_g1 = self.g_prior.dbyg1_array(g1vals,g2vals)
             dpri_by_g2 = self.g_prior.dbyg2_array(g1vals,g2vals)
-
-            psum = gprior.sum()
 
             g=pars[2:2+2]
             g1diff = g[0]-g1vals
             g2diff = g[1]-g2vals
 
             gsens = numpy.zeros(2)
-            gsens[0]= 1.-(g1diff*dpri_by_g1).sum()/psum
-            gsens[1]= 1.-(g2diff*dpri_by_g2).sum()/psum
+            gsens[0]= 1.-(g1diff[w]*dpri_by_g1[w]*gpinv).mean()
+            gsens[1]= 1.-(g2diff[w]*dpri_by_g2[w]*gpinv).mean()
+
+            #gsens[0]= 1.-(g1diff*dpri_by_g1).sum()/psum
+            #gsens[1]= 1.-(g2diff*dpri_by_g2).sum()/psum
         else:
             gsens=numpy.array([1.,1.])
 
@@ -873,6 +957,7 @@ class MCMCSimple(MCMCBase):
 
         """
 
+        raise RuntimeError("fix for during")
         g1=self.trials[:,2]
         g2=self.trials[:,3]
 
@@ -1034,7 +1119,11 @@ def _extract_weighted_stats(data, weights):
     npar = data.shape[1]
 
     wsum = weights.sum()
-    wsum2 = wsum**2
+
+    if wsum <= 0.0:
+        for i in xrange(data.shape[0]):
+            print_pars(data[i,:])
+        raise ValueError("wsum <= 0: %s" % wsum)
 
     means = numpy.zeros(npar,dtype='f8')
     cov = numpy.zeros( (npar,npar), dtype='f8')
