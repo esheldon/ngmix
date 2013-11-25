@@ -73,9 +73,10 @@ class GMix(object):
            ]
 
         """
-        pars=numpy.zeros(self.ngauss*6)
+        n=self._ngauss
+        pars=numpy.zeros(n*6)
         beg=0
-        for i in xrange(self.ngauss):
+        for i in xrange(n):
             pars[beg+0] = self._data['p'][i]
             pars[beg+1] = self._data['row'][i]
             pars[beg+2] = self._data['col'][i]
