@@ -101,6 +101,28 @@ def g1g2_to_e1e2(g1, g2):
     
     return e1,e2
 
+@jit(argtypes=[float64,float64])
+def e1e2_to_g1g2(e1, e2):
+
+    e = numpy.sqrt(e1*e1 + e2*e2)
+    if e >= 1.:
+        raise GMixRangeError("e out of bounds: %s" % e)
+    if e == 0.0:
+        return (0.0, 0.0)
+    
+    eta=numpy.arctanh(e)
+    g = numpy.tanh(0.5*eta)
+    if g >= 1.:
+        # round off?
+        g = 0.99999999
+
+    fac = g/e
+
+    g1 = fac*e1
+    g2 = fac*e2
+
+    return g1,g2
+
 
 @jit(argtypes=[float64,float64,float64,float64])
 def dgs_by_dgo_jacob(g1, g2, s1, s2):

@@ -5,7 +5,7 @@ import numba
 from numba import float64, int64, autojit, jit
 from . import fastmath
 from .jacobian import Jacobian, _jacobian
-from .shape import g1g2_to_e1e2
+from .shape import g1g2_to_e1e2, e1e2_to_g1g2
 
 from .gexceptions import GMixRangeError, GMixFatalError
 
@@ -64,6 +64,28 @@ class GMix(object):
         """
         return self._data
 
+    def get_full_pars(self):
+        """
+        Get a full parameter description.
+           [p1,row1,col1,irr1,irc1,icc1,
+            p2,row2,col2,irr2,irc2,icc2,
+            ...
+           ]
+
+        """
+        pars=numpy.zeros(self.ngauss*6)
+        beg=0
+        for i in xrange(self.ngauss):
+            pars[beg+0] = self._data['p'][i]
+            pars[beg+1] = self._data['row'][i]
+            pars[beg+2] = self._data['col'][i]
+            pars[beg+3] = self._data['irr'][i]
+            pars[beg+4] = self._data['irc'][i]
+            pars[beg+5] = self._data['icc'][i]
+            
+            beg += 6
+        return pars
+
     def get_cen(self):
         """
         get the center position (row,col)
@@ -83,6 +105,25 @@ class GMix(object):
         """
         T,psum=_get_T(self._data)
         return T
+
+    def get_e1e2T(self):
+        """
+        Get e1,e2 and T for the total gmix.
+
+        Warning: only really works if the centers are the same
+        """
+        e1,e2,T=_get_e1e2T(self._data)
+        return e1,e2,T
+
+    def get_g1g2T(self):
+        """
+        Get g1,g2 and T for the total gmix.
+
+        Warning: only really works if the centers are the same
+        """
+        e1,e2,T=_get_e1e2T(self._data)
+        g1,g2=e1e2_to_g1g2(e1,e2)
+        return g1,g2,T
 
     def get_psum(self):
         """
@@ -559,6 +600,39 @@ def _get_T(self):
     T /= psum
 
     return T, psum
+
+@jit(argtypes=[ _gauss2d[:] ])
+def _get_e1e2T(self):
+    e1=-9999.
+    e2=-9999.
+    irr=0.0
+    irc=0.0
+    icc=0.0
+
+    psum=0.0
+
+    ngauss=self.size
+    for i in xrange(ngauss):
+        p=self[i].p
+
+        irr += p*self[i].irr
+        irc += p*self[i].irc
+        icc += p*self[i].icc
+
+        psum += p
+
+    ipsum = 1.0/psum
+    irr *= ipsum
+    irc *= ipsum
+    icc *= ipsum
+
+    T = irr + icc
+    
+    if T > 0:
+        e1 = (icc-irr)/T
+        e2 = 2*irc/T
+
+    return e1, e2, T
 
 
 @jit(argtypes=[ _gauss2d[:] ])
