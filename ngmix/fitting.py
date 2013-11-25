@@ -5,13 +5,14 @@ from .gmix import _exp3_ivals,_exp3_lookup
 from .jacobian import Jacobian, UnitJacobian
 
 from . import priors
-from .priors import srandu
+from .priors import srandu, LOWVAL, BIGVAL
 
 from .gexceptions import GMixRangeError
 
 import time
 
-LOWVAL=-9999.0e47
+MAX_TAU=0.1
+MIN_ARATE=0.2
 
 BAD_VAR=2**0
 
@@ -270,11 +271,12 @@ class FitterBase(object):
         "get_fit_stats" method.  For the max likelihood fitter we also have a
         _get_ydiff method
         """
+
+        s2n_numer=0.0
+        s2n_denom=0.0
         try:
 
             lnprob = self._get_priors(pars)
-            s2n_numer=0.0
-            s2n_denom=0.0
 
             self._fill_gmix_lol(pars)
             for band in xrange(self.nband):
@@ -306,6 +308,8 @@ class FitterBase(object):
 
         except GMixRangeError:
             lnprob = LOWVAL
+            s2n_numer=0.0
+            s2n_denom=BIGVAL
 
         if get_s2nsums:
             return lnprob, s2n_numer, s2n_denom
@@ -376,26 +380,23 @@ class FitterBase(object):
         Fill the list of lists of gmix objects, potentially convolved with the
         psf in the individual images
         """
-        if self._gmix_lol is None:
-            self._init_gmix_lol(pars)
-        else:
-            for band in xrange(self.nband):
-                gmix_list0=self._gmix_lol0[band]
-                gmix_list=self._gmix_lol[band]
+        for band in xrange(self.nband):
+            gmix_list0=self._gmix_lol0[band]
+            gmix_list=self._gmix_lol[band]
 
-                band_pars=self._get_band_pars(pars, band)
-                psf_list=self.psf_lol[band]
+            band_pars=self._get_band_pars(pars, band)
+            psf_list=self.psf_lol[band]
 
-                for i,psf in enumerate(psf_list):
-                    gm0=gmix_list0[i]
-                    gm=gmix_list[i]
+            for i,psf in enumerate(psf_list):
+                gm0=gmix_list0[i]
+                gm=gmix_list[i]
 
-                    # Calling the python versions was a huge time sync!
-                    #gm0.fill(band_pars)
-                    self._fill_gmix_func(gm0._data, band_pars)
-                    # Calling the python version was a huge time sync!
-                    #gmix.convolve_fill(gm, gm0, psf)
-                    gmix._convolve_fill(gm._data, gm0._data, psf._data)
+                # Calling the python versions was a huge time sync!
+                #gm0.fill(band_pars)
+                self._fill_gmix_func(gm0._data, band_pars)
+                # Calling the python version was a huge time sync!
+                #gmix.convolve_fill(gm, gm0, psf)
+                gmix._convolve_fill(gm._data, gm0._data, psf._data)
 
     def _get_counts_guess(self, **keys):
         cguess=keys.get('counts_guess',None)
@@ -628,7 +629,9 @@ class MCMCBase(FitterBase):
         """
         Run the mcmc sampler and calculate some statistics
         """
-        self.sampler=self._do_trials()
+
+        # not nstep can change
+        self._do_trials()
 
         self.trials  = self.sampler.flatchain
 
@@ -642,31 +645,79 @@ class MCMCBase(FitterBase):
         """
         Actually run the sampler
         """
+        import emcee
+
+        if emcee.ensemble.acor is not None:
+            have_acor=True
+        else:
+            have_acor=False
+
         # over-ridden
         guess=self._get_guess()
+        for i in xrange(10):
+            try:
+                self._init_gmix_lol(guess[0,:])
+                break
+            except GMixRangeError as gerror:
+                # make sure we draw random guess if we got failure
+                print >>stderr,'failed init gmix lol:',str(gerror)
+                print >>stderr,'getting a new guess'
+                guess=self._get_random_guess()
+        if i==9:
+            raise gerror
 
         sampler = self._get_sampler()
 
-        pos, prob, state = sampler.run_mcmc(guess, self.burnin)
+        total_burnin=0
+        self.tau=None
+        pos=guess
+
+        while True:
+            total_burnin += self.burnin
+            # adds burnin more samples
+            pos, prob, state = sampler.run_mcmc(pos, self.burnin)
+
+            arates = sampler.acceptance_fraction
+            self.arate = arates.mean()
+
+            tau_ok=True
+            arate_ok=True
+            if have_acor:
+                try:
+                    self.tau=self._get_tau(sampler, total_burnin)
+                    if self.tau > MAX_TAU and self.doiter:
+                        print >>stderr,"tau",self.tau,">",MAX_TAU
+                        tau_ok=False
+                except:
+                    # something went wrong with acor, run some more
+                    print >>stderr,"exception in acor, running more"
+                    tau_ok=False
+
+            if self.arate < MIN_ARATE and self.doiter:
+                self.nstep *= 2
+                print >>stderr,"arate ",self.arate,"<",MIN_ARATE
+                arate_ok=False
+
+            if tau_ok and arate_ok:
+                break
+
+        # if we get here we should be burned in, now do a few more steps
         sampler.reset()
         pos, prob, state = sampler.run_mcmc(pos, self.nstep)
 
-        if self.doiter:
-            while True:
-                try:
-                    acor=sampler.acor
-                    tau = (acor/self.nstep).max()
-                    if tau > 0.1:
-                        print "tau",tau,"greater than 0.1"
-                    else:
-                        break
-                except:
-                    # something went wrong with acor, run some more
-                    pass
-                pos, prob, state = sampler.run_mcmc(pos, self.nstep)
+        self.flags=0
+        if self.tau > MAX_TAU:
+            self.flags |= LARGE_TAU
+        
+        if self.arate < MIN_ARATE:
+            self.flags |= LOW_ARATE
 
+        self.sampler=sampler
 
-        return sampler
+    def _get_tau(self,sampler, nstep):
+        acor=sampler.acor
+        tau = (acor/nstep).max()
+        return tau
 
     def _get_sampler(self):
         """
@@ -693,15 +744,13 @@ class MCMCBase(FitterBase):
 
         pars,pars_cov=self._get_trial_stats()
  
-        arates = self.sampler.acceptance_fraction
-        arate = arates.mean()
-
         self._result={'model':self.model_name,
-                      'flags':0,
+                      'flags':self.flags,
                       'pars':pars,
                       'pars_cov':pars_cov,
                       'perr':numpy.sqrt(numpy.diag(pars_cov)),
-                      'arate':arate}
+                      'tau':self.tau,
+                      'arate':self.arate}
 
         stats = self.get_fit_stats(pars)
         self._result.update(stats)
@@ -760,7 +809,11 @@ class MCMCBase(FitterBase):
         biggles.configure('screen','width', 1920)
         biggles.configure('screen','height', 1200)
 
-        self._fill_gmix_lol(self._result['pars'])
+        try:
+            self._fill_gmix_lol(self._result['pars'])
+        except GMixRangeError as gerror:
+            print >>stderr,str(gerror)
+            return None
 
         tablist=[]
         for band in xrange(self.nband):
@@ -822,7 +875,10 @@ class MCMCSimple(MCMCBase):
         super(MCMCSimple,self).__init__(image, weight, jacobian, model, **keys)
 
         self.full_guess=keys.get('full_guess',None)
-        self.T_guess=keys.get('T_guess',4.0)
+        self.T_guess=keys.get('T_guess',None)
+        if self.T_guess is None:
+            self.T_guess=1.44
+
         self.counts_guess=self._get_counts_guess(**keys)
 
         ncg=self.counts_guess.size
@@ -871,9 +927,10 @@ class MCMCSimple(MCMCBase):
     
     def _get_guess_from_full(self):
         """
-        Return the last ``nwalkers'' entries
+        Return last ``nwalkers'' entries
         """
         ntrial=self.full_guess.shape[0]
+        #rint=numpy.random.random_integers(0,ntrial-1,size=self.nwalkers)
         return self.full_guess[ntrial-self.nwalkers:, :]
 
     def _get_random_guess(self):
@@ -1005,7 +1062,6 @@ class MCMCSimpleAnze(MCMCSimple):
             trials[i,:] = sa.pars
             weights[i] = sa.we
 
-        #mcmc.plot_results(mc_obj.get_trials(), weights=weights)
 
         eu.plotting.bhist( trials[:, 0], weights=weights, binsize=0.0005,title='row')
         eu.plotting.bhist( trials[:, 1], weights=weights, binsize=0.0005,title='col')
@@ -1013,32 +1069,7 @@ class MCMCSimpleAnze(MCMCSimple):
         eu.plotting.bhist( trials[:, 3], weights=weights, binsize=0.001,title='g2')
         eu.plotting.bhist( trials[:, 4], weights=weights, binsize=0.01,title='T')
         eu.plotting.bhist( trials[:, 5], weights=weights, binsize=1.0,title='counts')
-        #print 'mean:',(trials*we).sum(axis=1)/we.sum()
 
-        """
-        for sa in sampler.sample_list:
-            m+=sa.pars*sa.we
-            m2+=sa.pars**2*sa.we
-            sw+=sa.we
-        m/=sw
-        m2/=sw
-        m2-=m*m
-        print m
-        print numpy.sqrt(m2)
-        """
- 
-        """
-        self.trials  = self.sampler.flatchain
-
-        self.lnprobs = self.sampler.lnprobability.reshape(self.nwalkers*self.nstep)
-        self.lnprobs -= self.lnprobs.max()
-
-        # get the expectation values, sensitivity and errors
-        self._calc_result()
-
-        if self.make_plots:
-            self._doplots()
-        """
 
     def lnprob_many(self, list_of_pars):
         return map(self.calc_lnprob, list_of_pars)
