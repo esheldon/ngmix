@@ -5,6 +5,9 @@ from numba import jit, autojit, float64, void
 
 from .gexceptions import GMixRangeError
 
+LOWVAL=-9999.0e47
+BIGVAL =9999.0e47
+
 class GPriorBase(object):
     """
     This is the base class.  You need to over-ride a few of
@@ -410,6 +413,29 @@ def _gprior2d_exp_scalar(A, a, g0sq, gmax, g, gsq):
     return prior
 
 
+@jit
+class FlatPrior(object):
+    @void(float64, float64)
+    def __init__(self, minval, maxval):
+        self.minval=minval
+        self.maxval=maxval
+
+    @float64(float64)
+    def get_prob_scalar(self, val):
+        retval=1.0
+        if val < self.minval or val > self.maxval:
+            raise GMixRangeError("value %s out of range: "
+                                 "[%s,%s]" % (val, self.minval, self.maxval))
+        return retval
+
+    @float64(float64)
+    def get_lnprob_scalar(self, val):
+        retval=0.0
+        if val < self.minval or val > self.maxval:
+            raise GMixRangeError("value %s out of range: "
+                                 "[%s,%s]" % (val, self.minval, self.maxval))
+        return retval
+       
 @autojit
 class GPriorExp(GPriorBase):
     def __init__(self, pars):
@@ -720,7 +746,7 @@ class LogNormalBase(object):
             z=numpy.random.randn()
         else:
             z=numpy.random.randn(nrand)
-        return exp(self.logmean + self.logsigma*z)
+        return numpy.exp(self.logmean + self.logsigma*z)
 
 
 @jit
@@ -805,6 +831,17 @@ class LogNormal(LogNormalBase):
         p=numpy.exp(lnp)
         return p
 
+def scipy_to_lognorm(shape, scale):
+    """
+    Wrong?
+    """
+    srat2 = numpy.exp( shape**2 ) - 1.0
+    #srat2 = numpy.exp( shape ) - 1.0
+
+    meanx = scale*numpy.exp( 0.5*numpy.log( 1.0 + srat2 ) )
+    sigmax = numpy.sqrt( srat2*meanx**2)
+
+    return meanx, sigmax
 
 class CenPriorBase(object):
     """
