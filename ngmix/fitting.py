@@ -38,6 +38,11 @@ class FitterBase(object):
     def __init__(self, image, weight, jacobian, model, **keys):
         self.keys=keys
 
+        self.g_prior = keys.get('g_prior',None)
+        self.cen_prior = keys.get('cen_prior',None)
+        self.T_prior = keys.get('T_prior',None)
+        self.counts_prior = keys.get('counts_prior',None)
+
         # in this case, image, weight, jacobian, psf are going to
         # be lists of lists.
 
@@ -50,11 +55,6 @@ class FitterBase(object):
 
         # the function to be called to fill a gaussian mixture
         self._set_fill_call()
-
-        self.g_prior = keys.get('g_prior',None)
-        self.cen_prior = keys.get('cen_prior',None)
-        self.T_prior = keys.get('T_prior',None)
-        self.counts_prior = keys.get('counts_prior',None)
 
         self.totpix=self.verify()
 
@@ -403,7 +403,7 @@ class FitterBase(object):
         if cguess is None:
             cguess = self._get_median_counts()
         else:
-            cguess=numpy.array(cguess)
+            cguess=numpy.array(cguess,ndmin=1)
         return cguess
 
     def _get_median_counts(self):
