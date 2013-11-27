@@ -15,6 +15,7 @@ MAX_TAU=0.1
 MIN_ARATE=0.2
 
 BAD_VAR=2**0
+LOW_ARATE=2**1
 
 class FitterBase(object):
     """
