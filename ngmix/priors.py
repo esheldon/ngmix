@@ -16,7 +16,7 @@ class GPriorBase(object):
     def __init__(self, pars):
         self.pars = numpy.array(pars, dtype='f8')
 
-        # sub-class may want to over-ride this, see GPriorExp
+        # sub-class may want to over-ride this, see GPriorM
         self.gmax=1.0
 
     def get_lnprob_scalar2d(self, g1, g2):
@@ -436,11 +436,36 @@ class FlatPrior(object):
                                  "[%s,%s]" % (val, self.minval, self.maxval))
         return retval
        
+
+def make_gprior_cosmos_galfit():
+    """
+    From the galfit fits
+    """
+    pars=[560.0, 1.05, 0.086, 0.813]
+    return GPriorM(pars)
+
+
+def make_gprior_cosmos_exp():
+    """
+    From fitting exp to cosmos galaxies
+    """
+    pars=[560.0, 1.11, 0.052, 0.791]
+    return GPriorM(pars)
+
+def make_gprior_cosmos_dev():
+    """
+    From fitting devto cosmos galaxies
+    """
+    pars=[560.0, 1.28, 0.088, 0.887]
+    return GPriorM(pars)
+
 @autojit
-class GPriorExp(GPriorBase):
+class GPriorM(GPriorBase):
     def __init__(self, pars):
         """
         [A, a, g0, gmax]
+
+        From Miller et al.
         """
         self.pars=pars
 
@@ -902,9 +927,24 @@ class TPriorCosmosBase(object):
     dN/dT = (1/T)dN/dlog(T)
     """
     def get_prob_scalar(self, T):
+        """
+        prob for a scalar
+        """
         return _2gauss_prob_scalar(self.means, self.ivars, self.weights, T)
+
+    def get_prob_array(self, Tarr):
+        """
+        prob for an array
+        """
+        Tarr=numpy.array(Tarr, copy=False)
+        output=numpy.zeros(Tarr.size)
+        _2gauss_prob_array(self.means, self.ivars, self.weights, Tarr, output)
+        return output
     
     def get_lnprob_scalar(self, T):
+        """
+        ln prob for a scalar
+        """
         return _2gauss_lnprob_scalar(self.means, self.ivars, self.weights, T)
 
 
@@ -931,6 +971,8 @@ def _2gauss_prob_scalar(means, ivars, weights, val):
 
     Then multiply by 1/T to put back in linear space
     """
+    if val <= 0:
+        raise GMixRangeError("values must be > 0")
     lnv=numpy.log10(val)
 
     diff1=lnv-means[0]
@@ -950,4 +992,36 @@ def _2gauss_prob_scalar(means, ivars, weights, val):
 def _2gauss_lnprob_scalar(means, ivars, weights, val):
     p=_2gauss_prob_scalar(means, ivars, weights, val) 
     return numpy.log(p)
+
+@autojit
+def _2gauss_prob_array(means, ivars, weights, vals, output):
+    """
+    calculate the double gaussian dN/dlog10(T)
+
+    Then multiply by 1/T to put back in linear space
+    """
+
+    n=vals.size
+    for i in xrange(n):
+        val=vals[i]
+
+        if val <= 0:
+            raise GMixRangeError("values must be > 0")
+
+        lnv=numpy.log10(val)
+
+        diff1=lnv-means[0]
+        diff1sq = diff1*diff1
+
+        diff2=lnv-means[1]
+        diff2sq = diff2*diff2
+
+        p1 = weights[0]*numpy.exp( -0.5*ivars[0]*diff1sq )
+        p2 = weights[1]*numpy.exp( -0.5*ivars[1]*diff2sq )
+        
+        # the 1/val puts us back into dN/val space
+        p = (p1+p2)/val
+
+        output[i] = p
+
 
