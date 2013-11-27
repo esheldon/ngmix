@@ -672,7 +672,8 @@ class MCMCBase(FitterBase):
         self.tau=None
         pos=guess
 
-        while True:
+        ntry=5
+        for i in xrange(ntry):
             total_burnin += self.burnin
             # adds burnin more samples
             pos, prob, state = sampler.run_mcmc(pos, self.burnin)
