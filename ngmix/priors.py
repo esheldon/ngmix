@@ -894,3 +894,60 @@ def srandu(num=None):
     return 2*(numpy.random.random(num)-0.5)
 
 
+class TPriorCosmosBase(object):
+    """
+    From fitting double gaussians to log(T) (actually log10
+    but we ignore the constant of prop.)
+
+    dN/dT = (1/T)dN/dlog(T)
+    """
+    def get_prob_scalar(self, T):
+        return _2gauss_prob_scalar(self.means, self.ivars, self.weights, T)
+    
+    def get_lnprob_scalar(self, T):
+        return _2gauss_lnprob_scalar(self.means, self.ivars, self.weights, T)
+
+
+class TPriorCosmosExp(TPriorCosmosBase):
+    __doc__=TPriorCosmosBase.__doc__
+    def __init__(self):
+        self.means   = numpy.array([-0.40019405, -1.13597665])
+        self.sigmas  = numpy.array([ 0.40682263,  0.29353975])
+        self.ivars   = 1./self.sigmas**2
+        self.weights = numpy.array([ 0.75845293,  0.24154707])
+class TPriorCosmosDev(TPriorCosmosBase):
+    __doc__=TPriorCosmosBase.__doc__
+    def __init__(self):
+        self.means   = numpy.array([-0.23898365,  0.99036254])
+        self.sigmas  = numpy.array([ 0.56108066,  0.6145333 ])
+        self.ivars   = 1./self.sigmas**2
+        self.weights = numpy.array([ 0.34782633,  0.65217367])
+
+
+@autojit
+def _2gauss_prob_scalar(means, ivars, weights, val):
+    """
+    calculate the double gaussian dN/dlog10(T)
+
+    Then multiply by 1/T to put back in linear space
+    """
+    lnv=numpy.log10(val)
+
+    diff1=lnv-means[0]
+    diff1sq = diff1*diff1
+
+    diff2=lnv-means[1]
+    diff2sq = diff2*diff2
+
+    p1 = weights[0]*numpy.exp( -0.5*ivars[0]*diff1sq )
+    p2 = weights[1]*numpy.exp( -0.5*ivars[1]*diff2sq )
+    
+    # the 1/val puts us back into dN/val space
+    p = (p1+p2)/val
+    return p
+
+@autojit
+def _2gauss_lnprob_scalar(means, ivars, weights, val):
+    p=_2gauss_prob_scalar(means, ivars, weights, val) 
+    return numpy.log(p)
+
