@@ -670,7 +670,7 @@ class MCMCBase(FitterBase):
         sampler = self._get_sampler()
 
         total_burnin=0
-        self.tau=None
+        self.tau=9999.0
         pos=guess
 
         ntry=1
@@ -708,7 +708,7 @@ class MCMCBase(FitterBase):
         pos, prob, state = sampler.run_mcmc(pos, self.nstep)
 
         self.flags=0
-        if self.tau > MAX_TAU:
+        if have_acor and self.tau > MAX_TAU:
             self.flags |= LARGE_TAU
         
         if self.arate < MIN_ARATE:
