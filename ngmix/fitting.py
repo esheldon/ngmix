@@ -673,7 +673,7 @@ class MCMCBase(FitterBase):
         self.tau=None
         pos=guess
 
-        ntry=5
+        ntry=1
         for i in xrange(ntry):
             total_burnin += self.burnin
             # adds burnin more samples
