@@ -16,6 +16,7 @@ MIN_ARATE=0.2
 
 BAD_VAR=2**0
 LOW_ARATE=2**1
+LARGE_TAU=2**2
 
 class FitterBase(object):
     """
@@ -977,32 +978,29 @@ class MCMCSimple(MCMCBase):
             self._result['R']=R
 
     def _get_lensfit_gsens(self, pars, gprior=None):
+        """
+        Miller et al. 2007 style sensitivity
+        """
 
-        if self.g_prior is not None:
-            g1vals=self.trials[:,2]
-            g2vals=self.trials[:,3]
+        g1vals=self.trials[:,2]
+        g2vals=self.trials[:,3]
 
-            g_prior = self.g_prior.get_prob_array2d(g1vals,g2vals)
-            w,=numpy.where(g_prior > 0)
-            if w.size == 0:
-                raise ValueError("no prior values > 0!")
-            gpinv = 1.0/g_prior[w]
+        g_prior = self.g_prior.get_prob_array2d(g1vals,g2vals)
+        w,=numpy.where(g_prior > 0)
+        if w.size == 0:
+            raise ValueError("no prior values > 0!")
+        gpinv = 1.0/g_prior[w]
 
-            dpri_by_g1 = self.g_prior.dbyg1_array(g1vals,g2vals)
-            dpri_by_g2 = self.g_prior.dbyg2_array(g1vals,g2vals)
+        dpri_by_g1 = self.g_prior.dbyg1_array(g1vals,g2vals)
+        dpri_by_g2 = self.g_prior.dbyg2_array(g1vals,g2vals)
 
-            g=pars[2:2+2]
-            g1diff = g[0]-g1vals
-            g2diff = g[1]-g2vals
+        g=pars[2:2+2]
+        g1diff = g[0]-g1vals
+        g2diff = g[1]-g2vals
 
-            gsens = numpy.zeros(2)
-            gsens[0]= 1.-(g1diff[w]*dpri_by_g1[w]*gpinv).mean()
-            gsens[1]= 1.-(g2diff[w]*dpri_by_g2[w]*gpinv).mean()
-
-            #gsens[0]= 1.-(g1diff*dpri_by_g1).sum()/psum
-            #gsens[1]= 1.-(g2diff*dpri_by_g2).sum()/psum
-        else:
-            gsens=numpy.array([1.,1.])
+        gsens = numpy.zeros(2)
+        gsens[0]= 1.-(g1diff[w]*dpri_by_g1[w]*gpinv).mean()
+        gsens[1]= 1.-(g2diff[w]*dpri_by_g2[w]*gpinv).mean()
 
         return gsens
 
@@ -1010,23 +1008,49 @@ class MCMCSimple(MCMCBase):
         """
         get the marginalized P,Q,R from Bernstein & Armstrong
 
-        Note if the prior is already in our mcmc chain, so we need to divide by
-        the prior everywhere.  Because P*J=P at shear==0 this means P is always
-        1
-
+        The prior is already in our mcmc chain, so we need to divide by the
+        prior everywhere.
         """
 
-        raise RuntimeError("fix for during")
         g1=self.trials[:,2]
         g2=self.trials[:,3]
 
         P,Q,R = self.g_prior.get_pqr(g1,g2)
+        P,Q,R,w = self._fix_pqr_for_during(g1,g2,P,Q,R)
 
         P = P.mean()
         Q = Q.mean(axis=0)
         R = R.mean(axis=0)
 
         return P,Q,R
+
+    def _fix_pqr_for_during(self, g1, g2, P, Q, R):
+        """
+        Since the prior is already in the posterior, divide all values by the
+        prior
+        """
+        g_prior = self.g_prior.get_prob_array2d(g1,g2)
+
+        w,=numpy.where(g_prior > 0)
+        if w.size == 0:
+            raise ValueError("no prior values > 0!")
+
+        P = P[w]
+        Q = Q[w,:]
+        R = R[w,:,:]
+
+        pinv = 1/g_prior[w]
+        P *= pinv
+        Q[:,0] *= pinv
+        Q[:,1] *= pinv
+
+        R[:,0,0] *= pinv
+        R[:,0,1] *= pinv
+        R[:,1,0] *= pinv
+        R[:,1,1] *= pinv
+
+        return P, Q, R, w
+
 
 class MCMCSimpleAnze(MCMCSimple):
     def __init__(self, image, weight, jacobian, model, **keys):
