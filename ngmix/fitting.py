@@ -968,14 +968,16 @@ class MCMCSimple(MCMCBase):
         self._result['g_cov'] = self._result['pars_cov'][2:2+2, 2:2+2].copy()
 
         if self.do_lensfit:
-            g_sens=self._get_lensfit_gsens(self._result['pars'])
+            g_sens,nuse=self._get_lensfit_gsens(self._result['pars'])
             self._result['g_sens']=g_sens
+            self._result['lensfit_nuse'] = nuse
 
         if self.do_pqr:
-            P,Q,R = self._get_PQR()
+            P,Q,R,nuse = self._get_PQR()
             self._result['P']=P
             self._result['Q']=Q
             self._result['R']=R
+            self._result['pqr_nuse'] = nuse
 
     def _get_lensfit_gsens(self, pars, gprior=None):
         """
@@ -1002,7 +1004,7 @@ class MCMCSimple(MCMCBase):
         gsens[0]= 1.-(g1diff[w]*dpri_by_g1[w]*gpinv).mean()
         gsens[1]= 1.-(g2diff[w]*dpri_by_g2[w]*gpinv).mean()
 
-        return gsens
+        return gsens, w.size
 
     def _get_PQR(self):
         """
@@ -1016,13 +1018,13 @@ class MCMCSimple(MCMCBase):
         g2=self.trials[:,3]
 
         P,Q,R = self.g_prior.get_pqr(g1,g2)
-        P,Q,R,w = self._fix_pqr_for_during(g1,g2,P,Q,R)
+        P,Q,R,nuse = self._fix_pqr_for_during(g1,g2,P,Q,R)
 
         P = P.mean()
         Q = Q.mean(axis=0)
         R = R.mean(axis=0)
 
-        return P,Q,R
+        return P,Q,R,nuse
 
     def _fix_pqr_for_during(self, g1, g2, P, Q, R):
         """
@@ -1049,7 +1051,7 @@ class MCMCSimple(MCMCBase):
         R[:,1,0] *= pinv
         R[:,1,1] *= pinv
 
-        return P, Q, R, w
+        return P, Q, R, w.size
 
 
 class MCMCSimpleAnze(MCMCSimple):
