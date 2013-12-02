@@ -393,12 +393,14 @@ class FitterBase(object):
                 gm0=gmix_list0[i]
                 gm=gmix_list[i]
 
-                # Calling the python versions was a huge time sync!
-                #gm0.fill(band_pars)
-                self._fill_gmix_func(gm0._data, band_pars)
-                # Calling the python version was a huge time sync!
-                #gmix.convolve_fill(gm, gm0, psf)
-                gmix._convolve_fill(gm._data, gm0._data, psf._data)
+                # Calling the python versions was a huge time sync.
+                # but we need some more error checking here
+                try:
+                    self._fill_gmix_func(gm0._data, band_pars)
+                    gmix._convolve_fill(gm._data, gm0._data, psf._data)
+                except ZeroDivisionError:
+                    raise GMixRangeError("zero division")
+
 
     def _get_counts_guess(self, **keys):
         cguess=keys.get('counts_guess',None)
