@@ -99,5 +99,13 @@ dependencies
 ------------
 
 * numpy
-* numba: http://numba.pydata.org/ I recommend instaling the anaconda python distribution. Don't forget to update numba with "conda update numba"
+* numba: http://numba.pydata.org/ I recommend instaling the anaconda python distribution. Don't forget to update numba with "conda update numba".
 * emcee: http://dan.iel.fm/emcee/current/ Affine invariant MCMC sampler.
+
+caveats
+-------
+
+numba is in heavy development.  Currently the JIT object code is not cached,
+so there is a slow compilation step everytime the package is loaded the first
+time.  Caching is palnned for the next major release, which will shorten the
+startup times immensely.
