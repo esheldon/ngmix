@@ -58,8 +58,8 @@ examples
     # fit in "sky coordinates".  We do this by making a jacobian to represent
     # the transformation, and make sure the center is at our best guess of the
     # object location.  In this case we make a unit jacobian.  for non-unit,
-    # see the ngmix.jacobian.Jacobian class note in a realistic case, we would
-    # also fit the PSF in sky coordinates by sending a jacobian to the EM code
+    # see the ngmix.jacobian.Jacobian class. In that case, we would also fit
+    # the PSF in sky coordinates by sending a jacobian to the EM code
 
     jacob=ngmix.jacobian.UnitJacobian(pars[0], pars[1])
 
@@ -78,10 +78,10 @@ examples
     print res['pars']
     print res['perr']
 
-    # fitting multiple images Send the image,weight etc as lists or even
-    # lists-of-lists if multiple wavelength bands are present.  If the input
-    # is a list of lists, each flux is fit for separately with fixed
-    # structural parameters
+    # Fit multiple images of the same object. Send the image, weight etc as
+    # lists or even lists-of-lists if multiple wavelength bands are present.
+    # If the input is a list of lists, each flux is fit for separately with
+    # fixed structural parameters
 
     # 4 bands
     imlist_g = [im1, im2, im3, im4]
