@@ -105,7 +105,11 @@ dependencies
 caveats
 -------
 
-numba is in heavy development.  Currently the JIT object code is not cached,
-so there is a slow compilation step everytime the package is loaded the first
-time.  Caching is palnned for the next major release, which will shorten the
-startup times immensely.
+* numba is in heavy development.  Currently the JIT object code is not cached,
+  so there is a slow compilation step everytime the package is loaded the
+  first time.  Caching is palnned for the next major release, which will
+  shorten the startup times immensely.
+* numba does not yet support inlining.  Also function calls are slow.
+  As a result, my code messy, because the same bit of code must appear in
+  multiple places.
+
