@@ -8,16 +8,16 @@ additional dependence on
 
 import os
 from sys import stderr
-
-import ngmix
-from .gexceptions import GMixRangeError, GMixMaxIterEM
+import time
 
 import numpy
 from numpy.random import random as randu
 from numpy.random import randn
 
-import time
+import ngmix
+from .gexceptions import GMixRangeError, GMixMaxIterEM
 
+# region over which to render images and calculate likelihoods
 NSIGMA_RENDER=5.0
 
 # minutes
