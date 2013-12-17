@@ -154,6 +154,11 @@ class GPriorBase(object):
 
         where jacob is d(es)/d(eo) and
         es=eo(+)(-g)
+
+        note the ba13 doesn't actually use
+        the lensing import but the numerical
+        pqr does.  We should write a vectorized
+        one in shape.py
         """
         import lensing
 
