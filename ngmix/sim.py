@@ -4,6 +4,44 @@ Simulate images and fit them, currently MCMC only
 additional dependence on
     emcee for MCMC fitting and
     fitsio if checkpointing
+
+example sim config file in yaml format
+--------------------------------------
+name: "nsim-dg01"
+
+psf_model: "gauss"
+psf_T: 4.0
+psf_shape: [0.0, 0.0]
+
+obj_model: "dev"
+obj_T_mean: 16.0
+obj_T_sigma_frac: 0.3
+
+obj_counts_mean: 100.0
+obj_counts_sigma_frac: 0.3
+
+shear: [0.01,0.0]
+
+nsub: 16
+
+example run config file in yaml format
+--------------------------------------
+run: "ngmix-dg01r33"
+sim: "nsim-dg01"
+
+fit_model: "dev"
+
+nwalkers: 40
+burnin:   400
+nstep:    200
+mca_a:    3.0
+
+# we normalize splits by split for is2n==0
+desired_err: 2.0e-05
+nsplit0: 60000
+
+s2n_vals: [ 15, 21, 30, 42, 60, 86, 122, 174, 247, 352, 500] 
+
 """
 
 import os
@@ -30,15 +68,14 @@ class TryAgainError(Exception):
         Exception.__init__(self, message)
 
 class NGMixSim(dict):
-    def __init__(self, conf, s2n, npairs, **keys):
+    def __init__(self, sim_conf, run_conf, s2n, npairs, **keys):
         """
         Simulate and fit the requested number of pairs at
         the specified s/n
         """
 
-        self.conf=conf
-        self.simc=conf['simc']
-        self.run=conf['run']
+        self.set_config(sim_conf, run_conf)
+
         self.s2n=s2n
         self.npairs=npairs
 
@@ -58,6 +95,17 @@ class NGMixSim(dict):
         self.set_priors()
         self.make_psf()
         self.set_noise()
+
+    def set_config(self, sim_conf, run_conf):
+        """
+        Check and set the configurations
+        """
+        if sim_conf['name'] != run_conf['sim']:
+            err="sim name in run config '%s' doesn't match sim name '%s'"
+            raise ValueError(err % (run_conf['sim'],sim_conf['name']))
+
+        self.simc=sim_conf
+        self.conf=run_conf
 
     def get_data(self):
         """
