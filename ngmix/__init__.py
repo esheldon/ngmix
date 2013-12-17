@@ -24,5 +24,3 @@ from . import fitting
 from .fitting import print_pars
 
 from . import em
-
-from . import sim
