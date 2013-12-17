@@ -1,5 +1,10 @@
+# there are a few additional imports not in this header for example we only
+# import emcee if needed
+
 from sys import stdout, stderr
 import numpy
+import time
+
 from . import gmix
 from .gmix import _exp3_ivals,_exp3_lookup
 from .jacobian import Jacobian, UnitJacobian
@@ -8,8 +13,6 @@ from . import priors
 from .priors import srandu, LOWVAL, BIGVAL
 
 from .gexceptions import GMixRangeError
-
-import time
 
 MAX_TAU=0.1
 MIN_ARATE=0.2
