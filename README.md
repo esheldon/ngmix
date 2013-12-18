@@ -1,7 +1,7 @@
 ngmix
 =====
 
-Gaussian mixtures implemented with python and numba
+Gaussian mixture for 2d images implemented with python and numba
 
 examples
 --------
@@ -100,8 +100,7 @@ dependencies
 
 * numpy
 * numba: http://numba.pydata.org/ I recommend instaling the anaconda python distribution, which comes with numba https://store.continuum.io/cshop/anaconda/.  Remember to update numba with "conda update numba".
-* optionally if doing MCMC fitting: emcee: http://dan.iel.fm/emcee/current/ Affine invariant MCMC sampler.
-* optionally for checkpointing in the simulation: fitsio https://github.com/esheldon/fitsio
+* emcee: optional for doing MCMC fitting: http://dan.iel.fm/emcee/current/ Affine invariant MCMC sampler.
 
 caveats
 -------
