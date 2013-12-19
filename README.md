@@ -1,7 +1,7 @@
 ngmix
 =====
 
-Gaussian mixture for 2d images implemented with python and numba
+Gaussian mixtures models for 2d images, implemented with python and numba
 
 examples
 --------
