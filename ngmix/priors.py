@@ -5,6 +5,8 @@ from numba import jit, autojit, float64, void
 
 from .gexceptions import GMixRangeError
 
+from . import shape
+
 LOWVAL=-9999.0e47
 BIGVAL =9999.0e47
 
@@ -154,23 +156,15 @@ class GPriorBase(object):
 
         where jacob is d(es)/d(eo) and
         es=eo(+)(-g)
-
-        note the ba13 doesn't actually use
-        the lensing import but the numerical
-        pqr does.  We should write a vectorized
-        one in shape.py
         """
-        import lensing
-
-
 
         # note sending negative shear to jacob
         s1m=-s1
         s2m=-s2
-        J=lensing.shear.dgs_by_dgo_jacob(g1, g2, s1m, s2m)
+        J=shape.dgs_by_dgo_jacob(g1, g2, s1m, s2m)
 
         # evaluating at negative shear
-        g1new,g2new=lensing.shear.gadd(g1, g2, s1m, s2m)
+        g1new,g2new=shape.shear_reduced(g1, g2, s1m, s2m)
         if numpy.isscalar(g1):
             P=self.get_prob_scalar2d(g1new,g2new)
         else:
