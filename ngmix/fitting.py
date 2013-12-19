@@ -620,6 +620,9 @@ class MCMCBase(FitterBase):
         self.do_pqr=keys.get('do_pqr',False)
         self.do_lensfit=keys.get('do_lensfit',False)
 
+        # expand around this shear value
+        self.shear_expand = keys.get('shear_expand',None)
+
         if (self.do_lensfit or self.do_pqr) and self.g_prior is None:
             raise ValueError("send g_prior for lensfit or pqr")
 
@@ -1022,7 +1025,14 @@ class MCMCSimple(MCMCBase):
         g1=self.trials[:,2]
         g2=self.trials[:,3]
 
-        P,Q,R = self.g_prior.get_pqr(g1,g2)
+        sh=self.shear_expand
+        if sh is None:
+            # expand around zero
+            P,Q,R = self.g_prior.get_pqr(g1,g2)
+        else:
+            # expand around a requested value
+            P,Q,R = self.g_prior.get_pqr_num(g1,g2,s1=sh[0], s2=sh[1])
+
         P,Q,R,nuse = self._fix_pqr_for_during(g1,g2,P,Q,R)
 
         P = P.mean()
