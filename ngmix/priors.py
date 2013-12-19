@@ -84,7 +84,7 @@ class GPriorBase(object):
 
 
  
-    def get_pqr_num(self, g1in, g2in, h=1.e-6):
+    def get_pqr_num(self, g1in, g2in, s1=0.0, s2=0.0, h=1.e-6):
         """
         Evaluate 
             P
@@ -96,11 +96,11 @@ class GPriorBase(object):
 
         Q is the gradient of P*J evaluated at shear==0
 
-            [ d(P*J)/dg1, d(P*J)/dg2]_{g=0}
+            [ d(P*J)/ds1, d(P*J)/ds2]_{s=0}
 
         R is grad of grad of P*J at shear==0
-            [ d(P*J)/dg1dg1  d(P*J)/dg1dg2 ]
-            [ d(P*J)/dg1dg2  d(P*J)/dg2dg2 ]_{g=0}
+            [ d(P*J)/dg1ds1  d(P*J)/dg1ds2 ]
+            [ d(P*J)/dg1ds2  d(P*J)/dg2ds2 ]_{s=0}
 
         Derivatives are calculated using finite differencing
         """
@@ -114,14 +114,14 @@ class GPriorBase(object):
         h2=1./(2.*h)
         hsq=1./h**2
 
-        P=self.get_pj(g1, g2, 0.0, 0.0)
+        P=self.get_pj(g1, g2, s1, s2)
 
-        Q1_p = self.get_pj(g1, g2, +h, 0.0)
-        Q1_m = self.get_pj(g1, g2, -h, 0.0)
-        Q2_p = self.get_pj(g1, g2, 0.0, +h)
-        Q2_m = self.get_pj(g1, g2, 0.0, -h)
-        R12_pp = self.get_pj(g1, g2, +h, +h)
-        R12_mm = self.get_pj(g1, g2, -h, -h)
+        Q1_p   = self.get_pj(g1, g2, s1+h, s2)
+        Q1_m   = self.get_pj(g1, g2, s1-h, s2)
+        Q2_p   = self.get_pj(g1, g2, s1,   s2+h)
+        Q2_m   = self.get_pj(g1, g2, s1,   s2-h)
+        R12_pp = self.get_pj(g1, g2, s1+h, s2+h)
+        R12_mm = self.get_pj(g1, g2, s1-h, s2-h)
 
         Q1 = (Q1_p - Q1_m)*h2
         Q2 = (Q2_p - Q2_m)*h2
@@ -162,6 +162,8 @@ class GPriorBase(object):
         """
         import lensing
 
+
+
         # note sending negative shear to jacob
         s1m=-s1
         s2m=-s2
@@ -169,7 +171,10 @@ class GPriorBase(object):
 
         # evaluating at negative shear
         g1new,g2new=lensing.shear.gadd(g1, g2, s1m, s2m)
-        P=self.get_prob_scalar2d(g1new,g2new)
+        if numpy.isscalar(g1):
+            P=self.get_prob_scalar2d(g1new,g2new)
+        else:
+            P=self.get_prob_array2d(g1new,g2new)
 
         return P*J
 
@@ -304,7 +309,6 @@ class GPriorBase(object):
         return g1,g2
 
 
-
     def set_maxval1d(self):
         """
         Use a simple minimizer to find the max value of the 1d 
@@ -327,7 +331,104 @@ class GPriorBase(object):
         """
         return -self.get_prob_scalar1d(g)
 
+    def test_pqr_shear_recovery(self, smin, smax, nshear,
+                                npair=10000, h=1.e-6, eps=None):
+        """
+        Test how well we recover the shear
 
+        parameters
+        ----------
+        smin: float
+            min shear to test
+        smax: float
+            max shear to test
+        nshear:
+            number of shear values to test
+        npair: integer, optional
+            Number of pairs to use at each shear test value
+        """
+        import lensing
+        from .shape import Shape, shear_reduced
+
+        shear1_true=numpy.linspace(smin, smax, nshear)
+        shear2_true=numpy.zeros(nshear)
+
+        shear1_meas=numpy.zeros(nshear)
+        shear2_meas=numpy.zeros(nshear)
+        
+        # _te means expanded around truth
+        shear1_meas_te=numpy.zeros(nshear)
+        shear2_meas_te=numpy.zeros(nshear)
+ 
+        theta=numpy.pi/2.0
+        twotheta = 2.0*theta
+        cos2angle = numpy.cos(twotheta)
+        sin2angle = numpy.sin(twotheta)
+
+        g1=numpy.zeros(npair*2)
+        g2=numpy.zeros(npair*2)
+        for ishear in xrange(nshear):
+            s1=shear1_true[ishear]
+            s2=shear2_true[ishear]
+
+            g1[0:npair],g2[0:npair] = self.sample2d(npair)
+            g1[npair:] =  g1[0:npair]*cos2angle + g2[0:npair]*sin2angle
+            g2[npair:] = -g1[0:npair]*sin2angle + g2[0:npair]*cos2angle
+
+            g1s, g2s = shear_reduced(g1, g2, s1, s2)
+
+            P,Q,R=self.get_pqr_num(g1s, g2s, h=h)
+            P_te,Q_te,R_te=self.get_pqr_num(g1s, g2s, s1=s1, s2=s2, h=h)
+
+            g1g2, C = lensing.pqr.get_shear_pqr(P,Q,R)
+            g1g2_te, C_te = lensing.pqr.get_shear_pqr(P_te,Q_te,R_te)
+
+            g1g2_te[0] += s1
+            g1g2_te[0] += s2
+            shear1_meas[ishear] = g1g2[0]
+            shear2_meas[ishear] = g1g2[1]
+
+            shear1_meas_te[ishear] = g1g2_te[0]
+            shear2_meas_te[ishear] = g1g2_te[1]
+
+            mess='true: %.6f,%.6f meas: %.6f,%.6f expand true: %.6f,%.6f'
+            print mess % (s1,s2,g1g2[0],g1g2[1],g1g2_te[0],g1g2_te[1])
+
+        fracdiff=shear1_meas/shear1_true-1
+        fracdiff_te=shear1_meas_te/shear1_true-1
+        if eps:
+            import biggles
+            plt=biggles.FramedPlot()
+            plt.xlabel=r'$\gamma_{true}$'
+            plt.ylabel=r'$\Delta \gamma/\gamma$'
+            plt.aspect_ratio=1.0
+
+            plt.add( biggles.FillBetween([0.0,smax], [0.004,0.004], 
+                                         [0.0,smax], [0.000,0.000],
+                                          color='grey80') )
+
+
+            pts=biggles.Points(shear1_true, fracdiff,type='filled circle',size=1.0)
+            pts.label='expand shear=0'
+            plt.add(pts)
+
+            pts_te=biggles.Points(shear1_true, fracdiff_te,type='filled circle',size=1.0,
+                                  color='dark green')
+            pts_te.label='expand shear=true'
+            plt.add(pts_te)
+
+            coeffs=numpy.polyfit(shear1_true, fracdiff, 2)
+            poly=numpy.poly1d(coeffs)
+
+            curve=biggles.Curve(shear1_true, poly(shear1_true), type='solid',
+                                color='blue')
+            curve.label=r'$\Delta \gamma/\gamma~\propto~\gamma^2$'
+            plt.add(curve)
+
+            plt.add( biggles.PlotKey(0.1, 0.9, [pts,pts_te,curve], halign='left') )
+
+            print 'writing:',eps
+            plt.write_eps(eps)
 
 class GPriorBABase(GPriorBase):
     """
@@ -360,7 +461,7 @@ class GPriorBABase(GPriorBase):
         g1 = numpy.array(g1in, dtype='f8', ndmin=1, copy=False)
         g2 = numpy.array(g2in, dtype='f8', ndmin=1, copy=False)
 
-        # these are the same
+        # these are the same for expanding about zero shear
         #P=self.get_pj(g1, g2, 0.0, 0.0)
         P=self.get_prob_array2d(g1, g2)
 

@@ -4,7 +4,8 @@ from numba import float64, int64, void, autojit, jit
 
 from .gexceptions import GMixRangeError, GMixFatalError
 
-@jit(argtypes=[float64,float64,float64,float64])
+#@jit(argtypes=[float64,float64,float64,float64])
+@autojit
 def shear_reduced(g1, g2, s1, s2):
     """
     addition formula for reduced shear
@@ -73,6 +74,20 @@ class Shape(ShapeBase):
         """
         g1,g2 = shear_reduced(self.g1,self.g2, s1, s2)
         self.set_g1g2(g1, g2)
+
+    @void(float64)
+    def rotate(self, theta_radians):
+        """
+        Rotate the shape by the input angle
+        """
+        twotheta = 2.0*theta_radians
+
+        cos2angle = numpy.cos(twotheta)
+        sin2angle = numpy.sin(twotheta)
+        g1rot =  self.g1*cos2angle + self.g2*sin2angle
+        g2rot = -self.g1*sin2angle + self.g2*cos2angle
+
+        self.set_g1g2(g1rot, g2rot)
 
 
 @jit(argtypes=[ float64, float64 ])
