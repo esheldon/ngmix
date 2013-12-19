@@ -139,7 +139,8 @@ def e1e2_to_g1g2(e1, e2):
     return g1,g2
 
 
-@jit(argtypes=[float64,float64,float64,float64])
+#@jit(argtypes=[float64,float64,float64,float64])
+@autojit
 def dgs_by_dgo_jacob(g1, g2, s1, s2):
     """
     jacobian of the transformation
