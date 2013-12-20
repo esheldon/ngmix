@@ -1030,7 +1030,8 @@ class MCMCSimple(MCMCBase):
             # expand around zero
             P,Q,R = self.g_prior.get_pqr(g1,g2)
         else:
-            # expand around a requested value
+            # expand around a requested value.  BA analytic formulas
+            # don't support this yet...
             P,Q,R = self.g_prior.get_pqr_num(g1,g2,s1=sh[0], s2=sh[1])
 
         P,Q,R,nuse = self._fix_pqr_for_during(g1,g2,P,Q,R)
