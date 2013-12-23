@@ -802,7 +802,7 @@ class MCMCBase(FitterBase):
                 weights=None
             else:
                 self._set_g_prior_vals()
-                print >>stderr,'weights are g prior'
+                print >>stderr,'    weights are g prior'
                 weights=self.g_prior_vals
         else:
             weights=self.iweights
