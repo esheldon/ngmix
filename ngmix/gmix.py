@@ -339,6 +339,7 @@ class GMixModel(GMix):
             self._pars[:] = parr[:]
 
             if self._model==GMIX_GAUSS:
+                #print >>stderr,'GMixModel filling GAUSS, ngauss:',self._ngauss
                 _fill_gauss(self._data, self._pars)
             elif self._model==GMIX_EXP:
                 _fill_exp(self._data, self._pars)

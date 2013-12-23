@@ -922,6 +922,11 @@ class LogNormal(LogNormalBase):
         self.logsigma = logsigma
         self.logivar  = logivar
 
+        self.mode = numpy.exp(self.logmean - self.logvar)
+
+        # logmean = ln(mode)+ logvar
+        # mean = exp( ln(mode) + logvar ) = mode*exp(logvar)
+
     @float64(float64)
     def get_lnprob_scalar(self, x):
         """
