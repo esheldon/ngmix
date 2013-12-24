@@ -1200,12 +1200,14 @@ class ISampleSimple(MCMCSimple):
     different than the actual posterior surface
 
     """
-    def __init__(self, image, weight, jacobian, model, **keys):
+    def __init__(self, image, weight, jacobian, model, trials, ln_probs, **keys):
         """
         Reproducing some code from FitterBase here.... Need a better
         way
         """
         self.keys=keys
+
+        self._set_samples(trials, ln_probs)
 
         # note these are not optional
         self.cen_prior    = keys['cen_prior']
@@ -1234,8 +1236,6 @@ class ISampleSimple(MCMCSimple):
 
         self._gmix_lol=None
 
-        self.n_samples_train=keys.get('n_samples_train',10000)
-        self.n_samples=keys.get('n_samples',40000)
         self.do_pqr=keys.get('do_pqr',False)
         self.do_lensfit=keys.get('do_lensfit',False)
 
@@ -1244,8 +1244,6 @@ class ISampleSimple(MCMCSimple):
 
         if (self.do_lensfit or self.do_pqr) and self.g_prior is None:
             raise ValueError("send g_prior for lensfit or pqr")
-
-        self.trials=None
 
         self.flags=0
         self.arate=1.0
@@ -1256,71 +1254,25 @@ class ISampleSimple(MCMCSimple):
         Get the trials and calculate the results
         """
 
-        self._do_trials(self.n_samples_train)
-
-        wmax=numpy.argmax( self.ln_probs )
-        self._reset_priors(self.trials[wmax,:])
-
-        self._do_trials(self.n_samples)
+        self._calc_all_lnprob()
+        self._calc_isample_weights()
         self._calc_result()
 
-    def _reset_priors(self, pars):
+    def _calc_all_lnprob(self):
         """
-        THIS IS WRONG, should jsut *draw* from different priors but
-        true priors should still be applied to get real prob!!!!!
-
-        Assuming T,counts are lognormal, center is double gaussian
-        """
-        self.cen_prior = priors.CenPrior(pars[0],
-                                         self.cen_prior.sigma1,
-                                         pars[1],
-                                         self.cen_prior.sigma2)
-        self.T_prior = priors.LogNormal(pars[4],
-                                        self.T_prior.sigma)
-        counts_prior=[]
-        for i,cp in enumerate(self.counts_prior):
-            cpnew = priors.LogNormal(pars[5+i], cp.sigma)
-            counts_prior.append(cpnew)
-        self.counts_prior=counts_prior
-
-    def _do_trials(self, n_samples):
-        """
-        Draw samples, evaluate all the log probs and weights
-
-        Iterate until the weights are all finite. We can get underflow in the
-        exp
-
+        Calc the actual ln(prob) at all our sample positions
         """
 
-        self.trials          = numpy.zeros( (n_samples, self.npars) )
-        self.ln_probs        = numpy.zeros(n_samples)
-        self.ln_probs_approx = numpy.zeros(n_samples)
-        self.iweights         = numpy.zeros(n_samples)
+        trials=self.trials
+        ln_probs=self.ln_probs
 
-        wleft=numpy.arange(n_samples)
-        first=True
-        while wleft.size > 0:
-            print >>stderr,'        ',wleft.size
+        self._init_gmix_lol(trials[0,:])
 
-            self._draw_samples(wleft)
+        n_samples=ln_probs.size
+        for i in xrange(n_samples):
+            ln_probs[i] = self.calc_lnprob(trials[i,:])
 
-            if first:
-                self._init_gmix_lol(self.trials[0,:])
-                first=False
-
-            self._calc_all_lnprob(wleft)
-            wleft=self._calc_isample_weights()
-
-    def _calc_result(self):
-        """
-        Same as parent with added effweight
-        """
-        super(ISampleSimple,self)._calc_result()
-
-        weights=self.iweights
-        wdiv = weights * ( 1.0/weights.max() )
-        eff_iweight = wdiv.sum()/weights.size
-        self._result['eff_iweight'] = eff_iweight
+        self.ln_probs=ln_probs
 
     def _calc_isample_weights(self):
         """
@@ -1336,58 +1288,289 @@ class ISampleSimple(MCMCSimple):
 
         Which we can use to keep the exp from going under.  We can
         choose to use
+
                = A*exp( lnp_diff - lnp_diff.max() )
 
-        We have to re-calculate this max when new samples are added, and thus
-        re-calculate the isfinite for *all* samples. This will slow things down
-        a bit but is unavoidable.
+        Choosing A=1.0 means the weights are between 0 and 1 and a perfect
+        match means all weights are one.
+
+        We would have to re-calculate this max if new samples were added, and
+        thus re-calculate the isfinite for *all* samples. This will slow things
+        down a bit but is unavoidable.
 
         """
 
-        lnp_diff = self.ln_probs - self.ln_probs_approx
+        iweights = self.iweights
+        lnp_diff = self.ln_probs - self.ln_probs0
 
         # force the maximum value to be zero, so the max weight
-        # is unity
+        # is unity. Should reduce underflow
         lnp_diff -= lnp_diff.max()
-        #print lnp_diff
 
-        weights = self.iweights
-        weights[:] = numpy.exp( lnp_diff )
-        #print weights
-        #stop
+        iweights[:] = numpy.exp( lnp_diff )
 
-        wleft,=numpy.where( numpy.isfinite(weights)==False )
-        return wleft
+        w_non_finite, = numpy.where( numpy.isfinite(iweights)==False )
+
+        if w_non_finite.size > 0:
+            iweights[w_non_finite] = 0.0
+
+        self.w_non_finite=w_non_finite
+
+    def _calc_result(self):
+        """
+        Same as parent with added effweight
+        """
+        super(ISampleSimple,self)._calc_result()
+
+        iweights=self.iweights
+        wdiv = iweights * ( 1.0/iweights.max() )
+        eff_n_samples = wdiv.sum()
+        eff_iweight = eff_n_samples/self.n_samples
+
+        res=self._result
+        res['n_samples']     = self.n_samples
+        res['n_non_finite']  = self.w_non_finite.size
+        res['eff_n_samples'] = eff_n_samples
+        res['eff_iweight']   = eff_iweight
+
+    def _set_samples(self, trials, ln_probs):
+        """
+        Set the local refs and check sizes
+        """
+        self.trials=trials
+        self.ln_probs0=ln_probs
+
+        n_samples=ln_probs.size
+        tsize=trials[:,0].size
+        if  tsize != n_samples:
+            raise ValueError("sizes don't match: %s %s" % (tsize,n_samples))
+
+        # actual ln probs
+        self.ln_probs=numpy.zeros(ln_probs.size)
+
+        # importance sample weights
+        self.iweights=numpy.zeros(ln_probs.size)
+        self.n_samples=n_samples
+
+class ISampleSimpleAuto(MCMCSimple):
+    """
+
+    Importance sampling
+
+    Only works for noisy galaxies for which the prior is actually not so
+    different than the actual posterior surface
+
+    """
+    def __init__(self, image, weight, jacobian, model, **keys):
+        """
+        Reproducing some code from FitterBase here.... Need a better
+        way
+        """
+        self.keys=keys
+
+        # initial number of samples
+        n_samples=keys['n_samples']
+        self.n_samples_init    = n_samples
+        self.n_samples         = n_samples # may change
+        self.min_eff_n_samples = keys['min_eff_n_samples']
 
 
-    def _calc_all_lnprob(self, w):
+        # note these are not optional
+        self.cen_prior    = keys['cen_prior']
+        self.g_prior      = keys['g_prior']
+        self.T_prior      = keys['T_prior']
+        self.counts_prior = keys['counts_prior']
+
+        # this is because we always are evaluating the full posterior
+        # when doing importance sampling
+        self.g_prior_during=True
+
+        # in this case, image, weight, jacobian, psf are going to
+        # be lists of lists.
+
+        # call this first, others depend on it
+        self._set_lists(image, weight, jacobian, **keys)
+
+        self.model=gmix.get_model_num(model)
+        self.model_name=gmix.get_model_name(self.model)
+        self._set_npars()
+
+        # the function to be called to fill a gaussian mixture
+        self._set_fill_call()
+
+        self.totpix=self.verify()
+
+        self._gmix_lol=None
+
+        self.do_pqr=keys.get('do_pqr',False)
+        self.do_lensfit=keys.get('do_lensfit',False)
+
+        # expand around this shear value
+        self.shear_expand = keys.get('shear_expand',None)
+
+        if (self.do_lensfit or self.do_pqr) and self.g_prior is None:
+            raise ValueError("send g_prior for lensfit or pqr")
+
+        self.flags=0
+        self.arate=1.0
+        self.tau=0.0
+        self._iresult={'eff_n_samples':0.0}
+
+    def go(self):
+        """
+        Get the trials and calculate the results
+        """
+
+        first=True
+        while self._iresult['eff_n_samples'] < self.min_eff_n_samples:
+
+            self._add_trials(self.n_samples_init)
+
+            if first:
+                self._init_gmix_lol(self.trials[0,:])
+
+            # only processed new ones
+            self._calc_new_lnprob()
+
+            # must process all
+            self._calc_isample_weights()
+
+            print >>stderr,'    eff_n_sample:',self._iresult['eff_n_samples'], \
+                    'eff_iweight:',self._iresult['eff_iweight']
+
+        self._calc_result()
+
+    def _add_trials(self, n_add):
+        """
+        Set the local refs and check sizes
+        """
+        if not hasattr(self,'trials'):
+            n_samples = n_add
+            trials    = numpy.zeros( (n_add, self.npars) )
+            ln_probs0 = numpy.zeros(n_add)
+            ln_probs  = numpy.zeros(n_add)
+            iweights  = numpy.zeros(n_add)
+
+            self.istart=0
+            self.itodo=n_add
+        else:
+            n_current=self.n_samples
+            n_samples = n_current + n_add
+
+            trials    = numpy.zeros( (n_samples, self.npars) )
+            ln_probs0 = numpy.zeros(n_samples)
+            ln_probs  = numpy.zeros(n_samples)
+            iweights  = numpy.zeros(n_samples)
+
+            trials[0:n_current, :]       = self.trials
+            ln_probs0[0:n_current] = self.ln_probs0
+            ln_probs[0:n_current]        = self.ln_probs
+            iweights[0:n_current]        = self.iweights
+
+            self.istart=n_current
+            self.itodo=n_add
+
+        self.n_samples = n_samples
+
+        self.trials    = trials
+        self.ln_probs  = ln_probs
+        self.ln_probs0 = ln_probs0
+        self.iweights  = iweights
+
+        self._draw_from_priors()
+
+    def _draw_from_priors(self):
+        """
+        Draw samples for importance sampling
+        """
+
+        n_add=self.itodo
+
+        beg=self.istart
+        end=self.istart + n_add
+
+        trials=self.trials
+        trials[beg:end,0],trials[beg:end,1]=self.cen_prior.sample(n=n_add)
+        trials[beg:end,2],trials[beg:end,3]=self.g_prior.sample2d(n_add)
+        trials[beg:end,4]=self.T_prior.sample(nrand=n_add)
+
+        for i,cp in enumerate(self.counts_prior):
+            trials[beg:end,5+i]=cp.sample(nrand=n_add)
+
+    def _calc_new_lnprob(self):
         """
         Calc the actual ln(prob) at all our sample positions
         """
 
         trials=self.trials
         ln_probs=self.ln_probs
-        ln_probs_approx=self.ln_probs_approx
+        ln_probs0=self.ln_probs0
 
-        n_samples=w.size
-        for ii in xrange(n_samples):
-            i=w[ii]
-            ln_probs[i],ln_probs_approx[i] = self.calc_lnprob(trials[i,:],get_priors=True)
-            #print ln_probs[i],ln_probs_approx[i]
+        beg=self.istart
+        end=self.istart+self.itodo
+        for i in xrange(beg,end):
+            ln_probs[i],ln_probs0[i] = self.calc_lnprob(trials[i,:],get_priors=True)
 
-    def _draw_samples(self, w):
+    def _calc_isample_weights(self):
         """
-        Draw our approximate
+        Calculate the importance sample weights
+
+        weight = prob_true/prob_approx
+               = exp( lnp_true-lnp_approx )
+               = exp( lnp_diff )
+
+        We can rescale the problem
+
+               = A*exp( lnp_diff - const )
+
+        Which we can use to keep the exp from going under.  We can
+        choose to use
+
+               = A*exp( lnp_diff - lnp_diff.max() )
+
+        Choosing A=1.0 means the weights are between 0 and 1 and a perfect
+        match means all weights are one.
+
+        We would have to re-calculate this max if new samples were added, and
+        thus re-calculate the isfinite for *all* samples. This will slow things
+        down a bit but is unavoidable.
+
         """
 
-        n_samples=w.size
-        trials=self.trials
+        iweights = self.iweights
+        lnp_diff = self.ln_probs - self.ln_probs0
 
-        trials[w,0],trials[w,1]=self.cen_prior.sample(n=n_samples)
-        trials[w,2],trials[w,3]=self.g_prior.sample2d(n_samples)
-        trials[w,4]=self.T_prior.sample(nrand=n_samples)
-        for i,cp in enumerate(self.counts_prior):
-            trials[w,5+i]=cp.sample(nrand=n_samples)
+        # force the maximum value to be zero, so the max weight
+        # is unity. Should reduce underflow
+        lnp_diff -= lnp_diff.max()
+
+        iweights[:] = numpy.exp( lnp_diff )
+
+        w_non_finite, = numpy.where( numpy.isfinite(iweights)==False )
+
+        if w_non_finite.size > 0:
+            iweights[w_non_finite] = 0.0
+
+        self.w_non_finite=w_non_finite
+
+        wdiv = iweights * ( 1.0/iweights.max() )
+        eff_n_samples = wdiv.sum()
+        eff_iweight = eff_n_samples/self.n_samples
+
+        res=self._iresult
+        res['n_samples']     = self.n_samples
+        res['n_non_finite']  = self.w_non_finite.size
+        res['eff_n_samples'] = eff_n_samples
+        res['eff_iweight']   = eff_iweight
+
+
+    def _calc_result(self):
+        """
+        Same as parent with added effweight
+        """
+        super(ISampleSimpleAuto,self)._calc_result()
+
+        self._result.update(self._iresult)
 
 
 
