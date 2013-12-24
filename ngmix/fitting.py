@@ -1266,6 +1266,9 @@ class ISampleSimple(MCMCSimple):
 
     def _reset_priors(self, pars):
         """
+        THIS IS WRONG, should jsut *draw* from different priors but
+        true priors should still be applied to get real prob!!!!!
+
         Assuming T,counts are lognormal, center is double gaussian
         """
         self.cen_prior = priors.CenPrior(pars[0],
