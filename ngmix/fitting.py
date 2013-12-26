@@ -1372,7 +1372,14 @@ class ISampleSimpleAuto(MCMCSimple):
         n_samples=keys['n_samples']
         self.n_samples_init    = n_samples
         self.n_samples         = n_samples # may change
+
         self.min_eff_n_samples = keys['min_eff_n_samples']
+
+        # probably tuned to 50,000 samples.  max should probably
+        # be fac*n_samples or something, and trim back by some
+        # fraction
+        self.max_n_samples     = 1000000
+        self.trim_frac         = 0.10
 
 
         # note these are not optional
@@ -1424,6 +1431,10 @@ class ISampleSimpleAuto(MCMCSimple):
         first=True
         while self._iresult['eff_n_samples'] < self.min_eff_n_samples:
 
+            if self.n_samples > self.max_n_samples:
+                print >>stderr,'        trimming'
+                self._trim_samples()
+
             self._add_trials(self.n_samples_init)
 
             if first:
@@ -1435,7 +1446,7 @@ class ISampleSimpleAuto(MCMCSimple):
             # must process all
             self._calc_isample_weights()
 
-            print >>stderr,'    eff_n_sample:',self._iresult['eff_n_samples'], \
+            print >>stderr,'    n:',self.n_samples,'eff_n_sample:',self._iresult['eff_n_samples'], \
                     'eff_iweight:',self._iresult['eff_iweight']
 
         self._calc_result()
@@ -1478,6 +1489,25 @@ class ISampleSimpleAuto(MCMCSimple):
         self.iweights  = iweights
 
         self._draw_from_priors()
+
+    def _trim_samples(self):
+        """
+        Trim to the top samples
+        """
+
+        nkeep = int( self.max_n_samples*self.trim_frac )
+
+        preverse = -self.ln_probs
+        s=preverse.argsort()
+        wkeep = s[0:nkeep]
+
+        self.n_samples = wkeep.size
+        self.trials    = self.trials[wkeep,:]
+        self.ln_probs  = self.ln_probs[wkeep]
+        self.ln_probs0 = self.ln_probs0[wkeep]
+        self.iweights  = self.iweights[wkeep]
+
+
 
     def _draw_from_priors(self):
         """
