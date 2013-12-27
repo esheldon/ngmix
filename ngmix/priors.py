@@ -1,3 +1,10 @@
+"""
+Convention is that all priors should have peak ln(prob)==0. This
+helps use in priors for LM fitting
+
+I haven't forced the max prob to be 1.0 yet, but should
+
+"""
 import numpy
 from numpy.random import random as randu
 import numba
@@ -579,11 +586,12 @@ class GPriorM(GPriorBase):
         self.hhalf = 0.5*self.h
         self.hinv  = 1./self.h
 
+        self.lnprob_mode = self.get_lnprob_scalar2d(0.0, 0.0)
+
     @float64(float64, float64)
     def get_prob_scalar2d(self, g1, g2):
         """
         Get the 2d prob for the input g value
-        (1-g^2)^2 * exp(-0.5*g^2/sigma^2)
         """
 
         gsq = g1**2 + g2**2
@@ -594,7 +602,6 @@ class GPriorM(GPriorBase):
     def get_lnprob_scalar2d(self, g1, g2):
         """
         Get the 2d prob for the input g value
-        (1-g^2)^2 * exp(-0.5*g^2/sigma^2)
         """
 
         gsq = g1**2 + g2**2
@@ -605,6 +612,7 @@ class GPriorM(GPriorBase):
             raise GMixRangeError("g too big: %s" % g)
 
         lnp=numpy.log(p)
+        lnp -= self.lnprob_mode
         return lnp
 
 
@@ -692,6 +700,8 @@ class GPriorM(GPriorBase):
 class GPriorBA(GPriorBABase):
     """
     g prior from Bernstein & Armstrong 2013
+
+    automatically has max lnprob 0 and max prob 1
     """
     @void(float64)
     def __init__(self, sigma):
@@ -923,6 +933,7 @@ class LogNormal(LogNormalBase):
         self.logivar  = logivar
 
         self.mode = numpy.exp(self.logmean - self.logvar)
+        self.lnprob_mode = self.get_lnprob_scalar(self.mode)
 
         # logmean = ln(mode)+ logvar
         # mean = exp( ln(mode) + logvar ) = mode*exp(logvar)
@@ -941,6 +952,9 @@ class LogNormal(LogNormalBase):
         lnp *= self.logivar
         lnp *= (-0.5)
         lnp -= logx
+
+        # this way the maximum lnprob is 0.0
+        lnp -= self.lnprob_mode
 
         return lnp
 

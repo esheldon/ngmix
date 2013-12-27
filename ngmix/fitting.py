@@ -608,6 +608,107 @@ class PSFFluxFitter(FitterBase):
 
         return self.eff_npix
 
+class LMFitter(FitterBase):
+    """
+    A base class for doing a fit using levenberg marquardt
+
+    """
+    def __init__(self, image, weight, jacobian, model, **keys):
+        super(MCMCBase,self).__init__(image, weight, jacobian, model, **keys)
+
+        # can contain maxfev (maxiter), ftol (tol in sum of squares)
+        # xtol (tol in solution), etc
+        self.lm_pars=keys['lm_pars']
+        self.maxiter=keys.get('maxiter',1000) 
+
+        # we subtract 2 since center and shape are combined
+        self.fdiff_size=self.totpix + self.npars - 2
+
+    def calc_fdiff(self, pars, get_s2nsums=False):
+        """
+        vector with (model-data)/error.
+
+        The last Npars elements contain -ln(prior)
+        """
+
+        # we cannot keep sending existing array into leastsq, don't know why
+
+        fdiff=numpy.zeros(self.fdiff_size)
+
+        s2n_numer=0.0
+        s2n_denom=0.0
+
+        try:
+
+            self._fill_gmix_lol(pars)
+
+            start=self._fill_priors(pars, fdiff)
+
+            for band in xrange(self.nband):
+
+                gmix_list=self._gmix_lol[band]
+                im_list=self.im_lol[band]
+                wt_list=self.wt_lol[band]
+                jacob_list=self.jacob_lol[band]
+
+                nim=len(im_list)
+                for i in xrange(nim):
+                    gm=gmix_list[i]
+                    im=im_list[i]
+                    wt=wt_list[i]
+                    j=jacob_list[i]
+
+
+                    res = gmix._fdiff_jacob_fast3(gm._data,
+                                                  im,
+                                                  wt,
+                                                  j._data,
+                                                  fdiff,
+                                                  start,
+                                                  _exp3_ivals[0],
+                                                  _exp3_lookup)
+                    s2n_numer += res[0]
+                    s2n_denom += res[1]
+
+                    start += im.size
+
+
+        except GMixRangeError:
+            fdiff[:] = LOWVAL
+            s2n_numer=0.0
+            s2n_denom=BIGVAL
+
+        if get_s2nsums:
+            return fdiff, s2n_numer, s2n_denom
+        else:
+            return fdiff
+
+    def _fill_priors(self, pars, fdiff):
+        """
+        Fill priors at the beginning of the array.
+
+        ret the position after last par
+
+        We require all the lnprobs are < 0, equivalent to
+        the peak probability always being 1.0
+
+        I have checked all our priors have this property.
+        """
+
+        last=0
+        fdiff[0] = -self.cen_prior.get_lnprob(pars[0], pars[1])
+        last += 1
+        fdiff[1] = -self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+        last += 1
+        fdiff[2] = -self.T_prior.get_lnprob_scalar(pars[4])
+        last += 1
+
+        for i,cp in enumerate(self.counts_prior):
+            counts=pars[5+i]
+            fdiff[3+i] = -cp.get_lnprob_scalar(counts)
+            last += 1
+
+        return last
 
 class MCMCBase(FitterBase):
     """
