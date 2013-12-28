@@ -1133,14 +1133,15 @@ def _fdiff_jacob_fast3(self, image, weight, j, fdiff, start, i0, expvals):
     s2n_numer=0.0
     s2n_denom=0.0
 
-    # simplifies logic later
-    i=start-1
+    # starting i at start-1 simplifies logic later, because of the continue
+    fdiff_i=start-1
+
     for row in xrange(nrows):
         u=j[0].dudrow*(row - j[0].row0) + j[0].dudcol*(0 - j[0].col0)
         v=j[0].dvdrow*(row - j[0].row0) + j[0].dvdcol*(0 - j[0].col0)
 
         for col in xrange(ncols):
-            i += 1
+            fdiff_i += 1
 
             ivar = weight[row,col]
             if ivar <= 0.0:
@@ -1179,7 +1180,7 @@ def _fdiff_jacob_fast3(self, image, weight, j, fdiff, start, i0, expvals):
                     model_val += pnorm*expval
             
             pixval = image[row,col]
-            fdiff[i] = (model_val-pixval)*ierr
+            fdiff[fdiff_i] = (model_val-pixval)*ierr
             s2n_numer += pixval*model_val*ivar
             s2n_denom += model_val*model_val*ivar
 

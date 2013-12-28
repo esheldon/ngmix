@@ -21,6 +21,16 @@ BAD_VAR=2**0
 LOW_ARATE=2**1
 LARGE_TAU=2**2
 
+# error codes in LM start at 2**0 and go to 2**3
+# this is because we set 2**(ier-5)
+LM_SINGULAR_MATRIX = 2**4
+LM_NEG_COV_EIG = 2**5
+LM_NEG_COV_DIAG = 2**6
+LM_EIG_NOTFINITE = 2**7
+LM_FUNC_NOTFINITE = 2**8
+
+PDEF=-9.999e9
+CDEF=9.999e9
 
 class FitterBase(object):
     """
@@ -367,8 +377,8 @@ class FitterBase(object):
         """
         initialize the list of lists of gmix
         """
-        self._gmix_lol0 = []
-        self._gmix_lol  = []
+        gmix_lol0 = []
+        gmix_lol  = []
 
         for band in xrange(self.nband):
             gmix_list0=[]
@@ -384,8 +394,11 @@ class FitterBase(object):
                 gmix_list0.append(gm0)
                 gmix_list.append(gm)
 
-            self._gmix_lol0.append(gmix_list0)
-            self._gmix_lol.append(gmix_list)
+            gmix_lol0.append(gmix_list0)
+            gmix_lol.append(gmix_list)
+
+        self._gmix_lol0 = gmix_lol0
+        self._gmix_lol  = gmix_lol
 
     def _fill_gmix_lol(self, pars):
         """
@@ -608,32 +621,50 @@ class PSFFluxFitter(FitterBase):
 
         return self.eff_npix
 
-class LMFitter(FitterBase):
+class LMSimple(FitterBase):
     """
-    A base class for doing a fit using levenberg marquardt
+    A class for doing a fit using levenberg marquardt
 
     """
-    def __init__(self, image, weight, jacobian, model, **keys):
-        super(MCMCBase,self).__init__(image, weight, jacobian, model, **keys)
+    def __init__(self, image, weight, jacobian, model, guess, **keys):
+        super(LMSimple,self).__init__(image, weight, jacobian, model, **keys)
 
+        # this is a dict
         # can contain maxfev (maxiter), ftol (tol in sum of squares)
         # xtol (tol in solution), etc
         self.lm_pars=keys['lm_pars']
-        self.maxiter=keys.get('maxiter',1000) 
+
+        self.guess=numpy.array( guess, dtype='f8' )
 
         # we subtract 2 since center and shape are combined
         self.fdiff_size=self.totpix + self.npars - 2
 
-    def calc_fdiff(self, pars, get_s2nsums=False):
+    def go(self):
+        """
+        Run leastsq and set the result
+        """
+
+        dof=self.get_dof()
+        result = run_leastsq(self._calc_fdiff, self.guess, dof, **self.lm_pars)
+
+        if result['flags']==0:
+            stats=self.get_fit_stats(result['pars'])
+            result.update(stats)
+
+        self._result=result
+
+    def _calc_fdiff(self, pars, get_s2nsums=False):
         """
         vector with (model-data)/error.
 
-        The last Npars elements contain -ln(prior)
+        The npars elements contain -ln(prior)
         """
 
         # we cannot keep sending existing array into leastsq, don't know why
-
         fdiff=numpy.zeros(self.fdiff_size)
+
+        if not hasattr(self,'_gmix_lol0'):
+            self._init_gmix_lol(pars)
 
         s2n_numer=0.0
         s2n_denom=0.0
@@ -658,7 +689,6 @@ class LMFitter(FitterBase):
                     wt=wt_list[i]
                     j=jacob_list[i]
 
-
                     res = gmix._fdiff_jacob_fast3(gm._data,
                                                   im,
                                                   wt,
@@ -671,7 +701,6 @@ class LMFitter(FitterBase):
                     s2n_denom += res[1]
 
                     start += im.size
-
 
         except GMixRangeError:
             fdiff[:] = LOWVAL
@@ -692,7 +721,7 @@ class LMFitter(FitterBase):
         We require all the lnprobs are < 0, equivalent to
         the peak probability always being 1.0
 
-        I have checked all our priors have this property.
+        I have verified all our priors have this property.
         """
 
         last=0
@@ -709,6 +738,148 @@ class LMFitter(FitterBase):
             last += 1
 
         return last
+
+    def _get_priors(self, pars):
+        """
+        For the stats calculation
+        """
+        lnp=0.0
+        
+        lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+        lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+        lnp += self.T_prior.get_lnprob_scalar(pars[4])
+        for i,cp in enumerate(self.counts_prior):
+            counts=pars[5+i]
+            lnp += cp.get_lnprob_scalar(counts)
+
+        return lnp
+
+
+ 
+
+NOTFINITE_BIT=11
+def run_leastsq(func, guess, dof, **keys):
+    """
+    run leastsq from scipy.optimize.  Deal with certain
+    types of errors
+
+    TODO make this do all the checking and fill in cov etc.  return
+    a dict
+
+    parameters
+    ----------
+    func:
+        the function to minimize
+    guess:
+        guess at pars
+
+    some useful keywords
+    maxfev:
+        maximum number of function evaluations. e.g. 1000
+    epsfcn:
+        Step for jacobian estimation (derivatives). 1.0e-6
+    ftol:
+        Relative error desired in sum of squares, 1.0e06
+    xtol:
+        Relative error desired in solution. 1.0e-6
+    """
+    from scipy.optimize import leastsq
+    import pprint
+
+    npars=guess.size
+
+    res={}
+    try:
+        lm_tup = leastsq(func, guess, full_output=1, **keys)
+
+        pars, pcov0, infodict, errmsg, ier = lm_tup
+
+        if ier == 0:
+            # wrong args, this is a bug
+            raise ValueError(errmsg)
+
+        flags = 0
+        if ier > 4:
+            flags = 2**(ier-5)
+            pars,pcov,perr=_get_def_stuff(npars)
+            print >>stderr,'    ',errmsg
+
+        elif pcov0 is None:    
+            # why on earth is this not in the flags?
+            flags += LM_SINGULAR_MATRIX 
+            errmsg = "singular covariance"
+            print >>stderr,'    ',errmsg
+            print_pars(pars,front='    pars at singular:',stream=stderr)
+            junk,pcov,perr=_get_def_stuff(npars)
+        else:
+            # Scale the covariance matrix returned from leastsq; this will
+            # recover the covariance of the parameters in the right units.
+            fdiff=func(pars)
+
+            # npars: to remove priors
+            s_sq = (fdiff[npars:]**2).sum()/dof
+            pcov = pcov0 * s_sq 
+
+            cflags = _test_cov(pcov)
+            if cflags != 0:
+                flags += cflags
+                errmsg = "bad covariance matrix"
+                print >>stderr,'    ',errmsg
+                junk1,junk2,perr=_get_def_stuff(npars)
+                perr=numpy.zeros(npars) + CDEF
+            else:
+                # only if we reach here did everything go well
+                perr=numpy.sqrt( numpy.diag(pcov) )
+
+        res['flags']=flags
+        res['nfev'] = infodict['nfev']
+        res['ier'] = ier
+        res['errmsg'] = errmsg
+
+        res['pars'] = pars
+        res['perr']=perr
+        res['pars_cov0'] = pcov0
+        res['pars_cov']=pcov
+
+    except ValueError as e:
+        serr=str(e)
+        if 'NaNs' in serr or 'infs' in serr:
+            pars,pcov,perr=_get_def_stuff(npars)
+
+            res['pars']=pars
+            res['pars_cov0']=pcov
+            res['pars_cov']=pcov
+            res['nfev']=-1
+            res['flags']=LM_FUNC_NOTFINITE
+            res['errmsg']="not finite"
+            print >>stderr,'    not finite'
+        else:
+            raise e
+
+    return res
+
+def _get_def_stuff(npars):
+    pars=numpy.zeros(npars) + PDEF
+    cov=numpy.zeros( (npars,npars) ) + CDEF
+    err=numpy.zeros(npars) + CDEF
+    return pars,cov,err
+
+def _test_cov(pcov):
+    flags=0
+    try:
+        e,v = numpy.linalg.eig(pcov)
+        weig,=numpy.where(e < 0)
+        if weig.size > 0:
+            flags += LM_NEG_COV_EIG 
+
+        wneg,=numpy.where(numpy.diag(pcov) < 0)
+        if wneg.size > 0:
+            flags += LM_NEG_COV_DIAG 
+
+    except numpy.linalg.linalg.LinAlgError:
+        flags += LM_EIG_NOTFINITE 
+
+    return flags
 
 class MCMCBase(FitterBase):
     """
