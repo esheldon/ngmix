@@ -648,6 +648,8 @@ class LMSimple(FitterBase):
         result = run_leastsq(self._calc_fdiff, self.guess, dof, **self.lm_pars)
 
         if result['flags']==0:
+            result['g'] = result['pars'][2:2+2].copy()
+            result['g_cov'] = result['pars_cov'][2:2+2, 2:2+2].copy()
             stats=self.get_fit_stats(result['pars'])
             result.update(stats)
 
