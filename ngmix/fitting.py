@@ -922,7 +922,7 @@ def run_leastsq(func, guess, dof, **keys):
         res['errmsg'] = errmsg
 
         res['pars'] = pars
-        res['perr']=perr
+        res['pars_err']=perr
         res['pars_cov0'] = pcov0
         res['pars_cov']=pcov
 
@@ -1128,7 +1128,7 @@ class MCMCBase(FitterBase):
                       'flags':self.flags,
                       'pars':pars,
                       'pars_cov':pars_cov,
-                      'perr':numpy.sqrt(numpy.diag(pars_cov)),
+                      'pars_err':numpy.sqrt(numpy.diag(pars_cov)),
                       'tau':self.tau,
                       'arate':self.arate}
 
@@ -2248,9 +2248,9 @@ def test_gauss_psf_jacob(counts_sky=100.0, noise_sky=0.001, nimages=10, jfac=10.
     res=mc.get_result()
 
     print_pars(res['pars'], front='pars:', stream=stderr)
-    print_pars(res['perr'], front='perr:', stream=stderr)
+    print_pars(res['pars_err'], front='perr:', stream=stderr)
     s=mc.get_flux_scaling()
-    #print 'flux in image coords: %.4g +/- %.4g' % (res['pars'][-1]*s,res['perr'][-1]*s)
+    #print 'flux in image coords: %.4g +/- %.4g' % (res['pars'][-1]*s,res['pars_err'][-1]*s)
 
     gmfit=mc.get_gmix()
     imfit=gmfit.make_image(im.shape, jacobian=j)
@@ -2354,8 +2354,8 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
     res_obj=mc_obj.get_result()
 
     print_pars(res_obj['pars'], front='pars_obj:', stream=stderr)
-    print_pars(res_obj['perr'], front='perr_obj:', stream=stderr)
-    print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['perr'][4]/jfac2)
+    print_pars(res_obj['pars_err'], front='perr_obj:', stream=stderr)
+    print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2)
 
     gmfit0=mc_obj.get_gmix()
     gmfit=gmfit0.convolve(psf_fit)
@@ -2476,8 +2476,8 @@ def test_model_priors(model,
 
     pprint.pprint(res_obj)
     print_pars(res_obj['pars'], front='pars_obj:', stream=stderr)
-    print_pars(res_obj['perr'], front='perr_obj:', stream=stderr)
-    print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['perr'][4]/jfac2)
+    print_pars(res_obj['pars_err'], front='perr_obj:', stream=stderr)
+    print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2)
     if do_lensfit:
         print 'gsens:',res_obj['g_sens']
     if do_pqr:
@@ -2679,8 +2679,8 @@ def test_model_mb(model,
     print 'arate:',res_obj['arate']
     print_pars(true_pars, front='true:    ', stream=stderr)
     print_pars(res_obj['pars'], front='pars_obj:', stream=stderr)
-    print_pars(res_obj['perr'], front='perr_obj:', stream=stderr)
-    #print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['perr'][4]/jfac2)
+    print_pars(res_obj['pars_err'], front='perr_obj:', stream=stderr)
+    #print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2)
     if do_lensfit:
         print 'gsens:',res_obj['g_sens']
     if do_pqr:
@@ -2823,8 +2823,8 @@ def test_model_priors_anze(model,
 
     pprint.pprint(res_obj)
     print_pars(res_obj['pars'], front='pars_obj:', stream=stderr)
-    print_pars(res_obj['perr'], front='perr_obj:', stream=stderr)
-    print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['perr'][4]/jfac2)
+    print_pars(res_obj['pars_err'], front='perr_obj:', stream=stderr)
+    print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2)
     if do_lensfit:
         print 'gsens:',res_obj['g_sens']
     if do_pqr:
