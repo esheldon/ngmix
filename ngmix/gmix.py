@@ -1220,8 +1220,10 @@ def _fdiff_jacob_fast3_randomize(self, image, weight, j, fdiff, randvals, start,
             if ivar <= 0.0:
                 continue
 
-            # note 0.5 because we are adding noise to the model
-            ierr=0.5*numpy.sqrt(ivar)
+            # because we are adding noise to the model
+            ivar *= 0.5
+
+            ierr=numpy.sqrt(ivar)
 
             model_val=0.0
             for i in xrange(ngauss):
