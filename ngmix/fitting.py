@@ -911,7 +911,6 @@ def run_leastsq(func, guess, dof, **keys):
                 errmsg = "bad covariance matrix"
                 print >>stderr,'    ',errmsg
                 junk1,junk2,perr=_get_def_stuff(npars)
-                perr=numpy.zeros(npars) + CDEF
             else:
                 # only if we reach here did everything go well
                 perr=numpy.sqrt( numpy.diag(pcov) )
