@@ -361,6 +361,7 @@ class FitterBase(object):
         bic = -2*lnprob + npars*numpy.log(eff_npix)
 
         return {'s2n_w':s2n,
+                'lnprob':lnprob,
                 'chi2per':chi2per,
                 'dof':dof,
                 'aic':aic,
