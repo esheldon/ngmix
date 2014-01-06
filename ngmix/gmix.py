@@ -759,7 +759,7 @@ def _render_slow(self, image, nsub):
 
                         chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
 
-                        if chi2 < 25.0 and chi2 >= 0.0:
+                        if chi2 < 99.0 and chi2 >= 0.0:
                             pnorm = self[i].pnorm
                             tval += pnorm*numpy.exp( -0.5*chi2 )
                     tcol += stepsize
@@ -772,7 +772,10 @@ def _render_slow(self, image, nsub):
 #
 # create the fast lookup table for exponentials
 
-_exp3_ivals, _exp3_lookup = fastmath.make_exp_lookup(-26, 0)
+# for this demand chi2 < 25
+#_exp3_ivals, _exp3_lookup = fastmath.make_exp_lookup(-26, 0)
+# for this demand chi2 < 99
+_exp3_ivals, _exp3_lookup = fastmath.make_exp_lookup(-100, 0)
 
 @jit(argtypes=[ _gauss2d[:], float64[:,:], int64, int64, float64[:] ])
 def _render_fast3(self, image, nsub, i0, expvals):
@@ -814,7 +817,7 @@ def _render_fast3(self, image, nsub, i0, expvals):
 
                         chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
 
-                        if chi2 < 25.0 and chi2 >= 0.0:
+                        if chi2 < 99.0 and chi2 >= 0.0:
                             pnorm = self[i].pnorm
                             x = -0.5*chi2
 
@@ -894,7 +897,7 @@ def _render_jacob_fast3(self, image, nsub, j, i0, expvals):
 
                         chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
 
-                        if chi2 < 25.0 and chi2 >= 0.0:
+                        if chi2 < 99.0 and chi2 >= 0.0:
                             pnorm = self[i].pnorm
                             x = -0.5*chi2
 
@@ -957,7 +960,7 @@ def _loglike_fast3(self, image, weight, i0, expvals):
 
                 chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
 
-                if chi2 < 25.0 and chi2 >= 0.0:
+                if chi2 < 99.0 and chi2 >= 0.0:
                     pnorm = self[i].pnorm
                     x = -0.5*chi2
 
@@ -1021,7 +1024,7 @@ def _loglike_jacob_fast3(self, image, weight, j, i0, expvals):
 
                 chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
 
-                if chi2 < 25.0 and chi2 >= 0.0:
+                if chi2 < 99.0 and chi2 >= 0.0:
                     pnorm = self[i].pnorm
                     x = -0.5*chi2
 
@@ -1090,7 +1093,7 @@ def _fluxcorr_jacob_fast3(self, image, weight, j, i0, expvals):
 
                 chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
 
-                if chi2 < 25.0 and chi2 >= 0.0:
+                if chi2 < 99.0 and chi2 >= 0.0:
                     pnorm = self[i].pnorm
                     x = -0.5*chi2
 
@@ -1161,7 +1164,7 @@ def _fdiff_jacob_fast3(self, image, weight, j, fdiff, start, i0, expvals):
 
                 chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
 
-                if chi2 < 25.0 and chi2 >= 0.0:
+                if chi2 < 99.0 and chi2 >= 0.0:
                     pnorm = self[i].pnorm
                     x = -0.5*chi2
 
@@ -1237,7 +1240,7 @@ def _fdiff_jacob_fast3_randomize(self, image, weight, j, fdiff, randvals, start,
 
                 chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
 
-                if chi2 < 25.0 and chi2 >= 0.0:
+                if chi2 < 99.0 and chi2 >= 0.0:
                     pnorm = self[i].pnorm
                     x = -0.5*chi2
 

@@ -1004,6 +1004,80 @@ class MCMCBase(FitterBase):
         """
         return self.trials
 
+    def go_test(self):
+        """
+        Run the mcmc sampler and calculate some statistics
+        """
+
+        # not nstep can change
+        self._do_trials_test()
+
+        # chain is (nwalkers, total_steps, npars)
+        trials = self.sampler.chain[:, self.burnin:, :]
+        self.trials = trials.reshape(self.nwalkers*self.nstep, self.npars)
+
+        # shape is (nwalkers, total_steps)
+        lnprobs = self.sampler.lnprobability[:, self.burnin:]
+        self.lnprobs = lnprobs.reshape(self.nwalkers*self.nstep)
+        self.lnprobs -= self.lnprobs.max()
+
+        # get the expectation values, sensitivity and errors
+        self._calc_result()
+
+    def _do_trials_test(self):
+        """
+        Actually run the sampler
+        """
+        import emcee
+
+        # over-ridden
+        guess=self._get_guess()
+        for i in xrange(10):
+            try:
+                self._init_gmix_lol(guess[0,:])
+                break
+            except GMixRangeError as gerror:
+                # make sure we draw random guess if we got failure
+                print >>stderr,'failed init gmix lol:',str(gerror)
+                print >>stderr,'getting a new guess'
+                guess=self._get_random_guess()
+        if i==9:
+            raise gerror
+
+        sampler = self._get_sampler()
+
+        self.tau=0.0
+
+        pos=guess
+
+        total_steps = self.burnin + self.nstep
+
+        # try a couple of times
+        ntry=2
+        for i in xrange(ntry):
+            pos, prob, state = sampler.run_mcmc(pos, total_steps)
+
+            arates = sampler.acceptance_fraction
+            self.arate = arates.mean()
+
+            if self.arate < MIN_ARATE and self.doiter:
+                self.nstep *= 2
+                print >>stderr,"arate ",self.arate,"<",MIN_ARATE
+
+                sampler.reset()
+            else:
+                break
+
+        # if we get here we should be burned in, now do a few more steps
+        sampler.reset()
+        pos, prob, state = sampler.run_mcmc(pos, self.nstep)
+
+        self.flags=0
+        if self.arate < MIN_ARATE:
+            self.flags |= LOW_ARATE
+
+        self.sampler=sampler
+
     def go(self):
         """
         Run the mcmc sampler and calculate some statistics
@@ -1019,6 +1093,7 @@ class MCMCBase(FitterBase):
 
         # get the expectation values, sensitivity and errors
         self._calc_result()
+
 
     def _do_trials(self):
         """
