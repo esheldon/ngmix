@@ -340,7 +340,6 @@ class GMixModel(GMix):
             self._pars[:] = parr[:]
 
             if self._model==GMIX_GAUSS:
-                #print >>stderr,'GMixModel filling GAUSS, ngauss:',self._ngauss
                 _fill_gauss(self._data, self._pars)
             elif self._model==GMIX_EXP:
                 _fill_exp(self._data, self._pars)
@@ -349,7 +348,7 @@ class GMixModel(GMix):
             elif self._model==GMIX_TURB:
                 _fill_turb(self._data, self._pars)
             elif self._model==GMIX_BDC:
-                raise ValueError("bdc not yet implemented")
+                _fill_bdc(self._data, self._pars)
             else:
                 raise GMixFatalError("unsupported model: "
                                      "'%s'" % self._model_name)
@@ -496,6 +495,7 @@ def _fill_simple(self, pars, fvals, pvals):
                      (T_i/2.)*e2,
                      (T_i/2.)*(1+e1))
 
+
 _gauss_fvals = array([1.0],dtype='f8')
 _gauss_pvals = array([1.0],dtype='f8')
 
@@ -548,6 +548,45 @@ _dev_pvals = array([6.5288960012625658e-05,
 def _fill_dev(self, pars):
     _fill_simple(self, pars, _dev_fvals, _dev_pvals)
 
+
+_tmp_bulge_pars=zeros(_gmix_npars_dict[GMIX_DEV])
+_tmp_disk_pars=zeros(_gmix_npars_dict[GMIX_EXP])
+_tmp_bulge_gmix=zeros(_gmix_ngauss_dict[GMIX_DEV],dtype=_gauss2d_dtype)
+_tmp_disk_gmix=zeros(_gmix_ngauss_dict[GMIX_EXP],dtype=_gauss2d_dtype)
+
+#@jit(argtypes=[ _gauss2d[:], float64[:] ] )
+def _fill_bdc(self, pars):
+    """
+    Fill a bulge+disk model, co-centric and co-elliptical
+
+    pars are [c1,c2,g1,g2,Tbulge,Tdisk,Fbulge,Fdisk]
+    """
+    _tmp_bulge_pars[0]=pars[0]
+    _tmp_bulge_pars[1]=pars[1]
+    _tmp_bulge_pars[2]=pars[2]
+    _tmp_bulge_pars[3]=pars[3]
+    _tmp_bulge_pars[4]=pars[4]
+    _tmp_bulge_pars[5]=pars[6]
+
+    _tmp_disk_pars[0]=pars[0]
+    _tmp_disk_pars[1]=pars[1]
+    _tmp_disk_pars[2]=pars[2]
+    _tmp_disk_pars[3]=pars[3]
+    _tmp_disk_pars[4]=pars[5]
+    _tmp_disk_pars[5]=pars[7]
+
+    _fill_dev(_tmp_bulge_gmix, _tmp_bulge_pars)
+    _fill_exp(_tmp_disk_gmix,  _tmp_disk_pars)
+
+    ng_bulge=_tmp_bulge_gmix.size
+    #ng_disk=_tmp_disk_gmix.size
+
+    #for i in xrange(ng_bulge):
+    #    self[i] = _tmp_bulge_gmix[i]
+    #for i in xrange(ng_disk):
+    #    self[ng_bulge+i] = _tmp_disk_gmix[i]
+    self[0:ng_bulge] = _tmp_bulge_gmix[:]
+    self[ng_bulge:]  = _tmp_disk_gmix[:]
 
 
 _turb_fvals = array([0.5793612389470884,1.621860687127999,7.019347162356363],dtype='f8')

@@ -16,6 +16,7 @@ from .gexceptions import GMixRangeError
 
 MAX_TAU=0.1
 MIN_ARATE=0.2
+MCMC_NTRY=1
 
 BAD_VAR=2**0
 LOW_ARATE=2**1
@@ -203,7 +204,6 @@ class FitterBase(object):
         if self.model==gmix.GMIX_FULL:
             self._fill_gmix_func=gmix._fill_full
         elif self.model==gmix.GMIX_GAUSS:
-            #print >>stderr,'USING GAUSS for fill'
             self._fill_gmix_func=gmix._fill_gauss
         elif self.model==gmix.GMIX_EXP:
             self._fill_gmix_func=gmix._fill_exp
@@ -212,7 +212,7 @@ class FitterBase(object):
         elif self.model==gmix.GMIX_TURB:
             self._fill_gmix_func=gmix._fill_turb
         elif self.model==gmix.GMIX_BDC:
-            raise ValueError("bdc not yet implemented")
+            self._fill_gmix_func=gmix._fill_bdc
         else:
             raise GMixFatalError("unsupported model: "
                                  "'%s'" % self.model_name)
@@ -369,9 +369,6 @@ class FitterBase(object):
 
 
 
-
-    def _get_band_pars(self, pars, band):
-        return pars[ [0,1,2,3,4,5+band] ]
 
 
     def _init_gmix_lol(self, pars):
@@ -978,6 +975,8 @@ class MCMCBase(FitterBase):
         self.nstep=keys.get('nstep',200)
         self.burnin=keys.get('burnin',400)
         self.mca_a=keys.get('mca_a',2.0)
+        self.ntry=keys.get('ntry',MCMC_NTRY)
+        self.min_arate=keys.get('min_arate',MIN_ARATE)
 
         self.g_prior_during=keys.get('g_prior_during',True)
 
@@ -1125,12 +1124,14 @@ class MCMCBase(FitterBase):
         total_burnin=0
         self.tau=9999.0
         pos=guess
+        burnin = self.burnin
 
-        ntry=1
-        for i in xrange(ntry):
-            total_burnin += self.burnin
+        for i in xrange(self.ntry):
+            #print >>stderr,'try:',i+1
+            total_burnin += burnin
             # adds burnin more samples
-            pos, prob, state = sampler.run_mcmc(pos, self.burnin)
+            sampler.reset()
+            pos, prob, state = sampler.run_mcmc(pos, burnin)
 
             arates = sampler.acceptance_fraction
             self.arate = arates.mean()
@@ -1141,16 +1142,15 @@ class MCMCBase(FitterBase):
                 try:
                     self.tau=self._get_tau(sampler, total_burnin)
                     if self.tau > MAX_TAU and self.doiter:
-                        print >>stderr,"tau",self.tau,">",MAX_TAU
+                        print >>stderr,"        tau",self.tau,">",MAX_TAU
                         tau_ok=False
                 except:
                     # something went wrong with acor, run some more
-                    print >>stderr,"exception in acor, running more"
+                    print >>stderr,"        exception in acor, running more"
                     tau_ok=False
 
-            if self.arate < MIN_ARATE and self.doiter:
-                self.nstep *= 2
-                print >>stderr,"arate ",self.arate,"<",MIN_ARATE
+            if self.arate < self.min_arate and self.doiter:
+                print >>stderr,"        arate ",self.arate,"<",self.min_arate
                 arate_ok=False
 
             if tau_ok and arate_ok:
@@ -1164,7 +1164,7 @@ class MCMCBase(FitterBase):
         if have_acor and self.tau > MAX_TAU:
             self.flags |= LARGE_TAU
         
-        if self.arate < MIN_ARATE:
+        if self.arate < self.min_arate:
             self.flags |= LOW_ARATE
 
         self.sampler=sampler
@@ -1245,6 +1245,7 @@ class MCMCBase(FitterBase):
         """
         Set g prior vals for later use
         """
+
         if not hasattr(self,'g_prior_vals'):
             g1=self.trials[:,2]
             g2=self.trials[:,3]
@@ -1252,6 +1253,9 @@ class MCMCBase(FitterBase):
 
     def _get_guess(self):
         raise RuntimeError("over-ride me")
+
+    def get_par_names(self):
+        return ['cen1','cen2', 'g1','g2', 'T']
 
     def make_plots(self,
                    show=False,
@@ -1266,7 +1270,7 @@ class MCMCBase(FitterBase):
         biggles.configure('screen','width', 1200)
         biggles.configure('screen','height', 1200)
 
-        names=['cen1','cen2', 'g1','g2', 'T']
+        names=self.get_par_names()
         if self.nband==1:
             names.append('flux')
         else:
@@ -1274,7 +1278,6 @@ class MCMCBase(FitterBase):
             names += bnames
 
         weights=self.get_weights() 
-        print >>stderr,'weights:',weights
         plt=mcmc.plot_results(self.trials,
                               names=names,
                               title=title,
@@ -1416,6 +1419,9 @@ class MCMCSimple(MCMCBase):
         return lnp
 
 
+    def _get_band_pars(self, pars, band):
+        return pars[ [0,1,2,3,4,5+band] ]
+
     def _get_guess(self):
         """
         # go in simple
@@ -1463,8 +1469,9 @@ class MCMCSimple(MCMCBase):
         Some extra stats for simple models
         """
 
-        self._set_g_prior_vals()
-        self._remove_zero_prior()
+        if self.g_prior is not None:
+            self._set_g_prior_vals()
+            self._remove_zero_prior()
 
         super(MCMCSimple,self)._calc_result()
 
@@ -1621,7 +1628,85 @@ class MCMCSimple(MCMCBase):
 
         return P, Q, R
 
+class MCMCBDC(MCMCSimple):
+    """
+    Add additional features to the base class to support simple models
+    """
+    def __init__(self, image, weight, jacobian, model, **keys):
+        super(MCMCBDC,self).__init__(image, weight, jacobian, model, **keys)
 
+        if self.full_guess is None:
+            raise ValueError("For BDC you must currently send a full guess")
+        self.T_b_prior = keys.get('T_b_prior',None)
+        self.T_d_prior = keys.get('T_d_prior',None)
+        self.counts_b_prior = keys.get('counts_b_prior',None)
+        self.counts_d_prior = keys.get('counts_d_prior',None)
+
+        # we cover this one case, but otherwise the user just have
+        # to give this in the right shape
+        if self.counts_b_prior is not None:
+            self.counts_b_prior=[self.counts_b_prior]
+        if self.counts_d_prior is not None:
+            self.counts_d_prior=[self.counts_d_prior]
+
+    def _get_priors(self, pars):
+        """
+        # go in simple
+        add any priors that were sent on construction
+        
+        note g prior is *not* applied during the likelihood exploration
+        if do_lensfit=True or do_pqr=True
+        """
+        lnp=0.0
+        
+        if self.cen_prior is not None:
+            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+
+        if self.g_prior is not None and self.g_prior_during:
+            lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+        
+        # bulge size
+        if self.T_b_prior is not None:
+            lnp += self.T_b_prior.get_lnprob_scalar(pars[4])
+        # disk size
+        if self.T_d_prior is not None:
+            lnp += self.T_d_prior.get_lnprob_scalar(pars[5])
+
+        # bulge flux in each band
+        if self.counts_b_prior is not None:
+            for i,cp in enumerate(self.counts_b_prior):
+                counts=pars[6+i]
+                lnp += cp.get_lnprob_scalar(counts)
+
+        # disk flux in each band
+        if self.counts_d_prior is not None:
+            for i,cp in enumerate(self.counts_d_prior):
+                counts=pars[6+self.nband+i]
+                lnp += cp.get_lnprob_scalar(counts)
+
+        return lnp
+
+    def _get_band_pars(self, pars, band):
+        """
+        pars are 
+            [c1,c2,g1,g2,Tb,Td, Fb1,Fb2,Fb3, ..., Fd1,Fd2,Fd3 ...]
+        """
+        Fbstart=6
+        Fdstart=6+self.nband
+        return pars[ [0,1,2,3,4,5, Fbstart+band, Fdstart+band] ]
+
+
+    def get_par_names(self):
+        names=['cen1','cen2', 'g1','g2','Tb','Td']
+        if self.nband == 1:
+            names += ['Fb','Fd']
+        else:
+            for band in xrange(self.nband):
+                names += ['Fb_%s' % i]
+            for band in xrange(self.nband):
+                names += ['Fd_%s' % i]
+
+        return names
 
 class ISampleSimple(MCMCSimple):
     """
