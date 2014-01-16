@@ -975,6 +975,38 @@ class LogNormal(LogNormalBase):
         p=numpy.exp(lnp)
         return p
 
+class TruncatedGaussianBase(object):
+    """
+    Truncated gaussian base
+    """
+    def sample(self, nrand=None):
+        """
+        Sample from truncated gaussian
+        """
+        raise RuntimeError("implement")
+@jit
+class TruncatedGaussian(TruncatedGaussianBase):
+    """
+    Truncated gaussian
+    """
+    @void(float64,float64,float64,float64)
+    def __init__(self, mean, sigma, minval, maxval):
+        self.mean=mean
+        self.sigma=sigma
+        self.ivar=1.0/sigma**2
+        self.minval=minval
+        self.maxval=maxval
+
+    @float64(float64)
+    def get_lnprob_scalar(self, x):
+        """
+        just raise error if out of rang
+        """
+        if x < self.minval or x > self.maxval:
+            raise GMixRangeError("value out of range")
+        diff=x-self.mean
+        return -0.5*diff*diff*self.ivar
+
 def scipy_to_lognorm(shape, scale):
     """
     Wrong?

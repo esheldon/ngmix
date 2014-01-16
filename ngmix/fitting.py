@@ -213,6 +213,8 @@ class FitterBase(object):
             self._fill_gmix_func=gmix._fill_turb
         elif self.model==gmix.GMIX_BDC:
             self._fill_gmix_func=gmix._fill_bdc
+        elif self.model==gmix.GMIX_BDF:
+            self._fill_gmix_func=gmix._fill_bdf
         else:
             raise GMixFatalError("unsupported model: "
                                  "'%s'" % self.model_name)
@@ -1255,7 +1257,14 @@ class MCMCBase(FitterBase):
         raise RuntimeError("over-ride me")
 
     def get_par_names(self):
-        return ['cen1','cen2', 'g1','g2', 'T']
+        names=['cen1','cen2', 'g1','g2', 'T']
+        if self.nband == 1:
+            names += ['Flux']
+        else:
+            for band in xrange(self.nband):
+                names += ['Flux_%s' % i]
+        return names
+
 
     def make_plots(self,
                    show=False,
@@ -1271,11 +1280,6 @@ class MCMCBase(FitterBase):
         biggles.configure('screen','height', 1200)
 
         names=self.get_par_names()
-        if self.nband==1:
-            names.append('flux')
-        else:
-            bnames=['flux_%s' % band for band in xrange(self.nband)]
-            names += bnames
 
         weights=self.get_weights() 
         plt=mcmc.plot_results(self.trials,
@@ -1707,6 +1711,95 @@ class MCMCBDC(MCMCSimple):
                 names += ['Fd_%s' % i]
 
         return names
+
+
+class MCMCBDF(MCMCSimple):
+    """
+    Add additional features to the base class to support simple models
+    """
+    def __init__(self, image, weight, jacobian, model, **keys):
+        super(MCMCBDF,self).__init__(image, weight, jacobian, model, **keys)
+
+        if self.full_guess is None:
+            raise ValueError("For BDF you must currently send a full guess")
+
+        # we alrady have T_prior and counts_prior from base class
+
+        # fraction of flux in bulge
+        self.bfrac_prior = keys.get('bfrac_prior',None)
+
+        # demand flux for both components is > 0
+        self.positive_components = keys.get('positive_components',True)
+
+    def _get_priors(self, pars):
+        """
+        # go in simple
+        add any priors that were sent on construction
+        
+        note g prior is *not* applied during the likelihood exploration
+        if do_lensfit=True or do_pqr=True
+        """
+        lnp=0.0
+        
+        if self.cen_prior is not None:
+            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+
+        if self.g_prior is not None and self.g_prior_during:
+            lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+        
+        # prior on total size
+        if self.T_prior is not None:
+            lnp += self.T_prior.get_lnprob_scalar(pars[4])
+
+        if self.positive_components:
+            # both bulge and disk components positive
+            if pars[5] <= 0.0 or pars[6] <= 0.0:
+                raise GMixRangeError("out of bounds")
+
+        # prior on total counts
+        if self.counts_prior is not None:
+            for i,cp in enumerate(self.counts_prior):
+                counts=pars[5:].sum()
+                lnp += cp.get_lnprob_scalar(counts)
+
+        # prior on fraction of total flux in the bulge
+        if self.bfrac_prior is not None:
+
+            counts = pars[5:].sum()
+            counts_b = pars[5]
+
+            if counts == 0:
+                raise GMixRangeError("total counts exactly zero")
+
+            bfrac = counts_b/counts
+            lnp += self.bfrac_prior.get_lnprob_scalar(bfrac)
+
+        return lnp
+
+    def _get_band_pars(self, pars, band):
+        """
+        pars are 
+            [c1,c2,g1,g2,Tb, Fb1,Fb2,Fb3, ..., Fd1,Fd2,Fd3 ...]
+        """
+        Fbstart=5
+        Fdstart=5+self.nband
+        return pars[ [0,1,2,3,4, Fbstart+band, Fdstart+band] ]
+
+
+    def get_par_names(self):
+        names=['cen1','cen2', 'g1','g2','T']
+        if self.nband == 1:
+            names += ['Fb','Fd']
+        else:
+            fbnames = []
+            fdnames = []
+            for band in xrange(self.nband):
+                fbnames.append('Fb_%s' % i)
+                fdnames.append('Fd_%s' % i)
+            names += fbnames
+            names += fdnames
+        return names
+
 
 class ISampleSimple(MCMCSimple):
     """

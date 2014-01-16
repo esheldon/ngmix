@@ -349,6 +349,8 @@ class GMixModel(GMix):
                 _fill_turb(self._data, self._pars)
             elif self._model==GMIX_BDC:
                 _fill_bdc(self._data, self._pars)
+            elif self._model==GMIX_BDF:
+                _fill_bdf(self._data, self._pars)
             else:
                 raise GMixFatalError("unsupported model: "
                                      "'%s'" % self._model_name)
@@ -360,6 +362,7 @@ GMIX_TURB=2
 GMIX_EXP=3
 GMIX_DEV=4
 GMIX_BDC=5
+GMIX_BDF=6
 
 _gmix_model_dict={'full':       GMIX_FULL,
                   GMIX_FULL:    GMIX_FULL,
@@ -372,7 +375,9 @@ _gmix_model_dict={'full':       GMIX_FULL,
                   'dev':        GMIX_DEV,
                   GMIX_DEV:     GMIX_DEV,
                   'bdc':        GMIX_BDC,
-                  GMIX_BDC:     GMIX_BDC}
+                  GMIX_BDC:     GMIX_BDC,
+                  'bdf':        GMIX_BDF,
+                  GMIX_BDF:     GMIX_BDF}
 
 _gmix_string_dict={GMIX_FULL:'full',
                    'full':'full',
@@ -385,18 +390,22 @@ _gmix_string_dict={GMIX_FULL:'full',
                    GMIX_DEV:'dev',
                    'dev':'dev',
                    GMIX_BDC:'bdc',
-                   'bdc':'bdc'}
+                   'bdc':'bdc',
+                   GMIX_BDF:'bdf',
+                   'bdf':'bdf'}
 
 _gmix_npars_dict={GMIX_GAUSS:6,
                   GMIX_TURB:6,
                   GMIX_EXP:6,
                   GMIX_DEV:6,
-                  GMIX_BDC:8}
+                  GMIX_BDC:8,
+                  GMIX_BDF:7}
 _gmix_ngauss_dict={GMIX_GAUSS:1,
                    GMIX_TURB:3,
                    GMIX_EXP:6,
                    GMIX_DEV:10,
-                   GMIX_BDC:16}
+                   GMIX_BDC:16,
+                   GMIX_BDF:16}
 
 
 _gauss2d=numba.struct([('p',float64),
@@ -587,6 +596,27 @@ def _fill_bdc(self, pars):
     #    self[ng_bulge+i] = _tmp_disk_gmix[i]
     self[0:ng_bulge] = _tmp_bulge_gmix[:]
     self[ng_bulge:]  = _tmp_disk_gmix[:]
+
+def _fill_bdf(self, pars):
+    """
+    Fill a bulge+disk model, co-centric and co-elliptical
+    and with Tbulge=Tdisk
+
+    pars are [c1,c2,g1,g2,T,Fbulge,Fdisk]
+    """
+    _tmp_bulge_pars[:]=pars[0:6]
+
+    _tmp_disk_pars[:]=_tmp_bulge_pars[:]
+    _tmp_disk_pars[5]=pars[6]
+
+    _fill_dev(_tmp_bulge_gmix, _tmp_bulge_pars)
+    _fill_exp(_tmp_disk_gmix,  _tmp_disk_pars)
+
+    ng_bulge=_tmp_bulge_gmix.size
+
+    self[0:ng_bulge] = _tmp_bulge_gmix[:]
+    self[ng_bulge:]  = _tmp_disk_gmix[:]
+
 
 
 _turb_fvals = array([0.5793612389470884,1.621860687127999,7.019347162356363],dtype='f8')
