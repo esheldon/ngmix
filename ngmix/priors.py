@@ -7,6 +7,7 @@ I haven't forced the max prob to be 1.0 yet, but should
 """
 import numpy
 from numpy.random import random as randu
+from numpy.random import randn
 import numba
 from numba import jit, autojit, float64, void
 
@@ -975,6 +976,117 @@ class LogNormal(LogNormalBase):
         p=numpy.exp(lnp)
         return p
 
+class BFracBase(object):
+    """
+    Base class for bulge fraction distribution
+    """
+    def sample(self, nrand=None):
+        if nrand is None:
+            return self.sample_one()
+        else:
+            return self.sample_many(nrand)
+
+    def sample_one(self):
+        while True:
+            t=numpy.random.random()
+            if t < self.bd_frac:
+                r=self.bd_sigma*randn()
+            else:
+                r=1.0 + self.dev_sigma*randn()
+            if r >= 0.0 and r <= 1.0:
+                break
+        return r
+
+    def sample_many(self, nrand):
+        r=numpy.zeros(nrand)-9999
+        ngood=0
+        nleft=nrand
+        while ngood < nrand:
+            tr=numpy.zeros(nleft)
+
+            tmpu=randu(nleft)
+            w,=numpy.where( tmpu < self.bd_frac )
+            if w.size > 0:
+                tr[0:w.size] = self.bd_loc  + self.bd_sigma*randn(w.size)
+            if w.size < nleft:
+                tr[w.size:]  = self.dev_loc + self.dev_sigma*randn(nleft-w.size)
+
+            wg,=numpy.where( (tr >= 0.0) & (tr <= 1.0) )
+
+            nkeep=wg.size
+            if nkeep > 0:
+                r[ngood:ngood+nkeep] = tr[wg]
+                ngood += nkeep
+                nleft -= nkeep
+        return r
+
+    def get_lnprob_array(self, bfrac):
+        """
+        Get the ln(prob) for the input b frac value
+        """
+        bfrac=numpy.array(bfrac, copy=False)
+        n=bfrac.size
+
+        lnp=numpy.zeros(n)
+
+        for i in xrange(n):
+            lnp[i] = self.get_lnprob_scalar(bfrac[i])
+
+        return lnp
+
+@jit
+class BFrac(BFracBase):
+    """
+    Bulge fraction
+
+    half gaussian at zero width 0.1 for bulge+disk galaxies.
+
+    smaller half gaussian at 1.0 with width 0.01 for bulge-only
+    galaxies
+    """
+    @void()
+    def __init__(self):
+        sq2pi=numpy.sqrt(2*numpy.pi)
+
+        # bd is half-gaussian centered at 0.0
+        self.bd_loc=0.0
+        # fraction that are bulge+disk
+        self.bd_frac=0.9
+        # width of bd prior
+        self.bd_sigma=0.1
+        self.bd_ivar=1.0/self.bd_sigma**2
+        self.bd_norm = self.bd_frac/(sq2pi*self.bd_sigma)
+
+
+        # dev is half-gaussian centered at 1.0
+        self.dev_loc=1.0
+        # fraction of objects that are pure dev
+        self.dev_frac=1.0-self.bd_frac
+        # width of prior for dev-only region
+        self.dev_sigma=0.01
+        self.dev_ivar=1.0/self.dev_sigma**2
+        self.dev_norm = self.dev_frac/(sq2pi*self.dev_sigma)
+
+
+    @float64(float64)
+    def get_lnprob_scalar(self, bfrac):
+        """
+        Get the ln(prob) for the input b frac value
+        """
+        if bfrac < 0.0 or bfrac > 1.0:
+            raise GMixRangeError("bfrac out of range")
+        
+        bd_diff  = bfrac-self.bd_loc
+        dev_diff = bfrac-self.dev_loc
+
+        p_bd  = self.bd_norm*numpy.exp(-0.5*bd_diff*bd_diff*self.bd_ivar)
+        p_dev = self.dev_norm*numpy.exp(-0.5*dev_diff*dev_diff*self.dev_ivar)
+
+        lnp = numpy.log(p_bd + p_dev)
+        return lnp
+
+
+'''
 class TruncatedGaussianBase(object):
     """
     Truncated gaussian base
@@ -1006,7 +1118,7 @@ class TruncatedGaussian(TruncatedGaussianBase):
             raise GMixRangeError("value out of range")
         diff=x-self.mean
         return -0.5*diff*diff*self.ivar
-
+'''
 def scipy_to_lognorm(shape, scale):
     """
     Wrong?
