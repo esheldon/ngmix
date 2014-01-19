@@ -1005,6 +1005,18 @@ class MCMCBase(FitterBase):
         """
         return self.trials
 
+    def get_last_pos(self):
+        """
+        Get last step from chain
+        """
+        return self.last_pos
+
+    def get_sampler(self):
+        """
+        get the emcee sampler
+        """
+        return self.sampler
+
     def go_test(self):
         """
         Run the mcmc sampler and calculate some statistics
@@ -1045,7 +1057,7 @@ class MCMCBase(FitterBase):
         if i==9:
             raise gerror
 
-        sampler = self._get_sampler()
+        sampler = self._make_sampler()
 
         self.tau=0.0
 
@@ -1121,7 +1133,7 @@ class MCMCBase(FitterBase):
         if i==9:
             raise gerror
 
-        sampler = self._get_sampler()
+        sampler = self._make_sampler()
 
         total_burnin=0
         self.tau=9999.0
@@ -1158,9 +1170,10 @@ class MCMCBase(FitterBase):
             if tau_ok and arate_ok:
                 break
 
-        # if we get here we should be burned in, now do a few more steps
+        # if we get here we are hopefully burned in, now do a few more steps
         sampler.reset()
         pos, prob, state = sampler.run_mcmc(pos, self.nstep)
+        self.last_pos=pos
 
         self.flags=0
         if have_acor and self.tau > MAX_TAU:
@@ -1176,7 +1189,7 @@ class MCMCBase(FitterBase):
         tau = (acor/nstep).max()
         return tau
 
-    def _get_sampler(self):
+    def _make_sampler(self):
         """
         Instantiate the sampler
         """
@@ -1236,7 +1249,7 @@ class MCMCBase(FitterBase):
                 weights=None
             else:
                 self._set_g_prior_vals()
-                print >>stderr,'    weights are g prior'
+                #print >>stderr,'    weights are g prior'
                 weights=self.g_prior_vals
         else:
             weights=self.iweights
@@ -1636,8 +1649,8 @@ class MCMCBDC(MCMCSimple):
     """
     Add additional features to the base class to support simple models
     """
-    def __init__(self, image, weight, jacobian, model, **keys):
-        super(MCMCBDC,self).__init__(image, weight, jacobian, model, **keys)
+    def __init__(self, image, weight, jacobian, **keys):
+        super(MCMCBDC,self).__init__(image, weight, jacobian, "bdc", **keys)
 
         if self.full_guess is None:
             raise ValueError("For BDC you must currently send a full guess")
@@ -1717,8 +1730,8 @@ class MCMCBDF(MCMCSimple):
     """
     Add additional features to the base class to support simple models
     """
-    def __init__(self, image, weight, jacobian, model, **keys):
-        super(MCMCBDF,self).__init__(image, weight, jacobian, model, **keys)
+    def __init__(self, image, weight, jacobian, **keys):
+        super(MCMCBDF,self).__init__(image, weight, jacobian, "bdf", **keys)
 
         if self.full_guess is None:
             raise ValueError("For BDF you must currently send a full guess")
@@ -1779,7 +1792,7 @@ class MCMCBDF(MCMCSimple):
     def _get_band_pars(self, pars, band):
         """
         pars are 
-            [c1,c2,g1,g2,Tb, Fb1,Fb2,Fb3, ..., Fd1,Fd2,Fd3 ...]
+            [c1,c2,g1,g2,T, Fb1,Fb2,Fb3, ..., Fd1,Fd2,Fd3 ...]
         """
         Fbstart=5
         Fdstart=5+self.nband
