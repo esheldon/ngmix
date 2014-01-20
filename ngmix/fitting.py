@@ -1017,80 +1017,6 @@ class MCMCBase(FitterBase):
         """
         return self.sampler
 
-    def go_test(self):
-        """
-        Run the mcmc sampler and calculate some statistics
-        """
-
-        # not nstep can change
-        self._do_trials_test()
-
-        # chain is (nwalkers, total_steps, npars)
-        trials = self.sampler.chain[:, self.burnin:, :]
-        self.trials = trials.reshape(self.nwalkers*self.nstep, self.npars)
-
-        # shape is (nwalkers, total_steps)
-        lnprobs = self.sampler.lnprobability[:, self.burnin:]
-        self.lnprobs = lnprobs.reshape(self.nwalkers*self.nstep)
-        self.lnprobs -= self.lnprobs.max()
-
-        # get the expectation values, sensitivity and errors
-        self._calc_result()
-
-    def _do_trials_test(self):
-        """
-        Actually run the sampler
-        """
-        import emcee
-
-        # over-ridden
-        guess=self._get_guess()
-        for i in xrange(10):
-            try:
-                self._init_gmix_lol(guess[0,:])
-                break
-            except GMixRangeError as gerror:
-                # make sure we draw random guess if we got failure
-                print >>stderr,'failed init gmix lol:',str(gerror)
-                print >>stderr,'getting a new guess'
-                guess=self._get_random_guess()
-        if i==9:
-            raise gerror
-
-        sampler = self._make_sampler()
-
-        self.tau=0.0
-
-        pos=guess
-
-        total_steps = self.burnin + self.nstep
-
-        # try a couple of times
-        ntry=2
-        for i in xrange(ntry):
-            pos, prob, state = sampler.run_mcmc(pos, total_steps)
-
-            arates = sampler.acceptance_fraction
-            self.arate = arates.mean()
-
-            if self.arate < MIN_ARATE and self.doiter:
-                self.nstep *= 2
-                print >>stderr,"arate ",self.arate,"<",MIN_ARATE
-
-                sampler.reset()
-            else:
-                break
-
-        # if we get here we should be burned in, now do a few more steps
-        sampler.reset()
-        pos, prob, state = sampler.run_mcmc(pos, self.nstep)
-
-        self.flags=0
-        if self.arate < MIN_ARATE:
-            self.flags |= LOW_ARATE
-
-        self.sampler=sampler
-
     def go(self):
         """
         Run the mcmc sampler and calculate some statistics
@@ -1134,27 +1060,34 @@ class MCMCBase(FitterBase):
             raise gerror
 
         sampler = self._make_sampler()
+        self.sampler=sampler
 
         total_burnin=0
         self.tau=9999.0
         pos=guess
         burnin = self.burnin
 
+        self.best_pars=None
+        self.best_lnprob=None
+
         for i in xrange(self.ntry):
             #print >>stderr,'try:',i+1
-            total_burnin += burnin
             # adds burnin more samples
-            sampler.reset()
-            pos, prob, state = sampler.run_mcmc(pos, burnin)
+            #sampler.reset()
+            #pos, prob, state = sampler.run_mcmc(pos, burnin)
+            pos=self._run_some_trials(pos, burnin)
 
-            arates = sampler.acceptance_fraction
-            self.arate = arates.mean()
+            #arates = sampler.acceptance_fraction
+            #lnprobs = sampler.lnprobability.reshape(self.nwalkers*self.nstep)
+            #w=lnprobs.argmax()
+            #self.best_pars=sampler.trials[w,:]
+            #self.arate = arates.mean()
 
             tau_ok=True
             arate_ok=True
             if have_acor:
                 try:
-                    self.tau=self._get_tau(sampler, total_burnin)
+                    self.tau=self._get_tau(sampler, burnin)
                     if self.tau > MAX_TAU and self.doiter:
                         print >>stderr,"        tau",self.tau,">",MAX_TAU
                         tau_ok=False
@@ -1171,9 +1104,7 @@ class MCMCBase(FitterBase):
                 break
 
         # if we get here we are hopefully burned in, now do a few more steps
-        sampler.reset()
-        pos, prob, state = sampler.run_mcmc(pos, self.nstep)
-        self.last_pos=pos
+        self.last_pos=self._run_some_trials(pos, self.nstep)
 
         self.flags=0
         if have_acor and self.tau > MAX_TAU:
@@ -1183,6 +1114,24 @@ class MCMCBase(FitterBase):
             self.flags |= LOW_ARATE
 
         self.sampler=sampler
+
+    def _run_some_trials(self, pos_in, nstep):
+        sampler=self.sampler
+        sampler.reset()
+        pos, prob, state = sampler.run_mcmc(pos_in, nstep)
+
+        arates = sampler.acceptance_fraction
+        self.arate = arates.mean()
+
+        lnprobs = sampler.lnprobability.reshape(self.nwalkers*nstep)
+        w=lnprobs.argmax()
+        bp=lnprobs[w]
+        if self.best_lnprob is None or bp > self.best_lnprob:
+            self.best_lnprob=bp
+            self.best_pars=sampler.flatchain[w,:]
+            #print_pars(self.best_pars, front='best pars:')
+
+        return pos
 
     def _get_tau(self,sampler, nstep):
         acor=sampler.acor
