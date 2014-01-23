@@ -34,6 +34,14 @@ class GPriorBase(object):
         Get the 2d log prob
         """
         raise RuntimeError("over-ride me")
+    def get_lnprob_array2d(self, g1arr, g2arr):
+        """
+        Get the 2d prior for the array inputs
+        """
+        output=numpy.zeros(g1arr.size)
+        self.fill_lnprob_array2d(g1arr, g2arr, output)
+        return output
+
 
     def get_prob_scalar2d(self, g1, g2):
         """
@@ -771,6 +779,30 @@ class GPriorBA(GPriorBABase):
                 p = omgsq*expval
             output[i] = p
 
+    @void(float64[:],float64[:],float64[:])
+    def fill_lnprob_array2d(self, g1arr, g2arr, output):
+        """
+        Fill the output with the 2d prob for the input g value
+        """
+        n=g1arr.size
+        for i in xrange(n):
+            p=0.0
+
+            g1=g1arr[i]
+            g2=g2arr[i]
+
+            gsq=g1*g1 + g2*g2
+            omgsq=1.0-gsq
+            if omgsq <= 0.0:
+                raise GMixRangeError("g^2 too big: %s" % gsq)
+            else:
+                omgsq *= omgsq
+                expval = numpy.exp(-0.5*gsq*self.sig2inv)
+                p = omgsq*expval
+                lnp = numpy.log(p)
+                output[i] = lnp
+
+
     @float64(float64)
     def get_prob_scalar1d(self, g):
         """
@@ -1086,7 +1118,6 @@ class BFrac(BFracBase):
         return lnp
 
 
-'''
 class TruncatedGaussianBase(object):
     """
     Truncated gaussian base
@@ -1118,7 +1149,70 @@ class TruncatedGaussian(TruncatedGaussianBase):
             raise GMixRangeError("value out of range")
         diff=x-self.mean
         return -0.5*diff*diff*self.ivar
-'''
+
+class TruncatedGaussianPolar(object):
+    """
+    Truncated gaussian on a circle
+    """
+    def __init__(self, mean1, mean2, sigma1, sigma2, maxval):
+        self.mean1=mean1
+        self.mean2=mean2
+        self.sigma1=sigma1
+        self.sigma2=sigma2
+        self.ivar1=1.0/sigma1**2
+        self.ivar2=1.0/sigma2**2
+
+        self.maxval=maxval
+        self.maxval2=maxval**2
+
+    def sample(self, nrand=None):
+        """
+        Sample from truncated gaussian
+        """
+        x1=numpy.zeros(nrand)
+        x2=numpy.zeros(nrand)
+
+        nleft=nrand
+        ngood=0
+        while nleft > 0:
+            r1=self.mean1 + self.sigma1*randn(nleft)
+            r2=self.mean2 + self.sigma2*randn(nleft)
+
+            rsq=r1**2 + r2**2
+
+            w,=numpy.where(rsq < self.maxval2)
+            nkeep=w.size
+            if nkeep > 0:
+                x1[ngood:ngood+nkeep] = r1[w]
+                x2[ngood:ngood+nkeep] = r2[w]
+                nleft -= nkeep
+                ngood += nkeep
+
+        return x1,x2
+
+    def get_lnprob_scalar(self, x1, x2):
+        """
+        ln(p) for scalar inputs
+        """
+        x2=x1**2 + x2**2
+        if x2 > self.maxval2:
+            raise GMixRangeError("square value out of range: %s" % x2)
+        diff1=x1-self.mean1
+        diff2=x2-self.mean2
+        return - 0.5*diff1*diff1*self.ivar1 - 0.5*diff2*diff2*self.ivar2 
+
+    def get_lnprob_array(self, x1, x2):
+        """
+        ln(p) for a array inputs
+        """
+        x2=x1**2 + x2**2
+        w,=numpy.where(x2 > self.maxval2)
+        if w.size > 0:
+            raise GMixRangeError("values out of range")
+        diff1=x1-self.mean1
+        diff2=x2-self.mean2
+        return - 0.5*diff1*diff1*self.ivar1 - 0.5*diff2*diff2*self.ivar2 
+
 def scipy_to_lognorm(shape, scale):
     """
     Wrong?
@@ -1147,6 +1241,14 @@ class CenPriorBase(object):
             rand2=self.cen2 + self.sigma2*numpy.random.randn(n)
 
         return rand1, rand2
+
+    def get_lnprob_array(self, p1, p2):
+        d1 = self.cen1-p1
+        d2 = self.cen2-p2
+        lnp = -0.5*d1*d1*self.s2inv1
+        lnp -= 0.5*d2*d2*self.s2inv2
+
+        return lnp
 
 
 @jit

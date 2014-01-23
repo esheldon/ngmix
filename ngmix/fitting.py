@@ -1115,6 +1115,80 @@ class MCMCBase(FitterBase):
 
         self.sampler=sampler
 
+    def go_simple(self):
+        """
+        Run the mcmc sampler and calculate some statistics
+        """
+
+        # not nstep can change
+        self._do_trials_simple()
+
+        # get the expectation values, sensitivity and errors
+        self._calc_result()
+
+
+    def _do_trials_simple(self):
+        """
+        Actually run the sampler
+        """
+        import emcee
+
+        total_steps = self.burnin + self.nstep
+        nwalkers=self.nwalkers
+
+        guess=self._get_guess()
+        self.best_lnprob=None
+        self.best_pars=None
+
+        for i in xrange(10):
+            try:
+                self._init_gmix_lol(guess[0,:])
+                break
+            except GMixRangeError as gerror:
+                # make sure we draw random guess if we got failure
+                print >>stderr,'failed init gmix lol:',str(gerror)
+                print >>stderr,'getting a new guess'
+                guess=self._get_random_guess()
+        if i==9:
+            raise gerror
+
+        sampler = self._make_sampler()
+        self.sampler=sampler
+
+        trials = numpy.zeros( (nwalkers*self.nstep, self.npars) )
+        lnprobs = numpy.zeros( nwalkers*self.nstep )
+
+        for pos, prob, rstate in sampler.sample(guess, iterations=self.burnin):
+            pass
+
+        i=0
+        sampler.reset()
+        for pos, prob, rstate in sampler.sample(pos, iterations=self.nstep):
+
+            start=i*nwalkers
+            stop=start+nwalkers
+
+            trials[start:stop, :] = pos
+            lnprobs[start:stop] = prob
+            i+=1
+
+        w=lnprobs.argmax()
+        bp=lnprobs[w]
+        self.best_lnprob=bp
+        self.best_pars=trials[w,:]
+
+        self.tau=9999.0
+
+        self.last_pos=pos
+
+        self.flags=0
+        self.sampler=sampler
+        self.trials=trials
+        self.lnprobs=lnprobs
+
+        arates = sampler.acceptance_fraction
+        self.arate = arates.mean()
+
     def _run_some_trials(self, pos_in, nstep):
         sampler=self.sampler
         sampler.reset()
@@ -1704,16 +1778,20 @@ class MCMCBDF(MCMCSimple):
         lnp=0.0
         
         if self.cen_prior is not None:
+            #print >>stderr,'cen prior'
             lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
 
         if self.g_prior is not None and self.g_prior_during:
+            #print >>stderr,'g prior'
             lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
         
         # prior on total size
         if self.T_prior is not None:
+            #print >>stderr,'T prior'
             lnp += self.T_prior.get_lnprob_scalar(pars[4])
 
         if self.positive_components:
+            #print >>stderr,'check positive'
             # both bulge and disk components positive
             if pars[5] <= 0.0 or pars[6] <= 0.0:
                 raise GMixRangeError("out of bounds")
@@ -1721,11 +1799,13 @@ class MCMCBDF(MCMCSimple):
         # prior on total counts
         if self.counts_prior is not None:
             for i,cp in enumerate(self.counts_prior):
+                #print >>stderr,'counts prior'
                 counts=pars[5:].sum()
                 lnp += cp.get_lnprob_scalar(counts)
 
         # prior on fraction of total flux in the bulge
         if self.bfrac_prior is not None:
+            #print >>stderr,'bfrac prior'
 
             counts = pars[5:].sum()
             counts_b = pars[5]
@@ -2223,6 +2303,63 @@ class MCMCSimpleAnze(MCMCSimple):
 
     def lnprob_many(self, list_of_pars):
         return map(self.calc_lnprob, list_of_pars)
+
+class ISampleBDFAnze(MCMCBDF):
+
+    def go(self):
+        import game
+        import esutil as eu
+
+        guess=self.full_guess
+        self._init_gmix_lol(guess)
+
+        # ok, these are the *maximum* allowed values for sigma
+        # in each dimension....
+        #sigreg=numpy.array([0.2,0.2,0.5,0.5,10.0,20.0,20.0])
+        #sigreg=numpy.array([0.1,0.1,0.2,0.2,8.0,10.0,10.0])
+        #sampler=game.Game(self.lnprob_many, guess, sigreg=sigreg)
+        # will get from sigreg
+        #sampler.fixedcov=True
+
+        sampler=game.Game(self.lnprob_many, guess,
+                          sigreg=[0.01, 0.01, 0.1, 0.1, 0.1, 0.1, 0.1])
+
+        sampler.N1=50
+        sampler.N1f=0
+        sampler.blow=1.3
+        sampler.mineffsamp=500
+        #sampler.maxiter=1000
+        sampler.maxiter=20
+        sampler.wemin=1.e-4
+
+        sampler.run()
+
+        print sampler.sample_list[-1]
+
+        npars=guess.size
+        m=numpy.zeros(npars)
+        m2=numpy.zeros(npars)
+        sw=0.0
+
+        nsamp=len(sampler.sample_list)
+        trials=numpy.zeros( (nsamp, npars) )
+        weights=numpy.zeros(nsamp)
+        for i,sa in enumerate(sampler.sample_list):
+            trials[i,:] = sa.pars
+            weights[i] = sa.we
+
+        eu.plotting.bhist( trials[:, 0], weights=weights, binsize=0.0005,title='row')
+        eu.plotting.bhist( trials[:, 1], weights=weights, binsize=0.0005,title='col')
+        eu.plotting.bhist( trials[:, 2], weights=weights, binsize=0.001,title='g1')
+        eu.plotting.bhist( trials[:, 3], weights=weights, binsize=0.001,title='g2')
+        eu.plotting.bhist( trials[:, 4], weights=weights, binsize=0.01,title='T')
+        eu.plotting.bhist( trials[:, 5], weights=weights, binsize=1.0,title='counts_b')
+        eu.plotting.bhist( trials[:, 6], weights=weights, binsize=1.0,title='counts_d')
+
+
+    def lnprob_many(self, list_of_pars):
+        return map(self.calc_lnprob, list_of_pars)
+
 
 class MCMCGaussPSF(MCMCSimple):
     def __init__(self, image, weight, jacobian, **keys):
