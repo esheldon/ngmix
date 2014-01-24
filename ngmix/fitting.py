@@ -2095,7 +2095,9 @@ class ISampleSimpleIter(MCMCSimple):
 
         while self._iresult['eff_n_samples'] < self.min_eff_n_samples:
 
-            self._add_trials(self.n_samples_per_iter)
+            done=self._add_trials(self.n_samples_per_iter)
+            if done:
+                break
 
             print >>stderr,'    n:',self.beg,'eff_n_sample:',self._iresult['eff_n_samples'], \
                     'eff_iweight:',self._iresult['eff_iweight']
@@ -2138,20 +2140,14 @@ class ISampleSimpleIter(MCMCSimple):
 
         nmax=self.n_samples_max
         if self.end > nmax:
+            # done
+            return True
+
             w=self.ln_probs.argmax()
             lnp=self.ln_probs[w]
-            if lnp > self.max_lnprob:
-                print >>stderr,'        re-centering: %s > %s' % (lnp,self.max_lnprob)
-                # we found a better center, start
-                # over completely
-                best_pars=self.trials[w,:]
-                self.sampler.re_center(best_pars)
-
-                self.beg=0
-                self.end=n_add
-
-                self.max_lnprob = lnp
-
+            #if lnp > self.max_lnprob:
+            if False:
+                pass
             else:
                 print >>stderr,'        trimming'
                 # no better center found, just trim some
@@ -2180,6 +2176,8 @@ class ISampleSimpleIter(MCMCSimple):
         self.trials[beg:end, :] = new_trials
         self.ln_probs0[beg:end] = new_lnp0
 
+        self.n_used=end
+
         # only processes new ones
         self._calc_new_lnprob()
 
@@ -2189,6 +2187,8 @@ class ISampleSimpleIter(MCMCSimple):
         self.beg += n_add
         self.end += n_add
 
+        # not done
+        return False
 
     def _calc_new_lnprob(self):
         """
@@ -2263,12 +2263,12 @@ class ISampleSimpleIter(MCMCSimple):
         Same as parent with added effweight
         """
         # trim out
-        end=self.end
-        if end < self.n_samples_max:
-            self.trials    = self.trials[0:end, :]
-            self.ln_probs0 = self.ln_probs0[0:end]
-            self.ln_probs  = self.ln_probs[0:end]
-            self.iweights  = self.iweights[0:end]
+        n_used=self.n_used
+        if n_used < self.n_samples_max:
+            self.trials    = self.trials[0:n_used, :]
+            self.ln_probs0 = self.ln_probs0[0:n_used]
+            self.ln_probs  = self.ln_probs[0:n_used]
+            self.iweights  = self.iweights[0:n_used]
 
         super(ISampleSimpleIter,self)._calc_result()
 

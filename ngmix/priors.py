@@ -1218,6 +1218,12 @@ class Student(object):
         """
         sigma is not std(x)
         """
+        self.reset(mean,sigma)
+
+    def reset(self, mean, sigma):
+        """
+        complete reset
+        """
         import scipy.stats
         self.mean=mean
         self.sigma=sigma
@@ -1285,6 +1291,12 @@ class Student2D(object):
         """
         sigma is not std(x)
         """
+        self.reset(mean1, mean2, sigma1, sigma2)
+
+    def reset(self, mean1, mean2, sigma1, sigma2):
+        """
+        complete reset
+        """
         import scipy.stats
         self.mean1=mean1
         self.sigma1=sigma1
@@ -1323,7 +1335,10 @@ class TruncatedStudentPolar(Student2D):
         """
         sigma is not std(x)
         """
-        super(TruncatedStudentPolar,self).__init__(mean1, mean2, sigma1, sigma2)
+        self.reset(mean1, mean2, sigma1, sigma2, maxval)
+
+    def reset(self, mean1, mean2, sigma1, sigma2, maxval):
+        super(TruncatedStudentPolar,self).reset(mean1, mean2, sigma1, sigma2)
         self.maxval=maxval
         self.maxval2=maxval**2
 
