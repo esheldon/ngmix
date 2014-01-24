@@ -1165,7 +1165,7 @@ class TruncatedGaussianPolar(object):
         self.maxval=maxval
         self.maxval2=maxval**2
 
-    def sample(self, nrand=None):
+    def sample(self, nrand):
         """
         Sample from truncated gaussian
         """
@@ -1212,6 +1212,168 @@ class TruncatedGaussianPolar(object):
         diff1=x1-self.mean1
         diff2=x2-self.mean2
         return - 0.5*diff1*diff1*self.ivar1 - 0.5*diff2*diff2*self.ivar2 
+
+class Student(object):
+    def __init__(self, mean, sigma):
+        """
+        sigma is not std(x)
+        """
+        import scipy.stats
+        self.mean=mean
+        self.sigma=sigma
+
+        self.tdist = scipy.stats.t(1.0, loc=mean, scale=sigma)
+
+    def sample(self, nrand):
+        """
+        Draw samples from the distribution
+        """
+        return self.tdist.rvs(nrand)
+
+    def get_lnprob_array(self, x):
+        """
+        get ln(prob)
+        """
+        return self.tdist.logpdf(x)
+
+    get_lnprob_scalar=get_lnprob_array
+
+class StudentPositive(Student):
+    def sample(self, nrand):
+        """
+        Draw samples from the distribution
+        """
+        vals=numpy.zeros(nrand)
+
+        nleft=nrand
+        ngood=0
+        while nleft > 0:
+            r = super(StudentPositive,self).sample(nleft)
+
+            w,=numpy.where(r > 0.0)
+            nkeep=w.size
+            if nkeep > 0:
+                vals[ngood:ngood+nkeep] = r[w]
+                nleft -= nkeep
+                ngood += nkeep
+
+        return vals
+
+    def get_lnprob_scalar(self, x):
+        """
+        get ln(prob)
+        """
+
+        if x <= 0:
+            raise GMixRangeError("value less than zero")
+        return super(StudentPositive,self).get_lnprob_scalar(x)
+
+    def get_lnprob_array(self, x):
+        """
+        get ln(prob)
+        """
+        
+        w,=numpy.where(x <= 0)
+        if w.size != 0:
+            raise GMixRangeError("values less than zero")
+        return super(StudentPositive,self).get_lnprob_array(x)
+
+
+
+class Student2D(object):
+    def __init__(self, mean1, mean2, sigma1, sigma2):
+        """
+        sigma is not std(x)
+        """
+        import scipy.stats
+        self.mean1=mean1
+        self.sigma1=sigma1
+        self.mean2=mean2
+        self.sigma2=sigma2
+
+        self.tdist1 = Student(mean1, sigma1)
+        self.tdist2 = Student(mean2, sigma2)
+
+    def sample(self, nrand):
+        """
+        Draw samples from the distribution
+        """
+        r1 = self.tdist1.sample(nrand)
+        r2 = self.tdist2.sample(nrand)
+
+        return r1, r2
+
+    def get_lnprob_array(self, x1, x2):
+        """
+        get ln(prob)
+        """
+        lnp1 = self.tdist1.get_lnprob_array(x1)
+        lnp2 = self.tdist2.get_lnprob_array(x2)
+
+        return lnp1 + lnp2
+
+    get_lnprob_scalar=get_lnprob_array
+
+
+class TruncatedStudentPolar(Student2D):
+    """
+    Truncated gaussian on a circle
+    """
+    def __init__(self, mean1, mean2, sigma1, sigma2, maxval):
+        """
+        sigma is not std(x)
+        """
+        super(TruncatedStudentPolar,self).__init__(mean1, mean2, sigma1, sigma2)
+        self.maxval=maxval
+        self.maxval2=maxval**2
+
+    def sample(self, nrand):
+        """
+        Sample from truncated gaussian
+        """
+        x1=numpy.zeros(nrand)
+        x2=numpy.zeros(nrand)
+
+        nleft=nrand
+        ngood=0
+        while nleft > 0:
+            r1,r2 = super(TruncatedStudentPolar,self).sample(nleft)
+
+            rsq=r1**2 + r2**2
+
+            w,=numpy.where(rsq < self.maxval2)
+            nkeep=w.size
+            if nkeep > 0:
+                x1[ngood:ngood+nkeep] = r1[w]
+                x2[ngood:ngood+nkeep] = r2[w]
+                nleft -= nkeep
+                ngood += nkeep
+
+        return x1,x2
+
+    def get_lnprob_scalar(self, x1, x2):
+        """
+        ln(p) for scalar inputs
+        """
+
+        x2=x1**2 + x2**2
+        if x2 > self.maxval2:
+            raise GMixRangeError("square value out of range: %s" % x2)
+        lnp = super(TruncatedStudentPolar,self).get_lnprob_scalar(x1,x2)
+        return lnp
+
+
+    def get_lnprob_array(self, x1, x2):
+        """
+        ln(p) for a array inputs
+        """
+        x2=x1**2 + x2**2
+        w,=numpy.where(x2 > self.maxval2)
+        if w.size > 0:
+            raise GMixRangeError("values out of range")
+
+        lnp = super(TruncatedStudentPolar,self).get_lnprob_array(x1,x2)
+        return lnp
 
 def scipy_to_lognorm(shape, scale):
     """
