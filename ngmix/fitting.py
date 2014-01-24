@@ -1280,7 +1280,12 @@ class MCMCBase(FitterBase):
                 weights=self.g_prior_vals
         else:
             weights=self.iweights
-            print >>stderr,'    weights are i sample'
+            if not self.g_prior_during:
+                self._set_g_prior_vals()
+                print >>stderr,'    weights are g prior times iweight'
+                weights *= self.g_prior_vals
+            else:
+                print >>stderr,'    weights are iweight'
 
         return weights
 
@@ -1600,7 +1605,7 @@ class MCMCSimple(MCMCBase):
             Pi,Qi,Ri = self.g_prior.get_pqr_num(g1,g2,s1=sh[0], s2=sh[1])
 
         if self.g_prior_during:
-            print >>stderr,'fixing for during'
+            print >>stderr,'        fixing for during'
             Pi,Qi,Ri = self._fix_pqr_for_during(Pi,Qi,Ri)
 
         P,Q,R = self._get_mean_pqr(Pi,Qi,Ri)
@@ -1614,6 +1619,7 @@ class MCMCSimple(MCMCBase):
         """
         weights=self.iweights
         if weights is not None:
+            print >>stderr,'        i weighting pqr'
 
             # normalize weights and multiply data by them this way we can use
             # the same formula below for means
@@ -1648,7 +1654,9 @@ class MCMCSimple(MCMCBase):
         if w.size == 0:
             raise ValueError("no prior values > 0!")
 
-        if w.size != self.trials.size:
+        ndiff=g_prior.size-w.size
+        if ndiff > 0:
+            print >>stderr,'        removed zero priors:',ndiff
             self.g_prior_vals = self.g_prior_vals[w]
             self.trials = self.trials[w,:]
 
@@ -2038,21 +2046,13 @@ class ISampleSimpleIter(MCMCSimple):
 
         self.min_eff_n_samples = keys['min_eff_n_samples']
 
-        # probably tuned to 50,000 samples.  max should probably
-        # be fac*n_samples or something, and trim back by some
-        # fraction
-        self.trim_frac         = 0.10
-
-
         # note these are not optional
         self.cen_prior    = keys['cen_prior']
         self.g_prior      = keys['g_prior']
         self.T_prior      = keys['T_prior']
         self.counts_prior = keys['counts_prior']
 
-        # this is because we always are evaluating the full posterior
-        # when doing importance sampling
-        self.g_prior_during=True
+        self.g_prior_during=keys.get('g_prior_during',True)
 
         # in this case, image, weight, jacobian, psf are going to
         # be lists of lists.
@@ -2093,16 +2093,43 @@ class ISampleSimpleIter(MCMCSimple):
         Get the trials and calculate the results
         """
 
+        beg=0
+        n_add=self.n_samples_per_iter
         while self._iresult['eff_n_samples'] < self.min_eff_n_samples:
 
-            done=self._add_trials(self.n_samples_per_iter)
-            if done:
+            self._add_trials(beg, n_add)
+            beg += n_add
+
+            print >>stderr,'    n:',beg,'eff n:',self._iresult['eff_n_samples'], \
+                    'eff iweight:',self._iresult['eff_iweight']
+            if beg >= self.n_samples_max:
                 break
 
-            print >>stderr,'    n:',self.beg,'eff_n_sample:',self._iresult['eff_n_samples'], \
-                    'eff_iweight:',self._iresult['eff_iweight']
+        self.n_used=beg
+        self._calc_result(self.n_used)
 
-        self._calc_result()
+    def _add_trials(self, beg, n_add):
+        """
+        If we go beyond max allowed, we sort and keep the best ones
+        So object data changes, 
+
+          trials,ln_probs0,ln_probs,iweights
+
+        return True if we should stop
+        """
+
+        if not hasattr(self,'trials'):
+            self.init_sampling(n_add)
+
+        new_trials, new_lnp0 = self.sampler.sample(n_add)
+
+        end = beg + n_add
+        self.trials[beg:end, :] = new_trials
+        self.ln_probs0[beg:end] = new_lnp0
+
+        # only processes new ones
+        self._calc_new_lnprob(beg, end)
+        self._calc_isample_weights(end)
 
     def init_sampling(self, n_start):
         """
@@ -2116,7 +2143,6 @@ class ISampleSimpleIter(MCMCSimple):
             except:
                 print >>stderr,'failed to init gmix lol with sample...'
 
-        self.max_lnprob=self.calc_lnprob(tpars[0,:])
 
         nmax=self.n_samples_max
         self.trials    = numpy.zeros( (nmax, self.npars) )
@@ -2124,73 +2150,7 @@ class ISampleSimpleIter(MCMCSimple):
         self.ln_probs  = numpy.zeros(nmax) - 9.99e30
         self.iweights  = numpy.zeros(nmax)
 
-        self.beg=0
-        self.end=n_start
-
-    def _add_trials(self, n_add):
-        """
-        If we go beyond max allowed, we sort and keep the best ones
-        So object data changes, 
-
-          trials,ln_probs0,ln_probs,iweights
-        """
-
-        if not hasattr(self,'trials'):
-            self.init_sampling(n_add)
-
-        nmax=self.n_samples_max
-        if self.end > nmax:
-            # done
-            return True
-
-            w=self.ln_probs.argmax()
-            lnp=self.ln_probs[w]
-            #if lnp > self.max_lnprob:
-            if False:
-                pass
-            else:
-                print >>stderr,'        trimming'
-                # no better center found, just trim some
-                # low prob ones
-
-                p_rev=-self.ln_probs
-                s=p_rev.argsort()
-
-                beg=nmax-n_add
-                end=nmax
-
-                skeep=s[0:beg]
-
-                self.trials[0:beg, :] = self.trials[skeep, :]
-                self.ln_probs0[0:beg] = self.ln_probs0[skeep]
-
-                self.ln_probs[0:beg] = self.ln_probs[skeep]
-                self.iweights[0:beg] = self.iweights[skeep]
-                self.beg=beg
-                self.end=end
-
-        new_trials, new_lnp0 = self.sampler.sample(n_add)
-
-        beg=self.beg
-        end=self.end
-        self.trials[beg:end, :] = new_trials
-        self.ln_probs0[beg:end] = new_lnp0
-
-        self.n_used=end
-
-        # only processes new ones
-        self._calc_new_lnprob()
-
-        # must process all to :end
-        self._calc_isample_weights()
-
-        self.beg += n_add
-        self.end += n_add
-
-        # not done
-        return False
-
-    def _calc_new_lnprob(self):
+    def _calc_new_lnprob(self, beg, end):
         """
         Calc the actual ln(prob) at all our sample positions
 
@@ -2200,10 +2160,10 @@ class ISampleSimpleIter(MCMCSimple):
         trials=self.trials
         ln_probs=self.ln_probs
 
-        for i in xrange(self.beg,self.end):
+        for i in xrange(beg,end):
             ln_probs[i] = self.calc_lnprob(trials[i,:])
 
-    def _calc_isample_weights(self):
+    def _calc_isample_weights(self, end):
         """
         Calculate the importance sample weights
 
@@ -2228,8 +2188,6 @@ class ISampleSimpleIter(MCMCSimple):
         down a bit but is unavoidable.
 
         """
-
-        end=self.end
 
         # this slice is a reference type!
         iweights = self.iweights[0:end]
@@ -2258,12 +2216,11 @@ class ISampleSimpleIter(MCMCSimple):
         res['eff_iweight']   = eff_iweight
 
 
-    def _calc_result(self):
+    def _calc_result(self, n_used):
         """
         Same as parent with added effweight
         """
-        # trim out
-        n_used=self.n_used
+
         if n_used < self.n_samples_max:
             self.trials    = self.trials[0:n_used, :]
             self.ln_probs0 = self.ln_probs0[0:n_used]
@@ -2274,6 +2231,71 @@ class ISampleSimpleIter(MCMCSimple):
 
         self._result.update(self._iresult)
 
+    def make_plots(self,
+                   show=False,
+                   title=None):
+        """
+        Plot the mcmc chain and some residual plots
+        """
+        import biggles
+        import esutil as eu
+
+        res=self._result
+        trials=self.trials
+
+        binfac=0.2
+
+        means=res['pars']
+        errs=res['pars_err']
+
+        names=self.get_par_names()
+        tab=biggles.Table(self.npars,1)
+        weights=self.get_weights() 
+
+        for i in xrange(self.npars):
+            if names is not None:
+                name=names[i]
+            else:
+                name=r'$p_{%d}$' % i
+
+            mean=means[i]
+            err=errs[i]
+
+            xrng=[mean-4.5*err, mean+4.5*err]
+            bsize=binfac*err
+
+            vals=trials[:,i]
+            bsize = binfac*errs[i]
+
+            plt=biggles.FramedPlot()
+            plt.xlabel=name
+
+            hdict = eu.stat.histogram(vals,
+                                      binsize=bsize, 
+                                      weights=weights,
+                                      more=True,
+                                      min=xrng[0],
+                                      max=xrng[1])
+
+            hist=hdict['whist']
+            hplot = biggles.Curve(hdict['center'],
+                                  hdict['whist'])
+
+            lab = r'$<%s> = %0.4g \pm %0.4g$' % (name,mean,err)
+            plab = biggles.PlotLabel(0.1,0.9,lab,
+                                     halign='left',
+                                     color='blue')
+
+            plt.add(hplot, plab)
+            tab[i,0] = plt
+
+        if show:
+            tab.show()
+            key=raw_input('hit a key: ')
+            if key=='q':
+                stop
+
+        return tab
 
 
 class MCMCSimpleAnze(MCMCSimple):
