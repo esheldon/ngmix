@@ -1628,7 +1628,7 @@ class MCMCSimple(MCMCBase):
             iwsum=1.0/wsum
             wnorm = weights*iwsum
 
-            Pi        *= wnorm
+            Pi[:]     *= wnorm
             Qi[:,0]   *= wnorm
             Qi[:,1]   *= wnorm
             Ri[:,0,0] *= wnorm
@@ -1660,9 +1660,8 @@ class MCMCSimple(MCMCBase):
             self.g_prior_vals = self.g_prior_vals[w]
             self.trials = self.trials[w,:]
 
-            if self.iweights is not None:
-                self.iweights=self.iweights[w]
-       
+        return ndiff
+
     def _fix_pqr_for_during(self, P, Q, R):
         """
         Since the prior is already in the posterior, divide all values by the
@@ -2021,7 +2020,7 @@ class ISampleSimple(MCMCSimple):
         self.iweights=numpy.zeros(ln_probs.size)
         self.n_samples=n_samples
 
-class ISampleSimpleIter(MCMCSimple):
+class ISampleSimpleAdapt(MCMCSimple):
     """
 
     Importance sampling
@@ -2037,14 +2036,15 @@ class ISampleSimpleIter(MCMCSimple):
         """
         self.keys=keys
 
-        # initial number of samples
-        self.n_samples_per_iter = keys['n_samples']
-        # max allowed samples
-        self.n_samples_max      = keys['n_samples_max']
-        if self.n_samples_max < self.n_samples_per_iter:
-            raise ValueError("max samples should be >= n_samples")
+        # number of samples per component added
+        self.n_per = keys['n_per']
 
-        self.min_eff_n_samples = keys['min_eff_n_samples']
+        # max number of components
+        self.max_components = keys['max_components']
+        self.n_samples_max=self.n_per * self.max_components
+
+        # need to really think hard about this
+        self.max_fdiff = numpy.array(keys['max_fdiff'])
 
         # note these are not optional
         self.cen_prior    = keys['cen_prior']
@@ -2064,7 +2064,8 @@ class ISampleSimpleIter(MCMCSimple):
         self.model_name=gmix.get_model_name(self.model)
         self._set_npars()
 
-        self.sampler=sampler
+        # the initial sampler
+        self.sampler_start=sampler
 
         # the function to be called to fill a gaussian mixture
         self._set_fill_call()
@@ -2085,6 +2086,8 @@ class ISampleSimpleIter(MCMCSimple):
         self.flags=0
         self.arate=1.0
         self.tau=0.0
+
+
         self._iresult={'eff_n_samples':0.0}
 
 
@@ -2093,64 +2096,155 @@ class ISampleSimpleIter(MCMCSimple):
         Get the trials and calculate the results
         """
 
-        beg=0
-        n_add=self.n_samples_per_iter
-        while self._iresult['eff_n_samples'] < self.min_eff_n_samples:
+        for component in xrange(self.max_components):
+            self._add_component()
 
-            self._add_trials(beg, n_add)
-            beg += n_add
+            #print >>stderr,'    n:',self.n_samples_used, \
+            #               'eff n:',self._iresult['eff_n_samples'], \
+            #               'eff iweight:',self._iresult['eff_iweight']
 
-            print >>stderr,'    n:',beg,'eff n:',self._iresult['eff_n_samples'], \
-                    'eff iweight:',self._iresult['eff_iweight']
-            if beg >= self.n_samples_max:
+            print >>stderr,'    %s' % self.n_samples_used
+            print_pars(self.current_pars,  front='      pars: ',stream=stderr)
+            print_pars(self.current_perr,  front='      perr: ',stream=stderr)
+            print_pars(self.pars_fdiff,    front='      fdiff:',stream=stderr)
+
+            if self.has_converged():
                 break
 
-        self.n_used=beg
-        self._calc_result(self.n_used)
+        self._calc_result()
 
-    def _add_trials(self, beg, n_add):
+    def _add_component(self):
         """
-        If we go beyond max allowed, we sort and keep the best ones
-        So object data changes, 
-
-          trials,ln_probs0,ln_probs,iweights
-
-        return True if we should stop
+        Add a new component around the highest weight point
         """
 
         if not hasattr(self,'trials'):
-            self.init_sampling(n_add)
+            self.init_sampling()
 
-        new_trials, new_lnp0 = self.sampler.sample(n_add)
+        n_per = self.n_per
+        start = self.n_samples_used
+        end   = start + n_per
 
-        end = beg + n_add
-        self.trials[beg:end, :] = new_trials
-        self.ln_probs0[beg:end] = new_lnp0
+        trials = self.trials
+        p0     = self.probs0
+        lnp0   = self.ln_probs0
 
-        # only processes new ones
-        self._calc_new_lnprob(beg, end)
+        sampler=self._get_new_sampler()
+
+        new_trials = sampler.sample(n_per)
+        trials[start:end, :] = new_trials
+
+        # need to optimize this; just get prob to begin with
+
+        # all trials need to get a contribution from the new sampler
+        p0[0:end] += numpy.exp( sampler.get_lnprob(trials[0:end, :]) )
+
+        # the new points need a contribution from each of the *current* set of
+        # samplers.  There might not be any.
+        for s in self.samplers:
+            p0[start:end] += numpy.exp( s.get_lnprob( new_trials ) )
+
+        lnp0[0:end] = numpy.log( p0[0:end] )
+
+
+        # calculate the true lnprob for the new ones
+        self._calc_new_lnprob(start, end)
+
+        # set the weights
         self._calc_isample_weights(end)
 
-    def init_sampling(self, n_start):
+        # prepare for the next call
+        self.samplers.append( sampler )
+        self.n_samples_used += n_per
+
+        self._calc_convergence()
+
+    def has_converged(self):
+        """
+        True if converged
+        """
+        return self._has_converged
+
+    def _calc_convergence(self):
+        """
+        Calculate how much the samples have changed since the last step
+        """
+        from numpy import sqrt, diag
+        end=self.n_samples_used
+
+        iweights = self.iweights[0:end]
+        trials = self.trials[0:end, :]
+        pars,pars_cov = extract_mcmc_stats(trials, weights=iweights)
+
+        perr=numpy.sqrt( numpy.diag(pars_cov) )
+
+        if hasattr(self, 'current_pars'):
+
+            # diff relative to error
+            pars_fdiff = numpy.abs( pars-self.current_pars )/perr
+
+            w,=numpy.where(pars_fdiff > self.max_fdiff)
+            if w.size > 0:
+                has_converged=False
+            else:
+                has_converged=True
+
+        else:
+            pars_fdiff=pars*0 + 1.e20
+            has_converged=False
+
+        self._has_converged=has_converged
+        self.pars_fdiff=pars_fdiff
+        self.current_pars=pars
+        self.current_perr=perr
+
+
+    def _get_new_sampler(self):
+        """
+        get a new sampler, or the starting input one if this is the first
+
+        I checked using the same sampler each time performs as expected
+        """
+
+        if len(self.samplers) == 0:
+            sampler = self.sampler_start
+        else:
+            w=self.iweights[0:self.n_samples_used].argmax()
+            pars=self.trials[w,:]
+            print_pars(pars,front='        maxw point:',stream=stderr)
+            sampler=self.sampler_start.copy()
+            sampler.re_center(pars[0],pars[1],pars[2],pars[3],pars[4],pars[5])
+
+        return sampler
+
+    def init_sampling(self):
         """
         Initialize the object variables
         """
         while True:
+            sampler=self.sampler_start
             try:
-                tpars,tlnp0=self.sampler.sample(1)
-                self._init_gmix_lol(tpars[0,:])
+                pars=sampler.sample(1)
+                self._init_gmix_lol(pars[0,:])
                 break
             except:
                 print >>stderr,'failed to init gmix lol with sample...'
 
+        self.samplers=[]
 
-        nmax=self.n_samples_max
+        nmax = self.n_samples_max
         self.trials    = numpy.zeros( (nmax, self.npars) )
-        self.ln_probs0 = numpy.zeros(nmax) - 9.99e30
-        self.ln_probs  = numpy.zeros(nmax) - 9.99e30
+        self.probs0    = numpy.zeros(nmax)
+        self.ln_probs0 = numpy.zeros(nmax)
+        self.ln_probs  = numpy.zeros(nmax)
         self.iweights  = numpy.zeros(nmax)
 
-    def _calc_new_lnprob(self, beg, end):
+        self.n_samples_used=0
+        self.n_components=0
+
+        self._has_converged=False
+
+    def _calc_new_lnprob(self, start, end):
         """
         Calc the actual ln(prob) at all our sample positions
 
@@ -2160,7 +2254,7 @@ class ISampleSimpleIter(MCMCSimple):
         trials=self.trials
         ln_probs=self.ln_probs
 
-        for i in xrange(beg,end):
+        for i in xrange(start,end):
             ln_probs[i] = self.calc_lnprob(trials[i,:])
 
     def _calc_isample_weights(self, end):
@@ -2189,16 +2283,13 @@ class ISampleSimpleIter(MCMCSimple):
 
         """
 
-        # this slice is a reference type!
-        iweights = self.iweights[0:end]
-
         lnp_diff = self.ln_probs[0:end] - self.ln_probs0[0:end]
 
         # force the maximum value to be zero, so the max weight
         # is unity. Should reduce underflow
         lnp_diff -= lnp_diff.max()
 
-        iweights[:] = numpy.exp( lnp_diff )
+        iweights = numpy.exp( lnp_diff )
 
         w_non_finite, = numpy.where( numpy.isfinite(iweights)==False )
 
@@ -2209,6 +2300,8 @@ class ISampleSimpleIter(MCMCSimple):
         eff_n_samples = wdiv.sum()
         eff_iweight = eff_n_samples/iweights.size
 
+        self.iweights[0:end] = iweights
+
         res=self._iresult
         res['n_samples']     = end
         res['n_non_finite']  = w_non_finite.size
@@ -2216,20 +2309,37 @@ class ISampleSimpleIter(MCMCSimple):
         res['eff_iweight']   = eff_iweight
 
 
-    def _calc_result(self, n_used):
+    def _calc_result(self):
         """
         Same as parent with added effweight
         """
 
+        n_used = self.n_samples_used
         if n_used < self.n_samples_max:
             self.trials    = self.trials[0:n_used, :]
             self.ln_probs0 = self.ln_probs0[0:n_used]
             self.ln_probs  = self.ln_probs[0:n_used]
             self.iweights  = self.iweights[0:n_used]
 
-        super(ISampleSimpleIter,self)._calc_result()
+        super(ISampleSimpleAdapt,self)._calc_result()
 
         self._result.update(self._iresult)
+ 
+    def _remove_zero_prior(self):
+        """
+        remove zero prior points, including from data we have used
+        in isampling
+        """
+
+        ndiff=super(ISampleSimpleAdapt,self)._remove_zero_prior()
+        if ndiff > 0:
+            self.iweights=self.iweights[w]
+            self.ln_probs0=self.ln_probs0[w]
+            self.ln_probs=self.ln_probs[w]
+
+            self.iweights *= (1.0/self.iweights.max())
+
+        return ndiff
 
     def make_plots(self,
                    show=False,
@@ -2296,6 +2406,8 @@ class ISampleSimpleIter(MCMCSimple):
                 stop
 
         return tab
+
+
 
 
 class MCMCSimpleAnze(MCMCSimple):
