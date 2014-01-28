@@ -976,10 +976,14 @@ class MCMCBase(FitterBase):
         super(MCMCBase,self).__init__(image, weight, jacobian, model, **keys)
 
         self.doiter=keys.get('iter',True)
-        self.nwalkers=keys.get('nwalkers',20)
+
         self.nstep=keys.get('nstep',200)
         self.burnin=keys.get('burnin',400)
+
+        # emcee specific
+        self.nwalkers=keys.get('nwalkers',20)
         self.mca_a=keys.get('mca_a',2.0)
+
         self.ntry=keys.get('ntry',MCMC_NTRY)
         self.min_arate=keys.get('min_arate',MIN_ARATE)
 
@@ -1683,6 +1687,120 @@ class MCMCSimple(MCMCBase):
 
         return P, Q, R
 
+class MHSimple(MCMCSimple):
+    """
+    Metropolis Hastings
+    """
+    def __init__(self, image, weight, jacobian, model, **keys):
+        super(MHSimple,self).__init__(image, weight, jacobian, model, **keys)
+
+        guess=keys.get('guess',None)
+        if guess is None:
+            if self.full_guess is not None:
+                guess=self.full_guess
+            else:
+                raise ValueError("send guess= or full_guess=")
+
+        self.guess=numpy.array(guess, copy=False)
+        self.max_arate=keys.get('max_arate',0.6)
+
+        self.step_sizes = numpy.array( keys['step_sizes'], dtype='f8')
+        if self.step_sizes.size != self.npars:
+            raise ValueError("got %d step sizes, expected %d" % (step_sizes.size, self.npars) )
+
+    def go(self):
+        """
+        run trials and calculate stats
+        """
+
+        self._initialize_gmix()
+        self._do_trials()
+        self._calc_result()
+
+    def _do_trials(self):
+        """
+        Do some trials with the MH sampler
+        """
+        sampler=MHSampler(self.calc_lnprob, self.step)
+        self.sampler=sampler
+
+        pars0 = self.guess
+        for i in xrange(self.ntry):
+            sampler.run(self.burnin, pars0)
+            arate=sampler.get_acceptance_rate()
+
+            if self.min_arate < arate < self.max_arate:
+                break
+
+            # safe aim is 0.4
+            fac = arate/0.4
+            self.step_sizes = self.step_sizes*fac
+
+            print >>stderr,'    BAD ARATE:',arate
+            pars0=( sampler.get_trials() )[-1,:]
+
+        pars=sampler.get_trials()
+        sampler.run(self.nstep, pars[0,:])
+
+        self.trials = sampler.get_trials()
+        self.arate  = sampler.get_acceptance_rate()
+        self.tau    = 0.0
+
+        self.flags  = 0
+        if self.arate < self.min_arate:
+            print >>stderr,'LOW ARATE:',self.arate
+            self.flags |= LOW_ARATE
+
+    def step(self, pars):
+        """
+        Take a step
+        """
+        from numpy.random import randn
+        newpars = pars + self.step_sizes*randn(self.npars)
+        '''
+        while True:
+            newpars = pars + self.step_sizes*randn(self.npars)
+            g2 = newpars[2]**2 + newpars[3]**2
+            if g2 < 1.0:
+                break
+        '''
+        return newpars
+
+    def _initialize_gmix(self):
+        """
+        Need some valid pars to initialize this
+        """
+        for i in xrange(10):
+            try:
+                self._init_gmix_lol(self.guess)
+                break
+            except GMixRangeError as gerror:
+                # make sure we draw random guess if we got failure
+                print >>stderr,'failed init gmix lol:',str(gerror)
+                print >>stderr,'getting a new guess'
+                self.guess=self._get_random_guess()
+
+    def _get_random_guess(self):
+        guess=0*self.guess
+
+        # center
+        guess[0]=0.1*srandu(self.nwalkers)
+        guess[1]=0.1*srandu(self.nwalkers)
+
+        if self.g_prior is not None and self.draw_g_prior:
+            guess[2],guess[3]=self.g_prior.sample2d(1)
+        else:
+            guess[2]=0.1*srandu()
+            guess[3]=0.1*srandu()
+
+        guess[4] = self.T_guess*(1 + 0.1*srandu())
+
+        for band in xrange(self.nband):
+            guess[5+band] = self.counts_guess[band]*(1 + 0.1*srandu())
+
+        return guess
+
+
 class MCMCBDC(MCMCSimple):
     """
     Add additional features to the base class to support simple models
@@ -2137,15 +2255,14 @@ class ISampleSimpleAdapt(MCMCSimple):
         # need to optimize this; just get prob to begin with
 
         # all trials need to get a contribution from the new sampler
-        p0[0:end] += numpy.exp( sampler.get_lnprob(trials[0:end, :]) )
+        p0[0:end] += sampler.get_prob(trials[0:end, :])
 
         # the new points need a contribution from each of the *current* set of
         # samplers.  There might not be any.
         for s in self.samplers:
-            p0[start:end] += numpy.exp( s.get_lnprob( new_trials ) )
+            p0[start:end] += s.get_prob( new_trials )
 
         lnp0[0:end] = numpy.log( p0[0:end] )
-
 
         # calculate the true lnprob for the new ones
         self._calc_new_lnprob(start, end)
@@ -3512,3 +3629,159 @@ def profile_test_psf_flux(ngauss,
                           noise_sky=noise_sky,
                           nimages=nimages,
                           jfac=jfac)
+
+class MHSampler(object):
+    """
+    Run a Monte Carlo Markov Chain (MCMC) using Metropolis-Hastings
+    
+    The user inputs an object that has the methods "step" and "get_loglike"
+    that can be used to generate the chain.
+
+    parameters
+    ----------
+    lnprob_func: function or method
+        A function to calculate the log proability given the input
+        parameters.  Can be a method of a class.
+            ln_prob = lnprob_func(pars)
+            
+    stepper: function or method 
+        A function to take a step given the input parameters.
+        Can be a method of a class.
+            newpars = stepper(pars)
+
+    seed: floating point, optional
+        An optional seed for the random number generator.
+
+    examples
+    ---------
+    m=mcmc.MCMC(lnprob_func, stepper, seed=34231)
+    m.run(nstep, par_guess)
+    trials = m.get_trials()
+    loglike = m.get_loglike()
+    arate = m.get_acceptance_rate()
+
+    """
+    def __init__(self, lnprob_func, stepper, seed=None):
+        self._lnprob_func=lnprob_func
+        self._stepper=stepper
+        self.reset(seed=seed)
+
+    def reset(self, seed=None):
+        """
+        Clear all data
+        """
+        self._trials=None
+        self._loglike=None
+        self._accepted=None
+        numpy.random.seed(seed)
+
+    def run(self, nstep, pars_start):
+        """
+        Run the MCMC chain.  Append new steps if trials already
+        exist in the chain.
+
+        parameters
+        ----------
+        nstep: Number of steps in the chain.
+        pars_start:  Starting point for the chain in the n-dimensional
+                parameters space.
+        """
+        
+        self._init_data(nstep, pars_start)
+
+        for i in xrange(1,nstep):
+            self._step()
+        
+
+    def get_trials(self):
+        """
+        Get the trials array
+        """
+        return self._trials
+
+    def get_loglike(self):
+        """
+        Get the trials array
+        """
+        return self._loglike
+
+    def get_acceptance_rate(self):
+        """
+        Get the acceptance rate
+        """
+        if not hasattr(self, '_arate'):
+            self._arate = self._accepted.sum()/float(self._accepted.size)
+        return self._arate
+
+    def get_accepted(self):
+        """
+        Get the accepted array
+        """
+        return self._accepted
+
+    def _step(self):
+        """
+        Take the next step in the MCMC chain.  
+        
+        Calls the stepper lnprob_func methods sent during
+        construction.  If the new loglike is not greater than the previous, or
+        a uniformly generated random number is greater than the the ratio of
+        new to old likelihoods, the new step is not used, and the new
+        parameters are the same as the old.  Otherwise the new step is kept.
+
+        This is an internal function that is called by the .run method.
+        It is not intended for call by the user.
+        """
+
+        index=self._current
+
+        oldpars=self._oldpars
+        oldlike=self._oldlike
+
+        # Take a step and evaluate the likelihood
+        newpars = self._stepper(oldpars)
+        newlike = self._lnprob_func(newpars)
+
+        log_likeratio = newlike-oldlike
+
+        randnum = numpy.random.random()
+        log_randnum = numpy.log(randnum)
+
+        # we allow use of -infinity as a sign we are out of bounds
+        if (numpy.isfinite(newlike) 
+                and ( (newlike > oldlike) | (log_randnum < log_likeratio)) ):
+
+            self._accepted[index]  = 1
+            self._loglike[index]   = newlike
+            self._trials[index, :] = newpars
+
+            self._oldpars = newpars
+            self._oldlike = newlike
+
+        else:
+            self._accepted[index] = 0
+            self._loglike[index]  = oldlike
+            self._trials[index,:] = oldpars
+
+        self._current += 1
+
+    def _init_data(self, nstep, pars_start):
+        """
+        Set the trials and accept array.
+        """
+
+        pars_start=numpy.array(pars_start,dtype='f8')
+        npars = pars_start.size
+
+        self._trials   = numpy.zeros( (nstep, npars) )
+        self._loglike  = numpy.zeros(nstep)
+        self._accepted = numpy.zeros(nstep, dtype='i1')
+        self._current  = 1
+
+        self._oldpars = pars_start.copy()
+        self._oldlike = self._lnprob_func(pars_start)
+
+        self._trials[0,:] = pars_start
+        self._loglike[0]  = self._oldlike
+        self._accepted[0] = 1
+
