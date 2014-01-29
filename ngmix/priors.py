@@ -34,6 +34,7 @@ class GPriorBase(object):
         Get the 2d log prob
         """
         raise RuntimeError("over-ride me")
+
     def get_lnprob_array2d(self, g1arr, g2arr):
         """
         Get the 2d prior for the array inputs
@@ -624,24 +625,16 @@ class GPriorM(GPriorBase):
         lnp -= self.lnprob_mode
         return lnp
 
-
+    @void(float64[:], float64[:], float64[:])
     def fill_prob_array2d(self, g1arr, g2arr, output):
         """
         Fill the output with the 2d prob for the input g value
         """
         n=g1arr.size
         for i in xrange(n):
-            p=0.0
-
             g1=g1arr[i]
             g2=g2arr[i]
-
-            gsq=g1*g1 + g2*g2
-            g = numpy.sqrt(gsq)
-
-            p=_gprior2d_exp_scalar(self.A, self.a, self.g0sq, self.gmax, g, gsq)
-            output[i] = p
-
+            output[i] = self.get_prob_scalar2d(g1,g2)
 
     @float64(float64)
     def get_prob_scalar1d(self, g):
@@ -664,16 +657,8 @@ class GPriorM(GPriorBase):
         """
         n=garr.size
         for i in xrange(n):
-            p=0.0
-
             g=garr[i]
-            gsq=g**2
-
-            p=_gprior2d_exp_scalar(self.A, self.a, self.g0sq, self.gmax, g, gsq)
-
-            p *= 2*numpy.pi*g
-
-            output[i] = p
+            output[i] = self.get_prob_scalar1d(g)
 
     @float64(float64,float64)
     def dbyg1_scalar(self, g1, g2):
@@ -766,18 +751,9 @@ class GPriorBA(GPriorBABase):
         """
         n=g1arr.size
         for i in xrange(n):
-            p=0.0
-
             g1=g1arr[i]
             g2=g2arr[i]
-
-            gsq=g1*g1 + g2*g2
-            omgsq=1.0-gsq
-            if omgsq >= 0.0:
-                omgsq *= omgsq
-                expval = numpy.exp(-0.5*gsq*self.sig2inv)
-                p = omgsq*expval
-            output[i] = p
+            output[i] = self.get_prob_scalar2d(g1,g2)
 
     @void(float64[:],float64[:],float64[:])
     def fill_lnprob_array2d(self, g1arr, g2arr, output):
@@ -786,21 +762,9 @@ class GPriorBA(GPriorBABase):
         """
         n=g1arr.size
         for i in xrange(n):
-            p=0.0
-
             g1=g1arr[i]
             g2=g2arr[i]
-
-            gsq=g1*g1 + g2*g2
-            omgsq=1.0-gsq
-            if omgsq <= 0.0:
-                raise GMixRangeError("g^2 too big: %s" % gsq)
-            else:
-                omgsq *= omgsq
-                expval = numpy.exp(-0.5*gsq*self.sig2inv)
-                p = omgsq*expval
-                lnp = numpy.log(p)
-                output[i] = lnp
+            output[i] = self.get_lnprob_scalar2d(g1,g2)
 
 
     @float64(float64)
@@ -832,20 +796,8 @@ class GPriorBA(GPriorBABase):
 
         n=garr.size
         for i in xrange(n):
-            p = 0.0
-
             g=garr[i]
-
-            gsq=g*g
-            omgsq=1.0-gsq
-
-            if omgsq > 0.0:
-                omgsq *= omgsq
-                expval = numpy.exp(-0.5*gsq*self.sig2inv)
-                p = omgsq*expval
-                # can't use pi in the if statement
-                #p = 2*numpy.pi*omgsq*expval
-            output[i] = 2*numpy.pi*p
+            output[i] = self.get_prob_scalar1d(g)
 
     @float64(float64,float64)
     def dbyg1_scalar(self, g1, g2):

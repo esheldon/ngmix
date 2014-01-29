@@ -1078,17 +1078,7 @@ class MCMCBase(FitterBase):
         self.best_lnprob=None
 
         for i in xrange(self.ntry):
-            #print >>stderr,'try:',i+1
-            # adds burnin more samples
-            #sampler.reset()
-            #pos, prob, state = sampler.run_mcmc(pos, burnin)
             pos=self._run_some_trials(pos, burnin)
-
-            #arates = sampler.acceptance_fraction
-            #lnprobs = sampler.lnprobability.reshape(self.nwalkers*self.nstep)
-            #w=lnprobs.argmax()
-            #self.best_pars=sampler.trials[w,:]
-            #self.arate = arates.mean()
 
             tau_ok=True
             arate_ok=True
@@ -1122,79 +1112,6 @@ class MCMCBase(FitterBase):
 
         self.sampler=sampler
 
-    def go_simple(self):
-        """
-        Run the mcmc sampler and calculate some statistics
-        """
-
-        # not nstep can change
-        self._do_trials_simple()
-
-        # get the expectation values, sensitivity and errors
-        self._calc_result()
-
-
-    def _do_trials_simple(self):
-        """
-        Actually run the sampler
-        """
-        import emcee
-
-        total_steps = self.burnin + self.nstep
-        nwalkers=self.nwalkers
-
-        guess=self._get_guess()
-        self.best_lnprob=None
-        self.best_pars=None
-
-        for i in xrange(10):
-            try:
-                self._init_gmix_lol(guess[0,:])
-                break
-            except GMixRangeError as gerror:
-                # make sure we draw random guess if we got failure
-                print >>stderr,'failed init gmix lol:',str(gerror)
-                print >>stderr,'getting a new guess'
-                guess=self._get_random_guess()
-        if i==9:
-            raise gerror
-
-        sampler = self._make_sampler()
-        self.sampler=sampler
-
-        trials = numpy.zeros( (nwalkers*self.nstep, self.npars) )
-        lnprobs = numpy.zeros( nwalkers*self.nstep )
-
-        for pos, prob, rstate in sampler.sample(guess, iterations=self.burnin):
-            pass
-
-        i=0
-        sampler.reset()
-        for pos, prob, rstate in sampler.sample(pos, iterations=self.nstep):
-
-            start=i*nwalkers
-            stop=start+nwalkers
-
-            trials[start:stop, :] = pos
-            lnprobs[start:stop] = prob
-            i+=1
-
-        w=lnprobs.argmax()
-        bp=lnprobs[w]
-        self.best_lnprob=bp
-        self.best_pars=trials[w,:]
-
-        self.tau=9999.0
-
-        self.last_pos=pos
-
-        self.flags=0
-        self.sampler=sampler
-        self.trials=trials
-        self.lnprobs=lnprobs
-
-        arates = sampler.acceptance_fraction
-        self.arate = arates.mean()
 
     def _run_some_trials(self, pos_in, nstep):
         sampler=self.sampler
@@ -1299,8 +1216,8 @@ class MCMCBase(FitterBase):
         """
 
         if not hasattr(self,'g_prior_vals'):
-            g1=self.trials[:,2]
-            g2=self.trials[:,3]
+            g1=self.trials[:,self.g1i]
+            g2=self.trials[:,self.g2i]
             self.g_prior_vals = self.g_prior.get_prob_array2d(g1,g2)
 
     def _get_guess(self):
@@ -1449,6 +1366,9 @@ class MCMCSimple(MCMCBase):
                 raise ValueError("counts_guess size %s doesn't match "
                                  "number of bands %s" % (ncg,self.nband))
 
+        self.g1i = 2
+        self.g2i = 3
+
     def _get_priors(self, pars):
         """
         # go in simple
@@ -1532,10 +1452,13 @@ class MCMCSimple(MCMCBase):
 
         super(MCMCSimple,self)._calc_result()
 
-        self._result['g'] = self._result['pars'][2:2+2].copy()
-        self._result['g_cov'] = self._result['pars_cov'][2:2+2, 2:2+2].copy()
+        g1i=self.g1i
+        g2i=self.g2i
 
-        self._result['nuse'] = self.trials[:,0].size
+        self._result['g'] = self._result['pars'][g1i:g1i+2].copy()
+        self._result['g_cov'] = self._result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
+
+        self._result['nuse'] = self.trials.shape[0]
 
         if self.do_lensfit:
             g_sens=self._get_lensfit_gsens(self._result['pars'])
@@ -1554,13 +1477,16 @@ class MCMCSimple(MCMCBase):
         zero prior values should be removed before calling
         """
 
-        g1vals=self.trials[:,2]
-        g2vals=self.trials[:,3]
+        g1i=self.g1i
+        g2i=self.g2i
+
+        g1vals=self.trials[:,g1i]
+        g2vals=self.trials[:,g2i]
 
         dpri_by_g1 = self.g_prior.dbyg1_array(g1vals,g2vals)
         dpri_by_g2 = self.g_prior.dbyg2_array(g1vals,g2vals)
 
-        g=pars[2:2+2]
+        g=pars[g1i:g1i+2]
         g1diff = g[0]-g1vals
         g2diff = g[1]-g2vals
 
@@ -1596,8 +1522,8 @@ class MCMCSimple(MCMCBase):
         """
 
         
-        g1=self.trials[:,2]
-        g2=self.trials[:,3]
+        g1=self.trials[:,self.g1i]
+        g2=self.trials[:,self.g2i]
 
         sh=self.shear_expand
         if sh is None:
@@ -1687,6 +1613,74 @@ class MCMCSimple(MCMCBase):
 
         return P, Q, R
 
+class MCMCSimpleFixCen(MCMCSimple):
+    """
+    Add additional features to the base class to support simple models
+
+    for now only support a full guess
+    """
+    def __init__(self, image, weight, jacobian, model, **keys):
+        super(MCMCSimpleFixCen,self).__init__(image, weight, jacobian, model, **keys)
+
+        self.full_guess=keys['full_guess']
+        self.center = numpy.array( keys['center'], dtype='f8' )
+        if self.center.size != 2:
+            raise ValueError("send center=[cen1,cen2]")
+
+        self.npars = self.npars-2
+        self.g1i = 0
+        self.g2i = 1
+
+    def _get_priors(self, pars):
+        """
+        # go in simple
+        add any priors that were sent on construction
+        
+        note g prior is *not* applied during the likelihood exploration
+        if do_lensfit=True or do_pqr=True
+        """
+        lnp=0.0
+
+        if self.g_prior is not None and self.g_prior_during:
+            lnp += self.g_prior.get_lnprob_scalar2d(pars[0], pars[1])
+        
+        if self.T_prior is not None:
+            lnp += self.T_prior.get_lnprob_scalar(pars[2])
+
+        if self.counts_prior is not None:
+            for i,cp in enumerate(self.counts_prior):
+                counts=pars[3+i]
+                lnp += cp.get_lnprob_scalar(counts)
+
+        return lnp
+
+    def _get_band_pars(self, pars, band):
+        """
+        Get priors for this band
+        """
+        cen=self.center
+        bpars = numpy.zeros(6)
+        bpars[0] = cen[0]
+        bpars[1] = cen[1]
+        bpars[2] = pars[0]
+        bpars[3] = pars[1]
+        bpars[4] = pars[2]
+        bpars[5] = pars[3+band]
+
+        return bpars
+
+    def get_par_names(self):
+        names=['g1','g2', 'T']
+        if self.nband == 1:
+            names += ['Flux']
+        else:
+            for band in xrange(self.nband):
+                names += ['Flux_%s' % i]
+        return names
+
+
+
+
 class MHSimple(MCMCSimple):
     """
     Metropolis Hastings
@@ -1757,13 +1751,6 @@ class MHSimple(MCMCSimple):
         """
         from numpy.random import randn
         newpars = pars + self.step_sizes*randn(self.npars)
-        '''
-        while True:
-            newpars = pars + self.step_sizes*randn(self.npars)
-            g2 = newpars[2]**2 + newpars[3]**2
-            if g2 < 1.0:
-                break
-        '''
         return newpars
 
     def _initialize_gmix(self):
@@ -3692,6 +3679,7 @@ class MHSampler(object):
         for i in xrange(1,nstep):
             self._step()
         
+        self._arate = self._accepted.sum()/float(self._accepted.size)
 
     def get_trials(self):
         """
@@ -3709,8 +3697,6 @@ class MHSampler(object):
         """
         Get the acceptance rate
         """
-        if not hasattr(self, '_arate'):
-            self._arate = self._accepted.sum()/float(self._accepted.size)
         return self._arate
 
     def get_accepted(self):
