@@ -761,89 +761,6 @@ class LMSimple(FitterBase):
         return lnp
 
 
-class LMSimpleRandomize(LMSimple):
-    """
-    In this version we randomize the model too
-    """
-    def __init__(self, image, weight, jacobian, model, guess, **keys):
-        super(LMSimpleRandomize,self).__init__(image, weight, jacobian, model, guess, **keys)
-
-        # values at beginning for priors not used, but simplifies notation
-        self.randvals = numpy.zeros(self.fdiff_size)
-
-    def _calc_fdiff(self, pars, get_s2nsums=False):
-        """
-        vector with (model-data)/error.
-
-        The npars elements contain -ln(prior)
-        """
-
-        # we cannot keep sending existing array into leastsq, don't know why
-        fdiff=numpy.zeros(self.fdiff_size)
-
-        randvals=self.randvals
-
-        if not hasattr(self,'_gmix_lol0'):
-            self._init_gmix_lol(pars)
-
-        s2n_numer=0.0
-        s2n_denom=0.0
-
-        try:
-
-            self._fill_gmix_lol(pars)
-
-            start=self._fill_priors(pars, fdiff)
-
-            for band in xrange(self.nband):
-
-                gmix_list=self._gmix_lol[band]
-                im_list=self.im_lol[band]
-                wt_list=self.wt_lol[band]
-                jacob_list=self.jacob_lol[band]
-
-                nim=len(im_list)
-                for i in xrange(nim):
-                    gm=gmix_list[i]
-                    im=im_list[i]
-                    wt=wt_list[i]
-                    j=jacob_list[i]
-
-                    npix = im.size
-                    end=start+npix 
-                    rvals = randvals[start:end]
-                    wt_ravel = wt.ravel()
-                    w,=numpy.where(wt_ravel > 0)
-                    if w.size > 0:
-                        sigmas = numpy.sqrt( 1.0/wt_ravel )
-                        rvals[w] = sigmas*numpy.random.randn(w.size)
-
-                    randvals[start:end] = rvals
-
-                    res = gmix._fdiff_jacob_fast3_randomize(gm._data,
-                                                            im,
-                                                            wt,
-                                                            j._data,
-                                                            fdiff,
-                                                            randvals,
-                                                            start,
-                                                            _exp3_ivals[0],
-                                                            _exp3_lookup)
-                    s2n_numer += res[0]
-                    s2n_denom += res[1]
-
-                    start += im.size
-
-        except GMixRangeError:
-            fdiff[:] = LOWVAL
-            s2n_numer=0.0
-            s2n_denom=BIGVAL
-
-        if get_s2nsums:
-            return fdiff, s2n_numer, s2n_denom
-        else:
-            return fdiff
-
 
 NOTFINITE_BIT=11
 def run_leastsq(func, guess, dof, **keys):
@@ -1613,71 +1530,6 @@ class MCMCSimple(MCMCBase):
 
         return P, Q, R
 
-class MCMCSimpleFixCen(MCMCSimple):
-    """
-    Add additional features to the base class to support simple models
-
-    for now only support a full guess
-    """
-    def __init__(self, image, weight, jacobian, model, **keys):
-        super(MCMCSimpleFixCen,self).__init__(image, weight, jacobian, model, **keys)
-
-        self.full_guess=keys['full_guess']
-        self.center = numpy.array( keys['center'], dtype='f8' )
-        if self.center.size != 2:
-            raise ValueError("send center=[cen1,cen2]")
-
-        self.npars = self.npars-2
-        self.g1i = 0
-        self.g2i = 1
-
-    def _get_priors(self, pars):
-        """
-        # go in simple
-        add any priors that were sent on construction
-        
-        note g prior is *not* applied during the likelihood exploration
-        if do_lensfit=True or do_pqr=True
-        """
-        lnp=0.0
-
-        if self.g_prior is not None and self.g_prior_during:
-            lnp += self.g_prior.get_lnprob_scalar2d(pars[0], pars[1])
-        
-        if self.T_prior is not None:
-            lnp += self.T_prior.get_lnprob_scalar(pars[2])
-
-        if self.counts_prior is not None:
-            for i,cp in enumerate(self.counts_prior):
-                counts=pars[3+i]
-                lnp += cp.get_lnprob_scalar(counts)
-
-        return lnp
-
-    def _get_band_pars(self, pars, band):
-        """
-        Get priors for this band
-        """
-        cen=self.center
-        bpars = numpy.zeros(6)
-        bpars[0] = cen[0]
-        bpars[1] = cen[1]
-        bpars[2] = pars[0]
-        bpars[3] = pars[1]
-        bpars[4] = pars[2]
-        bpars[5] = pars[3+band]
-
-        return bpars
-
-    def get_par_names(self):
-        names=['g1','g2', 'T']
-        if self.nband == 1:
-            names += ['Flux']
-        else:
-            for band in xrange(self.nband):
-                names += ['Flux_%s' % i]
-        return names
-
 
 
 
@@ -1790,7 +1642,7 @@ class MHSimple(MCMCSimple):
 
 class MCMCBDC(MCMCSimple):
     """
-    Add additional features to the base class to support simple models
+    Add additional features to the base class to support coelliptical bulge+disk
     """
     def __init__(self, image, weight, jacobian, **keys):
         super(MCMCBDC,self).__init__(image, weight, jacobian, "bdc", **keys)
@@ -1832,6 +1684,7 @@ class MCMCBDC(MCMCSimple):
         if self.T_d_prior is not None:
             lnp += self.T_d_prior.get_lnprob_scalar(pars[5])
 
+        raise ValueError("fix to put prior on total counts and bdfrac")
         # bulge flux in each band
         if self.counts_b_prior is not None:
             for i,cp in enumerate(self.counts_b_prior):
