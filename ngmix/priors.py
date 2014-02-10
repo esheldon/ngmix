@@ -409,22 +409,32 @@ class GPriorBase(object):
         fracdiff_te=shear1_meas_te/shear1_true-1
         if eps:
             import biggles
+            biggles.configure('default','fontsize_min',3)
             plt=biggles.FramedPlot()
-            plt.xlabel=r'$\gamma_{true}$'
-            plt.ylabel=r'$\Delta \gamma/\gamma$'
+            #plt.xlabel=r'$\gamma_{true}$'
+            #plt.ylabel=r'$\Delta \gamma/\gamma$'
+            plt.xlabel=r'$g_{true}$'
+            plt.ylabel=r'$\Delta g/g$'
             plt.aspect_ratio=1.0
 
             plt.add( biggles.FillBetween([0.0,smax], [0.004,0.004], 
                                          [0.0,smax], [0.000,0.000],
+                                          color='grey90') )
+            plt.add( biggles.FillBetween([0.0,smax], [0.002,0.002], 
+                                         [0.0,smax], [0.000,0.000],
                                           color='grey80') )
 
 
-            pts=biggles.Points(shear1_true, fracdiff,type='filled circle',size=1.0)
+            psize=2.25
+            pts=biggles.Points(shear1_true, fracdiff,
+                               type='filled circle',size=psize,
+                               color='blue')
             pts.label='expand shear=0'
             plt.add(pts)
 
-            pts_te=biggles.Points(shear1_true, fracdiff_te,type='filled circle',size=1.0,
-                                  color='dark green')
+            pts_te=biggles.Points(shear1_true, fracdiff_te,
+                                  type='filled diamond',size=psize,
+                                  color='red')
             pts_te.label='expand shear=true'
             plt.add(pts_te)
 
@@ -432,14 +442,17 @@ class GPriorBase(object):
             poly=numpy.poly1d(coeffs)
 
             curve=biggles.Curve(shear1_true, poly(shear1_true), type='solid',
-                                color='blue')
-            curve.label=r'$\Delta \gamma/\gamma~\propto~\gamma^2$'
+                                color='black')
+            #curve.label=r'$\Delta \gamma/\gamma~\propto~\gamma^2$'
+            curve.label=r'$\Delta g/g = 1.9 g^2$'
             plt.add(curve)
 
             plt.add( biggles.PlotKey(0.1, 0.9, [pts,pts_te,curve], halign='left') )
 
             print 'writing:',eps
             plt.write_eps(eps)
+
+            print poly
 
 class GPriorBABase(GPriorBase):
     """
