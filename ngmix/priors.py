@@ -527,6 +527,185 @@ class GPriorBABase(GPriorBase):
 
         return P, Q, R
 
+    def get_pqr_expand(self, g1in, g2in, s1, s2):
+        """
+        Evaluate 
+            P
+            Q
+            R
+        From Bernstein & Armstrong
+
+        P is this prior times the jacobian at shear==0
+
+        Q is the gradient of P*J evaluated at shear==0
+
+            [ d(P*J)/dg1, d(P*J)/dg2]_{g=0}
+
+        R is grad of grad of P*J at shear==0
+            [ d(P*J)/dg1dg1  d(P*J)/dg1dg2 ]
+            [ d(P*J)/dg1dg2  d(P*J)/dg2dg2 ]_{g=0}
+        """
+        from numpy import exp
+
+        if numpy.isscalar(g1in):
+            isscalar=True
+        else:
+            isscalar=False
+
+        g1 = numpy.array(g1in, dtype='f8', ndmin=1, copy=False)
+        g2 = numpy.array(g2in, dtype='f8', ndmin=1, copy=False)
+
+        P=self.get_pj(g1, g2, s1, s2)
+
+        s1sq = s1**2
+        s2sq = s2**2
+
+        gsq = g1**2 + g2**2
+        gsqmo = gsq - 1.0
+        ssq = s1**2 + s2**2
+        ssqmo = ssq - 1.0
+
+        s2sqmo = s2sq - 1.0
+
+        sigma=self.sigma
+
+        sdet = (1 - 2*g1*s1 - 2*g2*s2 + g1**2*(s1**2 + s2**2) + g2**2*(s1**2 + s2**2))
+        sdet2 = sdet**2
+        sdet3 = sdet**3
+        sdet4 = sdet**4
+        sdet6 = sdet**6
+        sdet7 = sdet**7
+
+        expfac = exp((g1**2 + g2**2 - 2*g1*s1 + s1**2 - 2*g2*s2 + s2**2)/(2.*sdet*sigma**2))
+
+        bigfac1 = (s2sqmo + 4*s1**4*sigma**2 + 4*s2**4*sigma**2 + s1**2*(1 + 8*s2**2*sigma**2))
+        bigfac2 = (s2sqmo + 8*s2**2*sigma**2 + s1**2*(1 + 8*sigma**2))
+        
+        bigfac3 = (g2**2*s2 + (1 + g1**2 - 2*g1*s1)*s2 + g2*(-1 + s1**2 - s2**2))
+        bigfac4 = (g1**2*s1 + s1*(1 + g2**2 - 2*g2*s2) + g1*(-1 - s1**2 + s2**2))
+
+        Q_subfac = (ssqmo + 8*s1**2*sigma**2 + 8*s2**2*sigma**2)
+        Qfac = gsqmo**2*ssqmo**3*((1 - s1**2 - s2**2 + 8*sigma**2 - 16*g1*s1*sigma**2 - 16*g2*s2*sigma**2 + g2**2*Q_subfac + g1**2*bigfac2))/ (expfac* sdet6*sigma**2)
+
+        Q1 = bigfac4*Qfac
+        Q2 = bigfac3*Qfac
+
+
+        R11_fac1 = (5*s1**6 + 3*s1**4*(-7 + 3*s2**2) + 3*s1**2*(6 - 6*s2**2 + s2**4) - s2**2*(2 - 3*s2**2 + s2**4))
+        R11_fac2 = (9 - 15*s2**2 + 6*s2**4 + s1**2*(-7 + 6*s2**2))
+
+        R11 = ( (4*gsqmo**2*ssqmo**2*(-1 + 3*s1sq + s2**2 - 4*g2*s2*(-1 + 3*s1**2 + s2**2) - 2*g2**2*(1 - 9*s1**2 + 6*s1**4 + s2**2 - 2*s2**4) + 
+            4*g2**3*s2*(1 + 6*s1**4 - s2**2 + s1**2*(-9 + 6*s2**2)) - 4*g1**3*s1*R11_fac2 + R11_fac1*(g1**4 + g2**4) - 
+            4*g1*s1*(3 - s1**2 - 3*s2**2 + 2*g2*s2*(-3 + s1**2 + 3*s2**2) + g2**2*R11_fac2) + 
+            2*g1**2*(5*g2**2*s1**6 - s2sqmo*(9 + 2*g2*s2 - 10*s2**2 + g2**2*s2**2*(-2 + s2**2)) + 3*s1**4*(-2 + 4*g2*s2 + g2**2*(-7 + 3*s2**2)) + 
+               3*s1**2*(1 + g2*(-6*s2 + 4*s2**3) + g2**2*(6 - 6*s2**2 + s2**4)))))/
+        (expfac*
+          sdet6) + 
+       (gsqmo**2*ssqmo**2*((4*(-1 + 3*s1**2 + s2**2))/
+             expfac + 
+            (8*gsqmo*s1*ssqmo*bigfac4)/
+             (expfac*
+               sdet2*sigma**2) + 
+            (gsqmo*ssqmo**2*(gsqmo*bigfac4**2 - 
+                 sdet*
+                  (-2*g1**3*s1*(3 + s1**2 - 3*s2**2) - 2*g1*g2**2*s1*(3 + s1**2 - 3*s2**2) + g1**4*(3*s1**2 - s2**2) + (1 + g2**2 - 2*g2*s2)*(-1 + 2*g2*s2 + g2**2*(3*s1**2 - s2**2)) + 
+                    g1**2*(3 - 5*s2**2 - 2*g2**2*s2**2 + s1**2*(3 + 6*g2**2 - 6*g2*s2) + 2*g2*(s2 + s2**3)))*sigma**2))/
+             (expfac*
+               sdet4*sigma**4)))/sdet4 - 
+       (8*gsqmo**2*ssqmo**2*(-2*g1*s2sqmo + g1**2*s1*(-2 + s1**2 + s2**2) + s1*(-1 + 2*g2*s2 + g2**2*(-2 + s1**2 + s2**2)))*
+          (-(g1**3*(-s2sqmo**2 + 16*s1**2*s2**2*sigma**2 + s1**4*(1 + 16*sigma**2))) + g1**4*s1*bigfac1 + 
+            g1*(s1**4 - s2sqmo**2 - 16*s1**2*sigma**2 + 32*g2*s1**2*s2*sigma**2 - g2**2*(-s2sqmo**2 + 16*s1**2*s2**2*sigma**2 + s1**4*(1 + 16*sigma**2))) + 
+            2*g1**2*s1*(4*(3*s1**2 + s2**2)*sigma**2 - g2*s2*bigfac2 + 
+               g2**2*bigfac1) + 
+            s1*(1 - s1**2 - s2**2 + 4*sigma**2 + 8*g2**2*(s1**2 + 3*s2**2)*sigma**2 + 2*g2*s2*(ssqmo - 8*sigma**2) - 
+               2*g2**3*s2*bigfac2 + g2**4*bigfac1)))/
+        (expfac*
+          sdet7*sigma**2) )
+
+
+        R12_fac1 = (2*g1**4*s1*s2 + g1**3*s2*(-2 - 3*s1**2 + s2**2) + g1**2*s1*(4*s2 + 4*g2**2*s2 + g2*(-2 + s1**2 - 3*s2**2)) + g2*s1*(-1 + 4*g2*s2 + 2*g2**3*s2 + g2**2*(-2 + s1**2 - 3*s2**2)) + g1*(2*g2 - s2 + g2**2*s2*(-2 - 3*s1**2 + s2**2)))
+        R12 = ( (gsqmo**2*ssqmo**2*(8*s1*s2 + (24*(-g1 + g1**2*s1 + g2**2*s1)*(-g2 + g1**2*s2 + g2**2*s2)*ssqmo**2)/
+            sdet2 - 
+           (16*(-g1 + g1**2*s1 + g2**2*s1)*ssqmo*bigfac3)/
+            sdet2 - 
+           (16*(-g2 + g1**2*s2 + g2**2*s2)*ssqmo*bigfac4)/
+            sdet2 + 
+           (8*bigfac3*bigfac4)/
+            sdet2 - 
+           (16*(-g1 + g1**2*s1 + g2**2*s1)*s2*ssqmo)/sdet - 
+           (16*s1*(-g2 + g1**2*s2 + g2**2*s2)*ssqmo)/sdet + 
+           (16*s1*bigfac3)/sdet + 
+           (16*s2*bigfac4)/sdet - 
+           (8*ssqmo*R12_fac1)/
+            sdet2 + 
+           (gsqmo**2*ssqmo**2*bigfac3*bigfac4)/
+            (sdet4*sigma**4) - 
+           (4*gsqmo*(-g1 + g1**2*s1 + g2**2*s1)*ssqmo**2*bigfac3)/
+            (sdet3*sigma**2) - 
+           (4*gsqmo*(-g2 + g1**2*s2 + g2**2*s2)*ssqmo**2*bigfac4)/
+            (sdet3*sigma**2) + 
+           (8*gsqmo*ssqmo*bigfac3*bigfac4)/
+            (sdet3*sigma**2) + 
+           (4*gsqmo*s1*ssqmo*bigfac3)/
+            (sdet2*sigma**2) + 
+           (4*gsqmo*s2*ssqmo*bigfac4)/
+            (sdet2*sigma**2) - 
+           (2*gsqmo*ssqmo**2*R12_fac1)/
+            (sdet3*sigma**2)))/
+       (expfac*
+         sdet4) )
+
+
+        R22_fac1 = (s1**6 - 18*s2**2 + 21*s2**4 - 5*s2**6 - 3*s1**4*(1 + s2**2) + s1**2*(2 + 18*s2**2 - 9*s2**4))
+        R22_fac2 = (1 - 9*s2**2 + 6*s2**4 + s1**2*(-1 + 6*s2**2))
+
+        R22 = ( (-4*gsqmo**2*ssqmo**2*(1 - s1**2 - 3*s2**2 - 4*g2*s2*(-3 + 3*s1**2 + s2**2) - 2*g2**2*(9 - 19*s1**2 + 10*s1**4 + 3*s2**2 - 6*s2**4) + 
+            4*g2**3*s2*(9 + 6*s1**4 - 7*s2**2 + 3*s1**2*(-5 + 2*s2**2)) - 4*g1**3*s1*R22_fac2 + 
+            R22_fac1*(g1**4 + g2**4) - 4*g1*s1*(1 - s1**2 - 3*s2**2 - 2*g2*s2*(-3 + 3*s1**2 + s2**2) + g2**2*R22_fac2) + 
+            2*g1**2*(1 + g2**2*s1**6 - 9*s2**2 + 6*s2**4 - 2*g2*s2*(-9 + 7*s2**2) + g2**2*(-18*s2**2 + 21*s2**4 - 5*s2**6) - s1**4*(2 - 12*g2*s2 + 3*g2**2*(1 + s2**2)) + 
+               s1**2*(1 + 6*g2*s2*(-5 + 2*s2**2) + g2**2*(2 + 18*s2**2 - 9*s2**4)))))/
+        (expfac*
+          sdet6) + 
+       (gsqmo**2*ssqmo**2*((4*(-1 + s1**2 + 3*s2**2))/
+             expfac + 
+            (8*gsqmo*s2*ssqmo*bigfac3)/
+             (expfac*
+               sdet2*sigma**2) + 
+            (gsqmo*ssqmo**2*(gsqmo*bigfac3**2 + 
+                 sdet*
+                  (1 + g1**4*(s1**2 - 3*s2**2) + g2**4*(s1**2 - 3*s2**2) + 2*g2**3*s2*(3 - 3*s1**2 + s2**2) - 2*g1**3*(s1 + s1**3 - 3*s1*s2**2) - 2*g1*s1*(2 + g2**2*(1 + s1**2 - 3*s2**2)) + 
+                    g2**2*(5*s1**2 - 3*(1 + s2**2)) + g1**2*(1 - 3*s2**2 - 6*g2**2*s2**2 + s1**2*(5 + 2*g2**2 - 6*g2*s2) + 2*g2*s2*(3 + s2**2)))*sigma**2))/
+             (expfac*
+               sdet4*sigma**4)))/sdet4 - 
+       (8*gsqmo**2*ssqmo**2*(-2*g2*(-1 + s1**2) + g2**2*s2*(-2 + s1**2 + s2**2) + s2*(-1 + 2*g1*s1 + g1**2*(-2 + s1**2 + s2**2)))*
+          (g2**3*(1 + s1**4 - s2**4*(1 + 16*sigma**2) - 2*s1**2*(1 + 8*s2**2*sigma**2)) + g2**4*s2*bigfac1 + 
+            g2*(-1 + 2*s1**2 - s1**4 + s2**4 - 16*s2**2*sigma**2 + 32*g1*s1*s2**2*sigma**2 + g1**2*(1 + s1**4 - s2**4*(1 + 16*sigma**2) - 2*s1**2*(1 + 8*s2**2*sigma**2))) + 
+            2*g2**2*s2*(4*(s1**2 + 3*s2**2)*sigma**2 - g1*s1*bigfac2 + 
+               g1**2*bigfac1) + 
+            s2*(1 - s1**2 - s2**2 + 4*sigma**2 + 8*g1**2*(3*s1**2 + s2**2)*sigma**2 + 2*g1*s1*(ssqmo - 8*sigma**2) - 
+               2*g1**3*s1*bigfac2 + g1**4*bigfac1)))/
+        (expfac*
+          sdet7*sigma**2) )
+
+
+        np=g1.size
+        Q = numpy.zeros( (np,2) )
+        R = numpy.zeros( (np,2,2) )
+
+        Q[:,0] = Q1
+        Q[:,1] = Q2
+        R[:,0,0] = R11
+        R[:,0,1] = R12
+        R[:,1,0] = R12
+        R[:,1,1] = R22
+
+        if isscalar:
+            P = P[0]
+            Q = Q[0,:]
+            R = R[0,:,:]
+
+        return P, Q, R
+
 
 #@jit(argtypes=[float64, float64, float64, float64, float64, float64])
 @autojit
