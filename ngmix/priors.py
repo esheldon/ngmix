@@ -39,6 +39,10 @@ class GPriorBase(object):
         """
         Get the 2d prior for the array inputs
         """
+
+        g1arr=numpy.array(g1arr, dtype='f8', copy=False)
+        g2arr=numpy.array(g2arr, dtype='f8', copy=False)
+
         output=numpy.zeros(g1arr.size)
         self.fill_lnprob_array2d(g1arr, g2arr, output)
         return output
@@ -54,6 +58,10 @@ class GPriorBase(object):
         """
         Get the 2d prior for the array inputs
         """
+
+        g1arr=numpy.array(g1arr, dtype='f8', copy=False)
+        g2arr=numpy.array(g2arr, dtype='f8', copy=False)
+
         output=numpy.zeros(g1arr.size)
         self.fill_prob_array2d(g1arr, g2arr, output)
         return output
@@ -68,6 +76,9 @@ class GPriorBase(object):
         """
         Get the 1d prior for the array inputs
         """
+
+        garr=numpy.array(garr, dtype='f8', copy=False)
+
         output=numpy.zeros(garr.size)
         self.fill_prob_array1d(garr, output)
         return output
@@ -598,17 +609,9 @@ class GPriorBABase(GPriorBase):
             4*g2**3*s2*(1 + 6*s1**4 - s2**2 + s1**2*(-9 + 6*s2**2)) - 4*g1**3*s1*R11_fac2 + R11_fac1*(g1**4 + g2**4) - 
             4*g1*s1*(3 - s1**2 - 3*s2**2 + 2*g2*s2*(-3 + s1**2 + 3*s2**2) + g2**2*R11_fac2) + 
             2*g1**2*(5*g2**2*s1**6 - s2sqmo*(9 + 2*g2*s2 - 10*s2**2 + g2**2*s2**2*(-2 + s2**2)) + 3*s1**4*(-2 + 4*g2*s2 + g2**2*(-7 + 3*s2**2)) + 
-               3*s1**2*(1 + g2*(-6*s2 + 4*s2**3) + g2**2*(6 - 6*s2**2 + s2**4)))))/
-        (expfac*
-          sdet6) + 
-       (gsqmo**2*ssqmo**2*((4*(-1 + 3*s1**2 + s2**2))/
-             expfac + 
-            (8*gsqmo*s1*ssqmo*bigfac4)/
-             (expfac*
-               sdet2*sigma**2) + 
-            (gsqmo*ssqmo**2*(gsqmo*bigfac4**2 - 
-                 sdet*
-                  (-2*g1**3*s1*(3 + s1**2 - 3*s2**2) - 2*g1*g2**2*s1*(3 + s1**2 - 3*s2**2) + g1**4*(3*s1**2 - s2**2) + (1 + g2**2 - 2*g2*s2)*(-1 + 2*g2*s2 + g2**2*(3*s1**2 - s2**2)) + 
+               3*s1**2*(1 + g2*(-6*s2 + 4*s2**3) + g2**2*(6 - 6*s2**2 + s2**4)))))/(expfac*sdet6)
+            + (gsqmo**2*ssqmo**2*((4*(-1 + 3*s1**2 + s2**2))/expfac+ (8*gsqmo*s1*ssqmo*bigfac4)/ (expfac* sdet2*sigma**2) + 
+            (gsqmo*ssqmo**2*(gsqmo*bigfac4**2 - sdet*(-2*g1**3*s1*(3 + s1**2 - 3*s2**2) - 2*g1*g2**2*s1*(3 + s1**2 - 3*s2**2) + g1**4*(3*s1**2 - s2**2) + (1 + g2**2 - 2*g2*s2)*(-1 + 2*g2*s2 + g2**2*(3*s1**2 - s2**2)) + 
                     g1**2*(3 - 5*s2**2 - 2*g2**2*s2**2 + s1**2*(3 + 6*g2**2 - 6*g2*s2) + 2*g2*(s2 + s2**3)))*sigma**2))/
              (expfac*
                sdet4*sigma**4)))/sdet4 - 
@@ -622,38 +625,6 @@ class GPriorBABase(GPriorBase):
         (expfac*
           sdet7*sigma**2) )
 
-
-        R12_fac1 = (2*g1**4*s1*s2 + g1**3*s2*(-2 - 3*s1**2 + s2**2) + g1**2*s1*(4*s2 + 4*g2**2*s2 + g2*(-2 + s1**2 - 3*s2**2)) + g2*s1*(-1 + 4*g2*s2 + 2*g2**3*s2 + g2**2*(-2 + s1**2 - 3*s2**2)) + g1*(2*g2 - s2 + g2**2*s2*(-2 - 3*s1**2 + s2**2)))
-        R12 = ( (gsqmo**2*ssqmo**2*(8*s1*s2 + (24*(-g1 + g1**2*s1 + g2**2*s1)*(-g2 + g1**2*s2 + g2**2*s2)*ssqmo**2)/
-            sdet2 - 
-           (16*(-g1 + g1**2*s1 + g2**2*s1)*ssqmo*bigfac3)/
-            sdet2 - 
-           (16*(-g2 + g1**2*s2 + g2**2*s2)*ssqmo*bigfac4)/
-            sdet2 + 
-           (8*bigfac3*bigfac4)/
-            sdet2 - 
-           (16*(-g1 + g1**2*s1 + g2**2*s1)*s2*ssqmo)/sdet - 
-           (16*s1*(-g2 + g1**2*s2 + g2**2*s2)*ssqmo)/sdet + 
-           (16*s1*bigfac3)/sdet + 
-           (16*s2*bigfac4)/sdet - 
-           (8*ssqmo*R12_fac1)/
-            sdet2 + 
-           (gsqmo**2*ssqmo**2*bigfac3*bigfac4)/
-            (sdet4*sigma**4) - 
-           (4*gsqmo*(-g1 + g1**2*s1 + g2**2*s1)*ssqmo**2*bigfac3)/
-            (sdet3*sigma**2) - 
-           (4*gsqmo*(-g2 + g1**2*s2 + g2**2*s2)*ssqmo**2*bigfac4)/
-            (sdet3*sigma**2) + 
-           (8*gsqmo*ssqmo*bigfac3*bigfac4)/
-            (sdet3*sigma**2) + 
-           (4*gsqmo*s1*ssqmo*bigfac3)/
-            (sdet2*sigma**2) + 
-           (4*gsqmo*s2*ssqmo*bigfac4)/
-            (sdet2*sigma**2) - 
-           (2*gsqmo*ssqmo**2*R12_fac1)/
-            (sdet3*sigma**2)))/
-       (expfac*
-         sdet4) )
 
 
         R22_fac1 = (s1**6 - 18*s2**2 + 21*s2**4 - 5*s2**6 - 3*s1**4*(1 + s2**2) + s1**2*(2 + 18*s2**2 - 9*s2**4))
@@ -688,6 +659,37 @@ class GPriorBABase(GPriorBase):
           sdet7*sigma**2) )
 
 
+        R12_fac1 = (2*g1**4*s1*s2 + g1**3*s2*(-2 - 3*s1**2 + s2**2) + g1**2*s1*(4*s2 + 4*g2**2*s2 + g2*(-2 + s1**2 - 3*s2**2)) + g2*s1*(-1 + 4*g2*s2 + 2*g2**3*s2 + g2**2*(-2 + s1**2 - 3*s2**2)) + g1*(2*g2 - s2 + g2**2*s2*(-2 - 3*s1**2 + s2**2)))
+        R12 = ( (gsqmo**2*ssqmo**2*(8*s1*s2 + (24*(-g1 + g1**2*s1 + g2**2*s1)*(-g2 + g1**2*s2 + g2**2*s2)*ssqmo**2)/sdet2 - 
+           (16*(-g1 + g1**2*s1 + g2**2*s1)*ssqmo*bigfac3)/
+            sdet2 - 
+           (16*(-g2 + g1**2*s2 + g2**2*s2)*ssqmo*bigfac4)/
+            sdet2 + 
+           (8*bigfac3*bigfac4)/
+            sdet2 - 
+           (16*(-g1 + g1**2*s1 + g2**2*s1)*s2*ssqmo)/sdet - 
+           (16*s1*(-g2 + g1**2*s2 + g2**2*s2)*ssqmo)/sdet + 
+           (16*s1*bigfac3)/sdet + 
+           (16*s2*bigfac4)/sdet - 
+           (8*ssqmo*R12_fac1)/
+            sdet2 + 
+           (gsqmo**2*ssqmo**2*bigfac3*bigfac4)/
+            (sdet4*sigma**4) - 
+           (4*gsqmo*(-g1 + g1**2*s1 + g2**2*s1)*ssqmo**2*bigfac3)/
+            (sdet3*sigma**2) - 
+           (4*gsqmo*(-g2 + g1**2*s2 + g2**2*s2)*ssqmo**2*bigfac4)/
+            (sdet3*sigma**2) + 
+           (8*gsqmo*ssqmo*bigfac3*bigfac4)/
+            (sdet3*sigma**2) + 
+           (4*gsqmo*s1*ssqmo*bigfac3)/
+            (sdet2*sigma**2) + 
+           (4*gsqmo*s2*ssqmo*bigfac4)/
+            (sdet2*sigma**2) - 
+           (2*gsqmo*ssqmo**2*R12_fac1)/
+            (sdet3*sigma**2)))/(expfac*sdet4) )
+
+
+
         np=g1.size
         Q = numpy.zeros( (np,2) )
         R = numpy.zeros( (np,2,2) )
@@ -705,6 +707,144 @@ class GPriorBABase(GPriorBase):
             R = R[0,:,:]
 
         return P, Q, R
+
+@jit
+class GPriorBA(GPriorBABase):
+    """
+    g prior from Bernstein & Armstrong 2013
+
+    automatically has max lnprob 0 and max prob 1
+    """
+    @void(float64)
+    def __init__(self, sigma):
+        """
+        pars are scalar gsigma from B&A 
+        """
+        self.sigma   = sigma
+        self.sig2 = self.sigma**2
+        self.sig4 = self.sigma**4
+        self.sig2inv = 1./self.sig2
+        self.sig4inv = 1./self.sig4
+
+        self.gmax=1.0
+
+        self.h=1.e-6
+        self.hhalf=0.5*self.h
+        self.hinv = 1./self.h
+
+    @float64(float64,float64)
+    def get_lnprob_scalar2d(self, g1, g2):
+        """
+        Get the 2d log prob for the input g value
+        """
+        gsq = g1*g1 + g2*g2
+        omgsq = 1.0 - gsq
+        if omgsq <= 0.0:
+            raise GMixRangeError("g^2 too big: %s" % gsq)
+        lnp = 2*numpy.log(omgsq) -0.5*gsq*self.sig2inv
+        return lnp
+
+    @float64(float64,float64)
+    def get_prob_scalar2d(self, g1, g2):
+        """
+        Get the 2d prob for the input g value
+        (1-g^2)^2 * exp(-0.5*g^2/sigma^2)
+        """
+        p=0.0
+
+        gsq=g1*g1 + g2*g2
+        omgsq=1.0-gsq
+        if omgsq > 0.0:
+            omgsq *= omgsq
+
+            expval = numpy.exp(-0.5*gsq*self.sig2inv)
+
+            p = omgsq*expval
+        return p
+
+    @void(float64[:],float64[:],float64[:])
+    def fill_prob_array2d(self, g1arr, g2arr, output):
+        """
+        Fill the output with the 2d prob for the input g value
+        """
+        n=g1arr.size
+        for i in xrange(n):
+            g1=g1arr[i]
+            g2=g2arr[i]
+            output[i] = self.get_prob_scalar2d(g1,g2)
+
+    @void(float64[:],float64[:],float64[:])
+    def fill_lnprob_array2d(self, g1arr, g2arr, output):
+        """
+        Fill the output with the 2d prob for the input g value
+        """
+        n=g1arr.size
+        for i in xrange(n):
+            g1=g1arr[i]
+            g2=g2arr[i]
+            output[i] = self.get_lnprob_scalar2d(g1,g2)
+
+
+    @float64(float64)
+    def get_prob_scalar1d(self, g):
+        """
+        Get the 1d prior for the input |g| value
+        """
+        p=0.0
+
+        gsq=g*g
+        omgsq=1.0-gsq
+        
+        if omgsq > 0.0:
+            omgsq *= omgsq
+
+            expval = numpy.exp(-0.5*gsq*self.sig2inv)
+
+            p = omgsq*expval
+
+            p *= 2*numpy.pi*g
+        return p
+
+
+    @void(float64[:],float64[:])
+    def fill_prob_array1d(self, garr, output):
+        """
+        Fill the output with the 1d prior for the input g value
+        """
+
+        n=garr.size
+        for i in xrange(n):
+            g=garr[i]
+            output[i] = self.get_prob_scalar1d(g)
+
+    @float64(float64,float64)
+    def dbyg1_scalar(self, g1, g2):
+        """
+        Derivative with respect to g1 at the input g1,g2 location
+        Used for lensfit.
+
+        Uses central difference and a small enough step size
+        to use just two points
+        """
+        ff = self.get_prob_scalar2d(g1+self.hhalf, g2)
+        fb = self.get_prob_scalar2d(g1-self.hhalf, g2)
+
+        return (ff - fb)*self.hinv
+
+    @float64(float64,float64)
+    def dbyg2_scalar(self, g1, g2):
+        """
+        Derivative with respect to g2 at the input g1,g2 location
+        Used for lensfit.
+
+        Uses central difference and a small enough step size
+        to use just two points
+        """
+        ff = self.get_prob_scalar2d(g1,g2+self.hhalf)
+        fb = self.get_prob_scalar2d(g1,g2-self.hhalf)
+
+        return (ff - fb)*self.hinv
+
 
 
 #@jit(argtypes=[float64, float64, float64, float64, float64, float64])
@@ -882,144 +1022,6 @@ class GPriorM(GPriorBase):
 
 
 
-@jit
-class GPriorBA(GPriorBABase):
-    """
-    g prior from Bernstein & Armstrong 2013
-
-    automatically has max lnprob 0 and max prob 1
-    """
-    @void(float64)
-    def __init__(self, sigma):
-        """
-        pars are scalar gsigma from B&A 
-        """
-        self.sigma   = sigma
-        self.sig2 = self.sigma**2
-        self.sig4 = self.sigma**4
-        self.sig2inv = 1./self.sig2
-        self.sig4inv = 1./self.sig4
-
-        self.gmax=1.0
-
-        self.h=1.e-6
-        self.hhalf=0.5*self.h
-        self.hinv = 1./self.h
-
-    @float64(float64,float64)
-    def get_lnprob_scalar2d(self, g1, g2):
-        """
-        Get the 2d log prob for the input g value
-        """
-        gsq = g1*g1 + g2*g2
-        omgsq = 1.0 - gsq
-        if omgsq <= 0.0:
-            raise GMixRangeError("g^2 too big: %s" % gsq)
-        lnp = 2*numpy.log(omgsq) -0.5*gsq*self.sig2inv
-        return lnp
-
-    @float64(float64,float64)
-    def get_prob_scalar2d(self, g1, g2):
-        """
-        Get the 2d prob for the input g value
-        (1-g^2)^2 * exp(-0.5*g^2/sigma^2)
-        """
-        p=0.0
-
-        gsq=g1*g1 + g2*g2
-        omgsq=1.0-gsq
-        if omgsq > 0.0:
-            omgsq *= omgsq
-
-            expval = numpy.exp(-0.5*gsq*self.sig2inv)
-
-            p = omgsq*expval
-        return p
-
-    @void(float64[:],float64[:],float64[:])
-    def fill_prob_array2d(self, g1arr, g2arr, output):
-        """
-        Fill the output with the 2d prob for the input g value
-        """
-        n=g1arr.size
-        for i in xrange(n):
-            g1=g1arr[i]
-            g2=g2arr[i]
-            output[i] = self.get_prob_scalar2d(g1,g2)
-
-    @void(float64[:],float64[:],float64[:])
-    def fill_lnprob_array2d(self, g1arr, g2arr, output):
-        """
-        Fill the output with the 2d prob for the input g value
-        """
-        n=g1arr.size
-        for i in xrange(n):
-            g1=g1arr[i]
-            g2=g2arr[i]
-            output[i] = self.get_lnprob_scalar2d(g1,g2)
-
-
-    @float64(float64)
-    def get_prob_scalar1d(self, g):
-        """
-        Get the 1d prior for the input |g| value
-        """
-        p=0.0
-
-        gsq=g*g
-        omgsq=1.0-gsq
-        
-        if omgsq > 0.0:
-            omgsq *= omgsq
-
-            expval = numpy.exp(-0.5*gsq*self.sig2inv)
-
-            p = omgsq*expval
-
-            p *= 2*numpy.pi*g
-        return p
-
-
-    @void(float64[:],float64[:])
-    def fill_prob_array1d(self, garr, output):
-        """
-        Fill the output with the 1d prior for the input g value
-        """
-
-        n=garr.size
-        for i in xrange(n):
-            g=garr[i]
-            output[i] = self.get_prob_scalar1d(g)
-
-    @float64(float64,float64)
-    def dbyg1_scalar(self, g1, g2):
-        """
-        Derivative with respect to g1 at the input g1,g2 location
-        Used for lensfit.
-
-        Uses central difference and a small enough step size
-        to use just two points
-        """
-        ff = self.get_prob_scalar2d(g1+self.hhalf, g2)
-        fb = self.get_prob_scalar2d(g1-self.hhalf, g2)
-
-        return (ff - fb)*self.hinv
-
-    @float64(float64,float64)
-    def dbyg2_scalar(self, g1, g2):
-        """
-        Derivative with respect to g2 at the input g1,g2 location
-        Used for lensfit.
-
-        Uses central difference and a small enough step size
-        to use just two points
-        """
-        ff = self.get_prob_scalar2d(g1,g2+self.hhalf)
-        fb = self.get_prob_scalar2d(g1,g2-self.hhalf)
-
-        return (ff - fb)*self.hinv
-
-
 
 class LogNormalBase(object):
     """
@@ -1029,22 +1031,20 @@ class LogNormalBase(object):
         """
         This one no error checking
         """
-        if numpy.any(x <= 0):
-            raise GMixRangeError("values of x must be > 0")
-        logx = numpy.log(x)
 
-        chi2 = self.logivar*(logx-self.logmean)**2
+        x=numpy.array(x, dtype='f8', copy=False)
 
-        lnprob = -0.5*chi2 - logx
-        return lnprob
+        lnp=numpy.zeros(x.size)
+        self.fill_lnprob_array(x, lnp)
+
+        return lnp
 
     def get_prob_array(self, x):
         """
         Get the probability of x.  x can be an array
         """
-        if numpy.any(x <= 0):
-            raise GMixRangeError("values of x must be > 0")
-        lnp=self.get_lnprob_array(x)
+
+        lnp = self.get_lnprob_array(x)
         return numpy.exp(lnp)
 
     def sample(self, nrand=None):
@@ -1060,6 +1060,47 @@ class LogNormalBase(object):
             z=numpy.random.randn(nrand)
         return numpy.exp(self.logmean + self.logsigma*z)
 
+    def sample_brute(self, nrand=None, maxval=None):
+        """
+        Get nrand random deviates from the distribution using brute force
+
+        This is really to check that our probabilities are being calculated
+        correctly, by comparing to the regular sampler
+        """
+
+        if maxval is None:
+            maxval=self.mean + 10*self.sigma
+
+
+        if nrand is None:
+            is_scalar=True
+            nrand=1
+        else:
+            is_scalar=False
+
+        samples=numpy.zeros(nrand)
+
+        ngood=0
+        nleft=nrand
+        while ngood < nrand:
+            
+            rvals = maxval*randu(nleft)
+
+            # between 0,1 which is max for prob
+            h = randu(nleft)
+
+            pvals = self.get_prob_array(rvals)
+
+            w,=numpy.where(h < pvals)
+            if w.size > 0:
+                samples[ngood:ngood+w.size] = rvals[w]
+                ngood += w.size
+                nleft -= w.size
+ 
+        if is_scalar:
+            samples=samples[0]
+
+        return samples
 
 @jit
 class LogNormal(LogNormalBase):
@@ -1122,35 +1163,34 @@ class LogNormal(LogNormalBase):
         """
         if x <= 0:
             raise GMixRangeError("values of x must be > 0")
+
         logx = numpy.log(x)
-        lnp = logx
-        lnp -= self.logmean 
-        lnp *= lnp
-        lnp *= self.logivar
-        lnp *= (-0.5)
-        lnp -= logx
+        chi2   = self.logivar*(logx-self.logmean)**2
 
-        # this way the maximum lnprob is 0.0
-        lnp -= self.lnprob_mode
+        # subtract mode to make max 0.0
+        lnprob = -0.5*chi2 - logx - self.lnprob_mode
 
-        return lnp
+        return lnprob
 
     @float64(float64)
     def get_prob_scalar(self, x):
         """
         Get the probability of x.
         """
-        if x <= 0:
-            raise GMixRangeError("values of x must be > 0")
-        logx = numpy.log(x)
-        lnp = logx
-        lnp -= self.logmean 
-        lnp *= lnp
-        lnp *= self.logivar
-        lnp *= (-0.5)
-        lnp -= logx
-        p=numpy.exp(lnp)
-        return p
+
+        lnprob=self.get_lnprob_scalar(x)
+        return numpy.exp(lnprob)
+
+    @void(float64[:], float64[:])
+    def fill_lnprob_array(self, x_arr, lnp_arr):
+        """
+        Fill in the array
+        """
+        n=x_arr.size
+        for i in xrange(n):
+            x=x_arr[i]
+            lnp_arr[i] = self.get_lnprob_scalar(x)
+
 
 class BFracBase(object):
     """
@@ -1200,7 +1240,7 @@ class BFracBase(object):
         """
         Get the ln(prob) for the input b frac value
         """
-        bfrac=numpy.array(bfrac, copy=False)
+        bfrac=numpy.array(bfrac, dtype='f8', copy=False)
         n=bfrac.size
 
         lnp=numpy.zeros(n)
@@ -1349,6 +1389,9 @@ class TruncatedGaussianPolar(object):
         """
         ln(p) for a array inputs
         """
+        x1=numpy.array(x1, dtype='f8', copy=False)
+        x2=numpy.array(x2, dtype='f8', copy=False)
+
         x2=x1**2 + x2**2
         w,=numpy.where(x2 > self.maxval2)
         if w.size > 0:
@@ -1422,6 +1465,7 @@ class StudentPositive(Student):
         """
         get ln(prob)
         """
+        x=numpy.array(x, dtype='f8', copy=False)
         
         w,=numpy.where(x <= 0)
         if w.size != 0:
@@ -1526,6 +1570,10 @@ class TruncatedStudentPolar(Student2D):
         """
         ln(p) for a array inputs
         """
+
+        x1=numpy.array(x1, dtype='f8', copy=False)
+        x2=numpy.array(x2, dtype='f8', copy=False)
+
         x2=x1**2 + x2**2
         w,=numpy.where(x2 > self.maxval2)
         if w.size > 0:
@@ -1563,13 +1611,73 @@ class CenPriorBase(object):
 
         return rand1, rand2
 
+    def sample_brute(self, nrand=None):
+        """
+        Get nrand random deviates from the distribution using brute force
+
+        This is really to check that our probabilities are being calculated
+        correctly, by comparing to the regular sampler
+        """
+
+        # 10 sigma
+        maxval1 = self.cen1 + 5.0*self.sigma1
+        maxval2 = self.cen2 + 5.0*self.sigma2
+
+        if nrand is None:
+            is_scalar=True
+            nrand=1
+        else:
+            is_scalar=False
+
+        r1=numpy.zeros(nrand)
+        r2=numpy.zeros(nrand)
+
+        ngood=0
+        nleft=nrand
+        while ngood < nrand:
+            
+            rvals1 = maxval1*srandu(nleft)
+            rvals2 = maxval2*srandu(nleft)
+
+            # between 0,1 which is max for prob
+            h = randu(nleft)
+
+            pvals = self.get_prob_array(rvals1, rvals2)
+
+            w,=numpy.where(h < pvals)
+            if w.size > 0:
+                r1[ngood:ngood+w.size] = rvals1[w]
+                r2[ngood:ngood+w.size] = rvals2[w]
+                ngood += w.size
+                nleft -= w.size
+ 
+        if is_scalar:
+            r1=r1[0]
+            r2=r2[0]
+
+        return r1,r2
+
+
     def get_lnprob_array(self, p1, p2):
-        d1 = self.cen1-p1
-        d2 = self.cen2-p2
-        lnp = -0.5*d1*d1*self.s2inv1
-        lnp -= 0.5*d2*d2*self.s2inv2
+        """
+        log probability for arrays
+        """
+
+        p1=numpy.array(p1, dtype='f8', copy=False)
+        p2=numpy.array(p2, dtype='f8', copy=False)
+
+        lnp = numpy.zeros(p1.size)
+        self.fill_lnprob_array(p1, p2, lnp)
 
         return lnp
+
+    def get_prob_array(self, p1, p2):
+        """
+        probability for arrays, max 1
+        """
+
+        lnp = self.get_lnprob_array(p1, p2)
+        return numpy.exp(lnp)
 
 
 @jit
@@ -1589,20 +1697,34 @@ class CenPrior(CenPriorBase):
 
 
     @float64(float64,float64)
-    def get_lnprob(self,p1,p2):
+    def get_lnprob(self,p1, p2):
+        """
+        log probability
+        """
         d1 = self.cen1-p1
         d2 = self.cen2-p2
-        lnp = -0.5*d1*d1*self.s2inv1
-        lnp -= 0.5*d2*d2*self.s2inv2
+        lnp = -0.5*d1*d1*self.s2inv1 - 0.5*d2*d2*self.s2inv2
 
         return lnp
 
+    @float64(float64,float64)
+    def get_prob(self,p1, p2):
+        """
+        probability, max 1
+        """
+        lnp = self.get_lnprob(p1, p2)
+        return numpy.exp(lnp)
 
-def srandu(num=None):
-    """
-    Generate random numbers in the symmetric distribution [-1,1]
-    """
-    return 2*(numpy.random.random(num)-0.5)
+    @void(float64[:], float64[:], float64[:])
+    def fill_lnprob_array(self, p1_arr, p2_arr, lnp_arr):
+        """
+        Fill in the array
+        """
+        n=p1_arr.size
+        for i in xrange(n):
+            p1=p1_arr[i]
+            p2=p2_arr[i]
+            lnp_arr[i] = self.get_lnprob(p1, p2)
 
 
 class TPriorCosmosBase(object):
@@ -1690,24 +1812,14 @@ def _2gauss_prob_array(means, ivars, weights, vals, output):
     n=vals.size
     for i in xrange(n):
         val=vals[i]
+        output[i] = _2gauss_prob_scalar(val)
 
-        if val <= 0:
-            raise GMixRangeError("values must be > 0")
 
-        lnv=numpy.log10(val)
+def srandu(num=None):
+    """
+    Generate random numbers in the symmetric distribution [-1,1]
+    """
+    return 2*(numpy.random.random(num)-0.5)
 
-        diff1=lnv-means[0]
-        diff1sq = diff1*diff1
-
-        diff2=lnv-means[1]
-        diff2sq = diff2*diff2
-
-        p1 = weights[0]*numpy.exp( -0.5*ivars[0]*diff1sq )
-        p2 = weights[1]*numpy.exp( -0.5*ivars[1]*diff2sq )
-        
-        # the 1/val puts us back into dN/val space
-        p = (p1+p2)/val
-
-        output[i] = p
 
 

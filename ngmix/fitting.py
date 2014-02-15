@@ -1449,7 +1449,8 @@ class MCMCSimple(MCMCBase):
         else:
             # expand around a requested value.  BA analytic formulas
             # don't support this yet...
-            Pi,Qi,Ri = self.g_prior.get_pqr_num(g1,g2,s1=sh[0], s2=sh[1])
+            #Pi,Qi,Ri = self.g_prior.get_pqr_num(g1,g2,s1=sh[0], s2=sh[1])
+            Pi,Qi,Ri = self.g_prior.get_pqr_expand(g1,g2, sh[0], sh[1])
 
         if self.g_prior_during:
             print >>stderr,'        fixing for during'
