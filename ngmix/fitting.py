@@ -892,6 +892,9 @@ class MCMCBase(FitterBase):
     def __init__(self, image, weight, jacobian, model, **keys):
         super(MCMCBase,self).__init__(image, weight, jacobian, model, **keys)
 
+        # this should be a numpy.random.RandomState object
+        self.random_state = keys.get('random_state',None)
+
         self.doiter=keys.get('iter',True)
 
         self.nstep=keys.get('nstep',200)
@@ -1062,6 +1065,19 @@ class MCMCBase(FitterBase):
                                         self.npars, 
                                         self.calc_lnprob,
                                         a=self.mca_a)
+        if self.random_state is not None:
+
+            # this is a property, runs set_state internally. sadly this will
+            # fail silently which is the stupidest thing I have ever seen in my
+            # entire life.  If I want to set the state it is important to me!
+            
+            print >>stderr,'    replacing random state'
+            #sampler.random_state=self.random_state.get_state()
+
+            # OK, we will just hope that _random doesn't change names in the future.
+            # but at least we get control back
+            sampler._random = self.random_state
+
         return sampler
 
     def _get_priors(self, pars):
