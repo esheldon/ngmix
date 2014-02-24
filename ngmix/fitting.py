@@ -892,7 +892,8 @@ class MCMCBase(FitterBase):
     def __init__(self, image, weight, jacobian, model, **keys):
         super(MCMCBase,self).__init__(image, weight, jacobian, model, **keys)
 
-        # this should be a numpy.random.RandomState object
+        # this should be a numpy.random.RandomState object, unlike emcee which
+        # through the random_state parameter takes the tuple state
         self.random_state = keys.get('random_state',None)
 
         self.doiter=keys.get('iter',True)

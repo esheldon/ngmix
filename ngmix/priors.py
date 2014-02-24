@@ -6,6 +6,7 @@ I haven't forced the max prob to be 1.0 yet, but should
 
 """
 import numpy
+from numpy import array
 from numpy.random import random as randu
 from numpy.random import randn
 import numba
@@ -1726,6 +1727,152 @@ class CenPrior(CenPriorBase):
             p2=p2_arr[i]
             lnp_arr[i] = self.get_lnprob(p1, p2)
 
+JOINT_NGAUSS=8
+JOINT_N_ITER=1000
+JOINT_MIN_COVAR=1.0e-6
+JOINT_COVARIANCE_TYPE='full'
+
+class TFluxPriorCosmosBase(object):
+    """
+    From fitting double gaussians to log(T) (actually log10
+    but we ignore the constant of prop.)
+
+    dN/dT = (1/T)dN/dlog(T)
+    """
+
+    def get_fmode(self):
+        return self.fmode
+
+    def get_lnprob(self, T_and_flux):
+        """
+        ln prob for linear variables
+        """
+        nd=len( T_and_flux.shape )
+        if nd == 1:
+            logvals = numpy.log10( T_and_flux ).reshape(1,2)
+        else:
+            logvals = numpy.log10( T_and_flux )
+
+        return self.gmm.score(logvals)
+
+    def sample_log(self, n):
+        """
+        Sample the log variables
+        """
+        return self.gmm.sample(n)
+
+    def sample(self, n):
+        """
+        Sample the linear variables
+        """
+        samples=self.gmm.sample(n)
+        lin_samples = 10.0**samples
+        return lin_samples
+
+    def make_gmm(self):
+        """
+        Make a GMM object from the inputs
+        """
+        from sklearn.mixture import GMM
+        # we will over-ride values, pars here shouldn't matter except
+        # for consistency
+        gmm=GMM(n_components=JOINT_NGAUSS,
+                n_iter=JOINT_N_ITER,
+                min_covar=JOINT_MIN_COVAR,
+                covariance_type=JOINT_COVARIANCE_TYPE)
+        gmm.means_ = self.means
+        gmm.covars_ = self.covars
+        gmm.weights_ = self.weights
+
+        self.gmm=gmm 
+
+
+class TFluxPriorCosmosExp(TFluxPriorCosmosBase):
+    def __init__(self, min_sigma=0.0):
+        self.min_sigma=min_sigma
+
+        self.fmode=0.121873372203
+        self.weights=array([ 0.24725964,  0.12439838,  0.10301993,
+                            0.07903986,  0.16064439, 0.01162365,
+                            0.15587558,  0.11813856])
+        self.means=array([[-0.63771027, -0.55703495],
+                          [-1.09910453, -0.79649937],
+                          [-0.89605713, -0.9432781 ],
+                          [-1.01262357, -0.05649636],
+                          [-0.26622288, -0.16742824],
+                          [-0.50259072, -0.10134068],
+                          [-0.11414387, -0.49449105],
+                          [-0.39625801, -0.83781264]])
+
+        self.covars=array([[[ 0.17219003, -0.00650028],
+                            [-0.00650028,  0.05053097]],
+
+                           [[ 0.09800749,  0.00211059],
+                            [ 0.00211059,  0.01099591]],
+
+                           [[ 0.16110231,  0.00194853],
+                            [ 0.00194853,  0.00166609]],
+
+                           [[ 0.07933064,  0.08535596],
+                            [ 0.08535596,  0.20289928]],
+
+                           [[ 0.17805248,  0.1356711 ],
+                            [ 0.1356711 ,  0.24728999]],
+
+                           [[ 1.07112875, -0.08777646],
+                            [-0.08777646,  0.26131025]],
+
+                           [[ 0.06570913,  0.04912536],
+                            [ 0.04912536,  0.094739  ]],
+
+                           [[ 0.0512232 ,  0.00519115],
+                            [ 0.00519115,  0.00999365]]])
+
+
+        self.make_gmm()
+
+class TFluxPriorCosmosDev(TFluxPriorCosmosBase):
+
+    def __init__(self, min_sigma=0.0):
+        self.min_sigma=min_sigma
+
+        self.fmode=0.241579121406777
+        self.weights=array([ 0.13271808,  0.10622821,  0.09982766,
+                            0.29088236,  0.1031488 , 0.10655095,
+                            0.01631938,  0.14432457])
+        self.means=array([[ 0.22180692,  0.05099562],
+                          [ 0.92589409, -0.61785194],
+                          [-0.10599071, -0.82198516],
+                          [ 1.06182382, -0.29997484],
+                          [ 1.57670969,  0.25244698],
+                          [-0.1807241 , -0.35644187],
+                          [ 0.73288177,  0.07028779],
+                          [-0.14674281, -0.65843109]])
+        self.covars=array([[[ 0.35760805,  0.17652397],
+                            [ 0.17652397,  0.28479473]],
+
+                           [[ 0.14969479,  0.03008289],
+                            [ 0.03008289,  0.01369154]],
+
+                           [[ 0.37153864,  0.03293217],
+                            [ 0.03293217,  0.00476308]],
+
+                           [[ 0.27138008,  0.08628813],
+                            [ 0.08628813,  0.0883718 ]],
+
+                           [[ 0.20242911,  0.12374718],
+                            [ 0.12374718,  0.22626528]],
+
+                           [[ 0.30836137,  0.07141098],
+                            [ 0.07141098,  0.05870399]],
+
+                           [[ 2.13662397,  0.04301596],
+                            [ 0.04301596,  0.17006638]],
+
+                           [[ 0.40151762,  0.05215542],
+                            [ 0.05215542,  0.01733399]]])
+
+        self.make_gmm()
 
 class TPriorCosmosBase(object):
     """
