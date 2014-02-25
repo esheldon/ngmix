@@ -1738,7 +1738,32 @@ class TFluxPriorCosmosBase(object):
     but we ignore the constant of prop.)
 
     dN/dT = (1/T)dN/dlog(T)
+
+    T is in arcsec**2
+
+    send pixel_scale to use pixels instead of arcsec as input and output units
+
+    bounds are assumed to be in pixels^2 if pixel_scale is set
     """
+    def __init__(self, bounds=None, pixel_scale=1.0):
+        self.pixel_scale=float( pixel_scale )
+
+        # to convert log(T) to arcsec, we add log10(pixel_scale**2)
+        self.log_pix2arcsec = 2*numpy.log10(self.pixel_scale)
+        self.arcsec2pix = 1.0/pixel_scale**2
+
+        self.bounds=bounds
+        if bounds is not None:
+            if len(bounds) != 2:
+                raise ValueError("bounds must be len==2")
+
+            # if pixel_scale!=1, we assume the input bounds
+            # were in pixels.  convert to arcsec for use later
+            self.bounds = numpy.array(bounds)
+            self.bounds_arcsec = numpy.array(bounds)
+            self.bounds_arcsec[0] += self.log_pix2arcsec
+
+        self.set_pars()
 
     def get_fmode(self):
         return self.fmode
@@ -1746,6 +1771,10 @@ class TFluxPriorCosmosBase(object):
     def get_lnprob(self, T_and_flux):
         """
         ln prob for linear variables
+
+        if pixel_scale was set, T is assumed to be in pixels^2 otherwise
+        arcsec^2
+
         """
         nd=len( T_and_flux.shape )
         if nd == 1:
@@ -1753,21 +1782,50 @@ class TFluxPriorCosmosBase(object):
         else:
             logvals = numpy.log10( T_and_flux )
 
+        # convert input T to arcsec^2 if pixel_scale != 1.0
+        logvals[:,0] += self.log_pix2arcsec
+        
         return self.gmm.score(logvals)
-
-    def sample_log(self, n):
-        """
-        Sample the log variables
-        """
-        return self.gmm.sample(n)
 
     def sample(self, n):
         """
         Sample the linear variables
+
+        if pixel_scale was set, T is in pixels^2 otherwise arcsec^2
         """
-        samples=self.gmm.sample(n)
-        lin_samples = 10.0**samples
+        if self.bounds is not None:
+            lin_samples=self._sample_bounds(n)
+        else:
+            samples=self.gmm.sample(n)
+            lin_samples = 10.0**samples
+
+        # now convert to pixel^2 if pixel_scale != 1
+        lin_samples[:,0] *= self.arcsec2pix
+
         return lin_samples
+
+    def _sample_bounds(self, n):
+        """
+        samples are in arcsec^2
+        """
+        bnd_arcsec=self.bounds_arcsec
+        lin_samples=numpy.zeros( (n,2) )
+        nleft=n
+        ngood=0
+        while nleft > 0:
+            tsamples=self.gmm.sample(nleft)
+            tlin_samples = 10.0**tsamples
+
+            w,=numpy.where(  (tlin_samples[:,0] > bnd_arcsec[0])
+                           & (tlin_samples[:,1] > bnd_arcsec[1]) )
+            if w.size > 0:
+                lin_samples[ngood:ngood+w.size,:] = tlin_samples[w,:]
+                ngood += w.size
+                nleft -= w.size
+
+
+        return lin_samples
+
 
     def make_gmm(self):
         """
@@ -1795,9 +1853,8 @@ class TFluxPriorCosmosExp(TFluxPriorCosmosBase):
     pars from 
     ~/lensing/galsim-cosmos-data/gmix-fits/001/dist/gmix-cosmos-001-exp-joint-dist.fits
     """
-    def __init__(self, min_sigma=0.0):
-        self.min_sigma=min_sigma
 
+    def set_pars(self):
         self.fmode=0.121873372203
 
         # T_near is mean T near the flux mode
@@ -1851,9 +1908,7 @@ class TFluxPriorCosmosDev(TFluxPriorCosmosBase):
     ~/lensing/galsim-cosmos-data/gmix-fits/001/dist/gmix-cosmos-001-dev-joint-dist.fits
     """
 
-    def __init__(self, min_sigma=0.0):
-        self.min_sigma=min_sigma
-
+    def set_pars(self):
         self.fmode=0.241579121406777
         # T_near is mean T near the flux mode
         self.T_near=2.24560320009

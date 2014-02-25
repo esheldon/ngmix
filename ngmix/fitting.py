@@ -639,8 +639,10 @@ class LMSimple(FitterBase):
 
         self.guess=numpy.array( guess, dtype='f8' )
 
-        # we subtract 2 since center and shape are combined
-        self.fdiff_size=self.totpix + self.npars - 2
+        # center + shape + T + fluxes
+        n_prior_pars=1 + 1 + 1 + self.nband
+
+        self.fdiff_size=self.totpix + n_prior_pars
 
     def go(self):
         """
@@ -732,20 +734,21 @@ class LMSimple(FitterBase):
         I have verified all our priors have this property.
         """
 
-        last=0
-        fdiff[0] = -self.cen_prior.get_lnprob(pars[0], pars[1])
-        last += 1
-        fdiff[1] = -self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
-        last += 1
-        fdiff[2] = -self.T_prior.get_lnprob_scalar(pars[4])
-        last += 1
+        index=0
+        fdiff[index] = -self.cen_prior.get_lnprob(pars[0], pars[1])
+        index += 1
+        fdiff[index] = -self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+        index += 1
 
+        fdiff[index] = -self.T_prior.get_lnprob_scalar(pars[4])
+        index += 1
         for i,cp in enumerate(self.counts_prior):
             counts=pars[5+i]
-            fdiff[3+i] = -cp.get_lnprob_scalar(counts)
-            last += 1
+            fdiff[index] = -cp.get_lnprob_scalar(counts)
+            index += 1
 
-        return last
+        # this leaves us after the priors
+        return index
 
     def _get_priors(self, pars):
         """
@@ -762,6 +765,64 @@ class LMSimple(FitterBase):
 
         return lnp
 
+
+class LMSimpleJointTF(LMSimple):
+    """
+    A class for doing a fit using levenberg marquardt
+
+    Joint size and flux distribution
+    """
+    def __init__(self, image, weight, jacobian, model, guess, **keys):
+        super(LMSimpleJointTF,self).__init__(image, weight, jacobian, model, **keys)
+
+        assert self.joint_TF_prior is not None,"send joint_TF_prior"
+        assert self.nband == 1, "add support for multi-band and joint prior"
+
+        # this is over-riding what we did in LMSimple
+
+        # center + shape + (T/fluxes combined)
+        n_prior_pars=1 + 1 + 1
+
+        self.fdiff_size=self.totpix + n_prior_pars
+
+
+    def _fill_priors(self, pars, fdiff):
+        """
+        Fill priors at the beginning of the array.
+
+        ret the position after last par
+
+        We require all the lnprobs are < 0, equivalent to
+        the peak probability always being 1.0
+
+        I have verified all our priors have this property.
+        """
+
+        index=0
+        fdiff[index] = -self.cen_prior.get_lnprob(pars[0], pars[1])
+        index += 1
+        fdiff[index] = -self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+        index += 1
+
+        lnp = -self.joint_TF_prior.get_lnprob(pars[4:])
+        fdiff[index] = lnp[0]
+        index += 1
+
+        # this leaves us after the priors
+        return index
+
+    def _get_priors(self, pars):
+        """
+        For the stats calculation
+        """
+        lnp=0.0
+        
+        lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+        lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+
+        lnp += ( self.joint_TF_prior.get_lnprob(pars[4:]) )[0]
+
+        return lnp
 
 
 NOTFINITE_BIT=11
@@ -1283,6 +1344,7 @@ class MCMCBase(FitterBase):
         return tablist
 
 
+
 class MCMCSimple(MCMCBase):
     """
     Add additional features to the base class to support simple models
@@ -1550,6 +1612,38 @@ class MCMCSimple(MCMCBase):
 
         return P, Q, R
 
+
+class MCMCSimpleJointTF(MCMCBase):
+    """
+    Add additional features to the base class to support simple models
+    """
+    def __init__(self, image, weight, jacobian, model, **keys):
+        super(MCMCSimpleJointTF,self).__init__(image, weight, jacobian, model, **keys)
+
+        assert self.joint_TF_prior is not None,"send joint_TF_prior"
+        assert self.nband == 1, "add support for multi-band and joint prior"
+
+        print >>stderr,'-- JOINT TF --'
+
+    def _get_priors(self, pars):
+        """
+        # go in simple
+        add any priors that were sent on construction
+        
+        note g prior is *not* applied during the likelihood exploration
+        if do_lensfit=True or do_pqr=True
+        """
+        lnp=0.0
+        
+        if self.cen_prior is not None:
+            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+
+        if self.g_prior is not None and self.g_prior_during:
+            lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+        
+        lnp = -self.joint_TF_prior.get_lnprob(pars[4:])
+
+        return lnp
 
 
 
