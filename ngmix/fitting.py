@@ -797,6 +797,8 @@ class LMSimpleJointTF(LMSimple):
 
         I have verified all our priors have this property.
         """
+        raise ValueError("think how to do prior in LM, both if we need "
+                         "factor of two and if need to max at zero ")
 
         index=0
         fdiff[index] = -self.cen_prior.get_lnprob(pars[0], pars[1])
@@ -804,8 +806,8 @@ class LMSimpleJointTF(LMSimple):
         fdiff[index] = -self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
         index += 1
 
-        lnp = -self.joint_TF_prior.get_lnprob(pars[4:])
-        fdiff[index] = lnp[0]
+        
+        fdiff[index] = -self.joint_TF_prior.get_lnprob_one(pars[4:])
         index += 1
 
         # this leaves us after the priors
@@ -820,7 +822,7 @@ class LMSimpleJointTF(LMSimple):
         lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
         lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
 
-        lnp += ( self.joint_TF_prior.get_lnprob(pars[4:]) )[0]
+        lnp += self.joint_TF_prior.get_lnprob_one(pars[4:])
 
         return lnp
 
@@ -1613,7 +1615,7 @@ class MCMCSimple(MCMCBase):
         return P, Q, R
 
 
-class MCMCSimpleJointTF(MCMCBase):
+class MCMCSimpleJointTF(MCMCSimple):
     """
     Add additional features to the base class to support simple models
     """
@@ -1622,8 +1624,6 @@ class MCMCSimpleJointTF(MCMCBase):
 
         assert self.joint_TF_prior is not None,"send joint_TF_prior"
         assert self.nband == 1, "add support for multi-band and joint prior"
-
-        print >>stderr,'-- JOINT TF --'
 
     def _get_priors(self, pars):
         """
@@ -1641,7 +1641,8 @@ class MCMCSimpleJointTF(MCMCBase):
         if self.g_prior is not None and self.g_prior_during:
             lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
         
-        lnp = -self.joint_TF_prior.get_lnprob(pars[4:])
+        jlnp = self.joint_TF_prior.get_lnprob_one(pars[4:])
+        lnp += jlnp
 
         return lnp
 

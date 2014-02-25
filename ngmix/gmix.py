@@ -279,6 +279,21 @@ class GMix(object):
         """
         self._data = zeros(self._ngauss, dtype=_gauss2d_dtype)
 
+
+    def get_loglike(self, row, col):
+        """
+        Evaluate a single row, col
+        """
+        #return _gauss2d_loglike(self._data, _exp3_ivals[0], _exp3_lookup, row, col)
+        return _gauss2d_loglike(self._data, row, col)
+    def get_like(self, row, col):
+        """
+        Evaluate a single row, col
+        """
+        #return _gauss2d_ike(self._data, _exp3_ivals[0], _exp3_lookup, row, col)
+        return _gauss2d_ike(self._data, row, col)
+
+
     def __len__(self):
         return self._ngauss
 
@@ -838,6 +853,7 @@ def _render_slow(self, image, nsub):
             model_val += tval
             image[row,col] = model_val
 
+
 #
 # create the fast lookup table for exponentials
 
@@ -911,6 +927,46 @@ def _render_fast3(self, image, nsub, i0, expvals):
             tval *= areafac
             model_val += tval
             image[row,col] = model_val
+
+
+# evaluate a single point
+#@jit(argtypes=[ _gauss2d[:], int64, float64[:], float64, float64 ])
+#def _gauss2d_like(self, i0, expvals, row, col):
+@jit(argtypes=[ _gauss2d[:], float64, float64 ])
+def _gauss2d_like(self, row, col):
+
+    like = 0.0
+
+    ngauss=self.size
+    for i in xrange(ngauss):
+
+        u = row - self[i].row
+        u2 = u*u
+        v = col - self[i].col
+        v2 = v*v
+
+        uv=u*v
+
+        chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
+
+        pnorm = self[i].pnorm
+        tlike = pnorm*numpy.exp(-0.5*chi2)
+
+        like += tlike
+
+    return like
+
+# evaluate a single point
+#@jit(argtypes=[ _gauss2d[:], int64, float64[:], float64, float64 ])
+#def _gauss2d_loglike(self, i0, expvals, row, col):
+@jit(argtypes=[ _gauss2d[:], float64, float64 ])
+def _gauss2d_loglike(self, row, col):
+    #like = _gauss2d_like(self, i0, expvals, row, col)
+    like = _gauss2d_like(self, row, col)
+    loglike = numpy.log( like )
+    return loglike
+
+
 
 @jit(argtypes=[ _gauss2d[:], float64[:,:], int64, _jacobian[:], int64, float64[:] ])
 def _render_jacob_fast3(self, image, nsub, j, i0, expvals):
