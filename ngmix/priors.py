@@ -1788,10 +1788,21 @@ class TFluxPriorCosmosBase(object):
 
 
 class TFluxPriorCosmosExp(TFluxPriorCosmosBase):
+    """
+    joint T-flux distribution based on fits to cosmos data
+    using an Exp model
+
+    pars from 
+    ~/lensing/galsim-cosmos-data/gmix-fits/001/dist/gmix-cosmos-001-exp-joint-dist.fits
+    """
     def __init__(self, min_sigma=0.0):
         self.min_sigma=min_sigma
 
         self.fmode=0.121873372203
+
+        # T_near is mean T near the flux mode
+        self.T_near=0.182461907543
+
         self.weights=array([ 0.24725964,  0.12439838,  0.10301993,
                             0.07903986,  0.16064439, 0.01162365,
                             0.15587558,  0.11813856])
@@ -1832,11 +1843,21 @@ class TFluxPriorCosmosExp(TFluxPriorCosmosBase):
         self.make_gmm()
 
 class TFluxPriorCosmosDev(TFluxPriorCosmosBase):
+    """
+    joint T-flux distribution based on fits to cosmos data
+    using an Dev model
+
+    pars from
+    ~/lensing/galsim-cosmos-data/gmix-fits/001/dist/gmix-cosmos-001-dev-joint-dist.fits
+    """
 
     def __init__(self, min_sigma=0.0):
         self.min_sigma=min_sigma
 
         self.fmode=0.241579121406777
+        # T_near is mean T near the flux mode
+        self.T_near=2.24560320009
+
         self.weights=array([ 0.13271808,  0.10622821,  0.09982766,
                             0.29088236,  0.1031488 , 0.10655095,
                             0.01631938,  0.14432457])
