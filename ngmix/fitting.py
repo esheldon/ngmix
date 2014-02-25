@@ -60,6 +60,8 @@ class FitterBase(object):
         self.T_prior = keys.get('T_prior',None)
         self.counts_prior = keys.get('counts_prior',None)
 
+        self.joint_TF_prior = keys.get('joint_TF_prior',None)
+
         # in this case, image, weight, jacobian, psf are going to
         # be lists of lists.
 
