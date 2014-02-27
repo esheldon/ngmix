@@ -1733,28 +1733,11 @@ JOINT_COVARIANCE_TYPE='full'
 
 class TFluxPriorCosmosBase(object):
     """
-    From fitting double gaussians to log(T) (actually log10
-    but we ignore the constant of prop.)
-
-    dN/dT = (1/T)dN/dlog(T)
-
     T is in arcsec**2
-
-    send pixel_scale to use pixels instead of arcsec as input and output units
-
-    bounds are assumed to be in pixels^2 if pixel_scale is set
     """
     def __init__(self,
-                 T_bounds=[0.01,100.0],
-                 flux_bounds=[0.01,100.0],
-                 pixel_scale=1.0):
-
-        self.pixel_scale=float( pixel_scale )
-
-        # to convert log(T) to arcsec, we add log10(pixel_scale**2)
-        self.log_pix2arcsec = 2*numpy.log10(self.pixel_scale)
-        self.arcsec_sq_to_pix = 1.0/pixel_scale**2
-        self.pix_to_arcsec_sq = pixel_scale**2
+                 T_bounds=[1.e-6,100.0],
+                 flux_bounds=[1.e-6,100.0]):
 
         self.set_bounds(T_bounds=T_bounds, flux_bounds=flux_bounds)
 
@@ -1768,26 +1751,19 @@ class TFluxPriorCosmosBase(object):
         if len(flux_bounds) != 2:
             raise ValueError("flux_bounds must be len==2")
 
-        # if pixel_scale!=1, we assume the input bounds
-        # were in pixels.  convert to arcsec for use later
-        self.T_bounds = numpy.array(T_bounds)
-        self.T_bounds_arcsec = self.T_bounds*self.pix_to_arcsec_sq
-
-        self.flux_bounds = numpy.array(flux_bounds)
+        self.T_bounds    = array(T_bounds, dtype='f8')
+        self.flux_bounds = array(flux_bounds,dtype='f8')
 
 
     def get_flux_mode(self):
         return self.flux_mode
+
     def get_T_near(self):
-        return self.T_near*self.arcsec_sq_to_pix
+        return self.T_near
 
     def get_lnprob_slow(self, T_and_flux_input):
         """
         ln prob for linear variables
-
-        if pixel_scale was set, T is assumed to be in pixels^2 otherwise
-        arcsec^2
-
         """
 
         nd=len( T_and_flux_input.shape )
@@ -1808,9 +1784,6 @@ class TFluxPriorCosmosBase(object):
             return LOWVAL
 
         logvals = numpy.log10( T_and_flux )
-
-        # convert input T to arcsec^2 if pixel_scale != 1.0
-        logvals[:,0] += self.log_pix2arcsec
         
         return self.gmm.score(logvals)
 
@@ -1832,6 +1805,7 @@ class TFluxPriorCosmosBase(object):
         The fast scalar one using a GMix
         """
 
+        # bounds cuts happen in pixel space (if scale!=1)
         T_bounds=self.T_bounds
         flux_bounds=self.flux_bounds
 
@@ -1844,16 +1818,15 @@ class TFluxPriorCosmosBase(object):
             return LOWVAL
 
         logpars=numpy.log10(T_and_flux)
+
         return self.gmix.get_loglike(logpars[0], logpars[1])
 
     def sample(self, n):
         """
         Sample the linear variables
-
-        if pixel_scale was set, T is in pixels^2 otherwise arcsec^2
         """
 
-        T_bounds_arcsec=self.T_bounds_arcsec
+        T_bounds = self.T_bounds
         flux_bounds = self.flux_bounds
 
         lin_samples=numpy.zeros( (n,2) )
@@ -1865,8 +1838,8 @@ class TFluxPriorCosmosBase(object):
 
             Tvals = tlin_samples[:,0]
             flux_vals=tlin_samples[:,1]
-            w,=numpy.where(  (Tvals > T_bounds_arcsec[0])
-                           & (Tvals < T_bounds_arcsec[1])
+            w,=numpy.where(  (Tvals > T_bounds[0])
+                           & (Tvals < T_bounds[1])
                            & (flux_vals > flux_bounds[0])
                            & (flux_vals < flux_bounds[1]) )
 
@@ -1875,9 +1848,7 @@ class TFluxPriorCosmosBase(object):
                 ngood += w.size
                 nleft -= w.size
 
-        lin_samples[:,0] *= self.arcsec_sq_to_pix
         return lin_samples
-
 
     def make_gmm(self):
         """
