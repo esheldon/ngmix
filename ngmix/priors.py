@@ -357,7 +357,7 @@ class GPriorBase(object):
     def test_pqr_shear_recovery(self, smin, smax, nshear,
                                 npair=10000, h=1.e-6, eps=None):
         """
-        Test how well we recover the shear
+        Test how well we recover the shear with no noise.
 
         parameters
         ----------
@@ -1726,6 +1726,111 @@ class CenPrior(CenPriorBase):
             p1=p1_arr[i]
             p2=p2_arr[i]
             lnp_arr[i] = self.get_lnprob(p1, p2)
+
+
+
+class TruncatedGauss2DBase(object):
+    """
+    Base class provides non-jitted methods
+    """
+
+    def sample(self, nrand=None):
+        """
+        Get nrand random deviates from the distribution
+        """
+
+        if nrand is None:
+            is_scalar=True
+            nrand=1
+        else:
+            is_scalar=False
+
+        r1=numpy.zeros(nrand)
+        r2=numpy.zeros(nrand)
+
+        ngood=0
+        nleft=nrand
+        while ngood < nrand:
+            
+            rvals1=self.cen1 + self.sigma1*randn(nleft)
+            rvals2=self.cen2 + self.sigma2*randn(nleft)
+
+            rsq = rvals1**2 + rvals2**2
+
+            w,=numpy.where(rsq < self.maxval_sq)
+            if w.size > 0:
+                r1[ngood:ngood+w.size] = rvals1[w]
+                r2[ngood:ngood+w.size] = rvals2[w]
+                ngood += w.size
+                nleft -= w.size
+ 
+        if is_scalar:
+            r1=r1[0]
+            r2=r2[0]
+
+        return r1,r2
+
+@jit
+class TruncatedGauss2D(TruncatedGauss2DBase):
+    """
+    Independent gaussians in each dimension, with a specified
+    maximum length
+    """
+    @void(float64, float64, float64, float64,float64)
+    def __init__(self, cen1, cen2, sigma1, sigma2, maxval):
+
+        self.cen1 = cen1
+        self.cen2 = cen2
+        self.sigma1 = sigma1
+        self.sigma2 = sigma2
+        self.s2inv1 = 1./self.sigma1**2
+        self.s2inv2 = 1./self.sigma2**2
+
+        self.maxval=maxval
+        self.maxval_sq = maxval**2
+
+
+    @float64(float64,float64)
+    def get_lnprob_nothrow(self,p1, p2):
+        """
+        log probability
+        """
+
+        psq = p1**2 + p2**2
+        if psq >= self.maxval_sq:
+            lnp=LOWVAL
+        else:
+            d1 = self.cen1-p1
+            d2 = self.cen2-p2
+            lnp = -0.5*d1*d1*self.s2inv1 - 0.5*d2*d2*self.s2inv2
+
+        return lnp
+
+
+    @float64(float64,float64)
+    def get_lnprob(self,p1, p2):
+        """
+        log probability
+        """
+
+        psq = p1**2 + p2**2
+        if psq >= self.maxval_sq:
+            raise GMixRangeError("value too big")
+
+        d1 = self.cen1-p1
+        d2 = self.cen2-p2
+        lnp = -0.5*d1*d1*self.s2inv1 - 0.5*d2*d2*self.s2inv2
+
+        return lnp
+
+    @float64(float64,float64)
+    def get_prob(self,p1, p2):
+        """
+        linear probability
+        """
+        lnp = self.get_lnprob(p1, p2)
+        return numpy.exp(lnp)
+
 
 JOINT_N_ITER=1000
 JOINT_MIN_COVAR=1.0e-6

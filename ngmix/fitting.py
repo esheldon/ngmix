@@ -1614,6 +1614,44 @@ class MCMCSimple(MCMCBase):
 
         return P, Q, R
 
+class MCMCSimpleFixed(MCMCSimple):
+    """
+    Fix everything but shapes
+    """
+    def __init__(self, image, weight, jacobian, model, **keys):
+        super(MCMCSimpleFixed,self).__init__(image, weight, jacobian, model, **keys)
+
+        # value of elements 2,3 are not important as those are the ones to be
+        # varied
+        self.fixed_pars=keys['fixed_pars']
+
+        self.npars=2
+        self.g1i = 0
+        self.g2i = 1
+
+    def _get_priors(self, pars):
+        """
+        # go in simple
+        add any priors that were sent on construction
+        
+        note g prior is *not* applied during the likelihood exploration
+        if do_lensfit=True or do_pqr=True
+        """
+        lnp=0.0
+        
+        if self.g_prior is not None and self.g_prior_during:
+            lnp += self.g_prior.get_lnprob_scalar2d(pars[0], pars[1])
+
+        return lnp
+
+    def _get_band_pars(self, pars, band):
+        bpars= self.fixed_pars[ [0,1,2,3,4,5+band] ]
+        bpars[2:2+2] = pars
+        return bpars
+
+    def get_par_names(self):
+        return ['g1','g2']
+
 
 class MCMCSimpleJointTF(MCMCSimple):
     """
