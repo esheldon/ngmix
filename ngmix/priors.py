@@ -151,6 +151,7 @@ class GPriorBase(object):
         Q1_m   = self.get_pj(g1, g2, s1-h, s2)
         Q2_p   = self.get_pj(g1, g2, s1,   s2+h)
         Q2_m   = self.get_pj(g1, g2, s1,   s2-h)
+
         R12_pp = self.get_pj(g1, g2, s1+h, s2+h)
         R12_mm = self.get_pj(g1, g2, s1-h, s2-h)
 
@@ -290,9 +291,10 @@ class GPriorBase(object):
         """
 
         grand=self.sample1d(nrand)
-        rangle = randu(nrand)*2*numpy.pi
-        g1rand = grand*numpy.cos(rangle)
-        g2rand = grand*numpy.sin(rangle)
+        theta = randu(nrand)*2*numpy.pi
+        twotheta = 2*theta
+        g1rand = grand*numpy.cos(twotheta)
+        g2rand = grand*numpy.sin(twotheta)
         return g1rand, g2rand
 
     def sample2d_brute(self, nrand):
@@ -346,7 +348,8 @@ class GPriorBase(object):
                                       disp=False)
         if warnflag != 0:
             raise ValueError("failed to find min: warnflag %d" % warnflag)
-        self.maxval1d = -fval
+        #self.maxval1d = -fval
+        self.maxval1d = -fval*1.1
 
     def get_prob_scalar1d_neg(self, g, *args):
         """
@@ -1379,9 +1382,9 @@ class TruncatedGaussianPolar(object):
         """
         ln(p) for scalar inputs
         """
-        x2=x1**2 + x2**2
-        if x2 > self.maxval2:
-            raise GMixRangeError("square value out of range: %s" % x2)
+        xsq=x1**2 + x2**2
+        if xsq > self.maxval2:
+            raise GMixRangeError("square value out of range: %s" % xsq)
         diff1=x1-self.mean1
         diff2=x2-self.mean2
         return - 0.5*diff1*diff1*self.ivar1 - 0.5*diff2*diff2*self.ivar2 

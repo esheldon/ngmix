@@ -1548,8 +1548,8 @@ class MCMCSimple(MCMCBase):
         Get the mean P,Q,R marginalized over priors.  Optionally weighted for
         importance sampling
         """
-        weights=self.iweights
-        if weights is not None:
+        if self.iweights is not None:
+            raise ValueError("support iweights again")
             print >>stderr,'        i weighting pqr'
 
             # normalize weights and multiply data by them this way we can use
@@ -1566,6 +1566,34 @@ class MCMCSimple(MCMCBase):
             Ri[:,0,1] *= wnorm
             Ri[:,1,0] *= wnorm
             Ri[:,1,1] *= wnorm
+
+        '''
+        npoints=Pi.size
+        if self.g_prior_during:
+            print >>stderr,'        fixing for during'
+
+            Pinv = 1.0/Pi
+            Pinv_sum=Pinv.sum()
+
+            Qfix = Qi.copy()
+            Rfix = Ri.copy()
+
+            Qfix[:,0] *= Pinv
+            Qfix[:,1] *= Pinv
+            Rfix[:,0,0] *= Pinv
+            Rfix[:,0,1] *= Pinv
+            Rfix[:,1,0] *= Pinv
+            Rfix[:,1,1] *= Pinv
+            
+            # We let the posterior be normalized
+            P = npoints/Pinv_sum
+            Q = Qfix.sum(axis=0)/Pinv_sum
+            R = Rfix.sum(axis=0)/Pinv_sum
+        else:
+            P = Pi.mean()
+            Q = Qi.mean(axis=0)
+            R = Ri.mean(axis=0)
+        '''
 
         P = Pi.mean()
         Q = Qi.mean(axis=0)
