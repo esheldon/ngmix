@@ -973,8 +973,6 @@ class MCMCBase(FitterBase):
         self.ntry=keys.get('ntry',MCMC_NTRY)
         self.min_arate=keys.get('min_arate',MIN_ARATE)
 
-        self.g_prior_during=keys.get('g_prior_during',True)
-
         self.draw_g_prior=keys.get('draw_g_prior',True)
 
         self.do_pqr=keys.get('do_pqr',False)
@@ -987,9 +985,6 @@ class MCMCBase(FitterBase):
             raise ValueError("send g_prior for lensfit or pqr")
 
         self.trials=None
-
-        # only used for importance sampling
-        self.iweights=None
 
 
     def get_trials(self):
@@ -1191,7 +1186,7 @@ class MCMCBase(FitterBase):
         """
         if hasattr(self,'nwalkers'):
             # this was an mcmc run
-            if self.g_prior_during:
+            if self.g_prior is None:
                 weights=None
                 print >>stderr,'    weights are None'
             else:
@@ -1199,13 +1194,8 @@ class MCMCBase(FitterBase):
                 print >>stderr,'    weights are g prior'
                 weights=self.g_prior_vals
         else:
-            weights=self.iweights
-            if not self.g_prior_during:
-                self._set_g_prior_vals()
-                print >>stderr,'    weights are g prior times iweight'
-                weights *= self.g_prior_vals
-            else:
-                print >>stderr,'    weights are iweight'
+            weights=None
+            print >>stderr,'    weights are none'
 
         return weights
 
@@ -1262,8 +1252,10 @@ class MCMCBase(FitterBase):
                                    show=show)
 
         if do_residual:
-            pltlist=self._plot_residuals(title=title,show=show)
-            plots=(plt, pltlist)
+            resplots=self._plot_residuals(title=title,show=show)
+            plots=(plt, resplots)
+            if weights is not None:
+                plots = (plt, wplt, resplots)
         else:
             if weights is not None:
                 plots=(plt, wplt)
@@ -1373,18 +1365,18 @@ class MCMCSimple(MCMCBase):
         """
         # go in simple
         add any priors that were sent on construction
-        
-        note g prior is *not* applied during the likelihood exploration
-        if do_lensfit=True or do_pqr=True
         """
         lnp=0.0
         
         if self.cen_prior is not None:
             lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
 
-        if self.g_prior is not None and self.g_prior_during:
-            lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
-        
+        if self.g_prior is not None:
+            # may have bounds
+            g = numpy.sqrt(pars[2]**2 + pars[3]**2)
+            if g > self.g_prior.gmax:
+                raise GMixRangeError("g too big")
+    
         if self.T_prior is not None:
             lnp += self.T_prior.get_lnprob_scalar(pars[4])
 
@@ -1495,17 +1487,6 @@ class MCMCSimple(MCMCBase):
         R1 = g1diff*dpri_by_g1
         R2 = g2diff*dpri_by_g2
 
-        if self.g_prior_during:
-            g_prior = self.g_prior_vals
-            gpinv = 1.0/g_prior
-
-            R1 *= gpinv
-            R2 *= gpinv
-
-        if self.iweights is not None:
-            R1 *= self.iweights
-            R2 *= self.iweights
-
         gsens[0]= 1.- R1.mean()
         gsens[1]= 1.- R2.mean()
 
@@ -1528,16 +1509,15 @@ class MCMCSimple(MCMCBase):
         sh=self.shear_expand
         if sh is None:
             # expand around zero
-            Pi,Qi,Ri = self.g_prior.get_pqr(g1,g2)
+            if hasattr(self.g_prior,'get_pqr'):
+                Pi,Qi,Ri = self.g_prior.get_pqr(g1,g2)
+            else:
+                Pi,Qi,Ri = self.g_prior.get_pqr_num(g1,g2)
         else:
             # expand around a requested value.  BA analytic formulas
             # don't support this yet...
             #Pi,Qi,Ri = self.g_prior.get_pqr_num(g1,g2,s1=sh[0], s2=sh[1])
             Pi,Qi,Ri = self.g_prior.get_pqr_expand(g1,g2, sh[0], sh[1])
-
-        if self.g_prior_during:
-            print >>stderr,'        fixing for during'
-            Pi,Qi,Ri = self._fix_pqr_for_during(Pi,Qi,Ri)
 
         P,Q,R = self._get_mean_pqr(Pi,Qi,Ri)
 
@@ -1548,52 +1528,6 @@ class MCMCSimple(MCMCBase):
         Get the mean P,Q,R marginalized over priors.  Optionally weighted for
         importance sampling
         """
-        if self.iweights is not None:
-            raise ValueError("support iweights again")
-            print >>stderr,'        i weighting pqr'
-
-            # normalize weights and multiply data by them this way we can use
-            # the same formula below for means
-
-            wsum = weights.sum()
-            iwsum=1.0/wsum
-            wnorm = weights*iwsum
-
-            Pi[:]     *= wnorm
-            Qi[:,0]   *= wnorm
-            Qi[:,1]   *= wnorm
-            Ri[:,0,0] *= wnorm
-            Ri[:,0,1] *= wnorm
-            Ri[:,1,0] *= wnorm
-            Ri[:,1,1] *= wnorm
-
-        '''
-        npoints=Pi.size
-        if self.g_prior_during:
-            print >>stderr,'        fixing for during'
-
-            Pinv = 1.0/Pi
-            Pinv_sum=Pinv.sum()
-
-            Qfix = Qi.copy()
-            Rfix = Ri.copy()
-
-            Qfix[:,0] *= Pinv
-            Qfix[:,1] *= Pinv
-            Rfix[:,0,0] *= Pinv
-            Rfix[:,0,1] *= Pinv
-            Rfix[:,1,0] *= Pinv
-            Rfix[:,1,1] *= Pinv
-            
-            # We let the posterior be normalized
-            P = npoints/Pinv_sum
-            Q = Qfix.sum(axis=0)/Pinv_sum
-            R = Rfix.sum(axis=0)/Pinv_sum
-        else:
-            P = Pi.mean()
-            Q = Qi.mean(axis=0)
-            R = Ri.mean(axis=0)
-        '''
 
         P = Pi.mean()
         Q = Qi.mean(axis=0)
@@ -1603,9 +1537,6 @@ class MCMCSimple(MCMCBase):
 
     def _remove_zero_prior(self):
         """
-        When not applying prior during, we will likely end up with
-        some zero probability points.  We need to make sure we don't
-        end up with zero of those
         """
         g_prior = self.g_prior_vals
 
@@ -1621,26 +1552,6 @@ class MCMCSimple(MCMCBase):
 
         return ndiff
 
-    def _fix_pqr_for_during(self, P, Q, R):
-        """
-        Since the prior is already in the posterior, divide all values by the
-        prior
-
-        zero prior values must already be removed
-        """
-        g_prior = self.g_prior_vals
-
-        pinv = 1/g_prior
-        P *= pinv
-        Q[:,0] *= pinv
-        Q[:,1] *= pinv
-
-        R[:,0,0] *= pinv
-        R[:,0,1] *= pinv
-        R[:,1,0] *= pinv
-        R[:,1,1] *= pinv
-
-        return P, Q, R
 
 class MCMCSimpleFixed(MCMCSimple):
     """
@@ -1662,14 +1573,15 @@ class MCMCSimpleFixed(MCMCSimple):
         # go in simple
         add any priors that were sent on construction
         
-        note g prior is *not* applied during the likelihood exploration
-        if do_lensfit=True or do_pqr=True
         """
         lnp=0.0
         
-        if self.g_prior is not None and self.g_prior_during:
-            lnp += self.g_prior.get_lnprob_scalar2d(pars[0], pars[1])
-
+        if self.g_prior is not None:
+            # may have bounds
+            g = numpy.sqrt(pars[2]**2 + pars[3]**2)
+            if g > self.g_prior.gmax:
+                raise GMixRangeError("g too big")
+ 
         return lnp
 
     def _get_band_pars(self, pars, band):
@@ -1696,9 +1608,8 @@ class MCMCSimpleJointTF(MCMCSimple):
         # go in simple
         add any priors that were sent on construction
         
-        note g prior is *not* applied during the likelihood exploration
-        if do_lensfit=True or do_pqr=True
         """
+        raise ValueError("fix to check gmax and remove during check")
         lnp=0.0
         
         if self.cen_prior is not None:
@@ -1855,9 +1766,12 @@ class MCMCBDC(MCMCSimple):
         if self.cen_prior is not None:
             lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
 
-        if self.g_prior is not None and self.g_prior_during:
-            lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
-        
+        if self.g_prior is not None:
+            # may have bounds
+            g = numpy.sqrt(pars[2]**2 + pars[3]**2)
+            if g > self.g_prior.gmax:
+                raise GMixRangeError("g too big")
+ 
         # bulge size
         if self.T_b_prior is not None:
             lnp += self.T_b_prior.get_lnprob_scalar(pars[4])
@@ -1932,20 +1846,19 @@ class MCMCBDF(MCMCSimple):
         lnp=0.0
         
         if self.cen_prior is not None:
-            #print >>stderr,'cen prior'
             lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
 
-        if self.g_prior is not None and self.g_prior_during:
-            #print >>stderr,'g prior'
-            lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
-        
+        if self.g_prior is not None:
+            # may have bounds
+            g = numpy.sqrt(pars[2]**2 + pars[3]**2)
+            if g > self.g_prior.gmax:
+                raise GMixRangeError("g too big")
+ 
         # prior on total size
         if self.T_prior is not None:
-            #print >>stderr,'T prior'
             lnp += self.T_prior.get_lnprob_scalar(pars[4])
 
         if self.positive_components:
-            #print >>stderr,'check positive'
             # both bulge and disk components positive
             if pars[5] <= 0.0 or pars[6] <= 0.0:
                 raise GMixRangeError("out of bounds")
@@ -1953,13 +1866,11 @@ class MCMCBDF(MCMCSimple):
         # prior on total counts
         if self.counts_prior is not None:
             for i,cp in enumerate(self.counts_prior):
-                #print >>stderr,'counts prior'
                 counts=pars[5:].sum()
                 lnp += cp.get_lnprob_scalar(counts)
 
         # prior on fraction of total flux in the bulge
         if self.bfrac_prior is not None:
-            #print >>stderr,'bfrac prior'
 
             counts = pars[5:].sum()
             counts_b = pars[5]
@@ -1997,660 +1908,8 @@ class MCMCBDF(MCMCSimple):
         return names
 
 
-class ISampleSimple(MCMCSimple):
-    """
 
-    Importance sampling
 
-    Only works for noisy galaxies for which the prior is actually not so
-    different than the actual posterior surface
-
-    """
-    def __init__(self, image, weight, jacobian, model, trials, ln_probs, **keys):
-        """
-        Reproducing some code from FitterBase here.... Need a better
-        way
-        """
-        self.keys=keys
-
-        self._set_samples(trials, ln_probs)
-
-        # note these are not optional
-        self.cen_prior    = keys['cen_prior']
-        self.g_prior      = keys['g_prior']
-        self.T_prior      = keys['T_prior']
-        self.counts_prior = keys['counts_prior']
-
-        # this is because we always are evaluating the full posterior
-        # when doing importance sampling
-        self.g_prior_during=True
-
-        # in this case, image, weight, jacobian, psf are going to
-        # be lists of lists.
-
-        # call this first, others depend on it
-        self._set_lists(image, weight, jacobian, **keys)
-
-        self.model=gmix.get_model_num(model)
-        self.model_name=gmix.get_model_name(self.model)
-        self._set_npars()
-
-        # the function to be called to fill a gaussian mixture
-        self._set_fill_call()
-
-        self.totpix=self.verify()
-
-        self._gmix_lol=None
-
-        self.do_pqr=keys.get('do_pqr',False)
-        self.do_lensfit=keys.get('do_lensfit',False)
-
-        # expand around this shear value
-        self.shear_expand = keys.get('shear_expand',None)
-
-        if (self.do_lensfit or self.do_pqr) and self.g_prior is None:
-            raise ValueError("send g_prior for lensfit or pqr")
-
-        self.flags=0
-        self.arate=1.0
-        self.tau=0.0
-
-    def go(self):
-        """
-        Get the trials and calculate the results
-        """
-
-        self._calc_all_lnprob()
-        self._calc_isample_weights()
-        self._calc_result()
-
-    def _calc_all_lnprob(self):
-        """
-        Calc the actual ln(prob) at all our sample positions
-        """
-
-        trials=self.trials
-        ln_probs=self.ln_probs
-
-        self._init_gmix_lol(trials[0,:])
-
-        n_samples=ln_probs.size
-        for i in xrange(n_samples):
-            ln_probs[i] = self.calc_lnprob(trials[i,:])
-
-        self.ln_probs=ln_probs
-
-    def _calc_isample_weights(self):
-        """
-        Calculate the importance sample weights
-
-        weight = prob_true/prob_approx
-               = exp( lnp_true-lnp_approx )
-               = exp( lnp_diff )
-
-        We can rescale the problem
-
-               = A*exp( lnp_diff - const )
-
-        Which we can use to keep the exp from going under.  We can
-        choose to use
-
-               = A*exp( lnp_diff - lnp_diff.max() )
-
-        Choosing A=1.0 means the weights are between 0 and 1 and a perfect
-        match means all weights are one.
-
-        We would have to re-calculate this max if new samples were added, and
-        thus re-calculate the isfinite for *all* samples. This will slow things
-        down a bit but is unavoidable.
-
-        """
-
-        iweights  = self.iweights
-
-        lnp_diff = self.ln_probs - self.ln_probs0
-
-        # force the maximum value to be zero, so the max weight
-        # is unity. Should reduce underflow
-        lnp_diff -= lnp_diff.max()
-
-        iweights[:] = numpy.exp( lnp_diff )
-
-        w_non_finite, = numpy.where( numpy.isfinite(iweights)==False )
-
-        if w_non_finite.size > 0:
-            iweights[w_non_finite] = 0.0
-
-        self.w_non_finite=w_non_finite
-
-    def _calc_result(self):
-        """
-        Same as parent with added effweight
-        """
-        super(ISampleSimple,self)._calc_result()
-
-        iweights=self.iweights
-        wdiv = iweights * ( 1.0/iweights.max() )
-        eff_n_samples = wdiv.sum()
-        eff_iweight = eff_n_samples/self.n_samples
-
-        res=self._result
-        res['n_samples']     = self.n_samples
-        res['n_non_finite']  = self.w_non_finite.size
-        res['eff_n_samples'] = eff_n_samples
-        res['eff_iweight']   = eff_iweight
-
-    def _set_samples(self, trials, ln_probs):
-        """
-        Set the local refs and check sizes
-        """
-        self.trials=trials
-        self.ln_probs0=ln_probs
-
-        n_samples=ln_probs.size
-        tsize=trials[:,0].size
-        if  tsize != n_samples:
-            raise ValueError("sizes don't match: %s %s" % (tsize,n_samples))
-
-        # actual ln probs
-        self.ln_probs=numpy.zeros(ln_probs.size)
-
-        # importance sample weights
-        self.iweights=numpy.zeros(ln_probs.size)
-        self.n_samples=n_samples
-
-class ISampleSimpleAdapt(MCMCSimple):
-    """
-
-    Importance sampling
-
-    Only works for noisy galaxies for which the prior is actually not so
-    different than the actual posterior surface
-
-    """
-    def __init__(self, image, weight, jacobian, model, sampler, **keys):
-        """
-        Reproducing some code from FitterBase here.... Need a better
-        way
-        """
-        self.keys=keys
-
-        # number of samples per component added
-        self.n_per = keys['n_per']
-
-        # max number of components
-        self.max_components = keys['max_components']
-        self.n_samples_max=self.n_per * self.max_components
-
-        # need to really think hard about this
-        self.max_fdiff = numpy.array(keys['max_fdiff'])
-
-        # note these are not optional
-        self.cen_prior    = keys['cen_prior']
-        self.g_prior      = keys['g_prior']
-        self.T_prior      = keys['T_prior']
-        self.counts_prior = keys['counts_prior']
-
-        self.g_prior_during=keys.get('g_prior_during',True)
-
-        # in this case, image, weight, jacobian, psf are going to
-        # be lists of lists.
-
-        # call this first, others depend on it
-        self._set_lists(image, weight, jacobian, **keys)
-
-        self.model=gmix.get_model_num(model)
-        self.model_name=gmix.get_model_name(self.model)
-        self._set_npars()
-
-        # the initial sampler
-        self.sampler_start=sampler
-
-        # the function to be called to fill a gaussian mixture
-        self._set_fill_call()
-
-        self.totpix=self.verify()
-
-        self._gmix_lol=None
-
-        self.do_pqr=keys.get('do_pqr',False)
-        self.do_lensfit=keys.get('do_lensfit',False)
-
-        # expand around this shear value
-        self.shear_expand = keys.get('shear_expand',None)
-
-        if (self.do_lensfit or self.do_pqr) and self.g_prior is None:
-            raise ValueError("send g_prior for lensfit or pqr")
-
-        self.flags=0
-        self.arate=1.0
-        self.tau=0.0
-
-
-        self._iresult={'eff_n_samples':0.0}
-
-
-    def go(self):
-        """
-        Get the trials and calculate the results
-        """
-
-        for component in xrange(self.max_components):
-            self._add_component()
-
-            #print >>stderr,'    n:',self.n_samples_used, \
-            #               'eff n:',self._iresult['eff_n_samples'], \
-            #               'eff iweight:',self._iresult['eff_iweight']
-
-            print >>stderr,'    %s' % self.n_samples_used
-            print_pars(self.current_pars,  front='      pars: ',stream=stderr)
-            print_pars(self.current_perr,  front='      perr: ',stream=stderr)
-            print_pars(self.pars_fdiff,    front='      fdiff:',stream=stderr)
-
-            if self.has_converged():
-                break
-
-        self._calc_result()
-
-    def _add_component(self):
-        """
-        Add a new component around the highest weight point
-        """
-
-        if not hasattr(self,'trials'):
-            self.init_sampling()
-
-        n_per = self.n_per
-        start = self.n_samples_used
-        end   = start + n_per
-
-        trials = self.trials
-        p0     = self.probs0
-        lnp0   = self.ln_probs0
-
-        sampler=self._get_new_sampler()
-
-        new_trials = sampler.sample(n_per)
-        trials[start:end, :] = new_trials
-
-        # need to optimize this; just get prob to begin with
-
-        # all trials need to get a contribution from the new sampler
-        p0[0:end] += sampler.get_prob(trials[0:end, :])
-
-        # the new points need a contribution from each of the *current* set of
-        # samplers.  There might not be any.
-        for s in self.samplers:
-            p0[start:end] += s.get_prob( new_trials )
-
-        lnp0[0:end] = numpy.log( p0[0:end] )
-
-        # calculate the true lnprob for the new ones
-        self._calc_new_lnprob(start, end)
-
-        # set the weights
-        self._calc_isample_weights(end)
-
-        # prepare for the next call
-        self.samplers.append( sampler )
-        self.n_samples_used += n_per
-
-        self._calc_convergence()
-
-    def has_converged(self):
-        """
-        True if converged
-        """
-        return self._has_converged
-
-    def _calc_convergence(self):
-        """
-        Calculate how much the samples have changed since the last step
-        """
-        from numpy import sqrt, diag
-        end=self.n_samples_used
-
-        iweights = self.iweights[0:end]
-        trials = self.trials[0:end, :]
-        pars,pars_cov = extract_mcmc_stats(trials, weights=iweights)
-
-        perr=numpy.sqrt( numpy.diag(pars_cov) )
-
-        if hasattr(self, 'current_pars'):
-
-            # diff relative to error
-            pars_fdiff = numpy.abs( pars-self.current_pars )/perr
-
-            w,=numpy.where(pars_fdiff > self.max_fdiff)
-            if w.size > 0:
-                has_converged=False
-            else:
-                has_converged=True
-
-        else:
-            pars_fdiff=pars*0 + 1.e20
-            has_converged=False
-
-        self._has_converged=has_converged
-        self.pars_fdiff=pars_fdiff
-        self.current_pars=pars
-        self.current_perr=perr
-
-
-    def _get_new_sampler(self):
-        """
-        get a new sampler, or the starting input one if this is the first
-
-        I checked using the same sampler each time performs as expected
-        """
-
-        if len(self.samplers) == 0:
-            sampler = self.sampler_start
-        else:
-            w=self.iweights[0:self.n_samples_used].argmax()
-            pars=self.trials[w,:]
-            print_pars(pars,front='        maxw point:',stream=stderr)
-            sampler=self.sampler_start.copy()
-            sampler.re_center(pars[0],pars[1],pars[2],pars[3],pars[4],pars[5])
-
-        return sampler
-
-    def init_sampling(self):
-        """
-        Initialize the object variables
-        """
-        while True:
-            sampler=self.sampler_start
-            try:
-                pars=sampler.sample(1)
-                self._init_gmix_lol(pars[0,:])
-                break
-            except:
-                print >>stderr,'failed to init gmix lol with sample...'
-
-        self.samplers=[]
-
-        nmax = self.n_samples_max
-        self.trials    = numpy.zeros( (nmax, self.npars) )
-        self.probs0    = numpy.zeros(nmax)
-        self.ln_probs0 = numpy.zeros(nmax)
-        self.ln_probs  = numpy.zeros(nmax)
-        self.iweights  = numpy.zeros(nmax)
-
-        self.n_samples_used=0
-        self.n_components=0
-
-        self._has_converged=False
-
-    def _calc_new_lnprob(self, start, end):
-        """
-        Calc the actual ln(prob) at all our sample positions
-
-        end not inclusive
-        """
-
-        trials=self.trials
-        ln_probs=self.ln_probs
-
-        for i in xrange(start,end):
-            ln_probs[i] = self.calc_lnprob(trials[i,:])
-
-    def _calc_isample_weights(self, end):
-        """
-        Calculate the importance sample weights
-
-        weight = prob_true/prob_approx
-               = exp( lnp_true-lnp_approx )
-               = exp( lnp_diff )
-
-        We can rescale the problem
-
-               = A*exp( lnp_diff - const )
-
-        Which we can use to keep the exp from going under.  We can
-        choose to use
-
-               = A*exp( lnp_diff - lnp_diff.max() )
-
-        Choosing A=1.0 means the weights are between 0 and 1 and a perfect
-        match means all weights are one.
-
-        We would have to re-calculate this max if new samples were added, and
-        thus re-calculate the isfinite for *all* samples. This will slow things
-        down a bit but is unavoidable.
-
-        """
-
-        lnp_diff = self.ln_probs[0:end] - self.ln_probs0[0:end]
-
-        # force the maximum value to be zero, so the max weight
-        # is unity. Should reduce underflow
-        lnp_diff -= lnp_diff.max()
-
-        iweights = numpy.exp( lnp_diff )
-
-        w_non_finite, = numpy.where( numpy.isfinite(iweights)==False )
-
-        if w_non_finite.size > 0:
-            iweights[w_non_finite] = 0.0
-
-        wdiv = iweights * ( 1.0/iweights.max() )
-        eff_n_samples = wdiv.sum()
-        eff_iweight = eff_n_samples/iweights.size
-
-        self.iweights[0:end] = iweights
-
-        res=self._iresult
-        res['n_samples']     = end
-        res['n_non_finite']  = w_non_finite.size
-        res['eff_n_samples'] = eff_n_samples
-        res['eff_iweight']   = eff_iweight
-
-
-    def _calc_result(self):
-        """
-        Same as parent with added effweight
-        """
-
-        n_used = self.n_samples_used
-        if n_used < self.n_samples_max:
-            self.trials    = self.trials[0:n_used, :]
-            self.ln_probs0 = self.ln_probs0[0:n_used]
-            self.ln_probs  = self.ln_probs[0:n_used]
-            self.iweights  = self.iweights[0:n_used]
-
-        super(ISampleSimpleAdapt,self)._calc_result()
-
-        self._result.update(self._iresult)
- 
-    def _remove_zero_prior(self):
-        """
-        remove zero prior points, including from data we have used
-        in isampling
-        """
-
-        ndiff=super(ISampleSimpleAdapt,self)._remove_zero_prior()
-        if ndiff > 0:
-            self.iweights=self.iweights[w]
-            self.ln_probs0=self.ln_probs0[w]
-            self.ln_probs=self.ln_probs[w]
-
-            self.iweights *= (1.0/self.iweights.max())
-
-        return ndiff
-
-    def make_plots(self,
-                   show=False,
-                   title=None):
-        """
-        Plot the mcmc chain and some residual plots
-        """
-        import biggles
-        import esutil as eu
-
-        res=self._result
-        trials=self.trials
-
-        binfac=0.2
-
-        means=res['pars']
-        errs=res['pars_err']
-
-        names=self.get_par_names()
-        tab=biggles.Table(self.npars,1)
-        weights=self.get_weights() 
-
-        for i in xrange(self.npars):
-            if names is not None:
-                name=names[i]
-            else:
-                name=r'$p_{%d}$' % i
-
-            mean=means[i]
-            err=errs[i]
-
-            xrng=[mean-4.5*err, mean+4.5*err]
-            bsize=binfac*err
-
-            vals=trials[:,i]
-            bsize = binfac*errs[i]
-
-            plt=biggles.FramedPlot()
-            plt.xlabel=name
-
-            hdict = eu.stat.histogram(vals,
-                                      binsize=bsize, 
-                                      weights=weights,
-                                      more=True,
-                                      min=xrng[0],
-                                      max=xrng[1])
-
-            hist=hdict['whist']
-            hplot = biggles.Curve(hdict['center'],
-                                  hdict['whist'])
-
-            lab = r'$<%s> = %0.4g \pm %0.4g$' % (name,mean,err)
-            plab = biggles.PlotLabel(0.1,0.9,lab,
-                                     halign='left',
-                                     color='blue')
-
-            plt.add(hplot, plab)
-            tab[i,0] = plt
-
-        if show:
-            tab.show()
-            key=raw_input('hit a key: ')
-            if key=='q':
-                stop
-
-        return tab
-
-
-
-
-class MCMCSimpleAnze(MCMCSimple):
-    def __init__(self, image, weight, jacobian, model, **keys):
-        super(MCMCSimpleAnze,self).__init__(image, weight, jacobian, model, **keys)
-
-    def go(self):
-        import game
-        import esutil as eu
-
-        guess=self._get_guess()
-        guess1=guess[0,:]
-        sampler=game.Game(self.lnprob_many, guess1,
-                          sigreg=[0.01, 0.01, 0.1, 0.1, 0.1, 0.1])
-
-        sampler.N1=50
-        sampler.N1f=0
-        sampler.blow=1.3
-        sampler.mineffsamp=500
-        sampler.maxiter=1000
-        sampler.wemin=1.e-4
-
-        sampler.run()
-
-        print sampler.sample_list[-1]
-
-        npars=guess1.size
-        m=numpy.zeros(npars)
-        m2=numpy.zeros(npars)
-        sw=0.0
-
-        nsamp=len(sampler.sample_list)
-        trials=numpy.zeros( (nsamp, npars) )
-        weights=numpy.zeros(nsamp)
-        for i,sa in enumerate(sampler.sample_list):
-            trials[i,:] = sa.pars
-            weights[i] = sa.we
-
-
-        eu.plotting.bhist( trials[:, 0], weights=weights, binsize=0.0005,title='row')
-        eu.plotting.bhist( trials[:, 1], weights=weights, binsize=0.0005,title='col')
-        eu.plotting.bhist( trials[:, 2], weights=weights, binsize=0.001,title='g1')
-        eu.plotting.bhist( trials[:, 3], weights=weights, binsize=0.001,title='g2')
-        eu.plotting.bhist( trials[:, 4], weights=weights, binsize=0.01,title='T')
-        eu.plotting.bhist( trials[:, 5], weights=weights, binsize=1.0,title='counts')
-
-
-    def lnprob_many(self, list_of_pars):
-        return map(self.calc_lnprob, list_of_pars)
-
-class ISampleBDFAnze(MCMCBDF):
-
-    def go(self):
-        import game
-        import esutil as eu
-
-        guess=self.full_guess
-        self._init_gmix_lol(guess)
-
-        # ok, these are the *maximum* allowed values for sigma
-        # in each dimension....
-        #sigreg=numpy.array([0.2,0.2,0.5,0.5,10.0,20.0,20.0])
-        #sigreg=numpy.array([0.1,0.1,0.2,0.2,8.0,10.0,10.0])
-        #sampler=game.Game(self.lnprob_many, guess, sigreg=sigreg)
-        # will get from sigreg
-        #sampler.fixedcov=True
-
-        sampler=game.Game(self.lnprob_many, guess,
-                          sigreg=[0.01, 0.01, 0.1, 0.1, 0.1, 0.1, 0.1])
-
-        sampler.N1=50
-        sampler.N1f=0
-        sampler.blow=1.3
-        sampler.mineffsamp=500
-        #sampler.maxiter=1000
-        sampler.maxiter=20
-        sampler.wemin=1.e-4
-
-        sampler.run()
-
-        print sampler.sample_list[-1]
-
-        npars=guess.size
-        m=numpy.zeros(npars)
-        m2=numpy.zeros(npars)
-        sw=0.0
-
-        nsamp=len(sampler.sample_list)
-        trials=numpy.zeros( (nsamp, npars) )
-        weights=numpy.zeros(nsamp)
-        for i,sa in enumerate(sampler.sample_list):
-            trials[i,:] = sa.pars
-            weights[i] = sa.we
-
-        eu.plotting.bhist( trials[:, 0], weights=weights, binsize=0.0005,title='row')
-        eu.plotting.bhist( trials[:, 1], weights=weights, binsize=0.0005,title='col')
-        eu.plotting.bhist( trials[:, 2], weights=weights, binsize=0.001,title='g1')
-        eu.plotting.bhist( trials[:, 3], weights=weights, binsize=0.001,title='g2')
-        eu.plotting.bhist( trials[:, 4], weights=weights, binsize=0.01,title='T')
-        eu.plotting.bhist( trials[:, 5], weights=weights, binsize=1.0,title='counts_b')
-        eu.plotting.bhist( trials[:, 6], weights=weights, binsize=1.0,title='counts_d')
-
-
-    def lnprob_many(self, list_of_pars):
-        return map(self.calc_lnprob, list_of_pars)
 
 
 class MCMCGaussPSF(MCMCSimple):
