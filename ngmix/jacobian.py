@@ -16,6 +16,8 @@ _jacobian_dtype=_jacobian.get_dtype()
 class Jacobian(object):
     def __init__(self, row0, col0, dudrow, dudcol, dvdrow, dvdcol):
         self._data = zeros(1, dtype=_jacobian_dtype)
+        self.row0=row0
+        self.col0=col0
         self._data['row0']=row0
         self._data['col0']=col0
 
@@ -28,6 +30,11 @@ class Jacobian(object):
         self._data['det'] = numpy.abs( dudrow*dvdcol-dudcol*dvdrow )
         self._data['sdet'] = sqrt(self._data['det'])
 
+    def get_cen(self):
+        """
+        Get the center of the coordinate system
+        """
+        return self.row0, self.col0
 
     def copy(self):
         return Jacobian(self._data['row0'][0],
