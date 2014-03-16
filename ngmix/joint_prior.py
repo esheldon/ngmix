@@ -1,8 +1,8 @@
 import numpy
-from numpy import where, log10, zeros
+from numpy import where, log10, zeros, exp
 
 from . import shape
-from .shape import g1g2_to_eta1eta2, eta1eta2_to_g1g2_array
+from .shape import g1g2_to_eta1eta2, eta1eta2_to_g1g2_array, g1g2_to_eta1eta2_array
 from .gexceptions import GMixRangeError
 
 from . import priors
@@ -30,9 +30,31 @@ class JointPriorBDF(GMixND):
 
         self.logT_bounds=logT_bounds
         self.logFlux_bounds=logFlux_bounds
+
+        self.T_bounds=[10.0**logT_bounds[0], 10.0**logT_bounds[1]]
+        self.Flux_bounds=[10.0**logFlux_bounds[0], 10.0**logFlux_bounds[1]]
+
         self._make_gmm()
 
     def get_lnprob(self, pars):
+        """
+        using gmm
+
+        the pars are in linear space
+            [g1,g2,T,Fb,Fd]
+        """
+        logpars=self._pars_to_logpars_array(pars)
+        lnp = self.gmm.score(logpars)
+        return lnp
+
+    def get_prob(self, pars):
+        """
+        exp(lnprob)
+        """
+        lnp = self.get_lnprob(pars)
+        return exp(lnp)
+
+    def get_lnprob_gmixnd(self, pars):
         """
         the pars are in linear space
             [g1,g2,T,Fb,Fd]
@@ -181,26 +203,12 @@ class JointPriorBDF(GMixND):
         n=g1.size
         P=zeros(n)
 
-        for i in xrange(n):
-            P[i] = self.get_prob(newpars[i,:])
+        P = self.get_prob(newpars)
 
         return P*J
 
-    def get_weights(self):
-        """
-        Get the weights
-        """
-        raise RuntimeError("need to set weights")
 
-        self._set_g_prior_vals()
-        print >>stderr,'    weights are g prior'
-        weights=self.g_prior_vals
-
-        return weights
-
-
-
-    def _pars_to_logpars(self, pars):
+    def _pars_to_logpars_scalar(self, pars):
         """
         convert the pars to log space
             [eta1,eta2,logT,logFb,logFd]
@@ -221,6 +229,34 @@ class JointPriorBDF(GMixND):
         logpars[4] = log10(Fd)
 
         return logpars
+
+    def _pars_to_logpars_array(self, pars):
+        """
+        convert the pars to log space
+            [eta1,eta2,logT,logFb,logFd]
+        """
+        logpars=pars.copy()
+        g1 = pars[:,0]
+        g2 = pars[:,1]
+        T  = pars[:,2]
+        Fb = pars[:,3]
+        Fd = pars[:,4]
+
+        logpars[:,0],logpars[:,1],good = g1g2_to_eta1eta2_array(g1,g2)
+
+        w,=where(  (good != 1)
+                 | (T <= 0.0)
+                 | (Fb <= 0.0)
+                 | (Fd <= 0.0) ) 
+        if w.size != 0.0:
+            raise GMixRangeError("T, Fb, Fd must be positive, g <1")
+
+        logpars[:,2] = log10(T)
+        logpars[:,3] = log10(Fb)
+        logpars[:,4] = log10(Fd)
+
+        return logpars
+
 
     def _make_gmm(self):
         """

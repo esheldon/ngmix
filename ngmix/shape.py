@@ -138,6 +138,35 @@ def e1e2_to_g1g2(e1, e2):
 
     return g1,g2
 
+
+def g1g2_to_eta1eta2_array(g1, g2):
+    """
+    convert reduced shear g1,g2 to eta
+    """
+    n=g1.size
+
+    g=numpy.sqrt(g1*g1 + g2*g2)
+
+    eta1=numpy.zeros(n) -9999.0
+    eta2=eta1.copy()
+    good = numpy.zeros(n, dtype='i1')
+
+    w,=numpy.where(g < 1.0)
+
+    if w.size > 0:
+
+        eta_w = 2*numpy.arctanh(g[w])
+
+        fac = eta_w/g[w]
+
+        eta1[w] = fac*g1[w]
+        eta2[w] = fac*g2[w]
+
+        good[w] = 1
+
+    return eta1,eta2, good
+
+
 @jit(argtypes=[float64,float64])
 def g1g2_to_eta1eta2(g1, g2):
     """
@@ -181,9 +210,6 @@ def eta1eta2_to_g1g2_array(eta1,eta2):
         good[w] = 1
 
     return g1,g2,good
-
-
-
 
 @jit(argtypes=[float64,float64])
 def eta1eta2_to_g1g2(eta1,eta2):

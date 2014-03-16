@@ -1939,21 +1939,33 @@ class MCMCBDFJoint(MCMCBDF):
         """
         lnp=0.0
         
-        lnp = self.joint_prior.get_lnprob(pars[2:])
-
         if self.cen_prior is not None:
             lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+
+        jp = self.joint_prior 
+        if jp is not None:
+            T_bounds = jp.T_bounds
+            Flux_bounds = jp.Flux_bounds
+            T=pars[4]
+            Fb=pars[5]
+            Fd=pars[6]
+            if (T < T_bounds[0] or T > T_bounds[1]
+                    or Fb < Flux_bounds[0] or Fb > Flux_bounds[1]
+                    or Fd < Flux_bounds[0] or Fd > Flux_bounds[1]):
+                raise GMixRangeError("T or flux out of range")
+        else:
+            # even without a prior, we want to enforce positive
+            if pars[4] < 0.0 or pars[5] < 0.0 or pars[6] < 0.0:
+                raise GMixRangeError("negative T or flux")
+
+
+        #lnp = self.joint_prior.get_lnprob(pars[2:])
 
         return lnp
 
     def _get_PQR(self):
         """
         get the marginalized P,Q,R from Bernstein & Armstrong
-
-        If the prior is already in our mcmc chain, so we need to divide by the
-        prior everywhere.
-
-        zero prior values should be removed prior to calling
         """
 
         Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:])
@@ -1961,7 +1973,17 @@ class MCMCBDFJoint(MCMCBDF):
 
         return P,Q,R
 
-
+    def get_weights(self):
+        """
+        must have         
+        """
+        if self.joint_prior is not None:
+            print >>stderr,'    weights are prior'
+            weights=self.joint_prior.get_prob(self.trials[:,2:])
+        else:
+            print >>stderr,'    weights are None'
+            weights=None
+        return weights
 
 
 
