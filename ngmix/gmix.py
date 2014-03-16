@@ -1413,8 +1413,7 @@ class GMixND(object):
 
         self._calc_icovars_and_norms()
 
-
-    def get_lnprob(self, pars):
+    def get_prob(self, pars):
         """
         (x-xmean) icovar (x-xmean)
         """
@@ -1431,6 +1430,14 @@ class GMixND(object):
 
             prob += pnorm*exp(-0.5*chi2)
 
+        return prob
+
+    def get_lnprob(self, pars):
+        """
+        (x-xmean) icovar (x-xmean)
+        """
+
+        prob = self.get_prob(pars)
         lnp = log(prob)
         return lnp
 

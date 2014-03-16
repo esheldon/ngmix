@@ -56,6 +56,7 @@ class FitterBase(object):
         self.keys=keys
 
         self.g_prior = keys.get('g_prior',None)
+        self.joint_prior = keys.get('joint_prior',None)
         self.cen_prior = keys.get('cen_prior',None)
         self.T_prior = keys.get('T_prior',None)
         self.counts_prior = keys.get('counts_prior',None)
@@ -981,8 +982,9 @@ class MCMCBase(FitterBase):
         # expand around this shear value
         self.shear_expand = keys.get('shear_expand',None)
 
-        if (self.do_lensfit or self.do_pqr) and self.g_prior is None:
-            raise ValueError("send g_prior for lensfit or pqr")
+        if ( (self.do_lensfit or self.do_pqr)
+                and (self.g_prior is None and self.joint_prior is None)):
+            raise ValueError("send g_prior or joint_prior for lensfit or pqr")
 
         self.trials=None
 
@@ -1516,8 +1518,10 @@ class MCMCSimple(MCMCBase):
         else:
             # expand around a requested value.  BA analytic formulas
             # don't support this yet...
-            #Pi,Qi,Ri = self.g_prior.get_pqr_num(g1,g2,s1=sh[0], s2=sh[1])
-            Pi,Qi,Ri = self.g_prior.get_pqr_expand(g1,g2, sh[0], sh[1])
+            if hasattr(self.g_prior,'get_pqr_expand'):
+                Pi,Qi,Ri = self.g_prior.get_pqr_expand(g1,g2, sh[0], sh[1])
+            else:
+                Pi,Qi,Ri = self.g_prior.get_pqr_num(g1,g2,s1=sh[0], s2=sh[1])
 
         P,Q,R = self._get_mean_pqr(Pi,Qi,Ri)
 
@@ -1602,6 +1606,7 @@ class MCMCSimpleJointTF(MCMCSimple):
 
         assert self.joint_TF_prior is not None,"send joint_TF_prior"
         assert self.nband == 1, "add support for multi-band and joint prior"
+
 
     def _get_priors(self, pars):
         """
@@ -1907,6 +1912,54 @@ class MCMCBDF(MCMCSimple):
             names += fdnames
         return names
 
+
+class MCMCBDFJoint(MCMCBDF):
+    """
+    BDF with a joint prior on [g1,g2,T,Fb,Fd]
+    """
+    def __init__(self, image, weight, jacobian, **keys):
+        super(MCMCBDF,self).__init__(image, weight, jacobian, "bdf", **keys)
+
+        if self.full_guess is None:
+            raise ValueError("For BDF you must currently send a full guess")
+
+        # we alrady have T_prior and counts_prior from base class
+
+        # fraction of flux in bulge
+        if self.joint_prior is None:
+            raise ValueError("send joint prior for MCMCBDFJoint")
+
+    def _get_priors(self, pars):
+        """
+        # go in simple
+        add any priors that were sent on construction
+        
+        note g prior is *not* applied during the likelihood exploration
+        if do_lensfit=True or do_pqr=True
+        """
+        lnp=0.0
+        
+        lnp = self.joint_prior.get_lnprob(pars[2:])
+
+        if self.cen_prior is not None:
+            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+
+        return lnp
+
+    def _get_PQR(self):
+        """
+        get the marginalized P,Q,R from Bernstein & Armstrong
+
+        If the prior is already in our mcmc chain, so we need to divide by the
+        prior everywhere.
+
+        zero prior values should be removed prior to calling
+        """
+
+        Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:])
+        P,Q,R = self._get_mean_pqr(Pi,Qi,Ri)
+
+        return P,Q,R
 
 
 
