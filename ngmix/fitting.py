@@ -1968,7 +1968,12 @@ class MCMCBDFJoint(MCMCBDF):
         get the marginalized P,Q,R from Bernstein & Armstrong
         """
 
-        Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:])
+        sh=self.shear_expand
+        if sh is None:
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:])
+        else:
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:],
+                                                    s1=sh[0],s2=sh[1])
         P,Q,R = self._get_mean_pqr(Pi,Qi,Ri)
 
         return P,Q,R
