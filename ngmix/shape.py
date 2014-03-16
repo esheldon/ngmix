@@ -138,6 +138,75 @@ def e1e2_to_g1g2(e1, e2):
 
     return g1,g2
 
+@jit(argtypes=[float64,float64])
+def g1g2_to_eta1eta2(g1, g2):
+    """
+    convert reduced shear g1,g2 to eta
+    """
+    g=numpy.sqrt(g1*g1 + g2*g2)
+
+    if g >= 1.:
+        raise GMixRangeError("g out of bounds: %s" % g)
+    if g == 0.0:
+        return (0.0, 0.0)
+
+    eta = 2*numpy.arctanh(g)
+
+    fac = eta/g
+
+    eta1 = fac*g1
+    eta2 = fac*g2
+    
+    return eta1,eta2
+
+def eta1eta2_to_g1g2_array(eta1,eta2):
+    """
+    Perform the conversion for all elements in an array
+    """
+    n=eta1.size
+    g1=numpy.zeros(n) - 9999
+    g2=numpy.zeros(n) - 9999
+    good = numpy.zeros(n, dtype='i1')
+
+    eta=numpy.sqrt(eta1*eta1 + eta2*eta2)
+
+    g = numpy.tanh(0.5*eta)
+
+    w,=numpy.where( g < 1.0 )
+    if w.size > 0:
+        fac = g[w]/eta[w]
+
+        g1 = fac*eta1[w]
+        g2 = fac*eta2[w]
+        good[w] = 1
+
+    return g1,g2,good
+
+
+
+
+@jit(argtypes=[float64,float64])
+def eta1eta2_to_g1g2(eta1,eta2):
+    """
+    convert from eta to reduced style 
+    """
+    eta=numpy.sqrt(eta1*eta1 + eta2*eta2)
+
+    g = numpy.tanh(0.5*eta)
+
+    if g >= 1.:
+        raise GMixRangeError("g out of bounds: %s" % g)
+    if g == 0.0:
+        return (0.0, 0.0)
+
+    fac = g/eta
+
+    g1 = fac*eta1
+    g2 = fac*eta2
+
+    return g1,g2
+
+
 
 #@jit(argtypes=[float64,float64,float64,float64])
 @autojit

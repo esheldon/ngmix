@@ -1,6 +1,6 @@
 from sys import stderr,stdout
 import numpy
-from numpy import array, zeros
+from numpy import array, zeros, exp, log10, log, dot, sqrt
 import numba
 from numba import float64, int64, autojit, jit
 from . import fastmath
@@ -1397,4 +1397,65 @@ def _fdiff_jacob_fast3_randomize(self, image, weight, j, fdiff, randvals, start,
 
 
     return s2n_numer, s2n_denom
+
+class GMixND(object):
+    """
+    Gaussian mixture in arbitrary dimensions
+    """
+    def __init__(self, weights, means, covars):
+        self.weights = weights
+        self.means=means
+        self.covars=covars
+
+        self.ngauss = self.weights.size
+
+        self.ndim = means[0,:].size
+
+        self._calc_icovars_and_norms()
+
+
+    def get_lnprob(self, pars):
+        """
+        (x-xmean) icovar (x-xmean)
+        """
+
+        prob = 0.0
+
+        for i in xrange(self.ngauss):
+            pnorm = self.pnorms[i]
+
+            xdiff = pars-self.means[i,:]
+            icovar = self.icovars[i,:,:]
+
+            chi2 = dot(xdiff,  dot(icovar,xdiff) )
+
+            prob += pnorm*exp(-0.5*chi2)
+
+        lnp = log(prob)
+        return lnp
+
+    def _calc_icovars_and_norms(self):
+        """
+        Calculate the normalizations and inverse covariance matrices
+        """
+        from numpy import pi
+
+        twopi = 2.0*pi
+
+        norms = zeros(self.ngauss)
+        icovars = zeros( (self.ngauss, self.ndim, self.ndim) )
+
+        for i in xrange(self.ngauss):
+            cov = self.covars[i,:,:]
+            icov = numpy.linalg.inv( cov )
+
+            det = numpy.linalg.det(cov)
+            n=1.0/sqrt( twopi**self.ndim * det )
+
+            norms[i] = n
+            icovars[i,:,:] = icov
+
+        self.norms = norms
+        self.pnorms = norms*self.weights
+        self.icovars = icovars
 

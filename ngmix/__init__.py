@@ -14,6 +14,8 @@ from . import fastmath
 from . import priors
 from .priors import srandu
 
+from . import joint_prior
+
 from . import shape
 from .shape import Shape
 

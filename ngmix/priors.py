@@ -12,6 +12,7 @@ from numpy.random import randn
 import numba
 from numba import jit, autojit, float64, void
 
+from . import gmix
 from .gexceptions import GMixRangeError
 
 from . import shape
@@ -1838,6 +1839,7 @@ class TruncatedGauss2D(TruncatedGauss2DBase):
 JOINT_N_ITER=1000
 JOINT_MIN_COVAR=1.0e-6
 JOINT_COVARIANCE_TYPE='full'
+
 
 class TFluxPriorCosmosBase(object):
     """
