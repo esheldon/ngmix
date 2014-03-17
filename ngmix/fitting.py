@@ -1454,6 +1454,13 @@ class MCMCSimple(MCMCBase):
 
         self._result['nuse'] = self.trials.shape[0]
 
+        wts=self.get_weights()
+        if wts is None:
+            self._result['effnum'] = self._result['nuse']
+        else:
+            self._result['effnum'] = wts.sum()/wts.max()
+
+
         if self.do_lensfit:
             g_sens=self._get_lensfit_gsens(self._result['pars'])
             self._result['g_sens']=g_sens
@@ -1929,6 +1936,8 @@ class MCMCBDFJoint(MCMCBDF):
         if self.joint_prior is None:
             raise ValueError("send joint prior for MCMCBDFJoint")
 
+        self.Tfracdiff_max = keys['Tfracdiff_max']
+
     def _get_priors(self, pars):
         """
         # go in simple
@@ -1970,10 +1979,12 @@ class MCMCBDFJoint(MCMCBDF):
 
         sh=self.shear_expand
         if sh is None:
-            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:])
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:],
+                                                    throw=False)
         else:
             Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:],
-                                                    s1=sh[0],s2=sh[1])
+                                                    s1=sh[0],s2=sh[1],
+                                                    throw=False)
         P,Q,R = self._get_mean_pqr(Pi,Qi,Ri)
 
         return P,Q,R
@@ -1983,12 +1994,113 @@ class MCMCBDFJoint(MCMCBDF):
         must have         
         """
         if self.joint_prior is not None:
-            print >>stderr,'    weights are prior'
-            weights=self.joint_prior.get_prob(self.trials[:,2:])
+            self._set_joint_prior_vals()
+            weights=self.joint_prior_vals
         else:
-            print >>stderr,'    weights are None'
             weights=None
         return weights
+
+    def _set_joint_prior_vals(self):
+        """
+        Set the prior vals for later use
+        """
+
+        if not hasattr(self,'joint_prior_vals'):
+            self.joint_prior_vals = self.joint_prior.get_prob(self.trials[:,2:],
+                                                              throw=False)
+
+    def _do_trials(self):
+        """
+        run the sampler
+        """
+        import emcee
+
+        if emcee.ensemble.acor is not None:
+            have_acor=True
+        else:
+            have_acor=False
+
+        # over-ridden
+        guess=self._get_guess()
+        for i in xrange(10):
+            try:
+                self._init_gmix_lol(guess[0,:])
+                break
+            except GMixRangeError as gerror:
+                # make sure we draw random guess if we got failure
+                print >>stderr,'failed init gmix lol:',str(gerror)
+                print >>stderr,'getting a new guess'
+                guess=self._get_random_guess()
+        if i==9:
+            raise gerror
+
+        sampler = self._make_sampler()
+        self.sampler=sampler
+
+        self.tau=9999.0
+
+        Tfracdiff_max=self.Tfracdiff_max
+
+
+        burnin=self.burnin
+        self.last_pos = guess
+
+        print >>stderr,'        burnin runs:',burnin
+        i=0
+        while True:
+
+            #if ( (i+1) % 4) == 0:
+            if i > 2:
+                burnin = burnin*2
+                print >>stderr,'        burnin:',burnin
+
+            sampler.reset()
+            self.last_pos, prob, state = sampler.run_mcmc(self.last_pos, burnin)
+
+            trials  = sampler.flatchain
+            wts = self.joint_prior.get_prob(trials[:,2:], throw=False)
+
+            wsum=wts.sum()
+
+            Tvals=trials[:,4]
+            Tmean = (Tvals*wts).sum()/wsum
+            Terr2 = ( wts**2 * (Tvals-Tmean)**2 ).sum()
+            Terr = numpy.sqrt( Terr2 )/wsum
+
+            if i > 0:
+                Tfracdiff =abs(Tmean/Tmean_last-1.0)
+                Tfracdiff_err = Terr/Tmean_last
+                
+                tfmess='Tmean: %.3g +/- %.3g Tfracdiff: %.3f +/- %.3f'
+                tfmess=tfmess % (Tmean,Terr,Tfracdiff,Tfracdiff_err)
+
+                if (Tfracdiff-1.5*Tfracdiff_err) < Tfracdiff_max:
+                    print >>stderr,'        last burn',tfmess
+                    break
+
+                print >>stderr,'        ',tfmess
+
+            Tmean_last=Tmean
+            i += 1
+
+        print >>stderr,'        final run:',self.nstep
+        sampler.reset()
+        self.last_pos, prob, state = sampler.run_mcmc(self.last_pos, self.nstep)
+
+        self.trials  = sampler.flatchain
+        self.joint_prior_vals = self.joint_prior.get_prob(self.trials[:,2:], throw=False)
+
+        arates = sampler.acceptance_fraction
+        self.arate = arates.mean()
+
+        lnprobs = sampler.lnprobability.reshape(self.nwalkers*self.nstep)
+        w=lnprobs.argmax()
+        bp=lnprobs[w]
+
+        self.best_lnprob=bp
+        self.best_pars=sampler.flatchain[w,:]
+
+        self.flags=0
 
 
 

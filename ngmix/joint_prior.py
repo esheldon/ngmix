@@ -1,3 +1,4 @@
+from sys import stderr
 import numpy
 from numpy import where, log10, zeros, exp
 
@@ -6,6 +7,7 @@ from .shape import g1g2_to_eta1eta2, eta1eta2_to_g1g2_array, g1g2_to_eta1eta2_ar
 from .gexceptions import GMixRangeError
 
 from . import priors
+from .priors import LOWVAL
 from . import gmix
 from .gmix import GMixND
 
@@ -36,22 +38,26 @@ class JointPriorBDF(GMixND):
 
         self._make_gmm()
 
-    def get_lnprob(self, pars):
+    def get_lnprob(self, pars, throw=True):
         """
         using gmm
 
         the pars are in linear space
             [g1,g2,T,Fb,Fd]
         """
-        logpars=self._pars_to_logpars_array(pars)
-        lnp = self.gmm.score(logpars)
+        logpars,w=self._pars_to_logpars_array(pars, throw=throw)
+        lnp = zeros(pars.shape[0]) + LOWVAL
+        lnp[w] = self.gmm.score(logpars[w,:])
         return lnp
 
-    def get_prob(self, pars):
+    def get_prob(self, pars, throw=True):
         """
         exp(lnprob)
+
+        if throw==False and there are bad values ,they
+        get prob==0
         """
-        lnp = self.get_lnprob(pars)
+        lnp = self.get_lnprob(pars, throw=throw)
         return exp(lnp)
 
     def get_lnprob_gmixnd(self, pars):
@@ -122,7 +128,7 @@ class JointPriorBDF(GMixND):
 
 
 
-    def get_pqr_num(self, pars, s1=0.0, s2=0.0, h=1.e-6):
+    def get_pqr_num(self, pars, s1=0.0, s2=0.0, h=1.e-6, throw=True):
         """
         Evaluate 
             P
@@ -148,15 +154,15 @@ class JointPriorBDF(GMixND):
 
         g1 = pars[:,0]
         g2 = pars[:,1]
-        P=self.get_pj(pars, s1, s2)
+        P=self.get_pj(pars, s1, s2, throw=throw)
 
-        Q1_p   = self.get_pj(pars, s1+h, s2)
-        Q1_m   = self.get_pj(pars, s1-h, s2)
-        Q2_p   = self.get_pj(pars, s1,   s2+h)
-        Q2_m   = self.get_pj(pars, s1,   s2-h)
+        Q1_p   = self.get_pj(pars, s1+h, s2, throw=throw)
+        Q1_m   = self.get_pj(pars, s1-h, s2, throw=throw)
+        Q2_p   = self.get_pj(pars, s1,   s2+h, throw=throw)
+        Q2_m   = self.get_pj(pars, s1,   s2-h, throw=throw)
 
-        R12_pp = self.get_pj(pars, s1+h, s2+h)
-        R12_mm = self.get_pj(pars, s1-h, s2-h)
+        R12_pp = self.get_pj(pars, s1+h, s2+h, throw=throw)
+        R12_mm = self.get_pj(pars, s1-h, s2-h, throw=throw)
 
         Q1 = (Q1_p - Q1_m)*h2
         Q2 = (Q2_p - Q2_m)*h2
@@ -178,7 +184,7 @@ class JointPriorBDF(GMixND):
 
         return P, Q, R
 
-    def get_pj(self, pars, s1, s2):
+    def get_pj(self, pars, s1, s2, throw=True):
         """
         PJ = p(g,-shear)*jacob
 
@@ -203,7 +209,7 @@ class JointPriorBDF(GMixND):
         n=g1.size
         P=zeros(n)
 
-        P = self.get_prob(newpars)
+        P = self.get_prob(newpars, throw=throw)
 
         return P*J
 
@@ -230,32 +236,47 @@ class JointPriorBDF(GMixND):
 
         return logpars
 
-    def _pars_to_logpars_array(self, pars):
+    def _pars_to_logpars_array(self, pars, throw=True):
         """
         convert the pars to log space
             [eta1,eta2,logT,logFb,logFd]
+
+        If throw==False then the log values are just set to very
+        negative values
         """
+
+        num=pars.shape[0]
+
         logpars=pars.copy()
+        logpars[:,:] = LOWVAL
+
         g1 = pars[:,0]
         g2 = pars[:,1]
         T  = pars[:,2]
         Fb = pars[:,3]
         Fd = pars[:,4]
 
-        logpars[:,0],logpars[:,1],good = g1g2_to_eta1eta2_array(g1,g2)
+        eta1,eta2,good = g1g2_to_eta1eta2_array(g1,g2)
 
-        w,=where(  (good != 1)
-                 | (T <= 0.0)
-                 | (Fb <= 0.0)
-                 | (Fd <= 0.0) ) 
-        if w.size != 0.0:
-            raise GMixRangeError("T, Fb, Fd must be positive, g <1")
+        w,=where(  (good == 1)
+                 & (T > 0.0)
+                 & (Fb > 0.0)
+                 & (Fd > 0.0) )
 
-        logpars[:,2] = log10(T)
-        logpars[:,3] = log10(Fb)
-        logpars[:,4] = log10(Fd)
+        if w.size != num:
+            mess='%s with T,Fb,Fd negative or bad e' % (num-w.size)
+            if throw:
+                raise GMixRangeError(mess)
+            else:
+                print >>stderr,mess
 
-        return logpars
+        logpars[w,0] = eta1[w]
+        logpars[w,1] = eta2[w]
+        logpars[w,2] = log10(T[w])
+        logpars[w,3] = log10(Fb[w])
+        logpars[w,4] = log10(Fd[w])
+
+        return logpars, w
 
 
     def _make_gmm(self):
