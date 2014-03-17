@@ -86,7 +86,7 @@ namespace gmix {
             }
 
             void show() const {
-                std::printf("p: %-12.8g row: %-12.8g col: %-12.8g irr: %-12.8g irc: %-12.8g icc: %-12.8g\n", p_, row_, col_, irr_, irc_, icc);
+                std::printf("p: %-12.8g row: %-12.8g col: %-12.8g irr: %-12.8g irc: %-12.8g icc: %-12.8g\n", p_, row_, col_, irr_, irc_, icc_);
             }
 
         private:
@@ -120,7 +120,7 @@ namespace gmix {
             GMix(long ngauss) {
                 resize(ngauss);
             }
-            GMix(vector<double> pars) {
+            GMix(const vector<double> &pars) {
                 set_from_pars(pars);
             }
 
@@ -148,20 +148,21 @@ namespace gmix {
                 data_.resize(ngauss);
             }
 
-            void set_from_pars(vector<double> pars) {
+            void set_from_pars(const vector<double> &pars) {
                 long npars=pars.size();
                 if ( (npars % 6) != 0) {
                     std::string err =
                         "GMix error: len(pars) must be multiple of 6";
                     throw std::runtime_error(err);
                 }
+
                 long ngauss = npars/6;
-                data_.resize(ngauss);
+                this->resize(ngauss);
 
                 for (long i=0; i<ngauss; i++) {
                     long beg=i*6;
 
-                    Gauss& gauss = data_[i];
+                    Gauss &gauss = data_[i];
 
                     gauss.set(pars[beg+0],
                               pars[beg+1],
@@ -205,9 +206,14 @@ namespace gmix {
             }
             */
 
+            void show() {
+                for (long i=0; i<ngauss_; i++) {
+                    data_[i].show();
+                }
+            }
 
         private:
-            long _ngauss;
+            long ngauss_;
             vector<Gauss> data_;
 
     };
