@@ -22,6 +22,9 @@ namespace gmix {
     //using image::Image;
 
     static const double TWO_PI=6.28318530717958647693;
+
+    // For speed mainly, although some upper limit is needed because fast exp
+    // fails at very large arguments
     static const double GAUSS_EXP_MAX_CHI2=25;
 
     struct Gauss {
@@ -183,7 +186,7 @@ namespace gmix {
 
             // render using the jacobian image transformation
             void render(image::Image &image,
-                        jacobian::Jacobian &jacob,
+                        const jacobian::Jacobian &jacob,
                         int nsub=1) const {
 
                 double col0=jacob.col0;
@@ -233,6 +236,58 @@ namespace gmix {
                 }
             }
 
+
+            void get_loglike(const image::Image &image,
+                             const image::Image &weight,
+                             const jacobian::Jacobian &jacob,
+                             double *loglike,
+                             double *s2n_numer,
+                             double *s2n_denom) const {
+
+                double col0=jacob.col0;
+                double row0=jacob.row0;
+                double dudrow=jacob.dudrow;
+                double dudcol=jacob.dudcol;
+                double dvdrow=jacob.dvdrow;
+                double dvdcol=jacob.dvdcol;
+
+                *loglike=0;
+                *s2n_numer=0;
+                *s2n_denom=0;
+                long nrows=image.get_nrows();
+                long ncols=image.get_ncols();
+
+                for (long row=0; row<nrows; row++) {
+
+                    // always start from lowcol position, then step u,v later
+                    double u=dudrow*(row - row0) + dudcol*(0.0 - col0);
+                    double v=dvdrow*(row - row0) + dvdcol*(0.0 - col0);
+
+                    for (long col=0; col<ncols; col++) {
+
+                        double ivar=weight(row,col);
+                        if (ivar <= 0.0) {
+                            continue;
+                        }
+
+                        double model_val = (*this)(row,col);
+                        double pixel_val = image(row,col);
+
+                        double diff=model_val-pixel_val;
+
+                        (*loglike) += diff*diff*ivar;
+                        (*s2n_numer) += pixel_val*model_val*ivar;
+                        (*s2n_denom) += model_val*model_val*ivar;
+
+                        u += dudcol;
+                        v += dvdcol;
+
+                    } // columns
+                } //rows
+
+                (*loglike) *= (-0.5);
+
+            } // get loglike
 
             void print() {
                 for (long i=0; i<ngauss_; i++) {

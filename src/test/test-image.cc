@@ -18,7 +18,7 @@ int main(int argc, char **argv)
 
     im.resize(5,5);
 
-    im.add_constant(10);
+    im.add_scalar(10);
 
     im.print();
 

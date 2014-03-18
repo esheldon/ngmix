@@ -1,13 +1,17 @@
 #include <cstdio>
+#include <cmath>
 #include <vector>
 #include "gmix.h"
 #include "image.h"
 #include "mtrng.h"
+#include "jacobian.h"
 
 using namespace std;
 
 using gmix::GMix;
 using gmix::Gauss;
+using image::Image;
+using jacobian::Jacobian;
 
 
 int main(int argc, char **argv)
@@ -57,7 +61,7 @@ int main(int argc, char **argv)
     printf("eval(%g,%g) = %g\n", row, col, obj_gmix(row,col));
 
     long nrows=32, ncols=32;
-    image::Image im(nrows, ncols);
+    Image im(nrows, ncols);
 
     obj_gmix.render(im);
     im.show("/tmp/timage-32432.dat");
@@ -65,9 +69,22 @@ int main(int argc, char **argv)
     mtrng::MtRng64 rng;
     rng.init_dev_urandom();
 
-    im.add_gaussian_noise(rng, 0.001);
+    double sigma=0.001;
+    im.add_gaussian_noise(rng, sigma);
     im.show("/tmp/timage-32432.dat");
 
+    double loglike=0, s2n_numer=0, s2n_denom=0;
+    Image weight(nrows,ncols);
+    Jacobian jacob;
+    weight.add_scalar( 1.0/(sigma*sigma) );
 
+    obj_gmix.get_loglike(im, weight, jacob,
+                         &loglike, &s2n_numer, &s2n_denom);
+
+    double s2n = s2n_numer/sqrt(s2n_denom);
+    double dof = im.get_size();
+    printf("s2n:       %g\n", s2n);
+    printf("loglike:   %g\n", loglike);
+    printf("chi^2/dof: %g\n", loglike/(-0.5)/dof);
     return 0;
 }

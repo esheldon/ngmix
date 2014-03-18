@@ -27,8 +27,7 @@ namespace image {
             double data[MAXSIZE][MAXSIZE];
 
             Image() {
-                nrows_=0;
-                ncols_=0;
+                resize(0,0);
             }
 
             Image(long nrows, long ncols) {
@@ -55,15 +54,19 @@ namespace image {
             }
 
 
-            long get_nrows() {
+            long get_nrows() const {
                 return nrows_;
             }
-            long get_ncols() {
+            long get_ncols() const {
                 return ncols_;
+            }
+            long get_size() const {
+                return size_;
             }
 
 
-            void add_constant(double value) {
+
+            void add_scalar(double value) {
                 for (long row=0; row<nrows_; row++) {
                     for (long col=0; col<ncols_; col++) {
                         data[row][col] += value;
@@ -87,6 +90,7 @@ namespace image {
                 zero();
                 nrows_=0;
                 ncols_=0;
+                size_=0;
             }
 
             // if larger the data might be junk
@@ -100,6 +104,7 @@ namespace image {
 
                 nrows_=nrows;
                 ncols_=ncols;
+                size_ = nrows*ncols;
             }
 
             void print() {
@@ -154,6 +159,7 @@ namespace image {
 
             long nrows_;
             long ncols_;
+            long size_;
 
     };
 
