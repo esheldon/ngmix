@@ -1,4 +1,5 @@
 #include <cstdio>
+#include "MtRng.h"
 #include "image.h"
 
 using namespace std;

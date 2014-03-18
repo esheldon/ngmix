@@ -2,12 +2,13 @@
 #include <vector>
 #include "gmix.h"
 #include "image.h"
+#include "MtRng.h"
 
 using namespace std;
 
 using gmix::GMix;
 using gmix::Gauss;
-using std::vector;
+
 
 int main(int argc, char **argv)
 {
@@ -27,25 +28,25 @@ int main(int argc, char **argv)
     pars.push_back(0.4);
     pars.push_back(16.0);
     pars.push_back(15.0);
-    pars.push_back(4.0);
-    pars.push_back(0.5);
-    pars.push_back(3.0);
+    pars.push_back(8.0);
+    pars.push_back(1.5);
+    pars.push_back(5.0);
 
     pars.push_back(0.6);
     pars.push_back(8.0);
     pars.push_back(15.0);
-    pars.push_back(2.0);
-    pars.push_back(1.2);
-    pars.push_back(5.0);
+    pars.push_back(4.0);
+    pars.push_back(2.2);
+    pars.push_back(7.0);
 
     GMix obj_gmix(pars);
 
-    std::printf("\n");
+    printf("\n");
     obj_gmix.print();
 
 
     double row=16.0, col=15.0;
-    std::printf("eval(%g,%g) = %g\n", row, col, obj_gmix(row,col));
+    printf("eval(%g,%g) = %g\n", row, col, obj_gmix(row,col));
 
     pars[1] = 18.0;
     pars[2] = 18.1;
@@ -53,14 +54,20 @@ int main(int argc, char **argv)
 
     obj_gmix.print();
 
-    std::printf("eval(%g,%g) = %g\n", row, col, obj_gmix(row,col));
+    printf("eval(%g,%g) = %g\n", row, col, obj_gmix(row,col));
 
     long nrows=32, ncols=32;
     image::Image im(nrows, ncols);
 
     obj_gmix.render(im);
-
     im.show("/tmp/timage-32432.dat");
+
+    MtRng::MtRng64 rng;
+    rng.init_dev_urandom();
+
+    im.add_gaussian_noise(rng, 0.001);
+    im.show("/tmp/timage-32432.dat");
+
 
     return 0;
 }

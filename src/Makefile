@@ -15,7 +15,7 @@ ALLTESTS = $(TEST_GMIX) $(TEST_FASTEXP) $(TEST_FASTEXP_SPEED) $(TEST_IMAGE) $(TE
 
 tests: $(ALLTESTS)
 
-$(TEST_GMIX): gmix.h image.h test/test-gmix.cc
+$(TEST_GMIX): gmix.h image.h MtRng.h test/test-gmix.cc
 	$(CC) -o test/test-gmix test/test-gmix.cc $(CFLAGS) $(LINKFLAGS)
 
 $(TEST_FASTEXP): fastexp.h test/test-fastexp.cc
