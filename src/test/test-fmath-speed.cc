@@ -3,7 +3,6 @@
 #include <cmath>
 #include <ctime>
 #include <vector>
-//#include "fmath.h"
 #include "fastexp.h"
 
 using namespace std;
@@ -43,7 +42,6 @@ int main(int argc, char **argv)
     for (long irep=0; irep<nrepeat; irep++) {
         tot=0;
         for (long i=0; i<n; i++) {
-            //tot += fmath::exp(d[i]);
             tot += fastexp::expd(d[i]);
         }
     }
@@ -53,7 +51,7 @@ int main(int argc, char **argv)
     printf("total sum: %.16g\n", tot);
 
 
-    printf("fmath is faster by %.16g\n", tstd/tfast);
+    printf("fastexp is faster by %.16g\n", tstd/tfast);
 
 
     return 0;
