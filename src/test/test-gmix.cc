@@ -2,7 +2,7 @@
 #include <vector>
 #include "gmix.h"
 #include "image.h"
-#include "MtRng.h"
+#include "mtrng.h"
 
 using namespace std;
 
@@ -62,7 +62,7 @@ int main(int argc, char **argv)
     obj_gmix.render(im);
     im.show("/tmp/timage-32432.dat");
 
-    MtRng::MtRng64 rng;
+    mtrng::MtRng64 rng;
     rng.init_dev_urandom();
 
     im.add_gaussian_noise(rng, 0.001);

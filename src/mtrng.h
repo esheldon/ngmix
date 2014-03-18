@@ -67,7 +67,7 @@ email: matumoto@math.keio.ac.jp
 #include <stdexcept>
 #include <fstream>
 
-namespace MtRng {
+namespace mtrng {
 
     struct Mt32Traits
     {

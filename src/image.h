@@ -13,7 +13,7 @@
 #include <cstdio>
 #include <cstring>
 #include <stdexcept>
-#include "MtRng.h"
+#include "mtrng.h"
 
 namespace image {
 
@@ -70,7 +70,7 @@ namespace image {
                     }
                 }
             }
-            void add_gaussian_noise(MtRng::MtRng64 &rng, double sigma) {
+            void add_gaussian_noise(mtrng::MtRng64 &rng, double sigma) {
                 for (long row=0; row<nrows_; row++) {
                     for (long col=0; col<ncols_; col++) {
 

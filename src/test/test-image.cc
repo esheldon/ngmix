@@ -1,5 +1,5 @@
 #include <cstdio>
-#include "MtRng.h"
+#include "mtrng.h"
 #include "image.h"
 
 using namespace std;
@@ -11,7 +11,7 @@ int main(int argc, char **argv)
 
     Image im(2,2);
 
-    MtRng::MtRng64 rng;
+    mtrng::MtRng64 rng;
 
     std::printf("seeding from /dev/urandom\n");
     rng.init_dev_urandom();
