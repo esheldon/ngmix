@@ -13,7 +13,6 @@
 #include <cstdio>
 
 //#include "image.h"
-//#include "fmath.h"
 #include "fastexp.h"
 
 namespace gmix {
