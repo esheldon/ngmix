@@ -13,21 +13,21 @@ int main(int argc, char **argv)
 {
 
     ftype tot=0;
-    int n=100000;
-    int nrepeat=10000;
+    long n=100000;
+    long nrepeat=10000;
 
     vector<ftype> d(n);
     
-    for (size_t i=0; i<n; i++) {
+    for (long i=0; i<n; i++) {
         d[i] = drand48();
     }
 
     time_t t1,t2;
     
     t1=clock();
-    for (size_t irep=0; irep<nrepeat; irep++) {
+    for (long irep=0; irep<nrepeat; irep++) {
         tot=0;
-        for (size_t i=0; i<n; i++) {
+        for (long i=0; i<n; i++) {
             tot += exp(d[i]);
         }
     }
@@ -39,9 +39,9 @@ int main(int argc, char **argv)
 
 
     t1=clock();
-    for (size_t irep=0; irep<nrepeat; irep++) {
+    for (long irep=0; irep<nrepeat; irep++) {
         tot=0;
-        for (size_t i=0; i<n; i++) {
+        for (long i=0; i<n; i++) {
             tot += fmath::exp(d[i]);
         }
     }

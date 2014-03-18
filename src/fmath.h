@@ -474,6 +474,7 @@ remark : -ffast-math option of gcc may generate bad code for fmath::expd
         return y * di.d;
     }
 
+/*
     inline void expd_v(double *px, int n)
     {
         using namespace local;
@@ -574,7 +575,7 @@ remark : -ffast-math option of gcc may generate bad code for fmath::expd
 
             return t;
         }
-
+*/
     inline float log(float x)
     {
         using namespace local;

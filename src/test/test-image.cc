@@ -10,33 +10,19 @@ int main(int argc, char **argv)
 
     Image im(2,2);
 
-    im.resize(5,7);
+    MtRng::MtRng64 rng;
+    rng.init_from_dev_urandom();
 
-    long nrows=im.get_nrows();
-    long ncols=im.get_ncols();
+    im.resize(5,5);
 
-    long i=0;
-    for (long row=0; row<nrows; row++) {
-        for (long col=0; col<ncols; col++) {
-            im(row,col)=i;
-            i++;
-        }
-    }
+    im.add_constant(10);
 
-    for (long row=0; row<nrows; row++) {
-        for (long col=0; col<ncols; col++) {
-            printf("%5g ", im(row,col));
-        }
-        printf("\n");
-    }
+    im.show();
 
-    // this is OK if you know what you are doing
-    for (long row=0; row<nrows; row++) {
-        for (long col=0; col<ncols; col++) {
-            printf("%5g ", im.data[row][col]);
-        }
-        printf("\n");
-    }
+    std::printf("\n");
+
+    im.add_gaussian_noise(rng, 1.0);
+    im.show();
 
     return 0;
 }

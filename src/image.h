@@ -10,24 +10,25 @@
 
 #include <cstring>
 #include <stdexcept>
+#include "MtRng.h"
 
-namespace simple_image {
+namespace image {
 
     static const long MAXSIZE=256;
 
-    class SimpleImage {
+    class Image {
 
         public:
 
             // this is public, but be careful
             double data[MAXSIZE][MAXSIZE];
 
-            SimpleImage() {
-                _nrows=0;
-                _ncols=0;
+            Image() {
+                nrows_=0;
+                ncols_=0;
             }
 
-            SimpleImage(long nrows, long ncols) {
+            Image(long nrows, long ncols) {
                 resize(nrows, ncols);
                 zero();
             }
@@ -35,16 +36,16 @@ namespace simple_image {
 
             // getter
             inline double operator()(long row, long col) const {
-                if (row < 0 || row >= _nrows 
-                    || col < 0 || col >= _ncols) {
+                if (row < 0 || row >= nrows_ 
+                    || col < 0 || col >= ncols_) {
                     throw std::runtime_error("out of bounds");
                 }
                 return data[row][col];
             }
             // setter
             inline double& operator()(long row, long col) {
-                if (row < 0 || row >= _nrows 
-                    || col < 0 || col >= _ncols) {
+                if (row < 0 || row >= nrows_ 
+                    || col < 0 || col >= ncols_) {
                     throw std::runtime_error("out of bounds");
                 }
                 return data[row][col];
@@ -52,17 +53,26 @@ namespace simple_image {
 
 
             long get_nrows() {
-                return _nrows;
+                return nrows_;
             }
             long get_ncols() {
-                return _ncols;
+                return ncols_;
             }
 
 
             void add_constant(double value) {
-                for (long row=0; row<_nrows; row++) {
-                    for (long col=0; col<_ncols; col++) {
+                for (long row=0; row<nrows_; row++) {
+                    for (long col=0; col<ncols_; col++) {
                         data[row][col] += value;
+                    }
+                }
+            }
+            void add_gaussian_noise(MtRng::MtRng64 &rng, double sigma) {
+                for (long row=0; row<nrows_; row++) {
+                    for (long col=0; col<ncols_; col++) {
+
+                        double r = rng.getNormal();
+                        data[row][col] += r*sigma;
                     }
                 }
             }
@@ -72,8 +82,8 @@ namespace simple_image {
             }
             void clear() {
                 zero();
-                _nrows=0;
-                _ncols=0;
+                nrows_=0;
+                ncols_=0;
             }
 
             // if larger the data might be junk
@@ -85,17 +95,25 @@ namespace simple_image {
                     throw std::runtime_error("dimensions too big");
                 }
 
-                _nrows=nrows;
-                _ncols=ncols;
+                nrows_=nrows;
+                ncols_=ncols;
             }
 
+            void show() {
+                for (long row=0; row<nrows_; row++) {
+                    for (long col=0; col<ncols_; col++) {
+                        printf("%12.5g ", data[row][col]);
+                    }
+                    printf("\n");
+                }
+            }
         private:
 
-            long _nrows;
-            long _ncols;
+            long nrows_;
+            long ncols_;
 
     };
 
-} // namespace simple_image
+} // namespace image
 
 #endif
