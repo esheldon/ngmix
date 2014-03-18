@@ -4,6 +4,8 @@
    This is a faster version by taking Shawn Cokus's optimization,
    Matthe Bellew's simplification, Isaku Wada's real version.
 
+   Added some methods, Erin Scott Sheldon, Brookhaven National Laboratory
+
    Before using, initialize the state by using init_genrand(seed) 
    or init_by_array(init_key, key_length).
 
