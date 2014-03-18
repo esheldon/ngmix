@@ -13,6 +13,7 @@
 #include <cstdio>
 
 #include "image.h"
+#include "jacobian.h"
 #include "fastexp.h"
 
 namespace gmix {
@@ -174,11 +175,30 @@ namespace gmix {
             }
 
 
-            // no jacobian
-            void render(image::Image& image, int nsub=1) const {
+            // This just creates a default jacobian
+            void render(image::Image &image, int nsub=1) const {
+                jacobian::Jacobian j;
+                render(image, j, nsub);
+            }
+
+            // render using the jacobian image transformation
+            void render(image::Image &image,
+                        jacobian::Jacobian &jacob,
+                        int nsub=1) const {
+
+                double col0=jacob.col0;
+                double row0=jacob.row0;
+                double dudrow=jacob.dudrow;
+                double dudcol=jacob.dudcol;
+                double dvdrow=jacob.dvdrow;
+                double dvdcol=jacob.dvdcol;
+
                 double stepsize = 1./nsub;
                 double offset = (nsub-1)*stepsize/2.;
                 double areafac = 1./(nsub*nsub);
+
+                double ustepsize = stepsize*dudcol;
+                double vstepsize = stepsize*dvdcol;
 
                 long nrows=image.get_nrows();
                 long ncols=image.get_ncols();
@@ -188,12 +208,22 @@ namespace gmix {
 
                         double tval=0.0;
                         double trow = row-offset;
+                        double lowcol = col-offset;
+
                         for (long irowsub=0; irowsub<nsub; irowsub++) {
-                            double tcol = col-offset;
+
+                            // always start from lowcol position, then step u,v later
+                            double u=dudrow*(trow - row0) + dudcol*(lowcol - col0);
+                            double v=dvdrow*(trow - row0) + dvdcol*(lowcol - col0);
+
                             for (long icolsub=0; icolsub<nsub; icolsub++) {
-                                tval += (*this)(trow,tcol);
-                                tcol += stepsize;
+
+                                tval += (*this)(u,v);
+
+                                u += ustepsize;
+                                v += vstepsize;
                             }
+                            // step to next sub-row
                             trow += stepsize;
                         }
 
@@ -202,6 +232,7 @@ namespace gmix {
                     }
                 }
             }
+
 
             void print() {
                 for (long i=0; i<ngauss_; i++) {
