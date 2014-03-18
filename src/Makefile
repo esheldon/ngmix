@@ -11,9 +11,11 @@ TEST_FASTEXP_SPEED = test/test-fastexp-speed
 TEST_IMAGE = test/test-image
 TEST_SHAPE = test/test-shape
 
-tests: $(TEST_GMIX) $(TEST_FASTEXP) $(TEST_FASTEXP_SPEED) $(TEST_IMAGE) $(TEST_SHAPE)
+ALLTESTS = $(TEST_GMIX) $(TEST_FASTEXP) $(TEST_FASTEXP_SPEED) $(TEST_IMAGE) $(TEST_SHAPE)
 
-$(TEST_GMIX): gmix.h test/test-gmix.cc
+tests: $(ALLTESTS)
+
+$(TEST_GMIX): gmix.h image.h test/test-gmix.cc
 	$(CC) -o test/test-gmix test/test-gmix.cc $(CFLAGS) $(LINKFLAGS)
 
 $(TEST_FASTEXP): fastexp.h test/test-fastexp.cc
@@ -28,5 +30,5 @@ $(TEST_IMAGE): image.h MtRng.h test/test-image.cc
 $(TEST_SHAPE): shape.h test/test-shape.cc
 	$(CC) -o test/test-shape test/test-shape.cc $(CFLAGS) $(LINKFLAGS)
 
-clean: $(TEST_GMIX) $(TEST_FASTEXP) $(TEST_FASTEXP_SPEED) $(TEST_IMAGE) $(TEST_SHAPE)
-	rm $(TEST_GMIX) $(TEST_FASTEXP) $(TEST_FASTEXP_SPEED) $(TEST_IMAGE) $(TEST_SHAPE)
+clean:
+	rm -f $(ALLTESTS)

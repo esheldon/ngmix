@@ -19,12 +19,12 @@ int main(int argc, char **argv)
 
     im.add_constant(10);
 
-    im.show();
+    im.print();
 
     std::printf("\n");
 
     im.add_gaussian_noise(rng, 1.0);
-    im.show();
+    im.print();
 
     return 0;
 }

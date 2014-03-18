@@ -12,7 +12,7 @@
 #include <cmath>
 #include <cstdio>
 
-//#include "image.h"
+#include "image.h"
 #include "fastexp.h"
 
 namespace gmix {
@@ -85,7 +85,7 @@ namespace gmix {
                 return val;
             }
 
-            void show() const {
+            void print() const {
                 std::printf("p: %-12.8g row: %-12.8g col: %-12.8g irr: %-12.8g irc: %-12.8g icc: %-12.8g\n", p_, row_, col_, irr_, irc_, icc_);
             }
 
@@ -175,8 +175,7 @@ namespace gmix {
 
 
             // no jacobian
-            /*
-            void render(Image& image, int nsub=1) const {
+            void render(image::Image& image, int nsub=1) const {
                 double stepsize = 1./nsub;
                 double offset = (nsub-1)*stepsize/2.;
                 double areafac = 1./(nsub*nsub);
@@ -192,7 +191,7 @@ namespace gmix {
                         for (long irowsub=0; irowsub<nsub; irowsub++) {
                             double tcol = col-offset;
                             for (long icolsub=0; icolsub<nsub; icolsub++) {
-                                tval += this(trow,tcol);
+                                tval += (*this)(trow,tcol);
                                 tcol += stepsize;
                             }
                             trow += stepsize;
@@ -202,13 +201,11 @@ namespace gmix {
                         image(row,col) = tval;
                     }
                 }
-
             }
-            */
 
-            void show() {
+            void print() {
                 for (long i=0; i<ngauss_; i++) {
-                    data_[i].show();
+                    data_[i].print();
                 }
             }
 

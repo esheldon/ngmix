@@ -8,6 +8,9 @@
 #ifndef _SIMPLE_IMAGE_HEADER_GUARD
 #define _SIMPLE_IMAGE_HEADER_GUARD
 
+#include <string>
+#include <sstream>
+#include <cstdio>
 #include <cstring>
 #include <stdexcept>
 #include "MtRng.h"
@@ -99,14 +102,54 @@ namespace image {
                 ncols_=ncols;
             }
 
-            void show() {
+            void print() {
                 for (long row=0; row<nrows_; row++) {
                     for (long col=0; col<ncols_; col++) {
-                        printf("%12.5g ", data[row][col]);
+                        std::printf("%12.5g ", data[row][col]);
                     }
-                    printf("\n");
+                    std::printf("\n");
                 }
             }
+            void write(std::string fname) {
+
+                std::printf("writing temporary image to: %s\n", fname.c_str());
+
+                FILE *fobj=std::fopen(fname.c_str(),"w");
+
+                std::fprintf(fobj,"%lu %lu\n", nrows_, ncols_);
+                for (long row=0; row<nrows_; row++) {
+                    for (long col=0; col<ncols_; col++) {
+                        std::fprintf(fobj,"%.16g ", data[row][col]);
+                    }
+                    std::fprintf(fobj,"\n");
+                }
+
+                std::fclose(fobj);
+            }
+
+
+            void show(std::string fname)
+            {
+                std::stringstream cmd;
+
+                write(fname);
+
+                cmd << "image-view -m "<<fname;
+                printf("%s\n", cmd.str().c_str() );
+
+                int ret=std::system( cmd.str().c_str() );
+                std::printf("ret: %d\n", ret);
+
+                // clear
+                cmd.str("");
+                cmd << "rm " << fname;
+
+                printf("%s\n", cmd.str().c_str() );
+                ret=std::system( cmd.str().c_str() );
+
+                std::printf("ret: %d\n", ret);
+            }
+
         private:
 
             long nrows_;
