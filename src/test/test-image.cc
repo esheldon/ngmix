@@ -11,7 +11,9 @@ int main(int argc, char **argv)
     Image im(2,2);
 
     MtRng::MtRng64 rng;
-    rng.init_from_dev_urandom();
+
+    std::printf("seeding from /dev/urandom\n");
+    rng.init_dev_urandom();
 
     im.resize(5,5);
 

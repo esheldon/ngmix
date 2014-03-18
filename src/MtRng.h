@@ -4,10 +4,16 @@
    This is a faster version by taking Shawn Cokus's optimization,
    Matthe Bellew's simplification, Isaku Wada's real version.
 
-   Added some methods, Erin Scott Sheldon, Brookhaven National Laboratory
+   Erin Scott Sheldon, Brookhaven National Laboratory
 
-   Before using, initialize the state by using init_genrand(seed) 
-   or init_by_array(init_key, key_length).
+       - init_dev_random, init_dev_urandom to initialize from those
+         files on unix
+       - get_sreal1 and get_sreal2 for [-1,1) and [-1,1] intervals
+       - get_normal for gaussian normal
+       - get_poisson from poission noise
+
+   also changed to underscore_style to match my other code
+
 
    Copyright (C) 1997 - 2002, Makoto Matsumoto and Takuji Nishimura,
    All rights reserved.                          
@@ -188,11 +194,11 @@ namespace MtRng {
                     }
                 }
 
-                void init_from_dev_random() {
+                void init_dev_random() {
                     UINTTYPE seed=read_dev_random();
                     init(seed);
                 }
-                void init_from_dev_urandom() {
+                void init_dev_urandom() {
                     UINTTYPE seed=read_dev_urandom();
                     init(seed);
                 }
@@ -258,21 +264,21 @@ namespace MtRng {
                 }
 
                 /* generates a random number on [0,2^bits-1]-interval */
-                UINTTYPE getUint()
+                UINTTYPE get_uint()
                 {
                     if (--left_ == 0) nextState();
                     return Traits::temper(*next_++);
                 }
 
                 /* generates a random number on [0,2^(bits-1)-1]-interval */
-                INTTYPE getInt()
+                INTTYPE get_int()
                 {
                     if (--left_ == 0) nextState();
                     return (INTTYPE)(Traits::temper(*next_++)>>1);
                 }
 
                 /* generates a random number on [0,1]-real-interval */
-                double getReal1()
+                double get_real1()
                 {
                     if (--left_ == 0) nextState();
                     if (Traits::INTTYPE_BITS > 53) {
@@ -288,7 +294,7 @@ namespace MtRng {
                 }
 
                 /* generates a random number on [0,1)-real-interval */
-                double getReal2()
+                double get_real2()
                 {
                     if (--left_ == 0) nextState();
                     if (Traits::INTTYPE_BITS > 53) {
@@ -304,7 +310,7 @@ namespace MtRng {
                 }
 
                 /* generates a random number on (0,1)-real-interval */
-                double getReal3()
+                double get_real3()
                 {
                     if (--left_ == 0) nextState();
                     if (Traits::INTTYPE_BITS > 52) {
@@ -324,12 +330,12 @@ namespace MtRng {
                    */
 
                 /* generates a random number on [-1,1]-real-interval */
-                inline double getSReal1() {
-                    return 2*(getReal1()-0.5);
+                inline double get_sreal1() {
+                    return 2*(get_real1()-0.5);
                 }
                 /* generates a random number on [-1,1)-real-interval */
-                inline double getSReal2() {
-                    return 2*(getReal2()-0.5);
+                inline double get_sreal2() {
+                    return 2*(get_real2()-0.5);
                 }
 
                 /*
@@ -337,13 +343,12 @@ namespace MtRng {
 
                    Note we get two per run but I'm only using one.
                    */
-                double getNormal() 
-                {
+                double get_normal() {
                     double x1, x2, w, y1;//, y2;
 
                     do {
-                        x1 = 2.*getReal2() - 1.0;
-                        x2 = 2.*getReal2() - 1.0;
+                        x1 = 2.*get_real2() - 1.0;
+                        x2 = 2.*get_real2() - 1.0;
                         w = x1*x1 + x2*x2;
                     } while ( w >= 1.0 );
 
@@ -360,8 +365,7 @@ namespace MtRng {
 
                    The cut/rejection method is based off numerical recipes
                    */
-                long getPoisson(double lambda)
-                {
+                long get_poisson(double lambda) {
                     long k=0;
 
                     if (lambda <= 0) {
@@ -372,7 +376,7 @@ namespace MtRng {
                         double loglam=std::log(lambda);
                         double em=0;
                         while (1) {
-                            double y=std::tan(M_PI*getReal2());
+                            double y=std::tan(M_PI*get_real2());
                             em=sq*y+lambda;
 
                             if (em < 0.0) {
@@ -384,7 +388,7 @@ namespace MtRng {
                             double g=lambda*loglam-lgamma(lambda+1.);
                             double t=0.9*(1.+y*y)*std::exp(em*loglam-lgamma(em+1.)-g);
 
-                            if (getReal2() <= t) {
+                            if (get_real2() <= t) {
                                 break;
                             }
                         }
@@ -394,10 +398,10 @@ namespace MtRng {
                     } else {
                         // this works great but for high values of lambda (lambda > 700),
                         // exp(-lambda) is returned as exactly zero
-                        double p=getReal2();
+                        double p=get_real2();
                         double target=std::exp(-lambda);
                         while (p > target) {
-                            p*=getReal2();
+                            p*=get_real2();
                             k+=1;
                         }
                     }

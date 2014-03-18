@@ -71,7 +71,7 @@ namespace image {
                 for (long row=0; row<nrows_; row++) {
                     for (long col=0; col<ncols_; col++) {
 
-                        double r = rng.getNormal();
+                        double r = rng.get_normal();
                         data[row][col] += r*sigma;
                     }
                 }
