@@ -4,7 +4,6 @@
 using namespace std;
 
 using shape::Shape;
-using shape::ShapeRangeError;
 
 int main(int argc, char **argv)
 {
