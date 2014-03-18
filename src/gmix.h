@@ -13,7 +13,8 @@
 #include <cstdio>
 
 //#include "image.h"
-#include "fmath.h"
+//#include "fmath.h"
+#include "fastexp.h"
 
 namespace gmix {
 
@@ -79,7 +80,7 @@ namespace gmix {
 
                 double val=0.0;
                 if (chi2 < GAUSS_EXP_MAX_CHI2) {
-                    val = pnorm_*fmath::expd( -0.5*chi2 );
+                    val = pnorm_*fastexp::expd( -0.5*chi2 );
                 }
 
                 return val;

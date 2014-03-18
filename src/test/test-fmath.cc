@@ -1,6 +1,7 @@
 #include <cstdio>
 #include <cmath>
-#include "fmath.h"
+//#include "fmath.h"
+#include "fastexp.h"
 
 using namespace std;
 
@@ -19,7 +20,8 @@ int main(int argc, char **argv)
     double x=dmin;
     for (long i=0; i<n; i++) {
         double etrue = std::exp(x);
-        double eapprox = fmath::expd(x);
+        //double eapprox = fmath::expd(x);
+        double eapprox = fastexp::expd(x);
 
         double fracdiff = abs( eapprox/etrue-1);
         if (fracdiff > max_fracdiff) {
