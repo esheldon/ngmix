@@ -152,7 +152,10 @@ namespace gmix {
                 data_.resize(ngauss);
             }
 
-            void set_from_pars(const vector<double> &pars) {
+            // virtual because more specific models will deal with
+            // this differently
+
+            virtual void set_from_pars(const vector<double> &pars) {
                 long npars=pars.size();
                 if ( (npars % 6) != 0) {
                     std::string err =
@@ -300,6 +303,53 @@ namespace gmix {
             vector<Gauss> data_;
 
     };
+
+    enum gmix_model {
+        GMIX_FULL,
+        GMIX_COELLIP,
+        GMIX_TURB,
+        GMIX_EXP,
+        GMIX_DEV,
+        GMIX_BDF,
+    };
+
+
+    // this is meant to be inherited
+    class GMixModel : public GMix {
+    
+        public:
+            // note GMix() would called with no parameters
+            // if we didn't do it with 6
+            GMixModel(const vector<double> &pars) {
+                set_from_pars(pars);
+            }
+
+
+            void _set_from_pars_fp(const vector<double> &pars,
+                                   const double *pvals,
+                                   const double *fvals) {
+                long npars=pars.size();
+                if ( npars != 6) {
+                    std::string err =
+                        "GMix error: send 6 pars for simple model";
+                    throw std::runtime_error(err);
+                }
+
+
+                for (long i=0; i<ngauss_; i++) {
+                    long beg=i*6;
+
+                    Gauss &gauss = data_[i];
+
+                    gauss.set(pars[beg+0],
+                              pars[beg+1],
+                              pars[beg+2],
+                              pars[beg+3],
+                              pars[beg+4],
+                              pars[beg+5]);
+                }
+            }
+    } // class GMixSimple
 
 }
 
