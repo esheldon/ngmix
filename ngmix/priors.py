@@ -5,6 +5,8 @@ helps use in priors for LM fitting
 I haven't forced the max prob to be 1.0 yet, but should
 
 """
+from __future__ import print_function
+
 import numpy
 from numpy import array
 from numpy.random import random as randu
@@ -419,7 +421,7 @@ class GPriorBase(object):
             shear2_meas_te[ishear] = g1g2_te[1]
 
             mess='true: %.6f,%.6f meas: %.6f,%.6f expand true: %.6f,%.6f'
-            print mess % (s1,s2,g1g2[0],g1g2[1],g1g2_te[0],g1g2_te[1])
+            print(mess % (s1,s2,g1g2[0],g1g2[1],g1g2_te[0],g1g2_te[1]))
 
         fracdiff=shear1_meas/shear1_true-1
         fracdiff_te=shear1_meas_te/shear1_true-1
@@ -465,10 +467,10 @@ class GPriorBase(object):
 
             plt.add( biggles.PlotKey(0.1, 0.9, [pts,pts_te,curve], halign='left') )
 
-            print 'writing:',eps
+            print('writing:',eps)
             plt.write_eps(eps)
 
-            print poly
+            print(poly)
 
 class GPriorBABase(GPriorBase):
     """

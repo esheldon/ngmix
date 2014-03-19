@@ -1,7 +1,8 @@
 # there are a few additional imports not in this header for example we only
 # import emcee if needed
+from __future__ import print_function
 
-from sys import stdout, stderr
+from sys import stdout
 import numpy
 import time
 
@@ -873,14 +874,14 @@ def run_leastsq(func, guess, dof, **keys):
         if ier > 4:
             flags = 2**(ier-5)
             pars,pcov,perr=_get_def_stuff(npars)
-            print >>stderr,'    ',errmsg
+            print('    ',errmsg)
 
         elif pcov0 is None:    
             # why on earth is this not in the flags?
             flags += LM_SINGULAR_MATRIX 
             errmsg = "singular covariance"
-            print >>stderr,'    ',errmsg
-            print_pars(pars,front='    pars at singular:',stream=stderr)
+            print('    ',errmsg)
+            print_pars(pars,front='    pars at singular:')
             junk,pcov,perr=_get_def_stuff(npars)
         else:
             # Scale the covariance matrix returned from leastsq; this will
@@ -895,7 +896,7 @@ def run_leastsq(func, guess, dof, **keys):
             if cflags != 0:
                 flags += cflags
                 errmsg = "bad covariance matrix"
-                print >>stderr,'    ',errmsg
+                print('    ',errmsg)
                 junk1,junk2,perr=_get_def_stuff(npars)
             else:
                 # only if we reach here did everything go well
@@ -922,7 +923,7 @@ def run_leastsq(func, guess, dof, **keys):
             res['nfev']=-1
             res['flags']=LM_FUNC_NOTFINITE
             res['errmsg']="not finite"
-            print >>stderr,'    not finite'
+            print('    not finite')
         else:
             raise e
 
@@ -1043,8 +1044,8 @@ class MCMCBase(FitterBase):
                 break
             except GMixRangeError as gerror:
                 # make sure we draw random guess if we got failure
-                print >>stderr,'failed init gmix lol:',str(gerror)
-                print >>stderr,'getting a new guess'
+                print('failed init gmix lol:',str(gerror))
+                print('getting a new guess')
                 guess=self._get_random_guess()
         if i==9:
             raise gerror
@@ -1069,15 +1070,15 @@ class MCMCBase(FitterBase):
                 try:
                     self.tau=self._get_tau(sampler, burnin)
                     if self.tau > MAX_TAU and self.doiter:
-                        print >>stderr,"        tau",self.tau,">",MAX_TAU
+                        print("        tau",self.tau,">",MAX_TAU)
                         tau_ok=False
                 except:
                     # something went wrong with acor, run some more
-                    print >>stderr,"        exception in acor, running more"
+                    print("        exception in acor, running more")
                     tau_ok=False
 
             if self.arate < self.min_arate and self.doiter:
-                print >>stderr,"        arate ",self.arate,"<",self.min_arate
+                print("        arate ",self.arate,"<",self.min_arate)
                 arate_ok=False
 
             if tau_ok and arate_ok:
@@ -1134,7 +1135,7 @@ class MCMCBase(FitterBase):
             # fail silently which is the stupidest thing I have ever seen in my
             # entire life.  If I want to set the state it is important to me!
             
-            print >>stderr,'    replacing random state'
+            print('    replacing random state')
             #sampler.random_state=self.random_state.get_state()
 
             # OK, we will just hope that _random doesn't change names in the future.
@@ -1190,14 +1191,14 @@ class MCMCBase(FitterBase):
             # this was an mcmc run
             if self.g_prior is None:
                 weights=None
-                print >>stderr,'    weights are None'
+                print('    weights are None')
             else:
                 self._set_g_prior_vals()
-                print >>stderr,'    weights are g prior'
+                print('    weights are g prior')
                 weights=self.g_prior_vals
         else:
             weights=None
-            print >>stderr,'    weights are none'
+            print('    weights are none')
 
         return weights
 
@@ -1281,7 +1282,7 @@ class MCMCBase(FitterBase):
         try:
             self._fill_gmix_lol(self._result['pars'])
         except GMixRangeError as gerror:
-            print >>stderr,str(gerror)
+            print(str(gerror))
             return None
 
         tablist=[]
@@ -1557,7 +1558,7 @@ class MCMCSimple(MCMCBase):
 
         ndiff=g_prior.size-w.size
         if ndiff > 0:
-            print >>stderr,'        removed zero priors:',ndiff
+            print('        removed zero priors:',ndiff)
             self.g_prior_vals = self.g_prior_vals[w]
             self.trials = self.trials[w,:]
 
@@ -1686,7 +1687,7 @@ class MHSimple(MCMCSimple):
             fac = arate/0.4
             self.step_sizes = self.step_sizes*fac
 
-            print >>stderr,'    BAD ARATE:',arate
+            print('    BAD ARATE:',arate)
             pars0=( sampler.get_trials() )[-1,:]
 
         pars=sampler.get_trials()
@@ -1698,7 +1699,7 @@ class MHSimple(MCMCSimple):
 
         self.flags  = 0
         if self.arate < self.min_arate:
-            print >>stderr,'LOW ARATE:',self.arate
+            print('LOW ARATE:',self.arate)
             self.flags |= LOW_ARATE
 
     def step(self, pars):
@@ -1719,8 +1720,8 @@ class MHSimple(MCMCSimple):
                 break
             except GMixRangeError as gerror:
                 # make sure we draw random guess if we got failure
-                print >>stderr,'failed init gmix lol:',str(gerror)
-                print >>stderr,'getting a new guess'
+                print('failed init gmix lol:',str(gerror))
+                print('getting a new guess')
                 self.guess=self._get_random_guess()
 
     def _get_random_guess(self):
@@ -2028,8 +2029,8 @@ class MCMCBDFJoint(MCMCBDF):
                 break
             except GMixRangeError as gerror:
                 # make sure we draw random guess if we got failure
-                print >>stderr,'failed init gmix lol:',str(gerror)
-                print >>stderr,'getting a new guess'
+                print('failed init gmix lol:',str(gerror) )
+                print('getting a new guess')
                 guess=self._get_random_guess()
         if i==9:
             raise gerror
@@ -2045,14 +2046,14 @@ class MCMCBDFJoint(MCMCBDF):
         burnin=self.burnin
         self.last_pos = guess
 
-        print >>stderr,'        burnin runs:',burnin
+        print('        burnin runs:',burnin)
 
         ntry=10
         for i in xrange(ntry):
 
             if i == 3:
                 burnin = burnin*2
-                print >>stderr,'        burnin:',burnin
+                print('        burnin:',burnin)
 
             sampler.reset()
             self.last_pos, prob, state = sampler.run_mcmc(self.last_pos, burnin)
@@ -2075,15 +2076,15 @@ class MCMCBDFJoint(MCMCBDF):
                 tfmess=tfmess % (Tmean,Terr,Tfracdiff,Tfracdiff_err)
 
                 if (Tfracdiff-1.5*Tfracdiff_err) < Tfracdiff_max:
-                    print >>stderr,'        last burn',tfmess
+                    print('        last burn',tfmess)
                     break
 
-                print >>stderr,'        ',tfmess
+                print('        ',tfmess)
 
             Tmean_last=Tmean
             i += 1
 
-        print >>stderr,'        final run:',self.nstep
+        print('        final run:',self.nstep)
         sampler.reset()
         self.last_pos, prob, state = sampler.run_mcmc(self.last_pos, self.nstep)
 
@@ -2220,7 +2221,7 @@ def test_gauss_psf_graph(counts=100.0, noise=0.1, nimages=10, n=10, groups=True,
 
     graphviz = GraphvizOutput()
     output='profile-nimages%02d.png' % nimages
-    print 'profile image:',output
+    print('profile image:',output)
     graphviz.output_file = output
     config=pycallgraph.Config(groups=groups)
 
@@ -2255,7 +2256,7 @@ def test_gauss_psf_graph(counts=100.0, noise=0.1, nimages=10, n=10, groups=True,
 
             res=mc.get_result()
 
-            print res['g']
+            print(res['g'])
 
 def test_gauss_psf(counts=100.0, noise=0.001, n=10, nimages=10, jfac=0.27):
     """
@@ -2300,7 +2301,7 @@ def test_gauss_psf(counts=100.0, noise=0.001, n=10, nimages=10, jfac=0.27):
 
     sec=time.time()-t0
     secper=sec/n
-    print secper,'seconds per'
+    print(secper,'seconds per')
 
     return sec,secper
 
@@ -2342,8 +2343,8 @@ def test_gauss_psf_jacob(counts_sky=100.0, noise_sky=0.001, nimages=10, jfac=10.
 
     res=mc.get_result()
 
-    print_pars(res['pars'], front='pars:', stream=stderr)
-    print_pars(res['pars_err'], front='perr:', stream=stderr)
+    print_pars(res['pars'], front='pars:')
+    print_pars(res['pars_err'], front='perr:')
     s=mc.get_flux_scaling()
     #print 'flux in image coords: %.4g +/- %.4g' % (res['pars'][-1]*s,res['pars_err'][-1]*s)
 
@@ -2427,7 +2428,7 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
     emo_guess._data['icc'] += 0.5*srandu()
     mc_psf.go(emo_guess, sky)
     res_psf=mc_psf.get_result()
-    print 'psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff']
+    print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
 
     psf_fit=mc_psf.get_gmix()
     imfit_psf=mc_psf.make_image(counts=im_psf.sum())
@@ -2448,9 +2449,9 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
 
     res_obj=mc_obj.get_result()
 
-    print_pars(res_obj['pars'], front='pars_obj:', stream=stderr)
-    print_pars(res_obj['pars_err'], front='perr_obj:', stream=stderr)
-    print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2)
+    print_pars(res_obj['pars'], front='pars_obj:')
+    print_pars(res_obj['pars_err'], front='perr_obj:')
+    print('Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2))
 
     gmfit0=mc_obj.get_gmix()
     gmfit=gmfit0.convolve(psf_fit)
@@ -2543,7 +2544,7 @@ def test_model_priors(model,
     emo_guess._data['icc'] += 0.5*srandu()
     mc_psf.go(emo_guess, sky)
     res_psf=mc_psf.get_result()
-    print 'psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff']
+    print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
 
     psf_fit=mc_psf.get_gmix()
     imfit_psf=mc_psf.make_image(counts=im_psf.sum())
@@ -2570,15 +2571,15 @@ def test_model_priors(model,
     res_obj=mc_obj.get_result()
 
     pprint.pprint(res_obj)
-    print_pars(res_obj['pars'], front='pars_obj:', stream=stderr)
-    print_pars(res_obj['pars_err'], front='perr_obj:', stream=stderr)
-    print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2)
+    print_pars(res_obj['pars'], front='pars_obj:')
+    print_pars(res_obj['pars_err'], front='perr_obj:')
+    print('Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2))
     if do_lensfit:
-        print 'gsens:',res_obj['g_sens']
+        print('gsens:',res_obj['g_sens'])
     if do_pqr:
-        print 'P:',res_obj['P']
-        print 'Q:',res_obj['Q']
-        print 'R:',res_obj['R']
+        print('P:',res_obj['P'])
+        print('Q:',res_obj['Q'])
+        print('R:',res_obj['R'])
 
     gmfit0=mc_obj.get_gmix()
     gmfit=gmfit0.convolve(psf_fit)
@@ -2734,7 +2735,7 @@ def test_model_mb(model,
     if profile:
         name='profile-mb-%s-%dbands-%iimages-%s.png' % (model,nband,nimages,gstr)
         graphviz = GraphvizOutput()
-        print 'profile image:',name
+        print('profile image:',name)
         graphviz.output_file = name
         config=pycallgraph.Config(groups=groups)
 
@@ -2771,17 +2772,17 @@ def test_model_mb(model,
     tmrest = time.time()-tmrest
 
     #pprint.pprint(res_obj)
-    print 'arate:',res_obj['arate']
-    print_pars(true_pars, front='true:    ', stream=stderr)
-    print_pars(res_obj['pars'], front='pars_obj:', stream=stderr)
-    print_pars(res_obj['pars_err'], front='perr_obj:', stream=stderr)
+    print('arate:',res_obj['arate'])
+    print_pars(true_pars, front='true:    ')
+    print_pars(res_obj['pars'], front='pars_obj:')
+    print_pars(res_obj['pars_err'], front='perr_obj:')
     #print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2)
     if do_lensfit:
-        print 'gsens:',res_obj['g_sens']
+        print('gsens:',res_obj['g_sens'])
     if do_pqr:
-        print 'P:',res_obj['P']
-        print 'Q:',res_obj['Q']
-        print 'R:',res_obj['R']
+        print('P:',res_obj['P'])
+        print('Q:',res_obj['Q'])
+        print('R:',res_obj['R'])
 
     #gmfit0=mc_obj.get_gmix()
     #gmfit=gmfit0.convolve(psf_fit)
@@ -2798,9 +2799,9 @@ def test_model_mb(model,
         plt.write_img(800,800,png)
 
     tmtot=tmrest + tmpsf
-    print 'time total:',tmtot
-    print 'time psf:  ',tmpsf
-    print 'time rest: ',tmrest
+    print('time total:',tmtot)
+    print('time psf:  ',tmpsf)
+    print('time rest: ',tmrest)
 
     return tmtot,res_obj
 
@@ -2889,7 +2890,7 @@ def test_model_priors_anze(model,
     emo_guess._data['icc'] += 0.5*srandu()
     mc_psf.go(emo_guess, sky)
     res_psf=mc_psf.get_result()
-    print 'psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff']
+    print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
 
     psf_fit=mc_psf.get_gmix()
     imfit_psf=mc_psf.make_image(counts=im_psf.sum())
@@ -2912,28 +2913,6 @@ def test_model_priors_anze(model,
                       do_lensfit=do_lensfit,
                       do_pqr=do_pqr)
     mc_obj.go()
-
-    """
-    res_obj=mc_obj.get_result()
-
-    pprint.pprint(res_obj)
-    print_pars(res_obj['pars'], front='pars_obj:', stream=stderr)
-    print_pars(res_obj['pars_err'], front='perr_obj:', stream=stderr)
-    print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2)
-    if do_lensfit:
-        print 'gsens:',res_obj['g_sens']
-    if do_pqr:
-        print 'P:',res_obj['P']
-        print 'Q:',res_obj['Q']
-        print 'R:',res_obj['R']
-
-    gmfit0=mc_obj.get_gmix()
-    gmfit=gmfit0.convolve(psf_fit)
-    imfit_obj=gmfit.make_image(im_obj.shape, jacobian=j)
-
-    images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
-    mcmc.plot_results(mc_obj.get_trials())
-    """
 
 
 
@@ -3028,8 +3007,8 @@ def test_psf_flux(ngauss,
         im0_skyset,sky=em.prep_image(im0)
         mc=em.GMixEM(im0_skyset, jacobian=j)
 
-        print 'true:'
-        print gm
+        print('true:')
+        print(gm)
         # gm is also guess
         gm_guess=gm.copy()
         gm_guess.set_psum(1.0)
@@ -3044,8 +3023,8 @@ def test_psf_flux(ngauss,
                     raise
                 else:
                     res=mc.get_result()
-                    print 'try:',k,'fdiff:',res['fdiff'],'numiter:',res['numiter']
-                    print mc.get_gmix()
+                    print('try:',k,'fdiff:',res['fdiff'],'numiter:',res['numiter'])
+                    print(mc.get_gmix())
                     gm_guess.set_cen(0.1*srandu(), 0.1*srandu())
                     gm_guess._data['irr'] = gm._data['irr']*(1.0 + 0.1*srandu(ngauss))
                     gm_guess._data['icc'] = gm._data['icc']*(1.0 + 0.1*srandu(ngauss))
@@ -3062,7 +3041,7 @@ def test_psf_flux(ngauss,
 
         #print 'fit: ',psf_fit
         res=mc.get_result()
-        print i+1,res['numiter']
+        print(i+1,res['numiter'])
 
 
     tm_fit=time.time()
@@ -3089,7 +3068,7 @@ def profile_test_psf_flux(ngauss,
 
     graphviz = GraphvizOutput()
     output='profile-psfflux-ngauss%02d-%02d.png' % (ngauss,nimages)
-    print 'profile image:',output
+    print('profile image:',output)
     graphviz.output_file = output
     config=pycallgraph.Config(groups=groups)
 

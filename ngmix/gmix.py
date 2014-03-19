@@ -1,4 +1,3 @@
-from sys import stderr,stdout
 import numpy
 from numpy import array, zeros, exp, log10, log, dot, sqrt
 import numba
@@ -783,30 +782,6 @@ def _convolve_fill(self, obj_gmix, psf_gmix):
             _gauss2d_set(self, iself, p, row, col, irr, irc, icc)
 
             iself += 1
-"""
-@jit(argtypes=[ _gauss2d[:], _gauss2d[:], _gauss2d[:] ])
-def _convolve_fill(self, obj_gmix, psf_gmix):
-    
-    nobj=obj_gmix.size
-    npsf=psf_gmix.size
-
-    rowcen,colcen,psum = _get_cen(psf_gmix)
-
-    obj=obj_gmix[0]
-    psf=psf_gmix[0]
-
-    for iobj in xrange(nobj):
-        obj = obj_gmix[iobj]
-        for ipsf in xrange(npsf):
-            print 'hello'
-            #psf = psf_gmix[ipsf]
-            tmp = obj_gmix[iobj]
-
-            #irr = obj.irr + psf.irr
-            #irc = obj.irc + psf.irc
-            #icc = obj.icc + psf.icc
-
-"""
 
 @jit(argtypes=[ _gauss2d[:], float64[:,:], int64 ])
 def _render_slow(self, image, nsub):

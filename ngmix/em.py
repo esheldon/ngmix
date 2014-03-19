@@ -1,6 +1,7 @@
 """
 Fit an image with a gaussian mixture using the EM algorithm
 """
+from __future__ import print_function
 
 import numpy
 import numba
@@ -285,8 +286,8 @@ def test_1gauss(counts=100.0, noise=0.0, maxiter=100, show=False):
 
     pars = [cen[0],cen[1], g1, g2, T, counts]
     gm=gmix.GMixModel(pars, "gauss")
-    print 'gmix true:'
-    print gm
+    print('gmix true:')
+    print(gm)
 
     im0=gm.make_image(dims)
 
@@ -302,21 +303,21 @@ def test_1gauss(counts=100.0, noise=0.0, maxiter=100, show=False):
     gm_guess._data['irc'] += 0.5*srandu()
     gm_guess._data['icc'] += 0.5*srandu()
 
-    print 'guess:'
-    print gm_guess
+    print('guess:')
+    print(gm_guess)
     
     tm0=time.time()
     em=GMixEM(imsky)
     em.go(gm_guess, sky, maxiter=maxiter)
     tm=time.time()-tm0
-    print 'time:',tm,'seconds'
+    print('time:',tm,'seconds')
 
     gmfit=em.get_gmix()
     res=em.get_result()
-    print 'best fit:'
-    print gmfit
-    print 'results'
-    print res
+    print('best fit:')
+    print(gmfit)
+    print('results')
+    print(res)
 
     if show:
         import images
@@ -342,8 +343,8 @@ def test_1gauss_jacob(counts_sky=100.0, noise_sky=0.0, maxiter=100, jfac=0.27, s
 
     pars = [0.0, 0.0, g1, g2, Tsky, counts_sky]
     gm=gmix.GMixModel(pars, "gauss")
-    print 'gmix true:'
-    print gm
+    print('gmix true:')
+    print(gm)
 
     im0=gm.make_image(dims, jacobian=j)
     #images.view(im0)
@@ -360,21 +361,21 @@ def test_1gauss_jacob(counts_sky=100.0, noise_sky=0.0, maxiter=100, jfac=0.27, s
     gm_guess._data['irc'] += 0.5*srandu()
     gm_guess._data['icc'] += 0.5*srandu()
 
-    print 'guess:'
-    print gm_guess
+    print('guess:')
+    print(gm_guess)
     
     tm0=time.time()
     em=GMixEM(imsky, jacobian=j)
     em.go(gm_guess, sky, maxiter=maxiter)
     tm=time.time()-tm0
-    print 'time:',tm,'seconds'
+    print('time:',tm,'seconds')
 
     gmfit=em.get_gmix()
     res=em.get_result()
-    print 'best fit:'
-    print gmfit
-    print 'results'
-    print res
+    print('best fit:')
+    print(gmfit)
+    print('results')
+    print(res)
 
     if show:
         import images
@@ -411,8 +412,8 @@ def test_2gauss(counts=100.0, noise=0.0, maxiter=100,show=False):
             counts_2, cen2[0],cen2[1], irr_2, irc_2, icc_2]
 
     gm=gmix.GMix(pars=pars)
-    print 'gmix true:'
-    print gm
+    print('gmix true:')
+    print(gm)
 
     im0=gm.make_image(dims)
     im = im0 + noise*numpy.random.randn(im0.size).reshape(dims)
@@ -427,21 +428,21 @@ def test_2gauss(counts=100.0, noise=0.0, maxiter=100,show=False):
     gm_guess._data['irc'] += 0.5*srandu(2)
     gm_guess._data['icc'] += 0.5*srandu(2)
 
-    print 'guess:'
-    print gm_guess
+    print('guess:')
+    print(gm_guess)
 
     tm0=time.time()
     em=GMixEM(imsky)
     em.go(gm_guess, sky, maxiter=maxiter)
     tm=time.time()-tm0
-    print 'time:',tm,'seconds'
+    print('time:',tm,'seconds')
 
     gmfit=em.get_gmix()
     res=em.get_result()
-    print 'best fit:'
-    print gmfit
-    print 'results'
-    print res
+    print('best fit:')
+    print(gmfit)
+    print('results')
+    print(res)
 
     if show:
         import images

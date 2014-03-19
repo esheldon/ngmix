@@ -1,4 +1,5 @@
-from sys import stderr
+from __future__ import print_function
+
 import numpy
 from numpy import where, log10, zeros, exp
 
@@ -268,7 +269,7 @@ class JointPriorBDF(GMixND):
             if throw:
                 raise GMixRangeError(mess)
             else:
-                print >>stderr,mess
+                print(mess)
 
                 wbad,=where(  (good != 1)
                             | (T <= 0.0)
