@@ -270,6 +270,15 @@ class JointPriorBDF(GMixND):
             else:
                 print >>stderr,mess
 
+                wbad,=where(  (good != 1)
+                            | (T <= 0.0)
+                            | (Fb <= 0.0)
+                            | (Fd <= 0.0) )
+
+                n = 10 if wbad.size > 10 else wbad.size
+                for i in xrange(n):
+                    print(pars[wbad[i],:])
+
         logpars[w,0] = eta1[w]
         logpars[w,1] = eta2[w]
         logpars[w,2] = log10(T[w])

@@ -2046,11 +2046,11 @@ class MCMCBDFJoint(MCMCBDF):
         self.last_pos = guess
 
         print >>stderr,'        burnin runs:',burnin
-        i=0
-        while True:
 
-            #if ( (i+1) % 4) == 0:
-            if i > 2:
+        ntry=10
+        for i in xrange(ntry):
+
+            if i == 3:
                 burnin = burnin*2
                 print >>stderr,'        burnin:',burnin
 
