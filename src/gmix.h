@@ -456,7 +456,7 @@ namespace NGMix {
                 _set_from_pars_fp(pars, GAUSS_NGAUSS, GAUSS_PVALS, GAUSS_FVALS);
             }
 
-    }; // class GMixGauss
+    };
 
 
     class GMixExp : public GMixSimple {
@@ -475,7 +475,7 @@ namespace NGMix {
                 _set_from_pars_fp(pars, EXP_NGAUSS, EXP_PVALS, EXP_FVALS);
             }
 
-    }; // class GMixExp
+    };
 
     class GMixDev : public GMixSimple {
     
@@ -493,7 +493,7 @@ namespace NGMix {
                 _set_from_pars_fp(pars, DEV_NGAUSS, DEV_PVALS, DEV_FVALS);
             }
 
-    }; // class GMixDev
+    };
 
     class GMixTurb : public GMixSimple {
     
@@ -511,7 +511,7 @@ namespace NGMix {
                 _set_from_pars_fp(pars, TURB_NGAUSS, TURB_PVALS, TURB_FVALS);
             }
 
-    }; // class GMixTurb
+    };
 
 
 }
