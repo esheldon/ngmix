@@ -370,6 +370,21 @@ namespace NGMix {
         3.055782252301236
     };
 
+
+    static const long TURB_NGAUSS=3;
+
+    static const double TURB_PVALS[] = {
+        0.596510042804182,
+        0.4034898268889178,
+        1.303069003078001e-07
+    };
+    static const double TURB_FVALS[] = {
+        0.5793612389470884,
+        1.621860687127999,
+        7.019347162356363
+    };
+
+
     // this is meant to be inherited
     class GMixSimple : public GMix {
 
@@ -478,7 +493,26 @@ namespace NGMix {
                 _set_from_pars_fp(pars, DEV_NGAUSS, DEV_PVALS, DEV_FVALS);
             }
 
-    }; // class GMixExp
+    }; // class GMixDev
+
+    class GMixTurb : public GMixSimple {
+    
+        public:
+            GMixTurb() {
+                npars_=SIMPLE_NPARS;
+                resize(TURB_NGAUSS);
+            }
+            GMixTurb(const vector<double> &pars) {
+                npars_=SIMPLE_NPARS;
+                set_from_pars(pars);
+            }
+            virtual void set_from_pars(const vector<double> &pars) {
+                resize(TURB_NGAUSS);
+                _set_from_pars_fp(pars, TURB_NGAUSS, TURB_PVALS, TURB_FVALS);
+            }
+
+    }; // class GMixTurb
+
 
 }
 
