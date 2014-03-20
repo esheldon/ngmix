@@ -48,8 +48,8 @@ namespace NGMix {
                     throw std::out_of_range ("e >= 1");
                 }
 
-                double cos2theta = g1/g;
-                double sin2theta = g2/g;
+                double cos2theta = g1in/g;
+                double sin2theta = g2in/g;
 
                 this->g1=g1in;
                 this->g2=g2in;
