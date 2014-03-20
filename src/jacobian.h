@@ -59,7 +59,7 @@ namespace jacobian {
                 this->dvdrow=dvdrow;
                 this->dvdcol=dvdcol;
 
-                this->det = abs(dudrow*dvdcol-dudcol*dvdrow);
+                this->det = std::fabs(dudrow*dvdcol-dudcol*dvdrow);
                 this->sdet = std::sqrt( this->det );
             }
 

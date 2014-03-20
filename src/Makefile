@@ -18,9 +18,10 @@ ALLTESTS = $(TEST_GMIX) $(TEST_GMIX_MODEL) $(TEST_FASTEXP) \
 
 tests: $(ALLTESTS)
 
-$(TEST_GMIX): gmix.h image.h mtrng.h test/test-gmix.cc
+$(TEST_GMIX): gmix.h image.h mtrng.h jacobian.h test/test-gmix.cc
 	$(CC) -o test/test-gmix test/test-gmix.cc $(CFLAGS) $(LINKFLAGS)
-$(TEST_GMIX_MODEL): gmix.h image.h mtrng.h test/test-gmix-model.cc
+
+$(TEST_GMIX_MODEL): gmix.h image.h mtrng.h jacobian.h test/test-gmix-model.cc
 	$(CC) -o test/test-gmix-model test/test-gmix-model.cc $(CFLAGS) $(LINKFLAGS)
 
 $(TEST_FASTEXP): fastexp.h test/test-fastexp.cc
