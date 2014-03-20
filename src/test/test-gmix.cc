@@ -8,8 +8,8 @@
 
 using namespace std;
 
-using gmix::GMix;
-using gmix::Gauss;
+using NGMix::GMix;
+using NGMix::Gauss;
 using image::Image;
 using jacobian::Jacobian;
 
@@ -43,27 +43,27 @@ int main(int argc, char **argv)
     pars.push_back(2.2);
     pars.push_back(7.0);
 
-    GMix obj_gmix(pars);
+    GMix gmix(pars);
 
     printf("\n");
-    obj_gmix.print();
+    gmix.print();
 
 
     double row=16.0, col=15.0;
-    printf("eval(%g,%g) = %g\n", row, col, obj_gmix(row,col));
+    printf("eval(%g,%g) = %g\n", row, col, gmix(row,col));
 
     pars[1] = 18.0;
     pars[2] = 18.1;
-    obj_gmix.set_from_pars(pars);
+    gmix.set_from_pars(pars);
 
-    obj_gmix.print();
+    gmix.print();
 
-    printf("eval(%g,%g) = %g\n", row, col, obj_gmix(row,col));
+    printf("eval(%g,%g) = %g\n", row, col, gmix(row,col));
 
     long nrows=32, ncols=32;
     Image im(nrows, ncols);
 
-    obj_gmix.render(im);
+    gmix.render(im);
     im.show("/tmp/timage-32432.dat");
 
     mtrng::MtRng64 rng;
@@ -78,8 +78,8 @@ int main(int argc, char **argv)
     Jacobian jacob;
     weight.add_scalar( 1.0/(sigma*sigma) );
 
-    obj_gmix.get_loglike(im, weight, jacob,
-                         &loglike, &s2n_numer, &s2n_denom);
+    gmix.get_loglike(im, weight, jacob,
+                     &loglike, &s2n_numer, &s2n_denom);
 
     double s2n = s2n_numer/sqrt(s2n_denom);
     double dof = im.get_size();

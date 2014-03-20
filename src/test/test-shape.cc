@@ -3,7 +3,7 @@
 
 using namespace std;
 
-using shape::Shape;
+using NGMix::Shape;
 
 int main(int argc, char **argv)
 {
@@ -30,6 +30,8 @@ int main(int argc, char **argv)
     printf("shape 2 after shear\n");
     shape2.show();
 
+    printf("e1:   %.16g   e2: %.16g\n", shape2.e1, shape2.e2);
+    printf("eta1: %.16g eta2: %.16g\n", shape2.eta1, shape2.eta2);
     return 0;
 
 }

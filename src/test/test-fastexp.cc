@@ -19,7 +19,7 @@ int main(int argc, char **argv)
     double x=dmin;
     for (long i=0; i<n; i++) {
         double etrue = std::exp(x);
-        double eapprox = fastexp::expd(x);
+        double eapprox = NGMix::expd(x);
 
         double fracdiff = abs( eapprox/etrue-1);
         if (fracdiff > max_fracdiff) {

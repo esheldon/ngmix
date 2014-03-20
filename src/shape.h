@@ -5,35 +5,60 @@
 #define _SHAPE_HEADER_GUARD
 
 #include <stdexcept>
-#include <cmath>
 #include <cstdio>
 #include <string>
 #include <iostream>
 
-namespace shape {
+// must use math.h to get atanh!
+//#include <cmath>
+#include <math.h>
+
+namespace NGMix {
 
     struct Shape {
 
         public:
 
-            // the data is public
             double g1;
             double g2;
+            double e1;
+            double e2;
+            double eta1;
+            double eta2;
 
-            Shape() {g1=0; g2=0;}
+            Shape() {
+                set_g(0.0, 0.0);
+            }
 
             Shape(double g1in, double g2in) {
                 set_g(g1in, g2in);
             }
 
             void set_g(double g1in, double g2in) {
-                double gsq = g1in*g1in + g2in*g2in;
-                if (gsq >= 1.0) {
+
+                double g = sqrt(g1in*g1in + g2in*g2in);
+                if (g >= 1.) {
                     throw std::out_of_range ("g >= 1");
                 }
-                g1=g1in;
-                g2=g2in;
+
+                double eta = 2*atanh(g);
+                double e = tanh(eta);
+
+                if (e >= 1.) {
+                    throw std::out_of_range ("e >= 1");
+                }
+
+                double cos2theta = g1/g;
+                double sin2theta = g2/g;
+
+                this->g1=g1in;
+                this->g2=g2in;
+                this->e1=e*cos2theta;
+                this->e2=e*sin2theta;
+                this->eta1=eta*cos2theta;
+                this->eta2=eta*sin2theta;
             }
+
 
             // shear the shape
             void shear(Shape s) {
@@ -59,8 +84,8 @@ namespace shape {
                 double twotheta = 2*theta_radians;
 
                 // note trig is always done double
-                double cos2angle = std::cos(twotheta);
-                double sin2angle = std::sin(twotheta);
+                double cos2angle = cos(twotheta);
+                double sin2angle = sin(twotheta);
                 double g1rot =  g1*cos2angle + g2*sin2angle;
                 double g2rot = -g1*sin2angle + g2*cos2angle;
 
@@ -85,11 +110,12 @@ namespace shape {
             void show() {
                 std::printf("%.16g %.16g\n", g1, g2);
             }
+
     };
 
 
 
 
-} // namespace shape
+} // namespace Shape
 
 #endif

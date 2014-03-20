@@ -24,7 +24,7 @@
 
 #include <stdint.h>
 
-namespace fastexp {
+namespace NGMix {
 
     union fmath_di {
         double d;
