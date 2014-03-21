@@ -22,9 +22,10 @@ int main(int argc, char **argv)
     size_t walker=35;
     size_t walker_step=80;
     size_t parnum=2;
+
     printf("par[%lu] for walker %lu step %lu: %g\n",
            parnum, walker, walker_step,
-           fitter.get_par_bywalker(walker, walker_step, parnum));
-    return 0;
+           fitter.get_par(walker, walker_step, parnum));
 
+    return 0;
 }

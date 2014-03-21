@@ -32,8 +32,8 @@ namespace mca {
                 nsteps_total_ = nwalkers_*nsteps_per_walker_;
 
                 chain_.resize( nsteps_total_ * npars_ );
-                lnprob_.resize( nsteps_total_);
-                accept_.resize( nsteps_total_);
+                lnprob_.resize( nsteps_total_ );
+                accept_.resize( nsteps_total_ );
             }
 
             inline size_t get_nwalkers() const {
@@ -53,7 +53,7 @@ namespace mca {
             // maximum step value is nsteps_per_walker, which can be gotten
             // with get_nsteps_per_walker()
 
-            inline double get_par_bywalker(size_t walker, size_t stepnum, size_t parnum) const {
+            inline double get_par(size_t walker, size_t stepnum, size_t parnum) const {
 
                 check_args_by_walker(walker, stepnum, parnum);
                 return chain_[npars_*nsteps_per_walker_*walker
@@ -66,13 +66,43 @@ namespace mca {
             // fact that some steps were associated with particular walkers.
             // The maximum step value is nwalkers*nsteps_per_walker-1 which can
             // be gotten from get_nstep_total()
-
-            inline double get_par_flat(size_t stepnum, size_t parnum) const {
+            inline double get_par(size_t stepnum, size_t parnum) const {
                 check_args_flat(stepnum, parnum);
                 return chain_[npars_*stepnum + parnum];
             }
 
+            // get the log probability of this step
+            inline double get_lnprob(size_t walker, size_t stepnum) const {
+                check_args_by_walker(walker, stepnum, 0);
+                return lnprob_[walker*nsteps_per_walker_ + stepnum];
+            }
+
+            // get the log probability of this step ignoring the fact that some
+            // steps are associated with particular walkers
+            inline double get_lnprob(size_t stepnum) const {
+                check_args_flat(stepnum, 0);
+                return lnprob_[stepnum];
+            }
+
+
+
+            // get the boolean telling if this point was accepted
+            inline double get_accept(size_t walker, size_t stepnum) const {
+                check_args_by_walker(walker, stepnum, 0);
+                return accept_[walker*nsteps_per_walker_ + stepnum];
+            }
+
+            // get the boolean telling if this point was accepted, ignoring the
+            // fact that some steps are associated with particular walkers
+            inline double get_accept(size_t stepnum) const {
+                check_args_flat(stepnum, 0);
+                return accept_[stepnum];
+            }
+
+
+
         private:
+
 
             inline void check_args_by_walker(size_t walker, size_t stepnum, size_t parnum) const {
                 if (stepnum > (nsteps_per_walker_-1)) {
