@@ -2,9 +2,11 @@ CC=g++
 
 prefix := /usr/local
 
+extra_ldflags :=
+
 CFLAGS = -I. -Wall -O2
-LINKFLAGS = -lm -static
-#LINKFLAGS = -lm
+#LDFLAGS = -lm -static
+LDFLAGS = -lm $(extra_ldflags)
 
 TEST_GMIX = test/test-gmix
 TEST_GMIX_MODEL = test/test-gmix-model
@@ -19,22 +21,22 @@ ALLTESTS = $(TEST_GMIX) $(TEST_GMIX_MODEL) $(TEST_FASTEXP) \
 tests: $(ALLTESTS)
 
 $(TEST_GMIX): gmix.h image.h mtrng.h jacobian.h test/test-gmix.cc
-	$(CC) -o test/test-gmix test/test-gmix.cc $(CFLAGS) $(LINKFLAGS)
+	$(CC) -o test/test-gmix test/test-gmix.cc $(CFLAGS) $(LDFLAGS)
 
 $(TEST_GMIX_MODEL): gmix.h image.h mtrng.h jacobian.h test/test-gmix-model.cc
-	$(CC) -o test/test-gmix-model test/test-gmix-model.cc $(CFLAGS) $(LINKFLAGS)
+	$(CC) -o test/test-gmix-model test/test-gmix-model.cc $(CFLAGS) $(LDFLAGS)
 
 $(TEST_FASTEXP): fastexp.h test/test-fastexp.cc
-	$(CC) -o test/test-fastexp test/test-fastexp.cc $(CFLAGS) $(LINKFLAGS)
+	$(CC) -o test/test-fastexp test/test-fastexp.cc $(CFLAGS) $(LDFLAGS)
 
 $(TEST_FASTEXP_SPEED): fastexp.h test/test-fastexp-speed.cc
-	$(CC) -o test/test-fastexp-speed test/test-fastexp-speed.cc $(CFLAGS) $(LINKFLAGS)
+	$(CC) -o test/test-fastexp-speed test/test-fastexp-speed.cc $(CFLAGS) $(LDFLAGS)
 
 $(TEST_IMAGE): image.h mtrng.h test/test-image.cc
-	$(CC) -o test/test-image test/test-image.cc $(CFLAGS) $(LINKFLAGS)
+	$(CC) -o test/test-image test/test-image.cc $(CFLAGS) $(LDFLAGS)
 
 $(TEST_SHAPE): shape.h test/test-shape.cc
-	$(CC) -o test/test-shape test/test-shape.cc $(CFLAGS) $(LINKFLAGS)
+	$(CC) -o test/test-shape test/test-shape.cc $(CFLAGS) $(LDFLAGS)
 
 clean:
 	rm -f $(ALLTESTS)
