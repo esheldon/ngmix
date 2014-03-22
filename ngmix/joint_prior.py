@@ -12,6 +12,7 @@ from .priors import LOWVAL
 from . import gmix
 from .gmix import GMixND
 
+
 class JointPriorBDF(GMixND):
     """
     Joint prior in g1,g2,T,Fb,Fd
@@ -44,7 +45,7 @@ class JointPriorBDF(GMixND):
         using gmm
 
         the pars are in linear space
-            [g1,g2,T,Fb,Fd]
+            [g1,g2,T,F1,....]
         """
         logpars,w=self._pars_to_logpars_array(pars, throw=throw)
         lnp = zeros(pars.shape[0]) + LOWVAL
@@ -306,6 +307,148 @@ class JointPriorBDF(GMixND):
         gmm.weights_ = self.weights
 
         self.gmm=gmm 
+
+
+class JointPriorSimple(JointPriorBDF):
+    """
+    Joint prior in g1,g2,T,F
+
+    The prior is actually in eta1,eta2,logT,logF as a sum of gaussians.  When
+    sampling the values are converted to the linear ones.  Also when getting
+    the log probability, the input linear values are converted into log space.
+    """
+    def __init__(self,
+                 weights,
+                 means,
+                 covars,
+                 logT_bounds=[-1.5, 0.5],
+                 logFlux_bounds=[-0.7, 1.5]):
+
+        super(JointPriorSimple,self).__init__(weights,
+                                              means,
+                                              covars,
+                                              logT_bounds=logT_bounds,
+                                              logFlux_bounds=logFlux_bounds)
+
+    def sample(self, n=None):
+        """
+        Get samples in linear space
+        """
+
+        if n is None:
+            is_scalar=True
+            n=1
+        else:
+            is_scalar=False
+
+        logT_bounds = self.logT_bounds
+        logFlux_bounds = self.logFlux_bounds
+
+        lin_samples=zeros( (n,self.ndim) )
+        nleft=n
+        ngood=0
+        while nleft > 0:
+            log_samples=self.gmm.sample(nleft)
+
+            eta1,eta2 = log_samples[:,0], log_samples[:,1]
+            g1,g2,g_good = eta1eta2_to_g1g2_array(eta1, eta2)
+
+            logT = log_samples[:,2]
+            logF = log_samples[:,3]
+            
+            w, = where(  (g_good == 1)
+                       & (logT > logT_bounds[0])
+                       & (logT < logT_bounds[1])
+                       & (logF > logFlux_bounds[0])
+                       & (logF < logFlux_bounds[1]) )
+
+            if w.size > 0:
+                first=ngood
+                last=ngood+w.size
+
+                T = 10.0**logT[w]
+                F = 10.0**logF[w]
+
+                lin_samples[first:last,0] = g1[w]
+                lin_samples[first:last,1] = g2[w]
+                lin_samples[first:last,2] = T
+                lin_samples[first:last,3] = F
+
+                ngood += w.size
+                nleft -= w.size
+
+        if is_scalar:
+            lin_samples = lin_samples[0,:]
+        return lin_samples
+
+
+
+    def _pars_to_logpars_scalar(self, pars):
+        """
+        convert the pars to log space
+            [eta1,eta2,logT,logF]
+        """
+        logpars=pars.copy()
+        g1 = pars[0]
+        g2 = pars[1]
+        T  = pars[2]
+        F  = pars[3]
+
+        if T <= 0 or F <= 0:
+            raise GMixRangeError("T, F must be positive")
+
+        logpars[0],logpars[1] = g1g2_to_eta1eta2(g1,g2)
+        logpars[2] = log10(T)
+        logpars[3] = log10(F)
+
+        return logpars
+
+    def _pars_to_logpars_array(self, pars, throw=True):
+        """
+        convert the pars to log space
+            [eta1,eta2,logT,logF]
+
+        If throw==False then the log values are just set to very
+        negative values
+        """
+
+        num=pars.shape[0]
+
+        logpars=pars.copy()
+        logpars[:,:] = LOWVAL
+
+        g1 = pars[:,0]
+        g2 = pars[:,1]
+        T  = pars[:,2]
+        F  = pars[:,3]
+
+        eta1,eta2,good = g1g2_to_eta1eta2_array(g1,g2)
+
+        w,=where(  (good == 1)
+                 & (T > 0.0)
+                 & (F > 0.0) )
+
+        if w.size != num:
+            mess='%s with T or F negative or bad e' % (num-w.size)
+            if throw:
+                raise GMixRangeError(mess)
+            else:
+                print(mess)
+
+                wbad,=where(  (good != 1)
+                            | (T <= 0.0)
+                            | (F <= 0.0) )
+
+                n = 10 if wbad.size > 10 else wbad.size
+                for i in xrange(n):
+                    print(pars[wbad[i],:])
+
+        logpars[w,0] = eta1[w]
+        logpars[w,1] = eta2[w]
+        logpars[w,2] = log10(T[w])
+        logpars[w,3] = log10(F[w])
+
+        return logpars, w
 
 
 
