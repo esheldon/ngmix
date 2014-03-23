@@ -40,7 +40,7 @@ class JointPriorBDF(GMixND):
 
         self._make_gmm()
 
-    def get_lnprob(self, pars, throw=True):
+    def get_lnprob_array(self, pars, throw=True):
         """
         using gmm
 
@@ -52,24 +52,34 @@ class JointPriorBDF(GMixND):
         lnp[w] = self.gmm.score(logpars[w,:])
         return lnp
 
-    def get_prob(self, pars, throw=True):
+    def get_prob_array(self, pars, throw=True):
         """
         exp(lnprob)
 
         if throw==False and there are bad values ,they
         get prob==0
         """
-        lnp = self.get_lnprob(pars, throw=throw)
+        lnp = self.get_lnprob_array(pars, throw=throw)
         return exp(lnp)
 
-    def get_lnprob_gmixnd(self, pars):
+    def get_lnprob_scalar(self, pars):
         """
         the pars are in linear space
             [g1,g2,T,Fb,Fd]
         """
-        logpars=self._pars_to_logpars(pars)
-        lnp = super(JointPriorBDF,self).get_lnprob(logpars)
+        logpars=self._pars_to_logpars_scalar(pars)
+        lnp = super(JointPriorBDF,self).get_lnprob_scalar(logpars)
         return lnp
+
+    def get_prob_scalar(self, pars):
+        """
+        the pars are in linear space
+            [g1,g2,T,Fb,Fd]
+        """
+        logpars=self._pars_to_logpars_scalar(pars)
+        lnp = super(JointPriorBDF,self).get_prob_scalar(logpars)
+        return lnp
+
 
 
     def sample(self, n=None):
@@ -151,11 +161,11 @@ class JointPriorBDF(GMixND):
         Derivatives are calculated using finite differencing
         """
 
+        npoints=pars.shape[0]
+
         h2=1./(2.*h)
         hsq=1./h**2
 
-        g1 = pars[:,0]
-        g2 = pars[:,1]
         P=self.get_pj(pars, s1, s2, throw=throw)
 
         Q1_p   = self.get_pj(pars, s1+h, s2, throw=throw)
@@ -173,9 +183,8 @@ class JointPriorBDF(GMixND):
         R22 = (Q2_p - 2*P + Q2_m)*hsq
         R12 = (R12_pp - Q1_p - Q2_p + 2*P - Q1_m - Q2_m + R12_mm)*hsq*0.5
 
-        np=g1.size
-        Q = zeros( (np,2) )
-        R = zeros( (np,2,2) )
+        Q = zeros( (npoints,2) )
+        R = zeros( (npoints,2,2) )
 
         Q[:,0] = Q1
         Q[:,1] = Q2
@@ -211,7 +220,7 @@ class JointPriorBDF(GMixND):
         n=g1.size
         P=zeros(n)
 
-        P = self.get_prob(newpars, throw=throw)
+        P = self.get_prob_array(newpars, throw=throw)
 
         return P*J
 

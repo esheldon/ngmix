@@ -1995,20 +1995,14 @@ class MCMCBDFJoint(MCMCBDF):
         must have         
         """
         if self.joint_prior is not None:
-            self._set_joint_prior_vals()
+            if not hasattr(self,'joint_prior_vals'):
+                self.joint_prior_vals = self.joint_prior.get_prob_array(self.trials[:,2:],
+                                                                        throw=False)
             weights=self.joint_prior_vals
         else:
             weights=None
         return weights
 
-    def _set_joint_prior_vals(self):
-        """
-        Set the prior vals for later use
-        """
-
-        if not hasattr(self,'joint_prior_vals'):
-            self.joint_prior_vals = self.joint_prior.get_prob(self.trials[:,2:],
-                                                              throw=False)
 
     def _do_trials(self):
         """
@@ -2059,7 +2053,7 @@ class MCMCBDFJoint(MCMCBDF):
             self.last_pos, prob, state = sampler.run_mcmc(self.last_pos, burnin)
 
             trials  = sampler.flatchain
-            wts = self.joint_prior.get_prob(trials[:,2:], throw=False)
+            wts = self.joint_prior.get_prob_array(trials[:,2:], throw=False)
 
             wsum=wts.sum()
 
@@ -2089,7 +2083,7 @@ class MCMCBDFJoint(MCMCBDF):
         self.last_pos, prob, state = sampler.run_mcmc(self.last_pos, self.nstep)
 
         self.trials  = sampler.flatchain
-        self.joint_prior_vals = self.joint_prior.get_prob(self.trials[:,2:], throw=False)
+        self.joint_prior_vals = self.joint_prior.get_prob_array(self.trials[:,2:], throw=False)
 
         arates = sampler.acceptance_fraction
         self.arate = arates.mean()
@@ -2104,6 +2098,101 @@ class MCMCBDFJoint(MCMCBDF):
         self.flags=0
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+class MCMCSimpleJoint(MCMCSimple):
+    """
+    Simple with a joint prior on [g1,g2,T,Fb,Fd]
+    """
+    def __init__(self, image, weight, jacobian, model, **keys):
+        super(MCMCSimpleJoint,self).__init__(image, weight, jacobian, model, **keys)
+
+        if self.full_guess is None:
+            raise ValueError("For joint simple you must currently send a full guess")
+
+        # we alrady have T_prior and counts_prior from base class
+
+        # fraction of flux in bulge
+        if self.joint_prior is None:
+            raise ValueError("send joint prior for MCMCSimpleJoint")
+
+        self.prior_during=keys['prior_during']
+
+    def _get_priors(self, pars):
+        """
+        Apply simple priors
+        """
+        lnp=0.0
+        
+        if self.cen_prior is not None:
+            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+
+        if self.prior_during:
+            lnp += self.joint_prior.get_lnprob_scalar(pars[2:])
+        else:
+            # apply bounds
+            jp = self.joint_prior 
+            T_bounds = jp.T_bounds
+            Flux_bounds = jp.Flux_bounds
+            T=pars[4]
+            F=pars[5]
+            if (T < T_bounds[0] or T > T_bounds[1]
+                    or F < Flux_bounds[0] or F > Flux_bounds[1]):
+                raise GMixRangeError("T or flux out of range")
+
+        return lnp
+
+    def _get_PQR(self):
+        """
+        get the marginalized P,Q,R from Bernstein & Armstrong
+        """
+
+        sh=self.shear_expand
+        if sh is None:
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:],
+                                                    throw=False)
+        else:
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:],
+                                                    s1=sh[0],s2=sh[1],
+                                                    throw=False)
+        if self.prior_during:
+            Pinv = 1.0/Pi
+            #Pi *= Pinv
+            Qi[:,0] *= Pinv 
+            Qi[:,1] *= Pinv
+
+            Ri[:,0,0] *= Pinv
+            Ri[:,0,1] *= Pinv
+            Ri[:,1,0] *= Pinv
+            Ri[:,1,1] *= Pinv
+
+        P,Q,R = self._get_mean_pqr(Pi,Qi,Ri)
+
+        return P,Q,R
+
+    def get_weights(self):
+        """
+        must have         
+        """
+        if not self.prior_during:
+            if not hasattr(self,'joint_prior_vals'):
+                print("weights are prior values")
+                self.joint_prior_vals = self.joint_prior.get_prob_array(self.trials[:,2:],
+                                                                        throw=False)
+            weights=self.joint_prior_vals
+        else:
+            weights=None
+        return weights
 
 class MCMCGaussPSF(MCMCSimple):
     def __init__(self, image, weight, jacobian, **keys):
