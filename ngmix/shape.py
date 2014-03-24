@@ -23,6 +23,17 @@ def shear_reduced(g1, g2, s1, s2):
 
     return g1o,g2o
 
+@autojit
+def shear_eta(eta1, eta2, s1, s2):
+    """
+    Shear the input etas
+    """
+
+    g1,g2=eta1eta2_to_g1g2(eta1,eta2)
+    g1s,g2s=shear_reduced(g1,g2,s1,s2)
+    eta1_s, eta2_s = g1g2_to_eta1eta2(g1s,g2s)
+    return eta1_s, eta2_s
+
 class ShapeBase(object):
     """
     This base class provides non-jitted methods.
@@ -175,7 +186,7 @@ def g1g2_to_eta1eta2(g1, g2):
     g=numpy.sqrt(g1*g1 + g2*g2)
 
     if g >= 1.:
-        raise GMixRangeError("g out of bounds: %s" % g)
+        raise GMixRangeError("g out of bounds: %s converting to eta" % g)
     if g == 0.0:
         return (0.0, 0.0)
 
@@ -221,7 +232,8 @@ def eta1eta2_to_g1g2(eta1,eta2):
     g = numpy.tanh(0.5*eta)
 
     if g >= 1.:
-        raise GMixRangeError("g out of bounds: %s" % g)
+        raise GMixRangeError("g out of bounds: %s converting "
+                             "from eta1,eta2: %s,%s" % (g,eta1,eta2))
     if g == 0.0:
         return (0.0, 0.0)
 
@@ -256,4 +268,31 @@ def dgs_by_dgo_jacob(g1, g2, s1, s2):
     jacob = num/denom
     return jacob
 
+@autojit
+def detas_by_detao_jacob_num(eta1, eta2, s1, s2, h):
+    """
+    jacobian of the transformation
+        |dgs/dgo|_{-shear}
 
+    parameters
+    ----------
+    eta1,eta2: numbers or arrays
+        shape pars for "observed" image
+    s1,s2: numbers or arrays
+        shape pars for shear, applied negative
+    """
+
+    fac=1.0/(2.0*h)
+    eta1_1_1,eta2_1_1 = shear_eta(eta1+h, eta2, s1, s2)
+    eta1_1_2,eta2_1_2 = shear_eta(eta1-h, eta2, s1, s2)
+
+    eta1_2_1,eta2_2_1 = shear_eta(eta1, eta2+h, s1, s2)
+    eta1_2_2,eta2_2_2 = shear_eta(eta1, eta2-h, s1, s2)
+
+    eta1s_by_eta1o = (eta1_1_1-eta1_1_2)*fac
+    eta2s_by_eta1o = (eta2_1_1-eta2_1_2)*fac
+
+    eta1s_by_eta2o = (eta1_2_1-eta1_2_2)*fac
+    eta2s_by_eta2o = (eta2_2_1-eta2_2_2)*fac
+
+    return eta1s_by_eta1o*eta2s_by_eta2o - eta1s_by_eta2o*eta2s_by_eta1o

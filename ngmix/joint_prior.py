@@ -1,7 +1,7 @@
 from __future__ import print_function
 
 import numpy
-from numpy import where, log10, zeros, exp
+from numpy import where, log10, zeros, exp, sqrt
 
 from . import shape
 from .shape import g1g2_to_eta1eta2, eta1eta2_to_g1g2_array, g1g2_to_eta1eta2_array
@@ -142,6 +142,9 @@ class JointPriorBDF(GMixND):
 
     def get_pqr_num(self, pars, s1=0.0, s2=0.0, h=1.e-6, throw=True):
         """
+
+        linear parameters input
+
         Evaluate 
             P
             Q
@@ -203,14 +206,26 @@ class JointPriorBDF(GMixND):
         es=eo(+)(-g)
         """
 
-        g1,g2 = pars[:,0], pars[:,1]
-
+        raise RuntimeError("figure what do do with jacob in log pars")
         # note sending negative shear to jacob
         s1m=-s1
         s2m=-s2
-        J=shape.dgs_by_dgo_jacob(g1, g2, s1m, s2m)
+
+        g1,g2 = pars[:,0], pars[:,1]
+
+        eta1,eta2,good=g1g2_to_eta1eta2_array(g1,g2)
+        J=zeros(eta1.size)
+        for i in xrange(J.size):
+            J[i]=shape.detas_by_detao_jacob_num(eta1[i],
+                                                eta2[i],
+                                                s1m,
+                                                s2m,
+                                                1.0e-6)
+
+        #J=shape.dgs_by_dgo_jacob(g1, g2, s1m, s2m)
 
         # evaluating at negative shear
+        # will get converted to log pars (eta)in get_prob_array
         g1new,g2new=shape.shear_reduced(g1, g2, s1m, s2m)
 
         newpars=pars.copy()
@@ -237,8 +252,16 @@ class JointPriorBDF(GMixND):
         Fb = pars[3]
         Fd = pars[4]
 
-        if T <= 0 or Fb <= 0 or Fd <= 0:
-            raise GMixRangeError("T, Fb, Fd must be positive")
+        T_bounds=self.T_bounds
+        Flux_bounds=self.Flux_bounds
+
+        if ( (T < T_bounds[0])
+                or (T > T_bounds[1])
+                or (Fb < Flux_bounds[0])
+                or (Fb > Flux_bounds[1])
+                or (Fd < Flux_bounds[0])
+                or (Fd > Flux_bounds[1]) ):
+            raise GMixRangeError("T, Fb, Fd out of range")
 
         logpars[0],logpars[1] = g1g2_to_eta1eta2(g1,g2)
         logpars[2] = log10(T)
@@ -269,10 +292,16 @@ class JointPriorBDF(GMixND):
 
         eta1,eta2,good = g1g2_to_eta1eta2_array(g1,g2)
 
+        T_bounds=self.T_bounds
+        Flux_bounds=self.Flux_bounds
+
         w,=where(  (good == 1)
-                 & (T > 0.0)
-                 & (Fb > 0.0)
-                 & (Fd > 0.0) )
+                 & (T > T_bounds[0])
+                 & (T < T_bounds[1])
+                 & (Fb > Flux_bounds[0])
+                 & (Fb < Flux_bounds[1])
+                 & (Fd > Flux_bounds[0])
+                 & (Fd < Flux_bounds[1]) )
 
         if w.size != num:
             mess='%s with T,Fb,Fd negative or bad e' % (num-w.size)
@@ -282,9 +311,12 @@ class JointPriorBDF(GMixND):
                 print(mess)
 
                 wbad,=where(  (good != 1)
-                            | (T <= 0.0)
-                            | (Fb <= 0.0)
-                            | (Fd <= 0.0) )
+                            | (T <= T_bounds[0])
+                            | (T >= T_bounds[1])
+                            | (Fb <= Flux_bounds[0])
+                            | (Fb >= Flux_bounds[1])
+                            | (Fd <= Flux_bounds[0])
+                            | (Fd >= Flux_bounds[1]) )
 
                 n = 10 if wbad.size > 10 else wbad.size
                 for i in xrange(n):
@@ -318,7 +350,7 @@ class JointPriorBDF(GMixND):
         self.gmm=gmm 
 
 
-class JointPriorSimple(JointPriorBDF):
+class JointPriorSimpleLogPars(JointPriorBDF):
     """
     Joint prior in g1,g2,T,F
 
@@ -403,9 +435,16 @@ class JointPriorSimple(JointPriorBDF):
         T  = pars[2]
         F  = pars[3]
 
-        if T <= 0 or F <= 0:
-            raise GMixRangeError("T, F must be positive")
+        T_bounds=self.T_bounds
+        Flux_bounds=self.Flux_bounds
 
+        if ( (T < T_bounds[0])
+                or (T > T_bounds[1])
+                or (F < Flux_bounds[0])
+                or (F > Flux_bounds[1]) ):
+            raise GMixRangeError("T, F out of range")
+
+        # will raise if out of bounds
         logpars[0],logpars[1] = g1g2_to_eta1eta2(g1,g2)
         logpars[2] = log10(T)
         logpars[3] = log10(F)
@@ -433,9 +472,14 @@ class JointPriorSimple(JointPriorBDF):
 
         eta1,eta2,good = g1g2_to_eta1eta2_array(g1,g2)
 
+        T_bounds=self.T_bounds
+        Flux_bounds=self.Flux_bounds
+
         w,=where(  (good == 1)
-                 & (T > 0.0)
-                 & (F > 0.0) )
+                 & (T > T_bounds[0])
+                 & (T < T_bounds[1])
+                 & (F > Flux_bounds[0])
+                 & (F < Flux_bounds[1]) )
 
         if w.size != num:
             mess='%s with T or F negative or bad e' % (num-w.size)
@@ -445,8 +489,10 @@ class JointPriorSimple(JointPriorBDF):
                 print(mess)
 
                 wbad,=where(  (good != 1)
-                            | (T <= 0.0)
-                            | (F <= 0.0) )
+                            | (T <= T_bounds[0])
+                            | (T >= T_bounds[1])
+                            | (F <= Flux_bounds[0])
+                            | (F >= Flux_bounds[1]) )
 
                 n = 10 if wbad.size > 10 else wbad.size
                 for i in xrange(n):
@@ -459,5 +505,177 @@ class JointPriorSimple(JointPriorBDF):
 
         return logpars, w
 
+
+class JointPriorSimpleLinPars(GMixND):
+    """
+    Joint prior in g1,g2,T,Fb,Fd
+
+    The prior is actually in eta1,eta2,logT,logFb,logFd as a sum of gaussians.
+    When sampling the values are converted to the linear ones.  Also when
+    getting the log probability, the input linear values are converted into log
+    space.
+
+    """
+    def __init__(self,
+                 weights,
+                 means,
+                 covars):
+
+        super(JointPriorSimpleLinPars,self).__init__(weights, means, covars)
+
+        self._make_gmm()
+
+    def sample(self, n=None):
+        """
+        Get samples in linear space
+        """
+
+        if n is None:
+            is_scalar=True
+            n=1
+        else:
+            is_scalar=False
+
+
+        nleft=n
+        ngood=0
+        while nleft > 0:
+            samples=self.gmm.sample(nleft)
+
+            g1,g2 = samples[:,0], samples[:,1]
+            g=sqrt(g1**2 + g2**2)
+            
+
+            T = samples[:,2]
+            F = samples[:,3]
+            
+            w, = where(  (g < 1)
+                       & (T > 0)
+                       & (F > 0) )
+
+            if w.size > 0:
+                first=ngood
+                last=ngood+w.size
+
+                samples[first:last,0] = g1[w]
+                samples[first:last,1] = g2[w]
+                samples[first:last,2] = T[w]
+                samples[first:last,3] = F[w]
+
+                ngood += w.size
+                nleft -= w.size
+
+        if is_scalar:
+            samples = samples[0,:]
+        return samples
+
+
+
+    def get_pqr_num(self, pars, s1=0.0, s2=0.0, h=1.e-6, throw=True):
+        """
+
+        linear parameters input
+
+        Evaluate 
+            P
+            Q
+            R
+        From Bernstein & Armstrong
+
+        P is this prior times the jacobian at shear==0
+
+        Q is the gradient of P*J evaluated at shear==0
+
+            [ d(P*J)/ds1, d(P*J)/ds2]_{s=0}
+
+        R is grad of grad of P*J at shear==0
+            [ d(P*J)/dg1ds1  d(P*J)/dg1ds2 ]
+            [ d(P*J)/dg1ds2  d(P*J)/dg2ds2 ]_{s=0}
+
+        Derivatives are calculated using finite differencing
+        """
+
+        npoints=pars.shape[0]
+
+        h2=1./(2.*h)
+        hsq=1./h**2
+
+        P=self.get_pj(pars, s1, s2, throw=throw)
+
+        Q1_p   = self.get_pj(pars, s1+h, s2, throw=throw)
+        Q1_m   = self.get_pj(pars, s1-h, s2, throw=throw)
+        Q2_p   = self.get_pj(pars, s1,   s2+h, throw=throw)
+        Q2_m   = self.get_pj(pars, s1,   s2-h, throw=throw)
+
+        R12_pp = self.get_pj(pars, s1+h, s2+h, throw=throw)
+        R12_mm = self.get_pj(pars, s1-h, s2-h, throw=throw)
+
+        Q1 = (Q1_p - Q1_m)*h2
+        Q2 = (Q2_p - Q2_m)*h2
+
+        R11 = (Q1_p - 2*P + Q1_m)*hsq
+        R22 = (Q2_p - 2*P + Q2_m)*hsq
+        R12 = (R12_pp - Q1_p - Q2_p + 2*P - Q1_m - Q2_m + R12_mm)*hsq*0.5
+
+        Q = zeros( (npoints,2) )
+        R = zeros( (npoints,2,2) )
+
+        Q[:,0] = Q1
+        Q[:,1] = Q2
+        R[:,0,0] = R11
+        R[:,0,1] = R12
+        R[:,1,0] = R12
+        R[:,1,1] = R22
+
+        return P, Q, R
+
+    def get_pj(self, pars, s1, s2, throw=True):
+        """
+        PJ = p(g,-shear)*jacob
+
+        where jacob is d(es)/d(eo) and
+        es=eo(+)(-g)
+        """
+
+        # note sending negative shear to jacob
+        s1m=-s1
+        s2m=-s2
+
+        g1,g2 = pars[:,0], pars[:,1]
+
+        J=shape.dgs_by_dgo_jacob(g1, g2, s1m, s2m)
+
+        # evaluating at negative shear
+        # will get converted to log pars (eta)in get_prob_array
+        g1new,g2new=shape.shear_reduced(g1, g2, s1m, s2m)
+
+        newpars=pars.copy()
+        newpars[:,0] = g1new
+        newpars[:,1] = g2new
+
+        n=g1.size
+        P=zeros(n)
+
+        P = self.get_prob_array(newpars, throw=throw)
+
+        return P*J
+
+    def _make_gmm(self):
+        """
+        Make a GMM object for sampling
+        """
+        from sklearn.mixture import GMM
+
+        # these numbers are not used because we set the means, etc by hand
+        ngauss=self.weights.size
+        gmm=GMM(n_components=self.ngauss,
+                n_iter=10000,
+                min_covar=1.0e-12,
+                covariance_type='full')
+        gmm.means_ = self.means
+        gmm.covars_ = self.covars
+        gmm.weights_ = self.weights
+
+        self.gmm=gmm 
 
 

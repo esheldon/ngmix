@@ -1393,43 +1393,19 @@ class GMixND(object):
 
         self.tmp_lnprob = zeros(self.ngauss)
 
-    def get_prob_slow(self, pars):
-        """
-        (x-xmean) icovar (x-xmean)
-        """
-
-        prob = 0.0
-
-        for i in xrange(self.ngauss):
-            pnorm = self.pnorms[i]
-
-            xdiff = pars-self.means[i,:]
-            icovar = self.icovars[i,:,:]
-
-            chi2 = dot(xdiff,  dot(icovar,xdiff) )
-
-            prob += pnorm*exp(-0.5*chi2)
-
-        return prob
-
-    def get_lnprob_slow(self, pars):
-        """
-        (x-xmean) icovar (x-xmean)
-        """
-
-        prob = self.get_prob(pars)
-        lnp = log(prob)
-        return lnp
 
     def get_prob_scalar(self, pars):
         """
         Use a numba compile function
         """
+        dolog=0
         if self.ndim==4:
-            return _get_gmixnd_prob4d(self.pnorms,
-                                      self.means,
-                                      self.icovars,
-                                      pars)
+            return _get_gmixnd_4d(self.log_pnorms,
+                                  self.means,
+                                  self.icovars,
+                                  self.tmp_lnprob,
+                                  pars,
+                                  dolog)
         else:
             raise RuntimeError("only have fast formula for 4 dims")
 
@@ -1437,16 +1413,52 @@ class GMixND(object):
         """
         (x-xmean) icovar (x-xmean)
         """
-
+        dolog=1
         if self.ndim==4:
-            return _get_gmixnd_lnprob4d(self.log_pnorms,
-                                        self.means,
-                                        self.icovars,
-                                        self.tmp_lnprob,
-                                        pars)
+            return _get_gmixnd_4d(self.log_pnorms,
+                                  self.means,
+                                  self.icovars,
+                                  self.tmp_lnprob,
+                                  pars,
+                                  dolog)
         else:
             raise RuntimeError("only have fast formula for 4 dims")
         return lnp
+
+    def get_prob_array(self, pars, **keys):
+        """
+        array input
+        """
+        dolog=0
+        n=pars.shape[0]
+        p=zeros(n)
+        _get_gmixnd_array_4d(self.log_pnorms,
+                             self.means,
+                             self.icovars,
+                             self.tmp_lnprob,
+                             pars,
+                             dolog,
+                             p)
+
+        return p
+
+    def get_lnprob_array(self, pars, **keys):
+        """
+        array input
+        """
+        dolog=1
+        n=pars.shape[0]
+        lnp=zeros(n)
+        _get_gmixnd_array_4d(self.log_pnorms,
+                             self.means,
+                             self.icovars,
+                             self.tmp_lnprob,
+                             pars,
+                             dolog,
+                             lnp)
+
+        return lnp
+
 
     def _calc_icovars_and_norms(self):
         """
@@ -1476,32 +1488,16 @@ class GMixND(object):
 
 
 @autojit
-def _get_gmixnd_prob4d(pnorms, means, icovars, x):
-    ngauss=pnorms.size
-    #ndim=means.shape[1]
-    #ndim=4
-
-    prob = 0.0
-
-    for i in xrange(ngauss):
-        pnorm = pnorms[i]
-
-        x1diff=x[0]-means[i,0]
-        x2diff=x[1]-means[i,1]
-        x3diff=x[2]-means[i,2]
-        x4diff=x[3]-means[i,3]
-
-        chi2  = x1diff*(icovars[i,0,0]*x1diff + icovars[i,0,1]*x2diff + icovars[i,0,2]*x3diff + icovars[i,0,3]*x4diff)
-        chi2 += x2diff*(icovars[i,1,0]*x1diff + icovars[i,1,1]*x2diff + icovars[i,1,2]*x3diff + icovars[i,1,3]*x4diff)
-        chi2 += x3diff*(icovars[i,2,0]*x1diff + icovars[i,2,1]*x2diff + icovars[i,2,2]*x3diff + icovars[i,2,3]*x4diff)
-        chi2 += x4diff*(icovars[i,3,0]*x1diff + icovars[i,3,1]*x2diff + icovars[i,3,2]*x3diff + icovars[i,3,3]*x4diff)
-
-        prob += pnorm*numpy.exp(-0.5*chi2)
-
-    return prob
+def _get_gmixnd_array_4d(log_pnorms, means, icovars, tmp_lnprob, x, dolog, output):
+    """
+    Fill the output array
+    """
+    n=output.size
+    for i in xrange(n):
+        output[i] = _get_gmixnd_4d(log_pnorms, means, icovars, tmp_lnprob, x[i,:], dolog)
 
 @autojit
-def _get_gmixnd_lnprob4d(log_pnorms, means, icovars, tmp_lnprob, x):
+def _get_gmixnd_4d(log_pnorms, means, icovars, tmp_lnprob, x, dolog):
     """
     Trying to avoid underflow
     vmax = arr.max(axis=0)
@@ -1536,6 +1532,37 @@ def _get_gmixnd_lnprob4d(log_pnorms, means, icovars, tmp_lnprob, x):
     for i in xrange(ngauss):
         p += exp(tmp_lnprob[i] - lnpmax)
 
-    lnp = log(p) + lnpmax
+    out=0.0
+    if dolog==1:
+        out = log(p) + lnpmax
+    else:
+        out=p*exp(lnpmax)
 
-    return lnp
+    return out
+
+"""
+@autojit
+def _get_gmixnd_prob4d(pnorms, means, icovars, x):
+    ngauss=pnorms.size
+    #ndim=means.shape[1]
+    #ndim=4
+
+    prob = 0.0
+
+    for i in xrange(ngauss):
+        pnorm = pnorms[i]
+
+        x1diff=x[0]-means[i,0]
+        x2diff=x[1]-means[i,1]
+        x3diff=x[2]-means[i,2]
+        x4diff=x[3]-means[i,3]
+
+        chi2  = x1diff*(icovars[i,0,0]*x1diff + icovars[i,0,1]*x2diff + icovars[i,0,2]*x3diff + icovars[i,0,3]*x4diff)
+        chi2 += x2diff*(icovars[i,1,0]*x1diff + icovars[i,1,1]*x2diff + icovars[i,1,2]*x3diff + icovars[i,1,3]*x4diff)
+        chi2 += x3diff*(icovars[i,2,0]*x1diff + icovars[i,2,1]*x2diff + icovars[i,2,2]*x3diff + icovars[i,2,3]*x4diff)
+        chi2 += x4diff*(icovars[i,3,0]*x1diff + icovars[i,3,1]*x2diff + icovars[i,3,2]*x3diff + icovars[i,3,3]*x4diff)
+
+        prob += pnorm*numpy.exp(-0.5*chi2)
+
+    return prob
+"""
