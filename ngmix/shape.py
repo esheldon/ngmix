@@ -251,7 +251,7 @@ def eta1eta2_to_g1g2(eta1,eta2):
 def dgs_by_dgo_jacob(g1, g2, s1, s2):
     """
     jacobian of the transformation
-        |dgs/dgo|_{-shear}
+        |dgs/dgo|_{shear}
 
     parameters
     ----------
@@ -272,7 +272,7 @@ def dgs_by_dgo_jacob(g1, g2, s1, s2):
 def detas_by_detao_jacob_num(eta1, eta2, s1, s2, h):
     """
     jacobian of the transformation
-        |dgs/dgo|_{-shear}
+        |dgs/dgo|_{shear}
 
     parameters
     ----------
@@ -296,3 +296,28 @@ def detas_by_detao_jacob_num(eta1, eta2, s1, s2, h):
     eta2s_by_eta2o = (eta2_2_1-eta2_2_2)*fac
 
     return eta1s_by_eta1o*eta2s_by_eta2o - eta1s_by_eta2o*eta2s_by_eta1o
+
+def compare_g_eta_jacob(s1, s2, h=1.0e-6):
+    import esutil as eu
+
+    n=100
+    g1=numpy.linspace(-0.7,0.7,n)
+    g2=numpy.linspace(-0.7,0.7,n)
+    #g2=numpy.zeros(n)
+
+    eta1,eta2,good=g1g2_to_eta1eta2_array(g1,g2)
+
+    jg=numpy.zeros(n)
+    jeta=numpy.zeros(n)
+
+    for i in xrange(n):
+        jg[i] = dgs_by_dgo_jacob(g1[i],g2[i],s1,s2)
+        jeta[i] = detas_by_detao_jacob_num(eta1[i],eta2[i],s1,s2,h)
+
+    plt=eu.plotting.bscatter(g1, jg, color='blue', xlabel='g1', show=False)
+    eu.plotting.bscatter(g1, jeta, color='red', plt=plt)
+
+    plt=eu.plotting.bscatter(g2, jg, color='blue', xlabel='g2', show=False)
+    eu.plotting.bscatter(g2, jeta, color='red', plt=plt)
+
+

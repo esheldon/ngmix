@@ -8,7 +8,7 @@ I haven't forced the max prob to be 1.0 yet, but should
 from __future__ import print_function
 
 import numpy
-from numpy import array
+from numpy import array, exp, sqrt, zeros
 from numpy.random import random as randu
 from numpy.random import randn
 import numba
@@ -259,17 +259,26 @@ class GPriorBase(object):
         if not hasattr(self,'maxval1d'):
             self.set_maxval1d()
 
+        maxval1d = self.maxval1d * 1.1
+
+        # don't go right up to the end
+        gmax=self.gmax
+        #gmax=self.gmax - 1.0e-4
+        print("using gmax:",gmax)
+        print("using maxval1d_loc:",self.maxval1d_loc)
+        print("using maxval1d:",maxval1d)
+
         g = numpy.zeros(nrand)
 
         ngood=0
         nleft=nrand
         while ngood < nrand:
 
-            # generate total g in [0,1)
-            grand = self.gmax*randu(nleft)
+            # generate total g in [0,gmax)
+            grand = gmax*randu(nleft)
 
             # now the height from [0,maxval)
-            h = self.maxval1d*randu(nleft)
+            h = maxval1d*randu(nleft)
 
             pvals = self.get_prob_array1d(grand)
 
@@ -351,8 +360,8 @@ class GPriorBase(object):
                                       disp=False)
         if warnflag != 0:
             raise ValueError("failed to find min: warnflag %d" % warnflag)
-        #self.maxval1d = -fval
-        self.maxval1d = -fval*1.1
+        self.maxval1d = -fval
+        self.maxval1d_loc = minvalx
 
     def get_prob_scalar1d_neg(self, g, *args):
         """
@@ -360,8 +369,14 @@ class GPriorBase(object):
         """
         return -self.get_prob_scalar1d(g)
 
-    def test_pqr_shear_recovery(self, smin, smax, nshear,
-                                npair=10000, h=1.e-6, eps=None):
+    def test_pqr_shear_recovery(self,
+                                smin,
+                                smax,
+                                nshear,
+                                doring=True,
+                                npair=10000,
+                                h=1.e-6,
+                                eps=None):
         """
         Test how well we recover the shear with no noise.
 
@@ -400,17 +415,65 @@ class GPriorBase(object):
             s1=shear1_true[ishear]
             s2=shear2_true[ishear]
 
-            g1[0:npair],g2[0:npair] = self.sample2d(npair)
-            g1[npair:] =  g1[0:npair]*cos2angle + g2[0:npair]*sin2angle
-            g2[npair:] = -g1[0:npair]*sin2angle + g2[0:npair]*cos2angle
+            if doring:
 
-            g1s, g2s = shear_reduced(g1, g2, s1, s2)
+                g1[0:npair],g2[0:npair] = self.sample2d(npair)
+                g1[npair:] =  g1[0:npair]*cos2angle + g2[0:npair]*sin2angle
+                g2[npair:] = -g1[0:npair]*sin2angle + g2[0:npair]*cos2angle
 
-            P,Q,R=self.get_pqr_num(g1s, g2s, h=h)
-            P_te,Q_te,R_te=self.get_pqr_num(g1s, g2s, s1=s1, s2=s2, h=h)
+                g1s, g2s = shear_reduced(g1, g2, s1, s2)
 
-            g1g2, C = lensing.pqr.get_shear_pqr(P,Q,R)
-            g1g2_te, C_te = lensing.pqr.get_shear_pqr(P_te,Q_te,R_te)
+                P,Q,R=self.get_pqr_num(g1s, g2s, h=h)
+                P_te,Q_te,R_te=self.get_pqr_num(g1s, g2s, s1=s1, s2=s2, h=h)
+
+                # watch for zeros in P for some priors
+                even = numpy.arange(npair)*2
+                odd = even+1
+
+                Pscale = P/P.max()
+                print("Pmin:",P.min(),"Pmax:",P.max())
+                print("Pscale_min: %g" % Pscale.min())
+                #w,=numpy.where( (P[even] > 0) & (P[odd] > 0) )
+                w,=numpy.where( (Pscale[even] > 1.0e-6) & (Pscale[odd] > 1.0e-6) )
+                w=numpy.concatenate( (even[w], odd[w] ) )
+                print("kept: %d/%d" % (w.size, npair*2))
+                P=P[w]
+                Q=Q[w,:]
+                R=R[w,:,:]
+
+                Pscale = P_te/P_te.max()
+                print("P_te_min:",P_te.min(),"P_te_max:",P_te.max())
+                print("P_te_scale_min: %g" % Pscale.min())
+                w,=numpy.where( (Pscale[even] > 1.0e-6) & (Pscale[odd] > 1.0e-6) )
+                #w,=numpy.where( (P_te[even] > 0) & (P_te[odd] > 0) )
+                w=numpy.concatenate( (even[w], odd[w] ) )
+                print("kept: %d/%d" % (w.size, npair*2))
+                P_te=P_te[w]
+                Q_te=Q_te[w,:]
+                R_te=R_te[w,:,:]
+            else:
+                ntot=npair
+                g1,g2 = self.sample2d(ntot)
+
+                g1s, g2s = shear_reduced(g1, g2, s1, s2)
+
+                P,Q,R=self.get_pqr_num(g1s, g2s, h=h)
+                P_te,Q_te,R_te=self.get_pqr_num(g1s, g2s, s1=s1, s2=s2, h=h)
+
+                w,=numpy.where(P > 0.0)
+                print("kept: %d/%d" % (w.size, ntot))
+                P=P[w]
+                Q=Q[w,:]
+                R=R[w,:,:]
+
+                w,=numpy.where(P_te > 0.0)
+                print("kept: %d/%d" % (w.size, ntot))
+                P_te=P_te[w]
+                Q_te=Q_te[w,:]
+                R_te=R_te[w,:,:]
+
+            g1g2, C = lensing.pqr.get_pqr_shear(P,Q,R)
+            g1g2_te, C_te = lensing.pqr.get_pqr_shear(P_te,Q_te,R_te)
 
             g1g2_te[0] += s1
             g1g2_te[0] += s2
@@ -420,8 +483,14 @@ class GPriorBase(object):
             shear1_meas_te[ishear] = g1g2_te[0]
             shear2_meas_te[ishear] = g1g2_te[1]
 
-            mess='true: %.6f,%.6f meas: %.6f,%.6f expand true: %.6f,%.6f'
-            print(mess % (s1,s2,g1g2[0],g1g2[1],g1g2_te[0],g1g2_te[1]))
+            if doring:
+                mess='true: %.6f,%.6f meas: %.6f,%.6f expand true: %.6f,%.6f'
+                print(mess % (s1,s2,g1g2[0],g1g2[1],g1g2_te[0],g1g2_te[1]))
+            else:
+                mess='true: %.6f meas: %.6f +/- %.6f expand true: %.6f +/- %.6f'
+                err=numpy.sqrt(C[0,0])
+                err_te=numpy.sqrt(C_te[0,0])
+                print(mess % (s1,g1g2[0],err,g1g2_te[0],err_te))
 
         fracdiff=shear1_meas/shear1_true-1
         fracdiff_te=shear1_meas_te/shear1_true-1
@@ -892,6 +961,112 @@ class FlatPrior(object):
                                  "[%s,%s]" % (val, self.minval, self.maxval))
         return retval
        
+
+class GPriorGreat3Exp(GPriorBase):
+    """
+    This doesn't fit very well
+    """
+    def __init__(self, pars):
+        self.A = pars[0]
+        self.a = pars[1]
+        self.g0 = pars[2]
+        self.g0_sq = self.g0**2
+        self.gmax = 1.0
+
+        self.p_mode=self.get_prob_scalar2d(0.0, 0.0)
+        self.lnprob_mode = self.get_lnprob_scalar2d(0.0, 0.0)
+
+    def get_prob_scalar2d(self, g1, g2):
+        """
+        Get the 2d prob for the input g value
+        """
+
+        g = sqrt(g1**2 + g2**2)
+        if g >= 1.0:
+            return 0.0
+
+        return self._get_prob2d(g)
+
+    def get_prob_array2d(self, g1, g2):
+        """
+        array input
+        """
+
+        n=g1.size
+        p=zeros(n)
+
+        g = sqrt(g1**2 + g2**2)
+        w,=numpy.where(g < 1.0)
+        if w.size > 0:
+            p[w] = self._get_prob2d(g[w])
+
+        return p
+
+    def get_prob_scalar1d(self, g):
+        """
+        Has the 2*pi*g in it
+        """
+
+        if g >= 1.0:
+            return 0.0
+
+        return 2*numpy.pi*g*self._get_prob2d(g)
+
+    def get_prob_array1d(self, g):
+        """
+        has 2*pi*g in it array input
+        """
+
+        n=g.size
+        p=zeros(n)
+
+        w,=numpy.where(g < 1.0)
+        if w.size > 0:
+            p[w] = 2*numpy.pi*g*self._get_prob2d(g[w])
+
+        return p
+
+    def get_lnprob_scalar2d(self, g1, g2):
+        """
+        Get the 2d prob for the input g value
+        """
+
+        p=self.get_prob_scalar2d(g1,g2)
+        if p <= 0.0:
+            raise GMixRangeError("g too big: %s" % g)
+
+        lnp=numpy.log(p)
+        return lnp
+
+    def _get_prob2d(self, g):
+        """
+        no error checking
+
+        no 2*pi*g
+        """
+        gsq = g**2
+        omgsq=1.0-gsq
+        omgsq_sq = omgsq*omgsq
+
+        A=self.A
+        a=self.a
+        g0_sq=self.g0_sq
+        gmax=self.gmax
+
+        numer = A*(1-exp( (g-gmax)/a )) * omgsq_sq
+        denom = (1+g)*sqrt(gsq + g0_sq)
+
+        prob=numer/denom
+
+        return prob
+
+
+def make_gprior_great3_exp():
+    """
+    from fitting exp to the real galaxy deep data
+    """
+    pars=[0.0126484, 1.64042, 0.0554674]
+    return GPriorGreat3Exp(pars)
 
 def make_gprior_cosmos_galfit():
     """

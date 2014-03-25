@@ -1980,12 +1980,10 @@ class MCMCBDFJoint(MCMCBDF):
 
         sh=self.shear_expand
         if sh is None:
-            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:],
-                                                    throw=False)
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:])
         else:
             Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:],
-                                                    s1=sh[0],s2=sh[1],
-                                                    throw=False)
+                                                    s1=sh[0],s2=sh[1])
         P,Q,R = self._get_mean_pqr(Pi,Qi,Ri)
 
         return P,Q,R
@@ -1996,8 +1994,7 @@ class MCMCBDFJoint(MCMCBDF):
         """
         if self.joint_prior is not None:
             if not hasattr(self,'joint_prior_vals'):
-                self.joint_prior_vals = self.joint_prior.get_prob_array(self.trials[:,2:],
-                                                                        throw=False)
+                self.joint_prior_vals = self.joint_prior.get_prob_array(self.trials[:,2:])
             weights=self.joint_prior_vals
         else:
             weights=None
@@ -2108,14 +2105,134 @@ class MCMCBDFJoint(MCMCBDF):
 
 
 
-
-
-class MCMCSimpleJoint(MCMCSimple):
+class MCMCSimpleJointLinPars(MCMCSimple):
     """
     Simple with a joint prior on [g1,g2,T,Fb,Fd]
     """
     def __init__(self, image, weight, jacobian, model, **keys):
-        super(MCMCSimpleJoint,self).__init__(image, weight, jacobian, model, **keys)
+        super(MCMCSimpleJointLinPars,self).__init__(image, weight, jacobian, model, **keys)
+
+        if self.full_guess is None:
+            raise ValueError("For joint simple you must currently send a full guess")
+
+        if self.joint_prior is None:
+            raise ValueError("send joint prior for MCMCSimpleJointLinPars")
+
+        self.prior_during=keys['prior_during']
+
+    def _get_eabs_pars(self, pars):
+        """
+        don't include centroid, and only total ellipticity
+        """
+        if len(pars.shape) == 2:
+            eabs_pars=numpy.zeros( (pars.shape[0], self.ndim-3) )
+            eabs_pars[:,0] = numpy.sqrt(pars[:,2]**2 + pars[:,3]**2)
+            eabs_pars[:,1:] = pars[:,4:]
+        else:
+            eabs_pars=numpy.zeros(self.ndim-3)
+
+            eabs_pars[0] = numpy.sqrt(pars[2]**2 + pars[3]**2)
+            eabs_pars[1:] = pars[4:]
+
+        return eabs_pars
+
+    def _get_priors(self, pars):
+        """
+        Apply simple priors
+        """
+        lnp=0.0
+        
+        if self.cen_prior is not None:
+            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+
+        eabs_pars=self._get_eabs_pars(pars)
+
+        jp=self.joint_prior
+        if self.prior_during:
+            lnp += jp.get_lnprob_scalar(eabs_pars)
+        else:
+            # this can raise a GMixRangeError exception
+            jp.check_bounds_scalar(eabs_pars)
+
+        return lnp
+
+    def _get_PQR(self):
+        """
+        get the marginalized P,Q,R from Bernstein & Armstrong
+        """
+
+        print("get pqr joint simple")
+        sh=self.shear_expand
+        if sh is None:
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:,2:])
+        else:
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:,2:],
+                                                    s1=sh[0],
+                                                    s2=sh[1])
+        
+        if self.prior_during:
+            # We measured the posterior surface.  But the integrals are over
+            # the likelihood.  So divide by the prior.
+            #
+            # Also note the p we divide by is in principle different from the
+            # Pi above, which are evaluated at the shear expansion value
+
+            prior_vals=self._get_joint_prior_vals()
+
+            w,=numpy.where(prior_vals > 0.0)
+
+            Pinv = 1.0/prior_vals[w]
+            Pinv_sum=Pinv.sum()
+
+            Pi = Pi[w]
+            Qi = Qi[w,:]
+            Ri = Ri[w,:,:]
+
+            # this is not unity if expanding about some shear
+            Pi *= Pinv
+            Qi[:,0] *= Pinv 
+            Qi[:,1] *= Pinv
+
+            Ri[:,0,0] *= Pinv
+            Ri[:,0,1] *= Pinv
+            Ri[:,1,0] *= Pinv
+            Ri[:,1,1] *= Pinv
+
+            P = Pi.sum()/Pinv_sum
+            Q = Qi.sum(axis=0)/Pinv_sum
+            R = Ri.sum(axis=0)/Pinv_sum
+        else:
+            P = Pi.mean()
+            Q = Qi.mean(axis=0)
+            R = Ri.mean(axis=0)
+ 
+        return P,Q,R
+
+    def get_weights(self):
+        """
+        must have         
+        """
+        if not self.prior_during:
+            print("        weight is prior")
+            weights=self._get_joint_prior_vals()
+        else:
+            print("        weight is None")
+            weights=None
+        return weights
+    
+    def _get_joint_prior_vals(self):
+        if not hasattr(self,'joint_prior_vals'):
+            eabs_pars=self._get_eabs_pars(self.trials)
+            self.joint_prior_vals = self.joint_prior.get_prob_array(eabs_pars)
+        return self.joint_prior_vals
+
+
+class MCMCSimpleJointLogPars(MCMCSimple):
+    """
+    Simple with a joint prior on [g1,g2,T,Fb,Fd]
+    """
+    def __init__(self, image, weight, jacobian, model, **keys):
+        super(MCMCSimpleJointLogPars,self).__init__(image, weight, jacobian, model, **keys)
 
         if self.full_guess is None:
             raise ValueError("For joint simple you must currently send a full guess")
@@ -2124,9 +2241,24 @@ class MCMCSimpleJoint(MCMCSimple):
 
         # fraction of flux in bulge
         if self.joint_prior is None:
-            raise ValueError("send joint prior for MCMCSimpleJoint")
+            raise ValueError("send joint prior for MCMCSimpleJointLogPars")
 
         self.prior_during=keys['prior_during']
+
+    def _get_band_pars(self, pars, band):
+        """
+        Extract pars for the specified band and convert to linear
+        """
+        from .shape import eta1eta2_to_g1g2
+        linpars=pars[ [0,1,2,3,4,5+band] ].copy()
+
+        g1,g2=eta1eta2_to_g1g2(pars[2],pars[3])
+        linpars[2] = g1
+        linpars[3] = g2
+        linpars[4] = 10.0**pars[4]
+        linpars[5] = 10.0**pars[5]
+
+        return linpars
 
     def _get_priors(self, pars):
         """
@@ -2141,22 +2273,8 @@ class MCMCSimpleJoint(MCMCSimple):
         if self.prior_during:
             lnp += jp.get_lnprob_scalar(pars[2:])
         else:
-            # note g1,g2 are bounds checked during creation
-            # of the model
-
-            T=pars[4]
-            F=pars[5]
-            if hasattr(jp, 'T_bounds'):
-                # apply bounds
-                jp = self.joint_prior 
-                T_bounds = jp.T_bounds
-                Flux_bounds = jp.Flux_bounds
-                if (T < T_bounds[0] or T > T_bounds[1]
-                        or F < Flux_bounds[0] or F > Flux_bounds[1]):
-                    raise GMixRangeError("T or flux out of range")
-            else:
-                if (T <= 0.0 or F <= 0.0):
-                    raise GMixRangeError("T or flux out of range")
+            # this can raise a GMixRangeError exception
+            jp.check_bounds_scalar(pars[2:])
 
         return lnp
 
@@ -2165,14 +2283,14 @@ class MCMCSimpleJoint(MCMCSimple):
         get the marginalized P,Q,R from Bernstein & Armstrong
         """
 
+        print("get pqr joint simple")
         sh=self.shear_expand
         if sh is None:
-            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:],
-                                                    throw=False)
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:])
         else:
             Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:],
-                                                    s1=sh[0],s2=sh[1],
-                                                    throw=False)
+                                                    s1=sh[0],
+                                                    s2=sh[1])
         
         if self.prior_during:
             # We measured the posterior surface.  But the integrals are over
@@ -2182,12 +2300,18 @@ class MCMCSimpleJoint(MCMCSimple):
             # Pi above, which are evaluated at the shear expansion value
 
             prior_vals=self._get_joint_prior_vals()
-            Pinv = 1.0/prior_vals
+
+            w,=numpy.where(prior_vals > 0.0)
+
+            Pinv = 1.0/prior_vals[w]
             Pinv_sum=Pinv.sum()
+
+            Pi = Pi[w]
+            Qi = Qi[w,:]
+            Ri = Ri[w,:,:]
 
             # this is not unity if expanding about some shear
             Pi *= Pinv
-            #print("Pi after division:",Pi)
             Qi[:,0] *= Pinv 
             Qi[:,1] *= Pinv
 
@@ -2195,7 +2319,6 @@ class MCMCSimpleJoint(MCMCSimple):
             Ri[:,0,1] *= Pinv
             Ri[:,1,0] *= Pinv
             Ri[:,1,1] *= Pinv
-
 
             P = Pi.sum()/Pinv_sum
             Q = Qi.sum(axis=0)/Pinv_sum
@@ -2204,21 +2327,6 @@ class MCMCSimpleJoint(MCMCSimple):
             P = Pi.mean()
             Q = Qi.mean(axis=0)
             R = Ri.mean(axis=0)
-
-        """
-        if self.prior_during:
-            Pinv = 1.0/Pi
-            #Pi *= Pinv
-            Qi[:,0] *= Pinv 
-            Qi[:,1] *= Pinv
-
-            Ri[:,0,0] *= Pinv
-            Ri[:,0,1] *= Pinv
-            Ri[:,1,0] *= Pinv
-            Ri[:,1,1] *= Pinv
-
-        P,Q,R = self._get_mean_pqr(Pi,Qi,Ri)
-        """
  
         return P,Q,R
 
@@ -2227,17 +2335,31 @@ class MCMCSimpleJoint(MCMCSimple):
         must have         
         """
         if not self.prior_during:
+            print("        weight is prior")
             weights=self._get_joint_prior_vals()
         else:
+            print("        weight is None")
             weights=None
         return weights
     
     def _get_joint_prior_vals(self):
         if not hasattr(self,'joint_prior_vals'):
-            print("        weight is prior")
-            self.joint_prior_vals = self.joint_prior.get_prob_array(self.trials[:,2:],
-                                                                    throw=False)
+            self.joint_prior_vals = self.joint_prior.get_prob_array(self.trials[:,2:])
         return self.joint_prior_vals
+
+    def get_par_names(self):
+        names=[r'$cen_1$',
+               r'$cen_2$',
+               r'$\eta_1$',
+               r'$\eta_2$',
+               r'$log_{10}(T)$']
+        if self.nband == 1:
+            names += [r'$log_{10}(T)$']
+        else:
+            for band in xrange(self.nband):
+                names += [r'$log_{10}(F_%s)$' % i]
+        return names
+
 
 
 class MCMCGaussPSF(MCMCSimple):
