@@ -946,4 +946,147 @@ class JointPriorSimpleLogPars(JointPriorSimpleLinPars):
                        & (logF < logFlux_bounds[1]) )
         return wgood
 
+class JointPriorSimpleHybrid(JointPriorSimpleLinPars):
+    """
+    Joint prior in g1,g2,T,F
+
+    The prior is actually in eta1,eta2,logT,logF as a sum of gaussians.  When
+    sampling the values are converted to the linear ones.  Also when getting
+    the log probability, the input linear values are converted into log space.
+    """
+    def __init__(self,
+                 weights,
+                 means,
+                 covars,
+                 g_prior,
+                 logT_bounds=[-1.5, 0.5],
+                 logFlux_bounds=[-0.7, 1.5]):
+
+        print("JointPriorSimpleHybrid")
+
+        self.logT_bounds=logT_bounds
+        self.logFlux_bounds=logFlux_bounds
+        self.g_prior=g_prior
+
+        GMixND.__init__(self, weights, means, covars)
+
+        self.ndim=2
+        self._make_gmm()
+
+    def get_prob_scalar(self, pars, **keys):
+        """
+        Use a numba compile function
+        """
+        if not self.check_bounds_scalar(pars, **keys):
+            return 0.0
+
+        return GMixND.get_prob_scalar(self,pars)
+
+    def get_lnprob_scalar(self, pars, **keys):
+        """
+        (x-xmean) icovar (x-xmean)
+        """
+        if not self.check_bounds_scalar(pars, **keys):
+            return LOWVAL
+
+        return GMixND.get_lnprob_scalar(self,pars)
+
+    def get_prob_array(self, pars, **keys):
+        """
+        array input
+        """
+
+        p=zeros(pars.shape[0])
+
+        w=self.check_bounds_array(pars)
+        if w.size > 0:
+            p[w]=GMixND.get_prob_array(self,pars[w,:])
+
+        return p
+
+    def get_lnprob_array(self, pars, **keys):
+        """
+        array input
+        """
+        lnp=zeros(pars.shape[0]) + LOWVAL
+
+        w=self.check_bounds_array(pars)
+        if w.size > 0:
+            lnp[w]=GMixND.get_lnprob_array(self,pars[w,:])
+
+        return lnp
+
+
+    def sample(self, n=None):
+        """
+        Get samples for logT logF
+        """
+
+        if n is None:
+            is_scalar=True
+            n=1
+        else:
+            is_scalar=False
+
+        samples=zeros( (n,self.ndim) )
+
+        nleft=n
+        ngood=0
+        while nleft > 0:
+
+            tsamples=self.gmm.sample(nleft)
+            w=self.check_bounds_array(tsamples)
+
+            if w.size > 0:
+                first=ngood
+                last=ngood+w.size
+
+                samples[first:last,:] = tsamples[w,:]
+
+                ngood += w.size
+                nleft -= w.size
+
+        if is_scalar:
+            samples = samples[0,:]
+        return samples
+
+
+    def check_bounds_scalar(self, pars, throw=True):
+        """
+        Check bounds on T Flux
+        """
+
+        logT_bounds=self.logT_bounds
+        logFlux_bounds=self.logFlux_bounds
+
+        logT=pars[0]
+        logF=pars[1]
+        if (  logT < logT_bounds[0]
+            or logT > logT_bounds[1]
+            or logF < logFlux_bounds[0]
+            or logF > logFlux_bounds[1]):
+
+            if throw:
+                raise GMixRangeError("g or T or F out of range")
+            else:
+                return False
+        else:
+            return True
+
+    def check_bounds_array(self,pars):
+        """
+        Check bounds on T Flux
+        """
+        logT_bounds=self.logT_bounds
+        logFlux_bounds=self.logFlux_bounds
+
+        logT=pars[:,0]
+        logF=pars[:,1]
+
+        wgood, = where(  (logT > logT_bounds[0])
+                       & (logT < logT_bounds[1])
+                       & (logF > logFlux_bounds[0])
+                       & (logF < logFlux_bounds[1]) )
+        return wgood
+
 

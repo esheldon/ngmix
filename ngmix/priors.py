@@ -264,9 +264,9 @@ class GPriorBase(object):
         # don't go right up to the end
         gmax=self.gmax
         #gmax=self.gmax - 1.0e-4
-        print("using gmax:",gmax)
-        print("using maxval1d_loc:",self.maxval1d_loc)
-        print("using maxval1d:",maxval1d)
+        #print("using gmax:",gmax)
+        #print("using maxval1d_loc:",self.maxval1d_loc)
+        #print("using maxval1d:",maxval1d)
 
         g = numpy.zeros(nrand)
 
