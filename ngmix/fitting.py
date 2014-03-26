@@ -4,6 +4,7 @@ from __future__ import print_function
 
 from sys import stdout
 import numpy
+from numpy import array, zeros, diag, sqrt
 import time
 
 from . import gmix
@@ -21,7 +22,7 @@ MCMC_NTRY=1
 
 BAD_VAR=2**0
 LOW_ARATE=2**1
-LARGE_TAU=2**2
+#LARGE_TAU=2**2
 
 # error codes in LM start at 2**0 and go to 2**3
 # this is because we set 2**(ier-5)
@@ -30,6 +31,8 @@ LM_NEG_COV_EIG = 2**5
 LM_NEG_COV_DIAG = 2**6
 LM_EIG_NOTFINITE = 2**7
 LM_FUNC_NOTFINITE = 2**8
+
+BAD_STATS=2**9
 
 PDEF=-9.999e9
 CDEF=9.999e9
@@ -120,14 +123,14 @@ class FitterBase(object):
 
         # can be 1
         self.nband=len(im_lol)
-        nimages = numpy.array( [len(l) for l in im_lol], dtype='i4')
+        nimages = array( [len(l) for l in im_lol], dtype='i4')
 
         self.im_lol=im_lol
         self.wt_lol=wt_lol
         self.psf_lol=psf_lol
 
         self.jacob_lol = j_lol
-        mean_det=numpy.zeros(self.nband)
+        mean_det=zeros(self.nband)
         for band in xrange(self.nband):
             jlist=self.jacob_lol[band]
             for j in jlist:
@@ -353,7 +356,7 @@ class FitterBase(object):
         lnprob,s2n_numer,s2n_denom=self.calc_lnprob(pars, get_s2nsums=True)
 
         if s2n_denom > 0:
-            s2n=s2n_numer/numpy.sqrt(s2n_denom)
+            s2n=s2n_numer/sqrt(s2n_denom)
         else:
             s2n=0.0
 
@@ -434,21 +437,21 @@ class FitterBase(object):
         if cguess is None:
             cguess = self._get_median_counts()
         else:
-            cguess=numpy.array(cguess,ndmin=1)
+            cguess=array(cguess,ndmin=1)
         return cguess
 
     def _get_median_counts(self):
         """
         median of the counts across all input images, for each band
         """
-        cguess=numpy.zeros(self.nband)
+        cguess=zeros(self.nband)
         for band in xrange(self.nband):
 
             im_list=self.im_lol[band]
             jacob_list=self.jacob_lol[band]
 
             nim=len(im_list)
-            clist=numpy.zeros(nim)
+            clist=zeros(nim)
 
             for i in xrange(nim):
                 im=im_list[i]
@@ -513,7 +516,7 @@ class PSFFluxFitter(FitterBase):
         flags=0
         arg=chi2/msq_sum/(self.totpix-1) 
         if arg >= 0.0:
-            flux_err = numpy.sqrt(arg)
+            flux_err = sqrt(arg)
         else:
             flags=BAD_VAR
             flux_err=9999.0
@@ -639,7 +642,7 @@ class LMSimple(FitterBase):
         # xtol (tol in solution), etc
         self.lm_pars=keys['lm_pars']
 
-        self.guess=numpy.array( guess, dtype='f8' )
+        self.guess=array( guess, dtype='f8' )
 
         # center + shape + T + fluxes
         n_prior_pars=1 + 1 + 1 + self.nband
@@ -673,7 +676,7 @@ class LMSimple(FitterBase):
         """
 
         # we cannot keep sending existing array into leastsq, don't know why
-        fdiff=numpy.zeros(self.fdiff_size)
+        fdiff=zeros(self.fdiff_size)
 
         if not hasattr(self,'_gmix_lol0'):
             self._init_gmix_lol(pars)
@@ -900,7 +903,7 @@ def run_leastsq(func, guess, dof, **keys):
                 junk1,junk2,perr=_get_def_stuff(npars)
             else:
                 # only if we reach here did everything go well
-                perr=numpy.sqrt( numpy.diag(pcov) )
+                perr=sqrt( numpy.diag(pcov) )
 
         res['flags']=flags
         res['nfev'] = infodict['nfev']
@@ -930,9 +933,9 @@ def run_leastsq(func, guess, dof, **keys):
     return res
 
 def _get_def_stuff(npars):
-    pars=numpy.zeros(npars) + PDEF
-    cov=numpy.zeros( (npars,npars) ) + CDEF
-    err=numpy.zeros(npars) + CDEF
+    pars=zeros(npars) + PDEF
+    cov=zeros( (npars,npars) ) + CDEF
+    err=zeros(npars) + CDEF
     return pars,cov,err
 
 def _test_cov(pcov):
@@ -1088,8 +1091,8 @@ class MCMCBase(FitterBase):
         self.last_pos=self._run_some_trials(pos, self.nstep)
 
         self.flags=0
-        if have_acor and self.tau > MAX_TAU:
-            self.flags |= LARGE_TAU
+        #if have_acor and self.tau > MAX_TAU:
+        #    self.flags |= LARGE_TAU
         
         if self.arate < self.min_arate:
             self.flags |= LOW_ARATE
@@ -1156,32 +1159,51 @@ class MCMCBase(FitterBase):
         Will probably over-ride this
         """
 
-        pars,pars_cov=self._get_trial_stats()
- 
+        pars,pars_cov,pars_err,stat_flags=self._get_trial_stats()
+        self.flags |= stat_flags
+
         self._result={'model':self.model_name,
                       'flags':self.flags,
                       'pars':pars,
                       'pars_cov':pars_cov,
-                      'pars_err':numpy.sqrt(numpy.diag(pars_cov)),
+                      'pars_err':pars_err,
                       'tau':self.tau,
                       'arate':self.arate}
 
-        stats = self.get_fit_stats(pars)
-        self._result.update(stats)
+        if stat_flags == 0:
+            # can't measure stats if pars are nonsense
+            stats = self.get_fit_stats(pars)
+
+            self._result.update(stats)
 
     def _get_trial_stats(self):
         """
         Get the means and covariance for the trials
         """
 
+        flags=0
+
         # weights could be the prior values if we didn't apply
         # the prior while sampling
         # or it could be the weights in importance sampling
         # or None
         weights=self.get_weights()
-        pars,pars_cov = extract_mcmc_stats(self.trials, weights=weights)
 
-        return pars,pars_cov
+        flags=0
+        if weights is not None:
+            wsum=weights.sum()
+            if wsum <= 0.0:
+                print("          found wsum < 0:",wsum)
+                pars=zeros(self.npars)-9999
+                pars_cov=zeros( (self.npars,self.npars))+9999
+                pars_err=zeros(self.npars)+9999
+                flags=BAD_STATS
+
+        if flags==0:
+            pars,pars_cov = extract_mcmc_stats(self.trials, weights=weights)
+            pars_err=sqrt(diag(pars_cov))
+
+        return pars,pars_cov,pars_err,flags
 
     def get_weights(self):
         """
@@ -1327,7 +1349,7 @@ class MCMCBase(FitterBase):
 
                 # might want them to have different stretches
                 #imcols=im.shape[1]
-                #imtot=numpy.zeros( (im.shape[0], 3*imcols ) )
+                #imtot=zeros( (im.shape[0], 3*imcols ) )
                 #imtot[:, 0:imcols]=im
                 #imtot[:, imcols:2*imcols]=model
                 #imtot[:, 2*imcols:]=residual
@@ -1376,7 +1398,7 @@ class MCMCSimple(MCMCBase):
 
         if self.g_prior is not None:
             # may have bounds
-            g = numpy.sqrt(pars[2]**2 + pars[3]**2)
+            g = sqrt(pars[2]**2 + pars[3]**2)
             if g > self.g_prior.gmax:
                 raise GMixRangeError("g too big")
     
@@ -1415,7 +1437,7 @@ class MCMCSimple(MCMCBase):
         return self.full_guess[ntrial-self.nwalkers:, :]
 
     def _get_random_guess(self):
-        guess=numpy.zeros( (self.nwalkers,self.npars) )
+        guess=zeros( (self.nwalkers,self.npars) )
 
         # center
         guess[:,0]=0.1*srandu(self.nwalkers)
@@ -1455,13 +1477,6 @@ class MCMCSimple(MCMCBase):
 
         self._result['nuse'] = self.trials.shape[0]
 
-        wts=self.get_weights()
-        if wts is None:
-            self._result['effnum'] = self._result['nuse']
-        else:
-            self._result['effnum'] = wts.sum()/wts.max()
-
-
         if self.do_lensfit:
             g_sens=self._get_lensfit_gsens(self._result['pars'])
             self._result['g_sens']=g_sens
@@ -1492,7 +1507,7 @@ class MCMCSimple(MCMCBase):
         g1diff = g[0]-g1vals
         g2diff = g[1]-g2vals
 
-        gsens = numpy.zeros(2)
+        gsens = zeros(2)
 
         R1 = g1diff*dpri_by_g1
         R2 = g2diff*dpri_by_g2
@@ -1590,7 +1605,7 @@ class MCMCSimpleFixed(MCMCSimple):
         
         if self.g_prior is not None:
             # may have bounds
-            g = numpy.sqrt(pars[2]**2 + pars[3]**2)
+            g = sqrt(pars[2]**2 + pars[3]**2)
             if g > self.g_prior.gmax:
                 raise GMixRangeError("g too big")
  
@@ -1652,10 +1667,10 @@ class MHSimple(MCMCSimple):
             else:
                 raise ValueError("send guess= or full_guess=")
 
-        self.guess=numpy.array(guess, copy=False)
+        self.guess=array(guess, copy=False)
         self.max_arate=keys.get('max_arate',0.6)
 
-        self.step_sizes = numpy.array( keys['step_sizes'], dtype='f8')
+        self.step_sizes = array( keys['step_sizes'], dtype='f8')
         if self.step_sizes.size != self.npars:
             raise ValueError("got %d step sizes, expected %d" % (step_sizes.size, self.npars) )
 
@@ -1781,7 +1796,7 @@ class MCMCBDC(MCMCSimple):
 
         if self.g_prior is not None:
             # may have bounds
-            g = numpy.sqrt(pars[2]**2 + pars[3]**2)
+            g = sqrt(pars[2]**2 + pars[3]**2)
             if g > self.g_prior.gmax:
                 raise GMixRangeError("g too big")
  
@@ -1863,7 +1878,7 @@ class MCMCBDF(MCMCSimple):
 
         if self.g_prior is not None:
             # may have bounds
-            g = numpy.sqrt(pars[2]**2 + pars[3]**2)
+            g = sqrt(pars[2]**2 + pars[3]**2)
             if g > self.g_prior.gmax:
                 raise GMixRangeError("g too big")
  
@@ -2057,7 +2072,7 @@ class MCMCBDFJoint(MCMCBDF):
             Tvals=trials[:,4]
             Tmean = (Tvals*wts).sum()/wsum
             Terr2 = ( wts**2 * (Tvals-Tmean)**2 ).sum()
-            Terr = numpy.sqrt( Terr2 )/wsum
+            Terr = sqrt( Terr2 )/wsum
 
             if i > 0:
                 Tfracdiff =abs(Tmean/Tmean_last-1.0)
@@ -2165,7 +2180,7 @@ class MCMCSimpleJointHybrid(MCMCSimple):
         if sh is None:
             Pi,Qi,Ri = g_prior.get_pqr_num(g1,g2)
         else:
-            print("expanding shear")
+            print("        expanding about shear:",sh)
             Pi,Qi,Ri = g_prior.get_pqr_num(g1,g2, s1=sh[0], s2=sh[1])
         
         if self.prior_during:
@@ -2211,10 +2226,10 @@ class MCMCSimpleJointHybrid(MCMCSimple):
         must have         
         """
         if not self.prior_during:
-            print("        weight is prior")
+            #print("        weight is prior")
             weights=self._get_g_prior_vals()
         else:
-            print("        weight is None")
+            #print("        weight is None")
             weights=None
         return weights
 
@@ -2274,13 +2289,13 @@ class MCMCSimpleJointLinPars(MCMCSimple):
         don't include centroid, and only total ellipticity
         """
         if len(pars.shape) == 2:
-            eabs_pars=numpy.zeros( (pars.shape[0], self.ndim-3) )
-            eabs_pars[:,0] = numpy.sqrt(pars[:,2]**2 + pars[:,3]**2)
+            eabs_pars=zeros( (pars.shape[0], self.ndim-3) )
+            eabs_pars[:,0] = sqrt(pars[:,2]**2 + pars[:,3]**2)
             eabs_pars[:,1:] = pars[:,4:]
         else:
-            eabs_pars=numpy.zeros(self.ndim-3)
+            eabs_pars=zeros(self.ndim-3)
 
-            eabs_pars[0] = numpy.sqrt(pars[2]**2 + pars[3]**2)
+            eabs_pars[0] = sqrt(pars[2]**2 + pars[3]**2)
             eabs_pars[1:] = pars[4:]
 
         return eabs_pars
@@ -2557,8 +2572,8 @@ def _extract_stats(data):
     ntrials=data.shape[0]
     npar = data.shape[1]
 
-    means = numpy.zeros(npar,dtype='f8')
-    cov = numpy.zeros( (npar,npar), dtype='f8')
+    means = zeros(npar,dtype='f8')
+    cov = zeros( (npar,npar), dtype='f8')
 
     for i in xrange(npar):
         means[i] = data[:, i].mean()
@@ -2593,8 +2608,8 @@ def _extract_weighted_stats(data, weights):
             print_pars(data[i,:])
         raise ValueError("wsum <= 0: %s" % wsum)
 
-    means = numpy.zeros(npar,dtype='f8')
-    cov = numpy.zeros( (npar,npar), dtype='f8')
+    means = zeros(npar,dtype='f8')
+    cov = zeros( (npar,npar), dtype='f8')
 
     for i in xrange(npar):
         dsum = (data[:, i]*weights).sum()
@@ -2644,7 +2659,7 @@ def test_gauss_psf_graph(counts=100.0, noise=0.1, nimages=10, n=10, groups=True,
     im=gm.make_image(dims)
 
     im[:,:] += noise*numpy.random.randn(im.size).reshape(im.shape)
-    wt=numpy.zeros(im.shape) + 1./noise**2
+    wt=zeros(im.shape) + 1./noise**2
     j=Jacobian(cen[0], cen[1], jfac, 0.0, 0.0, jfac)
 
     imlist=[im]*nimages
@@ -2685,7 +2700,7 @@ def test_gauss_psf(counts=100.0, noise=0.001, n=10, nimages=10, jfac=0.27):
     im=gm.make_image(dims)
 
     im[:,:] += noise*numpy.random.randn(im.size).reshape(im.shape)
-    wt=numpy.zeros(im.shape) + 1./noise**2
+    wt=zeros(im.shape) + 1./noise**2
     j=Jacobian(cen[0], cen[1], jfac, 0.0, 0.0, jfac)
 
     imlist=[im]*nimages
@@ -2737,7 +2752,7 @@ def test_gauss_psf_jacob(counts_sky=100.0, noise_sky=0.001, nimages=10, jfac=10.
     im=gm.make_image(dims, jacobian=j)
 
     im[:,:] += noise_pix*numpy.random.randn(im.size).reshape(im.shape)
-    wt=numpy.zeros(im.shape) + 1./noise_pix**2
+    wt=zeros(im.shape) + 1./noise_pix**2
 
     imlist=[im]*nimages
     wtlist=[wt]*nimages
@@ -2811,11 +2826,11 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
 
     im_psf=gm_psf.make_image(dims, jacobian=j)
     im_psf[:,:] += noise_pix_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
-    wt_psf=numpy.zeros(im_psf.shape) + 1./noise_pix_psf**2
+    wt_psf=zeros(im_psf.shape) + 1./noise_pix_psf**2
 
     im_obj=gm.make_image(dims, jacobian=j)
     im_obj[:,:] += noise_pix_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
-    wt_obj=numpy.zeros(im_obj.shape) + 1./noise_pix_obj**2
+    wt_obj=zeros(im_obj.shape) + 1./noise_pix_obj**2
 
     #
     # fitting
@@ -2923,7 +2938,7 @@ def test_model_priors(model,
     im_obj=gm.make_image(dims, jacobian=j)
 
     im_obj[:,:] += noise_pix_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
-    wt_obj=numpy.zeros(im_obj.shape) + 1./noise_pix_obj**2
+    wt_obj=zeros(im_obj.shape) + 1./noise_pix_obj**2
 
     #
     # priors
@@ -3036,7 +3051,7 @@ def test_model_mb(model,
     Tpix_obj=16.0
     Tsky_obj=Tpix_obj*jfac2
 
-    true_pars=numpy.array([0.0,0.0,g1_obj,g2_obj,Tsky_obj]+counts_sky)
+    true_pars=array([0.0,0.0,g1_obj,g2_obj,Tsky_obj]+counts_sky)
 
     #jlist=[Jacobian(cen[0],cen[1], jfac, 0.0, 0.0, jfac),
     #       Jacobian(cen[0]+0.5,cen[1]-0.1, jfac, 0.001, -0.001, jfac),
@@ -3097,7 +3112,7 @@ def test_model_mb(model,
             im_obj=gm.make_image(dims, jacobian=j, nsub=16)
 
             im_obj[:,:] += noise_pix_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
-            wt_obj=numpy.zeros(im_obj.shape) + 1./noise_pix_obj**2
+            wt_obj=zeros(im_obj.shape) + 1./noise_pix_obj**2
 
             # psf using EM
             tmpsf0=time.time()
@@ -3269,7 +3284,7 @@ def test_model_priors_anze(model,
     im_obj=gm.make_image(dims, jacobian=j)
 
     im_obj[:,:] += noise_pix_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
-    wt_obj=numpy.zeros(im_obj.shape) + 1./noise_pix_obj**2
+    wt_obj=zeros(im_obj.shape) + 1./noise_pix_obj**2
 
     #
     # priors
@@ -3331,7 +3346,7 @@ def _get_test_psf_flux_pars(ngauss, jfac, counts_sky):
         Tpix=4.0*(1.0 + 0.2*srandu())
 
         Tsky=Tpix*jfac2
-        pars=numpy.array([counts_sky,
+        pars=array([counts_sky,
                           0.0,
                           0.0,
                           (Tsky/2.)*(1-e1),
@@ -3351,7 +3366,7 @@ def _get_test_psf_flux_pars(ngauss, jfac, counts_sky):
 
         T1sky=T1pix*jfac2
         T2sky=T2pix*jfac2
-        pars=numpy.array([counts_frac1*counts_sky,
+        pars=array([counts_frac1*counts_sky,
                           0.0,
                           0.0,
                           (T1sky/2.)*(1-e1_1),
@@ -3626,12 +3641,12 @@ class MHSampler(object):
         Set the trials and accept array.
         """
 
-        pars_start=numpy.array(pars_start,dtype='f8')
+        pars_start=array(pars_start,dtype='f8')
         npars = pars_start.size
 
-        self._trials   = numpy.zeros( (nstep, npars) )
-        self._loglike  = numpy.zeros(nstep)
-        self._accepted = numpy.zeros(nstep, dtype='i1')
+        self._trials   = zeros( (nstep, npars) )
+        self._loglike  = zeros(nstep)
+        self._accepted = zeros(nstep, dtype='i1')
         self._current  = 1
 
         self._oldpars = pars_start.copy()
