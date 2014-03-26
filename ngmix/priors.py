@@ -8,7 +8,7 @@ I haven't forced the max prob to be 1.0 yet, but should
 from __future__ import print_function
 
 import numpy
-from numpy import array, exp, sqrt, zeros
+from numpy import array, exp, sqrt, zeros, diag
 from numpy.random import random as randu
 from numpy.random import randn
 import numba
@@ -375,6 +375,7 @@ class GPriorBase(object):
                                 nshear,
                                 doring=True,
                                 npair=10000,
+                                shear_expand=None,
                                 h=1.e-6,
                                 eps=None):
         """
@@ -424,7 +425,15 @@ class GPriorBase(object):
                 g1s, g2s = shear_reduced(g1, g2, s1, s2)
 
                 P,Q,R=self.get_pqr_num(g1s, g2s, h=h)
-                P_te,Q_te,R_te=self.get_pqr_num(g1s, g2s, s1=s1, s2=s2, h=h)
+
+                if shear_expand is None:
+                    s1expand=s1
+                    s2expand=s2
+                else:
+                    s1expand=shear_expand[0]
+                    s2expand=shear_expand[1]
+                P_te,Q_te,R_te=self.get_pqr_num(g1s, g2s,
+                                                s1=s1expand, s2=s2expand, h=h)
 
                 # watch for zeros in P for some priors
                 even = numpy.arange(npair)*2
@@ -540,6 +549,73 @@ class GPriorBase(object):
             plt.write_eps(eps)
 
             print(poly)
+
+
+    def test_pqr_shear_recovery_iter(self, shear, npair, niter,
+                                     doring=True,
+                                     h=1.e-6):
+        """
+        Test how well we recover the shear with no noise and
+        iteration on the measured shear
+
+        parameters
+        ----------
+        smin: float
+            min shear to test
+        smax: float
+            max shear to test
+        nshear:
+            number of shear values to test
+        npair: integer, optional
+            Number of pairs to use at each shear test value
+        """
+        import lensing
+        from .shape import Shape, shear_reduced
+ 
+        theta=numpy.pi/2.0
+        twotheta = 2.0*theta
+        cos2angle = numpy.cos(twotheta)
+        sin2angle = numpy.sin(twotheta)
+
+        g1=numpy.zeros(npair*2)
+        g2=numpy.zeros(npair*2)
+
+        shear_expand=array([0.0, 0.0])
+        for i in xrange(niter):
+
+            if doring:
+
+                g1[0:npair],g2[0:npair] = self.sample2d(npair)
+                g1[npair:] =  g1[0:npair]*cos2angle + g2[0:npair]*sin2angle
+                g2[npair:] = -g1[0:npair]*sin2angle + g2[0:npair]*cos2angle
+
+            else:
+                g1,g2 = self.sample2d(npair*2)
+
+
+            g1s, g2s = shear_reduced(g1, g2, shear[0], shear[1])
+
+            P,Q,R=self.get_pqr_num(g1s, g2s,
+                                   s1=shear_expand[0],
+                                   s2=shear_expand[1])
+
+            shmeas, Cmeas = lensing.pqr.get_pqr_shear(P,Q,R)
+
+            shmeas += shear_expand
+
+            err=sqrt(diag(Cmeas))
+            frac=shmeas/shear-1
+            frac_err=err/shear
+
+            if doring:
+                mess='iter: %d true: %.6f, %.6f meas: %.6f, %.6f frac: %.6f %.6f'
+                print(mess % (i+1,shear[0],shear[1],shmeas[0],shmeas[1],frac[0],frac[1]))
+            else:
+                mess='iter: %d true: %.6f,%.6f meas: %.6f +/- %.6f %.6f +/- %.6f frac: %.6f +/- %.6f %.6f +/- %.6f'
+                print(mess % (i+1,shear[0],shear[1],shmeas[0],err[0],shmeas[1],err[1],
+                              frac[0],frac_err[0],frac[1],frac_err[1]))
+
+            shear_expand=shmeas
 
 class GPriorBABase(GPriorBase):
     """

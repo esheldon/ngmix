@@ -745,7 +745,8 @@ class JointPriorSimpleLinPars(GMixND):
         return wgood
 
     def test_pqr_shear_recovery(self, smin, smax, nshear,
-                                npair=10000, h=1.e-6, eps=None):
+                                npair=10000, h=1.e-6, eps=None,
+                                expand_shear=None):
         """
         Test how well we recover the shear with no noise.
 
@@ -811,7 +812,14 @@ class JointPriorSimpleLinPars(GMixND):
             samples[npair:, 2:] = tsamples[:,2:]
 
             P,Q,R=self.get_pqr_num(samples, h=h)
-            P_te,Q_te,R_te=self.get_pqr_num(samples, s1=s1, s2=s2, h=h)
+
+            if expand_shear is not None:
+                s1expand=expand_shear[0]
+                s2expand=expand_shear[1]
+            else:
+                s1expand=s1
+                s2expand=s2
+            P_te,Q_te,R_te=self.get_pqr_num(samples, s1=s1expand, s2=s2expand, h=h)
 
 
             g1g2, C = lensing.pqr.get_pqr_shear(P,Q,R)
@@ -899,7 +907,7 @@ class JointPriorSimpleLogPars(JointPriorSimpleLinPars):
         self.logT_bounds=logT_bounds
         self.logFlux_bounds=logFlux_bounds
 
-        super(JointPriorSimpleLogPars,self).__init__(weights, means, covars)
+        super(JointPriorSimpleLogPars,self).__init__(weights, means, covars, 0.0, 0.0)
 
         self._make_gmm()
 
@@ -912,9 +920,9 @@ class JointPriorSimpleLogPars(JointPriorSimpleLinPars):
         logT_bounds=self.logT_bounds
         logFlux_bounds=self.logFlux_bounds
 
-        eta=sqrt(pars[0]**2 + pars[1]**2)
-        logT=pars[2]
-        logF=pars[3]
+        eta=pars[0]
+        logT=pars[1]
+        logF=pars[2]
         if (eta > self.eta_max
             or logT < logT_bounds[0]
             or logT > logT_bounds[1]
@@ -935,9 +943,9 @@ class JointPriorSimpleLogPars(JointPriorSimpleLinPars):
         logT_bounds=self.logT_bounds
         logFlux_bounds=self.logFlux_bounds
 
-        eta=sqrt(pars[:,0]**2 + pars[:,1]**2)
-        logT=pars[:,2]
-        logF=pars[:,3]
+        eta=pars[:,0]
+        logT=pars[:,1]
+        logF=pars[:,2]
 
         wgood, = where(  (eta < self.eta_max)
                        & (logT > logT_bounds[0])
