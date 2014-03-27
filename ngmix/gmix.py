@@ -371,6 +371,46 @@ class GMixModel(GMix):
                                      "'%s'" % self._model_name)
 
 
+
+class GMixCoellip(GMix):
+    """
+    A two-dimensional gaussian mixture, each co-centeric and co-elliptical
+
+    Inherits from the more general GMix class, and all its methods.
+
+    parameters
+    ----------
+    pars: array-like
+        Parameter array. The number of elements will depend
+        on the model type.
+    """
+    def __init__(self, pars):
+        self._model      = GMIX_COELLIP
+        self._model_name = 'coellip'
+        self.fill(pars)
+
+    def fill(self, parsin):
+        """
+        Fill in the gaussian mixture with new parameters
+        """
+
+        pars = array(parsin, dtype='f8', copy=True) 
+
+        npars=pars.size
+
+        ncheck=npars-4
+        if ( ncheck % 2 ) != 0:
+            raise ValueError("coellip must have len(pars)==4+2*ngauss, got %s" % npars)
+
+        self._pars=pars
+        self._ngauss = ncheck/2
+        self._npars = npars
+
+        self.reset()
+
+        _fill_coellip(self._data, pars)
+
+
 GMIX_FULL=0
 GMIX_GAUSS=1
 GMIX_TURB=2
@@ -378,6 +418,7 @@ GMIX_EXP=3
 GMIX_DEV=4
 GMIX_BDC=5
 GMIX_BDF=6
+GMIX_COELLIP=7
 
 _gmix_model_dict={'full':       GMIX_FULL,
                   GMIX_FULL:    GMIX_FULL,
@@ -392,7 +433,9 @@ _gmix_model_dict={'full':       GMIX_FULL,
                   'bdc':        GMIX_BDC,
                   GMIX_BDC:     GMIX_BDC,
                   'bdf':        GMIX_BDF,
-                  GMIX_BDF:     GMIX_BDF}
+                  GMIX_BDF:     GMIX_BDF,
+                  'coellip':    GMIX_COELLIP,
+                  GMIX_COELLIP: GMIX_COELLIP}
 
 _gmix_string_dict={GMIX_FULL:'full',
                    'full':'full',
@@ -407,7 +450,9 @@ _gmix_string_dict={GMIX_FULL:'full',
                    GMIX_BDC:'bdc',
                    'bdc':'bdc',
                    GMIX_BDF:'bdf',
-                   'bdf':'bdf'}
+                   'bdf':'bdf',
+                   GMIX_COELLIP:'coellip',
+                   'coellip':GMIX_COELLIP}
 
 _gmix_npars_dict={GMIX_GAUSS:6,
                   GMIX_TURB:6,
@@ -491,6 +536,35 @@ def _gauss2d_set(self, i, p, row, col, irr, irc, icc):
     self[i].norm = 1./(2*numpy.pi*numpy.sqrt(det))
 
     self[i].pnorm = self[i].p*self[i].norm
+
+@jit(argtypes=[ _gauss2d[:], float64[:] ] )
+def _fill_coellip(self, pars):
+
+    npars=pars.size
+    ngauss = (npars-4)/2;
+
+    row=pars[0]
+    col=pars[1]
+    g1=pars[2]
+    g2=pars[3]
+
+    e1,e2 = g1g2_to_e1e2(g1, g2)
+
+    ngauss=self.size
+    for i in xrange(ngauss):
+
+        T = pars[4+i]
+        counts=pars[4+ngauss+i]
+
+        _gauss2d_set(self,
+                     i,
+                     counts,
+                     row,
+                     col, 
+                     (T/2.)*(1-e1), 
+                     (T/2.)*e2,
+                     (T/2.)*(1+e1))
+
 
 
 @jit(argtypes=[ _gauss2d[:], float64[:], float64[:], float64[:] ] )
