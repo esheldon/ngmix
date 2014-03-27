@@ -65,6 +65,8 @@ class FitterBase(object):
         self.T_prior = keys.get('T_prior',None)
         self.counts_prior = keys.get('counts_prior',None)
 
+        self.g_prior_during=keys.get('g_prior_during',False)
+
         self.joint_TF_prior = keys.get('joint_TF_prior',None)
 
         # in this case, image, weight, jacobian, psf are going to
@@ -1211,20 +1213,19 @@ class MCMCBase(FitterBase):
         """
         if hasattr(self,'nwalkers'):
             # this was an mcmc run
-            if self.g_prior is None:
+            if self.g_prior is None or self.g_prior_during:
                 weights=None
                 print('    weights are None')
             else:
-                self._set_g_prior_vals()
+                weights=self._get_g_prior_vals()
                 print('    weights are g prior')
-                weights=self.g_prior_vals
         else:
             weights=None
             print('    weights are none')
 
         return weights
 
-    def _set_g_prior_vals(self):
+    def _get_g_prior_vals(self):
         """
         Set g prior vals for later use
         """
@@ -1233,6 +1234,7 @@ class MCMCBase(FitterBase):
             g1=self.trials[:,self.g1i]
             g2=self.trials[:,self.g2i]
             self.g_prior_vals = self.g_prior.get_prob_array2d(g1,g2)
+        return self.g_prior_vals
 
     def _get_guess(self):
         raise RuntimeError("over-ride me")
@@ -1397,11 +1399,14 @@ class MCMCSimple(MCMCBase):
             lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
 
         if self.g_prior is not None:
-            # may have bounds
-            g = sqrt(pars[2]**2 + pars[3]**2)
-            if g > self.g_prior.gmax:
-                raise GMixRangeError("g too big")
-    
+            if self.g_prior_during:
+                lnp += self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
+            else:
+                # may have bounds
+                g = sqrt(pars[2]**2 + pars[3]**2)
+                if g > self.g_prior.gmax:
+                    raise GMixRangeError("g too big")
+        
         if self.T_prior is not None:
             lnp += self.T_prior.get_lnprob_scalar(pars[4])
 
@@ -1464,7 +1469,7 @@ class MCMCSimple(MCMCBase):
         """
 
         if self.g_prior is not None:
-            self._set_g_prior_vals()
+            tmp=self._get_g_prior_vals()
             self._remove_zero_prior()
 
         super(MCMCSimple,self)._calc_result()
@@ -1556,9 +1561,43 @@ class MCMCSimple(MCMCBase):
         importance sampling
         """
 
-        P = Pi.mean()
-        Q = Qi.mean(axis=0)
-        R = Ri.mean(axis=0)
+        if self.g_prior_during:
+            # We measured the posterior surface.  But the integrals are over
+            # the likelihood.  So divide by the prior.
+            #
+            # Also note the p we divide by is in principle different from the
+            # Pi above, which are evaluated at the shear expansion value
+
+            print("undoing prior for pqr")
+
+            prior_vals=self._get_g_prior_vals()
+
+            w,=numpy.where(prior_vals > 0.0)
+
+            Pinv = 1.0/prior_vals[w]
+            Pinv_sum=Pinv.sum()
+
+            Pi = Pi[w]
+            Qi = Qi[w,:]
+            Ri = Ri[w,:,:]
+
+            # this is not unity if expanding about some shear
+            Pi *= Pinv
+            Qi[:,0] *= Pinv 
+            Qi[:,1] *= Pinv
+
+            Ri[:,0,0] *= Pinv
+            Ri[:,0,1] *= Pinv
+            Ri[:,1,0] *= Pinv
+            Ri[:,1,1] *= Pinv
+
+            P = Pi.sum()/Pinv_sum
+            Q = Qi.sum(axis=0)/Pinv_sum
+            R = Ri.sum(axis=0)/Pinv_sum
+        else:
+            P = Pi.mean()
+            Q = Qi.mean(axis=0)
+            R = Ri.mean(axis=0)
 
         return P,Q,R
 
@@ -2190,6 +2229,8 @@ class MCMCSimpleJointHybrid(MCMCSimple):
             # Also note the p we divide by is in principle different from the
             # Pi above, which are evaluated at the shear expansion value
 
+            print("undoing prior for pqr")
+
             prior_vals=self._get_g_prior_vals()
 
             w,=numpy.where(prior_vals > 0.0)
@@ -2251,8 +2292,8 @@ class MCMCSimpleJointHybrid(MCMCSimple):
         if not hasattr(self,'joint_prior_vals'):
             trials=self.trials
             g1,g2=trials[:,2],trials[:,3]
-            self.prior_vals = self.joint_prior.g_prior.get_prob_array2d(g1,g2)
-        return self.prior_vals
+            self.joint_prior_vals = self.joint_prior.g_prior.get_prob_array2d(g1,g2)
+        return self.joint_prior_vals
 
     def get_par_names(self):
         names=[r'$cen_1$',
