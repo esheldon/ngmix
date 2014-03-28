@@ -4,7 +4,7 @@ from __future__ import print_function
 
 from sys import stdout
 import numpy
-from numpy import array, zeros, diag, sqrt
+from numpy import array, zeros, diag, sqrt, where
 import time
 
 from . import gmix
@@ -1253,6 +1253,9 @@ class MCMCBase(FitterBase):
     def make_plots(self,
                    show=False,
                    do_residual=False,
+                   width=1200,
+                   height=1200,
+                   separate=False,
                    title=None):
         """
         Plot the mcmc chain and some residual plots
@@ -1260,27 +1263,34 @@ class MCMCBase(FitterBase):
         import mcmc
         import biggles
 
-        biggles.configure('screen','width', 1200)
-        biggles.configure('screen','height', 1200)
+        biggles.configure('screen','width', width)
+        biggles.configure('screen','height', height)
 
         names=self.get_par_names()
 
         weights=self.get_weights() 
-        plt=mcmc.plot_results(self.trials,
-                              names=names,
-                              title=title,
-                              show=show)
+        if separate:
+            plotfunc =mcmc.plot_results_separate
+        else:
+            plotfunc =mcmc.plot_results
+
+        plt=plotfunc(self.trials,
+                     names=names,
+                     title=title,
+                     show=show)
 
 
         if weights is not None:
-            wplt=mcmc.plot_results(self.trials,
-                                   weights=weights,
-                                   names=names,
-                                   title='%s weighted' % title,
-                                   show=show)
+            wplt=plotfunc(self.trials,
+                          weights=weights,
+                          names=names,
+                          title='%s weighted' % title,
+                          show=show)
 
         if do_residual:
-            resplots=self._plot_residuals(title=title,show=show)
+            resplots=self._plot_residuals(title=title,show=show,
+                                         width=width,
+                                         height=height)
             plots=(plt, resplots)
             if weights is not None:
                 plots = (plt, wplt, resplots)
@@ -1297,12 +1307,13 @@ class MCMCBase(FitterBase):
 
         return plots
 
-    def _plot_residuals(self, title=None, show=False):
+    def _plot_residuals(self, title=None, show=False,
+                        width=1920, height=1200):
         import images
         import biggles
 
-        biggles.configure('screen','width', 1920)
-        biggles.configure('screen','height', 1200)
+        biggles.configure('screen','width', width)
+        biggles.configure('screen','height', height)
 
         try:
             self._fill_gmix_lol(self._result['pars'])
@@ -1364,59 +1375,6 @@ class MCMCBase(FitterBase):
 
             tablist.append(tab)
         return tablist
-
-class MCMCCoellip(MCMCBase):
-    """
-    Add additional features to the base class to support simple models
-    """
-    def __init__(self, image, weight, jacobian, **keys):
-
-        self.full_guess=keys.get('full_guess',None)
-        if self.full_guess is None:
-            raise ValueError("send full guess for coellip")
-
-        super(MCMCCoellip,self).__init__(image, weight, jacobian, "coellip", **keys)
-
-    def _set_npars(self):
-        """
-        nband should be set in set_lists, called before this
-        """
-        self.npars=self.full_guess.shape[1]
-
-    def _get_priors(self, pars):
-        """
-        # go in simple
-        add any priors that were sent on construction
-        """
-        lnp=0.0
-        
-        if self.cen_prior is not None:
-            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
-
-        if self.g_prior is not None:
-            if self.g_prior_during:
-                lnp += self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
-            else:
-                # may have bounds
-                g = sqrt(pars[2]**2 + pars[3]**2)
-                if g > self.g_prior.gmax:
-                    raise GMixRangeError("g too big")
-        
-        if self.T_prior is not None:
-            lnp += self.T_prior.get_lnprob_scalar(pars[4])
-
-        if self.counts_prior is not None:
-            for i,cp in enumerate(self.counts_prior):
-                counts=pars[5+i]
-                lnp += cp.get_lnprob_scalar(counts)
-
-        return lnp
-
-
-    def _get_band_pars(self, pars, band):
-        if band > 0:
-            raise ValueError("support multi-band for coellip")
-        return pars.copy()
 
 
 class MCMCSimple(MCMCBase):
@@ -1670,6 +1628,95 @@ class MCMCSimple(MCMCBase):
             self.trials = self.trials[w,:]
 
         return ndiff
+
+class MCMCCoellip(MCMCSimple):
+    """
+    Add additional features to the base class to support simple models
+    """
+    def __init__(self, image, weight, jacobian, **keys):
+
+        self.full_guess=keys.get('full_guess',None)
+        self.ngauss=gmix.get_coellip_ngauss(self.full_guess.shape[1])
+        self.g1i=2
+        self.g2i=3
+
+        if self.full_guess is None:
+            raise ValueError("send full guess for coellip")
+
+        MCMCBase.__init__(self, image, weight, jacobian, "coellip", **keys)
+
+    def _get_guess(self):
+        return self.full_guess
+
+    def get_par_names(self):
+        names=['cen1','cen2', 'g1','g2']
+
+        for i in xrange(self.ngauss):
+            names.append(r'$T_%s$' % i)
+        for i in xrange(self.ngauss):
+            names.append(r'$F_%s$' % i)
+
+        return names
+
+
+    def _set_npars(self):
+        """
+        nband should be set in set_lists, called before this
+        """
+        self.npars=self.full_guess.shape[1]
+
+    def _get_priors(self, pars):
+        """
+        # go in simple
+        add any priors that were sent on construction
+        """
+        lnp=0.0
+        
+        if self.cen_prior is not None:
+            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+
+        if self.g_prior is not None:
+            if self.g_prior_during:
+                lnp += self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
+            else:
+                # may have bounds
+                g = sqrt(pars[2]**2 + pars[3]**2)
+                if g > self.g_prior.gmax:
+                    raise GMixRangeError("g too big")
+        
+        # all T must be positive
+        ngauss=self.ngauss
+        Tvals = pars[4:4+ngauss]
+        Ttotal = Tvals.sum()
+        w,=where(Tvals < 0.0)
+        if w.size > 0:
+            raise GMixRangeError("some T were < 0.0")
+
+        if self.T_prior is not None:
+            lnp += self.T_prior.get_lnprob_scalar(Ttotal)
+
+        # all counts must be positive
+        counts_vals = pars[4+ngauss: 4+2*ngauss]
+        counts_total=counts_vals.sum()
+        w,=where(counts_vals < 0.0)
+        if w.size > 0:
+            raise GMixRangeError("some counts were < 0.0")
+
+        if self.counts_prior is not None:
+            if len(self.counts_prior) > 1:
+                raise ValueError("make work with multiple bands")
+
+            cp=self.counts_prior[0]
+            lnp += cp.get_lnprob_scalar(counts_total)
+
+        return lnp
+
+
+    def _get_band_pars(self, pars, band):
+        if band > 0:
+            raise ValueError("support multi-band for coellip")
+        return pars.copy()
+
 
 
 class MCMCSimpleFixed(MCMCSimple):
@@ -3029,7 +3076,50 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
 
 
 
-def test_model_coellip(model, ngauss, counts=100.0, noise=0.001, nimages=1):
+def test_many_model_coellip(ntry,
+                            model,
+                            ngauss,
+                            **keys):
+    import time
+
+    tm0=time.time()
+    g1fit=zeros(ntry)
+    g2fit=zeros(ntry)
+
+    for i in xrange(ntry):
+        print("-"*40)
+        print("%d/%d" % (i+1,ntry))
+
+        true_pars, fit_pars= test_model_coellip(model,
+                                                ngauss,
+                                                **keys)
+        g1fit[i] = fit_pars[2]
+        g2fit[i] = fit_pars[3]
+
+        print(g1fit[i],g2fit[i])
+
+    frac1_arr=g1fit/true_pars[2]-1
+    frac2_arr=g2fit/true_pars[3]-1
+
+    frac1 = frac1_arr.mean()
+    frac1_err = frac1_arr.std()/sqrt(ntry)
+    frac2 = frac2_arr.mean()
+    frac2_err = frac2_arr.std()/sqrt(ntry)
+
+    print("-"*40)
+    print("%g +/- %g" % (frac1, frac1_err))
+    print("%g +/- %g" % (frac2, frac2_err))
+
+    tm=time.time()-tm0
+    print("time per:",tm/ntry)
+
+def test_model_coellip(model, ngauss,
+                       counts=100.0, noise=0.00001,
+                       nwalkers=320,
+                       burnin=800,
+                       nstep=800,
+                       niter=1,
+                       doplots=False):
     """
     fit an n gauss coellip model to a different model
 
@@ -3043,11 +3133,6 @@ def test_model_coellip(model, ngauss, counts=100.0, noise=0.001, nimages=1):
     import images
     import mcmc
     from . import em
-
-    dims=[25,25]
-    cen=[dims[0]/2., dims[1]/2.]
-
-    jacob=UnitJacobian(cen[0],cen[1])
 
     #
     # simulation
@@ -3064,7 +3149,18 @@ def test_model_coellip(model, ngauss, counts=100.0, noise=0.001, nimages=1):
     counts_obj=counts
     g1_obj=0.1
     g2_obj=0.05
-    T_obj=16.0
+    if model=='exp':
+        T_obj=16.0
+    elif model=='dev':
+        T_obj=64.0
+
+    sigma=sqrt(T_obj/2.0)
+    dim=int(round(5*sigma*2))
+    dims=[dim]*2
+    cen=[dims[0]/2., dims[1]/2.]
+    print("dim: %g" % dims[0])
+
+    jacob=UnitJacobian(cen[0],cen[1])
 
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
     gm_psf=gmix.make_gmix_model(pars_psf, "gauss")
@@ -3102,50 +3198,101 @@ def test_model_coellip(model, ngauss, counts=100.0, noise=0.001, nimages=1):
 
     psf_fit=mc_psf.get_gmix()
     imfit_psf=mc_psf.make_image(counts=im_psf.sum())
-    images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
+    #images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
 
-    nwalkers=80
-    burnin=800
-    nstep=800
+    full_guess=test_guess_coellip(nwalkers, ngauss,
+                                 g1_obj, g2_obj, T_obj, counts_obj)
+
+    for i in xrange(niter):
+        if niter > 1:
+            print("iter:",i+1)
+        mc_obj=MCMCCoellip(im_obj, wt_obj, jacob,
+                           psf=psf_fit,
+                           nwalkers=nwalkers,
+                           burnin=burnin,
+                           nstep=nstep,
+                           full_guess=full_guess)
+        mc_obj.go()
+
+        if i < (niter-1):
+            best_pars=mc_obj.best_pars
+            full_guess[:,:]=0
+            full_guess[:,0] = best_pars[0]+0.001*srandu(nwalkers)
+            full_guess[:,1] = best_pars[1]+0.001*srandu(nwalkers)
+            full_guess[:,2] = best_pars[2]+0.001*srandu(nwalkers)
+            full_guess[:,3] = best_pars[3]+0.001*srandu(nwalkers)
+
+            for tpi in xrange(2*ngauss):
+                pi = 4+tpi
+                full_guess[:,pi] = best_pars[pi]*(1.0+0.001*srandu(nwalkers))
+
+
+    res=mc_obj.get_result()
+    if doplots:
+        mc_obj.make_plots(show=True, do_residual=True,
+                          width=1100,height=750,
+                          separate=True)
+
+    res_obj=mc_obj.get_result()
+    gm=mc_obj.get_gmix()
+
+    print("s2n_w:",res["s2n_w"])
+    print("arate:",res['arate'])
+    print('T: %g Flux: %6g' % (gm.get_T(),gm.get_psum()) )
+    print_pars(res_obj['pars'], front='pars_obj:')
+    print_pars(res_obj['pars_err'], front='perr_obj:')
+
+    return pars_obj, res_obj['pars']
+
+def test_guess_coellip(nwalkers, ngauss,
+                       g1_obj, g2_obj, T_obj, counts_obj):
     npars=gmix.get_coellip_npars(ngauss)
     full_guess=zeros( (nwalkers, npars) )
     full_guess[:,0] = 0.1*srandu(nwalkers)
     full_guess[:,1] = 0.1*srandu(nwalkers)
     full_guess[:,2] = g1_obj + 0.01*srandu(nwalkers)
     full_guess[:,3] = g2_obj + 0.01*srandu(nwalkers)
-    for i in xrange(ngauss):
-        if i==0:
-            full_guess[:,4+i] = 0.1*T_obj*(1.0 + 0.01*srandu(nwalkers))
-            full_guess[:,4+ngauss+i] = 0.1*counts_obj*(1.0 + 0.01*srandu(nwalkers))
-        elif i==1:
-            full_guess[:,4+i] = 1.0*T_obj*(1.0 + 0.01*srandu(nwalkers))
-            full_guess[:,4+ngauss+i] = 0.5*counts_obj*(1.0 + 0.01*srandu(nwalkers))
-        elif i==2:
-            full_guess[:,4+i] = 2.0*T_obj*(1.0 + 0.01*srandu(nwalkers))
-            full_guess[:,4+ngauss+i] = 0.4*counts_obj*(1.0 + 0.01*srandu(nwalkers))
-        else:
-            raise ValueError("support ngauss > 3")
 
-    mc_obj=MCMCCoellip(im_obj, wt_obj, jacob,
-                       psf=psf_fit,
-                       full_guess=full_guess)
-    mc_obj.go()
-    mc_obj.make_plots(show=True)
+    if ngauss==3:
+        for i in xrange(ngauss):
+            if i==0:
+                full_guess[:,4+i] = 0.1*T_obj*(1.0 + 0.01*srandu(nwalkers))
+                full_guess[:,4+ngauss+i] = 0.1*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+            elif i==1:
+                full_guess[:,4+i] = 1.0*T_obj*(1.0 + 0.01*srandu(nwalkers))
+                full_guess[:,4+ngauss+i] = 0.5*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+            elif i==2:
+                full_guess[:,4+i] = 2.0*T_obj*(1.0 + 0.01*srandu(nwalkers))
+                full_guess[:,4+ngauss+i] = 0.4*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+    elif ngauss==4:
+        # implement this
+        # 0.710759     3.66662     22.9798     173.704
+        # 19.6636     18.3341     31.3521     29.5486
+        # nromalized
+        pars0=array([0.01183116, 0.06115546,  0.3829298 ,  2.89446939,
+                     0.19880675,  0.18535747, 0.31701891,  0.29881687])
 
-    res_obj=mc_obj.get_result()
+        for i in xrange(ngauss):
+            full_guess[:,4+i] = T_obj*pars0[i]*(1.0 + 0.01*srandu(nwalkers))
+            full_guess[:,4+ngauss+i] = counts_obj*pars0[ngauss+i]*(1.0 + 0.01*srandu(nwalkers))
 
-    print_pars(res_obj['pars'], front='pars_obj:')
-    print_pars(res_obj['pars_err'], front='perr_obj:')
-    print('Tpix: %.4g +/- %.4g' % (res_obj['pars'][4], res_obj['pars_err'][4]))
-
-    gmfit0=mc_obj.get_gmix()
-    gmfit=gmfit0.convolve(psf_fit)
-    imfit_obj=gmfit.make_image(im_obj.shape, jacobian=jacob)
-
-    images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
-    mcmc.plot_results(mc_obj.get_trials())
-
-
+            """
+            if i==0:
+                full_guess[:,4+i] = 0.01*T_obj*(1.0 + 0.01*srandu(nwalkers))
+                full_guess[:,4+ngauss+i] = 0.1*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+            elif i==1:
+                full_guess[:,4+i] = 0.1*T_obj*(1.0 + 0.01*srandu(nwalkers))
+                full_guess[:,4+ngauss+i] = 0.2*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+            elif i==2:
+                full_guess[:,4+i] = 1.0*T_obj*(1.0 + 0.01*srandu(nwalkers))
+                full_guess[:,4+ngauss+i] = 0.5*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+            elif i==3:
+                full_guess[:,4+i] = 2.0*T_obj*(1.0 + 0.01*srandu(nwalkers))
+                full_guess[:,4+ngauss+i] = 0.2*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+            """
+    else:
+        raise ValueError("try other ngauss")
+    return full_guess
 
 def test_model_priors(model,
                       counts_sky=100.0,

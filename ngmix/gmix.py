@@ -385,6 +385,9 @@ class GMixModel(GMix):
 def get_coellip_npars(ngauss):
     return 4 + 2*ngauss
 
+def get_coellip_ngauss(npars):
+    return (npars-4)/2
+
 class GMixCoellip(GMix):
     """
     A two-dimensional gaussian mixture, each co-centeric and co-elliptical
