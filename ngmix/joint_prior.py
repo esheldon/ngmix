@@ -1112,7 +1112,7 @@ class JointPriorBDFHybrid(JointPriorSimpleHybrid):
                  logT_bounds=[-1.5, 0.5],
                  logFlux_bounds=[-3.0, 1.0]):
 
-        print("JointPriorSimpleHybrid")
+        print("JointPriorBDFHybrid")
 
         self.logT_bounds=logT_bounds
         self.logFlux_bounds=logFlux_bounds

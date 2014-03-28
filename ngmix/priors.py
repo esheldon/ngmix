@@ -1142,6 +1142,7 @@ def make_gprior_great3_exp():
     from fitting exp to the real galaxy deep data
     """
     pars=[0.0126484, 1.64042, 0.0554674]
+    print("great3 simple joint exp g pars:",pars)
     return GPriorGreat3Exp(pars)
 
 def make_gprior_great3_bdf():
@@ -1149,6 +1150,7 @@ def make_gprior_great3_bdf():
     from fitting bdf to the real galaxy deep data
     """
     pars=[0.014,1.85,0.058]
+    print("great3 bdf joint bdf g pars:",pars)
     return GPriorGreat3Exp(pars)
 
 

@@ -1957,7 +1957,7 @@ class MCMCBDF(MCMCSimple):
         """
         Fbstart=5
         Fdstart=5+self.nband
-        return pars[ [0,1,2,3,4, Fbstart+band, Fdstart+band] ]
+        return pars[ [0,1,2,3,4, Fbstart+band, Fdstart+band] ].copy()
 
 
     def get_par_names(self):
@@ -2159,7 +2159,7 @@ class MCMCBDFJoint(MCMCBDF):
 
 class MCMCSimpleJointHybrid(MCMCSimple):
     """
-    Simple with a joint prior on [g1,g2,T,Fb,Fd]
+    Simple with a joint prior on [T,F],separate on g1,g2
     """
     def __init__(self, image, weight, jacobian, model, **keys):
         super(MCMCSimpleJointHybrid,self).__init__(image, weight, jacobian, model, **keys)
@@ -2179,8 +2179,8 @@ class MCMCSimpleJointHybrid(MCMCSimple):
         from .shape import eta1eta2_to_g1g2
         linpars=pars[ [0,1,2,3,4,5+band] ].copy()
 
-        linpars[4] = 10.0**pars[4]
-        linpars[5] = 10.0**pars[5]
+        linpars[4] = 10.0**linpars[4]
+        linpars[5] = 10.0**linpars[5]
 
         return linpars
 
@@ -2306,6 +2306,58 @@ class MCMCSimpleJointHybrid(MCMCSimple):
         else:
             for band in xrange(self.nband):
                 names += [r'$log_{10}(F_%s)$' % i]
+        return names
+
+
+class MCMCBDFJointHybrid(MCMCSimpleJointHybrid):
+    """
+    BDF with a joint prior on [T,Fb,Fd] separate on g1,g2
+    """
+
+    def __init__(self, image, weight, jacobian, **keys):
+        super(MCMCBDFJointHybrid,self).__init__(image, weight, jacobian, "bdf", **keys)
+
+    def _get_band_pars(self, pars, band):
+        """
+        Extract pars for the specified band and convert to linear
+        """
+        Fbstart=5
+        Fdstart=5+self.nband
+
+        linpars = pars[ [0,1,2,3,4, Fbstart+band, Fdstart+band] ].copy()
+
+        linpars[4] = 10.0**linpars[4]
+        linpars[5] = 10.0**linpars[5]
+        linpars[6] = 10.0**linpars[6]
+
+        return linpars
+
+    def get_gmix(self):
+        """
+        Get a gaussian mixture at the "best" parameter set, which
+        definition depends on the sub-class
+        """
+        logpars=self._result['pars']
+        pars=logpars.copy()
+        pars[4] = 10.0**logpars[4]
+        pars[5] = 10.0**logpars[5]
+        pars[6] = 10.0**logpars[6]
+
+        gm=gmix.GMixModel(pars, self.model)
+        return gm
+
+    def get_par_names(self):
+        names=[r'$cen_1$',
+               r'$cen_2$',
+               r'$g_1$',
+               r'$g_2$',
+               r'$log_{10}(T)$']
+        if self.nband == 1:
+            names += [r'$log_{10}(F_b)$',r'$log_{10}(F_d)$']
+        else:
+            for ftype in ['b','d']:
+                for band in xrange(self.nband):
+                    names += [r'$log_{10}(F_%s^%s)$' % (ftype,i)]
         return names
 
 
