@@ -224,6 +224,8 @@ class FitterBase(object):
             self._fill_gmix_func=gmix._fill_bdc
         elif self.model==gmix.GMIX_BDF:
             self._fill_gmix_func=gmix._fill_bdf
+        elif self.model==gmix.GMIX_COELLIP:
+            self._fill_gmix_func=gmix._fill_coellip
         else:
             raise GMixFatalError("unsupported model: "
                                  "'%s'" % self.model_name)
@@ -251,8 +253,7 @@ class FitterBase(object):
         definition depends on the sub-class
         """
         pars=self._result['pars']
-        gm=gmix.GMixModel(pars, self.model)
-        return gm
+        return gmix.make_gmix_model(pars, self.model)
 
     def get_dof(self):
         """
@@ -397,7 +398,7 @@ class FitterBase(object):
             psf_list=self.psf_lol[band]
 
             for psf in psf_list:
-                gm0=gmix.GMixModel(band_pars, self.model)
+                gm0=gmix.make_gmix_model(band_pars, self.model)
                 gm=gm0.convolve(psf)
 
                 gmix_list0.append(gm0)
@@ -1364,6 +1365,58 @@ class MCMCBase(FitterBase):
             tablist.append(tab)
         return tablist
 
+class MCMCCoellip(MCMCBase):
+    """
+    Add additional features to the base class to support simple models
+    """
+    def __init__(self, image, weight, jacobian, **keys):
+
+        self.full_guess=keys.get('full_guess',None)
+        if self.full_guess is None:
+            raise ValueError("send full guess for coellip")
+
+        super(MCMCCoellip,self).__init__(image, weight, jacobian, "coellip", **keys)
+
+    def _set_npars(self):
+        """
+        nband should be set in set_lists, called before this
+        """
+        self.npars=self.full_guess.shape[1]
+
+    def _get_priors(self, pars):
+        """
+        # go in simple
+        add any priors that were sent on construction
+        """
+        lnp=0.0
+        
+        if self.cen_prior is not None:
+            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+
+        if self.g_prior is not None:
+            if self.g_prior_during:
+                lnp += self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
+            else:
+                # may have bounds
+                g = sqrt(pars[2]**2 + pars[3]**2)
+                if g > self.g_prior.gmax:
+                    raise GMixRangeError("g too big")
+        
+        if self.T_prior is not None:
+            lnp += self.T_prior.get_lnprob_scalar(pars[4])
+
+        if self.counts_prior is not None:
+            for i,cp in enumerate(self.counts_prior):
+                counts=pars[5+i]
+                lnp += cp.get_lnprob_scalar(counts)
+
+        return lnp
+
+
+    def _get_band_pars(self, pars, band):
+        if band > 0:
+            raise ValueError("support multi-band for coellip")
+        return pars.copy()
 
 
 class MCMCSimple(MCMCBase):
@@ -2284,7 +2337,7 @@ class MCMCSimpleJointHybrid(MCMCSimple):
         pars[4] = 10.0**logpars[4]
         pars[5] = 10.0**logpars[5]
 
-        gm=gmix.GMixModel(pars, self.model)
+        gm=gmix.make_gmix_model(band, self.model)
         return gm
 
 
@@ -2343,7 +2396,7 @@ class MCMCBDFJointHybrid(MCMCSimpleJointHybrid):
         pars[5] = 10.0**logpars[5]
         pars[6] = 10.0**logpars[6]
 
-        gm=gmix.GMixModel(pars, self.model)
+        gm=gmix.make_gmix_model(pars, self.model)
         return gm
 
     def get_par_names(self):
@@ -2973,6 +3026,125 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
 
     images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
     mcmc.plot_results(mc_obj.get_trials())
+
+
+
+def test_model_coellip(model, ngauss, counts=100.0, noise=0.001, nimages=1):
+    """
+    fit an n gauss coellip model to a different model
+
+    parameters
+    ----------
+    model:
+        the true model
+    ngauss:
+        number of gaussians to fit to the true model
+    """
+    import images
+    import mcmc
+    from . import em
+
+    dims=[25,25]
+    cen=[dims[0]/2., dims[1]/2.]
+
+    jacob=UnitJacobian(cen[0],cen[1])
+
+    #
+    # simulation
+    #
+
+    # PSF pars
+    counts_psf=100.0
+    noise_psf=0.001
+    g1_psf=0.00
+    g2_psf=0.00
+    T_psf=4.0
+
+    # object pars
+    counts_obj=counts
+    g1_obj=0.1
+    g2_obj=0.05
+    T_obj=16.0
+
+    pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
+    gm_psf=gmix.make_gmix_model(pars_psf, "gauss")
+
+    pars_obj = [0.0, 0.0, g1_obj, g2_obj, T_obj, counts]
+    gm_obj0=gmix.make_gmix_model(pars_obj, model)
+
+    gm=gm_obj0.convolve(gm_psf)
+
+    im_psf=gm_psf.make_image(dims, jacobian=jacob)
+    im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
+    wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
+
+    im_obj=gm.make_image(dims, jacobian=jacob)
+    im_obj[:,:] += noise*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
+    wt_obj=zeros(im_obj.shape) + 1./noise**2
+
+    #
+    # fitting
+    #
+
+    # psf using EM
+    im_psf_sky,sky=em.prep_image(im_psf)
+    mc_psf=em.GMixEM(im_psf_sky, jacobian=jacob)
+    emo_guess=gm_psf.copy()
+    emo_guess._data['p'] = 1.0
+    emo_guess._data['row'] += 0.1*srandu()
+    emo_guess._data['col'] += 0.1*srandu()
+    emo_guess._data['irr'] += 0.5*srandu()
+    emo_guess._data['irc'] += 0.1*srandu()
+    emo_guess._data['icc'] += 0.5*srandu()
+    mc_psf.go(emo_guess, sky, maxiter=5000)
+    res_psf=mc_psf.get_result()
+    print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
+
+    psf_fit=mc_psf.get_gmix()
+    imfit_psf=mc_psf.make_image(counts=im_psf.sum())
+    images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
+
+    nwalkers=80
+    burnin=800
+    nstep=800
+    npars=gmix.get_coellip_npars(ngauss)
+    full_guess=zeros( (nwalkers, npars) )
+    full_guess[:,0] = 0.1*srandu(nwalkers)
+    full_guess[:,1] = 0.1*srandu(nwalkers)
+    full_guess[:,2] = g1_obj + 0.01*srandu(nwalkers)
+    full_guess[:,3] = g2_obj + 0.01*srandu(nwalkers)
+    for i in xrange(ngauss):
+        if i==0:
+            full_guess[:,4+i] = 0.1*T_obj*(1.0 + 0.01*srandu(nwalkers))
+            full_guess[:,4+ngauss+i] = 0.1*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+        elif i==1:
+            full_guess[:,4+i] = 1.0*T_obj*(1.0 + 0.01*srandu(nwalkers))
+            full_guess[:,4+ngauss+i] = 0.5*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+        elif i==2:
+            full_guess[:,4+i] = 2.0*T_obj*(1.0 + 0.01*srandu(nwalkers))
+            full_guess[:,4+ngauss+i] = 0.4*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+        else:
+            raise ValueError("support ngauss > 3")
+
+    mc_obj=MCMCCoellip(im_obj, wt_obj, jacob,
+                       psf=psf_fit,
+                       full_guess=full_guess)
+    mc_obj.go()
+    mc_obj.make_plots(show=True)
+
+    res_obj=mc_obj.get_result()
+
+    print_pars(res_obj['pars'], front='pars_obj:')
+    print_pars(res_obj['pars_err'], front='perr_obj:')
+    print('Tpix: %.4g +/- %.4g' % (res_obj['pars'][4], res_obj['pars_err'][4]))
+
+    gmfit0=mc_obj.get_gmix()
+    gmfit=gmfit0.convolve(psf_fit)
+    imfit_obj=gmfit.make_image(im_obj.shape, jacobian=jacob)
+
+    images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
+    mcmc.plot_results(mc_obj.get_trials())
+
 
 
 def test_model_priors(model,

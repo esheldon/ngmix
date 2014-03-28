@@ -9,6 +9,16 @@ from .shape import g1g2_to_e1e2, e1e2_to_g1g2
 
 from .gexceptions import GMixRangeError, GMixFatalError
 
+def make_gmix_model(pars, model):
+    """
+    get a gaussian mixture model for the given model
+    """
+    model_num=get_model_num(model)
+    if model==GMIX_COELLIP:
+        return GMixCoellip(pars)
+    else:
+        return GMixModel(pars, model)
+
 class GMix(object):
     """
     A two-dimensional gaussian mixture.
@@ -371,6 +381,9 @@ class GMixModel(GMix):
                                      "'%s'" % self._model_name)
 
 
+
+def get_coellip_npars(ngauss):
+    return 4 + 2*ngauss
 
 class GMixCoellip(GMix):
     """
