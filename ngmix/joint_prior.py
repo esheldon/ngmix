@@ -954,6 +954,8 @@ class JointPriorSimpleLogPars(JointPriorSimpleLinPars):
                        & (logF < logFlux_bounds[1]) )
         return wgood
 
+
+
 class JointPriorSimpleHybrid(JointPriorSimpleLinPars):
     """
     Joint prior in g1,g2,T,F
@@ -1027,7 +1029,7 @@ class JointPriorSimpleHybrid(JointPriorSimpleLinPars):
 
     def sample(self, n=None):
         """
-        Get samples for logT logF
+        Get samples
         """
 
         if n is None:
@@ -1095,6 +1097,76 @@ class JointPriorSimpleHybrid(JointPriorSimpleLinPars):
                        & (logT < logT_bounds[1])
                        & (logF > logFlux_bounds[0])
                        & (logF < logFlux_bounds[1]) )
+        return wgood
+
+class JointPriorBDFHybrid(JointPriorSimpleHybrid):
+    """
+    The flux bounds are applied separately to both
+    Fb and Fd
+    """
+    def __init__(self,
+                 weights,
+                 means,
+                 covars,
+                 g_prior,
+                 logT_bounds=[-1.5, 0.5],
+                 logFlux_bounds=[-3.0, 1.0]):
+
+        print("JointPriorSimpleHybrid")
+
+        self.logT_bounds=logT_bounds
+        self.logFlux_bounds=logFlux_bounds
+        self.g_prior=g_prior
+
+        GMixND.__init__(self, weights, means, covars)
+
+        self.ndim=3
+        self._make_gmm()
+
+    def check_bounds_scalar(self, pars, throw=True):
+        """
+        Check bounds on T Flux
+        """
+
+        logT_bounds=self.logT_bounds
+        logFlux_bounds=self.logFlux_bounds
+
+        logT=pars[0]
+        logFb=pars[1]
+        logFd=pars[2]
+
+        if (   logT < logT_bounds[0]
+            or logT > logT_bounds[1]
+            or logFb < logFlux_bounds[0]
+            or logFb > logFlux_bounds[1]
+            or logFd < logFlux_bounds[0]
+            or logFd > logFlux_bounds[1]) :
+
+            if throw:
+                raise GMixRangeError("T or Fb,Fd out of range")
+            else:
+                return False
+        else:
+            return True
+
+
+    def check_bounds_array(self,pars):
+        """
+        Check bounds on T Flux
+        """
+        logT_bounds=self.logT_bounds
+        logFlux_bounds=self.logFlux_bounds
+
+        logT=pars[:,0]
+        logFb=pars[:,1]
+        logFd=pars[:,2]
+
+        wgood, = where(  (logT > logT_bounds[0])
+                       & (logT < logT_bounds[1])
+                       & (logFb > logFlux_bounds[0])
+                       & (logFb < logFlux_bounds[1])
+                       & (logFd > logFlux_bounds[0])
+                       & (logFd < logFlux_bounds[1]) )
         return wgood
 
 

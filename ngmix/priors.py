@@ -1144,6 +1144,15 @@ def make_gprior_great3_exp():
     pars=[0.0126484, 1.64042, 0.0554674]
     return GPriorGreat3Exp(pars)
 
+def make_gprior_great3_bdf():
+    """
+    from fitting bdf to the real galaxy deep data
+    """
+    pars=[0.014,1.85,0.058]
+    return GPriorGreat3Exp(pars)
+
+
+
 def make_gprior_cosmos_galfit():
     """
     From the galfit fits
