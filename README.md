@@ -1,7 +1,7 @@
 ngmix
 =====
 
-Gaussian mixtures models for 2d images, implemented with python and numba.
+Gaussian mixture models for 2d images, implemented with python and numba.
 
 Note this code is still under heavy development, including an alternative
 implementation in C++.  No stable API is yet provided.
@@ -9,6 +9,8 @@ implementation in C++.  No stable API is yet provided.
 Also numba itself is under even heavier development, and in fact recent
 releases have broken backwards compatibility.  This version only works with
 the 0.11 release series.
+
+See the caveats section below.
 
 examples
 --------
@@ -83,7 +85,8 @@ examples
 
     res=fitter.get_result()
     print res['pars']
-    print res['perr']
+    print res['pars_perr']
+    # also full covariance ins in pars_cov
 
     # Fit multiple images of the same object. Send the image, weight etc as
     # lists or even lists-of-lists if multiple wavelength bands are present.
@@ -106,16 +109,17 @@ dependencies
 ------------
 
 * numpy
-* numba: http://numba.pydata.org/ I recommend instaling the anaconda python distribution, which comes with numba https://store.continuum.io/cshop/anaconda/.  Remember to update numba with "conda update numba".
+* numba: http://numba.pydata.org/ I recommend installing the anaconda python distribution, which comes with numba https://store.continuum.io/cshop/anaconda/.  Remember to update numba with "conda update numba".  Only 0.1* series currentlyworks, as numba itself has changed dramatically.
 * emcee: optional for doing MCMC fitting: http://dan.iel.fm/emcee/current/ Affine invariant MCMC sampler.
 
 caveats
 -------
 
+* only numba 0.1* series works.
 * numba is in heavy development.  Currently the JIT object code is not cached,
   so there is a slow compilation step every time the package is loaded the
-  *first* time in your python session.  Caching is planned for the next major
-  numba release, which will shorten the startup times immensely.
+  *first* time in your python session.  Caching is planned for a future numba
+  release.
 * numba does not yet support inlining.  Also function calls are slow.
   As a result, my numba-based code has a lot of redundancy, because the same
   bit of code must appear in multiple places.  Inlining could appear in a
