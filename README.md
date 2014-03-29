@@ -3,8 +3,8 @@ ngmix
 
 Gaussian mixtures models for 2d images, implemented with python and numba.
 
-Note this code is still under heavy development, and no stable API is yet
-provided.
+Note this code is still under heavy development, including an alternative
+implementation in C++.  No stable API is yet provided.
 
 examples
 --------
