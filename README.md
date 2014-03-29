@@ -6,6 +6,10 @@ Gaussian mixtures models for 2d images, implemented with python and numba.
 Note this code is still under heavy development, including an alternative
 implementation in C++.  No stable API is yet provided.
 
+Also numba itself is under even heavier development, and in fact recent
+releases have broken backwards compatibility.  This version only works with
+the 0.11 release series.
+
 examples
 --------
 
