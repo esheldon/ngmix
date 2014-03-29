@@ -2384,7 +2384,7 @@ class MCMCSimpleJointHybrid(MCMCSimple):
         pars[4] = 10.0**logpars[4]
         pars[5] = 10.0**logpars[5]
 
-        gm=gmix.make_gmix_model(band, self.model)
+        gm=gmix.make_gmix_model(pars, self.model)
         return gm
 
 
