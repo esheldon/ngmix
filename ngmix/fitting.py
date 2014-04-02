@@ -4,7 +4,7 @@ from __future__ import print_function
 
 from sys import stdout
 import numpy
-from numpy import array, zeros, diag, sqrt, where
+from numpy import array, zeros, diag, sqrt, where, log10, isfinite
 import time
 
 from . import gmix
@@ -1645,6 +1645,8 @@ class MCMCCoellip(MCMCSimple):
 
         MCMCBase.__init__(self, image, weight, jacobian, "coellip", **keys)
 
+        self.priors_are_log=keys.get('priors_are_log',False)
+
     def _get_guess(self):
         return self.full_guess
 
@@ -1670,8 +1672,9 @@ class MCMCCoellip(MCMCSimple):
         # go in simple
         add any priors that were sent on construction
         """
+
         lnp=0.0
-        
+
         if self.cen_prior is not None:
             lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
 
@@ -1684,30 +1687,41 @@ class MCMCCoellip(MCMCSimple):
                 if g > self.g_prior.gmax:
                     raise GMixRangeError("g too big")
         
-        # all T must be positive
-        ngauss=self.ngauss
-        Tvals = pars[4:4+ngauss]
-        Ttotal = Tvals.sum()
-        w,=where(Tvals < 0.0)
-        if w.size > 0:
-            raise GMixRangeError("some T were < 0.0")
+        if self.counts_prior is not None or self.T_prior is not None:
+            ngauss=self.ngauss
 
-        if self.T_prior is not None:
-            lnp += self.T_prior.get_lnprob_scalar(Ttotal)
+            wbad,=where( pars[4:] < 0.0 )
+            if wbad.size != 0:
+                raise GMixRangeError("gauss T or counts too small")
 
-        # all counts must be positive
-        counts_vals = pars[4+ngauss: 4+2*ngauss]
-        counts_total=counts_vals.sum()
-        w,=where(counts_vals < 0.0)
-        if w.size > 0:
-            raise GMixRangeError("some counts were < 0.0")
+            Tvals = pars[4:4+ngauss]
+            counts_vals = pars[4+ngauss:]
+            counts_total=counts_vals.sum()
 
-        if self.counts_prior is not None:
-            if len(self.counts_prior) > 1:
-                raise ValueError("make work with multiple bands")
+            if self.counts_prior is not None:
+                if len(self.counts_prior) > 1:
+                    raise ValueError("make work with multiple bands")
 
-            cp=self.counts_prior[0]
-            lnp += cp.get_lnprob_scalar(counts_total)
+                priors_are_log=self.priors_are_log
+                cp=self.counts_prior[0]
+                if priors_are_log:
+                    if counts_total < 1.e-10:
+                        raise GMixRangeError("counts too small")
+                    logF = log10(counts_total)
+                    lnp += cp.get_lnprob_scalar(logF)
+                else:
+                    lnp += cp.get_lnprob_scalar(counts_total)
+
+            if self.T_prior is not None:
+                T_total = (counts_vals*Tvals).sum()/counts_total
+
+                if priors_are_log:
+                    if T_total < 1.e-10:
+                        raise GMixRangeError("T too small")
+                    logT = log10(T_total)
+                    lnp += self.T_prior.get_lnprob_scalar(logT)
+                else:
+                    lnp += self.T_prior.get_lnprob_scalar(T_total)
 
         return lnp
 
@@ -1716,7 +1730,6 @@ class MCMCCoellip(MCMCSimple):
         if band > 0:
             raise ValueError("support multi-band for coellip")
         return pars.copy()
-
 
 
 class MCMCSimpleFixed(MCMCSimple):
@@ -3076,19 +3089,19 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
 
 
 
-def test_many_model_coellip(ntry,
+def test_many_model_coellip(ntrial,
                             model,
                             ngauss,
                             **keys):
     import time
 
     tm0=time.time()
-    g1fit=zeros(ntry)
-    g2fit=zeros(ntry)
+    g1fit=zeros(ntrial)
+    g2fit=zeros(ntrial)
 
-    for i in xrange(ntry):
+    for i in xrange(ntrial):
         print("-"*40)
-        print("%d/%d" % (i+1,ntry))
+        print("%d/%d" % (i+1,ntrial))
 
         true_pars, fit_pars= test_model_coellip(model,
                                                 ngauss,
@@ -3102,23 +3115,23 @@ def test_many_model_coellip(ntry,
     frac2_arr=g2fit/true_pars[3]-1
 
     frac1 = frac1_arr.mean()
-    frac1_err = frac1_arr.std()/sqrt(ntry)
+    frac1_err = frac1_arr.std()/sqrt(ntrial)
     frac2 = frac2_arr.mean()
-    frac2_err = frac2_arr.std()/sqrt(ntry)
+    frac2_err = frac2_arr.std()/sqrt(ntrial)
 
     print("-"*40)
     print("%g +/- %g" % (frac1, frac1_err))
     print("%g +/- %g" % (frac2, frac2_err))
 
     tm=time.time()-tm0
-    print("time per:",tm/ntry)
+    print("time per:",tm/ntrial)
 
 def test_model_coellip(model, ngauss,
                        counts=100.0, noise=0.00001,
                        nwalkers=320,
+                       g1=0.1, g2=0.1,
                        burnin=800,
                        nstep=800,
-                       niter=1,
                        doplots=False):
     """
     fit an n gauss coellip model to a different model
@@ -3147,8 +3160,8 @@ def test_model_coellip(model, ngauss,
 
     # object pars
     counts_obj=counts
-    g1_obj=0.1
-    g2_obj=0.05
+    g1_obj=g1
+    g2_obj=g2
     if model=='exp':
         T_obj=16.0
     elif model=='dev':
@@ -3201,30 +3214,29 @@ def test_model_coellip(model, ngauss,
     #images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
 
     full_guess=test_guess_coellip(nwalkers, ngauss,
-                                 g1_obj, g2_obj, T_obj, counts_obj)
+                                  g1_obj, g2_obj, T_obj, counts_obj)
 
-    for i in xrange(niter):
-        if niter > 1:
-            print("iter:",i+1)
-        mc_obj=MCMCCoellip(im_obj, wt_obj, jacob,
-                           psf=psf_fit,
-                           nwalkers=nwalkers,
-                           burnin=burnin,
-                           nstep=nstep,
-                           full_guess=full_guess)
-        mc_obj.go()
+    priors_are_log=False
+    if priors_are_log:
+        counts_prior=priors.FlatPrior(log10(0.5*counts_obj),
+                                      log10(2.0*counts_obj) )
+        T_prior=priors.FlatPrior(log10(0.5*T_obj),
+                                 log10(2.0*T_obj) )
+    else:
+        counts_prior=priors.FlatPrior(0.5*counts_obj, 2.0*counts_obj)
+        T_prior=priors.FlatPrior(0.5*T_obj, 2.0*T_obj )
 
-        if i < (niter-1):
-            best_pars=mc_obj.best_pars
-            full_guess[:,:]=0
-            full_guess[:,0] = best_pars[0]+0.001*srandu(nwalkers)
-            full_guess[:,1] = best_pars[1]+0.001*srandu(nwalkers)
-            full_guess[:,2] = best_pars[2]+0.001*srandu(nwalkers)
-            full_guess[:,3] = best_pars[3]+0.001*srandu(nwalkers)
-
-            for tpi in xrange(2*ngauss):
-                pi = 4+tpi
-                full_guess[:,pi] = best_pars[pi]*(1.0+0.001*srandu(nwalkers))
+    mc_obj=MCMCCoellip(im_obj, wt_obj, jacob,
+                       psf=psf_fit,
+                       nwalkers=nwalkers,
+                       burnin=burnin,
+                       nstep=nstep,
+                       ntry=2,
+                       priors_are_log=priors_are_log,
+                       counts_prior=counts_prior,
+                       T_prior=T_prior,
+                       full_guess=full_guess)
+    mc_obj.go()
 
 
     res=mc_obj.get_result()
@@ -3236,9 +3248,28 @@ def test_model_coellip(model, ngauss,
     res_obj=mc_obj.get_result()
     gm=mc_obj.get_gmix()
 
+    pars=res_obj['pars']
+    perr=res_obj['pars_err']
+
+    trials=mc_obj.get_trials()
+
+    Ttrials = trials[:,4:4+ngauss]
+    Ftrials = trials[:,4+ngauss:]
+
+    Ftot = Ftrials.sum(axis=1)
+    Ttot = (Ttrials*Ftrials).sum(axis=1)/Ftot
+
+    Fmeas = Ftot.mean()
+    Ferr = Ftot.std()
+
+    Tmeas = Ttot.mean()
+    Terr = Ttot.std()
+
+    print("true T:",T_obj,"F:",counts_obj)
     print("s2n_w:",res["s2n_w"])
     print("arate:",res['arate'])
-    print('T: %g Flux: %6g' % (gm.get_T(),gm.get_psum()) )
+    print('Tgmix: %g Fluxgmix: %g' % (gm.get_T(),gm.get_psum()) )
+    print('Tmeas: %g +/- %g Fluxmeas: %g +/- %g' % (Tmeas,Terr,Fmeas,Ferr))
     print_pars(res_obj['pars'], front='pars_obj:')
     print_pars(res_obj['pars_err'], front='perr_obj:')
 
@@ -3271,6 +3302,8 @@ def test_guess_coellip(nwalkers, ngauss,
         # nromalized
         pars0=array([0.01183116, 0.06115546,  0.3829298 ,  2.89446939,
                      0.19880675,  0.18535747, 0.31701891,  0.29881687])
+        #pars0=array([1.0e-6, 0.06115546,  0.3829298 ,  2.89446939,
+        #             0.19880675,  0.18535747, 0.31701891,  0.29881687])
 
         for i in xrange(ngauss):
             full_guess[:,4+i] = T_obj*pars0[i]*(1.0 + 0.01*srandu(nwalkers))
@@ -3292,6 +3325,8 @@ def test_guess_coellip(nwalkers, ngauss,
             """
     else:
         raise ValueError("try other ngauss")
+
+    #full_guess[:, 4:] = log10( full_guess[:,4:] )
     return full_guess
 
 def test_model_priors(model,

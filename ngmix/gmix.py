@@ -435,6 +435,7 @@ GMIX_DEV=4
 GMIX_BDC=5
 GMIX_BDF=6
 GMIX_COELLIP=7
+GMIX_COELLIP4=8
 
 _gmix_model_dict={'full':       GMIX_FULL,
                   GMIX_FULL:    GMIX_FULL,
@@ -451,7 +452,9 @@ _gmix_model_dict={'full':       GMIX_FULL,
                   'bdf':        GMIX_BDF,
                   GMIX_BDF:     GMIX_BDF,
                   'coellip':    GMIX_COELLIP,
-                  GMIX_COELLIP: GMIX_COELLIP}
+                  GMIX_COELLIP: GMIX_COELLIP,
+                  'coellip4':    GMIX_COELLIP4,
+                  GMIX_COELLIP4: GMIX_COELLIP4}
 
 _gmix_string_dict={GMIX_FULL:'full',
                    'full':'full',
@@ -468,20 +471,24 @@ _gmix_string_dict={GMIX_FULL:'full',
                    GMIX_BDF:'bdf',
                    'bdf':'bdf',
                    GMIX_COELLIP:'coellip',
-                   'coellip':GMIX_COELLIP}
+                   'coellip':GMIX_COELLIP,
+                   GMIX_COELLIP4:'coellip4',
+                   'coellip4':GMIX_COELLIP4}
 
 _gmix_npars_dict={GMIX_GAUSS:6,
                   GMIX_TURB:6,
                   GMIX_EXP:6,
                   GMIX_DEV:6,
                   GMIX_BDC:8,
-                  GMIX_BDF:7}
+                  GMIX_BDF:7,
+                  GMIX_COELLIP4:12}
 _gmix_ngauss_dict={GMIX_GAUSS:1,
                    GMIX_TURB:3,
                    GMIX_EXP:6,
                    GMIX_DEV:10,
                    GMIX_BDC:16,
-                   GMIX_BDF:16}
+                   GMIX_BDF:16,
+                   GMIX_COELLIP4:4}
 
 
 _gauss2d=numba.struct([('p',float64),
@@ -512,6 +519,7 @@ def get_model_name(model):
     which could be string or number
     """
     return _gmix_string_dict[model]
+
 def get_model_npars(model):
     """
     Get the number of parameters for the input model,
