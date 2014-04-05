@@ -16,14 +16,14 @@ def make_gmix_model(pars, model):
     model_num=get_model_num(model)
     if model==GMIX_COELLIP:
         return GMixCoellip(pars)
+    elif model==GMIX_SERSIC:
+        return GMixSersic(pars)
     else:
         return GMixModel(pars, model)
 
 class GMix(object):
     """
-    A two-dimensional gaussian mixture.
-
-    To create a specific model, use GMixModel
+    A general two-dimensional gaussian mixture.
 
     parameters
     ----------
@@ -427,6 +427,122 @@ class GMixCoellip(GMix):
         _fill_coellip(self._data, pars)
 
 
+_sersic_nvals=array([ 0.75,  0.85,  1.  ,  1.25,  1.5 ,  2.  ,  2.5 ,  3.  , 3.5 , 4.  ,  4.5 ,  5.  ])
+
+_sersic_data=array([[  3.69494947e-02,   1.97053108e-01,   6.33883193e-01, 1.51435066e+00,   7.08208834e-03,   8.59207355e-02, 4.43746547e-01,   4.63250629e-01],
+                    [  2.90387348e-02,   1.68296929e-01,   5.93610604e-01, 1.63187426e+00,   9.72529125e-03,   1.03947871e-01, 4.47044898e-01,   4.39281940e-01],
+                    [  2.23696667e-02,   1.39978037e-01,   5.47915141e-01, 1.77945642e+00,   1.46000467e-02,   1.25008000e-01, 4.45665093e-01,   4.14726860e-01],
+                    [  1.42339006e-02,   1.01942540e-01,   4.62560857e-01, 1.88023780e+00,   1.99262529e-02,   1.37914412e-01, 4.21677726e-01,   4.20481610e-01],
+                    [  9.87378169e-03,   7.75096986e-02,   3.94587603e-01, 1.90910757e+00,   2.41043699e-02,   1.41034183e-01, 3.99472993e-01,   4.35388454e-01],
+                    [  5.38206588e-03,   4.94672540e-02,   2.98616122e-01, 1.86702932e+00,   2.86836188e-02,   1.36311754e-01, 3.60794889e-01,   4.74209738e-01],
+                    [  3.60650177e-03,   3.66953272e-02,   2.45540040e-01, 1.82432147e+00,   3.30634590e-02,   1.32459292e-01, 3.34013709e-01,   5.00463540e-01],
+                    [  2.71454369e-03,   2.98844426e-02,   2.15856460e-01, 1.80361689e+00,   3.75391108e-02,   1.31431274e-01, 3.16728325e-01,   5.14301291e-01],
+                    [  2.18222345e-03,   2.55336932e-02,   1.95377448e-01, 1.79058183e+00,   4.18797127e-02,   1.30419206e-01, 3.04342190e-01,   5.23358892e-01],
+                    [  1.84350996e-03,   2.28478938e-02,   1.82129073e-01, 1.78972843e+00,   4.66335354e-02,   1.31271533e-01, 2.95105814e-01,   5.26989118e-01],
+                    [  1.66575061e-03,   2.14834683e-02,   1.75250161e-01, 1.82247227e+00,   5.44383731e-02,   1.35811812e-01, 2.90643848e-01,   5.19105967e-01],
+                    [  1.52744636e-03,   2.05535393e-02,   1.71807517e-01, 1.86354774e+00,   6.27047539e-02,   1.41002132e-01, 2.87824394e-01,   5.08468721e-01]])
+
+
+def fit_sersic_splines(type):
+    from scipy.interpolate import InterpolatedUnivariateSpline
+
+    print("fitting",type,"sersic splines")
+    ngauss=_sersic_data.shape[1]/2
+
+    if type=='T':
+        start=0
+    else:
+        start=ngauss
+
+    splines=[]
+
+    for i in xrange(ngauss):
+        vals=_sersic_data[:,start+i]
+
+        interpolator=InterpolatedUnivariateSpline(_sersic_nvals,vals,k=3)
+
+        splines.append(interpolator)
+
+    return splines
+
+class GMixSersic(GMix):
+    """
+    A two-dimensional gaussian mixture approximating a Sersic profile
+
+    Inherits from the more general GMix class, and all its methods.
+
+    parameters
+    ----------
+    pars: array-like
+        Parameter array with elements
+            [cen1,cen2,g1,g2,T,flux,n] 
+    """
+
+    T_splines=fit_sersic_splines('T')
+    F_splines=fit_sersic_splines('F')
+
+
+    def __init__(self, pars):
+        self._model      = GMIX_SERSIC
+        self._model_name = 'sersic'
+        self._ngauss = 4
+        self._npars = 7
+
+        self._fvals=zeros(self._ngauss)
+        self._pvals=zeros(self._ngauss)
+
+        self.reset()
+        self.fill(pars)
+
+    def fill(self, parsin):
+        """
+        Fill in the gaussian mixture with new parameters
+        """
+
+        pars = array(parsin, dtype='f8', copy=False) 
+
+        npars=pars.size
+
+        if npars != 7:
+            raise ValueError("sersic models require 7 pars, got %s" % npars)
+
+        self._set_fvals_pvals(pars[6])
+        _fill_simple(self._data, pars, self._fvals, self._pvals)
+
+    def _set_fvals_pvals(self, n):
+        import scipy.interpolate
+
+        if n < _sersic_nvals[0] or n > _sersic_nvals[-1]:
+            raise GMixRangeError("n out of bounds: %g" % n)
+
+        narr=numpy.atleast_1d(n)
+
+        ngauss=self._ngauss
+
+        fvals=self._fvals
+        pvals=self._pvals
+        for i in xrange(ngauss):
+            Tinterp=GMixSersic.T_splines[i]
+            #fvals[i] = Tinterp(n)
+            t,c,k=Tinterp._eval_args
+            fvals[i],err=scipy.interpolate.fitpack._fitpack._spl_(narr,
+                                                                  0,
+                                                                  t,
+                                                                  c,
+                                                                  k,
+                                                                  0)
+
+            Finterp=GMixSersic.F_splines[i]
+            t,c,k=Finterp._eval_args
+            #pvals[i] = Finterp(n)
+            pvals[i],err=scipy.interpolate.fitpack._fitpack._spl_(narr,
+                                                                  0,
+                                                                  t,
+                                                                  c,
+                                                                  k,
+                                                                  0)
+
+
 GMIX_FULL=0
 GMIX_GAUSS=1
 GMIX_TURB=2
@@ -435,7 +551,9 @@ GMIX_DEV=4
 GMIX_BDC=5
 GMIX_BDF=6
 GMIX_COELLIP=7
-GMIX_COELLIP4=8
+GMIX_SERSIC=8
+
+GMIX_COELLIP4=100
 
 _gmix_model_dict={'full':       GMIX_FULL,
                   GMIX_FULL:    GMIX_FULL,
@@ -451,8 +569,13 @@ _gmix_model_dict={'full':       GMIX_FULL,
                   GMIX_BDC:     GMIX_BDC,
                   'bdf':        GMIX_BDF,
                   GMIX_BDF:     GMIX_BDF,
+
                   'coellip':    GMIX_COELLIP,
                   GMIX_COELLIP: GMIX_COELLIP,
+
+                  'sersic':    GMIX_SERSIC,
+                  GMIX_SERSIC: GMIX_SERSIC,
+
                   'coellip4':    GMIX_COELLIP4,
                   GMIX_COELLIP4: GMIX_COELLIP4}
 
@@ -470,8 +593,13 @@ _gmix_string_dict={GMIX_FULL:'full',
                    'bdc':'bdc',
                    GMIX_BDF:'bdf',
                    'bdf':'bdf',
+
                    GMIX_COELLIP:'coellip',
                    'coellip':GMIX_COELLIP,
+
+                   GMIX_SERSIC:'sersic',
+                   'sersic':GMIX_SERSIC,
+
                    GMIX_COELLIP4:'coellip4',
                    'coellip4':GMIX_COELLIP4}
 
@@ -481,6 +609,7 @@ _gmix_npars_dict={GMIX_GAUSS:6,
                   GMIX_DEV:6,
                   GMIX_BDC:8,
                   GMIX_BDF:7,
+                  GMIX_SERSIC:7,
                   GMIX_COELLIP4:12}
 _gmix_ngauss_dict={GMIX_GAUSS:1,
                    GMIX_TURB:3,
@@ -488,6 +617,9 @@ _gmix_ngauss_dict={GMIX_GAUSS:1,
                    GMIX_DEV:10,
                    GMIX_BDC:16,
                    GMIX_BDF:16,
+
+                   GMIX_SERSIC:4,
+
                    GMIX_COELLIP4:4}
 
 

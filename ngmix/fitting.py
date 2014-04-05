@@ -14,7 +14,7 @@ from .jacobian import Jacobian, UnitJacobian
 from . import priors
 from .priors import srandu, LOWVAL, BIGVAL
 
-from .gexceptions import GMixRangeError
+from .gexceptions import GMixRangeError, GMixFatalError
 
 MAX_TAU=0.1
 MIN_ARATE=0.2
@@ -224,6 +224,8 @@ class FitterBase(object):
             self._fill_gmix_func=gmix._fill_bdc
         elif self.model==gmix.GMIX_BDF:
             self._fill_gmix_func=gmix._fill_bdf
+        elif self.model==gmix.GMIX_SERSIC:
+            pass
         elif self.model==gmix.GMIX_COELLIP:
             self._fill_gmix_func=gmix._fill_coellip
         else:
@@ -429,7 +431,10 @@ class FitterBase(object):
                 # Calling the python versions was a huge time sync.
                 # but we need some more error checking here
                 try:
-                    self._fill_gmix_func(gm0._data, band_pars)
+                    if self.model==gmix.GMIX_SERSIC:
+                        gm0.fill(band_pars)
+                    else:
+                        self._fill_gmix_func(gm0._data, band_pars)
                     gmix._convolve_fill(gm._data, gm0._data, psf._data)
                 except ZeroDivisionError:
                     raise GMixRangeError("zero division")
@@ -1084,7 +1089,7 @@ class MCMCBase(FitterBase):
                     tau_ok=False
 
             if self.arate < self.min_arate and self.doiter:
-                print("        arate ",self.arate,"<",self.min_arate)
+                #print("        burnin arate ",self.arate,"<",self.min_arate)
                 arate_ok=False
 
             if tau_ok and arate_ok:
@@ -1098,6 +1103,7 @@ class MCMCBase(FitterBase):
         #    self.flags |= LARGE_TAU
         
         if self.arate < self.min_arate:
+            print("arate",self.arate,"is low setting flag,",LOW_ARATE)
             self.flags |= LOW_ARATE
 
         self.sampler=sampler
@@ -1256,7 +1262,8 @@ class MCMCBase(FitterBase):
                    width=1200,
                    height=1200,
                    separate=False,
-                   title=None):
+                   title=None,
+                   **keys):
         """
         Plot the mcmc chain and some residual plots
         """
@@ -1277,7 +1284,8 @@ class MCMCBase(FitterBase):
         plt=plotfunc(self.trials,
                      names=names,
                      title=title,
-                     show=show)
+                     show=show,
+                     **keys)
 
 
         if weights is not None:
@@ -1629,6 +1637,73 @@ class MCMCSimple(MCMCBase):
 
         return ndiff
 
+class MCMCSersic(MCMCSimple):
+    def __init__(self, image, weight, jacobian, **keys):
+
+        self.full_guess=keys.get('full_guess',None)
+        self.g1i=2
+        self.g2i=3
+
+        self.n_prior=keys.get('n_prior',None)
+
+        if (self.full_guess is None
+                or self.n_prior is None):
+            raise ValueError("send full guess n_prior for sersic")
+
+        MCMCBase.__init__(self, image, weight, jacobian, "sersic", **keys)
+
+
+    def _get_priors(self, pars):
+        """
+        # go in simple
+        add any priors that were sent on construction
+        """
+
+        lnp=0.0
+
+        if self.cen_prior is not None:
+            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+
+        if self.g_prior is not None:
+            if self.g_prior_during:
+                lnp += self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
+            else:
+                # may have bounds
+                g = sqrt(pars[2]**2 + pars[3]**2)
+                if g > self.g_prior.gmax:
+                    raise GMixRangeError("g too big")
+        
+        if self.T_prior is not None:
+            lnp += self.T_prior.get_lnprob_scalar(pars[4])
+
+        if self.counts_prior is not None:
+            for i,cp in enumerate(self.counts_prior):
+                counts=pars[5+i]
+                lnp += cp.get_lnprob_scalar(counts)
+
+        lnp += self.n_prior.get_lnprob_scalar(pars[6])
+
+        return lnp
+
+    def _get_guess(self):
+        return self.full_guess
+
+    def get_par_names(self):
+        names=['cen1','cen2', 'g1','g2','T','F','n']
+        return names
+
+    def _set_npars(self):
+        """
+        nband should be set in set_lists, called before this
+        """
+        self.npars=self.full_guess.shape[1]
+
+    def _get_band_pars(self, pars, band):
+        if band > 0:
+            raise ValueError("support multi-band for sersic")
+        return pars.copy()
+
+
 class MCMCCoellip(MCMCSimple):
     """
     Add additional features to the base class to support simple models
@@ -1646,6 +1721,15 @@ class MCMCCoellip(MCMCSimple):
         MCMCBase.__init__(self, image, weight, jacobian, "coellip", **keys)
 
         self.priors_are_log=keys.get('priors_are_log',False)
+
+        # should make this configurable
+        #first_T_mean=0.01
+        #first_T_sigma=first_T_mean*0.1
+        #self.first_T_prior=priors.LogNormal(first_T_mean, first_T_sigma)
+
+        # halt tendency to wander off
+        #self.sigma_max=keys.get('sigma_max',30.0)
+        #self.T_max = 2*self.sigma_max**2
 
     def _get_guess(self):
         return self.full_guess
@@ -1687,14 +1771,24 @@ class MCMCCoellip(MCMCSimple):
                 if g > self.g_prior.gmax:
                     raise GMixRangeError("g too big")
         
+        # make sure the first one is constrained in size
+        #lnp += self.first_T_prior.get_lnprob_scalar(pars[4])
+
+        wbad,=where( pars[4:] <= 0.0 )
+        if wbad.size != 0:
+            raise GMixRangeError("gauss T or counts too small")
+
+
         if self.counts_prior is not None or self.T_prior is not None:
             ngauss=self.ngauss
 
-            wbad,=where( pars[4:] < 0.0 )
-            if wbad.size != 0:
-                raise GMixRangeError("gauss T or counts too small")
-
             Tvals = pars[4:4+ngauss]
+
+            #wbad,=where( (Tvals <= 0.0) | (Tvals > self.T_max) )
+            wbad,=where( (Tvals <= 0.0) )
+            if wbad.size != 0:
+                raise GMixRangeError("out of bounds T values")
+
             counts_vals = pars[4+ngauss:]
             counts_total=counts_vals.sum()
 
@@ -3213,9 +3307,12 @@ def test_model_coellip(model, ngauss,
     imfit_psf=mc_psf.make_image(counts=im_psf.sum())
     #images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
 
+    g1_guess=0.0
+    g2_guess=0.0
     full_guess=test_guess_coellip(nwalkers, ngauss,
-                                  g1_obj, g2_obj, T_obj, counts_obj)
+                                  g1_guess, g2_guess, T_obj, counts_obj)
 
+    cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
     priors_are_log=False
     if priors_are_log:
         counts_prior=priors.FlatPrior(log10(0.5*counts_obj),
@@ -3231,9 +3328,9 @@ def test_model_coellip(model, ngauss,
                        nwalkers=nwalkers,
                        burnin=burnin,
                        nstep=nstep,
-                       ntry=2,
                        priors_are_log=priors_are_log,
                        counts_prior=counts_prior,
+                       cen_prior=cen_prior,
                        T_prior=T_prior,
                        full_guess=full_guess)
     mc_obj.go()
@@ -3281,8 +3378,8 @@ def test_guess_coellip(nwalkers, ngauss,
     full_guess=zeros( (nwalkers, npars) )
     full_guess[:,0] = 0.1*srandu(nwalkers)
     full_guess[:,1] = 0.1*srandu(nwalkers)
-    full_guess[:,2] = g1_obj + 0.01*srandu(nwalkers)
-    full_guess[:,3] = g2_obj + 0.01*srandu(nwalkers)
+    full_guess[:,2] = g1_obj + 0.1*srandu(nwalkers)
+    full_guess[:,3] = g2_obj + 0.1*srandu(nwalkers)
 
     if ngauss==3:
         for i in xrange(ngauss):
@@ -3328,6 +3425,179 @@ def test_guess_coellip(nwalkers, ngauss,
 
     #full_guess[:, 4:] = log10( full_guess[:,4:] )
     return full_guess
+
+
+
+def make_sersic_images(model, hlr, flux, n, noise, g1, g2):
+    import galsim 
+
+    psf_sigma=1.414
+    pixel_scale=1.0
+
+    gal = galsim.Sersic(n,
+                        half_light_radius=hlr,
+                        flux=flux)
+    gal.applyShear(g1=g1, g2=g2)
+
+    psf = galsim.Gaussian(sigma=psf_sigma, flux=1.0)
+    pixel=galsim.Pixel(pixel_scale)
+
+    gal_final = galsim.Convolve([gal, psf, pixel])
+    psf_final = galsim.Convolve([psf, pixel])
+
+    # deal with massive unannounced api changes
+    try:
+        image_obj = gal_final.draw(scale=pixel_scale)
+        psf_obj   = psf_final.draw(scale=pixel_scale)
+    except:
+        image_obj = gal_final.draw(dx=pixel_scale)
+        psf_obj   = psf_final.draw(dx=pixel_scale)
+
+    image_obj.addNoise(galsim.GaussianNoise(sigma=noise))
+
+    image = image_obj.array.astype('f8')
+
+    """
+    # never use more than 200x200
+    if image.shape[0] > 200:
+        cen=int(0.5*image.shape[0])
+        xmin=cen-100
+        xmax=cen+100
+        if xmin < 0:
+            xmin=0
+        if xmax > image.shape[1]:
+            xmax=image.shape[1]
+
+        image=image[xmin:xmax, xmin:xmax]
+    """
+    psf_image = psf_obj.array.astype('f8')
+
+    wt = image*0 + ( 1.0/noise**2 )
+
+    print("image dims:",image.shape)
+    return image, wt, psf_image
+
+def test_sersic(model,
+                n=None, # only needed if model is 'sersic'
+                counts=100.0,
+                noise=0.00001,
+                nwalkers=80,
+                g1=0.1, g2=0.1,
+                burnin=400,
+                nstep=800,
+                doplots=False):
+    """
+    fit an n gauss coellip model to a different model
+
+    parameters
+    ----------
+    model:
+        the true model
+    n: optional
+        if true model is sersic, send n
+    """
+    from . import em
+
+    if model != 'sersic':
+        if model=='exp':
+            n=1.0
+        elif model=='dev':
+            n=4.0
+        else:
+            raise ValueError("bad model: '%s'" % model)
+    #
+    # simulation
+    #
+
+    # PSF pars
+    sigma_psf=sqrt(2)
+
+
+    hlr=2.0
+
+    im, wt, im_psf=make_sersic_images(model, hlr, counts, n, noise, g1, g2)
+    cen=(im.shape[0]-1)/2.
+    psf_cen=(im_psf.shape[0]-1)/2.
+
+    jacob=UnitJacobian(cen,cen)
+    psf_jacob=UnitJacobian(psf_cen,psf_cen)
+
+    #
+    # fitting
+    #
+
+    # psf using EM
+    im_psf_sky,sky=em.prep_image(im_psf)
+    mc_psf=em.GMixEM(im_psf_sky, jacobian=psf_jacob)
+
+    psf_pars_guess=[1.0,
+                    0.01*srandu(),
+                    0.01*srandu(),
+                    sigma_psf**2,
+                    0.01*srandu(),
+                    sigma_psf**2]
+    emo_guess=gmix.GMix(pars=psf_pars_guess)
+
+    mc_psf.go(emo_guess, sky, maxiter=5000)
+    res_psf=mc_psf.get_result()
+    print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
+
+    psf_fit=mc_psf.get_gmix()
+    print("psf gmix:")
+    print(psf_fit)
+
+    # terrible
+    T_guess=2*hlr**2
+    full_guess=test_guess_sersic(nwalkers, T_guess, counts)
+
+    cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
+
+    counts_prior=priors.FlatPrior(0.5*counts, 2.0*counts)
+    T_prior=priors.FlatPrior(0.1*T_guess, 20.0*T_guess)
+    n_prior=priors.FlatPrior(0.7501, 4.999)
+
+    mc_obj=MCMCSersic(im, wt, jacob,
+                      psf=psf_fit,
+                      nwalkers=nwalkers,
+                      burnin=burnin,
+                      nstep=nstep,
+                      counts_prior=counts_prior,
+                      cen_prior=cen_prior,
+                      n_prior=n_prior,
+                      T_prior=T_prior,
+                      full_guess=full_guess)
+    mc_obj.go()
+
+    res=mc_obj.get_result()
+    if doplots:
+        mc_obj.make_plots(show=True, do_residual=True,
+                          width=1100,height=750,
+                          separate=True)
+
+    res=mc_obj.get_result()
+    gm=mc_obj.get_gmix()
+
+    print_pars(res['pars'],     front='pars:')
+    print_pars(res['pars_err'], front='perr:')
+
+    return res['pars']
+
+
+def test_guess_sersic(nwalkers, T, counts):
+    from numpy.random import random as randu
+
+    full_guess=zeros( (nwalkers, 7) )
+    full_guess[:,0] = 0.1*srandu(nwalkers)
+    full_guess[:,1] = 0.1*srandu(nwalkers)
+    full_guess[:,2] = 0.1*srandu(nwalkers)
+    full_guess[:,3] = 0.1*srandu(nwalkers)
+
+    full_guess[:,4] = T*(1.0 + 0.2*srandu(nwalkers))
+    full_guess[:,5] = counts*(1.0 + 0.2*srandu(nwalkers))
+    full_guess[:,6] = 0.75 + (5.0-0.75)*randu(nwalkers)
+
+    return full_guess
+
 
 def test_model_priors(model,
                       counts_sky=100.0,
