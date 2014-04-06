@@ -1723,9 +1723,7 @@ class MCMCCoellip(MCMCSimple):
         self.priors_are_log=keys.get('priors_are_log',False)
 
         # should make this configurable
-        #first_T_mean=0.01
-        #first_T_sigma=first_T_mean*0.1
-        #self.first_T_prior=priors.LogNormal(first_T_mean, first_T_sigma)
+        self.first_T_prior=keys.get('first_T_prior',None)
 
         # halt tendency to wander off
         #self.sigma_max=keys.get('sigma_max',30.0)
@@ -1772,7 +1770,8 @@ class MCMCCoellip(MCMCSimple):
                     raise GMixRangeError("g too big")
         
         # make sure the first one is constrained in size
-        #lnp += self.first_T_prior.get_lnprob_scalar(pars[4])
+        if self.first_T_prior is not None:
+            lnp += self.first_T_prior.get_lnprob_scalar(pars[4])
 
         wbad,=where( pars[4:] <= 0.0 )
         if wbad.size != 0:
@@ -3479,6 +3478,7 @@ def make_sersic_images(model, hlr, flux, n, noise, g1, g2):
 
 def test_sersic(model,
                 n=None, # only needed if model is 'sersic'
+                hlr=2.0,
                 counts=100.0,
                 noise=0.00001,
                 nwalkers=80,
@@ -3496,6 +3496,7 @@ def test_sersic(model,
     n: optional
         if true model is sersic, send n
     """
+    import images
     from . import em
 
     if model != 'sersic':
@@ -3511,9 +3512,6 @@ def test_sersic(model,
 
     # PSF pars
     sigma_psf=sqrt(2)
-
-
-    hlr=2.0
 
     im, wt, im_psf=make_sersic_images(model, hlr, counts, n, noise, g1, g2)
     cen=(im.shape[0]-1)/2.
@@ -3569,13 +3567,17 @@ def test_sersic(model,
     mc_obj.go()
 
     res=mc_obj.get_result()
+    gm=mc_obj.get_gmix()
+    gmc=gm.convolve(psf_fit)
+
     if doplots:
-        mc_obj.make_plots(show=True, do_residual=True,
+        mc_obj.make_plots(show=True,
                           width=1100,height=750,
                           separate=True)
+        model_im=gmc.make_image(im.shape, jacobian=jacob)
+        images.compare_images(im, model_im) 
 
     res=mc_obj.get_result()
-    gm=mc_obj.get_gmix()
 
     print_pars(res['pars'],     front='pars:')
     print_pars(res['pars_err'], front='perr:')
