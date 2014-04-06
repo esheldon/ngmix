@@ -1724,6 +1724,8 @@ class MCMCCoellip(MCMCSimple):
 
         # should make this configurable
         self.first_T_prior=keys.get('first_T_prior',None)
+        if self.first_T_prior is not None:
+            print("will use first_T_prior")
 
         # halt tendency to wander off
         #self.sigma_max=keys.get('sigma_max',30.0)
