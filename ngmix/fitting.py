@@ -3550,7 +3550,7 @@ def test_sersic(model,
     n_prior=priors.FlatPrior(nmin, nmax)
     #n_prior=priors.TruncatedGaussian(n, 0.001, nmin, nmax)
 
-    ntry=2
+    ntry=1
     for i in xrange(ntry):
         print("try: %s/%s" % (i+1,ntry))
         if i==0:
