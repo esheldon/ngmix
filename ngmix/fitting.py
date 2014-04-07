@@ -6,6 +6,7 @@ from sys import stdout
 import numpy
 from numpy import array, zeros, diag, sqrt, where, log10, isfinite
 import time
+from pprint import pprint
 
 from . import gmix
 from .gmix import _exp3_ivals,_exp3_lookup
@@ -867,7 +868,6 @@ def run_leastsq(func, guess, dof, **keys):
         Relative error desired in solution. 1.0e-6
     """
     from scipy.optimize import leastsq
-    import pprint
 
     npars=guess.size
 
@@ -1258,6 +1258,7 @@ class MCMCBase(FitterBase):
 
     def make_plots(self,
                    show=False,
+                   prompt=True,
                    do_residual=False,
                    width=1200,
                    height=1200,
@@ -1308,7 +1309,7 @@ class MCMCBase(FitterBase):
             else:
                 plots=plt
 
-        if show:
+        if show and prompt:
             key=raw_input('hit a key: ')
             if key=='q':
                 stop
@@ -3458,24 +3459,12 @@ def make_sersic_images(model, hlr, flux, n, noise, g1, g2):
 
     image = image_obj.array.astype('f8')
 
-    """
-    # never use more than 200x200
-    if image.shape[0] > 200:
-        cen=int(0.5*image.shape[0])
-        xmin=cen-100
-        xmax=cen+100
-        if xmin < 0:
-            xmin=0
-        if xmax > image.shape[1]:
-            xmax=image.shape[1]
-
-        image=image[xmin:xmax, xmin:xmax]
-    """
     psf_image = psf_obj.array.astype('f8')
 
     wt = image*0 + ( 1.0/noise**2 )
 
     print("image dims:",image.shape)
+    print("image sum:",image.sum())
     return image, wt, psf_image
 
 def test_sersic(model,
@@ -3500,6 +3489,7 @@ def test_sersic(model,
     """
     import images
     from . import em
+    from . import gmix
 
     if model != 'sersic':
         if model=='exp':
@@ -3548,32 +3538,46 @@ def test_sersic(model,
 
     # terrible
     T_guess=2*hlr**2
-    full_guess=test_guess_sersic(nwalkers, T_guess, counts)
 
     cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
 
-    counts_prior=priors.FlatPrior(0.5*counts, 2.0*counts)
-    T_prior=priors.FlatPrior(0.1*T_guess, 20.0*T_guess)
-    n_prior=priors.FlatPrior(0.7501, 4.999)
+    counts_prior=priors.FlatPrior(0.01*counts, 100*counts)
+    T_prior=priors.FlatPrior(0.01*T_guess, 100*T_guess)
 
-    mc_obj=MCMCSersic(im, wt, jacob,
-                      psf=psf_fit,
-                      nwalkers=nwalkers,
-                      burnin=burnin,
-                      nstep=nstep,
-                      counts_prior=counts_prior,
-                      cen_prior=cen_prior,
-                      n_prior=n_prior,
-                      T_prior=T_prior,
-                      full_guess=full_guess)
-    mc_obj.go()
+    nmin = gmix.MIN_SERSIC_N
+    nmax = gmix.MAX_SERSIC_N
+
+    n_prior=priors.FlatPrior(nmin, nmax)
+    #n_prior=priors.TruncatedGaussian(n, 0.001, nmin, nmax)
+
+    ntry=2
+    for i in xrange(ntry):
+        print("try: %s/%s" % (i+1,ntry))
+        if i==0:
+            full_guess=test_guess_sersic(nwalkers, T_guess, counts)
+        else:
+            best_pars=mc_obj.best_pars
+            print_pars(best_pars,front="best pars: ")
+            full_guess=test_guess_sersic_from_pars(nwalkers,best_pars)
+
+        mc_obj=MCMCSersic(im, wt, jacob,
+                          psf=psf_fit,
+                          nwalkers=nwalkers,
+                          burnin=burnin,
+                          nstep=nstep,
+                          counts_prior=counts_prior,
+                          cen_prior=cen_prior,
+                          n_prior=n_prior,
+                          T_prior=T_prior,
+                          full_guess=full_guess)
+        mc_obj.go()
 
     res=mc_obj.get_result()
     gm=mc_obj.get_gmix()
     gmc=gm.convolve(psf_fit)
 
     if doplots:
-        mc_obj.make_plots(show=True,
+        mc_obj.make_plots(show=True, prompt=False,
                           width=1100,height=750,
                           separate=True)
         model_im=gmc.make_image(im.shape, jacobian=jacob)
@@ -3581,6 +3585,7 @@ def test_sersic(model,
 
     res=mc_obj.get_result()
 
+    print('arate:',res['arate'])
     print_pars(res['pars'],     front='pars:')
     print_pars(res['pars_err'], front='perr:')
 
@@ -3589,6 +3594,7 @@ def test_sersic(model,
 
 def test_guess_sersic(nwalkers, T, counts):
     from numpy.random import random as randu
+    from . import gmix
 
     full_guess=zeros( (nwalkers, 7) )
     full_guess[:,0] = 0.1*srandu(nwalkers)
@@ -3598,7 +3604,40 @@ def test_guess_sersic(nwalkers, T, counts):
 
     full_guess[:,4] = T*(1.0 + 0.2*srandu(nwalkers))
     full_guess[:,5] = counts*(1.0 + 0.2*srandu(nwalkers))
-    full_guess[:,6] = 0.75 + (5.0-0.75)*randu(nwalkers)
+
+    nmin = gmix.MIN_SERSIC_N
+    nmax = gmix.MAX_SERSIC_N
+
+    full_guess[:,6] = nmin + (nmax-nmin)*randu(nwalkers)
+
+    return full_guess
+
+def test_guess_sersic_from_pars(nwalkers, pars):
+    from numpy.random import random as randu
+    from . import gmix
+
+    full_guess=zeros( (nwalkers, 7) )
+    full_guess[:,0] = pars[0] + 0.01*srandu(nwalkers)
+    full_guess[:,1] = pars[1] + 0.01*srandu(nwalkers)
+    full_guess[:,2] = pars[2] + 0.01*srandu(nwalkers)
+    full_guess[:,3] = pars[3] + 0.01*srandu(nwalkers)
+
+    full_guess[:,4] = pars[4]*(1.0 + 0.01*srandu(nwalkers))
+    full_guess[:,5] = pars[5]*(1.0 + 0.01*srandu(nwalkers))
+
+    nmin = gmix.MIN_SERSIC_N
+    nmax = gmix.MAX_SERSIC_N
+
+    nleft=nwalkers
+    ngood=0
+    while nleft > 0:
+        vals = pars[6]*(1.0 + 0.01*srandu(nleft))
+        w,=numpy.where( (vals > nmin) & (vals < nmax) )
+        nkeep=w.size
+        if nkeep > 0:
+            full_guess[ngood:ngood+nkeep,6] = vals[w]
+            nleft -= w.size
+            ngood += w.size
 
     return full_guess
 
@@ -3613,7 +3652,6 @@ def test_model_priors(model,
     """
     testing jacobian stuff
     """
-    import pprint
     import images
     import mcmc
     from . import em
@@ -3712,7 +3750,7 @@ def test_model_priors(model,
 
     res_obj=mc_obj.get_result()
 
-    pprint.pprint(res_obj)
+    pprint(res_obj)
     print_pars(res_obj['pars'], front='pars_obj:')
     print_pars(res_obj['pars_err'], front='perr_obj:')
     print('Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2))
@@ -3746,7 +3784,6 @@ def test_model_mb(model,
     """
     testing mb stuff
     """
-    import pprint
     import images
     import mcmc
     from . import em
@@ -3913,7 +3950,7 @@ def test_model_mb(model,
     res_obj=mc_obj.get_result()
     tmrest = time.time()-tmrest
 
-    #pprint.pprint(res_obj)
+    #pprint(res_obj)
     print('arate:',res_obj['arate'])
     print_pars(true_pars, front='true:    ')
     print_pars(res_obj['pars'], front='pars_obj:')
@@ -3959,7 +3996,6 @@ def test_model_priors_anze(model,
     """
     testing jacobian stuff
     """
-    import pprint
     import images
     import mcmc
     from . import em
@@ -4119,7 +4155,6 @@ def test_psf_flux(ngauss,
     flux fit time is negligible, EM fitting dominates
     """
     from .em import GMixMaxIterEM
-    import pprint
     import images
     import mcmc
     from . import em
