@@ -430,17 +430,6 @@ class GMixCoellip(GMix):
 MIN_SERSIC_N=0.751
 MAX_SERSIC_N=5.999
 
-_sersic_nvals_lt1=array([ 0.75,  0.85,  1. ])
-_sersic_nvals_gt1=array([ 1.0, 1.25, 1.5, 2.  ,  2.5 ,  3.  , 3.5 , 4.  ,  4.5 ,  5., 5.5, 6.0  ])
-
-# sersic-ngauss-06-combined.fits
-# fit-splines --ngauss 6 --order 1 0.75 0.85 1.0
-
-_sersic_data_lt1 =   array([
-    [0.00498409,  0.0313574,  0.120413,  0.356376,  0.858859,  1.74071,  0.000251821,  0.00381911,  0.0320796,  0.178908,  0.49226,  0.292682],
-    [0.00376159,  0.0252951,  0.102482,  0.321545,  0.843898,  1.94303,  0.000399642,  0.00564146,  0.0426268,  0.202777,  0.476904,  0.271651],
-    [0.00246715,  0.0181473,  0.0794381,  0.271372,  0.79781,  2.16232,  0.000615937,  0.00794548,  0.0532787,  0.21797,  0.454968,  0.265221]
-])
 
 # sersic-ngauss-10-combined.fits
 # fit-splines --ngauss 10 --order 3 1.0 1.25 1.5 2.00 2.50 3.00 3.50 4.00 4.50 5.00 5.50 6.00
@@ -509,41 +498,6 @@ def fit_sersic_splines(type, ngauss, order):
 
     return splines
 
-
-
-def fit_sersic_splines_split(type, vartype):
-    from scipy.interpolate import InterpolatedUnivariateSpline
-
-    if type=='lt1':
-        ngauss=6
-        order=1
-        sersic_nvals=_sersic_nvals_lt1
-        sersic_data=_sersic_data_lt1 
-    elif type=='gt1':
-        ngauss=10
-        order=3
-        sersic_nvals=_sersic_nvals_gt1
-        sersic_data=_sersic_data_gt1 
-    else:
-        raise ValueError("bad sersic spline type: '%s'" % type)
-
-    print("fitting",type,"sersic splines, ngauss",ngauss,"order",order)
-
-    if vartype=='T':
-        start=0
-    else:
-        start=ngauss
-
-    splines=[]
-
-    for i in xrange(ngauss):
-        vals=sersic_data[:,start+i]
-
-        interpolator=InterpolatedUnivariateSpline(sersic_nvals,vals,k=order)
-
-        splines.append(interpolator)
-
-    return splines
 
 class GMixSersic(GMix):
     """
@@ -628,112 +582,6 @@ class GMixSersic(GMix):
             if err:
                 print("error occurred in F interp")
 
-class GMixSersicSplit(GMix):
-    """
-    A two-dimensional gaussian mixture approximating a Sersic profile
-
-    Inherits from the more general GMix class, and all its methods.
-
-    parameters
-    ----------
-    pars: array-like
-        Parameter array with elements
-            [cen1,cen2,g1,g2,T,flux,n] 
-    """
-
-    T_splines_lt1=fit_sersic_splines_split('lt1','T')
-    F_splines_lt1=fit_sersic_splines_split('lt1','flux')
-
-    T_splines_gt1=fit_sersic_splines_split('gt1','T')
-    F_splines_gt1=fit_sersic_splines_split('gt1','flux')
-
-
-    def __init__(self, pars):
-        self._model      = GMIX_SERSIC
-        self._model_name = 'sersic'
-        self._npars = 7
-
-        self._ngauss_lt1 = 6
-        self._ngauss_gt1 = 10
-
-        self._fvals_lt1=zeros(self._ngauss_lt1)
-        self._pvals_lt1=zeros(self._ngauss_lt1)
-        self._fvals_gt1=zeros(self._ngauss_gt1)
-        self._pvals_gt1=zeros(self._ngauss_gt1)
-
-        self._data_lt1 = zeros(self._ngauss_lt1, dtype=_gauss2d_dtype)
-        self._data_gt1 = zeros(self._ngauss_gt1, dtype=_gauss2d_dtype)
-
-        self.fill(pars)
-
-    def fill(self, parsin):
-        """
-        Fill in the gaussian mixture with new parameters
-        """
-
-        pars = array(parsin, dtype='f8', copy=False) 
-
-        npars=pars.size
-
-        if npars != 7:
-            raise ValueError("sersic models require 7 pars, got %s" % npars)
-
-        self._set_fvals_pvals(pars[6])
-        _fill_simple(self._data, pars, self._fvals, self._pvals)
-
-    def _set_fvals_pvals(self, n):
-        import scipy.interpolate
-
-        if n < MIN_SERSIC_N or n > MAX_SERSIC_N:
-            raise GMixRangeError("n out of bounds")
-
-        if n < 1.0:
-            fvals=self._fvals_lt1
-            pvals=self._pvals_lt1
-
-            ngauss=self._ngauss_lt1
-            T_splines=GMixSersic.T_splines_lt1
-            F_splines=GMixSersic.F_splines_lt1
-            data=self._data_lt1
-        else:
-            fvals=self._fvals_gt1
-            pvals=self._pvals_gt1
-
-            ngauss=self._ngauss_gt1
-            T_splines=GMixSersic.T_splines_gt1
-            F_splines=GMixSersic.F_splines_gt1
-            data=self._data_gt1
-
-
-        narr=numpy.atleast_1d(n)
-        for i in xrange(ngauss):
-            Tinterp=T_splines[i]
-            Finterp=F_splines[i]
-
-            t,c,k=Tinterp._eval_args
-            fvals[i],err=scipy.interpolate.fitpack._fitpack._spl_(narr,
-                                                                  0,
-                                                                  t,
-                                                                  c,
-                                                                  k,
-                                                                  0)
-            #if err:
-            #    print("error occurred in T interp")
-
-            t,c,k=Finterp._eval_args
-            pvals[i],err=scipy.interpolate.fitpack._fitpack._spl_(narr,
-                                                                  0,
-                                                                  t,
-                                                                  c,
-                                                                  k,
-                                                                  0)
-
-            #if err:
-            #    print("error occurred in F interp")
-        self._data=data
-        self._ngauss=ngauss
-        self._fvals=fvals
-        self._pvals=pvals
 
 GMIX_FULL=0
 GMIX_GAUSS=1

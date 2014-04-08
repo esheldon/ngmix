@@ -1013,9 +1013,24 @@ def _gprior2d_exp_scalar(A, a, g0sq, gmax, g, gsq):
 
     return prior
 
+class FlatPriorBase(object):
+    def sample(self, n=None):
+        from numpy.random import random as randu
+        if n is None:
+            is_scalar=True
+            n=1
+        else:
+            is_scalar=False
+
+        rvals = self.minval + (self.maxval-self.minval)*randu(n)
+
+        if is_scalar:
+            rvals=rvals[0]
+
+        return rvals
 
 @jit
-class FlatPrior(object):
+class FlatPrior(FlatPriorBase):
     @void(float64, float64)
     def __init__(self, minval, maxval):
         self.minval=minval
