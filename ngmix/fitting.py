@@ -751,7 +751,9 @@ class LMSimple(FitterBase):
         index=0
         fdiff[index] = -self.cen_prior.get_lnprob(pars[0], pars[1])
         index += 1
-        fdiff[index] = -self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+
+        if self.g_prior is not None:
+            fdiff[index] = -self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
         index += 1
 
         fdiff[index] = -self.T_prior.get_lnprob_scalar(pars[4])
@@ -771,13 +773,90 @@ class LMSimple(FitterBase):
         lnp=0.0
         
         lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
-        lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+
+        if self.g_prior is not None:
+            lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+
         lnp += self.T_prior.get_lnprob_scalar(pars[4])
         for i,cp in enumerate(self.counts_prior):
             counts=pars[5+i]
             lnp += cp.get_lnprob_scalar(counts)
 
         return lnp
+
+
+class LMSersic(LMSimple):
+    def __init__(self, image, weight, jacobian, guess, **keys):
+        super(LMSimple,self).__init__(image, weight, jacobian, "sersic", **keys)
+        # this is a dict
+        # can contain maxfev (maxiter), ftol (tol in sum of squares)
+        # xtol (tol in solution), etc
+        self.lm_pars=keys['lm_pars']
+
+        self.guess=array( guess, dtype='f8' )
+
+        self.n_prior=keys['n_prior']
+
+        n_prior_pars=7
+        self.fdiff_size=self.totpix + n_prior_pars
+
+    def _get_band_pars(self, pars, band):
+        if band > 0:
+            raise ValueError("support more than one band")
+        return pars.copy()
+
+    def _fill_priors(self, pars, fdiff):
+        """
+        Fill priors at the beginning of the array.
+
+        ret the position after last par
+
+        We require all the lnprobs are < 0, equivalent to
+        the peak probability always being 1.0
+
+        I have verified all our priors have this property.
+        """
+
+        index=0
+        fdiff[index] = -self.cen_prior.get_lnprob(pars[0], pars[1])
+        index += 1
+        if self.g_prior is not None:
+            fdiff[index] = -self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+        index += 1
+
+        fdiff[index] = -self.T_prior.get_lnprob_scalar(pars[4])
+        index += 1
+
+        cp=self.counts_prior[0]
+        fdiff[index] = -cp.get_lnprob_scalar(pars[5])
+        index += 1
+
+        fdiff[index] = -self.n_prior.get_lnprob_scalar(pars[6])
+        index += 1
+
+        # this leaves us after the priors
+        return index
+
+    def _get_priors(self, pars):
+        """
+        For the stats calculation
+        """
+        lnp=0.0
+        
+        lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+        if self.g_prior is not None:
+            lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+        lnp += self.T_prior.get_lnprob_scalar(pars[4])
+
+        cp=self.counts_prior[0]
+        lnp += cp.get_lnprob_scalar(pars[5])
+
+        lnp += self.n_prior.get_lnprob_scalar(pars[6])
+
+        return lnp
+
+
+
 
 
 class LMSimpleJointTF(LMSimple):
