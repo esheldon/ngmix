@@ -36,6 +36,12 @@ class Jacobian(object):
         """
         return self.row0, self.col0
 
+    def get_scale(self):
+        """
+        Get the scale, defined as sqrt(det)
+        """
+        return self._data['sdet'][0]
+
     def copy(self):
         return Jacobian(self._data['row0'][0],
                         self._data['col0'][0],
