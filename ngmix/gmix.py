@@ -427,27 +427,87 @@ class GMixCoellip(GMix):
         _fill_coellip(self._data, pars)
 
 
+@autojit
+def binary_search(a, x):
+    """
+    Index of closest value from a smaller than x
+
+    however, defaults to edges when out of bounds
+    """
+
+    up=a.size
+    down=-1
+
+    if x < a[0]:
+        return 0
+    if x > a[up-1]:
+        return up-1
+
+    while up-down > 1:
+        mid = down + (up-down)//2
+        val=a[mid]
+
+        if x >= val:
+            down=mid
+        else:
+            up=mid
+        
+    return down
+
+@jit(argtypes=[float64[:], float64[:,:], float64, float64[:]])
+def interp_multi_scalar(xref, yref, x, output):
+    """
+    parameters
+    ----------
+    xref: array
+        shape (n,)
+    yref: array
+        shape (n,ndim)
+    x: scalar
+        point at which to interpolate
+    output: array
+        shape (ndim,)
+    """
+
+    np=xref.size
+    ndim=output.size
+
+    ilo = binary_search(xref, x)
+    if (ilo >= (np-1)):
+        ilo = np-2
+    ihi = ilo + 1
+
+    for i in xrange(ndim):
+        output[i] = (x-xref[ilo])*(yref[ihi,i] - yref[ilo,i])/(xref[ihi]-xref[ilo]) + yref[ilo,i]
+
+
+
+def interp_multi_array(xref, yref, x):
+    """
+    parameters
+    ----------
+    xref: array
+        shape (n,)
+    yref: array
+        shape (n,ndim)
+    x: array
+        points at which to interpolate
+    """
+
+    ndim=yref.shape[1]
+    npoints=x.size
+    output=zeros( (npoints, ndim) )
+    res=zeros(ndim)
+    for i in xrange(npoints):
+        interp_multi_scalar(xref, yref, x[i], res)
+        output[i,:] = res
+
+    return output
+
+
+
 MIN_SERSIC_N=0.751
 MAX_SERSIC_N=5.999
-
-
-# sersic-ngauss-10-combined.fits
-# fit-splines --ngauss 10 --order 3 1.0 1.25 1.5 2.00 2.50 3.00 3.50 4.00 4.50 5.00 5.50 6.00
-
-_sersic_data_gt1 =   array([
-    [0.000141183,  0.00103725,  0.00453358,  0.0154615,  0.0452213,  0.118812,  0.288153,  0.657267,  1.43447,  3.09618,  8.69196e-06,  0.000114263,  0.00083198,  0.00442365,  0.0188262,  0.0653268,  0.177007,  0.32906,  0.317786,  0.0866153],
-    [6.39097e-05,  0.000527167,  0.00252544,  0.00935232,  0.0296281,  0.0845536,  0.224712,  0.571277,  1.4312,  3.73464,  1.58929e-05,  0.000195935,  0.00133795,  0.00658759,  0.0254544,  0.0785048,  0.18699,  0.31222,  0.29498,  0.0937132],
-    [2.9818e-05,  0.00027051,  0.00140013,  0.0055675,  0.0189225,  0.0581109,  0.167323,  0.466364,  1.3084,  3.997,  2.20616e-05,  0.000258835,  0.00168076,  0.00781816,  0.0283343,  0.0816486,  0.182828,  0.295325,  0.290403,  0.111681],
-    [7.18653e-06,  7.68446e-05,  0.00045508,  0.0020511,  0.00789117,  0.0275417,  0.0909392,  0.295217,  0.992545,  3.89542,  2.8716e-05,  0.000317049,  0.00193356,  0.00841468,  0.0284897,  0.0771123,  0.165373,  0.268048,  0.293013,  0.15727],
-    [1.98179e-06,  2.47646e-05,  0.000165708,  0.000835235,  0.00358485,  0.0139879,  0.0519524,  0.191828,  0.748381,  3.58525,  2.93838e-05,  0.000317696,  0.00188226,  0.00794749,  0.0261771,  0.0694859,  0.148591,  0.247823,  0.296409,  0.201336],
-    [6.50627e-07,  9.20752e-06,  6.82515e-05,  0.00037868,  0.0017871,  0.00768484,  0.0316306,  0.130712,  0.580699,  3.29779,  2.84846e-05,  0.000300823,  0.00174627,  0.00724537,  0.023567,  0.062296,  0.134507,  0.231803,  0.298465,  0.240041],
-    [3.70285e-07,  4.94355e-06,  3.70333e-05,  0.000213576,  0.0010627,  0.00486769,  0.0215516,  0.096939,  0.476936,  3.10563,  3.92413e-05,  0.000343401,  0.00182922,  0.00718711,  0.0225433,  0.0583249,  0.125256,  0.219312,  0.296521,  0.268644],
-    [2.95933e-07,  3.46867e-06,  2.48365e-05,  0.000143079,  0.000727616,  0.00345813,  0.0160859,  0.0770072,  0.410127,  2.98125,  6.50736e-05,  0.000441826,  0.00208608,  0.00759116,  0.0226025,  0.0565324,  0.11939,  0.209696,  0.292542,  0.289053],
-    [2.63657e-07,  2.75208e-06,  1.8623e-05,  0.000105636,  0.000541346,  0.00263354,  0.0126999,  0.0638365,  0.362754,  2.89231,  0.000107377,  0.000578318,  0.00242603,  0.00817028,  0.023058,  0.0556427,  0.11522,  0.202006,  0.288213,  0.304577],
-    [2.47725e-07,  2.35418e-06,  1.5056e-05,  8.35572e-05,  0.000427966,  0.0021121,  0.0104602,  0.0546547,  0.327721,  2.82692,  0.000170701,  0.00075224,  0.00283117,  0.00886048,  0.023743,  0.0552981,  0.112159,  0.195717,  0.283881,  0.316588],
-    [2.40362e-07,  2.1193e-06,  1.28581e-05,  6.96343e-05,  0.000354659,  0.00176456,  0.00891162,  0.0480232,  0.301129,  2.77845,  0.00026027,  0.000964948,  0.0032944,  0.00963429,  0.0245826,  0.0553232,  0.109883,  0.190484,  0.279651,  0.325921],
-    [2.3827e-07,  1.97827e-06,  1.14419e-05,  6.04297e-05,  0.000305109,  0.0015236,  0.00780465,  0.0431059,  0.280569,  2.74262,  0.000381366,  0.00121753,  0.00381056,  0.0104738,  0.0255305,  0.0556082,  0.108184,  0.186068,  0.275568,  0.333157]
-])
 
 _sersic_nvals_10gauss=array([0.75, 0.80, 0.85, 0.90, 0.95, 1.0, 1.05, 1.25, 1.5, 2.00, 2.50, 3.00, 3.50, 4.00, 4.50, 5.00, 5.50, 6.00])
 _sersic_data_10gauss=array([
@@ -511,9 +571,11 @@ class GMixSersic(GMix):
         Parameter array with elements
             [cen1,cen2,g1,g2,T,flux,n] 
     """
-    T_splines = fit_sersic_splines("T", 10, 1)
-    F_splines = fit_sersic_splines("F", 10, 1)
+    #T_splines = fit_sersic_splines("T", 10, 1)
+    #F_splines = fit_sersic_splines("F", 10, 1)
 
+    _n_vals=_sersic_nvals_10gauss
+    _tf_vals=_sersic_data_10gauss
     def __init__(self, pars):
         self._model      = GMIX_SERSIC
         self._model_name = 'sersic'
@@ -521,6 +583,7 @@ class GMixSersic(GMix):
 
         self._ngauss = 10
 
+        self._interp_res=zeros(2*self._ngauss)
         self._fvals=zeros(self._ngauss)
         self._pvals=zeros(self._ngauss)
 
@@ -548,6 +611,15 @@ class GMixSersic(GMix):
         if n < MIN_SERSIC_N or n > MAX_SERSIC_N:
             raise GMixRangeError("n out of bounds")
 
+        _interp_vals = _interp_multi_scalar(GMixSersic._n_vals,
+                                            GMixSersic._tf_vals,
+                                            n,
+                                            self._interp_res)
+        ngauss=self._ngauss
+        self._fvals[:] = self._interp_res[0:self._ngauss]
+        self._pvals[:] = self._interp_res[self._ngauss:]
+
+        return
         fvals=self._fvals
         pvals=self._pvals
 
