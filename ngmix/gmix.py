@@ -705,7 +705,7 @@ def get_model_npars(model):
 def _gauss2d_verify(self):
     ngauss=self.size
     for i in xrange(ngauss):
-        if self[i].det <= 0:
+        if self[i].det < 1.0e-200:
             raise GMixRangeError("det <= 0: %s" % self[i].det)
 
 # have to send whole array
@@ -713,7 +713,7 @@ def _gauss2d_verify(self):
 def _gauss2d_set(self, i, p, row, col, irr, irc, icc):
 
     det = irr*icc - irc*irc
-    if det <= 0.0:
+    if det < 1.0e-200:
         raise GMixRangeError("found det <= 0: %s" % det)
 
     self[i].p=p
