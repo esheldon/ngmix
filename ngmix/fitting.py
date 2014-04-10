@@ -1181,9 +1181,9 @@ class MCMCBase(FitterBase):
         #if have_acor and self.tau > MAX_TAU:
         #    self.flags |= LARGE_TAU
         
-        if self.arate < self.min_arate:
-            print("arate",self.arate,"is low setting flag,",LOW_ARATE)
-            self.flags |= LOW_ARATE
+        #if self.arate < self.min_arate:
+        #    print("arate",self.arate,"is low setting flag,",LOW_ARATE)
+        #    self.flags |= LOW_ARATE
 
         self.sampler=sampler
 
@@ -2040,9 +2040,9 @@ class MHSimple(MCMCSimple):
         self.tau    = 0.0
 
         self.flags  = 0
-        if self.arate < self.min_arate:
-            print('LOW ARATE:',self.arate)
-            self.flags |= LOW_ARATE
+        #if self.arate < self.min_arate:
+        #    print('LOW ARATE:',self.arate)
+        #    self.flags |= LOW_ARATE
 
     def step(self, pars):
         """
