@@ -630,10 +630,12 @@ class PSFFluxFitter(FitterBase):
 
                 wtsum += wt.sum()
 
-            self.eff_npix=wtsum/wtmax
+            eff_npix=wtsum/wtmax
 
-        if self.eff_npix <= 0:
-            self.eff_npix=1.e-6
+            if eff_npix <= 0:
+                eff_npix=1.e-6
+
+            self.eff_npix=eff_npix
 
         return self.eff_npix
 
@@ -1108,8 +1110,8 @@ class MCMCBase(FitterBase):
 
         self.trials  = self.sampler.flatchain
 
-        self.lnprobs = self.sampler.lnprobability.reshape(self.nwalkers*self.nstep)
-        self.lnprobs -= self.lnprobs.max()
+        #self.lnprobs = self.sampler.lnprobability.reshape(self.nwalkers*self.nstep)
+        #self.lnprobs -= self.lnprobs.max()
 
         # get the expectation values, sensitivity and errors
         self._calc_result()
@@ -1717,7 +1719,146 @@ class MCMCSimple(MCMCBase):
 
         return ndiff
 
+
 class MCMCSersic(MCMCSimple):
+    def __init__(self, image, weight, jacobian, **keys):
+
+        self.g1i=2
+        self.g2i=3
+
+        self.n_prior=keys.get('n_prior',None)
+
+        if (self.n_prior is None):
+            raise ValueError("send n_prior for sersic")
+
+        MCMCBase.__init__(self, image, weight, jacobian, "sersic", **keys)
+
+
+    def _setup_sampler_and_data(self, pos):
+        """
+        try very hard to initialize the mixtures
+        """
+
+        self.flags=0
+        self.tau=0.0
+        self.pos=pos
+        self.npars=pos.shape[1]
+
+        self.sampler = self._make_sampler()
+        self.best_lnprob=None
+
+        ok=False
+        for i in xrange(self.nwalkers):
+            try:
+                self._init_gmix_lol(self.pos[i,:])
+                ok=True
+                break
+            except GMixRangeError as gerror:
+                continue
+
+        if ok:
+            return
+
+        print('failed init gmix lol from input guess:',str(gerror))
+        print('getting a new guess')
+        for j in xrange(10):
+            self.pos=self._get_random_guess()
+            ok=False
+            for i in xrange(self.nwalkers):
+                try:
+                    self._init_gmix_lol(self.pos[i,:])
+                    ok=True
+                    break
+                except GMixRangeError as gerror:
+                    continue
+            if ok:
+                break
+
+        if not ok:
+            raise gerror
+
+    def run_mcmc(self, pos, nstep):
+        """
+        user can run steps
+        """
+
+        if not hasattr(self,'sampler'):
+            self._setup_sampler_and_data(pos)
+
+        sampler=self.sampler
+        sampler.reset()
+        self.pos, prob, state = sampler.run_mcmc(self.pos, nstep)
+
+        lnprobs = sampler.lnprobability.reshape(self.nwalkers*nstep)
+        w=lnprobs.argmax()
+        bp=lnprobs[w]
+        if self.best_lnprob is None or bp > self.best_lnprob:
+            self.best_lnprob=bp
+            self.best_pars=sampler.flatchain[w,:]
+
+        arates = sampler.acceptance_fraction
+        self.arate = arates.mean()
+
+        self.trials  = sampler.flatchain
+
+        return self.pos
+
+    def calc_result(self):
+        """
+        user-facing version
+        """
+        self._calc_result()
+
+    def _get_priors(self, pars):
+        """
+        # go in simple
+        add any priors that were sent on construction
+        """
+
+        lnp=0.0
+
+        if self.cen_prior is not None:
+            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+
+        if self.g_prior is not None:
+            if self.g_prior_during:
+                lnp += self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
+            else:
+                # may have bounds
+                g = sqrt(pars[2]**2 + pars[3]**2)
+                if g > self.g_prior.gmax:
+                    raise GMixRangeError("g too big")
+        
+        if self.T_prior is not None:
+            lnp += self.T_prior.get_lnprob_scalar(pars[4])
+
+        if self.counts_prior is not None:
+            for i,cp in enumerate(self.counts_prior):
+                counts=pars[5+i]
+                lnp += cp.get_lnprob_scalar(counts)
+
+        lnp += self.n_prior.get_lnprob_scalar(pars[6])
+
+        return lnp
+
+    def get_par_names(self):
+        names=['cen1','cen2', 'g1','g2','T','F','n']
+        return names
+
+    def _set_npars(self):
+        """
+        this is actually set elsewhere
+        """
+        pass
+
+    def _get_band_pars(self, pars, band):
+        if band > 0:
+            raise ValueError("support multi-band for sersic")
+        return pars.copy()
+
+
+
+class MCMCSersicDefault(MCMCSimple):
     def __init__(self, image, weight, jacobian, **keys):
 
         self.full_guess=keys.get('full_guess',None)
@@ -1782,6 +1923,7 @@ class MCMCSersic(MCMCSimple):
         if band > 0:
             raise ValueError("support multi-band for sersic")
         return pars.copy()
+
 
 
 class MCMCCoellip(MCMCSimple):
@@ -3566,6 +3708,7 @@ def test_sersic(model,
                 g1=0.1, g2=0.1,
                 burnin=400,
                 nstep=800,
+                ntry=1,
                 doplots=False):
     """
     fit an n gauss coellip model to a different model
@@ -3640,7 +3783,6 @@ def test_sersic(model,
     n_prior=priors.FlatPrior(nmin, nmax)
     #n_prior=priors.TruncatedGaussian(n, 0.001, nmin, nmax)
 
-    ntry=1
     for i in xrange(ntry):
         print("try: %s/%s" % (i+1,ntry))
         if i==0:
