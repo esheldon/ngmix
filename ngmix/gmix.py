@@ -427,6 +427,103 @@ class GMixCoellip(GMix):
         _fill_coellip(self._data, pars)
 
 
+def cbinary_search(a, x):
+    """
+    use weave inline for speed
+    """
+    import scipy.weave
+    from scipy.weave import inline
+    from scipy.weave.converters import blitz
+
+    size=a.size
+
+    code="""
+    long up=size;
+    long down=-1;
+
+    for (;;) {
+        if ( x < a(0) ) {
+            return_val =  0;
+            break;
+        }
+        if (x > a(up-1)) {
+            return_val =  up-1;
+            break;
+        }
+
+        long mid=0;
+        double val=0;
+        while ( (up-down) > 1 ) {
+            mid = down + (up-down)/2;
+            val=a(mid);
+
+            if (x >= val) {
+                down=mid;
+            } else {
+                up=mid;
+            }
+     
+        }
+        return_val = down;
+    }
+    """
+    down=inline(code, ['a','x','size'],
+                type_converters=blitz,
+                compiler='gcc')
+
+    return down
+
+
+
+def cinterp_multi_scalar(xref, yref, xinterp, output):
+    import scipy.weave
+    from scipy.weave import inline
+    from scipy.weave.converters import blitz
+
+    npoints=xref.size
+    ndim=yref.shape[1]
+
+    ilo = cbinary_search(xref, xinterp)
+
+    code="""
+    double x=xinterp;
+
+    if (ilo < 0) {
+        ilo=0;
+    }
+    if (ilo >= (npoints-1)) {
+        ilo=npoints-2;
+    }
+
+    int ihi = ilo+1;
+
+    double xlo=xref(ilo);
+    double xhi=xref(ihi);
+    double xdiff = xhi-xlo;
+    double xmxlo = x-xlo;
+
+    for (int i=0; i<ndim; i++) {
+
+        double ylo = yref(ilo, i);
+        double yhi = yref(ihi, i);
+        double ydiff = yhi - ylo;
+
+        double slope = ydiff/xdiff;
+
+        output(i) = xmxlo*slope + ylo;
+
+    }
+
+    return_val=1;
+    """
+
+    inline(code, ['xref','yref','xinterp','ilo','npoints','ndim','output'],
+           type_converters=blitz)#, compiler='gcc')
+
+
+
+
+
 @autojit
 def binary_search(a, x):
     """
@@ -621,7 +718,7 @@ class GMixSersic(GMix):
         if n < MIN_SERSIC_N or n > MAX_SERSIC_N:
             raise GMixRangeError("n out of bounds")
 
-        _interp_vals = interp_multi_scalar(GMixSersic._n_vals,
+        _interp_vals = cinterp_multi_scalar(GMixSersic._n_vals,
                                            GMixSersic._tf_vals,
                                            n,
                                            self._interp_res)
