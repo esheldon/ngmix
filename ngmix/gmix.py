@@ -427,7 +427,6 @@ class GMixCoellip(GMix):
         _fill_coellip(self._data, pars)
 
 
-'''
 @autojit
 def binary_search(a, x):
     """
@@ -478,8 +477,21 @@ def interp_multi_scalar(xref, yref, x, output):
         ilo = np-2
     ihi = ilo + 1
 
+    xlo=xref[ilo]
+    xhi=xref[ihi]
+
+    xdiff = xhi-xlo
+    xmxlo = x-xlo
+
     for i in xrange(ndim):
-        output[i] = (x-xref[ilo])*(yref[ihi,i] - yref[ilo,i])/(xref[ihi]-xref[ilo]) + yref[ilo,i]
+        ylo = yref[ilo, i]
+        yhi = yref[ihi, i]
+        ydiff = yhi - ylo
+
+        slope = ydiff/xdiff
+
+        output[i] = xmxlo*slope + ylo
+
 
 def interp_multi_array(xref, yref, x):
     """
@@ -503,7 +515,6 @@ def interp_multi_array(xref, yref, x):
 
     return output
 
-'''
 
 MIN_SERSIC_N=0.751
 MAX_SERSIC_N=5.999
@@ -570,11 +581,11 @@ class GMixSersic(GMix):
         Parameter array with elements
             [cen1,cen2,g1,g2,T,flux,n] 
     """
-    T_splines = fit_sersic_splines("T", 10, 1)
-    F_splines = fit_sersic_splines("F", 10, 1)
+    #T_splines = fit_sersic_splines("T", 10, 1)
+    #F_splines = fit_sersic_splines("F", 10, 1)
 
-    #_n_vals=_sersic_nvals_10gauss
-    #_tf_vals=_sersic_data_10gauss
+    _n_vals=_sersic_nvals_10gauss
+    _tf_vals=_sersic_data_10gauss
     def __init__(self, pars):
         self._model      = GMIX_SERSIC
         self._model_name = 'sersic'
@@ -582,7 +593,7 @@ class GMixSersic(GMix):
 
         self._ngauss = 10
 
-        #self._interp_res=zeros(2*self._ngauss)
+        self._interp_res=zeros(2*self._ngauss)
         self._fvals=zeros(self._ngauss)
         self._pvals=zeros(self._ngauss)
 
@@ -610,7 +621,6 @@ class GMixSersic(GMix):
         if n < MIN_SERSIC_N or n > MAX_SERSIC_N:
             raise GMixRangeError("n out of bounds")
 
-        """
         _interp_vals = interp_multi_scalar(GMixSersic._n_vals,
                                            GMixSersic._tf_vals,
                                            n,
@@ -653,7 +663,7 @@ class GMixSersic(GMix):
 
             if err:
                 print("error occurred in F interp")
-
+        """
 
 GMIX_FULL=0
 GMIX_GAUSS=1

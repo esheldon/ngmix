@@ -3546,6 +3546,17 @@ def make_sersic_images(model, hlr, flux, n, noise, g1, g2):
     print("image sum:",image.sum())
     return image, wt, psf_image
 
+def test_sersic_profile(model, **keys):
+    import cProfile
+    import pstats
+
+    cProfile.runctx('test_sersic(model, **keys)',
+                    globals(),locals(),
+                    'profile_stats')
+    p = pstats.Stats('profile_stats')
+    p.sort_stats('time').print_stats()
+
+
 def test_sersic(model,
                 n=None, # only needed if model is 'sersic'
                 hlr=2.0,
