@@ -33,6 +33,8 @@ LM_NEG_COV_DIAG = 2**6
 LM_EIG_NOTFINITE = 2**7
 LM_FUNC_NOTFINITE = 2**8
 
+LM_DIV_ZERO = 2**9
+
 BAD_STATS=2**9
 
 PDEF=-9.999e9
@@ -1019,6 +1021,18 @@ def run_leastsq(func, guess, dof, **keys):
         else:
             raise e
 
+    except ZeroDivisionError:
+        pars,pcov,perr=_get_def_stuff(npars)
+
+        res['pars']=pars
+        res['pars_cov0']=pcov
+        res['pars_cov']=pcov
+        res['nfev']=-1
+
+        res['flags']=LM_DIV_ZERO
+        res['errmsg']="zero division"
+        print('    zero division')
+
     return res
 
 def _get_def_stuff(npars):
@@ -1755,6 +1769,8 @@ class MCMCSersic(MCMCSimple):
                 break
             except GMixRangeError as gerror:
                 continue
+            except ZeroDivisionError:
+                continue
 
         if ok:
             return
@@ -1770,6 +1786,8 @@ class MCMCSersic(MCMCSimple):
                     ok=True
                     break
                 except GMixRangeError as gerror:
+                    continue
+                except ZeroDivisionError:
                     continue
             if ok:
                 break
