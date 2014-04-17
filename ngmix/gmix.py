@@ -1866,7 +1866,11 @@ class GMixND(object):
 
         self.ngauss = self.weights.size
 
-        self.ndim = means[0,:].size
+        sh=means.shape
+        if len(sh) == 1:
+            self.ndim=1
+        else:
+            self.ndim = sh[1]
 
         self._calc_icovars_and_norms()
 
@@ -1892,8 +1896,16 @@ class GMixND(object):
                                   self.tmp_lnprob,
                                   pars,
                                   dolog)
+        elif self.ndim==1:
+            return _get_gmixnd_1d(self.log_pnorms,
+                                  self.means,
+                                  self.icovars,
+                                  self.tmp_lnprob,
+                                  pars,
+                                  dolog)
+
         else:
-            raise RuntimeError("only have fast formula for 2,3 dims")
+            raise RuntimeError("only have fast formula for 1,2,3 dims")
 
     def get_lnprob_scalar(self, pars):
         """
@@ -1914,9 +1926,16 @@ class GMixND(object):
                                   self.tmp_lnprob,
                                   pars,
                                   dolog)
+        elif self.ndim==1:
+            return _get_gmixnd_1d(self.log_pnorms,
+                                  self.means,
+                                  self.icovars,
+                                  self.tmp_lnprob,
+                                  pars,
+                                  dolog)
 
         else:
-            raise RuntimeError("only have fast formula for 2,3 dims")
+            raise RuntimeError("only have fast formula for 1,2,3 dims")
         return lnp
 
     def get_prob_array(self, pars):
@@ -1943,8 +1962,17 @@ class GMixND(object):
                                  dolog,
                                  p)
 
+        elif self.ndim==1:
+            _get_gmixnd_array_1d(self.log_pnorms,
+                                 self.means,
+                                 self.icovars,
+                                 self.tmp_lnprob,
+                                 pars,
+                                 dolog,
+                                 p)
+
         else:
-            raise RuntimeError("only have fast formula for 2,3 dims")
+            raise RuntimeError("only have fast formula for 1,2,3 dims")
         return p
 
     def get_lnprob_array(self, pars):
@@ -1970,6 +1998,14 @@ class GMixND(object):
                                  pars,
                                  dolog,
                                  lnp)
+        if self.ndim==1:
+            _get_gmixnd_array_1d(self.log_pnorms,
+                                 self.means,
+                                 self.icovars,
+                                 self.tmp_lnprob,
+                                 pars,
+                                 dolog,
+                                 lnp)
 
         else:
             raise RuntimeError("only have fast formula for 2,3 dims")
@@ -1985,18 +2021,21 @@ class GMixND(object):
 
         twopi = 2.0*pi
 
-        norms = zeros(self.ngauss)
-        icovars = zeros( (self.ngauss, self.ndim, self.ndim) )
+        if self.ndim==1:
+            norms = 1.0/sqrt(twopi*self.covars)
+            icovars = 1.0/self.covars
+        else:
+            norms = zeros(self.ngauss)
+            icovars = zeros( (self.ngauss, self.ndim, self.ndim) )
+            for i in xrange(self.ngauss):
+                cov = self.covars[i,:,:]
+                icov = numpy.linalg.inv( cov )
 
-        for i in xrange(self.ngauss):
-            cov = self.covars[i,:,:]
-            icov = numpy.linalg.inv( cov )
+                det = numpy.linalg.det(cov)
+                n=1.0/sqrt( twopi**self.ndim * det )
 
-            det = numpy.linalg.det(cov)
-            n=1.0/sqrt( twopi**self.ndim * det )
-
-            norms[i] = n
-            icovars[i,:,:] = icov
+                norms[i] = n
+                icovars[i,:,:] = icov
 
         self.norms = norms
         self.pnorms = norms*self.weights
@@ -2087,6 +2126,54 @@ def _get_gmixnd_2d(log_pnorms, means, icovars, tmp_lnprob, x, dolog):
 
         chi2  = x1diff*(icovars[i,0,0]*x1diff + icovars[i,0,1]*x2diff)
         chi2 += x2diff*(icovars[i,1,0]*x1diff + icovars[i,1,1]*x2diff)
+
+        lnp = -0.5*chi2 + logpnorm
+        if lnp > lnpmax:
+            lnpmax=lnp
+        tmp_lnprob[i] = lnp
+        
+    for i in xrange(ngauss):
+        p += exp(tmp_lnprob[i] - lnpmax)
+
+    out=0.0
+    if dolog==1:
+        out = log(p) + lnpmax
+    else:
+        out=p*exp(lnpmax)
+
+    return out
+
+
+@autojit
+def _get_gmixnd_array_1d(log_pnorms, means, icovars, tmp_lnprob, x, dolog, output):
+    """
+    Fill the output array
+    """
+    n=output.size
+    for i in xrange(n):
+        output[i] = _get_gmixnd_1d(log_pnorms, means, icovars, tmp_lnprob, x[i], dolog)
+
+@autojit
+def _get_gmixnd_1d(log_pnorms, means, icovars, tmp_lnprob, x, dolog):
+    """
+    Trying to avoid underflow
+    vmax = arr.max(axis=0)
+    out = np.log(np.sum(np.exp(arr - vmax), axis=0))
+    out += vmax
+    return out
+    """
+    ngauss=log_pnorms.size
+
+    p=0.0
+    lnp=0.0
+    lnpmax=-9.99e9
+
+    for i in xrange(ngauss):
+        logpnorm = log_pnorms[i]
+
+        xdiff=x-means[i]
+
+        chi2  = xdiff*xdiff*icovars[i]
 
         lnp = -0.5*chi2 + logpnorm
         if lnp > lnpmax:
