@@ -1846,7 +1846,11 @@ class MCMCSersic(MCMCSimple):
                 g = sqrt(pars[2]**2 + pars[3]**2)
                 if g > self.g_prior.gmax:
                     raise GMixRangeError("g too big")
-        
+        else:
+            g = sqrt(pars[2]**2 + pars[3]**2)
+            if g >= 0.99999:
+                raise GMixRangeError("g too big")
+
         if self.T_prior is not None:
             lnp += self.T_prior.get_lnprob_scalar(pars[4])
 
@@ -1873,6 +1877,177 @@ class MCMCSersic(MCMCSimple):
         if band > 0:
             raise ValueError("support multi-band for sersic")
         return pars.copy()
+
+class MCMCSersicJointHybrid(MCMCSersic):
+    def __init__(self, image, weight, jacobian, **keys):
+
+        self.g1i=2
+        self.g2i=3
+
+        self.joint_prior=keys.get('joint_prior',None)
+
+        if (self.joint_prior is None):
+            raise ValueError("send joint_prior for sersic joint")
+
+        self.prior_during=keys.get('prior_during',False)
+
+        MCMCBase.__init__(self, image, weight, jacobian, "sersic", **keys)
+
+
+    def _get_priors(self, pars):
+        """
+        Apply simple priors
+        """
+        lnp=0.0
+        
+        if self.cen_prior is not None:
+            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+
+        jp=self.joint_prior
+
+        # this is just the structural parameters
+        lnp += jp.get_lnprob_scalar(pars[4:])
+
+        if self.prior_during:
+            lnp += jp.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
+
+        return lnp
+
+    def _get_band_pars(self, pars, band):
+        """
+        Extract pars for the specified band and convert to linear
+        """
+        if band != 0:
+            raise ValueError("deal with more than one band")
+        linpars=pars.copy()
+
+        linpars[4] = 10.0**linpars[4]
+        linpars[5] = 10.0**linpars[5]
+        linpars[6] = 10.0**linpars[6]
+
+        return linpars
+
+
+    def _get_priors(self, pars):
+        """
+        Apply simple priors
+        """
+        lnp=0.0
+        
+        if self.cen_prior is not None:
+            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
+
+        jp=self.joint_prior
+
+        # this is just the structural parameters
+        lnp += jp.get_lnprob_scalar(pars[4:])
+
+        if self.prior_during:
+            lnp += jp.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
+
+        return lnp
+
+    def _get_PQR(self):
+        """
+        get the marginalized P,Q,R from Bernstein & Armstrong
+        """
+
+        g_prior=self.joint_prior.g_prior
+        trials=self.trials
+        g1=trials[:,2]
+        g2=trials[:,3]
+
+        #print("get pqr joint simple hybrid")
+        sh=self.shear_expand
+        if sh is None:
+            Pi,Qi,Ri = g_prior.get_pqr_num(g1,g2)
+        else:
+            print("        expanding about shear:",sh)
+            Pi,Qi,Ri = g_prior.get_pqr_num(g1,g2, s1=sh[0], s2=sh[1])
+        
+        if self.prior_during:
+            # We measured the posterior surface.  But the integrals are over
+            # the likelihood.  So divide by the prior.
+            #
+            # Also note the p we divide by is in principle different from the
+            # Pi above, which are evaluated at the shear expansion value
+
+            print("undoing prior for pqr")
+
+            prior_vals=self._get_g_prior_vals()
+
+            w,=numpy.where(prior_vals > 0.0)
+
+            Pinv = 1.0/prior_vals[w]
+            Pinv_sum=Pinv.sum()
+
+            Pi = Pi[w]
+            Qi = Qi[w,:]
+            Ri = Ri[w,:,:]
+
+            # this is not unity if expanding about some shear
+            Pi *= Pinv
+            Qi[:,0] *= Pinv 
+            Qi[:,1] *= Pinv
+
+            Ri[:,0,0] *= Pinv
+            Ri[:,0,1] *= Pinv
+            Ri[:,1,0] *= Pinv
+            Ri[:,1,1] *= Pinv
+
+            P = Pi.sum()/Pinv_sum
+            Q = Qi.sum(axis=0)/Pinv_sum
+            R = Ri.sum(axis=0)/Pinv_sum
+        else:
+            P = Pi.mean()
+            Q = Qi.mean(axis=0)
+            R = Ri.mean(axis=0)
+ 
+        return P,Q,R
+
+    def get_weights(self):
+        """
+        must have         
+        """
+        if not self.prior_during:
+            #print("        weight is prior")
+            weights=self._get_g_prior_vals()
+        else:
+            #print("        weight is None")
+            weights=None
+        return weights
+
+    def get_gmix(self):
+        """
+        Get a gaussian mixture at the "best" parameter set, which
+        definition depends on the sub-class
+        """
+        logpars=self._result['pars']
+        pars=logpars.copy()
+        pars[4] = 10.0**logpars[4]
+        pars[5] = 10.0**logpars[5]
+        pars[6] = 10.0**logpars[6]
+
+        gm=gmix.make_gmix_model(pars, self.model)
+        return gm
+
+
+    def _get_g_prior_vals(self):
+        if not hasattr(self,'joint_prior_vals'):
+            trials=self.trials
+            g1,g2=trials[:,2],trials[:,3]
+            self.joint_prior_vals = self.joint_prior.g_prior.get_prob_array2d(g1,g2)
+        return self.joint_prior_vals
+
+    def get_par_names(self):
+        names=[r'$cen_1$',
+               r'$cen_2$',
+               r'$g_1$',
+               r'$g_2$',
+               r'$log_{10}(T)$',
+               r'$log_{10}(F)$',
+               r'$log_{10}(n)$']
+        return names
 
 
 
@@ -3706,7 +3881,7 @@ def make_sersic_images(model, hlr, flux, n, noise, g1, g2):
     print("image sum:",image.sum())
     return image, wt, psf_image
 
-def test_sersic_profile(model, **keys):
+def profile_sersic(model, **keys):
     import cProfile
     import pstats
 
@@ -3813,14 +3988,15 @@ def test_sersic(model,
         mc_obj=MCMCSersic(im, wt, jacob,
                           psf=psf_fit,
                           nwalkers=nwalkers,
-                          burnin=burnin,
-                          nstep=nstep,
                           counts_prior=counts_prior,
                           cen_prior=cen_prior,
                           n_prior=n_prior,
                           T_prior=T_prior,
                           full_guess=full_guess)
-        mc_obj.go()
+        pars=mc_obj.run_mcmc(full_guess, burnin)
+        pars=mc_obj.run_mcmc(pars, nstep)
+
+    mc_obj.calc_result()
 
     res=mc_obj.get_result()
     gm=mc_obj.get_gmix()

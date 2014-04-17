@@ -1151,6 +1151,15 @@ class GPriorGreat3Exp(GPriorBase):
 
         return prob
 
+def make_gprior_great3_sersic_cgc():
+    """
+    Fitting sersic to control-ground-constant
+    run nfit-cgc-deep01
+    """
+    pars=[0.00467434, 0.0632592, 0.094156]
+    print("great3 sersic cgc g pars:",pars)
+    return GPriorGreat3Exp(pars)
+
 
 def make_gprior_great3_exp():
     """

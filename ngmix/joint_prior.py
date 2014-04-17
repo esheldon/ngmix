@@ -955,7 +955,6 @@ class JointPriorSimpleLogPars(JointPriorSimpleLinPars):
         return wgood
 
 
-
 class JointPriorSimpleHybrid(JointPriorSimpleLinPars):
     """
     Joint prior in g1,g2,T,F
@@ -1098,6 +1097,87 @@ class JointPriorSimpleHybrid(JointPriorSimpleLinPars):
                        & (logF > logFlux_bounds[0])
                        & (logF < logFlux_bounds[1]) )
         return wgood
+
+
+class JointPriorSersicHybrid(JointPriorSimpleHybrid):
+    """
+    Joint prior in g1,g2,T,F
+
+    The prior is actually in eta1,eta2,logT,logF as a sum of gaussians.  When
+    sampling the values are converted to the linear ones.  Also when getting
+    the log probability, the input linear values are converted into log space.
+    """
+    def __init__(self,
+                 weights,
+                 means,
+                 covars,
+                 g_prior,
+                 logT_bounds=[-1.5, 1.0],
+                 logFlux_bounds=[-0.5, 1.0],
+                 logn_bounds=[log10(0.751), log10(5.99)]):
+
+        print("JointPriorSersicHybrid")
+
+        self.logT_bounds=logT_bounds
+        self.logFlux_bounds=logFlux_bounds
+        self.logn_bounds = logn_bounds
+        self.g_prior=g_prior
+
+        GMixND.__init__(self, weights, means, covars)
+
+        self.ndim=3
+        self._make_gmm()
+
+
+    def check_bounds_scalar(self, pars, throw=True):
+        """
+        Check bounds on T Flux
+        """
+
+        logT_bounds=self.logT_bounds
+        logFlux_bounds=self.logFlux_bounds
+        logn_bounds=self.logn_bounds
+
+        logT=pars[0]
+        logF=pars[1]
+        logn=pars[2]
+
+        if (  logT < logT_bounds[0]
+            or logT > logT_bounds[1]
+            or logF < logFlux_bounds[0]
+            or logF > logFlux_bounds[1]
+            or logn < logn_bounds[0]
+            or logn > logn_bounds[1]):
+
+            if throw:
+                raise GMixRangeError("T, F or n out of range")
+            else:
+                return False
+        else:
+            return True
+
+    def check_bounds_array(self,pars):
+        """
+        Check bounds on T Flux
+        """
+        logT_bounds=self.logT_bounds
+        logFlux_bounds=self.logFlux_bounds
+        logn_bounds=self.logn_bounds
+
+        logT=pars[:,0]
+        logF=pars[:,1]
+        logn=pars[:,2]
+
+        wgood, = where(  (logT > logT_bounds[0])
+                       & (logT < logT_bounds[1])
+                       & (logF > logFlux_bounds[0])
+                       & (logF < logFlux_bounds[1])
+                       & (logn > logn_bounds[0])
+                       & (logn < logn_bounds[1]) )
+        return wgood
+
+
+
 
 class JointPriorBDFHybrid(JointPriorSimpleHybrid):
     """
