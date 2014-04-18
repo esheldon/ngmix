@@ -377,6 +377,7 @@ class GPriorBase(object):
                                 npair=10000,
                                 shear_expand=None,
                                 h=1.e-6,
+                                show=False,
                                 eps=None):
         """
         Test how well we recover the shear with no noise.
@@ -503,7 +504,7 @@ class GPriorBase(object):
 
         fracdiff=shear1_meas/shear1_true-1
         fracdiff_te=shear1_meas_te/shear1_true-1
-        if eps:
+        if eps or show:
             import biggles
             biggles.configure('default','fontsize_min',3)
             plt=biggles.FramedPlot()
@@ -545,9 +546,12 @@ class GPriorBase(object):
 
             plt.add( biggles.PlotKey(0.1, 0.9, [pts,pts_te,curve], halign='left') )
 
-            print('writing:',eps)
-            plt.write_eps(eps)
+            if eps:
+                print('writing:',eps)
+                plt.write_eps(eps)
 
+            if show:
+                plt.show()
             print(poly)
 
 
