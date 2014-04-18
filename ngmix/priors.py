@@ -8,7 +8,7 @@ I haven't forced the max prob to be 1.0 yet, but should
 from __future__ import print_function
 
 import numpy
-from numpy import array, exp, sqrt, zeros, diag
+from numpy import where, array, exp, log, sqrt, zeros, diag
 from numpy.random import random as randu
 from numpy.random import randn
 import numba
@@ -2483,4 +2483,112 @@ def srandu(num=None):
     return 2*(numpy.random.random(num)-0.5)
 
 
+class GPriorCosmosSersic(GPriorBase):
+    def __init__(self):
+        self.gmax=1.0
 
+    def get_prob_scalar1d(self, g):
+        """
+        get prob, scalar input, raise exception on range error
+        """
+        if g < 0 or g > 1:
+            raise GMixRangeError("e out of range")
+        parr=self.get_prob_array1d(g)
+        return parr[0]
+
+    def get_prob_array1d(self, g):
+        """
+        get prob, array input, don't raise exception on range error,
+        instead set to LOWVAL
+        """
+        g_arr=array(g,ndmin=1,copy=False)
+
+        p=zeros(g_arr.size)
+        w,=where( (g_arr >= 0.0) & (g_arr < 1.0) )
+
+        if w.size > 0:
+            p[w] = self._get_prob_nocheck(g_arr[w])
+
+        return p
+
+    def get_lnprob_scalar1d(self, g):
+        """
+        get prob, scalar input, raise exception on range error
+        """
+        if g < 0 or g > 1:
+            raise GMixRangeError("e out of range")
+        lnparr=self.get_lnprob_array1d(g)
+        return lnparr[0]
+
+
+    def get_lnprob_array1d(self, g):
+        """
+        get prob, array input, don't raise exception on range error,
+        instead set to LOWVAL
+        """
+        g_arr=array(g,ndmin=1,copy=False)
+
+        lnp=zeros(g_arr.size) + LOWVAL
+        w,=where( (g_arr >= 0.0) & (g_arr < 1.0) )
+
+        if w.size > 0:
+            p = self._get_prob_nocheck(g_arr[w])
+            lnp[w] = log(p)
+
+        return lnp
+
+    def get_prob_scalar2d(self, g1, g2):
+        """
+        both g1,g2 input, scalar, raise exceptions
+        """
+        g=sqrt(g1**2 + g2**2)
+        return self.get_prob_scalar1d(g)
+
+    def get_prob_array2d(self, g1, g2):
+        """
+        both g1,g2 input, scalar, raise exceptions
+        """
+        g=sqrt(g1**2 + g2**2)
+        return self.get_prob_array1d(g)
+
+
+    def get_lnprob_scalar2d(self, g1, g2):
+        """
+        both g1,g2 input, scalar, raise exceptions
+        """
+        g=sqrt(g1**2 + g2**2)
+        return self.get_lnprob_scalar1d(g)
+
+    def get_lnprob_array2d(self, g1, g2):
+        """
+        both g1,g2 input, scalar, raise exceptions
+        """
+        g=sqrt(g1**2 + g2**2)
+        return self.get_lnprob_array1d(g)
+
+
+    def _get_prob_nocheck(self, g_arr):
+        """
+        Input should be in bounds and an array
+        """
+        from scipy.interpolate import fitpack
+        p,err=fitpack._fitpack._spl_(g_arr,
+                                     0,
+                                     _g_cosmos_t,
+                                     _g_cosmos_c,
+                                     _g_cosmos_k,
+                                     0)
+        if err:
+            print("error occurred in g interp")
+
+        return p
+
+_g_cosmos_t = array([0.,0.,0.,0.,0.001,0.15,0.2,0.4,0.5,
+                     0.7,0.8,0.9,0.92,0.999,1.,1.,1.,1.])
+
+_g_cosmos_c= array([0.,41.56646313,1089.28265178,1117.24827112, 
+          1083.02107936,836.29580332,502.71408304,282.19129159, 
+          -14.58689825,4.83572205,-3.331918,2.16668349, 
+          0.,0.,0.,0., 0.,0.])
+
+_g_cosmos_k = 3
