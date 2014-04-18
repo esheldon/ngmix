@@ -9,6 +9,7 @@ from __future__ import print_function
 
 import numpy
 from numpy import where, array, exp, log, sqrt, zeros, diag
+from numpy import pi
 from numpy.random import random as randu
 from numpy.random import randn
 import numba
@@ -262,11 +263,8 @@ class GPriorBase(object):
         maxval1d = self.maxval1d * 1.1
 
         # don't go right up to the end
-        gmax=self.gmax
-        #gmax=self.gmax - 1.0e-4
-        #print("using gmax:",gmax)
-        #print("using maxval1d_loc:",self.maxval1d_loc)
-        #print("using maxval1d:",maxval1d)
+        #gmax=self.gmax
+        gmax=self.gmax - 1.0e-4
 
         g = numpy.zeros(nrand)
 
@@ -401,10 +399,14 @@ class GPriorBase(object):
 
         shear1_meas=numpy.zeros(nshear)
         shear2_meas=numpy.zeros(nshear)
+        shear1_meas_err=numpy.zeros(nshear)
+        shear2_meas_err=numpy.zeros(nshear)
         
         # _te means expanded around truth
         shear1_meas_te=numpy.zeros(nshear)
         shear2_meas_te=numpy.zeros(nshear)
+        shear1_meas_err_te=numpy.zeros(nshear)
+        shear2_meas_err_te=numpy.zeros(nshear)
  
         theta=numpy.pi/2.0
         twotheta = 2.0*theta
@@ -414,6 +416,7 @@ class GPriorBase(object):
         g1=numpy.zeros(npair*2)
         g2=numpy.zeros(npair*2)
         for ishear in xrange(nshear):
+            print("-"*70)
             s1=shear1_true[ishear]
             s2=shear2_true[ishear]
 
@@ -437,15 +440,15 @@ class GPriorBase(object):
                                                 s1=s1expand, s2=s2expand, h=h)
 
                 # watch for zeros in P for some priors
-                even = numpy.arange(npair)*2
-                odd = even+1
+                first=numpy.arange(npair)
+                second=first+npair
 
                 Pscale = P/P.max()
                 print("Pmin:",P.min(),"Pmax:",P.max())
                 print("Pscale_min: %g" % Pscale.min())
-                #w,=numpy.where( (P[even] > 0) & (P[odd] > 0) )
-                w,=numpy.where( (Pscale[even] > 1.0e-6) & (Pscale[odd] > 1.0e-6) )
-                w=numpy.concatenate( (even[w], odd[w] ) )
+                #w,=numpy.where( (Pscale[first] > 1.0e-6) & (Pscale[second] > 1.0e-6) )
+                w,=numpy.where( (Pscale[first] > 0.) & (Pscale[second] > 0.) )
+                w=numpy.concatenate( (first[w], second[w] ) )
                 print("kept: %d/%d" % (w.size, npair*2))
                 P=P[w]
                 Q=Q[w,:]
@@ -454,9 +457,8 @@ class GPriorBase(object):
                 Pscale = P_te/P_te.max()
                 print("P_te_min:",P_te.min(),"P_te_max:",P_te.max())
                 print("P_te_scale_min: %g" % Pscale.min())
-                w,=numpy.where( (Pscale[even] > 1.0e-6) & (Pscale[odd] > 1.0e-6) )
-                #w,=numpy.where( (P_te[even] > 0) & (P_te[odd] > 0) )
-                w=numpy.concatenate( (even[w], odd[w] ) )
+                w,=numpy.where( (Pscale[first] > 1.0e-6) & (Pscale[second] > 1.0e-6) )
+                w=numpy.concatenate( (first[w], second[w] ) )
                 print("kept: %d/%d" % (w.size, npair*2))
                 P_te=P_te[w]
                 Q_te=Q_te[w,:]
@@ -500,10 +502,16 @@ class GPriorBase(object):
                 mess='true: %.6f meas: %.6f +/- %.6f expand true: %.6f +/- %.6f'
                 err=numpy.sqrt(C[0,0])
                 err_te=numpy.sqrt(C_te[0,0])
+
+                shear1_meas_err[ishear] = err
+                shear1_meas_err_te[ishear] = err_te
                 print(mess % (s1,g1g2[0],err,g1g2_te[0],err_te))
 
         fracdiff=shear1_meas/shear1_true-1
+        fracdiff_err=shear1_meas_err/shear1_true
         fracdiff_te=shear1_meas_te/shear1_true-1
+        fracdiff_err_te=shear1_meas_err_te/shear1_true
+
         if eps or show:
             import biggles
             biggles.configure('default','fontsize_min',3)
@@ -535,13 +543,19 @@ class GPriorBase(object):
             pts_te.label='expand shear=true'
             plt.add(pts_te)
 
+            if not doring:
+                perr=biggles.SymmetricErrorBarsY(shear1_true, fracdiff, fracdiff_err,
+                                                 color='blue')
+                perr_te=biggles.SymmetricErrorBarsY(shear1_true, fracdiff_te, fracdiff_err_te,
+                                                 color='blue')
+                plt.add(perr,perr_te)
+
             coeffs=numpy.polyfit(shear1_true, fracdiff, 2)
             poly=numpy.poly1d(coeffs)
 
             curve=biggles.Curve(shear1_true, poly(shear1_true), type='solid',
                                 color='black')
-            #curve.label=r'$\Delta \gamma/\gamma~\propto~\gamma^2$'
-            curve.label=r'$\Delta g/g = 1.9 g^2$'
+            curve.label=r'$\Delta g/g = %.1f g^2$' % coeffs[0]
             plt.add(curve)
 
             plt.add( biggles.PlotKey(0.1, 0.9, [pts,pts_te,curve], halign='left') )
@@ -1155,14 +1169,21 @@ class GPriorGreat3Exp(GPriorBase):
 
         return prob
 
-def make_gprior_great3_sersic_cgc():
+def make_gprior_great3_sersic_cgc(type='erf'):
     """
-    Fitting sersic to control-ground-constant
-    run nfit-cgc-deep01
+    Fitting to Lackner ellipticities
+    A:        0.0250834 +/- 0.00198797
+    a:        1.98317 +/- 0.187965
+    g0:       0.0793992 +/- 0.00256969
+    gmax:     0.706151 +/- 0.00414383
+    gsigma:   0.124546 +/- 0.00611789
     """
-    pars=[0.00467434, 0.0632592, 0.094156]
-    print("great3 sersic cgc g pars:",pars)
-    return GPriorGreat3Exp(pars)
+    if type=='spline':
+        return GPriorCosmosSersicSpline()
+    else:
+        pars=[0.0250834, 1.98317, 0.0793992, 0.706151, 0.124546]
+        print("great3 sersic cgc g pars:",pars)
+        return GPriorMErf(pars)
 
 
 def make_gprior_great3_exp():
@@ -1318,6 +1339,123 @@ class GPriorM(GPriorBase):
         return (ff - fb)*self.hinv
 
 
+class GPriorMErf(GPriorBase):
+    def __init__(self, pars):
+        """
+        [A, a, g0, gmax, gsigma]
+
+        From Miller et al. multiplied by an erf
+        """
+        self.pars=pars
+
+        self.A    = pars[0]
+        self.a    = pars[1]
+        self.g0   = pars[2]
+        self.g0sq = self.g0**2
+        self.gmax_func = pars[3]
+        self.gsigma = pars[4]
+
+        self.gmax = 1.0
+
+    def get_prob_scalar1d(self, g):
+        """
+        Get the prob for the input g value
+        """
+
+        if g < 0.0 or g >= 1.0:
+            raise GMixRangeError("g out of range")
+
+        return self._get_prob_nocheck_prefac(g)
+
+    def get_prob_scalar2d(self, g1, g2):
+        """
+        Get the 2d prob for the input g1,g2 values
+        """
+
+        gsq = g1**2 + g2**2
+        g = sqrt(gsq)
+
+        if g < 0.0 or g >= 1.0:
+            raise GMixRangeError("g out of range")
+
+        return self._get_prob_nocheck(g)
+
+    def get_lnprob_scalar2d(self, g1, g2):
+        """
+        Get the 2d log prob for the input g1,g2 values
+        """
+        
+        p=self.get_prob_scalar2d(g1,g2)
+        return log(p)
+
+    def get_prob_array1d(self, g):
+        """
+        Get the prob for the input g values
+        """
+
+        p=zeros(g.size)
+        w,=where( (g >= 0.0) & (g < 1.0) )
+        if w.size > 0:
+            p[w]=self._get_prob_nocheck_prefac(g[w])
+        return p
+
+    def get_prob_array2d(self, g1, g2):
+        """
+        Get the 2d prob for the input g1,g2 values
+        """
+
+        gsq = g1**2 + g2**2
+        g = sqrt(gsq)
+
+        p=zeros(g1.size)
+        w,=where( (g >= 0.0) & (g < 1.0) )
+        if w.size > 0:
+            p[w]=self._get_prob_nocheck(g[w])
+        return p
+
+
+    def get_lnprob_array2d(self, g1, g2):
+        """
+        Get the 2d log prob for the input g1,g2 values
+        """
+
+        gsq = g1**2 + g2**2
+        g = sqrt(gsq)
+
+        lnp=zeros(g1.size)+LOWVAL
+        w,=where( (g >= 0.0) & (g < 1.0) )
+        if w.size > 0:
+            p=self._get_prob_nocheck(g[w])
+            lnp[w] = log(p)
+        return lnp
+
+
+
+    def _get_prob_nocheck_prefac(self, g):
+        """
+        With the 2*pi*g
+        """
+        return 2*pi*g*self._get_prob_nocheck(g)
+
+    def _get_prob_nocheck(self, g):
+        """
+        workhorse function
+
+        this does not include the 2*pi*g
+        """
+        from scipy.special import erf
+
+        #numer1 = 2*pi*g*self.A*(1-exp( (g-1.0)/self.a ))
+        numer1 = self.A*(1-exp( (g-1.0)/self.a ))
+
+        gerf=0.5*(1.0+erf((self.gmax_func-g)/self.gsigma))
+        numer =  numer1 * gerf
+
+        denom = (1+g)*sqrt(g**2 + self.g0sq)
+
+        model=numer/denom
+
+        return model
 
 
 class LogNormalBase(object):
@@ -2487,95 +2625,32 @@ def srandu(num=None):
     return 2*(numpy.random.random(num)-0.5)
 
 
-class GPriorCosmosSersic(GPriorBase):
+
+class GPriorCosmosSersicSpline(GPriorMErf):
     def __init__(self):
         self.gmax=1.0
 
-    def get_prob_scalar1d(self, g):
+    def _get_prob_nocheck(self, g):
         """
-        get prob, scalar input, raise exception on range error
+        Remove the 2*pi*g
         """
-        if g < 0 or g > 1:
-            raise GMixRangeError("e out of range")
-        parr=self.get_prob_array1d(g)
-        return parr[0]
+        g_arr=numpy.atleast_1d(g)
+        w,=where(g_arr > 0)
+        if w.size != g_arr.size:
+            raise GMixRangeError("zero g found")
 
-    def get_prob_array1d(self, g):
-        """
-        get prob, array input, don't raise exception on range error,
-        instead set to LOWVAL
-        """
-        g_arr=array(g,ndmin=1,copy=False)
-
+        p_prefac=self._get_prob_nocheck_prefac(g_arr)
         p=zeros(g_arr.size)
-        w,=where( (g_arr >= 0.0) & (g_arr < 1.0) )
-
-        if w.size > 0:
-            p[w] = self._get_prob_nocheck(g_arr[w])
-
+        p = p_prefac/(2.*pi*g_arr)
         return p
 
-    def get_lnprob_scalar1d(self, g):
-        """
-        get prob, scalar input, raise exception on range error
-        """
-        if g < 0 or g > 1:
-            raise GMixRangeError("e out of range")
-        lnparr=self.get_lnprob_array1d(g)
-        return lnparr[0]
-
-
-    def get_lnprob_array1d(self, g):
-        """
-        get prob, array input, don't raise exception on range error,
-        instead set to LOWVAL
-        """
-        g_arr=array(g,ndmin=1,copy=False)
-
-        lnp=zeros(g_arr.size) + LOWVAL
-        w,=where( (g_arr >= 0.0) & (g_arr < 1.0) )
-
-        if w.size > 0:
-            p = self._get_prob_nocheck(g_arr[w])
-            lnp[w] = log(p)
-
-        return lnp
-
-    def get_prob_scalar2d(self, g1, g2):
-        """
-        both g1,g2 input, scalar, raise exceptions
-        """
-        g=sqrt(g1**2 + g2**2)
-        return self.get_prob_scalar1d(g)
-
-    def get_prob_array2d(self, g1, g2):
-        """
-        both g1,g2 input, scalar, raise exceptions
-        """
-        g=sqrt(g1**2 + g2**2)
-        return self.get_prob_array1d(g)
-
-
-    def get_lnprob_scalar2d(self, g1, g2):
-        """
-        both g1,g2 input, scalar, raise exceptions
-        """
-        g=sqrt(g1**2 + g2**2)
-        return self.get_lnprob_scalar1d(g)
-
-    def get_lnprob_array2d(self, g1, g2):
-        """
-        both g1,g2 input, scalar, raise exceptions
-        """
-        g=sqrt(g1**2 + g2**2)
-        return self.get_lnprob_array1d(g)
-
-
-    def _get_prob_nocheck(self, g_arr):
+    def _get_prob_nocheck_prefac(self, g):
         """
         Input should be in bounds and an array
         """
         from scipy.interpolate import fitpack
+
+        g_arr=numpy.atleast_1d(g)
         p,err=fitpack._fitpack._spl_(g_arr,
                                      0,
                                      _g_cosmos_t,
@@ -2583,10 +2658,32 @@ class GPriorCosmosSersic(GPriorBase):
                                      _g_cosmos_k,
                                      0)
         if err:
-            print("error occurred in g interp")
+            raise RuntimeError("error occurred in g interp")
 
-        return p
+        if not isinstance(g,numpy.ndarray):
+            return p[0]
+        else:
+            return p
 
+
+_g_cosmos_t = array([ 0.   ,  0.   ,  0.   ,  0.   ,  0.001,  0.15 ,  0.2  ,  0.4  ,
+                             0.5  ,  0.7  ,  0.8  ,  0.85 ,  0.86 ,  0.865,  0.89 ,  0.9  ,
+                             0.91 ,  0.92 ,  0.925,  0.93 ,  0.94 ,  0.95 ,  0.96 ,  0.97 ,
+                             0.98 ,  0.999,  1.   ,  1.   ,  1.   ,  1.   ])
+_g_cosmos_c = array([  0.00000000e+00,   4.16863836e+01,   1.08898496e+03,
+                              1.11759878e+03,   1.08252322e+03,   8.37179646e+02,
+                              5.01288706e+02,   2.85169581e+02,   1.82341644e+01,
+                              9.86159479e+00,   2.35167895e+00,  -1.16749781e-02,
+                              2.18333603e-03,   6.23967745e-03,   4.25839705e-03,
+                              5.30413464e-03,   4.89754389e-03,   5.11359296e-03,
+                              4.87944452e-03,   5.13580057e-03,   4.78950152e-03,
+                              5.37471368e-03,   4.00911261e-03,   7.30958026e-03,
+                             -4.03798531e-20,   0.00000000e+00,   0.00000000e+00,
+                              0.00000000e+00,   0.00000000e+00,   0.00000000e+00])
+_g_cosmos_k= 3
+
+
+'''
 _g_cosmos_t = array([0.,0.,0.,0.,0.001,0.15,0.2,0.4,0.5,
                      0.7,0.8,0.9,0.92,0.999,1.,1.,1.,1.])
 
@@ -2596,3 +2693,4 @@ _g_cosmos_c= array([0.,41.56646313,1089.28265178,1117.24827112,
           0.,0.,0.,0., 0.,0.])
 
 _g_cosmos_k = 3
+'''
