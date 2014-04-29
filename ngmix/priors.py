@@ -570,6 +570,7 @@ class GPriorBase(object):
 
 
     def test_pqr_shear_recovery_iter(self, shear, npair, niter,
+                                     shear_expand_start=None,
                                      doring=True,
                                      h=1.e-6):
         """
@@ -598,7 +599,11 @@ class GPriorBase(object):
         g1=numpy.zeros(npair*2)
         g2=numpy.zeros(npair*2)
 
-        shear_expand=array([0.0, 0.0])
+        if shear_expand_start is not None:
+            shear_expand=array(shear_expand_start)
+        else:
+            shear_expand=array([0.0, 0.0])
+
         for i in xrange(niter):
 
             if doring:
@@ -1169,22 +1174,6 @@ class GPriorGreat3Exp(GPriorBase):
 
         return prob
 
-def make_gprior_great3_sersic_cgc(type='erf'):
-    """
-    Fitting to Lackner ellipticities
-    A:        0.0250834 +/- 0.00198797
-    a:        1.98317 +/- 0.187965
-    g0:       0.0793992 +/- 0.00256969
-    gmax:     0.706151 +/- 0.00414383
-    gsigma:   0.124546 +/- 0.00611789
-    """
-    if type=='spline':
-        return GPriorCosmosSersicSpline()
-    else:
-        pars=[0.0250834, 1.98317, 0.0793992, 0.706151, 0.124546]
-        print("great3 sersic cgc g pars:",pars)
-        return GPriorMErf(pars)
-
 
 def make_gprior_great3_exp():
     """
@@ -1204,13 +1193,6 @@ def make_gprior_great3_bdf():
 
 
 
-def make_gprior_cosmos_galfit():
-    """
-    From the galfit fits
-    """
-    pars=[560.0, 1.05, 0.086, 0.813]
-    return GPriorM(pars)
-
 
 def make_gprior_cosmos_exp():
     """
@@ -1225,6 +1207,23 @@ def make_gprior_cosmos_dev():
     """
     pars=[560.0, 1.28, 0.088, 0.887]
     return GPriorM(pars)
+
+def make_gprior_cosmos_sersic(type='erf'):
+    """
+    Fitting to Lackner ellipticities
+    A:        0.0250834 +/- 0.00198797
+    a:        1.98317 +/- 0.187965
+    g0:       0.0793992 +/- 0.00256969
+    gmax:     0.706151 +/- 0.00414383
+    gsigma:   0.124546 +/- 0.00611789
+    """
+    if type=='spline':
+        return GPriorCosmosSersicSpline()
+    else:
+        pars=[0.0250834, 1.98317, 0.0793992, 0.706151, 0.124546]
+        print("great3 sersic cgc g pars:",pars)
+        return GPriorMErf(pars)
+
 
 @autojit
 class GPriorM(GPriorBase):

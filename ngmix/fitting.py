@@ -1194,13 +1194,6 @@ class MCMCBase(FitterBase):
         self.last_pos=self._run_some_trials(pos, self.nstep)
 
         self.flags=0
-        #if have_acor and self.tau > MAX_TAU:
-        #    self.flags |= LARGE_TAU
-        
-        #if self.arate < self.min_arate:
-        #    print("arate",self.arate,"is low setting flag,",LOW_ARATE)
-        #    self.flags |= LOW_ARATE
-
         self.sampler=sampler
 
 
@@ -1659,8 +1652,7 @@ class MCMCSimple(MCMCBase):
             else:
                 Pi,Qi,Ri = self.g_prior.get_pqr_num(g1,g2)
         else:
-            # expand around a requested value.  BA analytic formulas
-            # don't support this yet...
+            print("        expanding pqr about:",sh)
             if hasattr(self.g_prior,'get_pqr_expand'):
                 Pi,Qi,Ri = self.g_prior.get_pqr_expand(g1,g2, sh[0], sh[1])
             else:
@@ -1683,7 +1675,7 @@ class MCMCSimple(MCMCBase):
             # Also note the p we divide by is in principle different from the
             # Pi above, which are evaluated at the shear expansion value
 
-            print("undoing prior for pqr")
+            print("        undoing prior for pqr")
 
             prior_vals=self._get_g_prior_vals()
 
