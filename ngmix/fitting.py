@@ -1,3 +1,11 @@
+"""
+- todo
+    - split out pqr calculations
+    - split out lensfit calculations
+    - support a single prior sent
+        - everywhere that these can be sent, including T= keywords etc.
+        - lots of _get_priors need to be adapted
+"""
 # there are a few additional imports not in this header for example we only
 # import emcee if needed
 from __future__ import print_function
@@ -10,6 +18,8 @@ from pprint import pprint
 
 from . import gmix
 from .gmix import _exp3_ivals,_exp3_lookup
+from .gmix import GMixList, MultiBandGMixList
+
 from .jacobian import Jacobian, UnitJacobian
 
 from . import priors
@@ -46,6 +56,8 @@ class FitterBase(object):
     """
     Base for other fitters
 
+    The basic input is the Observation (or ObsList or MultiBandObsList)
+
     Designed to fit many images at once.  For this reason, a jacobian
     transformation is required to put all on the same system. For the
     same reason, the center of the model is relative to "zero", which
@@ -53,12 +65,7 @@ class FitterBase(object):
     row0,col0 in pixels for each should correspond to that center in the
     common coordinates (e.g. sky coords)
 
-    Fluxes and sizes will also be in the transformed system.  You can use the
-    method get_flux_scaling to get the average scaling from the input images.
-    This only makes sense for comparing to fluxes measured in the image system,
-    for example zeropoints.  If you are using very many different cameras then
-    you should just work in sky coordinates, or scale the images by the zero
-    point corrections.
+    Fluxes and sizes will also be in the transformed system.
     
     """
     def __init__(self, obs, model, **keys):
@@ -161,13 +168,6 @@ class FitterBase(object):
             raise ValueError("No result, you must run go()!")
 
         return self._result
-    
-    def get_flux_scaling(self):
-        """
-        Scaling to take flux back into image coords.  Useful if comparing to a
-        zero point calculated in image coords
-        """
-        return 1.0/self.mean_jacob_det
 
     def get_gmix(self):
         """
@@ -312,7 +312,6 @@ class FitterBase(object):
         """
         initialize the list of lists of gaussian mixtures
         """
-        from .gmix import make_gmix_model, GMixList, MultiBandGMixList
         gmix_all0 = MultiBandGMixList()
         gmix_all  = MultiBandGMixList()
 
@@ -363,6 +362,17 @@ class FitterBase(object):
                     gmix._convolve_fill(gm._data, gm0._data, psf_gmix._data)
                 except ZeroDivisionError:
                     raise GMixRangeError("zero division")
+
+    def _get_priors(self, pars):
+        """
+        get the sum of ln(prob) from the priors or 0.0 if
+        no priors were sent
+        """
+        if self.prior is None:
+            return 0.0
+        else:
+            return self.prior.get_lnprob(pars)
+
 
 
 class PSFFluxFitter(FitterBase):
@@ -542,20 +552,18 @@ class LMSimple(FitterBase):
         # xtol (tol in solution), etc
         self.lm_pars=keys['lm_pars']
 
-        self.guess=array( guess, dtype='f8' )
-
         # center + shape + T + fluxes
         n_prior_pars=1 + 1 + 1 + self.nband
 
         self.fdiff_size=self.totpix + n_prior_pars
 
-    def go(self):
+    def go(self, guess):
         """
         Run leastsq and set the result
         """
 
         dof=self.get_dof()
-        result = run_leastsq(self._calc_fdiff, self.guess, dof, **self.lm_pars)
+        result = run_leastsq(self._calc_fdiff, guess, dof, **self.lm_pars)
 
         if result['flags']==0:
             result['g'] = result['pars'][2:2+2].copy()
@@ -639,6 +647,8 @@ class LMSimple(FitterBase):
         I have verified all our priors have this property.
         """
 
+        raise RuntimeError("adapt to new system")
+
         index=0
         fdiff[index] = -self.cen_prior.get_lnprob(pars[0], pars[1])
         index += 1
@@ -707,6 +717,7 @@ class LMSersic(LMSimple):
 
         I have verified all our priors have this property.
         """
+        raise RuntimeError("adapt to new system")
 
         index=0
         fdiff[index] = -self.cen_prior.get_lnprob(pars[0], pars[1])
@@ -898,7 +909,7 @@ class MCMCBase(FitterBase):
         self.random_state = keys.get('random_state',None)
 
         # emcee specific
-        self.nwalkers=keys.get('nwalkers',20)
+        self.nwalkers=keys['nwalkers']
         self.mca_a=keys.get('mca_a',2.0)
 
         self.do_pqr=keys.get('do_pqr',False)
@@ -976,27 +987,8 @@ class MCMCBase(FitterBase):
             except ZeroDivisionError:
                 continue
 
-        if ok:
-            return
-
-        print('failed init gmix lol from input guess:',str(gerror))
-        print('getting a new guess')
-        for j in xrange(10):
-            self.pos=self._get_random_guess()
-            ok=False
-            for i in xrange(self.nwalkers):
-                try:
-                    self._init_gmix_all(self.pos[i,:])
-                    ok=True
-                    break
-                except GMixRangeError as gerror:
-                    continue
-                except ZeroDivisionError:
-                    continue
-            if ok:
-                break
-
         if not ok:
+            print('failed init gmix from input guess: %s' % str(gerror))
             raise gerror
 
     def _get_tau(self,sampler, nstep):
@@ -1030,7 +1022,8 @@ class MCMCBase(FitterBase):
 
     def _get_priors(self, pars):
         """
-        Basically a placeholder for no priors
+        get the sum of ln(prob) from the priors or 0.0 if
+        no priors were sent
         """
         if self.prior is None:
             return 0.0
@@ -1193,6 +1186,8 @@ class MCMCBase(FitterBase):
         import images
         import biggles
 
+        raise RuntimeError("adapt to new system")
+
         biggles.configure('screen','width', width)
         biggles.configure('screen','height', height)
 
@@ -1354,18 +1349,6 @@ class MCMCSimple(MCMCBase):
     """
     def __init__(self, image, weight, jacobian, model, **keys):
         super(MCMCSimple,self).__init__(image, weight, jacobian, model, **keys)
-
-        self.full_guess=keys.get('full_guess',None)
-        self.T_guess=keys.get('T_guess',None)
-        if self.T_guess is None:
-            self.T_guess=1.44
-
-        self.counts_guess=self._get_counts_guess(**keys)
-
-        ncg=self.counts_guess.size
-        if ncg != self.nband:
-                raise ValueError("counts_guess size %s doesn't match "
-                                 "number of bands %s" % (ncg,self.nband))
 
         self.g1i = 2
         self.g2i = 3
@@ -1560,17 +1543,13 @@ class MCMCSimple(MCMCBase):
 
 
 class MCMCSersic(MCMCSimple):
-    def __init__(self, image, weight, jacobian, **keys):
+    def __init__(self, obs, **keys):
 
+        raise RuntimeError("adapt to new system")
         self.g1i=2
         self.g2i=3
 
-        self.n_prior=keys.get('n_prior',None)
-
-        if (self.n_prior is None):
-            raise ValueError("send n_prior for sersic")
-
-        MCMCBase.__init__(self, image, weight, jacobian, "sersic", **keys)
+        MCMCBase.__init__(self, obs, "sersic", **keys)
 
 
     def _setup_sampler_and_data(self, pos):
@@ -3161,8 +3140,6 @@ def test_gauss_psf_jacob(counts_sky=100.0, noise_sky=0.001, nimages=10, jfac=10.
 
     print_pars(res['pars'], front='pars:')
     print_pars(res['pars_err'], front='perr:')
-    s=mc.get_flux_scaling()
-    #print 'flux in image coords: %.4g +/- %.4g' % (res['pars'][-1]*s,res['pars_err'][-1]*s)
 
     gmfit=mc.get_gmix()
     imfit=gmfit.make_image(im.shape, jacobian=j)
@@ -3251,16 +3228,10 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
     images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
 
 
+    obs=Observation(im_obj, wt_obj, j, psf_gmix=psf_fit)
+    mc_obj=MCMCSimple(obs, model)
 
-    # obj
-    jlist=[j]*nimages
-    imlist_obj=[im_obj]*nimages
-    wtlist_obj=[wt_obj]*nimages
-    psf_fit_list=[psf_fit]*nimages
-
-    mc_obj=MCMCSimple(imlist_obj, wtlist_obj, jlist, model,
-                      psf=psf_fit_list,
-                      T=Tsky_obj, counts=counts_sky_obj)
+    raise ValueError("make guess")
     mc_obj.go()
 
     res_obj=mc_obj.get_result()
@@ -4254,158 +4225,4 @@ def profile_test_psf_flux(ngauss,
                           noise_sky=noise_sky,
                           nimages=nimages,
                           jfac=jfac)
-
-class MHSampler(object):
-    """
-    Run a Monte Carlo Markov Chain (MCMC) using Metropolis-Hastings
-    
-    The user inputs an object that has the methods "step" and "get_loglike"
-    that can be used to generate the chain.
-
-    parameters
-    ----------
-    lnprob_func: function or method
-        A function to calculate the log proability given the input
-        parameters.  Can be a method of a class.
-            ln_prob = lnprob_func(pars)
-            
-    stepper: function or method 
-        A function to take a step given the input parameters.
-        Can be a method of a class.
-            newpars = stepper(pars)
-
-    seed: floating point, optional
-        An optional seed for the random number generator.
-
-    examples
-    ---------
-    m=mcmc.MCMC(lnprob_func, stepper, seed=34231)
-    m.run(nstep, par_guess)
-    trials = m.get_trials()
-    loglike = m.get_loglike()
-    arate = m.get_acceptance_rate()
-
-    """
-    def __init__(self, lnprob_func, stepper, seed=None):
-        self._lnprob_func=lnprob_func
-        self._stepper=stepper
-        self.reset(seed=seed)
-
-    def reset(self, seed=None):
-        """
-        Clear all data
-        """
-        self._trials=None
-        self._loglike=None
-        self._accepted=None
-        numpy.random.seed(seed)
-
-    def run(self, nstep, pars_start):
-        """
-        Run the MCMC chain.  Append new steps if trials already
-        exist in the chain.
-
-        parameters
-        ----------
-        nstep: Number of steps in the chain.
-        pars_start:  Starting point for the chain in the n-dimensional
-                parameters space.
-        """
-        
-        self._init_data(nstep, pars_start)
-
-        for i in xrange(1,nstep):
-            self._step()
-        
-        self._arate = self._accepted.sum()/float(self._accepted.size)
-
-    def get_trials(self):
-        """
-        Get the trials array
-        """
-        return self._trials
-
-    def get_loglike(self):
-        """
-        Get the trials array
-        """
-        return self._loglike
-
-    def get_acceptance_rate(self):
-        """
-        Get the acceptance rate
-        """
-        return self._arate
-
-    def get_accepted(self):
-        """
-        Get the accepted array
-        """
-        return self._accepted
-
-    def _step(self):
-        """
-        Take the next step in the MCMC chain.  
-        
-        Calls the stepper lnprob_func methods sent during
-        construction.  If the new loglike is not greater than the previous, or
-        a uniformly generated random number is greater than the the ratio of
-        new to old likelihoods, the new step is not used, and the new
-        parameters are the same as the old.  Otherwise the new step is kept.
-
-        This is an internal function that is called by the .run method.
-        It is not intended for call by the user.
-        """
-
-        index=self._current
-
-        oldpars=self._oldpars
-        oldlike=self._oldlike
-
-        # Take a step and evaluate the likelihood
-        newpars = self._stepper(oldpars)
-        newlike = self._lnprob_func(newpars)
-
-        log_likeratio = newlike-oldlike
-
-        randnum = numpy.random.random()
-        log_randnum = numpy.log(randnum)
-
-        # we allow use of -infinity as a sign we are out of bounds
-        if (numpy.isfinite(newlike) 
-                and ( (newlike > oldlike) | (log_randnum < log_likeratio)) ):
-
-            self._accepted[index]  = 1
-            self._loglike[index]   = newlike
-            self._trials[index, :] = newpars
-
-            self._oldpars = newpars
-            self._oldlike = newlike
-
-        else:
-            self._accepted[index] = 0
-            self._loglike[index]  = oldlike
-            self._trials[index,:] = oldpars
-
-        self._current += 1
-
-    def _init_data(self, nstep, pars_start):
-        """
-        Set the trials and accept array.
-        """
-
-        pars_start=array(pars_start,dtype='f8')
-        npars = pars_start.size
-
-        self._trials   = zeros( (nstep, npars) )
-        self._loglike  = zeros(nstep)
-        self._accepted = zeros(nstep, dtype='i1')
-        self._current  = 1
-
-        self._oldpars = pars_start.copy()
-        self._oldlike = self._lnprob_func(pars_start)
-
-        self._trials[0,:] = pars_start
-        self._loglike[0]  = self._oldlike
-        self._accepted[0] = 1
 
