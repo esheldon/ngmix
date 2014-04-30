@@ -20,6 +20,7 @@ class Observation(object):
     psf_gmix: GMix, optional
         Optional GMix object representing the PSF
     """
+
     def __init__(self, image, weight, jacobian, psf_image=None, psf_gmix=None):
         assert isinstance(image,ndarray),"image must be of type ndarray"
         assert isinstance(weight,ndarray),"weight must be of type ndarray"
@@ -62,27 +63,40 @@ class ObsList(list):
     def append(self, obs):
         """
         Add a new observation
+
+        over-riding this for type safety
         """
         assert isinstance(obs,Observation),"obs should be of type Observation"
         super(ObsList,self).append(obs)
 
     def __setitem__(self, index, obs):
+        """
+        over-riding this for type safety
+        """
         assert isinstance(obs,Observation),"obs should be of type Observation"
         super(ObsList,self).__setitem__(index, obs)
 
-class MultibandObsList(list):
+class MultiBandObsList(list):
     """
-    Hold a list of lists of Observation objects, each representing a filter
+    Hold a list of lists of ObsList objects, each representing a filter
     band
 
     This class provides a bit of type safety and ease of type checking
     """
 
     def append(self, obs_list):
+        """
+        Add a new ObsList
+
+        over-riding this for type safety
+        """
         assert isinstance(obs_list,ObsList),"obs_list should be of type ObsList"
         super(MultibandObsList,self).append(obs_list)
 
     def __setitem__(self, index, obs_list):
+        """
+        over-riding this for type safety
+        """
         assert isinstance(obs_list,ObsList),"obs_list should be of type ObsList"
         super(MultibandObsList,self).__setitem__(index, obs_list)
 

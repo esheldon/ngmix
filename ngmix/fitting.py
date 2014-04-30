@@ -17,6 +17,8 @@ from .priors import srandu, LOWVAL, BIGVAL
 
 from .gexceptions import GMixRangeError, GMixFatalError
 
+from .observation import Observation,ObsList,MultiBandObsList
+
 MAX_TAU=0.1
 MIN_ARATE=0.2
 MCMC_NTRY=1
@@ -59,24 +61,15 @@ class FitterBase(object):
     point corrections.
     
     """
-    def __init__(self, image, weight, jacobian, model, **keys):
+    def __init__(self, obs, model, **keys):
         self.keys=keys
 
-        self.g_prior = keys.get('g_prior',None)
-        self.joint_prior = keys.get('joint_prior',None)
-        self.cen_prior = keys.get('cen_prior',None)
-        self.T_prior = keys.get('T_prior',None)
-        self.counts_prior = keys.get('counts_prior',None)
+        self._set_obs(obs)
 
-        self.g_prior_during=keys.get('g_prior_during',False)
-
-        self.joint_TF_prior = keys.get('joint_TF_prior',None)
+        self.prior = keys.get('prior',None)
 
         # in this case, image, weight, jacobian, psf are going to
         # be lists of lists.
-
-        # call this first, others depend on it
-        self._set_lists(image, weight, jacobian, **keys)
 
         self.model=gmix.get_model_num(model)
         self.model_name=gmix.get_model_name(self.model)
@@ -85,121 +78,45 @@ class FitterBase(object):
         # the function to be called to fill a gaussian mixture
         self._set_fill_call()
 
-        self.totpix=self.verify()
+        self._set_totpix()
 
-        self._gmix_lol=None
+        self._gmix_all=None
 
-    def _set_lists(self, im_lol, wt_lol, j_lol, **keys):
+    def _set_obs(self, obs_in):
         """
-        Internally we store everything as lists of lists.  The outer
-        list is the bands, the inner is the list of images in the band.
+        Input should be an Observation, ObsList, or MultiBandObsList
         """
 
-        psf_lol=keys.get('psf',None)
 
-        if isinstance(im_lol,numpy.ndarray):
-            # lists-of-lists for generic, including multi-band
-            im_lol=[[im_lol]]
-            wt_lol=[[wt_lol]]
-            j_lol=[[j_lol]]
+        if isinstance(obs_in,Observation):
+            obs_list=ObsList()
+            obs_list.append(obs_in)
 
-            if psf_lol is not None:
-                psf_lol=[[psf_lol]]
-
-            if self.counts_prior is not None:
-                self.counts_prior=[self.counts_prior]
-
-        elif isinstance(im_lol,list) and isinstance(im_lol[0],numpy.ndarray):
-            im_lol=[im_lol]
-            wt_lol=[wt_lol]
-            j_lol=[j_lol]
-
-            if psf_lol is not None:
-                psf_lol=[psf_lol]
-        elif (isinstance(im_lol,list) 
-                and isinstance(im_lol[0],list)
-                and isinstance(im_lol[0][0],numpy.ndarray)):
-            # OK, good
-            pass
+            obs=MultiBandObsList()
+            obs.append(obs_list)
+        elif isinstance(obs_in,ObsList):
+            obs=MultiBandObsList()
+            obs.append(obs_in)
+        elif isinstance(obs_in,MultiBandObsList):
+            obs=obs_in
         else:
-            raise ValueError("images should be input as array, "
-                             "list of arrays, or lists-of lists "
-                             "of arrays")
+            raise ValueError("obs should be Observation, ObsList, or MultibandObsList")
 
-        # can be 1
-        self.nband=len(im_lol)
-        nimages = array( [len(l) for l in im_lol], dtype='i4')
+        self.nband=len(obs)
+        self.obs=obs
 
-        self.im_lol=im_lol
-        self.wt_lol=wt_lol
-        self.psf_lol=psf_lol
-
-        self.jacob_lol = j_lol
-        mean_det=zeros(self.nband)
-        for band in xrange(self.nband):
-            jlist=self.jacob_lol[band]
-            for j in jlist:
-                mean_det[band] += j._data['det']
-            mean_det[band] /= len(jlist)
-
-        self.mean_det=mean_det
-
-    def verify(self):
+    def _set_totpix(self):
         """
         Make sure the data are consistent.
         """
-        nb=self.nband
-        wt_nb = len(self.wt_lol)
-        j_nb  = len(self.jacob_lol)
-        if (wt_nb != nb or j_nb != nb):
-            nbt=(nb,wt_nb,j_nb)
-            raise ValueError("lists of lists not all same size: "
-                             "im: %s wt: %s jacob: %s" % nbt)
-        if self.psf_lol is not None:
-            psf_nb=len(self.psf_lol)
-            if psf_nb != nb:
-                nbt=(nb,psf_nb)
-                raise ValueError("lists of lists not all same size: "
-                                 "im: %s psf: %s" % nbt)
-
 
         totpix=0
-        for i in xrange(self.nband):
-            nim=len(self.im_lol[i])
+        for obs_list in self.obs:
+            for obs in obs_list:
+                shape=obs.image.shape
+                totpix += shape[0]*shape[1]
 
-            wt_n=len(self.wt_lol[i])
-            j_n=len(self.jacob_lol[i])
-            if wt_n != nim or j_n != nim:
-                nt=(i,nim,wt_n,j_n)
-                raise ValueError("lists for band %s not same length: "
-                                 "im: %s wt: %s jacob: " % nt)
-            if self.psf_lol is not None:
-                psf_n = len(self.psf_lol[i])
-                if psf_n != nim:
-                    nt=(i,nim,psf_n)
-                    raise ValueError("lists for band %s not same length: "
-                                     "im: %s psf: " % nt)
-
-
-            for j in xrange(nim):
-                imsh=self.im_lol[i][j].shape
-                wtsh=self.wt_lol[i][j].shape
-                if imsh != wtsh:
-                    raise ValueError("im.shape != wt.shape "
-                                     "(%s != %s)" % (imsh,wtsh))
-
-                totpix += imsh[0]*imsh[1]
-
-        if self.counts_prior is not None:
-            if not isinstance(self.counts_prior,list):
-                raise ValueError("counts_prior must be a list, "
-                                 "got %s" % type(self.counts_prior))
-            nc=len(self.counts_prior)
-            if nc != self.nband:
-                raise ValueError("counts_prior list %s doesn't match "
-                                 "number of bands %s" % (nc,self.nband))
-            
-        return totpix
+        self.totpix=totpix
 
     def _set_npars(self):
         """
@@ -283,8 +200,11 @@ class FitterBase(object):
         if not hasattr(self, 'eff_npix'):
             wtmax = 0.0
             wtsum = 0.0
-            for wt_list in self.wt_lol:
-                for wt in wt_list:
+
+            for obs_list in self.obs:
+                for obs in obs_list:
+                    wt=obs.weight
+
                     this_wtmax = wt.max()
                     if this_wtmax > wtmax:
                         wtmax = this_wtmax
@@ -314,10 +234,10 @@ class FitterBase(object):
             ln_priors = self._get_priors(pars)
             ln_prob = ln_priors
 
-            self._fill_gmix_lol(pars)
+            self._fill_gmix_all(pars)
             for band in xrange(self.nband):
 
-                gmix_list=self._gmix_lol[band]
+                gmix_list=self._gmix_all[band]
                 im_list=self.im_lol[band]
                 wt_list=self.wt_lol[band]
                 jacob_list=self.jacob_lol[band]
@@ -388,88 +308,62 @@ class FitterBase(object):
 
 
 
-    def _init_gmix_lol(self, pars):
+    def _init_gmix_all(self, pars):
         """
-        initialize the list of lists of gmix
+        initialize the list of lists of gaussian mixtures
         """
-        gmix_lol0 = []
-        gmix_lol  = []
+        from .gmix import make_gmix_model, GMixList, MultiBandGMixList
+        gmix_all0 = MultiBandGMixList()
+        gmix_all  = MultiBandGMixList()
 
-        for band in xrange(self.nband):
-            gmix_list0=[]
-            gmix_list=[]
+        for band,obs_list in enumerate(self.obs):
+            gmix_list0=GMixList()
+            gmix_list=GMixList()
 
             band_pars=self._get_band_pars(pars, band)
-            psf_list=self.psf_lol[band]
 
-            for psf in psf_list:
+            for obs in obs_list:
+                psf_gmix=obs.psf_gmix
+
                 gm0=gmix.make_gmix_model(band_pars, self.model)
-                gm=gm0.convolve(psf)
+                gm=gm0.convolve(psf_gmix)
 
                 gmix_list0.append(gm0)
                 gmix_list.append(gm)
 
-            gmix_lol0.append(gmix_list0)
-            gmix_lol.append(gmix_list)
+            gmix_all0.append(gmix_list0)
+            gmix_all.append(gmix_list)
 
-        self._gmix_lol0 = gmix_lol0
-        self._gmix_lol  = gmix_lol
+        self._gmix_all0 = gmix_all0
+        self._gmix_all  = gmix_all
 
-    def _fill_gmix_lol(self, pars):
+    def _fill_gmix_all(self, pars):
         """
-        Fill the list of lists of gmix objects, potentially convolved with the
-        psf in the individual images
+        Fill the list of lists of gmix objects for the given parameters
         """
-        for band in xrange(self.nband):
-            gmix_list0=self._gmix_lol0[band]
-            gmix_list=self._gmix_lol[band]
+
+        for band,obs_list in enumerate(self.obs):
+            gmix_list0=self._gmix_all0[band]
+            gmix_list=self._gmix_all[band]
 
             band_pars=self._get_band_pars(pars, band)
-            psf_list=self.psf_lol[band]
 
-            for i,psf in enumerate(psf_list):
+            for i,obs in enumerate(obs_list):
+
+                psf_gmix = obs.psf_gmix
+
                 gm0=gmix_list0[i]
                 gm=gmix_list[i]
 
-                # Calling the python versions was a huge time sync.
-                # but we need some more error checking here
                 try:
                     if self.model==gmix.GMIX_SERSIC:
                         gm0.fill(band_pars)
                     else:
                         self._fill_gmix_func(gm0._data, band_pars)
-                    gmix._convolve_fill(gm._data, gm0._data, psf._data)
+                    gmix._convolve_fill(gm._data, gm0._data, psf_gmix._data)
                 except ZeroDivisionError:
                     raise GMixRangeError("zero division")
 
-
-    def _get_counts_guess(self, **keys):
-        cguess=keys.get('counts_guess',None)
-        if cguess is None:
-            cguess = self._get_median_counts()
-        else:
-            cguess=array(cguess,ndmin=1)
-        return cguess
-
-    def _get_median_counts(self):
-        """
-        median of the counts across all input images, for each band
-        """
-        cguess=zeros(self.nband)
-        for band in xrange(self.nband):
-
-            im_list=self.im_lol[band]
-            jacob_list=self.jacob_lol[band]
-
-            nim=len(im_list)
-            clist=zeros(nim)
-
-            for i in xrange(nim):
-                im=im_list[i]
-                j=jacob_list[i]
-                clist[i] = im.sum()*j._data['det']
-            cguess[band] = numpy.median(clist) 
-        return cguess
 
 class PSFFluxFitter(FitterBase):
     """
@@ -566,13 +460,6 @@ class PSFFluxFitter(FitterBase):
         self.wt_list=wt_list
         self.jacob_list = j_list
         self.psf_list_in=psf_list_in
-
-        mean_det=0.0
-        for j in j_list:
-            mean_det += j._data['det']
-        mean_det /= len(j_list)
-
-        self.mean_det=mean_det
 
         psf_list=[]
         for psf_in in self.psf_list_in:
@@ -691,21 +578,21 @@ class LMSimple(FitterBase):
         # we cannot keep sending existing array into leastsq, don't know why
         fdiff=zeros(self.fdiff_size)
 
-        if not hasattr(self,'_gmix_lol0'):
-            self._init_gmix_lol(pars)
+        if not hasattr(self,'_gmix_all0'):
+            self._init_gmix_all(pars)
 
         s2n_numer=0.0
         s2n_denom=0.0
 
         try:
 
-            self._fill_gmix_lol(pars)
+            self._fill_gmix_all(pars)
 
             start=self._fill_priors(pars, fdiff)
 
             for band in xrange(self.nband):
 
-                gmix_list=self._gmix_lol[band]
+                gmix_list=self._gmix_all[band]
                 im_list=self.im_lol[band]
                 wt_list=self.wt_lol[band]
                 jacob_list=self.jacob_lol[band]
@@ -863,65 +750,6 @@ class LMSersic(LMSimple):
 
 
 
-class LMSimpleJointTF(LMSimple):
-    """
-    A class for doing a fit using levenberg marquardt
-
-    Joint size and flux distribution
-    """
-    def __init__(self, image, weight, jacobian, model, guess, **keys):
-        super(LMSimpleJointTF,self).__init__(image, weight, jacobian, model, **keys)
-
-        assert self.joint_TF_prior is not None,"send joint_TF_prior"
-        assert self.nband == 1, "add support for multi-band and joint prior"
-
-        # this is over-riding what we did in LMSimple
-
-        # center + shape + (T/fluxes combined)
-        n_prior_pars=1 + 1 + 1
-
-        self.fdiff_size=self.totpix + n_prior_pars
-
-
-    def _fill_priors(self, pars, fdiff):
-        """
-        Fill priors at the beginning of the array.
-
-        ret the position after last par
-
-        We require all the lnprobs are < 0, equivalent to
-        the peak probability always being 1.0
-
-        I have verified all our priors have this property.
-        """
-        raise ValueError("think how to do prior in LM, both if we need "
-                         "factor of two and if need to max at zero ")
-
-        index=0
-        fdiff[index] = -self.cen_prior.get_lnprob(pars[0], pars[1])
-        index += 1
-        fdiff[index] = -self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
-        index += 1
-
-        
-        fdiff[index] = -self.joint_TF_prior.get_lnprob_one(pars[4:])
-        index += 1
-
-        # this leaves us after the priors
-        return index
-
-    def _get_priors(self, pars):
-        """
-        For the stats calculation
-        """
-        lnp=0.0
-        
-        lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
-        lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
-
-        lnp += self.joint_TF_prior.get_lnprob_one(pars[4:])
-
-        return lnp
 
 
 NOTFINITE_BIT=11
@@ -1062,26 +890,16 @@ class MCMCBase(FitterBase):
     """
     A base class for MCMC runs.  Inherits from overall fitter base class.
     """
-    def __init__(self, image, weight, jacobian, model, **keys):
-        super(MCMCBase,self).__init__(image, weight, jacobian, model, **keys)
+    def __init__(self, obs, model, **keys):
+        super(MCMCBase,self).__init__(obs, model, **keys)
 
         # this should be a numpy.random.RandomState object, unlike emcee which
         # through the random_state parameter takes the tuple state
         self.random_state = keys.get('random_state',None)
 
-        self.doiter=keys.get('iter',True)
-
-        self.nstep=keys.get('nstep',200)
-        self.burnin=keys.get('burnin',400)
-
         # emcee specific
         self.nwalkers=keys.get('nwalkers',20)
         self.mca_a=keys.get('mca_a',2.0)
-
-        self.ntry=keys.get('ntry',MCMC_NTRY)
-        self.min_arate=keys.get('min_arate',MIN_ARATE)
-
-        self.draw_g_prior=keys.get('draw_g_prior',True)
 
         self.do_pqr=keys.get('do_pqr',False)
         self.do_lensfit=keys.get('do_lensfit',False)
@@ -1089,9 +907,8 @@ class MCMCBase(FitterBase):
         # expand around this shear value
         self.shear_expand = keys.get('shear_expand',None)
 
-        if ( (self.do_lensfit or self.do_pqr)
-                and (self.g_prior is None and self.joint_prior is None)):
-            raise ValueError("send g_prior or joint_prior for lensfit or pqr")
+        if (self.do_lensfit or self.do_pqr) and (self.prior is None):
+            raise ValueError("send prior for lensfit or pqr")
 
         self.trials=None
 
@@ -1102,108 +919,24 @@ class MCMCBase(FitterBase):
         """
         return self.trials
 
-    def get_last_pos(self):
-        """
-        Get last step from chain
-        """
-        return self.last_pos
-
     def get_sampler(self):
         """
         get the emcee sampler
         """
         return self.sampler
 
-    def go(self):
+
+    def run_mcmc(self, pos, nstep):
         """
-        Run the mcmc sampler and calculate some statistics
+        user can run steps
         """
 
-        # not nstep can change
-        self._do_trials()
+        if not hasattr(self,'sampler'):
+            self._setup_sampler_and_data(pos)
 
-        self.trials  = self.sampler.flatchain
-
-        #self.lnprobs = self.sampler.lnprobability.reshape(self.nwalkers*self.nstep)
-        #self.lnprobs -= self.lnprobs.max()
-
-        # get the expectation values, sensitivity and errors
-        self._calc_result()
-
-
-    def _do_trials(self):
-        """
-        Actually run the sampler
-        """
-        import emcee
-
-        if emcee.ensemble.acor is not None:
-            have_acor=True
-        else:
-            have_acor=False
-
-        # over-ridden
-        guess=self._get_guess()
-        for i in xrange(10):
-            try:
-                self._init_gmix_lol(guess[0,:])
-                break
-            except GMixRangeError as gerror:
-                # make sure we draw random guess if we got failure
-                print('failed init gmix lol:',str(gerror))
-                print('getting a new guess')
-                guess=self._get_random_guess()
-        if i==9:
-            raise gerror
-
-        sampler = self._make_sampler()
-        self.sampler=sampler
-
-        total_burnin=0
-        self.tau=9999.0
-        pos=guess
-        burnin = self.burnin
-
-        self.best_pars=None
-        self.best_lnprob=None
-
-        for i in xrange(self.ntry):
-            pos=self._run_some_trials(pos, burnin)
-
-            tau_ok=True
-            arate_ok=True
-            if have_acor:
-                try:
-                    self.tau=self._get_tau(sampler, burnin)
-                    if self.tau > MAX_TAU and self.doiter:
-                        print("        tau",self.tau,">",MAX_TAU)
-                        tau_ok=False
-                except:
-                    # something went wrong with acor, run some more
-                    print("        exception in acor, running more")
-                    tau_ok=False
-
-            if self.arate < self.min_arate and self.doiter:
-                #print("        burnin arate ",self.arate,"<",self.min_arate)
-                arate_ok=False
-
-            if tau_ok and arate_ok:
-                break
-
-        # if we get here we are hopefully burned in, now do a few more steps
-        self.last_pos=self._run_some_trials(pos, self.nstep)
-
-        self.flags=0
-        self.sampler=sampler
-
-
-    def _run_some_trials(self, pos_in, nstep):
         sampler=self.sampler
         sampler.reset()
-        pos, prob, state = sampler.run_mcmc(pos_in, nstep)
-
-        arates = sampler.acceptance_fraction
-        self.arate = arates.mean()
+        self.pos, prob, state = sampler.run_mcmc(self.pos, nstep)
 
         lnprobs = sampler.lnprobability.reshape(self.nwalkers*nstep)
         w=lnprobs.argmax()
@@ -1211,9 +944,60 @@ class MCMCBase(FitterBase):
         if self.best_lnprob is None or bp > self.best_lnprob:
             self.best_lnprob=bp
             self.best_pars=sampler.flatchain[w,:]
-            #print_pars(self.best_pars, front='best pars:')
 
-        return pos
+        arates = sampler.acceptance_fraction
+        self.arate = arates.mean()
+
+        self.trials  = sampler.flatchain
+
+        return self.pos
+
+    def _setup_sampler_and_data(self, pos):
+        """
+        try very hard to initialize the mixtures
+        """
+
+        self.flags=0
+        self.tau=0.0
+        self.pos=pos
+        self.npars=pos.shape[1]
+
+        self.sampler = self._make_sampler()
+        self.best_lnprob=None
+
+        ok=False
+        for i in xrange(self.nwalkers):
+            try:
+                self._init_gmix_all(self.pos[i,:])
+                ok=True
+                break
+            except GMixRangeError as gerror:
+                continue
+            except ZeroDivisionError:
+                continue
+
+        if ok:
+            return
+
+        print('failed init gmix lol from input guess:',str(gerror))
+        print('getting a new guess')
+        for j in xrange(10):
+            self.pos=self._get_random_guess()
+            ok=False
+            for i in xrange(self.nwalkers):
+                try:
+                    self._init_gmix_all(self.pos[i,:])
+                    ok=True
+                    break
+                except GMixRangeError as gerror:
+                    continue
+                except ZeroDivisionError:
+                    continue
+            if ok:
+                break
+
+        if not ok:
+            raise gerror
 
     def _get_tau(self,sampler, nstep):
         acor=sampler.acor
@@ -1248,10 +1032,13 @@ class MCMCBase(FitterBase):
         """
         Basically a placeholder for no priors
         """
-        return 0.0
+        if self.prior is None:
+            return 0.0
+        else:
+            return self.prior.get_lnprob(pars)
 
 
-    def _calc_result(self):
+    def calc_result(self):
         """
         Will probably over-ride this
         """
@@ -1330,9 +1117,6 @@ class MCMCBase(FitterBase):
             g2=self.trials[:,self.g2i]
             self.g_prior_vals = self.g_prior.get_prob_array2d(g1,g2)
         return self.g_prior_vals
-
-    def _get_guess(self):
-        raise RuntimeError("over-ride me")
 
     def get_par_names(self):
         names=['cen1','cen2', 'g1','g2', 'T']
@@ -1413,14 +1197,14 @@ class MCMCBase(FitterBase):
         biggles.configure('screen','height', height)
 
         try:
-            self._fill_gmix_lol(self._result['pars'])
+            self._fill_gmix_all(self._result['pars'])
         except GMixRangeError as gerror:
             print(str(gerror))
             return None
 
         tablist=[]
         for band in xrange(self.nband):
-            gmix_list=self._gmix_lol[band]
+            gmix_list=self._gmix_all[band]
             im_list=self.im_lol[band]
             wt_list=self.wt_lol[band]
             jacob_list=self.jacob_lol[band]
@@ -1472,6 +1256,96 @@ class MCMCBase(FitterBase):
 
             tablist.append(tab)
         return tablist
+
+
+    def _do_trials(self):
+        """
+        don't use this
+        Actually run the sampler
+        """
+        import emcee
+
+        if emcee.ensemble.acor is not None:
+            have_acor=True
+        else:
+            have_acor=False
+
+        # over-ridden
+        guess=self._get_guess()
+        for i in xrange(10):
+            try:
+                self._init_gmix_all(guess[0,:])
+                break
+            except GMixRangeError as gerror:
+                # make sure we draw random guess if we got failure
+                print('failed init gmix lol:',str(gerror))
+                print('getting a new guess')
+                guess=self._get_random_guess()
+        if i==9:
+            raise gerror
+
+        sampler = self._make_sampler()
+        self.sampler=sampler
+
+        total_burnin=0
+        self.tau=9999.0
+        pos=guess
+        burnin = self.burnin
+
+        self.best_pars=None
+        self.best_lnprob=None
+
+        for i in xrange(self.ntry):
+            pos=self._run_some_trials(pos, burnin)
+
+            tau_ok=True
+            arate_ok=True
+            if have_acor:
+                try:
+                    self.tau=self._get_tau(sampler, burnin)
+                    if self.tau > MAX_TAU and self.doiter:
+                        print("        tau",self.tau,">",MAX_TAU)
+                        tau_ok=False
+                except:
+                    # something went wrong with acor, run some more
+                    print("        exception in acor, running more")
+                    tau_ok=False
+
+            if self.arate < self.min_arate and self.doiter:
+                #print("        burnin arate ",self.arate,"<",self.min_arate)
+                arate_ok=False
+
+            if tau_ok and arate_ok:
+                break
+
+        # if we get here we are hopefully burned in, now do a few more steps
+        self.last_pos=self._run_some_trials(pos, self.nstep)
+
+        self.flags=0
+        self.sampler=sampler
+
+
+    def _run_some_trials(self, pos_in, nstep):
+        """
+        don't use this
+        """
+        sampler=self.sampler
+        sampler.reset()
+        pos, prob, state = sampler.run_mcmc(pos_in, nstep)
+
+        arates = sampler.acceptance_fraction
+        self.arate = arates.mean()
+
+        lnprobs = sampler.lnprobability.reshape(self.nwalkers*nstep)
+        w=lnprobs.argmax()
+        bp=lnprobs[w]
+        if self.best_lnprob is None or bp > self.best_lnprob:
+            self.best_lnprob=bp
+            self.best_pars=sampler.flatchain[w,:]
+            #print_pars(self.best_pars, front='best pars:')
+
+        return pos
+
 
 
 class MCMCSimple(MCMCBase):
@@ -1529,49 +1403,8 @@ class MCMCSimple(MCMCBase):
     def _get_band_pars(self, pars, band):
         return pars[ [0,1,2,3,4,5+band] ]
 
-    def _get_guess(self):
-        """
-        # go in simple
-        The counts guess is stupid unless you have a well-trimmed
-        PSF image
-        """
 
-        if self.full_guess is not None:
-            return self._get_guess_from_full()
-        else:
-            return self._get_random_guess()
-    
-    def _get_guess_from_full(self):
-        """
-        Return last ``nwalkers'' entries
-        """
-        ntrial=self.full_guess.shape[0]
-        #rint=numpy.random.random_integers(0,ntrial-1,size=self.nwalkers)
-        return self.full_guess[ntrial-self.nwalkers:, :]
-
-    def _get_random_guess(self):
-        guess=zeros( (self.nwalkers,self.npars) )
-
-        # center
-        guess[:,0]=0.1*srandu(self.nwalkers)
-        guess[:,1]=0.1*srandu(self.nwalkers)
-
-        if self.g_prior is not None and self.draw_g_prior:
-            guess[:,2],guess[:,3]=self.g_prior.sample2d(self.nwalkers)
-        else:
-            guess[:,2]=0.1*srandu(self.nwalkers)
-            guess[:,3]=0.1*srandu(self.nwalkers)
-
-        guess[:,4] = self.T_guess*(1 + 0.1*srandu(self.nwalkers))
-
-        for band in xrange(self.nband):
-            guess[:,5+band] = self.counts_guess[band]*(1 + 0.1*srandu(self.nwalkers))
-
-        self._guess=guess
-        return guess
-
-
-    def _calc_result(self):
+    def calc_result(self):
         """
         Some extra stats for simple models
         """
@@ -1580,7 +1413,7 @@ class MCMCSimple(MCMCBase):
             tmp=self._get_g_prior_vals()
             self._remove_zero_prior()
 
-        super(MCMCSimple,self)._calc_result()
+        super(MCMCSimple,self).calc_result()
 
         g1i=self.g1i
         g2i=self.g2i
@@ -1756,7 +1589,7 @@ class MCMCSersic(MCMCSimple):
         ok=False
         for i in xrange(self.nwalkers):
             try:
-                self._init_gmix_lol(self.pos[i,:])
+                self._init_gmix_all(self.pos[i,:])
                 ok=True
                 break
             except GMixRangeError as gerror:
@@ -1774,7 +1607,7 @@ class MCMCSersic(MCMCSimple):
             ok=False
             for i in xrange(self.nwalkers):
                 try:
-                    self._init_gmix_lol(self.pos[i,:])
+                    self._init_gmix_all(self.pos[i,:])
                     ok=True
                     break
                 except GMixRangeError as gerror:
@@ -1812,12 +1645,6 @@ class MCMCSersic(MCMCSimple):
         self.trials  = sampler.flatchain
 
         return self.pos
-
-    def calc_result(self):
-        """
-        user-facing version
-        """
-        self._calc_result()
 
     def _get_priors(self, pars):
         """
@@ -2274,146 +2101,6 @@ class MCMCSimpleFixed(MCMCSimple):
         return ['g1','g2']
 
 
-class MCMCSimpleJointTF(MCMCSimple):
-    """
-    Add additional features to the base class to support simple models
-    """
-    def __init__(self, image, weight, jacobian, model, **keys):
-        super(MCMCSimpleJointTF,self).__init__(image, weight, jacobian, model, **keys)
-
-        assert self.joint_TF_prior is not None,"send joint_TF_prior"
-        assert self.nband == 1, "add support for multi-band and joint prior"
-
-
-    def _get_priors(self, pars):
-        """
-        # go in simple
-        add any priors that were sent on construction
-        
-        """
-        raise ValueError("fix to check gmax and remove during check")
-        lnp=0.0
-        
-        if self.cen_prior is not None:
-            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
-
-        if self.g_prior is not None and self.g_prior_during:
-            lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
-        
-        jlnp = self.joint_TF_prior.get_lnprob_one(pars[4:])
-        lnp += jlnp
-
-        return lnp
-
-
-
-class MHSimple(MCMCSimple):
-    """
-    Metropolis Hastings
-    """
-    def __init__(self, image, weight, jacobian, model, **keys):
-        super(MHSimple,self).__init__(image, weight, jacobian, model, **keys)
-
-        guess=keys.get('guess',None)
-        if guess is None:
-            if self.full_guess is not None:
-                guess=self.full_guess
-            else:
-                raise ValueError("send guess= or full_guess=")
-
-        self.guess=array(guess, copy=False)
-        self.max_arate=keys.get('max_arate',0.6)
-
-        self.step_sizes = array( keys['step_sizes'], dtype='f8')
-        if self.step_sizes.size != self.npars:
-            raise ValueError("got %d step sizes, expected %d" % (step_sizes.size, self.npars) )
-
-    def go(self):
-        """
-        run trials and calculate stats
-        """
-
-        self._initialize_gmix()
-        self._do_trials()
-        self._calc_result()
-
-    def _do_trials(self):
-        """
-        Do some trials with the MH sampler
-        """
-        sampler=MHSampler(self.calc_lnprob, self.step)
-        self.sampler=sampler
-
-        pars0 = self.guess
-        for i in xrange(self.ntry):
-            sampler.run(self.burnin, pars0)
-            arate=sampler.get_acceptance_rate()
-
-            if self.min_arate < arate < self.max_arate:
-                break
-
-            # safe aim is 0.4
-            fac = arate/0.4
-            self.step_sizes = self.step_sizes*fac
-
-            print('    BAD ARATE:',arate)
-            pars0=( sampler.get_trials() )[-1,:]
-
-        pars=sampler.get_trials()
-        sampler.run(self.nstep, pars[0,:])
-
-        self.trials = sampler.get_trials()
-        self.arate  = sampler.get_acceptance_rate()
-        self.tau    = 0.0
-
-        self.flags  = 0
-        #if self.arate < self.min_arate:
-        #    print('LOW ARATE:',self.arate)
-        #    self.flags |= LOW_ARATE
-
-    def step(self, pars):
-        """
-        Take a step
-        """
-        from numpy.random import randn
-        newpars = pars + self.step_sizes*randn(self.npars)
-        return newpars
-
-    def _initialize_gmix(self):
-        """
-        Need some valid pars to initialize this
-        """
-        for i in xrange(10):
-            try:
-                self._init_gmix_lol(self.guess)
-                break
-            except GMixRangeError as gerror:
-                # make sure we draw random guess if we got failure
-                print('failed init gmix lol:',str(gerror))
-                print('getting a new guess')
-                self.guess=self._get_random_guess()
-
-    def _get_random_guess(self):
-        guess=0*self.guess
-
-        # center
-        guess[0]=0.1*srandu(self.nwalkers)
-        guess[1]=0.1*srandu(self.nwalkers)
-
-        if self.g_prior is not None and self.draw_g_prior:
-            guess[2],guess[3]=self.g_prior.sample2d(1)
-        else:
-            guess[2]=0.1*srandu()
-            guess[3]=0.1*srandu()
-
-        guess[4] = self.T_guess*(1 + 0.1*srandu())
-
-        for band in xrange(self.nband):
-            guess[5+band] = self.counts_guess[band]*(1 + 0.1*srandu())
-
-        return guess
-
-
 class MCMCBDC(MCMCSimple):
     """
     Add additional features to the base class to support coelliptical bulge+disk
@@ -2685,7 +2372,7 @@ class MCMCBDFJoint(MCMCBDF):
         guess=self._get_guess()
         for i in xrange(10):
             try:
-                self._init_gmix_lol(guess[0,:])
+                self._init_gmix_all(guess[0,:])
                 break
             except GMixRangeError as gerror:
                 # make sure we draw random guess if we got failure
@@ -4401,114 +4088,6 @@ def test_model_mb(model,
     print('time rest: ',tmrest)
 
     return tmtot,res_obj
-
-
-
-def test_model_priors_anze(model,
-                      counts_sky=100.0,
-                      noise_sky=0.01,
-                      nimages=1,
-                      jfac=0.27,
-                      do_lensfit=False,
-                      do_pqr=False):
-    """
-    testing jacobian stuff
-    """
-    import images
-    import mcmc
-    from . import em
-
-    dims=[25,25]
-    cen=[dims[0]/2., dims[1]/2.]
-
-    jfac2=jfac**2
-    j=Jacobian(cen[0],cen[1], jfac, 0.0, 0.0, jfac)
-
-    #
-    # simulation
-    #
-
-    # PSF pars
-    counts_sky_psf=100.0
-    counts_pix_psf=counts_sky_psf/jfac2
-    g1_psf=0.05
-    g2_psf=-0.01
-    Tpix_psf=4.0
-    Tsky_psf=Tpix_psf*jfac2
-
-    # object pars
-    g1_obj=0.1
-    g2_obj=0.05
-    Tpix_obj=16.0
-    Tsky_obj=Tpix_obj*jfac2
-
-    counts_sky_obj=counts_sky
-    noise_sky_obj=noise_sky
-    counts_pix_obj=counts_sky_obj/jfac2
-    noise_pix_obj=noise_sky_obj/jfac2
-
-    pars_psf = [0.0, 0.0, g1_psf, g2_psf, Tsky_psf, counts_sky_psf]
-    gm_psf=gmix.GMixModel(pars_psf, "gauss")
-
-    pars_obj = [0.0, 0.0, g1_obj, g2_obj, Tsky_obj, counts_sky_obj]
-    gm_obj0=gmix.GMixModel(pars_obj, model)
-
-    gm=gm_obj0.convolve(gm_psf)
-
-    im_psf=gm_psf.make_image(dims, jacobian=j)
-    im_obj=gm.make_image(dims, jacobian=j)
-
-    im_obj[:,:] += noise_pix_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
-    wt_obj=zeros(im_obj.shape) + 1./noise_pix_obj**2
-
-    #
-    # priors
-    #
-
-    cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
-    T_prior=priors.LogNormal(Tsky_obj, 0.1*Tsky_obj)
-    counts_prior=priors.LogNormal(counts_sky_obj, 0.1*counts_sky_obj)
-    g_prior = priors.GPriorBA(0.3)
-
-    #
-    # fitting
-    #
-
-    # psf using EM
-    im_psf_sky,sky=em.prep_image(im_psf)
-    mc_psf=em.GMixEM(im_psf_sky, jacobian=j)
-    emo_guess=gm_psf.copy()
-    emo_guess._data['p'] = 1.0
-    emo_guess._data['row'] += 0.1*srandu()
-    emo_guess._data['col'] += 0.1*srandu()
-    emo_guess._data['irr'] += 0.5*srandu()
-    emo_guess._data['irc'] += 0.1*srandu()
-    emo_guess._data['icc'] += 0.5*srandu()
-    mc_psf.go(emo_guess, sky)
-    res_psf=mc_psf.get_result()
-    print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
-
-    psf_fit=mc_psf.get_gmix()
-    imfit_psf=mc_psf.make_image(counts=im_psf.sum())
-    #images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
-
-    # obj
-    jlist=[j]*nimages
-    imlist_obj=[im_obj]*nimages
-    wtlist_obj=[wt_obj]*nimages
-    psf_fit_list=[psf_fit]*nimages
-
-    mc_obj=MCMCSimpleAnze(imlist_obj, wtlist_obj, jlist, model,
-                      psf=psf_fit_list,
-                      T=Tsky_obj,
-                      counts=counts_sky_obj,
-                      cen_prior=cen_prior,
-                      T_prior=T_prior,
-                      counts_prior=counts_prior,
-                      g_prior=g_prior,
-                      do_lensfit=do_lensfit,
-                      do_pqr=do_pqr)
-    mc_obj.go()
 
 
 
