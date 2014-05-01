@@ -245,39 +245,25 @@ class GMix(object):
         else:
             _render_fast3(self._data, image, nsub, _exp3_ivals[0], _exp3_lookup)
 
-    def get_loglike(self, image, weight, jacobian=None, get_s2nsums=False):
+    def get_loglike(self, obs, get_s2nsums=False):
         """
-        Calculate the log likelihood
+        Calculate the log likelihood given the input Observation
 
-        If the function calls and error checking are bottlenecks, make the
-        calls to the _loglike* functions directly.  But looks to be only
-        1%% slower
 
         parameters
         ----------
-        image: 2-d array
-            the image to fill
-        weight: 2-d array
-            the weight image
+        obs: Observation
+            The Observation to compare with. See ngmix.observation.Observation
+            The Observation must have a weight map set
         """
-        if image.size != weight.size:
-            raise ValueError("image and weight must be same shape")
 
-        if jacobian is not None:
-            if not isinstance(jacobian,Jacobian):
-                raise ValueError("jacobian must be instance of Jacobian")
-            loglike,s2n_numer,s2n_denom=_loglike_jacob_fast3(self._data,
-                                                             image,
-                                                             weight,
-                                                             jacobian._data,
-                                                             _exp3_ivals[0],
-                                                             _exp3_lookup)
-        else:
-            loglike,s2n_numer,s2n_denom=_loglike_fast3(self._data,
-                                                       image,
-                                                       weight,
-                                                       _exp3_ivals[0],
-                                                       _exp3_lookup)
+        loglike,s2n_numer,s2n_denom=_loglike_jacob_fast3(self._data,
+                                                         obs.image,
+                                                         obs.weight,
+                                                         obs.jacobian._data,
+                                                         _exp3_ivals[0],
+                                                         _exp3_lookup)
+
         if get_s2nsums:
             return loglike,s2n_numer,s2n_denom
         else:
@@ -290,18 +276,17 @@ class GMix(object):
         self._data = zeros(self._ngauss, dtype=_gauss2d_dtype)
 
 
-    def get_loglike(self, row, col):
+    def get_loglike_rowcol(self, row, col):
         """
         Evaluate a single row, col
         """
-        #return _gauss2d_loglike(self._data, _exp3_ivals[0], _exp3_lookup, row, col)
         return _gauss2d_loglike(self._data, row, col)
-    def get_like(self, row, col):
+
+    def get_like_rowcol(self, row, col):
         """
         Evaluate a single row, col
         """
-        #return _gauss2d_ike(self._data, _exp3_ivals[0], _exp3_lookup, row, col)
-        return _gauss2d_ike(self._data, row, col)
+        return _gauss2d_like(self._data, row, col)
 
 
     def __len__(self):
@@ -356,14 +341,14 @@ class MultiBandGMixList(list):
         over-riding this for type safety
         """
         assert isinstance(gmix_list,GMixList),"gmix_list should be of type GMixList"
-        super(MultibandGMixList,self).append(gmix_list)
+        super(MultiBandGMixList,self).append(gmix_list)
 
     def __setitem__(self, index, gmix_list):
         """
         over-riding this for type safety
         """
         assert isinstance(gmix_list,GMixList),"gmix_list should be of type GMixList"
-        super(MultibandGMixList,self).__setitem__(index, gmix_list)
+        super(MultiBandGMixList,self).__setitem__(index, gmix_list)
 
 
 

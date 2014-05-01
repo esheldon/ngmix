@@ -12,7 +12,35 @@ from .gmix import _exp3_ivals, _exp3_lookup
 from .gexceptions import GMixRangeError, GMixMaxIterEM
 from .priors import srandu
 
-from .jacobian import Jacobian, UnitJacobian, _jacobian
+from .jacobian import Jacobian, _jacobian
+
+from .observation import Observation
+
+def prep_image(im0):
+    """
+    Prep an image to fit with EM.  Make sure there are no pixels < 0
+
+    parameters
+    ----------
+    image: ndarray
+        2d image
+
+    output
+    ------
+    new_image, sky:
+        The image with new background level and the background level
+    """
+    im=im0.copy()
+
+    # need no zero pixels and sky value
+    im_min = im.min()
+    im_max = im.max()
+    sky=0.001*(im_max-im_min)
+
+    im += (sky-im_min)
+
+    return im, sky
+
 
 class GMixEM(object):
     """
@@ -20,20 +48,16 @@ class GMixEM(object):
 
     parameters
     ----------
-    image: 2-d array
-        an image represented by a 2-d numpy array
-    jacobian: Jacobian, optional
-        A Jocobian object representing a transformation between pixel
-        coordinates and another coordinate system such as "sky"
+    obs: Observation
+        An Observation object, containing the image and possibly
+        non-trivial jacobian.  see ngmix.observation.Observation
+
+        The image should not have zero or negative pixels. You can
+        use the prep_image() function to ensure this.
     """
-    def __init__(self, image, jacobian=None):
+    def __init__(self, obs):
 
-        self._image=numpy.array(image, dtype='f8', copy=False)
-
-        if jacobian is None:
-            self._jacobian=UnitJacobian(0.0, 0.0)
-        else:
-            self._jacobian=jacobian
+        self._obs=obs
 
         self._gm        = None
         self._sums      = None
@@ -56,7 +80,8 @@ class GMixEM(object):
         """
         Get an image of the best fit mixture
         """
-        im=self._gm.make_image(self._image.shape, jacobian=self._jacobian)
+        im=self._gm.make_image(self._obs.image.shape,
+                               jacobian=self._obs.jacobian)
         if counts is not None:
             im *= (counts/im.sum())
         return im
@@ -86,10 +111,10 @@ class GMixEM(object):
         self._maxiter   = maxiter
         self._tol       = tol
 
-        numiter, fdiff = _run_em(self._image,
+        numiter, fdiff = _run_em(self._obs.image,
                                  self._gm._data,
                                  self._sums,
-                                 self._jacobian._data,
+                                 self._obs.jacobian._data,
                                  numpy.float64(self._sky_guess),
                                  numpy.int64(self._maxiter),
                                  numpy.float64(self._tol),
@@ -262,19 +287,6 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol, i0, expvals):
     return iiter, fdiff
 
 
-def prep_image(im0):
-
-    im=im0.copy()
-
-    # need no zero pixels and sky value
-    im_min = im.min()
-    im_max = im.max()
-    sky=0.001*(im_max-im_min)
-
-    im += (sky-im_min)
-
-    return im, sky
-
 def test_1gauss(counts=100.0, noise=0.0, maxiter=100, show=False):
     import time
     dims=[25,25]
@@ -295,6 +307,8 @@ def test_1gauss(counts=100.0, noise=0.0, maxiter=100, show=False):
 
     imsky,sky = prep_image(im) 
 
+    obs=Observation(imsky)
+
     gm_guess=gm.copy()
     gm_guess._data['p']=1.0
     gm_guess._data['row'] += 1*srandu()
@@ -307,7 +321,7 @@ def test_1gauss(counts=100.0, noise=0.0, maxiter=100, show=False):
     print(gm_guess)
     
     tm0=time.time()
-    em=GMixEM(imsky)
+    em=GMixEM(obs)
     em.go(gm_guess, sky, maxiter=maxiter)
     tm=time.time()-tm0
     print('time:',tm,'seconds')
@@ -353,6 +367,8 @@ def test_1gauss_jacob(counts_sky=100.0, noise_sky=0.0, maxiter=100, jfac=0.27, s
 
     imsky,sky = prep_image(im) 
 
+    obs=Observation(imsky, jacobian=j)
+
     gm_guess=gm.copy()
     gm_guess._data['p']=1.0
     gm_guess._data['row'] += 1*srandu()
@@ -365,7 +381,7 @@ def test_1gauss_jacob(counts_sky=100.0, noise_sky=0.0, maxiter=100, jfac=0.27, s
     print(gm_guess)
     
     tm0=time.time()
-    em=GMixEM(imsky, jacobian=j)
+    em=GMixEM(obs)
     em.go(gm_guess, sky, maxiter=maxiter)
     tm=time.time()-tm0
     print('time:',tm,'seconds')
@@ -420,6 +436,8 @@ def test_2gauss(counts=100.0, noise=0.0, maxiter=100,show=False):
 
     imsky,sky = prep_image(im) 
 
+    obs=Observation(imsky)
+
     gm_guess=gm.copy()
     gm_guess._data['p']=[0.5,0.5]
     gm_guess._data['row'] += 4*srandu(2)
@@ -432,7 +450,7 @@ def test_2gauss(counts=100.0, noise=0.0, maxiter=100,show=False):
     print(gm_guess)
 
     tm0=time.time()
-    em=GMixEM(imsky)
+    em=GMixEM(obs)
     em.go(gm_guess, sky, maxiter=maxiter)
     tm=time.time()-tm0
     print('time:',tm,'seconds')

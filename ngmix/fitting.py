@@ -29,6 +29,8 @@ from .gexceptions import GMixRangeError, GMixFatalError
 
 from .observation import Observation,ObsList,MultiBandObsList
 
+from . import stats
+
 MAX_TAU=0.1
 MIN_ARATE=0.2
 MCMC_NTRY=1
@@ -107,7 +109,7 @@ class FitterBase(object):
         elif isinstance(obs_in,MultiBandObsList):
             obs=obs_in
         else:
-            raise ValueError("obs should be Observation, ObsList, or MultibandObsList")
+            raise ValueError("obs should be Observation, ObsList, or MultiBandObsList")
 
         self.nband=len(obs)
         self.obs=obs
@@ -221,7 +223,6 @@ class FitterBase(object):
 
     def calc_lnprob(self, pars, get_s2nsums=False, get_priors=False):
         """
-        get_priors=True only works 
         This is all we use for mcmc approaches, but also used generally for the
         "get_fit_stats" method.  For the max likelihood fitter we also have a
         _get_ydiff method
@@ -237,26 +238,12 @@ class FitterBase(object):
             self._fill_gmix_all(pars)
             for band in xrange(self.nband):
 
+                obs_list=self.obs[band]
                 gmix_list=self._gmix_all[band]
-                im_list=self.im_lol[band]
-                wt_list=self.wt_lol[band]
-                jacob_list=self.jacob_lol[band]
 
-                nim=len(im_list)
-                for i in xrange(nim):
-                    gm=gmix_list[i]
-                    im=im_list[i]
-                    wt=wt_list[i]
-                    j=jacob_list[i]
+                for obs,gm in zip(obs_list, gmix_list):
 
-                    #res = gm.get_loglike(im, wt, jacobian=j,
-                    #                     get_s2nsums=True)
-                    res = gmix._loglike_jacob_fast3(gm._data,
-                                                    im,
-                                                    wt,
-                                                    j._data,
-                                                    _exp3_ivals[0],
-                                                    _exp3_lookup)
+                    res = gm.get_loglike(obs, get_s2nsums=True)
 
                     ln_prob += res[0]
                     s2n_numer += res[1]
@@ -568,8 +555,8 @@ class LMSimple(FitterBase):
         if result['flags']==0:
             result['g'] = result['pars'][2:2+2].copy()
             result['g_cov'] = result['pars_cov'][2:2+2, 2:2+2].copy()
-            stats=self.get_fit_stats(result['pars'])
-            result.update(stats)
+            stat_dict=self.get_fit_stats(result['pars'])
+            result.update(stat_dict)
 
         self._result=result
 
@@ -1031,13 +1018,14 @@ class MCMCBase(FitterBase):
             return self.prior.get_lnprob(pars)
 
 
-    def calc_result(self):
+    def calc_result(self, weights=None):
         """
-        Will probably over-ride this
+        Calculate the mcmc stats and the "best fit" stats
         """
 
-        pars,pars_cov,pars_err,stat_flags=self._get_trial_stats()
-        self.flags |= stat_flags
+        pars,pars_cov = stats.calc_mcmc_stats(self.trials, weights=weights)
+
+        pars_err=sqrt(diag(pars_cov))
 
         self._result={'model':self.model_name,
                       'flags':self.flags,
@@ -1047,58 +1035,8 @@ class MCMCBase(FitterBase):
                       'tau':self.tau,
                       'arate':self.arate}
 
-        if stat_flags == 0:
-            # can't measure stats if pars are nonsense
-            stats = self.get_fit_stats(pars)
-
-            self._result.update(stats)
-
-    def _get_trial_stats(self):
-        """
-        Get the means and covariance for the trials
-        """
-
-        flags=0
-
-        # weights could be the prior values if we didn't apply
-        # the prior while sampling
-        # or it could be the weights in importance sampling
-        # or None
-        weights=self.get_weights()
-
-        flags=0
-        if weights is not None:
-            wsum=weights.sum()
-            if wsum <= 0.0:
-                print("          found wsum < 0:",wsum)
-                pars=zeros(self.npars)-9999
-                pars_cov=zeros( (self.npars,self.npars))+9999
-                pars_err=zeros(self.npars)+9999
-                flags=BAD_STATS
-
-        if flags==0:
-            pars,pars_cov = extract_mcmc_stats(self.trials, weights=weights)
-            pars_err=sqrt(diag(pars_cov))
-
-        return pars,pars_cov,pars_err,flags
-
-    def get_weights(self):
-        """
-        Get the weights
-        """
-        if hasattr(self,'nwalkers'):
-            # this was an mcmc run
-            if self.g_prior is None or self.g_prior_during:
-                weights=None
-                print('    weights are None')
-            else:
-                weights=self._get_g_prior_vals()
-                print('    weights are g prior')
-        else:
-            weights=None
-            print('    weights are none')
-
-        return weights
+        fit_stats = self.get_fit_stats(pars)
+        self._result.update(fit_stats)
 
     def _get_g_prior_vals(self):
         """
@@ -1129,6 +1067,7 @@ class MCMCBase(FitterBase):
                    height=1200,
                    separate=False,
                    title=None,
+                   weights=None,
                    **keys):
         """
         Plot the mcmc chain and some residual plots
@@ -1141,7 +1080,6 @@ class MCMCBase(FitterBase):
 
         names=self.get_par_names()
 
-        weights=self.get_weights() 
         if separate:
             plotfunc =mcmc.plot_results_separate
         else:
@@ -1347,13 +1285,13 @@ class MCMCSimple(MCMCBase):
     """
     Add additional features to the base class to support simple models
     """
-    def __init__(self, image, weight, jacobian, model, **keys):
-        super(MCMCSimple,self).__init__(image, weight, jacobian, model, **keys)
+    def __init__(self, obs, model,  **keys):
+        super(MCMCSimple,self).__init__(obs, model, **keys)
 
         self.g1i = 2
         self.g2i = 3
 
-    def _get_priors(self, pars):
+    def _get_priors_old(self, pars):
         """
         # go in simple
         add any priors that were sent on construction
@@ -1387,16 +1325,16 @@ class MCMCSimple(MCMCBase):
         return pars[ [0,1,2,3,4,5+band] ]
 
 
-    def calc_result(self):
+    def calc_result(self, weights=None):
         """
         Some extra stats for simple models
         """
 
-        if self.g_prior is not None:
-            tmp=self._get_g_prior_vals()
-            self._remove_zero_prior()
+        #if self.g_prior is not None:
+        #    tmp=self._get_g_prior_vals()
+        #    self._remove_zero_prior()
 
-        super(MCMCSimple,self).calc_result()
+        super(MCMCSimple,self).calc_result(weights=None)
 
         g1i=self.g1i
         g2i=self.g2i
@@ -1404,17 +1342,17 @@ class MCMCSimple(MCMCBase):
         self._result['g'] = self._result['pars'][g1i:g1i+2].copy()
         self._result['g_cov'] = self._result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
 
-        self._result['nuse'] = self.trials.shape[0]
+        #self._result['nuse'] = self.trials.shape[0]
 
-        if self.do_lensfit:
-            g_sens=self._get_lensfit_gsens(self._result['pars'])
-            self._result['g_sens']=g_sens
+        #if self.do_lensfit:
+        #    g_sens=self._get_lensfit_gsens(self._result['pars'])
+        #    self._result['g_sens']=g_sens
 
-        if self.do_pqr:
-            P,Q,R = self._get_PQR()
-            self._result['P']=P
-            self._result['Q']=Q
-            self._result['R']=R
+        #if self.do_pqr:
+        #    P,Q,R = self._get_PQR()
+        #    self._result['P']=P
+        #    self._result['Q']=Q
+        #    self._result['R']=R
 
     def _get_lensfit_gsens(self, pars, gprior=None):
         """
@@ -1803,17 +1741,6 @@ class MCMCSersicJointHybrid(MCMCSersic):
  
         return P,Q,R
 
-    def get_weights(self):
-        """
-        must have         
-        """
-        if not self.prior_during:
-            #print("        weight is prior")
-            weights=self._get_g_prior_vals()
-        else:
-            #print("        weight is None")
-            weights=None
-        return weights
 
     def get_gmix(self):
         """
@@ -2323,18 +2250,6 @@ class MCMCBDFJoint(MCMCBDF):
 
         return P,Q,R
 
-    def get_weights(self):
-        """
-        must have         
-        """
-        if self.joint_prior is not None:
-            if not hasattr(self,'joint_prior_vals'):
-                self.joint_prior_vals = self.joint_prior.get_prob_array(self.trials[:,2:])
-            weights=self.joint_prior_vals
-        else:
-            weights=None
-        return weights
-
 
     def _do_trials(self):
         """
@@ -2543,17 +2458,6 @@ class MCMCSimpleJointHybrid(MCMCSimple):
  
         return P,Q,R
 
-    def get_weights(self):
-        """
-        must have         
-        """
-        if not self.prior_during:
-            #print("        weight is prior")
-            weights=self._get_g_prior_vals()
-        else:
-            #print("        weight is None")
-            weights=None
-        return weights
 
     def get_gmix(self):
         """
@@ -2746,17 +2650,6 @@ class MCMCSimpleJointLinPars(MCMCSimple):
  
         return P,Q,R
 
-    def get_weights(self):
-        """
-        must have         
-        """
-        if not self.prior_during:
-            print("        weight is prior")
-            weights=self._get_joint_prior_vals()
-        else:
-            print("        weight is None")
-            weights=None
-        return weights
     
     def _get_joint_prior_vals(self):
         if not hasattr(self,'joint_prior_vals'):
@@ -2868,17 +2761,6 @@ class MCMCSimpleJointLogPars(MCMCSimple):
  
         return P,Q,R
 
-    def get_weights(self):
-        """
-        must have         
-        """
-        if not self.prior_during:
-            print("        weight is prior")
-            weights=self._get_joint_prior_vals()
-        else:
-            print("        weight is None")
-            weights=None
-        return weights
     
     def _get_joint_prior_vals(self):
         if not hasattr(self,'joint_prior_vals'):
@@ -2935,75 +2817,6 @@ def _get_as_list(arg, argname, allow_none=False):
     else:
         return [arg]
 
-
-def extract_mcmc_stats(data, weights=None):
-    if weights is not None:
-        return _extract_weighted_stats(data, weights)
-    else:
-        return _extract_stats(data)
-
-def _extract_stats(data):
-    ntrials=data.shape[0]
-    npar = data.shape[1]
-
-    means = zeros(npar,dtype='f8')
-    cov = zeros( (npar,npar), dtype='f8')
-
-    for i in xrange(npar):
-        means[i] = data[:, i].mean()
-
-    num=ntrials
-
-    for i in xrange(npar):
-        idiff = data[:,i]-means[i]
-        for j in xrange(i,npar):
-            if i == j:
-                jdiff = idiff
-            else:
-                jdiff = data[:,j]-means[j]
-
-            cov[i,j] = (idiff*jdiff).sum()/(num-1)
-
-            if i != j:
-                cov[j,i] = cov[i,j]
-
-    return means, cov
-
-def _extract_weighted_stats(data, weights):
-    if weights.size != data.shape[0]:
-        raise ValueError("weights not same size as data")
-
-    npar = data.shape[1]
-
-    wsum = weights.sum()
-
-    if wsum <= 0.0:
-        for i in xrange(data.shape[0]/100):
-            print_pars(data[i,:])
-        raise ValueError("wsum <= 0: %s" % wsum)
-
-    means = zeros(npar,dtype='f8')
-    cov = zeros( (npar,npar), dtype='f8')
-
-    for i in xrange(npar):
-        dsum = (data[:, i]*weights).sum()
-        means[i] = dsum/wsum
-
-    for i in xrange(npar):
-        idiff = data[:,i]-means[i]
-        for j in xrange(i,npar):
-            if i == j:
-                jdiff = idiff
-            else:
-                jdiff = data[:,j]-means[j]
-
-            wvar = ( weights*idiff*jdiff ).sum()/wsum
-            cov[i,j] = wvar
-
-            if i != j:
-                cov[j,i] = cov[i,j]
-
-    return means, cov
 
 
 def test_gauss_psf_graph(counts=100.0, noise=0.1, nimages=10, n=10, groups=True, jfac=0.27):
@@ -3149,13 +2962,17 @@ def test_gauss_psf_jacob(counts_sky=100.0, noise_sky=0.001, nimages=10, jfac=10.
     
     mcmc.plot_results(mc.get_trials())
 
-def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
+def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27, show=False):
     """
     testing jacobian stuff
     """
-    import images
     import mcmc
     from . import em
+
+
+    nwalkers=80
+    burnin=800
+    nstep=800
 
     dims=[25,25]
     cen=[dims[0]/2., dims[1]/2.]
@@ -3191,7 +3008,8 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, Tsky_psf, counts_sky_psf]
     gm_psf=gmix.GMixModel(pars_psf, "gauss")
 
-    pars_obj = [0.0, 0.0, g1_obj, g2_obj, Tsky_obj, counts_sky_obj]
+    pars_obj = array([0.0, 0.0, g1_obj, g2_obj, Tsky_obj, counts_sky_obj])
+    npars=pars_obj.size
     gm_obj0=gmix.GMixModel(pars_obj, model)
 
     gm=gm_obj0.convolve(gm_psf)
@@ -3211,7 +3029,9 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
 
     # psf using EM
     im_psf_sky,sky=em.prep_image(im_psf)
-    mc_psf=em.GMixEM(im_psf_sky, jacobian=j)
+    psf_obs = Observation(im_psf_sky, jacobian=j)
+    mc_psf=em.GMixEM(psf_obs)
+
     emo_guess=gm_psf.copy()
     emo_guess._data['p'] = 1.0
     emo_guess._data['row'] += 0.1*srandu()
@@ -3219,33 +3039,48 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27):
     emo_guess._data['irr'] += 0.5*srandu()
     emo_guess._data['irc'] += 0.1*srandu()
     emo_guess._data['icc'] += 0.5*srandu()
+
     mc_psf.go(emo_guess, sky)
     res_psf=mc_psf.get_result()
     print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
 
     psf_fit=mc_psf.get_gmix()
-    imfit_psf=mc_psf.make_image(counts=im_psf.sum())
-    images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
 
 
-    obs=Observation(im_obj, wt_obj, j, psf_gmix=psf_fit)
-    mc_obj=MCMCSimple(obs, model)
+    obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf_gmix=psf_fit)
+    mc_obj=MCMCSimple(obs, model, nwalkers=nwalkers)
 
-    raise ValueError("make guess")
-    mc_obj.go()
+    guess=zeros( (nwalkers, npars) )
+    guess[:,0] = 0.1*srandu(nwalkers)
+    guess[:,1] = 0.1*srandu(nwalkers)
+
+    # intentionally bad guesses
+    guess[:,2] = 0.1*srandu(nwalkers)
+    guess[:,3] = 0.1*srandu(nwalkers)
+    guess[:,4] = 0.5*Tsky_obj*(1.0 + 0.1*srandu(nwalkers))
+    guess[:,5] = 2.0*counts_sky_obj*(1.0 + 0.1*srandu(nwalkers))
+
+    pos=mc_obj.run_mcmc(guess, burnin)
+    pos=mc_obj.run_mcmc(pos, nstep)
+    mc_obj.calc_result()
 
     res_obj=mc_obj.get_result()
 
-    print_pars(res_obj['pars'], front='pars_obj:')
-    print_pars(res_obj['pars_err'], front='perr_obj:')
+    print_pars(pars_obj,            front='true pars:')
+    print_pars(res_obj['pars'],     front='pars_obj: ')
+    print_pars(res_obj['pars_err'], front='perr_obj: ')
     print('Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2))
 
     gmfit0=mc_obj.get_gmix()
     gmfit=gmfit0.convolve(psf_fit)
-    imfit_obj=gmfit.make_image(im_obj.shape, jacobian=j)
 
-    images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
-    mcmc.plot_results(mc_obj.get_trials())
+    if show:
+        imfit_psf=mc_psf.make_image(counts=im_psf.sum())
+        images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
+
+        imfit_obj=gmfit.make_image(im_obj.shape, jacobian=j)
+        images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
+        mcmc.plot_results(mc_obj.get_trials())
 
 
 

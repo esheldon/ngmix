@@ -2358,7 +2358,7 @@ class TFluxPriorCosmosBase(object):
 
         logpars=numpy.log10(T_and_flux)
 
-        return self.gmix.get_loglike(logpars[0], logpars[1])
+        return self.gmix.get_loglike_rowcol(logpars[0], logpars[1])
 
     def sample(self, n):
         """

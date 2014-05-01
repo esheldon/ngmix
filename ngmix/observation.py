@@ -1,5 +1,5 @@
 from numpy import ndarray
-from .jacobian import Jacobian
+from .jacobian import Jacobian, UnitJacobian
 from .gmix import GMix
 
 class Observation(object):
@@ -13,7 +13,7 @@ class Observation(object):
         The image
     weight: ndarray
         Weight map, same shape as image
-    jacobian: Jacobian
+    jacobian: Jacobian, optional
         Type Jacobian or a sub-type
     psf_image: ndarray, optional
         Optional psf image
@@ -21,21 +21,49 @@ class Observation(object):
         Optional GMix object representing the PSF
     """
 
-    def __init__(self, image, weight, jacobian, psf_image=None, psf_gmix=None):
+    def __init__(self, image, weight=None, jacobian=None, psf_image=None, psf_gmix=None):
+
         assert isinstance(image,ndarray),"image must be of type ndarray"
-        assert isinstance(weight,ndarray),"weight must be of type ndarray"
-        assert isinstance(jacobian,Jacobian),"jacobian must be of type Jacobian"
         assert len(image.shape)==2,"image must be 2d"
-        assert len(weight.shape)==2,"weight must be 2d"
-
-        assert (image.shape==weight.shape),"image and weight must be same shape"
-
         self.image=image.astype('f8', copy=False)
-        self.weight=weight.astype('f8', copy=False)
-        self.jacobian=jacobian
 
+        self.set_jacobian(jacobian)
+        self.set_weight(weight)
         self.set_psf_image(psf_image)
         self.set_psf_gmix(psf_gmix)
+
+
+
+    def set_weight(self, weight):
+        """
+        Set the weight map.
+
+        parameters
+        ----------
+        weight: ndarray (or None)
+        """
+
+        if weight is not None:
+            assert isinstance(weight,ndarray),"weight must be of type ndarray"
+            weight=weight.astype('f8', copy=False)
+
+            assert len(weight.shape)==2,"weight must be 2d"
+            assert (weight.shape==self.image.shape),"image and weight must be same shape"
+
+        self.weight=weight
+
+    def set_jacobian(self, jacobian):
+        """
+        Set the jacobian.
+
+        parameters
+        ----------
+        jacobian: Jacobian (or None)
+        """
+        if jacobian is None:
+            jacobian=UnitJacobian(0.0, 0.0)
+        assert isinstance(jacobian,Jacobian),"jacobian must be of type Jacobian"
+        self.jacobian=jacobian
 
     def set_psf_image(self,psf_image):
         """
@@ -66,7 +94,7 @@ class ObsList(list):
 
         over-riding this for type safety
         """
-        assert isinstance(obs,Observation),"obs should be of type Observation"
+        assert isinstance(obs,Observation),"obs should be of type Observation, got %s" % type(obs)
         super(ObsList,self).append(obs)
 
     def __setitem__(self, index, obs):
@@ -91,13 +119,13 @@ class MultiBandObsList(list):
         over-riding this for type safety
         """
         assert isinstance(obs_list,ObsList),"obs_list should be of type ObsList"
-        super(MultibandObsList,self).append(obs_list)
+        super(MultiBandObsList,self).append(obs_list)
 
     def __setitem__(self, index, obs_list):
         """
         over-riding this for type safety
         """
         assert isinstance(obs_list,ObsList),"obs_list should be of type ObsList"
-        super(MultibandObsList,self).__setitem__(index, obs_list)
+        super(MultiBandObsList,self).__setitem__(index, obs_list)
 
 

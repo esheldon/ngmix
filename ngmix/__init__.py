@@ -28,3 +28,6 @@ from .fitting import print_pars
 from . import em
 
 from . import observation
+from . import lensfit
+
+from . import stats
