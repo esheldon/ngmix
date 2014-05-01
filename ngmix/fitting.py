@@ -1,12 +1,14 @@
 """
+
 - todo
-    - make sure the psf flux fitting in my other codes is sending a jacobian
-        with center at the correct location
+    - make sure the psf flux fitting in my other codes are now sending the
+    center in sky coordinates
     - split out pqr calculations
     - split out lensfit calculations
     - support a single prior sent
         - everywhere that these can be sent, including T= keywords etc.
         - lots of _get_priors need to be adapted
+
 """
 # there are a few additional imports not in this header for example we only
 # import emcee if needed
