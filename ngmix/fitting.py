@@ -367,11 +367,20 @@ class PSFFluxFitter(FitterBase):
     We fix the center, so this is linear.  Just cross-correlations
     between model and data.
 
-    The center of the jacobians should point to the center of the object
+    The center of the jacobians should point to a common place on
+    the sky
+
+    parameters
+    -----------
+    obs: Observation or ObsList
+        See ngmix.observation.Observation
+    cen: 2-element sequence
+        The center in sky coordinates.
     """
-    def __init__(self, obs, **keys):
+    def __init__(self, obs, cen, **keys):
         self.keys=keys
         self._set_obs(obs)
+        self.cen=cen
 
         self.model_name='psf'
         self.npars=1
@@ -387,6 +396,8 @@ class PSFFluxFitter(FitterBase):
 
         chi2=0.0
 
+        cen=self.cen
+
         for ipass in [1,2]:
             for obs in self.obs:
                 im=obs.image
@@ -395,7 +406,7 @@ class PSFFluxFitter(FitterBase):
                 psf=obs.psf_gmix.copy()
                 
                 # center coincides with center of jacobian
-                psf.set_cen(0.0, 0.0)
+                psf.set_cen(cen[0], cen[1])
 
                 if ipass==1:
                     psf.set_psum(1.0)
@@ -3884,7 +3895,7 @@ def test_model_mb(model,
 
 
 
-def _get_test_psf_flux_pars(ngauss, jfac, counts_sky):
+def _get_test_psf_flux_pars(ngauss, cen, jfac, counts_sky):
 
     jfac2=jfac**2
     if ngauss==1:
@@ -3894,11 +3905,11 @@ def _get_test_psf_flux_pars(ngauss, jfac, counts_sky):
 
         Tsky=Tpix*jfac2
         pars=array([counts_sky,
-                          0.0,
-                          0.0,
-                          (Tsky/2.)*(1-e1),
-                          (Tsky/2.)*e2,
-                          (Tsky/2.)*(1+e1)],dtype='f8')
+                    cen[0],
+                    cen[1],
+                    (Tsky/2.)*(1-e1),
+                    (Tsky/2.)*e2,
+                    (Tsky/2.)*(1+e1)],dtype='f8')
 
     elif ngauss==2:
         e1_1=0.1*srandu()
@@ -3914,18 +3925,18 @@ def _get_test_psf_flux_pars(ngauss, jfac, counts_sky):
         T1sky=T1pix*jfac2
         T2sky=T2pix*jfac2
         pars=array([counts_frac1*counts_sky,
-                          0.0,
-                          0.0,
-                          (T1sky/2.)*(1-e1_1),
-                          (T1sky/2.)*e2_1,
-                          (T1sky/2.)*(1+e1_1),
+                    cen[0],
+                    cen[1],
+                    (T1sky/2.)*(1-e1_1),
+                    (T1sky/2.)*e2_1,
+                    (T1sky/2.)*(1+e1_1),
 
-                          counts_frac2*counts_sky,
-                          0.0,
-                          0.0,
-                          (T2sky/2.)*(1-e1_2),
-                          (T2sky/2.)*e2_2,
-                          (T2sky/2.)*(1+e1_2)])
+                    counts_frac2*counts_sky,
+                    cen[0],
+                    cen[1],
+                    (T2sky/2.)*(1-e1_2),
+                    (T2sky/2.)*e2_2,
+                    (T2sky/2.)*(1+e1_2)])
 
 
     else:
@@ -3938,26 +3949,30 @@ def test_psf_flux(ngauss,
                   counts_sky=100.0,
                   noise_sky=0.01,
                   nimages=1,
-                  jfac=0.27):
+                  jfac=0.27,
+                  jcen_offset=None,
+                  show=False):
     """
-    testing jacobian stuff
-
+    All jacobian centers must point to the same spot in sky coordinates.
     """
     from .em import GMixMaxIterEM
     import images
     import mcmc
     from . import em
 
-    dims=[25,25]
-    cen=[dims[0]/2., dims[1]/2.]
-    cenfac=0.0
+    # arcsec
+    #cen_sky = array([0.8, -1.2])
+    cen_sky = array([1.8, -2.1])
+
+    dims=[40,40]
+    jcen=array( [dims[0]/2., dims[1]/2.] )
+    if jcen_offset is not None:
+        jcen_offset = array(jcen_offset)
+        jcen += jcen_offset
+
+    jcenfac=2.0
     jfac2=jfac**2
     noise_pix=noise_sky/jfac2
-
-    im_list=[]
-    wt_list=[]
-    j_list=[]
-    psf_list=[]
 
     ntry=10
 
@@ -3965,11 +3980,17 @@ def test_psf_flux(ngauss,
 
     obs_list=ObsList()
     for i in xrange(nimages):
-        # gmix is in sky coords
-        gm=_get_test_psf_flux_pars(ngauss, jfac, counts_sky)
-        j=Jacobian(cen[0]+cenfac*srandu(),cen[1]+cenfac*srandu(), jfac, 0.0, 0.0, jfac)
+        # gmix is in sky coords.  Note center is cen_sky not the jacobian center
+        gm=_get_test_psf_flux_pars(ngauss, cen_sky, jfac, counts_sky)
+
+        # put row0,col0 at a random place
+        j=Jacobian(jcen[0]+jcenfac*srandu(),jcen[1]+jcenfac*srandu(), jfac, 0.0, 0.0, jfac)
 
         im0=gm.make_image(dims, jacobian=j)
+        if show:
+            import images
+            images.view(im0,title='image %s' % (i+1))
+
         im = im0 + noise_pix*numpy.random.randn(im0.size).reshape(dims)
 
         im0_skyset,sky=em.prep_image(im0)
@@ -4006,7 +4027,7 @@ def test_psf_flux(ngauss,
         print(i+1,res['numiter'])
 
 
-    fitter=PSFFluxFitter(obs_list)
+    fitter=PSFFluxFitter(obs_list, cen_sky)
     fitter.go()
 
     res=fitter.get_result()
