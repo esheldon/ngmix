@@ -7,6 +7,43 @@ import numpy
 from numpy import where, zeros
 from .gexceptions import GMixRangeError, GMixFatalError
 
+def calc_sensitivity(g, g_prior, remove_prior=False):
+    """
+    parameters
+    ----------
+    g: 2-d array
+        The g1,g2 values over the likelihood surface as a [N,2] array
+    g_prior:
+        The g prior object.
+    remove_prior: bool, optional
+        Remove the prior value from the Q,R terms.  This is needed
+        if the prior was used in likelihood exploration.
+
+    """
+
+    ls=LensfitSensitivity(g, g_prior, remove_prior=remove_prior)
+    gsens=ls.get_gsens()
+    return gsens
+
+def calc_shear(g, gsens):
+    """
+    Calculate shear from g and g sensitivity arrays
+
+    parameters
+    ----------
+    g: array
+        g1 and g2 as a [N,2] array
+    gsens: array
+        sensitivity as a [N,2] array
+    """
+    w=where(gsens > 0.0)
+    if w[0].size != g.shape[0]:
+        raise GMixFatalError("some gsens were <= 0.0")
+
+    shear = g.mean(axis=0)/gsens.mean(axis=0)
+
+    return shear
+
 class LensfitSensitivity(object):
     def __init__(self, g, g_prior, remove_prior=False):
         """
@@ -54,7 +91,7 @@ class LensfitSensitivity(object):
         dpri_by_g1 = self._g_prior.dbyg1_array(g1,g2)
         dpri_by_g2 = self._g_prior.dbyg2_array(g1,g2)
 
-        prior=self._g_prior.get_prob_array(g1,g2)
+        prior=self._g_prior.get_prob_array2d(g1,g2)
 
         if self._remove_prior:
             w,=where( prior > 0.0 )
@@ -88,22 +125,4 @@ class LensfitSensitivity(object):
 
         self._gsens=gsens
 
-def calc_lensfit_shear(g, gsens):
-    """
-    Calculate shear from g and g sensitivity arrays
-
-    parameters
-    ----------
-    g: array
-        g1 and g2 as a [N,2] array
-    gsens: array
-        sensitivity as a [N,2] array
-    """
-    w=where(gsens > 0.0)
-    if w[0].size != g.shape[0]:
-        raise GMixFatalError("some gsens were <= 0.0")
-
-    shear = g.mean(axis=0)/gsens.mean(axis=0)
-
-    return shear
 

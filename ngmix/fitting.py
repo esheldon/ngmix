@@ -1,5 +1,7 @@
 """
 - todo
+    - make sure the psf flux fitting in my other codes is sending a jacobian
+        with center at the correct location
     - split out pqr calculations
     - split out lensfit calculations
     - support a single prior sent
@@ -18,7 +20,7 @@ from pprint import pprint
 
 from . import gmix
 from .gmix import _exp3_ivals,_exp3_lookup
-from .gmix import GMixList, MultiBandGMixList
+from .gmix import GMix, GMixList, MultiBandGMixList
 
 from .jacobian import Jacobian, UnitJacobian
 
@@ -61,11 +63,11 @@ class FitterBase(object):
     The basic input is the Observation (or ObsList or MultiBandObsList)
 
     Designed to fit many images at once.  For this reason, a jacobian
-    transformation is required to put all on the same system. For the
-    same reason, the center of the model is relative to "zero", which
-    points to the common center used by all transformation objects; the
-    row0,col0 in pixels for each should correspond to that center in the
-    common coordinates (e.g. sky coords)
+    transformation is used to put all on the same system; this is part of each
+    Observation object. For the same reason, the center of the model is
+    relative to "zero", which points to the common center used by all
+    transformation objects; the row0,col0 in pixels for each should correspond
+    to that center in the common coordinates (e.g. sky coords)
 
     Fluxes and sizes will also be in the transformed system.
     
@@ -90,6 +92,23 @@ class FitterBase(object):
         self._set_totpix()
 
         self._gmix_all=None
+
+    def get_result(self):
+        """
+        Result will not be non-None until go() is run
+        """
+        if not hasattr(self, '_result'):
+            raise ValueError("No result, you must run go()!")
+
+        return self._result
+
+    def get_gmix(self):
+        """
+        Get a gaussian mixture at the "best" parameter set, which
+        definition depends on the sub-class
+        """
+        pars=self._result['pars']
+        return gmix.make_gmix_model(pars, self.model)
 
     def _set_obs(self, obs_in):
         """
@@ -162,22 +181,6 @@ class FitterBase(object):
                                  "'%s'" % self.model_name)
 
 
-    def get_result(self):
-        """
-        Result will not be non-None until go() is run
-        """
-        if not hasattr(self, '_result'):
-            raise ValueError("No result, you must run go()!")
-
-        return self._result
-
-    def get_gmix(self):
-        """
-        Get a gaussian mixture at the "best" parameter set, which
-        definition depends on the sub-class
-        """
-        pars=self._result['pars']
-        return gmix.make_gmix_model(pars, self.model)
 
     def get_dof(self):
         """
@@ -292,9 +295,6 @@ class FitterBase(object):
                 'bic':bic}
 
 
-
-
-
     def _init_gmix_all(self, pars):
         """
         initialize the list of lists of gaussian mixtures
@@ -366,20 +366,17 @@ class PSFFluxFitter(FitterBase):
     """
     We fix the center, so this is linear.  Just cross-correlations
     between model and data.
+
+    The center of the jacobians should point to the center of the object
     """
-    def __init__(self, image, weight, jacobian, psf, **keys):
+    def __init__(self, obs, **keys):
         self.keys=keys
-
-        # in this case, image, weight, jacobian, psf are going to
-        # be lists of lists.
-
-        # call this first, others depend on it
-        self._set_lists(image, weight, jacobian, psf, **keys)
+        self._set_obs(obs)
 
         self.model_name='psf'
         self.npars=1
 
-        self.totpix=self.verify()
+        self._set_totpix()
 
     def go(self):
         """
@@ -391,15 +388,17 @@ class PSFFluxFitter(FitterBase):
         chi2=0.0
 
         for ipass in [1,2]:
-            for i in xrange(self.nimages):
-                im=self.im_list[i]
-                wt=self.wt_list[i]
-                j=self.jacob_list[i]
-                psf=self.psf_list[i]
+            for obs in self.obs:
+                im=obs.image
+                wt=obs.weight
+                j=obs.jacobian
+                psf=obs.psf_gmix.copy()
                 
+                # center coincides with center of jacobian
+                psf.set_cen(0.0, 0.0)
+
                 if ipass==1:
                     psf.set_psum(1.0)
-                    psf.set_cen(0.0, 0.0)
                     model=psf.make_image(im.shape, jacobian=j)
                     xcorr_sum += (model*im*wt).sum()
                     msq_sum += (model*model*wt).sum()
@@ -430,72 +429,39 @@ class PSFFluxFitter(FitterBase):
                       'flux':flux,
                       'flux_err':flux_err}
 
-    def _set_lists(self, im_list, wt_list, j_list, psf_list_in, **keys):
+    def _set_obs(self, obs_in):
         """
-        Internally we store everything as lists of lists.  The outer
-        list is the bands, the inner is the list of images in the band.
+        Input should be an Observation, ObsList, or MultiBandObsList
         """
 
-        if isinstance(im_list,numpy.ndarray):
-            # lists-of-lists for generic, including multi-band
-            im_list=[im_list]
-            wt_list=[wt_list]
-            j_list=[j_list]
-            psf_list_in=[psf_list_in]
 
-        elif (isinstance(im_list,list) 
-                and isinstance(im_list[0],numpy.ndarray)):
-            # OK, good
-            pass
+        if isinstance(obs_in,Observation):
+            obs_list=ObsList()
+            obs_list.append(obs_in)
+        elif isinstance(obs_in,ObsList):
+            obs_list=obs_in
         else:
-            raise ValueError("images should be input as array or "
-                             "list of arrays")
+            raise ValueError("obs should be Observation or ObsList")
 
-        self.nimages = len(im_list)
+        for obs in obs_list:
+            if not isinstance(obs.psf_gmix, GMix):
+                raise ValueError("observations must have a not-None psf_gmix attribute")
 
-        self.im_list=im_list
-        self.wt_list=wt_list
-        self.jacob_list = j_list
-        self.psf_list_in=psf_list_in
+        self.obs=obs_list
 
-        psf_list=[]
-        for psf_in in self.psf_list_in:
-            psf = psf_in.copy()
-
-            #psfnorm1.set_psum(1.0)
-            #psfnorm1.set_cen(0.0, 0.0)
-            psf_list.append(psf)
-
-        self.psf_list=psf_list
-
-    def verify(self):
+    def _set_totpix(self):
         """
         Make sure the data are consistent.
         """
-        n_im=self.nimages
-        n_wt = len(self.wt_list)
-        n_j  = len(self.jacob_list)
-        n_psf  = len(self.psf_list)
-        if n_wt != n_im or n_wt != n_j or n_psf != n_im:
-            nl=(n_im,n_wt,n_j,n_psf)
-            raise ValueError("lists not all same size: "
-                             "im: %s wt: %s jacob: %s psf: %s" % nl)
-
 
         totpix=0
+        for obs in self.obs:
+            shape=obs.image.shape
+            totpix += shape[0]*shape[1]
 
-        for j in xrange(n_im):
-            imsh=self.im_list[j].shape
-            wtsh=self.wt_list[j].shape
-            if imsh != wtsh:
-                raise ValueError("im.shape != wt.shape "
-                                 "(%s != %s)" % (imsh,wtsh))
+        self.totpix=totpix
 
-            totpix += imsh[0]*imsh[1]
-
-            
-        return totpix
-
+ 
     def get_effective_npix(self):
         """
         Because of the weight map, each pixel gets a different weight in the
@@ -509,7 +475,9 @@ class PSFFluxFitter(FitterBase):
         if not hasattr(self, 'eff_npix'):
             wtmax = 0.0
             wtsum = 0.0
-            for wt in self.wt_list:
+
+            for obs in self.obs:
+                wt=obs.weight
                 this_wtmax = wt.max()
                 if this_wtmax > wtmax:
                     wtmax = this_wtmax
@@ -886,7 +854,10 @@ def _test_cov(pcov):
 
 class MCMCBase(FitterBase):
     """
-    A base class for MCMC runs.  Inherits from overall fitter base class.
+    A base class for MCMC runs.  Inherits from overall fitter base class, which provides
+    the get_result() method.
+
+    Extra user-facing methods are run_mcmc(), calc_result(), get_trials(), get_sampler(), make_plots()
     """
     def __init__(self, obs, model, **keys):
         super(MCMCBase,self).__init__(obs, model, **keys)
@@ -949,6 +920,26 @@ class MCMCBase(FitterBase):
         self.trials  = sampler.flatchain
 
         return self.pos
+
+    def calc_result(self, weights=None):
+        """
+        Calculate the mcmc stats and the "best fit" stats
+        """
+
+        pars,pars_cov = stats.calc_mcmc_stats(self.trials, weights=weights)
+
+        pars_err=sqrt(diag(pars_cov))
+
+        self._result={'model':self.model_name,
+                      'flags':self.flags,
+                      'pars':pars,
+                      'pars_cov':pars_cov,
+                      'pars_err':pars_err,
+                      'tau':self.tau,
+                      'arate':self.arate}
+
+        fit_stats = self.get_fit_stats(pars)
+        self._result.update(fit_stats)
 
     def _setup_sampler_and_data(self, pos):
         """
@@ -1018,25 +1009,6 @@ class MCMCBase(FitterBase):
             return self.prior.get_lnprob(pars)
 
 
-    def calc_result(self, weights=None):
-        """
-        Calculate the mcmc stats and the "best fit" stats
-        """
-
-        pars,pars_cov = stats.calc_mcmc_stats(self.trials, weights=weights)
-
-        pars_err=sqrt(diag(pars_cov))
-
-        self._result={'model':self.model_name,
-                      'flags':self.flags,
-                      'pars':pars,
-                      'pars_cov':pars_cov,
-                      'pars_err':pars_err,
-                      'tau':self.tau,
-                      'arate':self.arate}
-
-        fit_stats = self.get_fit_stats(pars)
-        self._result.update(fit_stats)
 
     def _get_g_prior_vals(self):
         """
@@ -1124,8 +1096,6 @@ class MCMCBase(FitterBase):
         import images
         import biggles
 
-        raise RuntimeError("adapt to new system")
-
         biggles.configure('screen','width', width)
         biggles.configure('screen','height', height)
 
@@ -1137,43 +1107,49 @@ class MCMCBase(FitterBase):
 
         tablist=[]
         for band in xrange(self.nband):
+
+            obs_list=self.obs[band]
             gmix_list=self._gmix_all[band]
-            im_list=self.im_lol[band]
-            wt_list=self.wt_lol[band]
-            jacob_list=self.jacob_lol[band]
             
-            nim=len(im_list)
+            nim=len(gmix_list)
 
             nrows,ncols=images.get_grid(nim)
-            #tab=biggles.Table(nim,1)
             tab=biggles.Table(nrows,ncols)
+
             ttitle='band: %s' % band
             if title is not None:
                 ttitle='%s %s' % (title, ttitle)
             tab.title=ttitle
-            #imtot_list=[]
+
             for i in xrange(nim):
                 row=i/ncols
                 col=i % ncols
 
-                im=im_list[i]
-                wt=wt_list[i]
-                j=jacob_list[i]
+                obs=obs_list[i]
                 gm=gmix_list[i]
+
+                im=obs.image
+                wt=obs.weight
+                j=obs.jacobian
 
                 model=gm.make_image(im.shape,jacobian=j)
 
-                # don't care about masked pixels
-                residual=(model-im)*wt
+                showim = im*wt
+                showmod = model*wt
 
-                subtab=biggles.Table(1,3)
-                imshow=im*wt
-                subtab[0,0] = images.view(imshow, show=False)
-                subtab[0,1] = images.view(model, show=False)
-                subtab[0,2] = images.view(residual, show=False)
+                # don't care about masked pixels
+                #residual=(model-im)*wt
+
+                #subtab=biggles.Table(1,3)
+                #imshow=im*wt
+                #subtab[0,0] = images.view(imshow, show=False)
+                #subtab[0,1] = images.view(model, show=False)
+                #subtab[0,2] = images.view(residual, show=False)
 
                 #tab[i,0] = subtab
-                tab[row,col] = subtab
+
+                sub_tab=images.compare_images(showim, showmod,show=False)
+                tab[row,col] = sub_tab
 
                 # might want them to have different stretches
                 #imcols=im.shape[1]
@@ -2962,9 +2938,11 @@ def test_gauss_psf_jacob(counts_sky=100.0, noise_sky=0.001, nimages=10, jfac=10.
     
     mcmc.plot_results(mc.get_trials())
 
-def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27, show=False):
+def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27, g_prior=None, show=False):
     """
-    testing jacobian stuff
+    Test fitting the specified model.
+
+    Send g_prior to do some lensfit/pqr calculations
     """
     import mcmc
     from . import em
@@ -3070,17 +3048,26 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27, s
     print_pars(res_obj['pars'],     front='pars_obj: ')
     print_pars(res_obj['pars_err'], front='perr_obj: ')
     print('Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2))
+    print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'])
 
     gmfit0=mc_obj.get_gmix()
     gmfit=gmfit0.convolve(psf_fit)
 
+    if g_prior is not None:
+        from . import lensfit
+        trials = mc_obj.get_trials()
+        gsens = lensfit.calc_sensitivity(trials[:,2:2+2], g_prior)
+        print("lensfit gsens:",gsens)
+
     if show:
+        import images
         imfit_psf=mc_psf.make_image(counts=im_psf.sum())
         images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
 
-        imfit_obj=gmfit.make_image(im_obj.shape, jacobian=j)
-        images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
-        mcmc.plot_results(mc_obj.get_trials())
+        mc_obj.make_plots(do_residual=True,show=True,prompt=False)
+        #imfit_obj=gmfit.make_image(im_obj.shape, jacobian=j)
+        #images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
+        #mcmc.plot_results(mc_obj.get_trials())
 
 
 
@@ -3955,7 +3942,6 @@ def test_psf_flux(ngauss,
     """
     testing jacobian stuff
 
-    flux fit time is negligible, EM fitting dominates
     """
     from .em import GMixMaxIterEM
     import images
@@ -3976,6 +3962,8 @@ def test_psf_flux(ngauss,
     ntry=10
 
     tm_em=0.0
+
+    obs_list=ObsList()
     for i in xrange(nimages):
         # gmix is in sky coords
         gm=_get_test_psf_flux_pars(ngauss, jfac, counts_sky)
@@ -3985,15 +3973,14 @@ def test_psf_flux(ngauss,
         im = im0 + noise_pix*numpy.random.randn(im0.size).reshape(dims)
 
         im0_skyset,sky=em.prep_image(im0)
-        mc=em.GMixEM(im0_skyset, jacobian=j)
 
-        print('true:')
-        print(gm)
+        tobs=Observation(im0_skyset, jacobian=j)
+        mc=em.GMixEM(tobs)
+
         # gm is also guess
         gm_guess=gm.copy()
         gm_guess.set_psum(1.0)
         gm_guess.set_cen(0.0, 0.0)
-        tm0_em=time.time()
         for k in xrange(ntry):
             try:
                 mc.go(gm_guess, sky, tol=1.e-5)
@@ -4009,55 +3996,21 @@ def test_psf_flux(ngauss,
                     gm_guess._data['irr'] = gm._data['irr']*(1.0 + 0.1*srandu(ngauss))
                     gm_guess._data['icc'] = gm._data['icc']*(1.0 + 0.1*srandu(ngauss))
         psf_fit=mc.get_gmix()
-        tm_em += time.time()-tm0_em
 
         wt=0.0*im.copy() + 1./noise_pix**2
 
-        im_list.append(im)
-        wt_list.append(wt)
-        j_list.append(j)
-        psf_list.append(psf_fit)
-        #psf_list.append(gm)
+        obs=Observation(im, weight=wt, jacobian=j, psf_gmix=psf_fit)
+        obs_list.append(obs)
 
-        #print 'fit: ',psf_fit
         res=mc.get_result()
         print(i+1,res['numiter'])
 
 
-    tm_fit=time.time()
-    fitter=PSFFluxFitter(im_list, wt_list, j_list, psf_list)
+    fitter=PSFFluxFitter(obs_list)
     fitter.go()
-    tm_fit=time.time()-tm_fit
 
     res=fitter.get_result()
 
-    #print res
-
-    return res['flux'], res['flux_err'], tm_fit, tm_em
-
-def profile_test_psf_flux(ngauss,
-                          counts_sky=100.0,
-                          noise_sky=0.01,
-                          nimages=1,
-                          jfac=0.27,
-                          groups=False):
-
-    import pycallgraph
-    from pycallgraph import PyCallGraph
-    from pycallgraph.output import GraphvizOutput
-
-    graphviz = GraphvizOutput()
-    output='profile-psfflux-ngauss%02d-%02d.png' % (ngauss,nimages)
-    print('profile image:',output)
-    graphviz.output_file = output
-    config=pycallgraph.Config(groups=groups)
-
-
-    with PyCallGraph(config=config, output=graphviz):
-        for i in xrange(10):
-            test_psf_flux(ngauss,
-                          counts_sky=counts_sky,
-                          noise_sky=noise_sky,
-                          nimages=nimages,
-                          jfac=jfac)
+    print("flux(sky):",counts_sky)
+    print("meas: %g +/- %g" % (res['flux'], res['flux_err']))
 
