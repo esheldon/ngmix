@@ -49,10 +49,8 @@ class LensfitSensitivity(object):
         """
         parameters
         ----------
-        g1: 1-d array
-            The g1 values over the likelihood surface
-        g2: 1-d array
-            The g2 values over the likelihood surface
+        g: 2-d array
+            g values [N,2]
         g_prior:
             The g prior object.
         remove_prior: bool, optional

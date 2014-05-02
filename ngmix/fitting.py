@@ -313,6 +313,7 @@ class FitterBase(object):
             gmix_list0=GMixList()
             gmix_list=GMixList()
 
+            # pars for this band, in linear space
             band_pars=self._get_band_pars(pars, band)
 
             for obs in obs_list:
@@ -339,6 +340,7 @@ class FitterBase(object):
             gmix_list0=self._gmix_all0[band]
             gmix_list=self._gmix_all[band]
 
+            # pars for this band, in linear space
             band_pars=self._get_band_pars(pars, band)
 
             for i,obs in enumerate(obs_list):
@@ -518,6 +520,7 @@ class LMSimple(FitterBase):
 
     """
     def __init__(self, image, weight, jacobian, model, guess, **keys):
+        raise RuntimeError("adapt to new system")
         super(LMSimple,self).__init__(image, weight, jacobian, model, **keys)
 
         # this is a dict
@@ -661,6 +664,7 @@ class LMSimple(FitterBase):
 
 class LMSersic(LMSimple):
     def __init__(self, image, weight, jacobian, guess, **keys):
+        raise RuntimeError("adapt to new system")
         super(LMSimple,self).__init__(image, weight, jacobian, "sersic", **keys)
         # this is a dict
         # can contain maxfev (maxiter), ftol (tol in sum of squares)
@@ -888,15 +892,6 @@ class MCMCBase(FitterBase):
         self.nwalkers=keys['nwalkers']
         self.mca_a=keys.get('mca_a',2.0)
 
-        self.do_pqr=keys.get('do_pqr',False)
-        self.do_lensfit=keys.get('do_lensfit',False)
-
-        # expand around this shear value
-        self.shear_expand = keys.get('shear_expand',None)
-
-        if (self.do_lensfit or self.do_pqr) and (self.prior is None):
-            raise ValueError("send prior for lensfit or pqr")
-
         self.trials=None
 
 
@@ -904,14 +899,27 @@ class MCMCBase(FitterBase):
         """
         Get the set of trials from the production run
         """
+        if self.trials is None:
+            raise RuntimeError("you need to run the mcmc chain first")
         return self.trials
+
+    def get_lin_trials(self):
+        """
+        Get trials with all parameters in linear space
+        """
+        if not hasattr(self, 'lin_trials'):
+            lin_trials=self.get_trials().copy()
+            lin_trials[:,4] = exp(lin_trials[:,4])
+            lin_trials[:,5] = exp(lin_trials[:,5])
+            self.lin_trials=lin_trials
+
+        return self.lin_trials
 
     def get_sampler(self):
         """
         get the emcee sampler
         """
         return self.sampler
-
 
     def run_mcmc(self, pos, nstep):
         """
@@ -1041,7 +1049,7 @@ class MCMCBase(FitterBase):
             return self.prior.get_lnprob(pars)
 
 
-
+    '''
     def _get_g_prior_vals(self):
         """
         Set g prior vals for later use
@@ -1052,14 +1060,15 @@ class MCMCBase(FitterBase):
             g2=self.trials[:,self.g2i]
             self.g_prior_vals = self.g_prior.get_prob_array2d(g1,g2)
         return self.g_prior_vals
+    '''
 
     def get_par_names(self):
-        names=['cen1','cen2', 'g1','g2', 'T']
+        names=['cen1','cen2', 'g1','g2', 'log(T)']
         if self.nband == 1:
-            names += ['Flux']
+            names += ['log(F)']
         else:
             for band in xrange(self.nband):
-                names += ['Flux_%s' % i]
+                names += ['log(F_%s)' % i]
         return names
 
 
@@ -1199,7 +1208,7 @@ class MCMCBase(FitterBase):
         return tablist
 
 
-    def _do_trials(self):
+    def _do_trials_old(self):
         """
         don't use this
         Actually run the sampler
@@ -1266,7 +1275,7 @@ class MCMCBase(FitterBase):
         self.sampler=sampler
 
 
-    def _run_some_trials(self, pos_in, nstep):
+    def _run_some_trials_old(self, pos_in, nstep):
         """
         don't use this
         """
@@ -1299,6 +1308,31 @@ class MCMCSimple(MCMCBase):
         self.g1i = 2
         self.g2i = 3
 
+    def _get_band_pars(self, log_pars, band):
+        """
+        Get linear pars for the specified band
+        """
+        pars=log_pars[ [0,1,2,3,4,5+band] ].copy()
+
+        pars[4] = exp(pars[4])
+        pars[5] = exp(pars[5])
+
+        return pars
+
+    def calc_result(self, weights=None):
+        """
+        Some extra stats for simple models
+        """
+
+        super(MCMCSimple,self).calc_result(weights=None)
+
+        g1i=self.g1i
+        g2i=self.g2i
+
+        self._result['g'] = self._result['pars'][g1i:g1i+2].copy()
+        self._result['g_cov'] = self._result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
+
+    '''
     def _get_priors_old(self, pars):
         """
         # go in simple
@@ -1327,40 +1361,6 @@ class MCMCSimple(MCMCBase):
                 lnp += cp.get_lnprob_scalar(counts)
 
         return lnp
-
-
-    def _get_band_pars(self, pars, band):
-        return pars[ [0,1,2,3,4,5+band] ]
-
-
-    def calc_result(self, weights=None):
-        """
-        Some extra stats for simple models
-        """
-
-        #if self.g_prior is not None:
-        #    tmp=self._get_g_prior_vals()
-        #    self._remove_zero_prior()
-
-        super(MCMCSimple,self).calc_result(weights=None)
-
-        g1i=self.g1i
-        g2i=self.g2i
-
-        self._result['g'] = self._result['pars'][g1i:g1i+2].copy()
-        self._result['g_cov'] = self._result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
-
-        #self._result['nuse'] = self.trials.shape[0]
-
-        #if self.do_lensfit:
-        #    g_sens=self._get_lensfit_gsens(self._result['pars'])
-        #    self._result['g_sens']=g_sens
-
-        #if self.do_pqr:
-        #    P,Q,R = self._get_PQR()
-        #    self._result['P']=P
-        #    self._result['Q']=Q
-        #    self._result['R']=R
 
     def _get_lensfit_gsens(self, pars, gprior=None):
         """
@@ -1486,7 +1486,7 @@ class MCMCSimple(MCMCBase):
             self.trials = self.trials[w,:]
 
         return ndiff
-
+    '''
 
 class MCMCSersic(MCMCSimple):
     def __init__(self, obs, **keys):
@@ -1624,6 +1624,7 @@ class MCMCSersic(MCMCSimple):
 
 class MCMCSersicJointHybrid(MCMCSersic):
     def __init__(self, image, weight, jacobian, **keys):
+        raise RuntimeError("adapt to new system")
 
         self.g1i=2
         self.g2i=3
@@ -1786,6 +1787,7 @@ class MCMCSersicJointHybrid(MCMCSersic):
 
 class MCMCSersicDefault(MCMCSimple):
     def __init__(self, image, weight, jacobian, **keys):
+        raise RuntimeError("adapt to new system")
 
         self.full_guess=keys.get('full_guess',None)
         self.g1i=2
@@ -1857,6 +1859,8 @@ class MCMCCoellip(MCMCSimple):
     Add additional features to the base class to support simple models
     """
     def __init__(self, image, weight, jacobian, **keys):
+
+        raise RuntimeError("adapt to new system")
 
         self.full_guess=keys.get('full_guess',None)
         self.ngauss=gmix.get_coellip_ngauss(self.full_guess.shape[1])
@@ -1980,6 +1984,7 @@ class MCMCSimpleFixed(MCMCSimple):
     Fix everything but shapes
     """
     def __init__(self, image, weight, jacobian, model, **keys):
+        raise RuntimeError("adapt to new system")
         super(MCMCSimpleFixed,self).__init__(image, weight, jacobian, model, **keys)
 
         # value of elements 2,3 are not important as those are the ones to be
@@ -2020,6 +2025,7 @@ class MCMCBDC(MCMCSimple):
     Add additional features to the base class to support coelliptical bulge+disk
     """
     def __init__(self, image, weight, jacobian, **keys):
+        raise RuntimeError("adapt to new system")
         super(MCMCBDC,self).__init__(image, weight, jacobian, "bdc", **keys)
 
         if self.full_guess is None:
@@ -2040,9 +2046,6 @@ class MCMCBDC(MCMCSimple):
         """
         # go in simple
         add any priors that were sent on construction
-        
-        note g prior is *not* applied during the likelihood exploration
-        if do_lensfit=True or do_pqr=True
         """
         lnp=0.0
         
@@ -2105,6 +2108,7 @@ class MCMCBDF(MCMCSimple):
     Add additional features to the base class to support simple models
     """
     def __init__(self, image, weight, jacobian, **keys):
+        raise RuntimeError("adapt to new system")
         super(MCMCBDF,self).__init__(image, weight, jacobian, "bdf", **keys)
 
         if self.full_guess is None:
@@ -2122,9 +2126,6 @@ class MCMCBDF(MCMCSimple):
         """
         # go in simple
         add any priors that were sent on construction
-        
-        note g prior is *not* applied during the likelihood exploration
-        if do_lensfit=True or do_pqr=True
         """
         lnp=0.0
         
@@ -2196,6 +2197,7 @@ class MCMCBDFJoint(MCMCBDF):
     BDF with a joint prior on [g1,g2,T,Fb,Fd]
     """
     def __init__(self, image, weight, jacobian, **keys):
+        raise RuntimeError("adapt to new system")
         super(MCMCBDF,self).__init__(image, weight, jacobian, "bdf", **keys)
 
         if self.full_guess is None:
@@ -2213,9 +2215,6 @@ class MCMCBDFJoint(MCMCBDF):
         """
         # go in simple
         add any priors that were sent on construction
-        
-        note g prior is *not* applied during the likelihood exploration
-        if do_lensfit=True or do_pqr=True
         """
         lnp=0.0
         
@@ -2366,6 +2365,7 @@ class MCMCSimpleJointHybrid(MCMCSimple):
     Simple with a joint prior on [T,F],separate on g1,g2
     """
     def __init__(self, image, weight, jacobian, model, **keys):
+        raise RuntimeError("adapt to new system")
         super(MCMCSimpleJointHybrid,self).__init__(image, weight, jacobian, model, **keys)
 
         if self.full_guess is None:
@@ -2508,6 +2508,7 @@ class MCMCBDFJointHybrid(MCMCSimpleJointHybrid):
     """
 
     def __init__(self, image, weight, jacobian, **keys):
+        raise RuntimeError("adapt to new system")
         super(MCMCBDFJointHybrid,self).__init__(image, weight, jacobian, "bdf", **keys)
 
     def _get_band_pars(self, pars, band):
@@ -2560,6 +2561,7 @@ class MCMCSimpleJointLinPars(MCMCSimple):
     Simple with a joint prior on [g1,g2,T,Fb,Fd]
     """
     def __init__(self, image, weight, jacobian, model, **keys):
+        raise RuntimeError("adapt to new system")
         super(MCMCSimpleJointLinPars,self).__init__(image, weight, jacobian, model, **keys)
 
         if self.full_guess is None:
@@ -2671,6 +2673,7 @@ class MCMCSimpleJointLogPars(MCMCSimple):
     Simple with a joint prior on [g1,g2,T,Fb,Fd]
     """
     def __init__(self, image, weight, jacobian, model, **keys):
+        raise RuntimeError("adapt to new system")
         super(MCMCSimpleJointLogPars,self).__init__(image, weight, jacobian, model, **keys)
 
         if self.full_guess is None:
@@ -2792,6 +2795,7 @@ class MCMCSimpleJointLogPars(MCMCSimple):
 
 class MCMCGaussPSF(MCMCSimple):
     def __init__(self, image, weight, jacobian, **keys):
+        raise RuntimeError("adapt to new system")
         model=gmix.GMIX_GAUSS
         if 'psf' in keys:
             raise RuntimeError("don't send psf= when fitting a psf")

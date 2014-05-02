@@ -29,5 +29,6 @@ from . import em
 
 from . import observation
 from . import lensfit
+from . import pqr
 
 from . import stats
