@@ -4,8 +4,13 @@
     - make sure the psf flux fitting in my other codes are now sending the
     center in sky coordinates
     - split out pqr calculations
-    - split out lensfit calculations
-    - support a single prior sent
+    * split out lensfit calculations
+    - support only a single prior sent
+        - take care of g prior not during by sending weights= to
+        the calc_result
+        - seperate lensfit/pqr then need to deal with remove prior for
+        g prior during
+    - support only full guess
         - everywhere that these can be sent, including T= keywords etc.
         - lots of _get_priors need to be adapted
 
@@ -918,7 +923,7 @@ class MCMCBase(FitterBase):
 
         sampler=self.sampler
         sampler.reset()
-        self.pos, prob, state = sampler.run_mcmc(self.pos, nstep)
+        self.pos, prob, state = sampler.run_mcmc(pos, nstep)
 
         lnprobs = sampler.lnprobability.reshape(self.nwalkers*nstep)
         w=lnprobs.argmax()
@@ -943,6 +948,8 @@ class MCMCBase(FitterBase):
 
         pars_err=sqrt(diag(pars_cov))
 
+        self._set_tau()
+
         self._result={'model':self.model_name,
                       'flags':self.flags,
                       'pars':pars,
@@ -962,7 +969,10 @@ class MCMCBase(FitterBase):
         self.flags=0
         self.tau=0.0
         self.pos=pos
-        self.npars=pos.shape[1]
+
+        npars=pos.shape[1]
+        mess="pos has npars=%d, expected %d" % (npars,self.npars)
+        assert (npars==self.npars),mess
 
         self.sampler = self._make_sampler()
         self.best_lnprob=None
@@ -982,10 +992,19 @@ class MCMCBase(FitterBase):
             print('failed init gmix from input guess: %s' % str(gerror))
             raise gerror
 
-    def _get_tau(self,sampler, nstep):
-        acor=sampler.acor
-        tau = (acor/nstep).max()
-        return tau
+    def _set_tau(self):
+        """
+        auto-correlation
+        """
+        import emcee
+        if emcee.ensemble.acor is not None:
+            acor=self.sampler.acor
+            nstep=self.trials.shape[0]
+            tau = (acor/nstep).max()
+        else:
+            tau=9999.0
+
+        self.tau=tau
 
     def _make_sampler(self):
         """
@@ -3061,7 +3080,7 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27, g
     print_pars(res_obj['pars'],     front='pars_obj: ')
     print_pars(res_obj['pars_err'], front='perr_obj: ')
     print('Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2))
-    print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'])
+    print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'])
 
     gmfit0=mc_obj.get_gmix()
     gmfit=gmfit0.convolve(psf_fit)

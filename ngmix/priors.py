@@ -8,7 +8,7 @@ I haven't forced the max prob to be 1.0 yet, but should
 from __future__ import print_function
 
 import numpy
-from numpy import where, array, exp, log, sqrt, zeros, diag
+from numpy import where, array, exp, log, sqrt, cos, sin, zeros, ones, diag
 from numpy import pi
 from numpy.random import random as randu
 from numpy.random import randn
@@ -1457,6 +1457,48 @@ class GPriorMErf(GPriorBase):
         return model
 
 
+
+class Normal(object):
+    """
+    This class provides a uniform interface consistent with LogNormal
+    """
+    def __init__(self, cen, sigma):
+
+        self.cen = array(cen, copy=False)
+        self.sigma = sigma
+        self.s2inv = 1./self.sigma**2
+
+    def sample(self, *args):
+        """
+        Get samples.  Send no args to get a scalar.
+        """
+        rand=self.cen + self.sigma*numpy.random.randn(*args)
+        return rand
+
+    def get_lnprob(self, p):
+        """
+        log probability
+        """
+        diff = self.cen-p
+        lnp = -0.5*diff*diff*self.s2inv
+        return lnp
+
+    # aliases
+    get_lnprob_array  = get_lnprob
+    get_lnprob_scalar = get_lnprob
+
+    def get_prob(self,p):
+        """
+        probability
+        """
+        lnp = self.get_lnprob(p)
+        return numpy.exp(lnp)
+
+    # aliases
+    get_prob_array  = get_prob
+    get_prob_scalar = get_prob
+
+
 class LogNormalBase(object):
     """
     Lognormal distribution Base, holds non-jitted methods
@@ -2693,3 +2735,130 @@ _g_cosmos_c= array([0.,41.56646313,1089.28265178,1117.24827112,
 
 _g_cosmos_k = 3
 '''
+
+
+class Disk2D(object):
+    """
+    uniform over a disk
+    """
+    def __init__(self, cen, radius):
+
+        self.cen = array(cen, copy=False)
+        if self.cen.size != 2:
+            raise ValueError("cen should have two elements")
+        self.radius = radius
+        self.radius_sq = radius**2
+
+    def sample1d(self, n):
+        """
+        Get samples in 1-d radius
+        """
+        r2 = self.radius_sq*randu(n)
+
+        r = sqrt(r2)
+        return r
+
+    def sample2d(self, n):
+        """
+        Get samples.  Send no args to get a scalar.
+        """
+
+        radius=self.sample1d(n)
+
+        theta=2.0*numpy.pi*randu(n)
+
+        x=radius*cos(theta)
+        y=radius*sin(theta)
+
+        x += self.cen[0]
+        y += self.cen[1]
+
+        return x,y
+
+    def get_lnprob_scalar1d(self, r):
+        """
+        log probability 0.0 inside of disk, outside raises
+        an exception
+        """
+        if r > self.radius:
+            raise GMixRangeError("position out of disk")
+        return 0.0
+
+    def get_lnprob_array1d(self, r):
+        """
+        log probability 0.0 inside of disk, outside raises
+        an exception
+        """
+
+        w,=numpy.where(r > self.radius)
+        if w.size > 0:
+            raise GMixRangeError("some positions were out of disk")
+
+        return zeros(x.size)
+
+    def get_prob_scalar1d(self, r):
+        """
+        probability, 1.0 inside disk, outside raises exception
+
+        does not raise an exception
+        """
+        r2 = x**2 + y**2
+        if r2 > self.radius_sq:
+            p=0.0
+        else:
+            p=1.0
+        return p
+
+    def get_prob_array1d(self, r):
+        """
+        probability, 1.0 inside disk, outside raises exception
+
+        does not raise an exception
+        """
+
+        p = ones(x.size)
+        w,=where(r > self.radius)
+        if w.size > 0:
+            p[w]=0.0
+        return p
+
+    def get_lnprob_scalar2d(self, x, y):
+        """
+        log probability 0.0 inside of disk, outside raises
+        an exception
+        """
+
+        r = sqrt(x**2 + y**2)
+        return self.get_lnprob_scalar1d(r)
+
+
+    def get_lnprob_array2d(self, x, y):
+        """
+        log probability 0.0 inside of disk, outside raises
+        an exception
+        """
+
+        r = sqrt(x**2 + y**2)
+        return self.get_lnprob_array1d(r)
+
+
+    def get_prob_scalar2d(self, x, y):
+        """
+        probability, 1.0 inside disk, outside raises exception
+
+        does not raise an exception
+        """
+        r = sqrt(x**2 + y**2)
+        return self.get_prob_scalar1d(r)
+
+    def get_prob_array2d(self, x, y):
+        """
+        probability, 1.0 inside disk, outside raises exception
+
+        does not raise an exception
+        """
+        r = sqrt(x**2 + y**2)
+        return self.get_prob_array1d(r)
+
+
+
