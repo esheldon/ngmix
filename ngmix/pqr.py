@@ -9,6 +9,8 @@ from .gexceptions import GMixRangeError, GMixFatalError
 class PQR(object):
     def __init__(self, g, g_prior, shear_expand=[0.0,0.0], remove_prior=False):
         """
+        A class to calculate the P,Q,R terms from Bernstein & Armstrong
+
         parameters
         ----------
         g: 2-d array
@@ -22,7 +24,10 @@ class PQR(object):
 
         self._g=g
         self._g_prior=g_prior
+
         self._shear_expand=array(shear_expand)
+        assert self._shear_expand.size==2,"shear expand should have two elements"
+
         self._remove_prior=remove_prior
 
         self._calc_pqr()
@@ -38,24 +43,17 @@ class PQR(object):
         get the P,Q,R
         """
 
-        sh=self._shear_expand
-        g_prior=self.g_prior
+        g_prior=self._g_prior
 
         g1=self._g[:,0]
         g2=self._g[:,1]
 
-        if sh is None:
-            # expand around zero
-            if hasattr(g_prior,'get_pqr'):
-                Pi,Qi,Ri = g_prior.get_pqr(g1,g2)
-            else:
-                Pi,Qi,Ri = g_prior.get_pqr_num(g1,g2)
+        sh=self._shear_expand
+        print("        expanding pqr about:",sh)
+        if hasattr(g_prior,'get_pqr_expand'):
+            Pi,Qi,Ri = g_prior.get_pqr_expand(g1,g2, sh[0], sh[1])
         else:
-            print("        expanding pqr about:",sh)
-            if hasattr(g_prior,'get_pqr_expand'):
-                Pi,Qi,Ri = g_prior.get_pqr_expand(g1,g2, sh[0], sh[1])
-            else:
-                Pi,Qi,Ri = g_prior.get_pqr_num(g1,g2,s1=sh[0], s2=sh[1])
+            Pi,Qi,Ri = g_prior.get_pqr_num(g1, g2, s1=sh[0], s2=sh[1])
 
         self._P,self._Q,self._R = self._get_mean_pqr(Pi,Qi,Ri)
 

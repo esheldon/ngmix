@@ -242,8 +242,9 @@ class FitterBase(object):
         s2n_denom=0.0
         try:
 
+            # these are the log pars (if working in log space)
             ln_priors = self._get_priors(pars)
-            ln_prob = ln_priors
+            ln_prob = 0.0
 
             self._fill_gmix_all(pars)
             for band in xrange(self.nband):
@@ -259,10 +260,13 @@ class FitterBase(object):
                     s2n_numer += res[1]
                     s2n_denom += res[2]
 
+            ln_prob += ln_priors
+
         except GMixRangeError:
             ln_prob = LOWVAL
             s2n_numer=0.0
             s2n_denom=BIGVAL
+
 
         if get_s2nsums:
             return ln_prob, s2n_numer, s2n_denom
@@ -274,7 +278,7 @@ class FitterBase(object):
 
     def get_fit_stats(self, pars):
         """
-        Get some statistics for the best fit.
+        Get some fit statistics for the input pars.
         """
         npars=self.npars
 
