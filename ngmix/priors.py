@@ -2739,7 +2739,7 @@ _g_cosmos_k = 3
 
 class Disk2D(object):
     """
-    uniform over a disk
+    uniform over a disk, [0,r)
     """
     def __init__(self, cen, radius):
 
@@ -2780,7 +2780,7 @@ class Disk2D(object):
         log probability 0.0 inside of disk, outside raises
         an exception
         """
-        if r > self.radius:
+        if r >= self.radius:
             raise GMixRangeError("position out of disk")
         return 0.0
 
@@ -2790,7 +2790,7 @@ class Disk2D(object):
         an exception
         """
 
-        w,=numpy.where(r > self.radius)
+        w,=numpy.where(r >= self.radius)
         if w.size > 0:
             raise GMixRangeError("some positions were out of disk")
 
@@ -2803,7 +2803,7 @@ class Disk2D(object):
         does not raise an exception
         """
         r2 = x**2 + y**2
-        if r2 > self.radius_sq:
+        if r2 >= self.radius_sq:
             p=0.0
         else:
             p=1.0
@@ -2817,7 +2817,7 @@ class Disk2D(object):
         """
 
         p = ones(x.size)
-        w,=where(r > self.radius)
+        w,=where(r >= self.radius)
         if w.size > 0:
             p[w]=0.0
         return p

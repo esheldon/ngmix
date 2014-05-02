@@ -994,15 +994,15 @@ class JointPriorSimpleLogPars(JointPriorSimpleLinPars):
         return wgood
 
 
-def make_uniform_simple_sep(cen_width, T_range, F_range):
+def make_uniform_simple_sep(cen, cen_width, T_range, F_range):
     """
     For testing
 
-    Make  PriorSimpleSep with double-gaussian prior in cen
-    but just uniform priors in T and F, and g
+    Make PriorSimpleSep uniform in all priors except the
+    center, which is gaussian
     """
 
-    cen_prior=priors.CenPrior(0.0, 0.0, cen_width, cen_width)
+    cen_prior=priors.CenPrior(cen[0], cen[1], cen_width[0], cen_width[1])
     g_prior=priors.Disk2D([0.0, 0.0], 1.0)
     T_prior=priors.FlatPrior(T_range[0], T_range[1])
     F_prior=priors.FlatPrior(F_range[0], F_range[1])
