@@ -3,6 +3,7 @@ class LensfitSensitivity
 function calc_lensfit_shear
 """
 
+from __future__ import print_function
 import numpy
 from numpy import where, zeros
 from .gexceptions import GMixRangeError, GMixFatalError

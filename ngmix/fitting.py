@@ -21,7 +21,7 @@ from __future__ import print_function
 
 from sys import stdout
 import numpy
-from numpy import array, zeros, diag, sqrt, where, log10, isfinite
+from numpy import array, zeros, diag, exp, sqrt, where, log10, isfinite
 import time
 from pprint import pprint
 
@@ -371,7 +371,7 @@ class FitterBase(object):
         if self.prior is None:
             return 0.0
         else:
-            return self.prior.get_lnprob(pars)
+            return self.prior.get_lnprob_scalar(pars)
 
 
 
@@ -1041,17 +1041,6 @@ class MCMCBase(FitterBase):
             sampler._random = self.random_state
 
         return sampler
-
-    def _get_priors(self, pars):
-        """
-        get the sum of ln(prob) from the priors or 0.0 if
-        no priors were sent
-        """
-        if self.prior is None:
-            return 0.0
-        else:
-            return self.prior.get_lnprob(pars)
-
 
     '''
     def _get_g_prior_vals(self):

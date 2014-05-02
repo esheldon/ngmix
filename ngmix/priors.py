@@ -1667,6 +1667,12 @@ class LogNormal(LogNormalBase):
             x=x_arr[i]
             lnp_arr[i] = self.get_lnprob_scalar(x)
 
+def lognorm_convert(mean, sigma):
+    logmean  = log(mean) - 0.5*log( 1 + sigma**2/mean**2 )
+    logvar   = log(1 + sigma**2/mean**2 )
+    logsigma = sqrt(logvar)
+
+    return logmean, logsigma
 
 class BFracBase(object):
     """
