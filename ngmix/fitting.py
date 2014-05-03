@@ -1317,7 +1317,7 @@ class MCMCSimple(MCMCBase):
         Some extra stats for simple models
         """
 
-        super(MCMCSimple,self).calc_result(weights=None)
+        super(MCMCSimple,self).calc_result(weights=weights)
 
         g1i=self.g1i
         g2i=self.g2i

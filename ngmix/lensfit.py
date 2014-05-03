@@ -5,10 +5,12 @@ function calc_lensfit_shear
 
 from __future__ import print_function
 import numpy
-from numpy import where, zeros
+from numpy import where, zeros, array
 from .gexceptions import GMixRangeError, GMixFatalError
 
-def calc_sensitivity(g, g_prior, remove_prior=False):
+_default_h=1.0e-6
+
+def calc_sensitivity(g, g_prior, remove_prior=False, h=_default_h):
     """
     parameters
     ----------
@@ -22,11 +24,11 @@ def calc_sensitivity(g, g_prior, remove_prior=False):
 
     """
 
-    ls=LensfitSensitivity(g, g_prior, remove_prior=remove_prior)
-    gsens=ls.get_gsens()
-    return gsens
+    ls=LensfitSensitivity(g, g_prior, remove_prior=remove_prior, h=h)
+    g_sens=ls.get_g_sens()
+    return g_sens
 
-def calc_shear(g, gsens):
+def calc_shear(g, g_sens):
     """
     Calculate shear from g and g sensitivity arrays
 
@@ -34,19 +36,19 @@ def calc_shear(g, gsens):
     ----------
     g: array
         g1 and g2 as a [N,2] array
-    gsens: array
+    g_sens: array
         sensitivity as a [N,2] array
     """
-    w=where(gsens > 0.0)
+    w=where(g_sens > 0.0)
     if w[0].size != g.shape[0]:
-        raise GMixFatalError("some gsens were <= 0.0")
+        raise GMixFatalError("some g_sens were <= 0.0")
 
-    shear = g.mean(axis=0)/gsens.mean(axis=0)
+    shear = g.mean(axis=0)/g_sens.mean(axis=0)
 
     return shear
 
 class LensfitSensitivity(object):
-    def __init__(self, g, g_prior, remove_prior=False):
+    def __init__(self, g, g_prior, remove_prior=False, h=_default_h):
         """
         parameters
         ----------
@@ -62,15 +64,22 @@ class LensfitSensitivity(object):
         self._g=g
         self._g_prior=g_prior
         self._remove_prior=remove_prior
+        self._h=h
 
-        self._calc_gsens()
+        self._calc_g_sens()
 
 
-    def get_gsens(self):
+    def get_g_mean(self):
+        """
+        get the g mean
+        """
+        return self._g_mean
+
+    def get_g_sens(self):
         """
         get the g sensitivity values as a [N, 2] array
         """
-        return self._gsens
+        return self._g_sens
 
     def get_nuse(self):
         """
@@ -79,16 +88,18 @@ class LensfitSensitivity(object):
         """
         return self._nuse
 
-    def _calc_gsens(self):
+    def _calc_g_sens(self):
         """
         Calculate the sensitivity
         """
 
+        g_sens = zeros(2)
+
         g1=self._g[:,0]
         g2=self._g[:,1]
 
-        dpri_by_g1 = self._g_prior.dbyg1_array(g1,g2)
-        dpri_by_g2 = self._g_prior.dbyg2_array(g1,g2)
+        dpri_by_g1 = self._g_prior.dbyg1_array(g1,g2,h=self._h)
+        dpri_by_g2 = self._g_prior.dbyg2_array(g1,g2,h=self._h)
 
         prior=self._g_prior.get_prob_array2d(g1,g2)
 
@@ -99,29 +110,34 @@ class LensfitSensitivity(object):
             g1mean=g1[w].mean()
             g2mean=g2[w].mean()
 
-            self._indices=w
+            g1diff = g1mean-g1
+            g2diff = g2mean-g2
+
+            R1 = g1diff[w]*dpri_by_g1[w]/prior[w]
+            R2 = g2diff[w]*dpri_by_g2[w]/prior[w]
+
+            g_sens[0] = 1- R1.mean()
+            g_sens[1] = 1- R2.mean()
+
             self._nuse=w.size
         else:
+            # need weighted mean shape
             psum=prior.sum()
             g1mean = (g1*prior).sum()/psum
             g2mean = (g2*prior).sum()/psum
-            self._nuse=g1.size
 
-        g1diff = g1mean-g1
-        g2diff = g2mean-g2
+            g1diff = g1mean-g1
+            g2diff = g2mean-g2
 
-        gsens = zeros(2)
-
-        if self._remove_prior:
-            R1 = g1diff[w]*dpri_by_g1[w]/prior[w]
-            R2 = g2diff[w]*dpri_by_g2[w]/prior[w]
-        else:
             R1 = g1diff*dpri_by_g1
             R2 = g2diff*dpri_by_g2
 
-        gsens[0]= 1.- R1.mean()
-        gsens[1]= 1.- R2.mean()
+            g_sens[0] = 1 - R1.sum()/psum
+            g_sens[1] = 1 - R2.sum()/psum
 
-        self._gsens=gsens
+            self._nuse=g1.size
+
+        self._g_mean=array([g1mean, g2mean])
+        self._g_sens=g_sens
 
 

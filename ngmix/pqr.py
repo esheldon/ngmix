@@ -416,6 +416,7 @@ def pqr_bootstrap(P, Q, R, nsamples, verbose=False, show=False, eps=None, png=No
 
 def _plot_shears(shears, show=True, eps=None, png=None):
     import biggles
+    import esutil as eu
     tab=biggles.Table(2,1)
     std=shears.std(axis=0)
 
