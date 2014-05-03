@@ -104,6 +104,13 @@ class PQR(object):
         """
         return self._P,self._Q,self._R
     
+    def get_nuse(self):
+        """
+        get number of points used.  Will be less than the input number
+        of points if remove_prior is set and some prior values were zero
+        """
+        return self._nuse
+
     def _calc_pqr(self):
         """
         get the P,Q,R
@@ -164,10 +171,13 @@ class PQR(object):
             P = Pi.sum()/Pinv_sum
             Q = Qi.sum(axis=0)/Pinv_sum
             R = Ri.sum(axis=0)/Pinv_sum
+
         else:
             P = Pi.mean()
             Q = Qi.mean(axis=0)
             R = Ri.mean(axis=0)
+
+        self._nuse=Pi.size
 
         return P,Q,R
 
