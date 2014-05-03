@@ -225,7 +225,7 @@ def calc_pqr_sums(P,Q,R):
 
 def combine_pqr_sums(P_sum, Q_sum, Cinv_sum):
     """
-    Combine the sums from get_pqr_sums to
+    Combine the sums from calc_pqr_sums to
     get a shear and covariance matrix
     """
 
