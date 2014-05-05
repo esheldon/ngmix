@@ -31,6 +31,8 @@ class Observation(object):
         assert len(image.shape)==2,"image must be 2d"
         self.image=image.astype('f8', copy=False)
 
+        self.meta={}
+
         self.set_jacobian(jacobian)
         self.set_weight(weight)
         self.set_gmix(gmix)
@@ -83,6 +85,11 @@ class Observation(object):
             assert isinstance(gmix,GMix),"gmix must be of type GMix"
         self.gmix=gmix
 
+    def update_meta_data(self, meta_dict):
+        """
+        Add some metadata
+        """
+        self.meta.update(meta_dict)
 
 class ObsList(list):
     """
