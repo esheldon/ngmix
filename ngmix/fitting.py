@@ -5,8 +5,13 @@
     center in sky coordinates
     - make sure the codes are not re-setting the jacobian!
     - split out pqr calculations
-    - split out lensfit calculations
-    - support a single prior sent
+    * split out lensfit calculations
+    - support only a single prior sent
+        - take care of g prior not during by sending weights= to
+        the calc_result
+        - seperate lensfit/pqr then need to deal with remove prior for
+        g prior during
+    - support only full guess
         - everywhere that these can be sent, including T= keywords etc.
         - lots of _get_priors need to be adapted
 
@@ -17,7 +22,7 @@ from __future__ import print_function
 
 from sys import stdout
 import numpy
-from numpy import array, zeros, diag, sqrt, where, log10, isfinite
+from numpy import array, zeros, diag, exp, sqrt, where, log10, isfinite
 import time
 from pprint import pprint
 
@@ -238,8 +243,9 @@ class FitterBase(object):
         s2n_denom=0.0
         try:
 
+            # these are the log pars (if working in log space)
             ln_priors = self._get_priors(pars)
-            ln_prob = ln_priors
+            ln_prob = 0.0
 
             self._fill_gmix_all(pars)
             for band in xrange(self.nband):
@@ -255,10 +261,13 @@ class FitterBase(object):
                     s2n_numer += res[1]
                     s2n_denom += res[2]
 
+            ln_prob += ln_priors
+
         except GMixRangeError:
             ln_prob = LOWVAL
             s2n_numer=0.0
             s2n_denom=BIGVAL
+
 
         if get_s2nsums:
             return ln_prob, s2n_numer, s2n_denom
@@ -270,7 +279,7 @@ class FitterBase(object):
 
     def get_fit_stats(self, pars):
         """
-        Get some statistics for the best fit.
+        Get some fit statistics for the input pars.
         """
         npars=self.npars
 
@@ -309,6 +318,7 @@ class FitterBase(object):
             gmix_list0=GMixList()
             gmix_list=GMixList()
 
+            # pars for this band, in linear space
             band_pars=self._get_band_pars(pars, band)
 
             for obs in obs_list:
@@ -335,6 +345,7 @@ class FitterBase(object):
             gmix_list0=self._gmix_all0[band]
             gmix_list=self._gmix_all[band]
 
+            # pars for this band, in linear space
             band_pars=self._get_band_pars(pars, band)
 
             for i,obs in enumerate(obs_list):
@@ -361,7 +372,7 @@ class FitterBase(object):
         if self.prior is None:
             return 0.0
         else:
-            return self.prior.get_lnprob(pars)
+            return self.prior.get_lnprob_scalar(pars)
 
 
 
@@ -514,6 +525,7 @@ class LMSimple(FitterBase):
 
     """
     def __init__(self, image, weight, jacobian, model, guess, **keys):
+        raise RuntimeError("adapt to new system")
         super(LMSimple,self).__init__(image, weight, jacobian, model, **keys)
 
         # this is a dict
@@ -657,6 +669,7 @@ class LMSimple(FitterBase):
 
 class LMSersic(LMSimple):
     def __init__(self, image, weight, jacobian, guess, **keys):
+        raise RuntimeError("adapt to new system")
         super(LMSimple,self).__init__(image, weight, jacobian, "sersic", **keys)
         # this is a dict
         # can contain maxfev (maxiter), ftol (tol in sum of squares)
@@ -884,15 +897,6 @@ class MCMCBase(FitterBase):
         self.nwalkers=keys['nwalkers']
         self.mca_a=keys.get('mca_a',2.0)
 
-        self.do_pqr=keys.get('do_pqr',False)
-        self.do_lensfit=keys.get('do_lensfit',False)
-
-        # expand around this shear value
-        self.shear_expand = keys.get('shear_expand',None)
-
-        if (self.do_lensfit or self.do_pqr) and (self.prior is None):
-            raise ValueError("send prior for lensfit or pqr")
-
         self.trials=None
 
 
@@ -900,14 +904,27 @@ class MCMCBase(FitterBase):
         """
         Get the set of trials from the production run
         """
+        if self.trials is None:
+            raise RuntimeError("you need to run the mcmc chain first")
         return self.trials
+
+    def get_lin_trials(self):
+        """
+        Get trials with all parameters in linear space
+        """
+        if not hasattr(self, 'lin_trials'):
+            lin_trials=self.get_trials().copy()
+            lin_trials[:,4] = exp(lin_trials[:,4])
+            lin_trials[:,5] = exp(lin_trials[:,5])
+            self.lin_trials=lin_trials
+
+        return self.lin_trials
 
     def get_sampler(self):
         """
         get the emcee sampler
         """
         return self.sampler
-
 
     def run_mcmc(self, pos, nstep):
         """
@@ -919,7 +936,7 @@ class MCMCBase(FitterBase):
 
         sampler=self.sampler
         sampler.reset()
-        self.pos, prob, state = sampler.run_mcmc(self.pos, nstep)
+        self.pos, prob, state = sampler.run_mcmc(pos, nstep)
 
         lnprobs = sampler.lnprobability.reshape(self.nwalkers*nstep)
         w=lnprobs.argmax()
@@ -944,6 +961,8 @@ class MCMCBase(FitterBase):
 
         pars_err=sqrt(diag(pars_cov))
 
+        self._set_tau()
+
         self._result={'model':self.model_name,
                       'flags':self.flags,
                       'pars':pars,
@@ -963,7 +982,10 @@ class MCMCBase(FitterBase):
         self.flags=0
         self.tau=0.0
         self.pos=pos
-        self.npars=pos.shape[1]
+
+        npars=pos.shape[1]
+        mess="pos has npars=%d, expected %d" % (npars,self.npars)
+        assert (npars==self.npars),mess
 
         self.sampler = self._make_sampler()
         self.best_lnprob=None
@@ -983,10 +1005,19 @@ class MCMCBase(FitterBase):
             print('failed init gmix from input guess: %s' % str(gerror))
             raise gerror
 
-    def _get_tau(self,sampler, nstep):
-        acor=sampler.acor
-        tau = (acor/nstep).max()
-        return tau
+    def _set_tau(self):
+        """
+        auto-correlation
+        """
+        import emcee
+        if emcee.ensemble.acor is not None:
+            acor=self.sampler.acor
+            nstep=self.trials.shape[0]
+            tau = (acor/nstep).max()
+        else:
+            tau=9999.0
+
+        self.tau=tau
 
     def _make_sampler(self):
         """
@@ -1012,18 +1043,7 @@ class MCMCBase(FitterBase):
 
         return sampler
 
-    def _get_priors(self, pars):
-        """
-        get the sum of ln(prob) from the priors or 0.0 if
-        no priors were sent
-        """
-        if self.prior is None:
-            return 0.0
-        else:
-            return self.prior.get_lnprob(pars)
-
-
-
+    '''
     def _get_g_prior_vals(self):
         """
         Set g prior vals for later use
@@ -1034,14 +1054,15 @@ class MCMCBase(FitterBase):
             g2=self.trials[:,self.g2i]
             self.g_prior_vals = self.g_prior.get_prob_array2d(g1,g2)
         return self.g_prior_vals
+    '''
 
     def get_par_names(self):
-        names=['cen1','cen2', 'g1','g2', 'T']
+        names=['cen1','cen2', 'g1','g2', 'log(T)']
         if self.nband == 1:
-            names += ['Flux']
+            names += ['log(F)']
         else:
             for band in xrange(self.nband):
-                names += ['Flux_%s' % i]
+                names += ['log(F_%s)' % i]
         return names
 
 
@@ -1181,7 +1202,7 @@ class MCMCBase(FitterBase):
         return tablist
 
 
-    def _do_trials(self):
+    def _do_trials_old(self):
         """
         don't use this
         Actually run the sampler
@@ -1248,7 +1269,7 @@ class MCMCBase(FitterBase):
         self.sampler=sampler
 
 
-    def _run_some_trials(self, pos_in, nstep):
+    def _run_some_trials_old(self, pos_in, nstep):
         """
         don't use this
         """
@@ -1281,6 +1302,31 @@ class MCMCSimple(MCMCBase):
         self.g1i = 2
         self.g2i = 3
 
+    def _get_band_pars(self, log_pars, band):
+        """
+        Get linear pars for the specified band
+        """
+        pars=log_pars[ [0,1,2,3,4,5+band] ].copy()
+
+        pars[4] = exp(pars[4])
+        pars[5] = exp(pars[5])
+
+        return pars
+
+    def calc_result(self, weights=None):
+        """
+        Some extra stats for simple models
+        """
+
+        super(MCMCSimple,self).calc_result(weights=weights)
+
+        g1i=self.g1i
+        g2i=self.g2i
+
+        self._result['g'] = self._result['pars'][g1i:g1i+2].copy()
+        self._result['g_cov'] = self._result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
+
+    '''
     def _get_priors_old(self, pars):
         """
         # go in simple
@@ -1309,40 +1355,6 @@ class MCMCSimple(MCMCBase):
                 lnp += cp.get_lnprob_scalar(counts)
 
         return lnp
-
-
-    def _get_band_pars(self, pars, band):
-        return pars[ [0,1,2,3,4,5+band] ]
-
-
-    def calc_result(self, weights=None):
-        """
-        Some extra stats for simple models
-        """
-
-        #if self.g_prior is not None:
-        #    tmp=self._get_g_prior_vals()
-        #    self._remove_zero_prior()
-
-        super(MCMCSimple,self).calc_result(weights=None)
-
-        g1i=self.g1i
-        g2i=self.g2i
-
-        self._result['g'] = self._result['pars'][g1i:g1i+2].copy()
-        self._result['g_cov'] = self._result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
-
-        #self._result['nuse'] = self.trials.shape[0]
-
-        #if self.do_lensfit:
-        #    g_sens=self._get_lensfit_gsens(self._result['pars'])
-        #    self._result['g_sens']=g_sens
-
-        #if self.do_pqr:
-        #    P,Q,R = self._get_PQR()
-        #    self._result['P']=P
-        #    self._result['Q']=Q
-        #    self._result['R']=R
 
     def _get_lensfit_gsens(self, pars, gprior=None):
         """
@@ -1468,7 +1480,7 @@ class MCMCSimple(MCMCBase):
             self.trials = self.trials[w,:]
 
         return ndiff
-
+    '''
 
 class MCMCSersic(MCMCSimple):
     def __init__(self, obs, **keys):
@@ -1606,6 +1618,7 @@ class MCMCSersic(MCMCSimple):
 
 class MCMCSersicJointHybrid(MCMCSersic):
     def __init__(self, image, weight, jacobian, **keys):
+        raise RuntimeError("adapt to new system")
 
         self.g1i=2
         self.g2i=3
@@ -1768,6 +1781,7 @@ class MCMCSersicJointHybrid(MCMCSersic):
 
 class MCMCSersicDefault(MCMCSimple):
     def __init__(self, image, weight, jacobian, **keys):
+        raise RuntimeError("adapt to new system")
 
         self.full_guess=keys.get('full_guess',None)
         self.g1i=2
@@ -1839,6 +1853,8 @@ class MCMCCoellip(MCMCSimple):
     Add additional features to the base class to support simple models
     """
     def __init__(self, image, weight, jacobian, **keys):
+
+        raise RuntimeError("adapt to new system")
 
         self.full_guess=keys.get('full_guess',None)
         self.ngauss=gmix.get_coellip_ngauss(self.full_guess.shape[1])
@@ -1962,6 +1978,7 @@ class MCMCSimpleFixed(MCMCSimple):
     Fix everything but shapes
     """
     def __init__(self, image, weight, jacobian, model, **keys):
+        raise RuntimeError("adapt to new system")
         super(MCMCSimpleFixed,self).__init__(image, weight, jacobian, model, **keys)
 
         # value of elements 2,3 are not important as those are the ones to be
@@ -2002,6 +2019,7 @@ class MCMCBDC(MCMCSimple):
     Add additional features to the base class to support coelliptical bulge+disk
     """
     def __init__(self, image, weight, jacobian, **keys):
+        raise RuntimeError("adapt to new system")
         super(MCMCBDC,self).__init__(image, weight, jacobian, "bdc", **keys)
 
         if self.full_guess is None:
@@ -2022,9 +2040,6 @@ class MCMCBDC(MCMCSimple):
         """
         # go in simple
         add any priors that were sent on construction
-        
-        note g prior is *not* applied during the likelihood exploration
-        if do_lensfit=True or do_pqr=True
         """
         lnp=0.0
         
@@ -2087,6 +2102,7 @@ class MCMCBDF(MCMCSimple):
     Add additional features to the base class to support simple models
     """
     def __init__(self, image, weight, jacobian, **keys):
+        raise RuntimeError("adapt to new system")
         super(MCMCBDF,self).__init__(image, weight, jacobian, "bdf", **keys)
 
         if self.full_guess is None:
@@ -2104,9 +2120,6 @@ class MCMCBDF(MCMCSimple):
         """
         # go in simple
         add any priors that were sent on construction
-        
-        note g prior is *not* applied during the likelihood exploration
-        if do_lensfit=True or do_pqr=True
         """
         lnp=0.0
         
@@ -2178,6 +2191,7 @@ class MCMCBDFJoint(MCMCBDF):
     BDF with a joint prior on [g1,g2,T,Fb,Fd]
     """
     def __init__(self, image, weight, jacobian, **keys):
+        raise RuntimeError("adapt to new system")
         super(MCMCBDF,self).__init__(image, weight, jacobian, "bdf", **keys)
 
         if self.full_guess is None:
@@ -2195,9 +2209,6 @@ class MCMCBDFJoint(MCMCBDF):
         """
         # go in simple
         add any priors that were sent on construction
-        
-        note g prior is *not* applied during the likelihood exploration
-        if do_lensfit=True or do_pqr=True
         """
         lnp=0.0
         
@@ -2348,6 +2359,7 @@ class MCMCSimpleJointHybrid(MCMCSimple):
     Simple with a joint prior on [T,F],separate on g1,g2
     """
     def __init__(self, image, weight, jacobian, model, **keys):
+        raise RuntimeError("adapt to new system")
         super(MCMCSimpleJointHybrid,self).__init__(image, weight, jacobian, model, **keys)
 
         if self.full_guess is None:
@@ -2490,6 +2502,7 @@ class MCMCBDFJointHybrid(MCMCSimpleJointHybrid):
     """
 
     def __init__(self, image, weight, jacobian, **keys):
+        raise RuntimeError("adapt to new system")
         super(MCMCBDFJointHybrid,self).__init__(image, weight, jacobian, "bdf", **keys)
 
     def _get_band_pars(self, pars, band):
@@ -2542,6 +2555,7 @@ class MCMCSimpleJointLinPars(MCMCSimple):
     Simple with a joint prior on [g1,g2,T,Fb,Fd]
     """
     def __init__(self, image, weight, jacobian, model, **keys):
+        raise RuntimeError("adapt to new system")
         super(MCMCSimpleJointLinPars,self).__init__(image, weight, jacobian, model, **keys)
 
         if self.full_guess is None:
@@ -2653,6 +2667,7 @@ class MCMCSimpleJointLogPars(MCMCSimple):
     Simple with a joint prior on [g1,g2,T,Fb,Fd]
     """
     def __init__(self, image, weight, jacobian, model, **keys):
+        raise RuntimeError("adapt to new system")
         super(MCMCSimpleJointLogPars,self).__init__(image, weight, jacobian, model, **keys)
 
         if self.full_guess is None:
@@ -2774,6 +2789,7 @@ class MCMCSimpleJointLogPars(MCMCSimple):
 
 class MCMCGaussPSF(MCMCSimple):
     def __init__(self, image, weight, jacobian, **keys):
+        raise RuntimeError("adapt to new system")
         model=gmix.GMIX_GAUSS
         if 'psf' in keys:
             raise RuntimeError("don't send psf= when fitting a psf")
@@ -3062,7 +3078,7 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27, g
     print_pars(res_obj['pars'],     front='pars_obj: ')
     print_pars(res_obj['pars_err'], front='perr_obj: ')
     print('Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2))
-    print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'])
+    print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'])
 
     gmfit0=mc_obj.get_gmix()
     gmfit=gmfit0.convolve(psf_fit)

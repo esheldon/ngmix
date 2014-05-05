@@ -8,7 +8,7 @@ I haven't forced the max prob to be 1.0 yet, but should
 from __future__ import print_function
 
 import numpy
-from numpy import where, array, exp, log, sqrt, zeros, diag
+from numpy import where, array, exp, log, sqrt, cos, sin, zeros, ones, diag
 from numpy import pi
 from numpy.random import random as randu
 from numpy.random import randn
@@ -99,10 +99,18 @@ class GPriorBase(object):
 
         Can over-ride with a jit method for speed
         """
-        ff = self.get_prob_array2d(g1+self.hhalf, g2)
-        fb = self.get_prob_array2d(g1-self.hhalf, g2)
+        h2=1./(2.*h)
 
-        return (ff - fb)*self.hinv
+        #g1new,g2new=shape.shear_reduced(g1, g2, h, 0.0)
+        #ff = self.get_prob_array2d(g1new, g2new)
+
+        #g1new,g2new=shape.shear_reduced(g1, g2, -h, 0.0)
+        #fb = self.get_prob_array2d(g1new, g2new)
+
+        ff = self.get_prob_array2d(g1+h, g2)
+        fb = self.get_prob_array2d(g1-h, g2)
+
+        return (ff - fb)*h2
 
     def dbyg2_array(self, g1, g2, h=1.e-6):
         """
@@ -113,10 +121,18 @@ class GPriorBase(object):
 
         Can over-ride with a jit method for speed
         """
-        ff = self.get_prob_array2d(g1, g2+h/2)
-        fb = self.get_prob_array2d(g1, g2-h/2)
-        return (ff - fb)*self.hinv
+        h2=1./(2.*h)
 
+        #g1new,g2new=shape.shear_reduced(g1, g2, 0.0, h)
+        #ff = self.get_prob_array2d(g1new, g2new)
+
+        #g1new,g2new=shape.shear_reduced(g1, g2, 0.0, -h)
+        #fb = self.get_prob_array2d(g1new, g2new)
+
+        ff = self.get_prob_array2d(g1, g2+h)
+        fb = self.get_prob_array2d(g1, g2-h)
+
+        return (ff - fb)*h2
 
  
     def get_pqr_num(self, g1in, g2in, s1=0.0, s2=0.0, h=1.e-6):
@@ -639,6 +655,104 @@ class GPriorBase(object):
                               frac[0],frac_err[0],frac[1],frac_err[1]))
 
             shear_expand=shmeas
+
+    def test_lensfit_shear_recovery(self,
+                                    smin,
+                                    smax,
+                                    nshear,
+                                    npair=10000,
+                                    nsample=1000,
+                                    sigma=0.1,
+                                    h=1.e-6,
+                                    show=False,
+                                    eps=None):
+        """
+        Test how well we recover the shear with no noise.
+
+        parameters
+        ----------
+        smin: float
+            min shear to test
+        smax: float
+            max shear to test
+        nshear:
+            number of shear values to test
+        npair: integer, optional
+            Number of pairs to use at each shear test value
+        """
+
+        import lensing
+        from .shape import Shape, shear_reduced
+        from . import lensfit
+
+        # only shear in g1
+        shear_true=zeros( (nshear,2) )
+        shear_true[:,0]=numpy.linspace(smin, smax, nshear)/sqrt(2)
+        shear_true[:,1]=numpy.linspace(smin, smax, nshear)/sqrt(2)
+
+
+        shear_meas=numpy.zeros( (nshear,2) )
+        shear_meas_err=numpy.zeros( (nshear,2) )
+
+        fracdiff=numpy.zeros( (nshear,2) )
+ 
+        theta=numpy.pi/2.0
+        twotheta = 2.0*theta
+        cos2angle = numpy.cos(twotheta)
+        sin2angle = numpy.sin(twotheta)
+
+        nshape = npair*2
+        g1=numpy.zeros(nshape)
+        g2=numpy.zeros(nshape)
+
+        g_mean=zeros( (nshape,2) )
+        g_sens=zeros( (nshape,2) )
+
+        # for holding likelihood samples
+        gsamples=numpy.zeros( (nsample, 2) )
+
+        for ishear in xrange(nshear):
+            print("-"*70)
+
+            g1[0:npair],g2[0:npair] = self.sample2d(npair)
+            g1[npair:] =  g1[0:npair]*cos2angle + g2[0:npair]*sin2angle
+            g2[npair:] = -g1[0:npair]*sin2angle + g2[0:npair]*cos2angle
+
+            g1s, g2s = shear_reduced(g1, g2, shear_true[ishear,0], shear_true[ishear,1])
+
+            # add noise
+            for i in xrange(nshape):
+                #import esutil as eu
+                glike=TruncatedGauss2D(g1s[i],g2s[i],sigma,sigma,1.0)
+                rg1,rg2=glike.sample(nsample)
+                #rg=sqrt(rg1**2 + rg2**2)
+                #eu.plotting.bhist(rg1,binsize=0.01,title='g1')
+                #eu.plotting.bhist(rg2,binsize=0.01,title='g2')
+                #key=raw_input('hit a key: ')
+                #if key.lower()=='q':
+                #    stop
+
+                gsamples[:,0] = rg1
+                gsamples[:,1] = rg2
+                lsobj = lensfit.LensfitSensitivity(gsamples, self, h=h)
+                g_sens[i,:] = lsobj.get_g_sens()
+                g_mean[i,:] = lsobj.get_g_mean()
+
+
+            print("g_mean:     ",g_mean.mean(axis=0))
+            print("g_sens mean:",g_sens.mean(axis=0))
+
+            shear_meas[ishear,:] = g_mean.sum(axis=0)/g_sens.sum(axis=0)
+            fracdiff[ishear,:] = shear_meas[ishear,:]/shear_true[ishear,:]-1
+
+            mess='true: %.6f,%.6f meas: %.6f,%.6f frac: %.6g,%.6g'
+            mess=mess % (shear_true[ishear,0],shear_true[ishear,1],
+                         shear_meas[ishear,0],shear_meas[ishear,1],
+                         fracdiff[ishear,0],fracdiff[ishear,1])
+            print(mess)
+
+
+
 
 class GPriorBABase(GPriorBase):
     """
@@ -1457,6 +1571,48 @@ class GPriorMErf(GPriorBase):
         return model
 
 
+
+class Normal(object):
+    """
+    This class provides a uniform interface consistent with LogNormal
+    """
+    def __init__(self, cen, sigma):
+
+        self.cen = array(cen, copy=False)
+        self.sigma = sigma
+        self.s2inv = 1./self.sigma**2
+
+    def sample(self, *args):
+        """
+        Get samples.  Send no args to get a scalar.
+        """
+        rand=self.cen + self.sigma*numpy.random.randn(*args)
+        return rand
+
+    def get_lnprob(self, p):
+        """
+        log probability
+        """
+        diff = self.cen-p
+        lnp = -0.5*diff*diff*self.s2inv
+        return lnp
+
+    # aliases
+    get_lnprob_array  = get_lnprob
+    get_lnprob_scalar = get_lnprob
+
+    def get_prob(self,p):
+        """
+        probability
+        """
+        lnp = self.get_lnprob(p)
+        return numpy.exp(lnp)
+
+    # aliases
+    get_prob_array  = get_prob
+    get_prob_scalar = get_prob
+
+
 class LogNormalBase(object):
     """
     Lognormal distribution Base, holds non-jitted methods
@@ -1625,6 +1781,12 @@ class LogNormal(LogNormalBase):
             x=x_arr[i]
             lnp_arr[i] = self.get_lnprob_scalar(x)
 
+def lognorm_convert(mean, sigma):
+    logmean  = log(mean) - 0.5*log( 1 + sigma**2/mean**2 )
+    logvar   = log(1 + sigma**2/mean**2 )
+    logsigma = sqrt(logvar)
+
+    return logmean, logsigma
 
 class BFracBase(object):
     """
@@ -2693,3 +2855,130 @@ _g_cosmos_c= array([0.,41.56646313,1089.28265178,1117.24827112,
 
 _g_cosmos_k = 3
 '''
+
+
+class Disk2D(object):
+    """
+    uniform over a disk, [0,r)
+    """
+    def __init__(self, cen, radius):
+
+        self.cen = array(cen, copy=False)
+        if self.cen.size != 2:
+            raise ValueError("cen should have two elements")
+        self.radius = radius
+        self.radius_sq = radius**2
+
+    def sample1d(self, n):
+        """
+        Get samples in 1-d radius
+        """
+        r2 = self.radius_sq*randu(n)
+
+        r = sqrt(r2)
+        return r
+
+    def sample2d(self, n):
+        """
+        Get samples.  Send no args to get a scalar.
+        """
+
+        radius=self.sample1d(n)
+
+        theta=2.0*numpy.pi*randu(n)
+
+        x=radius*cos(theta)
+        y=radius*sin(theta)
+
+        x += self.cen[0]
+        y += self.cen[1]
+
+        return x,y
+
+    def get_lnprob_scalar1d(self, r):
+        """
+        log probability 0.0 inside of disk, outside raises
+        an exception
+        """
+        if r >= self.radius:
+            raise GMixRangeError("position out of disk")
+        return 0.0
+
+    def get_lnprob_array1d(self, r):
+        """
+        log probability 0.0 inside of disk, outside raises
+        an exception
+        """
+
+        w,=numpy.where(r >= self.radius)
+        if w.size > 0:
+            raise GMixRangeError("some positions were out of disk")
+
+        return zeros(x.size)
+
+    def get_prob_scalar1d(self, r):
+        """
+        probability, 1.0 inside disk, outside raises exception
+
+        does not raise an exception
+        """
+        r2 = x**2 + y**2
+        if r2 >= self.radius_sq:
+            p=0.0
+        else:
+            p=1.0
+        return p
+
+    def get_prob_array1d(self, r):
+        """
+        probability, 1.0 inside disk, outside raises exception
+
+        does not raise an exception
+        """
+
+        p = ones(x.size)
+        w,=where(r >= self.radius)
+        if w.size > 0:
+            p[w]=0.0
+        return p
+
+    def get_lnprob_scalar2d(self, x, y):
+        """
+        log probability 0.0 inside of disk, outside raises
+        an exception
+        """
+
+        r = sqrt(x**2 + y**2)
+        return self.get_lnprob_scalar1d(r)
+
+
+    def get_lnprob_array2d(self, x, y):
+        """
+        log probability 0.0 inside of disk, outside raises
+        an exception
+        """
+
+        r = sqrt(x**2 + y**2)
+        return self.get_lnprob_array1d(r)
+
+
+    def get_prob_scalar2d(self, x, y):
+        """
+        probability, 1.0 inside disk, outside raises exception
+
+        does not raise an exception
+        """
+        r = sqrt(x**2 + y**2)
+        return self.get_prob_scalar1d(r)
+
+    def get_prob_array2d(self, x, y):
+        """
+        probability, 1.0 inside disk, outside raises exception
+
+        does not raise an exception
+        """
+        r = sqrt(x**2 + y**2)
+        return self.get_prob_array1d(r)
+
+
+

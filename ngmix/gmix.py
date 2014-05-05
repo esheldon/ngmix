@@ -366,52 +366,66 @@ class GMixModel(GMix):
     model: string or gmix type
         e.g. 'exp' or GMIX_EXP
     """
-    def __init__(self, pars, model):
+    def __init__(self, pars, model, logpars=False):
 
-        self._pars       = array(pars, dtype='f8', copy=False) 
+        self._logpars=logpars
+
         self._model      = _gmix_model_dict[model]
         self._model_name = _gmix_string_dict[self._model]
 
-        if self._model==GMIX_FULL:
-            super(GMixModel,self).__init__(pars=self._pars) 
-        else:
-            self._ngauss = _gmix_ngauss_dict[self._model]
-            self._npars  = _gmix_npars_dict[self._model]
-            self.reset()
-            self.fill(self._pars)
+        self._set_fill_func()
 
-    def fill(self, pars):
+        self._ngauss = _gmix_ngauss_dict[self._model]
+        self._npars  = _gmix_npars_dict[self._model]
+
+        self.reset()
+        self.fill(pars)
+
+    def _set_fill_func(self):
+        """
+        set the fill function
+        """
+        if self._model==GMIX_GAUSS:
+            self._fill_func=_fill_gauss
+        elif self._model==GMIX_EXP:
+            self._fill_func=_fill_exp
+        elif self._model==GMIX_DEV:
+            self._fill_func=_fill_dev
+        elif self._model==GMIX_TURB:
+            self._fill_func=_fill_turb
+        elif self._model==GMIX_BDC:
+            self._fill_func=_fill_bdc
+        elif self._model==GMIX_BDF:
+            self._fill_func=_fill_bdf
+        else:
+            raise GMixFatalError("unsupported model: "
+                                 "'%s'" % self._model_name)
+
+
+    def fill(self, pars_in):
         """
         Fill in the gaussian mixture with new parameters
+
+        parameters
+        ----------
+        pars: ndarray or sequence
+            The parameters; some may be in log space and are converted
         """
-        if self._model==GMIX_FULL:
-            super(GMixModel,self).fill(pars)
+
+        if self._logpars:
+            pars = array(pars_in, dtype='f8', copy=True) 
+            pars[4:] = exp(pars[4:])
         else:
-            parr=array(pars, dtype='f8', copy=False)
+            pars = array(pars_in, dtype='f8', copy=False) 
 
-            if parr.size != self._npars:
-                err="model '%s' requires %s pars, got %s"
-                err =err % (self._model_name,self._npars, parr.size)
-                raise GMixFatalError(err)
+        if pars.size != self._npars:
+            err="model '%s' requires %s pars, got %s"
+            err =err % (self._model_name,self._npars, pars.size)
+            raise GMixFatalError(err)
 
-            self._pars[:] = parr[:]
+        self._pars = pars
 
-            if self._model==GMIX_GAUSS:
-                _fill_gauss(self._data, self._pars)
-            elif self._model==GMIX_EXP:
-                _fill_exp(self._data, self._pars)
-            elif self._model==GMIX_DEV:
-                _fill_dev(self._data, self._pars)
-            elif self._model==GMIX_TURB:
-                _fill_turb(self._data, self._pars)
-            elif self._model==GMIX_BDC:
-                _fill_bdc(self._data, self._pars)
-            elif self._model==GMIX_BDF:
-                _fill_bdf(self._data, self._pars)
-            else:
-                raise GMixFatalError("unsupported model: "
-                                     "'%s'" % self._model_name)
-
+        self._fill_func(self._data, pars)
 
 
 def get_coellip_npars(ngauss):
