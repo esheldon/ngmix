@@ -3,6 +3,7 @@
 - todo
     - make sure the psf flux fitting in my other codes are now sending the
     center in sky coordinates
+    - make sure the codes are not re-setting the jacobian!
     - split out pqr calculations
     - split out lensfit calculations
     - support a single prior sent
