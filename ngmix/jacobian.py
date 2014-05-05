@@ -36,6 +36,13 @@ class Jacobian(object):
         """
         return self.row0, self.col0
 
+    def set_cen(self, row0, col0):
+        """
+        reset the center
+        """
+        self._data['row0'] = row0
+        self._data['col0'] = col0
+
     def get_scale(self):
         """
         Get the scale, defined as sqrt(det)

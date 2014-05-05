@@ -5,7 +5,6 @@ todo:
 from . import gmix
 from .gmix import GMix
 from .gmix import GMixModel
-from .gmix import GMixRangeError
 
 from . import jacobian
 from .jacobian import Jacobian
@@ -28,6 +27,8 @@ from .fitting import print_pars
 from . import em
 
 from . import observation
+from .observation import Observation, ObsList, MultiBandObsList
+
 from . import lensfit
 from . import pqr
 

@@ -15,13 +15,17 @@ class Observation(object):
         Weight map, same shape as image
     jacobian: Jacobian, optional
         Type Jacobian or a sub-type
-    psf_image: ndarray, optional
-        Optional psf image
-    psf_gmix: GMix, optional
-        Optional GMix object representing the PSF
+    gmix: GMix, optional
+        Optional GMix object associated with this observation
+    psf: Observation, optional
+        Optional psf Observation
     """
 
-    def __init__(self, image, weight=None, jacobian=None, psf_image=None, psf_gmix=None):
+    def __init__(self, image,
+                 weight=None,
+                 jacobian=None,
+                 gmix=None,
+                 psf=None):
 
         assert isinstance(image,ndarray),"image must be of type ndarray"
         assert len(image.shape)==2,"image must be 2d"
@@ -29,10 +33,8 @@ class Observation(object):
 
         self.set_jacobian(jacobian)
         self.set_weight(weight)
-        self.set_psf_image(psf_image)
-        self.set_psf_gmix(psf_gmix)
-
-
+        self.set_gmix(gmix)
+        self.set_psf(psf)
 
     def set_weight(self, weight):
         """
@@ -65,21 +67,21 @@ class Observation(object):
         assert isinstance(jacobian,Jacobian),"jacobian must be of type Jacobian"
         self.jacobian=jacobian
 
-    def set_psf_image(self,psf_image):
+    def set_psf(self,psf):
         """
-        Set a psf image.
+        Set a psf Observation
         """
-        if psf_image is not None:
-            assert isinstance(psf_image,ndarray),"psf_image must be of type ndarray"
-        self.psf_image=psf_image
+        if psf is not None:
+            assert isinstance(psf,Observation),"psf must be of Observation"
+        self.psf=psf
 
-    def set_psf_gmix(self,psf_gmix):
+    def set_gmix(self,gmix):
         """
         Set a psf gmix.
         """
-        if psf_gmix is not None:
-            assert isinstance(psf_gmix,GMix),"psf_gmix must be of type GMix"
-        self.psf_gmix=psf_gmix
+        if gmix is not None:
+            assert isinstance(gmix,GMix),"gmix must be of type GMix"
+        self.gmix=gmix
 
 
 class ObsList(list):

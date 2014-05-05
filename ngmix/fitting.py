@@ -1043,28 +1043,6 @@ class MCMCBase(FitterBase):
 
         return sampler
 
-    '''
-    def _get_g_prior_vals(self):
-        """
-        Set g prior vals for later use
-        """
-
-        if not hasattr(self,'g_prior_vals'):
-            g1=self.trials[:,self.g1i]
-            g2=self.trials[:,self.g2i]
-            self.g_prior_vals = self.g_prior.get_prob_array2d(g1,g2)
-        return self.g_prior_vals
-    '''
-
-    def get_par_names(self):
-        names=['cen1','cen2', 'g1','g2', 'log(T)']
-        if self.nband == 1:
-            names += ['log(F)']
-        else:
-            for band in xrange(self.nband):
-                names += ['log(F_%s)' % i]
-        return names
-
 
     def make_plots(self,
                    show=False,
@@ -1202,6 +1180,21 @@ class MCMCBase(FitterBase):
         return tablist
 
 
+    def get_par_names(self):
+        raise RuntimeError("over-ride me")
+
+    '''
+    def _get_g_prior_vals(self):
+        """
+        Set g prior vals for later use
+        """
+
+        if not hasattr(self,'g_prior_vals'):
+            g1=self.trials[:,self.g1i]
+            g2=self.trials[:,self.g2i]
+            self.g_prior_vals = self.g_prior.get_prob_array2d(g1,g2)
+        return self.g_prior_vals
+
     def _do_trials_old(self):
         """
         don't use this
@@ -1289,7 +1282,7 @@ class MCMCBase(FitterBase):
             #print_pars(self.best_pars, front='best pars:')
 
         return pos
-
+    '''
 
 
 class MCMCSimple(MCMCBase):
@@ -1299,19 +1292,9 @@ class MCMCSimple(MCMCBase):
     def __init__(self, obs, model,  **keys):
         super(MCMCSimple,self).__init__(obs, model, **keys)
 
+        # where g1,g2 are located in a pars array
         self.g1i = 2
         self.g2i = 3
-
-    def _get_band_pars(self, log_pars, band):
-        """
-        Get linear pars for the specified band
-        """
-        pars=log_pars[ [0,1,2,3,4,5+band] ].copy()
-
-        pars[4] = exp(pars[4])
-        pars[5] = exp(pars[5])
-
-        return pars
 
     def calc_result(self, weights=None):
         """
@@ -1325,6 +1308,27 @@ class MCMCSimple(MCMCBase):
 
         self._result['g'] = self._result['pars'][g1i:g1i+2].copy()
         self._result['g_cov'] = self._result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
+
+    def _get_band_pars(self, log_pars, band):
+        """
+        Get linear pars for the specified band
+        """
+        pars=log_pars[ [0,1,2,3,4,5+band] ].copy()
+
+        pars[4] = exp(pars[4])
+        pars[5] = exp(pars[5])
+
+        return pars
+
+    def get_par_names(self):
+        names=['cen1','cen2', 'g1','g2', 'log(T)']
+        if self.nband == 1:
+            names += ['log(F)']
+        else:
+            for band in xrange(self.nband):
+                names += [r'$log(F_%s)$' % i]
+        return names
+
 
     '''
     def _get_priors_old(self, pars):
