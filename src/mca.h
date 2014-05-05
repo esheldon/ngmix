@@ -2,6 +2,15 @@
 
    Implementation of the Goodman & Weare affine invariant MCMC sampler
 
+   - lnprob function
+   - stretch move
+   - Add acceptance rate calculation
+
+
+   - maybe just have the user send a Chain to be filled?
+       - no need for user to understand layout
+
+
 */
 #ifndef _MCA_HEADER_GUARD
 #define _MCA_HEADER_GUARD
@@ -13,14 +22,14 @@
 
 namespace mca {
 
-    class MCA {
+    class Chain {
 
         public:
 
-            MCA() {
+            Chain () {
                 reset(0,0,0);
             }
-            MCA(size_t nwalkers, size_t nsteps_per_walker, size_t npars) {
+            Chain(size_t nwalkers, size_t nsteps_per_walker, size_t npars) {
                 reset(nwalkers, nsteps_per_walker, npars);
             }
 
@@ -140,12 +149,14 @@ namespace mca {
             
             // size nwalkers*nsteps_per_walker*npars
             std::vector<double> chain_;
+
             // size nwalkers*nsteps_per_walker
             std::vector<double> lnprob_;
+
             // size nwalkers*nsteps_per_walker
             std::vector<int> accept_;
 
-    };
+    }; // Chain
 
 
 
