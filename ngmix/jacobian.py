@@ -43,6 +43,12 @@ class Jacobian(object):
         self._data['row0'] = row0
         self._data['col0'] = col0
 
+    def get_det(self):
+        """
+        Get the determinant of the jacobian matrix
+        """
+        return self._data['det'][0]
+
     def get_scale(self):
         """
         Get the scale, defined as sqrt(det)

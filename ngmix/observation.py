@@ -77,6 +77,39 @@ class Observation(object):
             assert isinstance(psf,Observation),"psf must be of Observation"
         self.psf=psf
 
+    def get_psf(self):
+        """
+        get the psf object
+        """
+        if not self.has_psf():
+            raise RuntimeError("this obs has no psf set")
+        return self.psf
+
+    def has_psf(self):
+        """
+        does this object have a psf set?
+        """
+        return hasattr(self,'psf')
+
+    def get_psf_gmix(self):
+        """
+        get the psf gmix if it exists
+        """
+        if not self.has_psf_gmix():
+            raise RuntimeError("this obs has not psf set with a gmix")
+        return self.psf.get_gmix()
+
+
+    def has_psf_gmix(self):
+        """
+        does this object have a psf set, which has a gmix set?
+        """
+        if self.has_psf():
+            return self.psf.has_gmix()
+        else:
+            return False
+
+
     def set_gmix(self,gmix):
         """
         Set a psf gmix.
@@ -84,6 +117,20 @@ class Observation(object):
         if gmix is not None:
             assert isinstance(gmix,GMix),"gmix must be of type GMix"
         self.gmix=gmix
+
+    def get_gmix(self):
+        """
+        get a copy of the gmix object
+        """
+        if not self.has_gmix():
+            raise RuntimeError("this obs has not gmix set")
+        return self.gmix.copy()
+
+    def has_gmix(self):
+        """
+        does this object have a gmix set?
+        """
+        return hasattr(self, 'gmix')
 
     def update_meta_data(self, meta_dict):
         """

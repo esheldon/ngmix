@@ -106,9 +106,19 @@ class FitterBase(object):
         Result will not be non-None until go() is run
         """
         if not hasattr(self, '_result'):
-            raise ValueError("No result, you must run go()!")
+            raise ValueError("No result, you must run_mcmc and calc_result!")
 
         return self._result
+
+    def get_lin_result(self):
+        """
+        Result will not be non-None until go() is run
+        """
+        if not hasattr(self, '_lin_result'):
+            raise ValueError("No lin result, you must run_mcmc and calc_lin_result!")
+
+        return self._lin_result
+
 
     def get_gmix(self):
         """
@@ -322,7 +332,7 @@ class FitterBase(object):
             band_pars=self._get_band_pars(pars, band)
 
             for obs in obs_list:
-                psf_gmix=obs.psf_gmix
+                psf_gmix=obs.psf.gmix
 
                 gm0=gmix.make_gmix_model(band_pars, self.model)
                 gm=gm0.convolve(psf_gmix)
@@ -350,7 +360,7 @@ class FitterBase(object):
 
             for i,obs in enumerate(obs_list):
 
-                psf_gmix = obs.psf_gmix
+                psf_gmix = obs.psf.gmix
 
                 gm0=gmix_list0[i]
                 gm=gmix_list[i]
@@ -376,27 +386,40 @@ class FitterBase(object):
 
 
 
-class PSFFluxFitter(FitterBase):
+class TemplateFluxFitter(FitterBase):
     """
     We fix the center, so this is linear.  Just cross-correlations
     between model and data.
 
-    The center of the jacobians should point to a common place on
-    the sky
+    The center of the jacobian(s) must point to a common place on the sky, and
+    if the center is input (to reset the gmix centers),) it is relative to that
+    position
 
     parameters
     -----------
     obs: Observation or ObsList
-        See ngmix.observation.Observation
-    cen: 2-element sequence
-        The center in sky coordinates.
-    """
-    def __init__(self, obs, cen, **keys):
-        self.keys=keys
-        self._set_obs(obs)
-        self.cen=cen
+        See ngmix.observation.Observation.  The observation should
+        have a gmix set.
+    cen: 2-element sequence, optional
 
-        self.model_name='psf'
+        The center in sky coordinates, relative to the jacobian center(s).  If
+        not sent, the gmix (or psf gmix) object(s) in the observation(s) should
+        be set to the wanted center.
+
+    """
+    def __init__(self, obs, **keys):
+        self.keys=keys
+        self.do_psf=keys.get('do_psf',False)
+        self.cen=keys.get('cen',None)
+
+        if self.cen is None:
+            self.cen_was_sent=False
+        else:
+            self.cen_was_sent=True
+
+        self._set_obs(obs)
+
+        self.model_name='template'
         self.npars=1
 
         self._set_totpix()
@@ -411,25 +434,25 @@ class PSFFluxFitter(FitterBase):
         chi2=0.0
 
         cen=self.cen
+        nobs=len(self.obs)
 
         for ipass in [1,2]:
-            for obs in self.obs:
+            for iobs in xrange(nobs):
+                obs=self.obs[iobs]
+                gm = self.gmix_list[iobs]
+
                 im=obs.image
                 wt=obs.weight
                 j=obs.jacobian
-                psf=obs.psf_gmix.copy()
-                
-                # center coincides with center of jacobian
-                psf.set_cen(cen[0], cen[1])
 
                 if ipass==1:
-                    psf.set_psum(1.0)
-                    model=psf.make_image(im.shape, jacobian=j)
+                    gm.set_psum(1.0)
+                    model=gm.make_image(im.shape, jacobian=j)
                     xcorr_sum += (model*im*wt).sum()
                     msq_sum += (model*model*wt).sum()
                 else:
-                    psf.set_psum(flux)
-                    model=psf.make_image(im.shape, jacobian=j)
+                    gm.set_psum(flux)
+                    model=gm.make_image(im.shape, jacobian=j)
                     chi2 +=( (model-im)**2 *wt ).sum()
             if ipass==1:
                 flux = xcorr_sum/msq_sum
@@ -456,9 +479,8 @@ class PSFFluxFitter(FitterBase):
 
     def _set_obs(self, obs_in):
         """
-        Input should be an Observation, ObsList, or MultiBandObsList
+        Input should be an Observation, ObsList
         """
-
 
         if isinstance(obs_in,Observation):
             obs_list=ObsList()
@@ -468,11 +490,22 @@ class PSFFluxFitter(FitterBase):
         else:
             raise ValueError("obs should be Observation or ObsList")
 
+        cen=self.cen
+        gmix_list=[]
         for obs in obs_list:
-            if not isinstance(obs.psf_gmix, GMix):
-                raise ValueError("observations must have a not-None psf_gmix attribute")
+            # these return copies, ok to modify
+            if self.do_psf:
+                gmix=obs.get_psf_gmix()
+            else:
+                gmix=obs.get_gmix()
 
-        self.obs=obs_list
+            if self.cen_was_sent:
+                gmix.set_cen(cen[0], cen[1])
+
+            gmix_list.append(gmix)
+
+        self.obs = obs_list
+        self.gmix_list = gmix_list
 
     def _set_totpix(self):
         """
@@ -952,27 +985,43 @@ class MCMCBase(FitterBase):
 
         return self.pos
 
-    def calc_result(self, weights=None):
+    def calc_result(self, weights=None, linear=False):
         """
         Calculate the mcmc stats and the "best fit" stats
         """
 
-        pars,pars_cov = stats.calc_mcmc_stats(self.trials, weights=weights)
+        if linear:
+            trials=self.get_lin_trials()
+        else:
+            trials=self.get_trials()
+
+        pars,pars_cov = stats.calc_mcmc_stats(trials, weights=weights)
 
         pars_err=sqrt(diag(pars_cov))
 
         self._set_tau()
 
-        self._result={'model':self.model_name,
-                      'flags':self.flags,
-                      'pars':pars,
-                      'pars_cov':pars_cov,
-                      'pars_err':pars_err,
-                      'tau':self.tau,
-                      'arate':self.arate}
+        res={'model':self.model_name,
+             'flags':self.flags,
+             'pars':pars,
+             'pars_cov':pars_cov,
+             'pars_err':pars_err,
+             'tau':self.tau,
+             'arate':self.arate}
 
         fit_stats = self.get_fit_stats(pars)
-        self._result.update(fit_stats)
+        res.update(fit_stats)
+
+        if linear:
+            self._lin_result=res
+        else:
+            self._result=res
+
+    def calc_lin_result(self, weights=None):
+        """
+        Calculate the mcmc stats and the "best fit" stats
+        """
+        self.calc_result(weights=weights, linear=True)
 
     def _setup_sampler_and_data(self, pos):
         """
@@ -1296,18 +1345,22 @@ class MCMCSimple(MCMCBase):
         self.g1i = 2
         self.g2i = 3
 
-    def calc_result(self, weights=None):
+    def calc_result(self, weights=None, linear=False):
         """
         Some extra stats for simple models
         """
 
-        super(MCMCSimple,self).calc_result(weights=weights)
+        super(MCMCSimple,self).calc_result(weights=weights, linear=linear)
 
         g1i=self.g1i
         g2i=self.g2i
 
-        self._result['g'] = self._result['pars'][g1i:g1i+2].copy()
-        self._result['g_cov'] = self._result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
+        if linear:
+            self._lin_result['g'] = self._lin_result['pars'][g1i:g1i+2].copy()
+            self._lin_result['g_cov'] = self._lin_result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
+        else:
+            self._result['g'] = self._result['pars'][g1i:g1i+2].copy()
+            self._result['g_cov'] = self._result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
 
     def _get_band_pars(self, log_pars, band):
         """
@@ -3968,15 +4021,22 @@ def _get_test_psf_flux_pars(ngauss, cen, jfac, counts_sky):
     gm=gmix.GMix(pars=pars)
     return gm
 
-def test_psf_flux(ngauss,
-                  counts_sky=100.0,
-                  noise_sky=0.01,
-                  nimages=1,
-                  jfac=0.27,
-                  jcen_offset=None,
-                  show=False):
+def test_template_flux(ngauss,
+                       send_center_as_keyword=True, # let the template fitting code reset the centers
+                       do_psf=True,
+                       counts_sky=100.0,
+                       noise_sky=0.01,
+                       nimages=1,
+                       jfac=0.27,
+                       jcen_offset=None,
+                       show=False):
     """
-    All jacobian centers must point to the same spot in sky coordinates.
+
+    For do_psf, the gmix are in the psf observations, otherwise in the
+    observation
+
+    If reset_centers, the cen= is sent, otherwise the gmix centers are
+    set before calling
     """
     from .em import GMixMaxIterEM
     import images
@@ -4043,14 +4103,25 @@ def test_psf_flux(ngauss,
 
         wt=0.0*im.copy() + 1./noise_pix**2
 
-        obs=Observation(im, weight=wt, jacobian=j, psf_gmix=psf_fit)
+        obs=Observation(im, weight=wt, jacobian=j)
+
+        if do_psf:
+            tobs.set_gmix(psf_fit)
+            obs.set_psf(tobs)
+        else:
+            obs.set_gmix(psf_fit)
+
         obs_list.append(obs)
 
         res=mc.get_result()
         print(i+1,res['numiter'])
 
 
-    fitter=PSFFluxFitter(obs_list, cen_sky)
+    if send_center_as_keyword:
+        fitter=TemplateFluxFitter(obs_list, cen=cen_sky, do_psf=do_psf)
+    else:
+        fitter=TemplateFluxFitter(obs_list, do_psf=do_psf)
+
     fitter.go()
 
     res=fitter.get_result()
