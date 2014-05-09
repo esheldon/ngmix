@@ -1119,39 +1119,32 @@ class MCMCBase(FitterBase):
         else:
             plotfunc =mcmc.plot_results
 
-        plt=plotfunc(self.trials,
-                     names=names,
-                     title=title,
-                     show=show,
-                     **keys)
+        pdict={}
+        pdict['trials']=plotfunc(self.trials,
+                                     names=names,
+                                     title=title,
+                                     show=show,
+                                     **keys)
 
 
         if weights is not None:
-            wplt=plotfunc(self.trials,
-                          weights=weights,
-                          names=names,
-                          title='%s weighted' % title,
-                          show=show)
+            pdict['wtrials']=plotfunc(self.trials,
+                                      weights=weights,
+                                      names=names,
+                                      title='%s weighted' % title,
+                                      show=show)
 
         if do_residual:
-            resplots=self._plot_residuals(title=title,show=show,
-                                         width=width,
-                                         height=height)
-            plots=(plt, resplots)
-            if weights is not None:
-                plots = (plt, wplt, resplots)
-        else:
-            if weights is not None:
-                plots=(plt, wplt)
-            else:
-                plots=plt
+            pdict['resid']=self._plot_residuals(title=title,show=show,
+                                                width=width,
+                                                height=height)
 
         if show and prompt:
             key=raw_input('hit a key: ')
             if key=='q':
                 stop
 
-        return plots
+        return pdict
 
     def _plot_residuals(self, title=None, show=False,
                         width=1920, height=1200):
@@ -1167,25 +1160,23 @@ class MCMCBase(FitterBase):
             print(str(gerror))
             return None
 
-        tablist=[]
+        plist=[]
         for band in xrange(self.nband):
+
+            band_list=[]
 
             obs_list=self.obs[band]
             gmix_list=self._gmix_all[band]
             
             nim=len(gmix_list)
 
-            nrows,ncols=images.get_grid(nim)
-            tab=biggles.Table(nrows,ncols)
-
             ttitle='band: %s' % band
             if title is not None:
                 ttitle='%s %s' % (title, ttitle)
-            tab.title=ttitle
 
             for i in xrange(nim):
-                row=i/ncols
-                col=i % ncols
+
+                this_title = '%s cutout: %d' % (ttitle, i+1)
 
                 obs=obs_list[i]
                 gm=gmix_list[i]
@@ -1199,35 +1190,16 @@ class MCMCBase(FitterBase):
                 showim = im*wt
                 showmod = model*wt
 
-                # don't care about masked pixels
-                #residual=(model-im)*wt
-
-                #subtab=biggles.Table(1,3)
-                #imshow=im*wt
-                #subtab[0,0] = images.view(imshow, show=False)
-                #subtab[0,1] = images.view(model, show=False)
-                #subtab[0,2] = images.view(residual, show=False)
-
-                #tab[i,0] = subtab
-
                 sub_tab=images.compare_images(showim, showmod,show=False)
-                tab[row,col] = sub_tab
+                sub_tab.title=this_title
 
-                # might want them to have different stretches
-                #imcols=im.shape[1]
-                #imtot=zeros( (im.shape[0], 3*imcols ) )
-                #imtot[:, 0:imcols]=im
-                #imtot[:, imcols:2*imcols]=model
-                #imtot[:, 2*imcols:]=residual
+                band_list.append(sub_tab)
 
-                #imtot_list.append(imtot)
-            #images.view_mosaic(imtot_list, title='band: %s' % band)
-            if show:
-                tab.show()
+                if show:
+                    sub_tab.show()
 
-            tablist.append(tab)
-        return tablist
-
+            plist.append(band_list)
+        return plist
 
     def get_par_names(self):
         raise RuntimeError("over-ride me")

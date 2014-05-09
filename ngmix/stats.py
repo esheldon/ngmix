@@ -1,3 +1,4 @@
+from __future__ import print_function
 from numpy import zeros
 
 def calc_mcmc_stats(data, weights=None):
@@ -53,7 +54,7 @@ def _calc_weighted_stats(data, weights):
 
     if wsum <= 0.0:
         for i in xrange(data.shape[0]/100):
-            print_pars(data[i,:])
+            print(i,data[i,:])
         raise ValueError("wsum <= 0: %s" % wsum)
 
     means = zeros(npar,dtype='f8')
