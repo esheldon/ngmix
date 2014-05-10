@@ -16,6 +16,7 @@ examples
 --------
 
     import ngmix
+    from ngmix.observation import Observation, ObsList, MultiBandObsList
     import numpy
     
     #
@@ -46,23 +47,6 @@ examples
     #
     # fit the data
     #
-
-    # fit the PSF
-    # it is best to fit the PSF using an EM algorithm
-    psf_dims=[24,24]
-    psf_im=psf_gmix.make_image(psf_dims, nsub=16)
-    imsky,sky=ngmix.em.prep_image(psf_im)
-
-    em=ngmix.em.GMixEM(imsky)
-    guess=psf_gmix.copy()
-    em.go(guess, sky, tol=1.e-5)
-
-    psf_gmix_fit=em.get_gmix()
-
-    # fit the galaxy.
-    # the weight image for the fit
-    weight=numpy.zeros(image.shape) + 1/sigma**2
-
     # The code is designed to work on multiple images simulaneously, we always
     # fit in "sky coordinates".  We do this by making a jacobian to represent
     # the transformation, and make sure the center is at our best guess of the
@@ -70,40 +54,79 @@ examples
     # see the ngmix.jacobian.Jacobian class. In that case, we would also fit
     # the PSF in sky coordinates by sending a jacobian to the EM code
 
+
+    # fit the PSF
+    # it is best to fit the PSF using an EM algorithm
+    psf_dims=[24,24]
+    psf_im=psf_gmix.make_image(psf_dims, nsub=16)
+    imsky,sky=ngmix.em.prep_image(psf_im)
+
+    jacob=ngmix.jacobian.UnitJacobian(psf_pars[0], psf_pars[1])
+    psf_obs=Observation(imsky, jacob=psf_jacob)
+
+    em=ngmix.em.GMixEM(psf_obs)
+    # guess truth
+    guess=psf_gmix.copy()
+    em.go(guess, sky, tol=1.e-5)
+
+    psf_gmix_fit=em.get_gmix()
+
+    psf_obs.add_gmix(psf_gmix_fit)
+
+    # fit the galaxy.
+    # the weight image for the fit
+    weight=numpy.zeros(image.shape) + 1/sigma**2
+
+
     jacob=ngmix.jacobian.UnitJacobian(pars[0], pars[1])
 
-    # fit using a "simple" model, either "exp" or "dev" currently
+    # we use a weight map and add the psf
+    obs = Observation(image, weight=weight, jacob=jacob, psf=psf_obs)
+
+    # Use MCMCSimple to fit using a "simple" model, either "exp" or "dev"
+    # currently. You can also send a prior= keyword that takes parameters
+    # and returns the log(probability)
+
     model="exp"
-    fitter=ngmix.fitting.MCMCSimple(noisy_image,weight,jacob,model,
-                                    psf=psf_gmix_fit,
-                                    T_guess=pars[4],
-                                    counts_guess=pars[5],
-                                    nwalkers=40,
-                                    burnin=200,
-                                    nstep=100)
-    fitter.go()
+    fitter=ngmix.fitting.MCMCSimple(obs, model, nwalkers=80)
+
+    # guess should be an array [nwalkers, npars].  It is good to
+    # guess random points around your best estimate of the galaxy
+    # parameters
+    # note the fitter works in log10(T) and log10(flux)
+
+    pos=fitter.run_mcmc(guess, burnin)
+    pos=fitter.run_mcmc(pos, nstep)
+
+    fitter.calc_result()
+    fitter.calc_lin_result() # T, flux in linear space
 
     res=fitter.get_result()
+    lin_res=fitter.get_lin_result()  # results in linear space
     print res['pars']
     print res['pars_perr']
-    # also full covariance ins in pars_cov
+    print res['pars_pcov'] # full covariance matrix
 
-    # Fit multiple images of the same object. Send the image, weight etc as
-    # lists or even lists-of-lists if multiple wavelength bands are present.
-    # If the input is a list of lists, each flux is fit for separately with
-    # fixed structural parameters
+    # Fit multiple images of the same object. Send an ObsList to the fitter.
+    # create an ObsList by appending Observation objects
 
-    # 4 bands
-    imlist_g = [im1, im2, im3, im4]
-    # etc... for other bands. Similar for weight lists, jacobians and psfs
+    obs_list = ObsList()
+    obs_list.append( obs1 )
+    obs_list.append( obs2 )
+    obs_list.append( obs3 )
 
-    im_lol = [ imlist_g, imlist_r, imlist_i, imlist_z ]
-    wt_lol = [ wtlist_g, wtlist_r, wtlist_i, wtlist_z ]
-    j_lol = [ jlist_g, jlist_r, jlist_i, jlist_z ]
-    psf_lol = [ psf_list_g, psf_list_r, psf_list_i, psf_list_z]
+    fitter=ngmix.fitting.MCMCSimple(obs_list, model, nwalkers=80)
 
-    fitter=ngmix.fitting.MCMCSimple(im_lol,wt_lol,j_lol,model,
-                                    psf=psf_gmix_fit, .....)
+    # you can also fit multiple bands/filters at once with fixed structural
+    # parameters but different fluxes in each band
+
+    mb_obs_list = MultiBandObsList()
+    mb_obs_list.append( obs_list_g ) 
+    mb_obs_list.append( obs_list_r ) 
+    mb_obs_list.append( obs_list_i ) 
+    mb_obs_list.append( obs_list_z ) 
+
+    fitter=ngmix.fitting.MCMCSimple(mb_obs_list, model, nwalkers=80)
 
 dependencies
 ------------
