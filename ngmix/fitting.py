@@ -947,8 +947,8 @@ class MCMCBase(FitterBase):
         """
         if not hasattr(self, 'lin_trials'):
             lin_trials=self.get_trials().copy()
-            lin_trials[:,4] = exp(lin_trials[:,4])
-            lin_trials[:,5] = exp(lin_trials[:,5])
+            lin_trials[:,4] = 10.0**lin_trials[:,4]
+            lin_trials[:,5] = 10.0**lin_trials[:,5]
             self.lin_trials=lin_trials
 
         return self.lin_trials
@@ -1340,18 +1340,18 @@ class MCMCSimple(MCMCBase):
         """
         pars=log_pars[ [0,1,2,3,4,5+band] ].copy()
 
-        pars[4] = exp(pars[4])
-        pars[5] = exp(pars[5])
+        pars[4] = 10.0**pars[4]
+        pars[5] = 10.0**pars[5]
 
         return pars
 
     def get_par_names(self):
-        names=['cen1','cen2', 'g1','g2', 'log(T)']
+        names=['cen1','cen2', 'g1','g2', r'$log_{10}(T)$']
         if self.nband == 1:
-            names += ['log(F)']
+            names += [r'$log_{10}(F)$']
         else:
             for band in xrange(self.nband):
-                names += [r'$log(F_%s)$' % i]
+                names += [r'$log_{10}(F_%s)$' % i]
         return names
 
 
