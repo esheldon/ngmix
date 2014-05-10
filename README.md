@@ -51,8 +51,7 @@ examples
     # fit in "sky coordinates".  We do this by making a jacobian to represent
     # the transformation, and make sure the center is at our best guess of the
     # object location.  In this case we make a unit jacobian.  for non-unit,
-    # see the ngmix.jacobian.Jacobian class. In that case, we would also fit
-    # the PSF in sky coordinates by sending a jacobian to the EM code
+    # see the ngmix.jacobian.Jacobian class. 
 
 
     # fit the PSF
