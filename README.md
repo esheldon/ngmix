@@ -73,13 +73,14 @@ examples
     psf_obs.add_gmix(psf_gmix_fit)
 
     # fit the galaxy.
-    # the weight image for the fit
+    # the weight image for the fit; can be complex in principle
     weight=numpy.zeros(image.shape) + 1/sigma**2
-
 
     jacob=ngmix.jacobian.UnitJacobian(pars[0], pars[1])
 
-    # we use a weight map and add the psf
+    # When constructing the Observation we include a weight map and a psf
+    # observation
+
     obs = Observation(image, weight=weight, jacob=jacob, psf=psf_obs)
 
     # Use MCMCSimple to fit using a "simple" model, either "exp" or "dev"
