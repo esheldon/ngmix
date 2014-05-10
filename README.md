@@ -98,11 +98,12 @@ examples
     pos=fitter.run_mcmc(guess, burnin)
     pos=fitter.run_mcmc(pos, nstep)
 
-    fitter.calc_result()
+    fitter.calc_result()     # log10(T), log10(flux)
     fitter.calc_lin_result() # T, flux in linear space
 
-    res=fitter.get_result()
-    lin_res=fitter.get_lin_result()  # results in linear space
+    res=fitter.get_result()         # log10 space
+    lin_res=fitter.get_lin_result() # linear space
+
     print res['pars']
     print res['pars_perr']
     print res['pars_pcov'] # full covariance matrix
