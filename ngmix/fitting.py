@@ -1351,7 +1351,7 @@ class MCMCSimple(MCMCBase):
             names += [r'$log_{10}(F)$']
         else:
             for band in xrange(self.nband):
-                names += [r'$log_{10}(F_%s)$' % i]
+                names += [r'$log_{10}(F_%s)$' % band]
         return names
 
 
@@ -2119,9 +2119,9 @@ class MCMCBDC(MCMCSimple):
             names += ['Fb','Fd']
         else:
             for band in xrange(self.nband):
-                names += ['Fb_%s' % i]
+                names += ['Fb_%s' % band]
             for band in xrange(self.nband):
-                names += ['Fd_%s' % i]
+                names += ['Fd_%s' % band]
 
         return names
 
@@ -2208,8 +2208,8 @@ class MCMCBDF(MCMCSimple):
             fbnames = []
             fdnames = []
             for band in xrange(self.nband):
-                fbnames.append('Fb_%s' % i)
-                fdnames.append('Fd_%s' % i)
+                fbnames.append('Fb_%s' % band)
+                fdnames.append('Fd_%s' % band)
             names += fbnames
             names += fdnames
         return names
@@ -2521,7 +2521,7 @@ class MCMCSimpleJointHybrid(MCMCSimple):
             names += [r'$log_{10}(F)$']
         else:
             for band in xrange(self.nband):
-                names += [r'$log_{10}(F_%s)$' % i]
+                names += [r'$log_{10}(F_%s)$' % band]
         return names
 
 
@@ -2574,7 +2574,7 @@ class MCMCBDFJointHybrid(MCMCSimpleJointHybrid):
         else:
             for ftype in ['b','d']:
                 for band in xrange(self.nband):
-                    names += [r'$log_{10}(F_%s^%s)$' % (ftype,i)]
+                    names += [r'$log_{10}(F_%s^%s)$' % (ftype,band)]
         return names
 
 
@@ -2811,7 +2811,7 @@ class MCMCSimpleJointLogPars(MCMCSimple):
             names += [r'$log_{10}(T)$']
         else:
             for band in xrange(self.nband):
-                names += [r'$log_{10}(F_%s)$' % i]
+                names += [r'$log_{10}(F_%s)$' % band]
         return names
 
 
@@ -3727,15 +3727,19 @@ def test_model_priors(model,
 
 
 def test_model_mb(model,
-                  counts_sky=[100.0, 88., 77., 95.0], # true counts each band
-                  noise_sky=[0.1,0.1,0.1,0.1],
+                  counts_sky=[100.0, 88., 77., 95.0], # determines nband
+                  noise_sky=0.1,
                   nimages=10, # in each band
                   jfac=0.27,
                   do_lensfit=False,
                   do_pqr=False,
+
+                  nwalkers=80,
                   burnin=400,
-                  draw_g_prior=False,
-                  png=None,
+                  nstep=800,
+
+                  rand_center=True,
+
                   show=False):
     """
     testing mb stuff
@@ -3750,7 +3754,7 @@ def test_model_mb(model,
     jfac2=jfac**2
 
     dims=[25,25]
-    cen=[dims[0]/2., dims[1]/2.]
+    cen=array( [dims[0]/2., dims[1]/2.] )
 
     # object pars
     g1_obj=0.1
@@ -3759,14 +3763,6 @@ def test_model_mb(model,
     Tsky_obj=Tpix_obj*jfac2
 
     true_pars=array([0.0,0.0,g1_obj,g2_obj,Tsky_obj]+counts_sky)
-
-    #jlist=[Jacobian(cen[0],cen[1], jfac, 0.0, 0.0, jfac),
-    #       Jacobian(cen[0]+0.5,cen[1]-0.1, jfac, 0.001, -0.001, jfac),
-    #       Jacobian(cen[0]-0.2,cen[1]+0.1, jfac, -0.001, 0.001, jfac)]
-
-    #
-    # simulation
-    #
 
     counts_sky_psf=100.0
     counts_pix_psf=counts_sky_psf/jfac2
@@ -3778,22 +3774,21 @@ def test_model_mb(model,
     tmpsf=0.0
     for band in xrange(nband):
 
-        im_list=[]
-        wt_list=[]
-        j_list=[]
-        psf_list=[]
+        if rand_center:
+            cen_i = cen + srandu(2)
+        else:
+            cen_i = cen.copy()
 
         # not always at same center
-        j=Jacobian(cen[0]+srandu(),
-                   cen[1]+srandu(),
-                   jfac,
-                   0.0,
-                   0.0,
-                   jfac)
+        jacob=Jacobian(cen_i[0],
+                       cen_i[1],
+                       jfac,
+                       0.0,
+                       0.0,
+                       jfac)
         counts_sky_obj=counts_sky[band]
-        noise_sky_obj=noise_sky[band]
         counts_pix_obj=counts_sky_obj/jfac2
-        noise_pix_obj=noise_sky_obj/jfac2
+        noise_pix_obj=noise_sky/jfac2
 
         obs_list=ObsList()
         for i in xrange(nimages):
@@ -3814,8 +3809,8 @@ def test_model_mb(model,
 
             gm=gm_obj0.convolve(gm_psf)
 
-            im_psf=gm_psf.make_image(dims, jacobian=j, nsub=16)
-            im_obj=gm.make_image(dims, jacobian=j, nsub=16)
+            im_psf=gm_psf.make_image(dims, jacobian=jacob, nsub=16)
+            im_obj=gm.make_image(dims, jacobian=jacob, nsub=16)
 
             im_obj[:,:] += noise_pix_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
             wt_obj=zeros(im_obj.shape) + 1./noise_pix_obj**2
@@ -3823,11 +3818,11 @@ def test_model_mb(model,
             # psf using EM
             tmpsf0=time.time()
 
-            obs_i = Observation(im_obj, weight=wt_obj, jacobian=j)
+            obs_i = Observation(im_obj, weight=wt_obj, jacobian=jacob)
 
             im_psf_sky,sky=em.prep_image(im_psf)
 
-            psf_obs_i = Observation(im_psf_sky, jacobian=j)
+            psf_obs_i = Observation(im_psf_sky, jacobian=jacob)
 
             mc_psf=em.GMixEM(psf_obs_i)
 
@@ -3878,22 +3873,17 @@ def test_model_mb(model,
     # fitting
     #
 
-    nwalkers=80
-    burnin=400
-    nstep=800
-
     mc_obj=MCMCSimple(mb_obs_list,
                       model,
                       prior=prior,
                       nwalkers=nwalkers)
 
-    npars=5+nband
-    # terrible guess
+    print("making guess from priors")
     guess=prior.sample(nwalkers)
 
-    print("burnin")
+    print("burnin",burnin)
     pos=mc_obj.run_mcmc(guess, burnin)
-    print("steps")
+    print("steps",nstep)
     pos=mc_obj.run_mcmc(pos, nstep)
 
     mc_obj.calc_result()
@@ -3902,6 +3892,12 @@ def test_model_mb(model,
     res=mc_obj.get_lin_result()
 
     tmrest = time.time()-tmrest
+
+    tmtot=tmrest + tmpsf
+    print('\ntime total:',tmtot)
+    print('time psf:  ',tmpsf)
+    print('time rest: ',tmrest)
+    print()
 
     print('arate:',res['arate'])
     print_pars(true_pars, front='true:    ')
@@ -3914,28 +3910,9 @@ def test_model_mb(model,
         print('P:',res['P'])
         print('Q:',res['Q'])
         print('R:',res['R'])
-
-    #gmfit0=mc_obj.get_gmix()
-    #gmfit=gmfit0.convolve(psf_fit)
-    #imfit_obj=gmfit.make_image(im_obj.shape, jacobian=j)
-
-    #images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
-
            
-    names=['cen1','cen2','g1','g2','T'] + ['counts%s' % (i+1) for i in xrange(nband)]
-    plt=mcmc.plot_results(mc_obj.get_trials(),names=names,show=show)
     if show:
-        plt.show()
-    elif png is not None:
-        plt.write_img(800,800,png)
-
-    tmtot=tmrest + tmpsf
-    print('time total:',tmtot)
-    print('time psf:  ',tmpsf)
-    print('time rest: ',tmrest)
-
-    #return tmtot,res_obj
-
+        mc_obj.make_plots(show=True, do_residual=True)
 
 
 def _get_test_psf_flux_pars(ngauss, cen, jfac, counts_sky):
