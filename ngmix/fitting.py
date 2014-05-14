@@ -948,7 +948,7 @@ class MCMCBase(FitterBase):
         if not hasattr(self, 'lin_trials'):
             lin_trials=self.get_trials().copy()
             lin_trials[:,4] = 10.0**lin_trials[:,4]
-            lin_trials[:,5] = 10.0**lin_trials[:,5]
+            lin_trials[:,5:] = 10.0**lin_trials[:,5:]
             self.lin_trials=lin_trials
 
         return self.lin_trials
@@ -3727,13 +3727,12 @@ def test_model_priors(model,
 
 
 def test_model_mb(model,
-                  counts_sky=[100.0,88., 77., 95.0], # true counts each band
+                  counts_sky=[100.0, 88., 77., 95.0], # true counts each band
                   noise_sky=[0.1,0.1,0.1,0.1],
                   nimages=10, # in each band
                   jfac=0.27,
                   do_lensfit=False,
                   do_pqr=False,
-                  profile=False, groups=False,
                   burnin=400,
                   draw_g_prior=False,
                   png=None,
@@ -3746,14 +3745,7 @@ def test_model_mb(model,
     from . import em
     import time
 
-    import pycallgraph
-    from pycallgraph import PyCallGraph
-    from pycallgraph.output import GraphvizOutput
-
-    if groups:
-        gstr='grouped'
-    else:
-        gstr='nogroup'
+    from ngmix.joint_prior import PriorSimpleSep
  
     jfac2=jfac**2
 
@@ -3780,10 +3772,8 @@ def test_model_mb(model,
     counts_pix_psf=counts_sky_psf/jfac2
 
     nband=len(counts_sky)
-    im_lol = []
-    wt_lol = []
-    j_lol = []
-    psf_lol = []
+
+    mb_obs_list=MultiBandObsList()
 
     tmpsf=0.0
     for band in xrange(nband):
@@ -3805,6 +3795,7 @@ def test_model_mb(model,
         counts_pix_obj=counts_sky_obj/jfac2
         noise_pix_obj=noise_sky_obj/jfac2
 
+        obs_list=ObsList()
         for i in xrange(nimages):
             # PSF pars
             psf_cen1=0.1*srandu()
@@ -3832,8 +3823,14 @@ def test_model_mb(model,
             # psf using EM
             tmpsf0=time.time()
 
+            obs_i = Observation(im_obj, weight=wt_obj, jacobian=j)
+
             im_psf_sky,sky=em.prep_image(im_psf)
-            mc_psf=em.GMixEM(im_psf_sky, jacobian=j)
+
+            psf_obs_i = Observation(im_psf_sky, jacobian=j)
+
+            mc_psf=em.GMixEM(psf_obs_i)
+
             emo_guess=gm_psf.copy()
             emo_guess._data['p'] = 1.0
             mc_psf.go(emo_guess, sky)
@@ -3844,14 +3841,14 @@ def test_model_mb(model,
 
             psf_fit=mc_psf.get_gmix()
 
-            im_list.append(im_obj)
-            wt_list.append(wt_obj)
-            j_list.append(j)
-            psf_list.append(psf_fit)
-        im_lol.append( im_list )
-        wt_lol.append( wt_list )
-        j_lol.append( j_list )
-        psf_lol.append( psf_list )
+            psf_obs_i.set_gmix(psf_fit)
+
+            obs_i.set_psf(psf_obs_i)
+
+            obs_list.append(obs_i)
+
+        mb_obs_list.append(obs_list)
+
 
     tmrest=time.time()
     #
@@ -3860,65 +3857,63 @@ def test_model_mb(model,
     #
 
     cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
-    T_prior=priors.LogNormal(Tsky_obj, 0.1*Tsky_obj)
-    counts_prior=[priors.LogNormal(counts_sky_obj, 0.1*counts_sky_obj)]*nband
+
+    log10_T = log10(Tsky_obj)
+
+    T_prior=priors.FlatPrior(log10_T-2.0, log10_T+2.0)
+    counts_prior=[]
+    for band in xrange(nband):
+        counts=counts_sky[band]
+        log10_counts = log10(counts)
+        cp = priors.FlatPrior(log10_counts-2.0, log10_counts+2.0)
+        counts_prior.append(cp)
+
     g_prior = priors.GPriorBA(0.3)
 
+    prior=PriorSimpleSep(cen_prior,
+                         g_prior,
+                         T_prior,
+                         counts_prior)
     #
     # fitting
     #
 
-    if profile:
-        name='profile-mb-%s-%dbands-%iimages-%s.png' % (model,nband,nimages,gstr)
-        graphviz = GraphvizOutput()
-        print('profile image:',name)
-        graphviz.output_file = name
-        config=pycallgraph.Config(groups=groups)
+    nwalkers=80
+    burnin=400
+    nstep=800
 
-        with PyCallGraph(config=config, output=graphviz):
-            mc_obj=MCMCSimple(im_lol, wt_lol, j_lol, model,
-                              psf=psf_lol,
-                              T=Tsky_obj*(1. + 0.1*srandu()),
-                              counts=counts_sky*(1. + 0.1*srandu(nband)),
-                              cen_prior=cen_prior,
-                              T_prior=T_prior,
-                              counts_prior=counts_prior,
-                              g_prior=g_prior,
-                              do_lensfit=do_lensfit,
-                              do_pqr=do_pqr, mca_a=3.,
-                              draw_g_prior=draw_g_prior,
-                              burnin=burnin)
-            mc_obj.go()
-    else:
-        mc_obj=MCMCSimple(im_lol, wt_lol, j_lol, model,
-                          psf=psf_lol,
-                          T=Tsky_obj*(1. + 0.1*srandu()),
-                          counts=counts_sky*(1. + 0.1*srandu(nband)),
-                          cen_prior=cen_prior,
-                          T_prior=T_prior,
-                          counts_prior=counts_prior,
-                          g_prior=g_prior,
-                          do_lensfit=do_lensfit,
-                          do_pqr=do_pqr, mca_a=3.,
-                          draw_g_prior=draw_g_prior,
-                          burnin=burnin)
-        mc_obj.go()
+    mc_obj=MCMCSimple(mb_obs_list,
+                      model,
+                      prior=prior,
+                      nwalkers=nwalkers)
 
-    res_obj=mc_obj.get_result()
+    npars=5+nband
+    # terrible guess
+    guess=prior.sample(nwalkers)
+
+    print("burnin")
+    pos=mc_obj.run_mcmc(guess, burnin)
+    print("steps")
+    pos=mc_obj.run_mcmc(pos, nstep)
+
+    mc_obj.calc_result()
+    mc_obj.calc_lin_result()
+
+    res=mc_obj.get_lin_result()
+
     tmrest = time.time()-tmrest
 
-    #pprint(res_obj)
-    print('arate:',res_obj['arate'])
+    print('arate:',res['arate'])
     print_pars(true_pars, front='true:    ')
-    print_pars(res_obj['pars'], front='pars_obj:')
-    print_pars(res_obj['pars_err'], front='perr_obj:')
-    #print 'Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2)
+    print_pars(res['pars'], front='pars_obj:')
+    print_pars(res['pars_err'], front='perr_obj:')
+
     if do_lensfit:
-        print('gsens:',res_obj['g_sens'])
+        print('gsens:',res['g_sens'])
     if do_pqr:
-        print('P:',res_obj['P'])
-        print('Q:',res_obj['Q'])
-        print('R:',res_obj['R'])
+        print('P:',res['P'])
+        print('Q:',res['Q'])
+        print('R:',res['R'])
 
     #gmfit0=mc_obj.get_gmix()
     #gmfit=gmfit0.convolve(psf_fit)
@@ -3939,7 +3934,7 @@ def test_model_mb(model,
     print('time psf:  ',tmpsf)
     print('time rest: ',tmrest)
 
-    return tmtot,res_obj
+    #return tmtot,res_obj
 
 
 

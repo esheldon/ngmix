@@ -7,8 +7,10 @@ I haven't forced the max prob to be 1.0 yet, but should
 """
 from __future__ import print_function
 
+import math
+
 import numpy
-from numpy import where, array, exp, log, sqrt, cos, sin, zeros, ones, diag
+from numpy import where, array, exp, log, log10, sqrt, cos, sin, zeros, ones, diag
 from numpy import pi
 from numpy.random import random as randu
 from numpy.random import randn
@@ -1787,6 +1789,17 @@ def lognorm_convert(mean, sigma):
     logsigma = sqrt(logvar)
 
     return logmean, logsigma
+
+def lognorm_convert_base(mean, sigma, base=math.e):
+    from math import log
+    lbase=log(base)
+
+    logmean  = log(mean,base) - 0.5*lbase*log( 1 + sigma**2/mean**2, base )
+    logvar   = log(1 + sigma**2/mean**2, base )
+    logsigma = sqrt(logvar)
+
+    return logmean, logsigma
+
 
 class BFracBase(object):
     """

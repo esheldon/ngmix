@@ -111,15 +111,18 @@ class GMixEM(object):
         self._maxiter   = maxiter
         self._tol       = tol
 
-        numiter, fdiff = _run_em(self._obs.image,
-                                 self._gm._data,
-                                 self._sums,
-                                 self._obs.jacobian._data,
-                                 numpy.float64(self._sky_guess),
-                                 numpy.int64(self._maxiter),
-                                 numpy.float64(self._tol),
-                                 _exp3_ivals[0],
-                                 _exp3_lookup)
+        try:
+            numiter, fdiff = _run_em(self._obs.image,
+                                     self._gm._data,
+                                     self._sums,
+                                     self._obs.jacobian._data,
+                                     numpy.float64(self._sky_guess),
+                                     numpy.int64(self._maxiter),
+                                     numpy.float64(self._tol),
+                                     _exp3_ivals[0],
+                                     _exp3_lookup)
+        except ZeroDivisionError:
+            raise GMixRangeError("divide by zero")
 
         self._result={'numiter':numiter,
                       'fdiff':fdiff}

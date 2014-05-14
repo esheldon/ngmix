@@ -1023,9 +1023,7 @@ class PriorSimpleSep(object):
     T_prior:
         Prior on T
     F_prior:
-        Prior on Flux
-    n_prior:
-        Prior on sersic index n
+        Prior on Flux.  Can be a list for a multi-band prior.
     """
 
     def __init__(self,
@@ -1039,7 +1037,14 @@ class PriorSimpleSep(object):
         self.cen_prior=cen_prior
         self.g_prior=g_prior
         self.T_prior=T_prior
-        self.F_prior=F_prior
+
+        if isinstance(F_prior,list):
+            self.nband=len(F_prior)
+        else:
+            self.nband=1
+            F_prior=[F_prior]
+
+        self.F_priors=F_prior
 
     def get_prob_scalar(self, pars, **keys):
         """
@@ -1058,7 +1063,10 @@ class PriorSimpleSep(object):
         lnp = self.cen_prior.get_lnprob(pars[0],pars[1])
         lnp += self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
         lnp += self.T_prior.get_lnprob_scalar(pars[4], **keys)
-        lnp += self.F_prior.get_lnprob_scalar(pars[5], **keys)
+
+        for i in xrange(self.nband):
+            F_prior=self.F_priors[i]
+            lnp += F_prior.get_lnprob_scalar(pars[5+i], **keys)
 
         return lnp
 
@@ -1080,7 +1088,10 @@ class PriorSimpleSep(object):
         lnp = self.cen_prior.get_lnprob_array(pars[:,0], pars[:,1])
         lnp += self.g_prior.get_lnprob_array2d(pars[:,2],pars[:,3])
         lnp += self.T_prior.get_lnprob_array(pars[:,4])
-        lnp += self.F_prior.get_lnprob_array(pars[:,5])
+
+        for i in xrange(self.nband):
+            F_prior=self.F_priors[i]
+            lnp += F_prior.get_lnprob_array(pars[:,5+i])
 
         return lnp
 
@@ -1095,19 +1106,22 @@ class PriorSimpleSep(object):
         else:
             is_scalar=False
 
-        samples=zeros( (n,6) )
+        samples=zeros( (n,5+self.nband) )
 
         cen1,cen2 = self.cen_prior.sample(n)
         g1,g2=self.g_prior.sample2d(n)
         T=self.T_prior.sample(n)
-        F=self.F_prior.sample(n)
 
         samples[:,0] = cen1
         samples[:,1] = cen2
         samples[:,2] = g1
         samples[:,3] = g2
         samples[:,4] = T
-        samples[:,5] = F
+
+        for i in xrange(self.nband):
+            F_prior=self.F_priors[i]
+            F=F_prior.sample(n)
+            samples[:,5+i] = F
 
         if is_scalar:
             samples=samples[0,:]
