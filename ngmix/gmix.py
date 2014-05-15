@@ -1637,44 +1637,45 @@ def _loglike_jacob_fast3(self, image, weight, j, i0, expvals):
         for col in xrange(ncols):
 
             ivar = weight[row,col]
-            if ivar < 0.0:
-                ivar=0.0
-
-            model_val=0.0
-            for i in xrange(ngauss):
-                udiff=u-self[i].row
-                vdiff=v-self[i].col
-
-                u2 = udiff*udiff
-                v2 = vdiff*vdiff
-                uv=udiff*vdiff
-
-                chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
-
-                if chi2 < 25.0 and chi2 >= 0.0:
-                    pnorm = self[i].pnorm
-                    x = -0.5*chi2
-
-                    # 3rd order approximation to exp
-                    #if x < 0.0:
-                    #    ival = int64(x-0.5)
-                    #else:
-                    #    ival = int64(x+0.5)
-                    ival = int64(x-0.5)
-                    f = x - ival
-                    index = ival-i0
-                    
-                    expval = expvals[index]
-                    fexp = (6+f*(6+f*(3+f)))*0.16666666
-                    expval *= fexp
-
-                    model_val += pnorm*expval
+            #if ivar < 0.0:
+            #    ivar=0.0
             
-            pixval = image[row,col]
-            diff = model_val-pixval
-            loglike += diff*diff*ivar
-            s2n_numer += pixval*model_val*ivar
-            s2n_denom += model_val*model_val*ivar
+            if ivar > 0.0:
+                model_val=0.0
+                for i in xrange(ngauss):
+                    udiff=u-self[i].row
+                    vdiff=v-self[i].col
+
+                    u2 = udiff*udiff
+                    v2 = vdiff*vdiff
+                    uv=udiff*vdiff
+
+                    chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
+
+                    if chi2 < 25.0 and chi2 >= 0.0:
+                        pnorm = self[i].pnorm
+                        x = -0.5*chi2
+
+                        # 3rd order approximation to exp
+                        #if x < 0.0:
+                        #    ival = int64(x-0.5)
+                        #else:
+                        #    ival = int64(x+0.5)
+                        ival = int64(x-0.5)
+                        f = x - ival
+                        index = ival-i0
+                        
+                        expval = expvals[index]
+                        fexp = (6+f*(6+f*(3+f)))*0.16666666
+                        expval *= fexp
+
+                        model_val += pnorm*expval
+                
+                pixval = image[row,col]
+                diff = model_val-pixval
+                loglike += diff*diff*ivar
+                s2n_numer += pixval*model_val*ivar
+                s2n_denom += model_val*model_val*ivar
 
             u += j[0].dudcol
             v += j[0].dvdcol
@@ -1709,45 +1710,45 @@ def _fdiff_jacob_fast3(self, image, weight, j, fdiff, start, i0, expvals):
         for col in xrange(ncols):
 
             ivar = weight[row,col]
-            if ivar < 0.0:
-                ivar=0.0
+            #if ivar < 0.0:
+            #    ivar=0.0
+            if ivar > 0.0:
+                ierr=numpy.sqrt(ivar)
 
-            ierr=numpy.sqrt(ivar)
+                model_val=0.0
+                for i in xrange(ngauss):
+                    udiff=u-self[i].row
+                    vdiff=v-self[i].col
 
-            model_val=0.0
-            for i in xrange(ngauss):
-                udiff=u-self[i].row
-                vdiff=v-self[i].col
+                    u2 = udiff*udiff
+                    v2 = vdiff*vdiff
+                    uv=udiff*vdiff
 
-                u2 = udiff*udiff
-                v2 = vdiff*vdiff
-                uv=udiff*vdiff
+                    chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
 
-                chi2=self[i].dcc*u2 + self[i].drr*v2 - 2.0*self[i].drc*uv
+                    if chi2 < 25.0 and chi2 >= 0.0:
+                        pnorm = self[i].pnorm
+                        x = -0.5*chi2
 
-                if chi2 < 25.0 and chi2 >= 0.0:
-                    pnorm = self[i].pnorm
-                    x = -0.5*chi2
+                        # 3rd order approximation to exp
+                        #if x < 0.0:
+                        #    ival = int64(x-0.5)
+                        #else:
+                        #    ival = int64(x+0.5)
+                        ival = int64(x-0.5)
+                        f = x - ival
+                        index = ival-i0
+                        
+                        expval = expvals[index]
+                        fexp = (6+f*(6+f*(3+f)))*0.16666666
+                        expval *= fexp
 
-                    # 3rd order approximation to exp
-                    #if x < 0.0:
-                    #    ival = int64(x-0.5)
-                    #else:
-                    #    ival = int64(x+0.5)
-                    ival = int64(x-0.5)
-                    f = x - ival
-                    index = ival-i0
-                    
-                    expval = expvals[index]
-                    fexp = (6+f*(6+f*(3+f)))*0.16666666
-                    expval *= fexp
-
-                    model_val += pnorm*expval
-            
-            pixval = image[row,col]
-            fdiff[fdiff_i] = (model_val-pixval)*ierr
-            s2n_numer += pixval*model_val*ivar
-            s2n_denom += model_val*model_val*ivar
+                        model_val += pnorm*expval
+                
+                pixval = image[row,col]
+                fdiff[fdiff_i] = (model_val-pixval)*ierr
+                s2n_numer += pixval*model_val*ivar
+                s2n_denom += model_val*model_val*ivar
 
             fdiff_i += 1
             u += j[0].dudcol

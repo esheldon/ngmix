@@ -537,6 +537,7 @@ class TemplateFluxFitter(FitterBase):
             for obs in self.obs:
                 wt=obs.weight
                 this_wtmax = wt.max()
+
                 if this_wtmax > wtmax:
                     wtmax = this_wtmax
 
