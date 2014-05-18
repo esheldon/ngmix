@@ -3,6 +3,10 @@
    Implementation of the Goodman & Weare affine invariant MCMC sampler
 
    - lnprob function
+       - make a MCAProb class that people can inherit from.  It only
+       has a get_lnprob(vector<double>& pars) method defined in the
+       base class.  The child class can hold data and whatever else is
+       needed to calculate the lnprob
    - stretch move
    - Add acceptance rate calculation
 
@@ -21,6 +25,15 @@
 #include <vector>
 
 namespace mca {
+
+    class Prob {
+        // child class will implement this
+        // do we need the {}?
+        virtual double get_lnprob(std::vector<double>& pars) {
+            return 0.0;
+        }
+
+    } // Prob
 
     class Chain {
 
