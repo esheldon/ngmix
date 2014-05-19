@@ -61,7 +61,7 @@ examples
     imsky,sky=ngmix.em.prep_image(psf_im)
 
     jacob=ngmix.jacobian.UnitJacobian(psf_pars[0], psf_pars[1])
-    psf_obs=Observation(imsky, jacob=psf_jacob)
+    psf_obs=Observation(imsky, jacobian=psf_jacob)
 
     em=ngmix.em.GMixEM(psf_obs)
     # guess truth
@@ -81,7 +81,7 @@ examples
     # When constructing the Observation we include a weight map and a psf
     # observation
 
-    obs = Observation(image, weight=weight, jacob=jacob, psf=psf_obs)
+    obs = Observation(image, weight=weight, jacobian=jacob, psf=psf_obs)
 
     # Use MCMCSimple to fit using a "simple" model, either "exp" or "dev"
     # currently. You can also send a prior= keyword that takes parameters
