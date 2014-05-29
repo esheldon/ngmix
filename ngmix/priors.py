@@ -1783,14 +1783,14 @@ class LogNormal(LogNormalBase):
             x=x_arr[i]
             lnp_arr[i] = self.get_lnprob_scalar(x)
 
-def lognorm_convert(mean, sigma):
+def lognorm_convert_old(mean, sigma):
     logmean  = log(mean) - 0.5*log( 1 + sigma**2/mean**2 )
     logvar   = log(1 + sigma**2/mean**2 )
     logsigma = sqrt(logvar)
 
     return logmean, logsigma
 
-def lognorm_convert_base(mean, sigma, base=math.e):
+def lognorm_convert(mean, sigma, base=math.e):
     from math import log
     lbase=log(base)
 

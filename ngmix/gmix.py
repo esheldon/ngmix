@@ -256,6 +256,28 @@ class GMix(object):
             The Observation to compare with. See ngmix.observation.Observation
             The Observation must have a weight map set
         """
+        from . import _gmix
+        loglike,s2n_numer,s2n_denom=_gmix.loglike_jacob(self._data,
+                                                        obs.image,
+                                                        obs.weight,
+                                                        obs.jacobian._data)
+
+        if get_s2nsums:
+            return loglike,s2n_numer,s2n_denom
+        else:
+            return loglike
+
+    def get_loglike_old(self, obs, get_s2nsums=False):
+        """
+        Calculate the log likelihood given the input Observation
+
+
+        parameters
+        ----------
+        obs: Observation
+            The Observation to compare with. See ngmix.observation.Observation
+            The Observation must have a weight map set
+        """
 
         loglike,s2n_numer,s2n_denom=_loglike_jacob_fast3(self._data,
                                                          obs.image,
@@ -268,6 +290,7 @@ class GMix(object):
             return loglike,s2n_numer,s2n_denom
         else:
             return loglike
+
 
     def reset(self):
         """
@@ -414,7 +437,7 @@ class GMixModel(GMix):
 
         if self._logpars:
             pars = array(pars_in, dtype='f8', copy=True) 
-            pars[4:] = exp(pars[4:])
+            pars[4:4+2] = 10.0**pars[4:4+2]
         else:
             pars = array(pars_in, dtype='f8', copy=False) 
 
@@ -570,6 +593,7 @@ def cinterp_multi_scalar(xref, yref, xinterp, output):
 
 
 
+'''
 @autojit
 def binary_search(a, x):
     """
@@ -657,7 +681,7 @@ def interp_multi_array(xref, yref, x):
         output[i,:] = res
 
     return output
-
+'''
 
 MIN_SERSIC_N=0.751
 MAX_SERSIC_N=5.999
@@ -1615,7 +1639,6 @@ def _loglike_fast3(self, image, weight, i0, expvals):
 
     return loglike, s2n_numer, s2n_denom
 
-#@autojit
 @jit(argtypes=[ _gauss2d[:], float64[:,:], float64[:,:], _jacobian[:], int64, float64[:] ])
 def _loglike_jacob_fast3(self, image, weight, j, i0, expvals):
     """
