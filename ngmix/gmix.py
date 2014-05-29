@@ -953,7 +953,7 @@ _gauss2d=numba.struct([('p',float64),
                        ('drc',float64),
                        ('dcc',float64),
                        ('norm',float64),
-                       ('pnorm',float64)])
+                       ('pnorm',float64)],packed=True)
 
 _gauss2d_dtype=_gauss2d.get_dtype()
 

@@ -1,7 +1,8 @@
 #ifndef _PYGMIX_HEADER_GUARD
 #define _PYGMIX_HEADER_GUARD
 
-struct PyGMix_Gauss2D {
+//struct PyGMix_Gauss2D {
+struct __attribute__((__packed__)) PyGMix_Gauss2D {
     double p;
     double row;
     double col;
@@ -20,7 +21,8 @@ struct PyGMix_Gauss2D {
     double pnorm;
 };
 
-struct PyGMix_Jacobian {
+//struct PyGMix_Jacobian {
+struct __attribute__((__packed__)) PyGMix_Jacobian {
     double row0;
     double col0;
 

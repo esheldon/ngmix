@@ -9,7 +9,7 @@ _jacobian=struct([('row0',float64),
                   ('dvdrow',float64),
                   ('dvdcol',float64),
                   ('det',float64),
-                  ('sdet',float64)])
+                  ('sdet',float64)],packed=True)
 _jacobian_dtype=_jacobian.get_dtype()
 
 
