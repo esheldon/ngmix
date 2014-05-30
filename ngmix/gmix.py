@@ -200,7 +200,7 @@ class GMix(object):
         convolve_fill(gmix, self, psf)
         return gmix
 
-    def make_image(self, dims, nsub=1, jacobian=None):
+    def make_image_old(self, dims, nsub=1, jacobian=None):
         """
         Render the mixture into a new image
 
@@ -224,7 +224,7 @@ class GMix(object):
 
         return image
 
-    def make_image_new(self, dims, nsub=1, jacobian=None):
+    def make_image(self, dims, nsub=1, jacobian=None):
         """
         Render the mixture into a new image
 
@@ -248,6 +248,42 @@ class GMix(object):
                          nsub)
 
         return image
+
+    def fill_fdiff(self, obs, fdiff, start=0, get_s2nsums=False):
+        """
+        Fill fdiff=(model-data)/err given the input Observation
+
+        parameters
+        ----------
+        obs: Observation
+            The Observation to compare with. See ngmix.observation.Observation
+            The Observation must have a weight map set
+        fdiff: 1-d array
+            The fdiff to fill
+        start: int, optional
+            Where to start in the array, default 0
+        """
+        from . import _gmix
+
+        nuse=fdiff.size-start
+
+        image=obs.image
+        if nuse < image.size:
+            raise ValueError("fdiff from start must have "
+                             "len >= %d, got %d" % (image.size,nuse))
+
+        s2n_numer,s2n_denom=_gmix.fill_fdiff(self._data,
+                                             image,
+                                             obs.weight,
+                                             obs.jacobian._data,
+                                             fdiff,
+                                             start)
+
+        if get_s2nsums:
+            return s2n_numer,s2n_denom
+        else:
+            return None
+
 
     def get_loglike(self, obs, get_s2nsums=False):
         """
@@ -1488,15 +1524,17 @@ def _gauss2d_like(self, row, col):
 # evaluate a single point
 #@jit(argtypes=[ _gauss2d[:], int64, float64[:], float64, float64 ])
 #def _gauss2d_loglike(self, i0, expvals, row, col):
+'''
 @jit(argtypes=[ _gauss2d[:], float64, float64 ])
 def _gauss2d_loglike(self, row, col):
     #like = _gauss2d_like(self, i0, expvals, row, col)
     like = _gauss2d_like(self, row, col)
     loglike = numpy.log( like )
     return loglike
+'''
 
 
-
+'''
 @jit(argtypes=[ _gauss2d[:], float64[:,:], int64, _jacobian[:], int64, float64[:] ])
 def _render_jacob_fast3(self, image, nsub, j, i0, expvals):
     """
@@ -1581,7 +1619,6 @@ def _render_jacob_fast3(self, image, nsub, j, i0, expvals):
             model_val += tval
             image[row,col] = model_val
 
-
 @jit(argtypes=[ _gauss2d[:], float64[:,:], float64[:,:], int64, float64[:] ])
 def _loglike_fast3(self, image, weight, i0, expvals):
     """
@@ -1642,6 +1679,7 @@ def _loglike_fast3(self, image, weight, i0, expvals):
     loglike *= (-0.5)
 
     return loglike, s2n_numer, s2n_denom
+
 
 @jit(argtypes=[ _gauss2d[:], float64[:,:], float64[:,:], _jacobian[:], int64, float64[:] ])
 def _loglike_jacob_fast3(self, image, weight, j, i0, expvals):
@@ -1711,8 +1749,7 @@ def _loglike_jacob_fast3(self, image, weight, j, i0, expvals):
 
     return loglike, s2n_numer, s2n_denom
 
-
-
+'''
 
 @jit(argtypes=[ _gauss2d[:], float64[:,:], float64[:,:], _jacobian[:], float64[:], int64, int64, float64[:] ])
 def _fdiff_jacob_fast3(self, image, weight, j, fdiff, start, i0, expvals):
@@ -1783,7 +1820,6 @@ def _fdiff_jacob_fast3(self, image, weight, j, fdiff, start, i0, expvals):
 
 
     return s2n_numer, s2n_denom
-
 
 class GMixND(object):
     """
