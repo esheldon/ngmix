@@ -224,26 +224,30 @@ class GMix(object):
 
         return image
 
-    def fill_image(self, image, nsub=1, jacobian=None):
+    def make_image_new(self, dims, nsub=1, jacobian=None):
         """
-        Render the mixture into the input image
+        Render the mixture into a new image
 
         parameters
         ----------
-        image: 2-d array
-            the image to fill
+        dims: 2-element sequence
+            dimensions [nrows, ncols]
         nsub: integer, optional
             Defines a grid for sub-pixel integration 
         """
+        from . import _gmix
+        image=numpy.zeros(dims, dtype='f8')
         if jacobian is not None:
-            _render_jacob_fast3(self._data,
-                                image,
-                                nsub,
-                                jacobian._data,
-                                _exp3_ivals[0],
-                                _exp3_lookup)
+            _gmix.render_jacob(self._data,
+                               image,
+                               nsub,
+                               jacobian._data)
         else:
-            _render_fast3(self._data, image, nsub, _exp3_ivals[0], _exp3_lookup)
+            _gmix.render(self._data,
+                         image,
+                         nsub)
+
+        return image
 
     def get_loglike(self, obs, get_s2nsums=False):
         """
@@ -257,10 +261,10 @@ class GMix(object):
             The Observation must have a weight map set
         """
         from . import _gmix
-        loglike,s2n_numer,s2n_denom=_gmix.loglike_jacob(self._data,
-                                                        obs.image,
-                                                        obs.weight,
-                                                        obs.jacobian._data)
+        loglike,s2n_numer,s2n_denom=_gmix.get_loglike(self._data,
+                                                      obs.image,
+                                                      obs.weight,
+                                                      obs.jacobian._data)
 
         if get_s2nsums:
             return loglike,s2n_numer,s2n_denom

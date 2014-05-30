@@ -9,8 +9,128 @@
 #include <numpy/arrayobject.h> 
 #include "_gmix.h"
 
+static PyObject * PyGMix_render(PyObject* self, PyObject* args) {
 
-static PyObject * PyGMix_loglike_jacob(PyObject* self, PyObject* args) {
+    PyObject* gmix_obj=NULL;
+    PyObject* image_obj=NULL;
+    int nsub=0;
+    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+    npy_intp rowsub=0, colsub=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;
+    double *ptr=NULL, stepsize=0, offset=0, areafac=0, tval=0, trow=0, tcol=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOi", &gmix_obj, &image_obj, &nsub)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    stepsize = 1./nsub;
+    offset = (nsub-1)*stepsize/2.;
+    areafac = 1./(nsub*nsub);
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_row; col++) {
+
+            tval = 0.0;
+            trow = row-offset;
+
+            for (rowsub=0; rowsub<nsub; rowsub++) {
+                tcol = col-offset;
+                for (colsub=0; colsub<nsub; colsub++) {
+
+                    tval += PYGMIX_GMIX_EVAL(gmix, n_gauss, trow, tcol);
+
+                    tcol += stepsize;
+                } // colsub
+
+                trow += stepsize;
+            } // rowsub
+
+            // add to existing values
+            ptr=(double*)PyArray_GETPTR2(image_obj,row,col);
+            tval *= areafac;
+            (*ptr) += tval;
+        } // cols
+    } // rows
+
+    return Py_None;
+}
+
+
+static PyObject * PyGMix_render_jacob(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    PyObject* image_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    int nsub=0;
+    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+    npy_intp rowsub=0, colsub=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    double *ptr=NULL, u=0, v=0, stepsize=0, ustepsize=0, vstepsize=0,
+           offset=0, areafac=0, tval=0,trow=0, lowcol=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOiO", &gmix_obj, &image_obj, &nsub, &jacob_obj)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    stepsize = 1./nsub;
+    offset = (nsub-1)*stepsize/2.;
+    areafac = 1./(nsub*nsub);
+    // sub-steps while moving along column direction
+    ustepsize = stepsize*jacob->dudcol;
+    vstepsize = stepsize*jacob->dvdcol;
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_row; col++) {
+
+            tval = 0.0;
+            trow = row-offset;
+            lowcol = col-offset;
+
+            for (rowsub=0; rowsub<nsub; rowsub++) {
+                u=jacob->dudrow*(trow - jacob->row0) + jacob->dudcol*(lowcol - jacob->col0);
+                v=jacob->dvdrow*(trow - jacob->row0) + jacob->dvdcol*(lowcol - jacob->col0);
+                for (colsub=0; colsub<nsub; colsub++) {
+
+                    tval += PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
+
+                    u += ustepsize;
+                    v += vstepsize;
+                } // colsub
+
+                trow += stepsize;
+            } // rowsub
+
+            // add to existing values
+            ptr=(double*)PyArray_GETPTR2(image_obj,row,col);
+            tval *= areafac;
+            (*ptr) += tval;
+        } // cols
+    } // rows
+
+    return Py_None;
+}
+
+
+
+static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
 
     PyObject* gmix_obj=NULL;
     PyObject* image_obj=NULL;
@@ -91,8 +211,10 @@ static PyObject * PyGMix_test(PyObject* self, PyObject* args) {
 }
 
 static PyMethodDef pygauss2d_funcs[] = {
-    {"test",      (PyCFunction)PyGMix_test,      METH_VARARGS,  "test\n\nprint and return."},
-    {"loglike_jacob",      (PyCFunction)PyGMix_loglike_jacob,      METH_VARARGS,  "calculate likelihood with weight map and jacobian\n"},
+    {"test",        (PyCFunction)PyGMix_test,         METH_VARARGS,  "test\n\nprint and return."},
+    {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
+    {"render",(PyCFunction)PyGMix_render, METH_VARARGS,  "render without jacobian\n"},
+    {"render_jacob",(PyCFunction)PyGMix_render_jacob, METH_VARARGS,  "render with jacobian\n"},
     {NULL}  /* Sentinel */
 };
 
