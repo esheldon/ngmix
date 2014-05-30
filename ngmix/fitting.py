@@ -558,9 +558,8 @@ class LMSimple(FitterBase):
     A class for doing a fit using levenberg marquardt
 
     """
-    def __init__(self, image, weight, jacobian, model, guess, **keys):
-        raise RuntimeError("adapt to new system")
-        super(LMSimple,self).__init__(image, weight, jacobian, model, **keys)
+    def __init__(self, obs, model, **keys):
+        super(LMSimple,self).__init__(obs, model, **keys)
 
         # this is a dict
         # can contain maxfev (maxiter), ftol (tol in sum of squares)
@@ -572,10 +571,14 @@ class LMSimple(FitterBase):
 
         self.fdiff_size=self.totpix + n_prior_pars
 
-    def go(self, guess):
+    def run_lm(self, guess):
         """
         Run leastsq and set the result
         """
+
+        if not hasattr(self,'_gmix_all0'):
+            self._setup_data(guess)
+
 
         dof=self.get_dof()
         result = run_leastsq(self._calc_fdiff, guess, dof, **self.lm_pars)
@@ -588,8 +591,34 @@ class LMSimple(FitterBase):
 
         self._result=result
 
-    def _get_band_pars(self, pars, band):
-        return pars[ [0,1,2,3,4,5+band] ]
+    def _setup_data(self, guess):
+        """
+        try very hard to initialize the mixtures
+        """
+
+        self.flags=0
+
+        npars=guess.size
+        mess="guess has npars=%d, expected %d" % (npars,self.npars)
+        assert (npars==self.npars),mess
+
+        try:
+            # this can raise GMixRangeError
+            self._init_gmix_all(guess)
+        except ZeroDivisionError:
+            raise GMixRangeError("got zero division")
+
+    def _get_band_pars(self, log_pars, band):
+        """
+        Get linear pars for the specified band
+        """
+        pars=log_pars[ [0,1,2,3,4,5+band] ].copy()
+
+        pars[4] = 10.0**pars[4]
+        pars[5] = 10.0**pars[5]
+
+        return pars
+
 
     def _calc_fdiff(self, pars, get_s2nsums=False):
         """
@@ -600,9 +629,6 @@ class LMSimple(FitterBase):
 
         # we cannot keep sending existing array into leastsq, don't know why
         fdiff=zeros(self.fdiff_size)
-
-        if not hasattr(self,'_gmix_all0'):
-            self._init_gmix_all(pars)
 
         s2n_numer=0.0
         s2n_denom=0.0
@@ -615,30 +641,17 @@ class LMSimple(FitterBase):
 
             for band in xrange(self.nband):
 
+                obs_list=self.obs[band]
                 gmix_list=self._gmix_all[band]
-                im_list=self.im_lol[band]
-                wt_list=self.wt_lol[band]
-                jacob_list=self.jacob_lol[band]
 
-                nim=len(im_list)
-                for i in xrange(nim):
-                    gm=gmix_list[i]
-                    im=im_list[i]
-                    wt=wt_list[i]
-                    j=jacob_list[i]
+                for obs,gm in zip(obs_list, gmix_list):
 
-                    res = gmix._fdiff_jacob_fast3(gm._data,
-                                                  im,
-                                                  wt,
-                                                  j._data,
-                                                  fdiff,
-                                                  start,
-                                                  _exp3_ivals[0],
-                                                  _exp3_lookup)
+                    res = gm.fill_fdiff(obs, fdiff, start=start)
+
                     s2n_numer += res[0]
                     s2n_denom += res[1]
 
-                    start += im.size
+                    start += obs.image.size
 
         except GMixRangeError:
             fdiff[:] = LOWVAL
@@ -662,7 +675,17 @@ class LMSimple(FitterBase):
         I have verified all our priors have this property.
         """
 
-        raise RuntimeError("adapt to new system")
+        if self.prior is None:
+            nprior=0
+        else:
+            # make them sqrt(chi2)=sqrt(-2*ln(p))
+            nprior=self.prior.fill_fdiff(pars, fdiff)
+
+        return nprior
+
+        '''
+        raise RuntimeError("adapt to new system, also "
+                           "should be sqrt(chi2)=sqrt(-2*ln(p))")
 
         index=0
         fdiff[index] = -self.cen_prior.get_lnprob(pars[0], pars[1])
@@ -681,29 +704,10 @@ class LMSimple(FitterBase):
 
         # this leaves us after the priors
         return index
-
-    def _get_priors(self, pars):
-        """
-        For the stats calculation
-        """
-        lnp=0.0
-        
-        lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
-
-        if self.g_prior is not None:
-            lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
-
-        lnp += self.T_prior.get_lnprob_scalar(pars[4])
-        for i,cp in enumerate(self.counts_prior):
-            counts=pars[5+i]
-            lnp += cp.get_lnprob_scalar(counts)
-
-        return lnp
-
+        '''
 
 class LMSersic(LMSimple):
     def __init__(self, image, weight, jacobian, guess, **keys):
-        raise RuntimeError("adapt to new system")
         super(LMSimple,self).__init__(image, weight, jacobian, "sersic", **keys)
         # this is a dict
         # can contain maxfev (maxiter), ftol (tol in sum of squares)
@@ -721,62 +725,6 @@ class LMSersic(LMSimple):
         if band > 0:
             raise ValueError("support more than one band")
         return pars.copy()
-
-    def _fill_priors(self, pars, fdiff):
-        """
-        Fill priors at the beginning of the array.
-
-        ret the position after last par
-
-        We require all the lnprobs are < 0, equivalent to
-        the peak probability always being 1.0
-
-        I have verified all our priors have this property.
-        """
-        raise RuntimeError("adapt to new system")
-
-        index=0
-        fdiff[index] = -self.cen_prior.get_lnprob(pars[0], pars[1])
-        index += 1
-        if self.g_prior is not None:
-            fdiff[index] = -self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
-        index += 1
-
-        fdiff[index] = -self.T_prior.get_lnprob_scalar(pars[4])
-        index += 1
-
-        cp=self.counts_prior[0]
-        fdiff[index] = -cp.get_lnprob_scalar(pars[5])
-        index += 1
-
-        fdiff[index] = -self.n_prior.get_lnprob_scalar(pars[6])
-        index += 1
-
-        # this leaves us after the priors
-        return index
-
-    def _get_priors(self, pars):
-        """
-        For the stats calculation
-        """
-        lnp=0.0
-        
-        lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
-        if self.g_prior is not None:
-            lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
-        lnp += self.T_prior.get_lnprob_scalar(pars[4])
-
-        cp=self.counts_prior[0]
-        lnp += cp.get_lnprob_scalar(pars[5])
-
-        lnp += self.n_prior.get_lnprob_scalar(pars[6])
-
-        return lnp
-
-
-
-
-
 
 
 NOTFINITE_BIT=11
@@ -1205,107 +1153,6 @@ class MCMCBase(FitterBase):
     def get_par_names(self):
         raise RuntimeError("over-ride me")
 
-    '''
-    def _get_g_prior_vals(self):
-        """
-        Set g prior vals for later use
-        """
-
-        if not hasattr(self,'g_prior_vals'):
-            g1=self.trials[:,self.g1i]
-            g2=self.trials[:,self.g2i]
-            self.g_prior_vals = self.g_prior.get_prob_array2d(g1,g2)
-        return self.g_prior_vals
-
-    def _do_trials_old(self):
-        """
-        don't use this
-        Actually run the sampler
-        """
-        import emcee
-
-        if emcee.ensemble.acor is not None:
-            have_acor=True
-        else:
-            have_acor=False
-
-        # over-ridden
-        guess=self._get_guess()
-        for i in xrange(10):
-            try:
-                self._init_gmix_all(guess[0,:])
-                break
-            except GMixRangeError as gerror:
-                # make sure we draw random guess if we got failure
-                print('failed init gmix lol:',str(gerror))
-                print('getting a new guess')
-                guess=self._get_random_guess()
-        if i==9:
-            raise gerror
-
-        sampler = self._make_sampler()
-        self.sampler=sampler
-
-        total_burnin=0
-        self.tau=9999.0
-        pos=guess
-        burnin = self.burnin
-
-        self.best_pars=None
-        self.best_lnprob=None
-
-        for i in xrange(self.ntry):
-            pos=self._run_some_trials(pos, burnin)
-
-            tau_ok=True
-            arate_ok=True
-            if have_acor:
-                try:
-                    self.tau=self._get_tau(sampler, burnin)
-                    if self.tau > MAX_TAU and self.doiter:
-                        print("        tau",self.tau,">",MAX_TAU)
-                        tau_ok=False
-                except:
-                    # something went wrong with acor, run some more
-                    print("        exception in acor, running more")
-                    tau_ok=False
-
-            if self.arate < self.min_arate and self.doiter:
-                #print("        burnin arate ",self.arate,"<",self.min_arate)
-                arate_ok=False
-
-            if tau_ok and arate_ok:
-                break
-
-        # if we get here we are hopefully burned in, now do a few more steps
-        self.last_pos=self._run_some_trials(pos, self.nstep)
-
-        self.flags=0
-        self.sampler=sampler
-
-
-    def _run_some_trials_old(self, pos_in, nstep):
-        """
-        don't use this
-        """
-        sampler=self.sampler
-        sampler.reset()
-        pos, prob, state = sampler.run_mcmc(pos_in, nstep)
-
-        arates = sampler.acceptance_fraction
-        self.arate = arates.mean()
-
-        lnprobs = sampler.lnprobability.reshape(self.nwalkers*nstep)
-        w=lnprobs.argmax()
-        bp=lnprobs[w]
-        if self.best_lnprob is None or bp > self.best_lnprob:
-            self.best_lnprob=bp
-            self.best_pars=sampler.flatchain[w,:]
-            #print_pars(self.best_pars, front='best pars:')
-
-        return pos
-    '''
-
 
 class MCMCSimple(MCMCBase):
     """
@@ -1356,161 +1203,6 @@ class MCMCSimple(MCMCBase):
         return names
 
 
-    '''
-    def _get_priors_old(self, pars):
-        """
-        # go in simple
-        add any priors that were sent on construction
-        """
-        lnp=0.0
-        
-        if self.cen_prior is not None:
-            lnp += self.cen_prior.get_lnprob(pars[0], pars[1])
-
-        if self.g_prior is not None:
-            if self.g_prior_during:
-                lnp += self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
-            else:
-                # may have bounds
-                g = sqrt(pars[2]**2 + pars[3]**2)
-                if g > self.g_prior.gmax:
-                    raise GMixRangeError("g too big")
-        
-        if self.T_prior is not None:
-            lnp += self.T_prior.get_lnprob_scalar(pars[4])
-
-        if self.counts_prior is not None:
-            for i,cp in enumerate(self.counts_prior):
-                counts=pars[5+i]
-                lnp += cp.get_lnprob_scalar(counts)
-
-        return lnp
-
-    def _get_lensfit_gsens(self, pars, gprior=None):
-        """
-        Miller et al. 2007 style sensitivity
-
-        zero prior values should be removed before calling
-        """
-
-        g1i=self.g1i
-        g2i=self.g2i
-
-        g1vals=self.trials[:,g1i]
-        g2vals=self.trials[:,g2i]
-
-        dpri_by_g1 = self.g_prior.dbyg1_array(g1vals,g2vals)
-        dpri_by_g2 = self.g_prior.dbyg2_array(g1vals,g2vals)
-
-        g=pars[g1i:g1i+2]
-        g1diff = g[0]-g1vals
-        g2diff = g[1]-g2vals
-
-        gsens = zeros(2)
-
-        R1 = g1diff*dpri_by_g1
-        R2 = g2diff*dpri_by_g2
-
-        gsens[0]= 1.- R1.mean()
-        gsens[1]= 1.- R2.mean()
-
-        return gsens
-
-    def _get_PQR(self):
-        """
-        get the marginalized P,Q,R from Bernstein & Armstrong
-
-        If the prior is already in our mcmc chain, so we need to divide by the
-        prior everywhere.
-
-        zero prior values should be removed prior to calling
-        """
-
-        
-        g1=self.trials[:,self.g1i]
-        g2=self.trials[:,self.g2i]
-
-        sh=self.shear_expand
-        if sh is None:
-            # expand around zero
-            if hasattr(self.g_prior,'get_pqr'):
-                Pi,Qi,Ri = self.g_prior.get_pqr(g1,g2)
-            else:
-                Pi,Qi,Ri = self.g_prior.get_pqr_num(g1,g2)
-        else:
-            print("        expanding pqr about:",sh)
-            if hasattr(self.g_prior,'get_pqr_expand'):
-                Pi,Qi,Ri = self.g_prior.get_pqr_expand(g1,g2, sh[0], sh[1])
-            else:
-                Pi,Qi,Ri = self.g_prior.get_pqr_num(g1,g2,s1=sh[0], s2=sh[1])
-
-        P,Q,R = self._get_mean_pqr(Pi,Qi,Ri)
-
-        return P,Q,R
-
-    def _get_mean_pqr(self, Pi, Qi, Ri):
-        """
-        Get the mean P,Q,R marginalized over priors.  Optionally weighted for
-        importance sampling
-        """
-
-        if self.g_prior_during:
-            # We measured the posterior surface.  But the integrals are over
-            # the likelihood.  So divide by the prior.
-            #
-            # Also note the p we divide by is in principle different from the
-            # Pi above, which are evaluated at the shear expansion value
-
-            print("        undoing prior for pqr")
-
-            prior_vals=self._get_g_prior_vals()
-
-            w,=numpy.where(prior_vals > 0.0)
-
-            Pinv = 1.0/prior_vals[w]
-            Pinv_sum=Pinv.sum()
-
-            Pi = Pi[w]
-            Qi = Qi[w,:]
-            Ri = Ri[w,:,:]
-
-            # this is not unity if expanding about some shear
-            Pi *= Pinv
-            Qi[:,0] *= Pinv 
-            Qi[:,1] *= Pinv
-
-            Ri[:,0,0] *= Pinv
-            Ri[:,0,1] *= Pinv
-            Ri[:,1,0] *= Pinv
-            Ri[:,1,1] *= Pinv
-
-            P = Pi.sum()/Pinv_sum
-            Q = Qi.sum(axis=0)/Pinv_sum
-            R = Ri.sum(axis=0)/Pinv_sum
-        else:
-            P = Pi.mean()
-            Q = Qi.mean(axis=0)
-            R = Ri.mean(axis=0)
-
-        return P,Q,R
-
-    def _remove_zero_prior(self):
-        """
-        """
-        g_prior = self.g_prior_vals
-
-        w,=numpy.where(g_prior > 0)
-        if w.size == 0:
-            raise ValueError("no prior values > 0!")
-
-        ndiff=g_prior.size-w.size
-        if ndiff > 0:
-            print('        removed zero priors:',ndiff)
-            self.g_prior_vals = self.g_prior_vals[w]
-            self.trials = self.trials[w,:]
-
-        return ndiff
-    '''
 
 class MCMCSersic(MCMCSimple):
     def __init__(self, obs, **keys):

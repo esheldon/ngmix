@@ -1070,6 +1070,27 @@ class PriorSimpleSep(object):
 
         return lnp
 
+    def fill_fdiff(self, pars, fdiff, **keys):
+        """
+        set sqrt(-2ln(p)) ~ (model-data)/err
+        """
+        index=0
+        fdiff[index] = self.cen_prior.get_lnprob(pars[0],pars[1])
+        index += 1
+        fdiff[index] = self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
+        index += 1
+        fdiff[index] =  self.T_prior.get_lnprob_scalar(pars[4], **keys)
+        index += 1
+
+        for i in xrange(self.nband):
+            F_prior=self.F_priors[i]
+            fdiff[index] = F_prior.get_lnprob_scalar(pars[5+i], **keys)
+            index += 1
+
+        fdiff[0:index] = sqrt(-2*fdiff[0:index])
+        return index
+
+
     def get_prob_array(self, pars, **keys):
         """
         probability for array input [N,ndims]

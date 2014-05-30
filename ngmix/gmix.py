@@ -9,6 +9,8 @@ from .shape import g1g2_to_e1e2, e1e2_to_g1g2
 
 from .gexceptions import GMixRangeError, GMixFatalError
 
+from . import _gmix
+
 def make_gmix_model(pars, model):
     """
     get a gaussian mixture model for the given model
@@ -200,6 +202,30 @@ class GMix(object):
         convolve_fill(gmix, self, psf)
         return gmix
 
+    def make_image(self, dims, nsub=1, jacobian=None):
+        """
+        Render the mixture into a new image
+
+        parameters
+        ----------
+        dims: 2-element sequence
+            dimensions [nrows, ncols]
+        nsub: integer, optional
+            Defines a grid for sub-pixel integration 
+        """
+        image=numpy.zeros(dims, dtype='f8')
+        if jacobian is not None:
+            _gmix.render_jacob(self._data,
+                               image,
+                               nsub,
+                               jacobian._data)
+        else:
+            _gmix.render(self._data,
+                         image,
+                         nsub)
+
+        return image
+
     def make_image_old(self, dims, nsub=1, jacobian=None):
         """
         Render the mixture into a new image
@@ -224,32 +250,7 @@ class GMix(object):
 
         return image
 
-    def make_image(self, dims, nsub=1, jacobian=None):
-        """
-        Render the mixture into a new image
-
-        parameters
-        ----------
-        dims: 2-element sequence
-            dimensions [nrows, ncols]
-        nsub: integer, optional
-            Defines a grid for sub-pixel integration 
-        """
-        from . import _gmix
-        image=numpy.zeros(dims, dtype='f8')
-        if jacobian is not None:
-            _gmix.render_jacob(self._data,
-                               image,
-                               nsub,
-                               jacobian._data)
-        else:
-            _gmix.render(self._data,
-                         image,
-                         nsub)
-
-        return image
-
-    def fill_fdiff(self, obs, fdiff, start=0, get_s2nsums=False):
+    def fill_fdiff(self, obs, fdiff, start=0):
         """
         Fill fdiff=(model-data)/err given the input Observation
 
@@ -263,7 +264,6 @@ class GMix(object):
         start: int, optional
             Where to start in the array, default 0
         """
-        from . import _gmix
 
         nuse=fdiff.size-start
 
@@ -279,11 +279,40 @@ class GMix(object):
                                              fdiff,
                                              start)
 
-        if get_s2nsums:
-            return s2n_numer,s2n_denom
-        else:
-            return None
+        return s2n_numer,s2n_denom
 
+    def fill_fdiff_old(self, obs, fdiff, start=0):
+        """
+        Fill fdiff=(model-data)/err given the input Observation
+
+        parameters
+        ----------
+        obs: Observation
+            The Observation to compare with. See ngmix.observation.Observation
+            The Observation must have a weight map set
+        fdiff: 1-d array
+            The fdiff to fill
+        start: int, optional
+            Where to start in the array, default 0
+        """
+
+        nuse=fdiff.size-start
+
+        image=obs.image
+        if nuse < image.size:
+            raise ValueError("fdiff from start must have "
+                             "len >= %d, got %d" % (image.size,nuse))
+
+        s2n_numer,s2n_denom=_fdiff_jacob_fast3(self._data,
+                                               image,
+                                               obs.weight,
+                                               obs.jacobian._data,
+                                               fdiff,
+                                               start,
+                                               _exp3_ivals[0],
+                                               _exp3_lookup)
+
+        return s2n_numer,s2n_denom
 
     def get_loglike(self, obs, get_s2nsums=False):
         """
@@ -296,7 +325,6 @@ class GMix(object):
             The Observation to compare with. See ngmix.observation.Observation
             The Observation must have a weight map set
         """
-        from . import _gmix
         loglike,s2n_numer,s2n_denom=_gmix.get_loglike(self._data,
                                                       obs.image,
                                                       obs.weight,
@@ -1019,13 +1047,6 @@ def get_model_npars(model):
     mi=_gmix_model_dict[model]
     return _gmix_npars_dict[mi]
 
-
-@autojit
-def _gauss2d_verify(self):
-    ngauss=self.size
-    for i in xrange(ngauss):
-        if self[i].det < 1.0e-200:
-            raise GMixRangeError("det <= 0: %s" % self[i].det)
 
 # have to send whole array
 @jit(argtypes=[_gauss2d[:], int64, float64, float64, float64, float64, float64, float64])
@@ -1751,6 +1772,7 @@ def _loglike_jacob_fast3(self, image, weight, j, i0, expvals):
 
 '''
 
+'''
 @jit(argtypes=[ _gauss2d[:], float64[:,:], float64[:,:], _jacobian[:], float64[:], int64, int64, float64[:] ])
 def _fdiff_jacob_fast3(self, image, weight, j, fdiff, start, i0, expvals):
     """
@@ -1820,6 +1842,7 @@ def _fdiff_jacob_fast3(self, image, weight, j, fdiff, start, i0, expvals):
 
 
     return s2n_numer, s2n_denom
+'''
 
 class GMixND(object):
     """

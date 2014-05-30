@@ -10,6 +10,224 @@
 #include "_gmix.h"
 
 /*
+    convert reduced shear g1,g2 to standard ellipticity
+    parameters e1,e2
+
+    return 0 means out of range
+*/
+int g1g2_to_e1e2(double g1, double g2, double *e1, double *e2) {
+    int status=0;
+    double g=sqrt(g1*g1 + g2*g2);
+
+    if (g >= 1) {
+        fprintf(stderr,"g out of bounds: %g\n", g);
+        return status;
+    }
+    if (g == 0.0) {
+        *e1=0;
+        *e2=0;
+    }
+
+    double eta = 2*atanh(g);
+    double e = tanh(eta);
+    if (e >= 1.) {
+        // round off?
+        e = 0.99999999;
+    }
+
+    double fac = e/g;
+
+    *e1 = fac*g1;
+    *e2 = fac*g2;
+    
+    status=1;
+    return status;
+}
+
+/* 
+   zero return value means bad determinant, out of range
+   
+*/
+static int gauss2d_set(struct PyGMix_Gauss2D *self,
+                       double p,
+                       double row,
+                       double col,
+                       double irr,
+                       double irc,
+                       double icc) {
+
+    int status=0;
+
+    double det = irr*icc - irc*irc;
+    if (det < 1.0e-200) {
+        fprintf(stderr,"gmix error: det too low: %.16g\n", det);
+        return status;
+    }
+
+    self->p=p;
+    self->row=row;
+    self->col=col;
+    self->irr=irr;
+    self->irc=irc;
+    self->icc=icc;
+
+    self->det = det;
+
+    double idet=1.0/det;
+    self->drr = irr*idet;
+    self->drc = irc*idet;
+    self->dcc = icc*idet;
+    self->norm = 1./(2*M_PI*sqrt(det));
+
+    self->pnorm = self->p*self->norm;
+
+    status=1;
+    return status;
+}
+
+static inline int get_ngauss(int model) {
+    int status=1;
+    switch (model) {
+        case PyGMIX_GMIX_EXP:
+            return 6;
+        case PyGMIX_GMIX_DEV:
+            return 10;
+        case PyGMIX_GMIX_TURB:
+            return 3;
+        case PyGMIX_GMIX_BDC:
+            return 16;
+        case PyGMIX_GMIX_BDF:
+            return 16;
+        case PyGMIX_GMIX_SERSIC:
+            return 10;
+        default:
+            fprintf(stderr,"cannot get ngauss for model %d\n", model);
+            status=0;
+    }
+
+    return status;
+}
+
+// for counts
+static const double PyGMix_pvals_exp[] = {
+    0.00061601229677880041, 
+    0.0079461395724623237, 
+    0.053280454055540001, 
+    0.21797364640726541, 
+    0.45496740582554868, 
+    0.26521634184240478};
+// for T
+static const double PyGMix_fvals_exp[] = {
+    0.002467115141477932, 
+    0.018147435573256168, 
+    0.07944063151366336, 
+    0.27137669897479122, 
+    0.79782256866993773, 
+    2.1623306025075739};
+
+int gmix_fill_simple(struct PyGMix_Gauss2D *self,
+                     npy_intp n_gauss,
+                     const double* pars,
+                     npy_intp n_pars,
+                     int model,
+                     const double* fvals,
+                     const double* pvals) {
+
+    int status=0;
+    npy_intp i=0;
+    if (n_pars != 6) {
+        fprintf(stderr,"simple pars should be size 6\n");
+        return status;
+    }
+    int n_gauss_expected=get_ngauss(model);
+    if (n_gauss != n_gauss_expected) {
+        fprintf(stderr,"for model %d expected %d gauss, got %ld\n",
+                model, n_gauss_expected, n_gauss);
+        return status;
+    }
+
+    double row=pars[0];
+    double col=pars[1];
+    double g1=pars[2];
+    double g2=pars[3];
+    double T=pars[4];
+    double counts=pars[5];
+
+    double e1,e2;
+    status=g1g2_to_e1e2(g1, g2, &e1, &e2);
+    if (!status) {
+        return status;
+    }
+
+
+    for (i=0; i<n_gauss; i++) {
+        double T_i_2 = 0.5*T*fvals[i];
+        double counts_i=counts*pvals[i];
+
+        gauss2d_set(&self[i],
+                    counts_i,
+                    row,
+                    col, 
+                    T_i_2*(1-e1), 
+                    T_i_2*e2,
+                    T_i_2*(1+e1));
+    }
+
+    status=1;
+    return status;
+}
+
+int gmix_fill(struct PyGMix_Gauss2D *self,
+              npy_intp n_gauss,
+              const double* pars,
+              npy_intp n_pars,
+              int model) {
+
+    int status=0;
+    switch (model) {
+        case PyGMIX_GMIX_EXP:
+            status=gmix_fill_simple(self, n_gauss,
+                                    pars, n_pars,
+                                    model,
+                                    PyGMix_fvals_exp,
+                                    PyGMix_pvals_exp);
+            break;
+        default:
+            fprintf(stderr,"gmix error: Bad gmix model: %d\n", model);
+            status=0;
+            break;
+    }
+
+    return status;
+}
+
+static PyObject * PyGMix_gmix_fill(PyObject* self, PyObject* args) {
+    PyObject* gmix_obj=NULL;
+    PyObject* pars_obj=NULL;
+    int model=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOi",
+                          &gmix_obj, 
+                          &pars_obj,
+                          &model)) {
+
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    npy_intp n_gauss=PyArray_SIZE(gmix_obj);
+
+    const double *pars=(double *) PyArray_DATA(pars_obj);
+    npy_intp n_pars = PyArray_SIZE(pars_obj);
+
+    int res=gmix_fill(gmix, n_gauss, pars, n_pars, model);
+
+    return PyInt_FromLong( (long) res );
+}
+
+/*
    Render the gmix in the input image, without jacobian
 */
 static PyObject * PyGMix_render(PyObject* self, PyObject* args) {
@@ -245,6 +463,8 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
 
         for (col=0; col < n_row; col++) {
 
+            //printf("row: %ld col: %ld start: %d\n", row, col, start);
+
             ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
             if ( ivar > 0.0) {
                 ierr=sqrt(ivar);
@@ -270,8 +490,8 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
     }
 
     retval=PyTuple_New(2);
-    PyTuple_SetItem(retval,1,PyFloat_FromDouble(s2n_numer));
-    PyTuple_SetItem(retval,2,PyFloat_FromDouble(s2n_denom));
+    PyTuple_SetItem(retval,0,PyFloat_FromDouble(s2n_numer));
+    PyTuple_SetItem(retval,1,PyFloat_FromDouble(s2n_denom));
     return retval;
 }
 
@@ -300,6 +520,8 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"fill_fdiff",  (PyCFunction)PyGMix_fill_fdiff,  METH_VARARGS,  "fill fdiff for LM\n"},
     {"render",      (PyCFunction)PyGMix_render, METH_VARARGS,  "render without jacobian\n"},
     {"render_jacob",(PyCFunction)PyGMix_render_jacob, METH_VARARGS,  "render with jacobian\n"},
+
+    {"gmix_fill",(PyCFunction)PyGMix_gmix_fill, METH_VARARGS,  "Fill the input gmix from the pars\n"},
     {NULL}  /* Sentinel */
 };
 

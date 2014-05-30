@@ -101,7 +101,8 @@ class Shape(ShapeBase):
         self.set_g1g2(g1rot, g2rot)
 
 
-@jit(argtypes=[ float64, float64 ])
+#@jit(argtypes=[ float64, float64 ])
+@autojit
 def g1g2_to_e1e2(g1, g2):
     """
     convert reduced shear g1,g2 to standard ellipticity

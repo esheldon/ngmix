@@ -7,7 +7,7 @@ import numpy
 import numba
 from numba import jit, autojit, float64, int64
 from . import gmix
-from .gmix import GMix, _gauss2d_set, _gauss2d, _get_wmomsum, _gauss2d_verify
+from .gmix import GMix, _gauss2d_set, _gauss2d, _get_wmomsum
 from .gmix import _exp3_ivals, _exp3_lookup
 from .gexceptions import GMixRangeError, GMixMaxIterEM
 from .priors import srandu
@@ -178,6 +178,14 @@ def _set_gmix_from_sums(gmix, sums):
                      sums[i].u2sum/p,
                      sums[i].uvsum/p,
                      sums[i].v2sum/p)
+
+@autojit
+def _gauss2d_verify(self):
+    ngauss=self.size
+    for i in xrange(ngauss):
+        if self[i].det < 1.0e-200:
+            raise GMixRangeError("det <= 0: %s" % self[i].det)
+
 
 #@autojit(locals=dict(psum=float64, skysum=float64))
 @jit(argtypes=[float64[:,:],_gauss2d[:],_sums[:],_jacobian[:],float64,int64,float64,int64,float64[:]],

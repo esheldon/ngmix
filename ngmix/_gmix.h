@@ -1,6 +1,19 @@
 #ifndef _PYGMIX_HEADER_GUARD
 #define _PYGMIX_HEADER_GUARD
 
+enum PyGMix_Models {
+    PyGMIX_GMIX_FULL=0,
+    PyGMIX_GMIX_GAUSS=1,
+    PyGMIX_GMIX_TURB=2,
+    PyGMIX_GMIX_EXP=3,
+    PyGMIX_GMIX_DEV=4,
+    PyGMIX_GMIX_BDC=5,
+    PyGMIX_GMIX_BDF=6,
+    PyGMIX_GMIX_COELLIP=7,
+    PyGMIX_GMIX_SERSIC=8,
+    PyGMIX_GMIX_COELLIP4=100
+};
+
 //struct PyGMix_Gauss2D {
 struct __attribute__((__packed__)) PyGMix_Gauss2D {
     double p;
@@ -84,6 +97,9 @@ static double _exp3_lookup[] = {  5.10908903e-12,   1.38879439e-11,   3.77513454
                                   1.35335283e-01,   3.67879441e-01,   1.00000000e+00};
 */
 
+
+
+
 #define PYGMIX_MAX_CHI2 25.0
 
 #define PYGMIX_GAUSS_EVAL(gauss, rowval, colval) ({            \
@@ -113,6 +129,7 @@ static double _exp3_lookup[] = {  5.10908903e-12,   1.38879439e-11,   3.77513454
     }                                                          \
     _gm_val;                                                   \
 })
+
 
 
 #endif
