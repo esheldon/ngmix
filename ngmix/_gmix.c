@@ -62,6 +62,7 @@ static int gauss2d_set(struct PyGMix_Gauss2D *self,
     double det = irr*icc - irc*irc;
     if (det < 1.0e-200) {
         // PyErr_Format doesn't format floats
+        fprintf(stderr,"gauss2d det too low: %.16g", det);
         PyErr_Format(GMixRangeError, "gauss2d det too low");
         //PyErr_Format(GMixRangeError, "gauss2d det too low: %.16g", det);
         return 0;
