@@ -114,7 +114,6 @@ class GMix(object):
         row=rowsum/psum
         col=colsum/psum
 
-        row,col,psum=_gmix.get_cen(self._data)
         return row,col
     
     def set_cen(self, row, col):
@@ -155,7 +154,7 @@ class GMix(object):
         irr=(d['irr']*d['p']).sum()*ipsum
         irc=(d['irc']*d['p']).sum()*ipsum
         icc=(d['icc']*d['p']).sum()*ipsum
-        T = (irrsum + iccsum)*ipsum
+        T = irr + icc
 
         e1=(icc-irr)/T
         e2=2.0*irc/T
