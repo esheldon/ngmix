@@ -55,6 +55,9 @@ class GMix(object):
     """
     def __init__(self, ngauss=None, pars=None):
 
+        self._model      = GMIX_FULL
+        self._model_name = 'full'
+
         if ngauss is None and pars is None:
             raise GMixFatalError("send ngauss= or pars=")
 
@@ -168,14 +171,9 @@ class GMix(object):
 
              Should have length 6*ngauss
         """
-        parr=array(pars, dtype='f8', copy=False) 
-        npars=parr.size
-        npars_expected = self._data.size*6
-        if npars != npars_expected:
-            raise GMixFatalError("expected len(pars)=%d but "
-                                 "got %d" % (npars_expected,npars))
-        
-        _fill_full(self._data, parr)
+
+        pars=array(pars, dtype='f8', copy=False) 
+        _gmix.gmix_fill(self._data, pars, self._model)
 
     def copy(self):
         """
@@ -198,9 +196,10 @@ class GMix(object):
                             " got type %s" % type(psf))
 
         ng=len(self)*len(psf)
-        gmix = GMix(ngauss=ng)
-        convolve_fill(gmix, self, psf)
-        return gmix
+        output = GMix(ngauss=ng)
+        #convolve_fill(gmix, self, psf)
+        _gmix.convolve_fill(self, psf, output)
+        return output
 
     def make_image(self, dims, nsub=1, jacobian=None):
         """
@@ -464,7 +463,7 @@ class GMixModel(GMix):
         self._model      = _gmix_model_dict[model]
         self._model_name = _gmix_string_dict[self._model]
 
-        self._set_fill_func()
+        #self._set_fill_func()
 
         self._ngauss = _gmix_ngauss_dict[self._model]
         self._npars  = _gmix_npars_dict[self._model]
@@ -516,12 +515,8 @@ class GMixModel(GMix):
 
         self._pars = pars
 
-        if self._model==GMIX_EXP:
-            print("calling c function")
-            from . import _gmix
-            _gmix.gmix_fill(self._data, pars, 3000)
-        else:
-            self._fill_func(self._data, pars)
+        _gmix.gmix_fill(self._data, pars, self._model)
+        #self._fill_func(self._data, pars)
 
 
 def get_coellip_npars(ngauss):
@@ -1108,6 +1103,7 @@ def _fill_coellip(self, pars):
 
 
 
+'''
 @jit(argtypes=[ _gauss2d[:], float64[:], float64[:], float64[:] ] )
 def _fill_simple(self, pars, fvals, pvals):
     row=pars[0]
@@ -1133,7 +1129,6 @@ def _fill_simple(self, pars, fvals, pvals):
                      (T_i/2.)*(1-e1), 
                      (T_i/2.)*e2,
                      (T_i/2.)*(1+e1))
-
 
 _gauss_fvals = array([1.0],dtype='f8')
 _gauss_pvals = array([1.0],dtype='f8')
@@ -1255,9 +1250,10 @@ _turb_pvals = array([0.596510042804182,0.4034898268889178,1.303069003078001e-07]
 @jit(argtypes=[ _gauss2d[:], float64[:] ] )
 def _fill_turb(self, pars):
     _fill_simple(self, pars, _turb_fvals, _turb_pvals)
+'''
 
 
-
+'''
 @jit(argtypes=[ _gauss2d[:] ])
 def _get_cen(self):
     row=0.0
@@ -1275,7 +1271,8 @@ def _get_cen(self):
     col /= psum
 
     return row, col, psum
-
+'''
+'''
 @jit(argtypes=[ _gauss2d[:], float64, float64 ])
 def _set_cen(self, row, col):
 
@@ -1336,16 +1333,9 @@ def _get_e1e2T(self):
 
     return e1, e2, T
 
+'''
 
-@jit(argtypes=[ _gauss2d[:] ])
-def _get_wmomsum(self):
-    ngauss=self.size
-    wmom=0.0
-    for i in xrange(ngauss):
-        wmom += self[i].p*(self[i].irr + self[i].icc)
-    return wmom
-
-
+'''
 @jit(argtypes=[_gauss2d[:], float64[:]] )
 def _fill_full(self, pars):
 
@@ -1362,7 +1352,9 @@ def _fill_full(self, pars):
                      pars[beg+3],
                      pars[beg+4],
                      pars[beg+5])
+'''
 
+'''
 def convolve_fill(self, gmix, psf):
     """
     Fill "self" with gmix convolved with psf
@@ -1398,7 +1390,8 @@ def _convolve_fill(self, obj_gmix, psf_gmix):
             _gauss2d_set(self, iself, p, row, col, irr, irc, icc)
 
             iself += 1
-
+'''
+'''
 @jit(argtypes=[ _gauss2d[:], float64[:,:], int64 ])
 def _render_slow(self, image, nsub):
     """
@@ -1550,17 +1543,14 @@ def _gauss2d_like(self, row, col):
 # evaluate a single point
 #@jit(argtypes=[ _gauss2d[:], int64, float64[:], float64, float64 ])
 #def _gauss2d_loglike(self, i0, expvals, row, col):
-'''
 @jit(argtypes=[ _gauss2d[:], float64, float64 ])
 def _gauss2d_loglike(self, row, col):
     #like = _gauss2d_like(self, i0, expvals, row, col)
     like = _gauss2d_like(self, row, col)
     loglike = numpy.log( like )
     return loglike
-'''
 
 
-'''
 @jit(argtypes=[ _gauss2d[:], float64[:,:], int64, _jacobian[:], int64, float64[:] ])
 def _render_jacob_fast3(self, image, nsub, j, i0, expvals):
     """
@@ -1775,9 +1765,6 @@ def _loglike_jacob_fast3(self, image, weight, j, i0, expvals):
 
     return loglike, s2n_numer, s2n_denom
 
-'''
-
-'''
 @jit(argtypes=[ _gauss2d[:], float64[:,:], float64[:,:], _jacobian[:], float64[:], int64, int64, float64[:] ])
 def _fdiff_jacob_fast3(self, image, weight, j, fdiff, start, i0, expvals):
     """

@@ -7,8 +7,7 @@ import numpy
 import numba
 from numba import jit, autojit, float64, int64
 from . import gmix
-from .gmix import GMix, _gauss2d_set, _gauss2d, _get_wmomsum
-from .gmix import _exp3_ivals, _exp3_lookup
+from .gmix import GMix, _gauss2d_set, _gauss2d
 from .gexceptions import GMixRangeError, GMixMaxIterEM
 from .priors import srandu
 
@@ -118,9 +117,9 @@ class GMixEM(object):
                                      self._obs.jacobian._data,
                                      numpy.float64(self._sky_guess),
                                      numpy.int64(self._maxiter),
-                                     numpy.float64(self._tol),
-                                     _exp3_ivals[0],
-                                     _exp3_lookup)
+                                     numpy.float64(self._tol))
+                                     #_exp3_ivals[0],
+                                     #_exp3_lookup)
         except ZeroDivisionError:
             raise GMixRangeError("divide by zero")
 
@@ -186,11 +185,21 @@ def _gauss2d_verify(self):
         if self[i].det < 1.0e-200:
             raise GMixRangeError("det <= 0: %s" % self[i].det)
 
+@jit(argtypes=[ _gauss2d[:] ])
+def _get_wmomsum(self):
+    ngauss=self.size
+    wmom=0.0
+    for i in xrange(ngauss):
+        wmom += self[i].p*(self[i].irr + self[i].icc)
+    return wmom
 
-#@autojit(locals=dict(psum=float64, skysum=float64))
-@jit(argtypes=[float64[:,:],_gauss2d[:],_sums[:],_jacobian[:],float64,int64,float64,int64,float64[:]],
+
+#@jit(argtypes=[float64[:,:],_gauss2d[:],_sums[:],_jacobian[:],float64,int64,float64,int64,float64[:]],
+#     locals=dict(psum=float64, skysum=float64))
+#def _run_em(image, gmix, sums, j, sky, maxiter, tol, i0, expvals):
+@jit(argtypes=[float64[:,:],_gauss2d[:],_sums[:],_jacobian[:],float64,int64,float64],
      locals=dict(psum=float64, skysum=float64))
-def _run_em(image, gmix, sums, j, sky, maxiter, tol, i0, expvals):
+def _run_em(image, gmix, sums, j, sky, maxiter, tol):
     """
     this is a mess until we get inlining in numba
     """
@@ -234,9 +243,10 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol, i0, expvals):
                     uv = udiff*vdiff
 
                     chi2=gmix[i].dcc*u2 + gmix[i].drr*v2 - 2.0*gmix[i].drc*uv
-                    #sums[i].gi = gmix[i].norm*gmix[i].p*numpy.exp( -0.5*chi2 )
+                    sums[i].gi = gmix[i].norm*gmix[i].p*numpy.exp( -0.5*chi2 )
                     # note a bigger range is needed than for rendering since we
                     # need to sample the space
+                    '''
                     if chi2 < 50.0 and chi2 >= 0.0:
                         pnorm = gmix[i].pnorm
                         x = -0.5*chi2
@@ -251,6 +261,7 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol, i0, expvals):
                         expval *= fexp
 
                         sums[i].gi = pnorm*expval
+                    '''
                     gtot += sums[i].gi
 
                     sums[i].trowsum = u*sums[i].gi

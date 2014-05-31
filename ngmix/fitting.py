@@ -27,7 +27,6 @@ import time
 from pprint import pprint
 
 from . import gmix
-from .gmix import _exp3_ivals,_exp3_lookup
 from .gmix import GMix, GMixList, MultiBandGMixList
 
 from .jacobian import Jacobian, UnitJacobian
