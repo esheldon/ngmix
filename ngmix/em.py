@@ -7,7 +7,7 @@ import numpy
 import numba
 from numba import jit, autojit, float64, int64
 from . import gmix
-from .gmix import GMix, _gauss2d_set, _gauss2d
+from .gmix import GMix
 from .gexceptions import GMixRangeError, GMixMaxIterEM
 from .priors import srandu
 
@@ -147,6 +147,7 @@ _sums=numba.struct([('gi',float64),
 _sums_dtype=_sums.get_dtype()
 
 
+'''
 @autojit
 def _clear_sums(sums):
     ngauss=sums.size
@@ -163,6 +164,31 @@ def _clear_sums(sums):
         sums[i].u2sum=0
         sums[i].uvsum=0
         sums[i].v2sum=0
+
+# have to send whole array
+@jit(argtypes=[_gauss2d[:], int64, float64, float64, float64, float64, float64, float64])
+def _gauss2d_set(self, i, p, row, col, irr, irc, icc):
+
+    det = irr*icc - irc*irc
+    if det < 1.0e-200:
+        raise GMixRangeError("found det <= 0: %s" % det)
+
+    self[i].p=p
+    self[i].row=row
+    self[i].col=col
+    self[i].irr=irr
+    self[i].irc=irc
+    self[i].icc=icc
+
+    self[i].det = det
+
+    idet=1.0/det
+    self[i].drr = irr*idet
+    self[i].drc = irc*idet
+    self[i].dcc = icc*idet
+    self[i].norm = 1./(2*numpy.pi*numpy.sqrt(det))
+
+    self[i].pnorm = self[i].p*self[i].norm
 
 @autojit
 def _set_gmix_from_sums(gmix, sums):
@@ -219,7 +245,7 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol):
 
     iiter=0
     while iiter < maxiter:
-        _gauss2d_verify(gmix)
+        #_gauss2d_verify(gmix)
 
         psum=0.0
         skysum=0.0
@@ -246,7 +272,7 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol):
                     sums[i].gi = gmix[i].norm*gmix[i].p*numpy.exp( -0.5*chi2 )
                     # note a bigger range is needed than for rendering since we
                     # need to sample the space
-                    '''
+                    """
                     if chi2 < 50.0 and chi2 >= 0.0:
                         pnorm = gmix[i].pnorm
                         x = -0.5*chi2
@@ -261,7 +287,7 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol):
                         expval *= fexp
 
                         sums[i].gi = pnorm*expval
-                    '''
+                    """
                     gtot += sums[i].gi
 
                     sums[i].trowsum = u*sums[i].gi
@@ -307,7 +333,7 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol):
         iiter += 1
 
     return iiter, fdiff
-
+'''
 
 def test_1gauss(counts=100.0, noise=0.0, maxiter=100, show=False):
     import time

@@ -106,20 +106,27 @@ class GMix(object):
         """
         get the center position (row,col)
         """
-        row,col,psum=_get_cen(self._data)
+        #row,col,psum=_get_cen(self._data)
+        row,col,psum=_gmix.get_cen(self._data)
         return row,col
     
     def set_cen(self, row, col):
         """
         Move the mixture to a new center
         """
-        _set_cen(self._data, row, col)
+        row0,col0 = self.get_cen()
+        row_shift = row - row0
+        col_shift = col - col0
+
+        self._data['row'] += row_shift
+        self._data['col'] += col_shift
 
     def get_T(self):
         """
         get weighted average T sum(p*T)/sum(p)
         """
-        T,psum=_get_T(self._data)
+        #T,psum=_get_T(self._data)
+        T,psum=_gmix.get_T(self._data)
         return T
 
     def get_e1e2T(self):
@@ -198,7 +205,7 @@ class GMix(object):
         ng=len(self)*len(psf)
         output = GMix(ngauss=ng)
         #convolve_fill(gmix, self, psf)
-        _gmix.convolve_fill(self, psf, output)
+        _gmix.convolve_fill(self._data, psf._data, output._data)
         return output
 
     def make_image(self, dims, nsub=1, jacobian=None):
@@ -1010,6 +1017,20 @@ _gmix_ngauss_dict={GMIX_GAUSS:1,
                    GMIX_COELLIP4:4}
 
 
+_gauss2d_dtype=[('p','f8'),
+                ('row','f8'),
+                ('col','f8'),
+                ('irr','f8'),
+                ('irc','f8'),
+                ('icc','f8'),
+                ('det','f8'),
+                ('drr','f8'),
+                ('drc','f8'),
+                ('dcc','f8'),
+                ('norm','f8'),
+                ('pnorm','f8')]
+
+'''
 _gauss2d=numba.struct([('p',float64),
                        ('row',float64),
                        ('col',float64),
@@ -1024,7 +1045,7 @@ _gauss2d=numba.struct([('p',float64),
                        ('pnorm',float64)],packed=True)
 
 _gauss2d_dtype=_gauss2d.get_dtype()
-
+'''
 
 def get_model_num(model):
     """
@@ -1048,31 +1069,7 @@ def get_model_npars(model):
     return _gmix_npars_dict[mi]
 
 
-# have to send whole array
-@jit(argtypes=[_gauss2d[:], int64, float64, float64, float64, float64, float64, float64])
-def _gauss2d_set(self, i, p, row, col, irr, irc, icc):
-
-    det = irr*icc - irc*irc
-    if det < 1.0e-200:
-        raise GMixRangeError("found det <= 0: %s" % det)
-
-    self[i].p=p
-    self[i].row=row
-    self[i].col=col
-    self[i].irr=irr
-    self[i].irc=irc
-    self[i].icc=icc
-
-    self[i].det = det
-
-    idet=1.0/det
-    self[i].drr = irr*idet
-    self[i].drc = irc*idet
-    self[i].dcc = icc*idet
-    self[i].norm = 1./(2*numpy.pi*numpy.sqrt(det))
-
-    self[i].pnorm = self[i].p*self[i].norm
-
+'''
 @jit(argtypes=[ _gauss2d[:], float64[:] ] )
 def _fill_coellip(self, pars):
 
@@ -1101,9 +1098,6 @@ def _fill_coellip(self, pars):
                      (T/2.)*e2,
                      (T/2.)*(1+e1))
 
-
-
-'''
 @jit(argtypes=[ _gauss2d[:], float64[:], float64[:], float64[:] ] )
 def _fill_simple(self, pars, fvals, pvals):
     row=pars[0]
@@ -1271,8 +1265,6 @@ def _get_cen(self):
     col /= psum
 
     return row, col, psum
-'''
-'''
 @jit(argtypes=[ _gauss2d[:], float64, float64 ])
 def _set_cen(self, row, col):
 
@@ -1333,9 +1325,6 @@ def _get_e1e2T(self):
 
     return e1, e2, T
 
-'''
-
-'''
 @jit(argtypes=[_gauss2d[:], float64[:]] )
 def _fill_full(self, pars):
 
@@ -1390,8 +1379,6 @@ def _convolve_fill(self, obj_gmix, psf_gmix):
             _gauss2d_set(self, iself, p, row, col, irr, irc, icc)
 
             iself += 1
-'''
-'''
 @jit(argtypes=[ _gauss2d[:], float64[:,:], int64 ])
 def _render_slow(self, image, nsub):
     """
