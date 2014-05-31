@@ -256,7 +256,7 @@ static PyObject * PyGMix_render(PyObject* self, PyObject* args) {
     n_col=PyArray_DIM(image_obj, 1);
 
     for (row=0; row < n_row; row++) {
-        for (col=0; col < n_row; col++) {
+        for (col=0; col < n_col; col++) {
 
             tval = 0.0;
             trow = row-offset;
@@ -322,7 +322,7 @@ static PyObject * PyGMix_render_jacob(PyObject* self, PyObject* args) {
     n_col=PyArray_DIM(image_obj, 1);
 
     for (row=0; row < n_row; row++) {
-        for (col=0; col < n_row; col++) {
+        for (col=0; col < n_col; col++) {
 
             tval = 0.0;
             trow = row-offset;
@@ -389,7 +389,7 @@ static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
         u=jacob->dudrow*(row - jacob->row0) + jacob->dudcol*(0 - jacob->col0);
         v=jacob->dvdrow*(row - jacob->row0) + jacob->dvdcol*(0 - jacob->col0);
 
-        for (col=0; col < n_row; col++) {
+        for (col=0; col < n_col; col++) {
 
             ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
             if ( ivar > 0.0) {
@@ -434,7 +434,7 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
     struct PyGMix_Jacobian *jacob=NULL;
 
     double data=0, ivar=0, ierr=0, u=0, v=0, *fdiff_ptr=NULL;
-    double model_val=0, diff=0;
+    double model_val=0;
     double s2n_numer=0.0, s2n_denom=0.0;
 
     PyObject* retval=NULL;
@@ -461,7 +461,7 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
         u=jacob->dudrow*(row - jacob->row0) + jacob->dudcol*(0 - jacob->col0);
         v=jacob->dvdrow*(row - jacob->row0) + jacob->dvdcol*(0 - jacob->col0);
 
-        for (col=0; col < n_row; col++) {
+        for (col=0; col < n_col; col++) {
 
             //printf("row: %ld col: %ld start: %d\n", row, col, start);
 
@@ -471,8 +471,6 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
 
                 data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
                 model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
-
-                diff = model_val-data;
 
                 (*fdiff_ptr) = (model_val-data)*ierr;
                 s2n_numer += data*model_val*ivar;
