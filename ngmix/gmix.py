@@ -516,7 +516,12 @@ class GMixModel(GMix):
 
         self._pars = pars
 
-        self._fill_func(self._data, pars)
+        if self._model==GMIX_EXP:
+            print("calling c function")
+            from . import _gmix
+            _gmix.gmix_fill(self._data, pars, 3000)
+        else:
+            self._fill_func(self._data, pars)
 
 
 def get_coellip_npars(ngauss):
