@@ -219,6 +219,7 @@ def _get_wmomsum(self):
         wmom += self[i].p*(self[i].irr + self[i].icc)
     return wmom
 
+'''
 
 #@jit(argtypes=[float64[:,:],_gauss2d[:],_sums[:],_jacobian[:],float64,int64,float64,int64,float64[:]],
 #     locals=dict(psum=float64, skysum=float64))
@@ -333,7 +334,6 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol):
         iiter += 1
 
     return iiter, fdiff
-'''
 
 def test_1gauss(counts=100.0, noise=0.0, maxiter=100, show=False):
     import time
