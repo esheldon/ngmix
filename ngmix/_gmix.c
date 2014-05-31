@@ -69,58 +69,6 @@ static void gmix_get_cen(const struct PyGMix_Gauss2D *self,
     (*col) /= (*psum);
 }
 
-static PyObject * PyGMix_get_cen(PyObject* self, PyObject* args) {
-    PyObject* gmix_obj=NULL;
-    struct PyGMix_Gauss2D *gmix=NULL;
-    double row=0, col=0, psum=0;
-
-    if (!PyArg_ParseTuple(args, (char*)"O", &gmix_obj)) {
-
-        return NULL;
-    }
-
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
-    npy_intp n_gauss=PyArray_SIZE(gmix_obj);
-
-    gmix_get_cen(gmix, n_gauss, &row, &col, &psum);
-
-    PyObject* retval=PyTuple_New(3);
-    PyTuple_SetItem(retval,0,PyFloat_FromDouble(row));
-    PyTuple_SetItem(retval,1,PyFloat_FromDouble(col));
-    PyTuple_SetItem(retval,2,PyFloat_FromDouble(psum));
-    return retval;
-
-}
-
-static PyObject * PyGMix_get_T(PyObject* self, PyObject* args) {
-    PyObject* gmix_obj=NULL;
-    struct PyGMix_Gauss2D *gmix=NULL;
-    double T=0, psum=0, p=0;
-    npy_intp i=0;
-
-    if (!PyArg_ParseTuple(args, (char*)"O", &gmix_obj)) {
-        return NULL;
-    }
-
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
-    npy_intp n_gauss=PyArray_SIZE(gmix_obj);
-
-    for (i=0; i<n_gauss; i++) {
-        struct PyGMix_Gauss2D *gauss=&gmix[i];
-        p=gauss->p;
-        T += (gauss->irr + gauss->icc)*p;
-        psum += p;
-    }
-
-    T /= psum;
-
-    PyObject* retval=PyTuple_New(2);
-    PyTuple_SetItem(retval,0,PyFloat_FromDouble(T));
-    PyTuple_SetItem(retval,1,PyFloat_FromDouble(psum));
-    return retval;
-
-}
-
 
 
 /* 
@@ -837,8 +785,6 @@ static PyObject * PyGMix_test(PyObject* self, PyObject* args) {
 static PyMethodDef pygauss2d_funcs[] = {
     {"test",        (PyCFunction)PyGMix_test,         METH_VARARGS,  "test\n\nprint and return."},
 
-    {"get_cen",     (PyCFunction)PyGMix_get_cen,  METH_VARARGS,  "get row,col,psum\n"},
-    {"get_T",     (PyCFunction)PyGMix_get_T,  METH_VARARGS,  "get T,psum\n"},
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
     {"fill_fdiff",  (PyCFunction)PyGMix_fill_fdiff,  METH_VARARGS,  "fill fdiff for LM\n"},
     {"render",      (PyCFunction)PyGMix_render, METH_VARARGS,  "render without jacobian\n"},

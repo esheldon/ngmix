@@ -106,7 +106,14 @@ class GMix(object):
         """
         get the center position (row,col)
         """
-        #row,col,psum=_get_cen(self._data)
+        d=self._data
+        psum=d['p'].sum()
+        rowsum=(d['row']*d['p']).sum()
+        colsum=(d['col']*d['p']).sum()
+
+        row=rowsum/psum
+        col=colsum/psum
+
         row,col,psum=_gmix.get_cen(self._data)
         return row,col
     
@@ -124,9 +131,15 @@ class GMix(object):
     def get_T(self):
         """
         get weighted average T sum(p*T)/sum(p)
+
+        Warning: only really works if the centers are the same
         """
-        #T,psum=_get_T(self._data)
-        T,psum=_gmix.get_T(self._data)
+        d=self._data
+        psum=d['p'].sum()
+
+        irrsum=(d['irr']*d['p']).sum()
+        iccsum=(d['icc']*d['p']).sum()
+        T = (irrsum + iccsum)/psum
         return T
 
     def get_e1e2T(self):
@@ -135,7 +148,17 @@ class GMix(object):
 
         Warning: only really works if the centers are the same
         """
-        e1,e2,T=_get_e1e2T(self._data)
+
+        d=self._data
+        ipsum=1.0/d['p'].sum()
+
+        irr=(d['irr']*d['p']).sum()*ipsum
+        irc=(d['irc']*d['p']).sum()*ipsum
+        icc=(d['icc']*d['p']).sum()*ipsum
+        T = (irrsum + iccsum)*ipsum
+
+        e1=(icc-irr)/T
+        e2=2.0*irc/T
         return e1,e2,T
 
     def get_g1g2T(self):
@@ -144,17 +167,19 @@ class GMix(object):
 
         Warning: only really works if the centers are the same
         """
-        e1,e2,T=_get_e1e2T(self._data)
+        e1,e2,T=self.get_e1e2T()
         g1,g2=e1e2_to_g1g2(e1,e2)
         return g1,g2,T
 
-    def get_psum(self):
+    def get_flux(self):
         """
         get sum(p)
         """
         return self._data['p'].sum()
+    # alias
+    get_psum=get_flux
 
-    def set_psum(self, psum):
+    def set_flux(self, psum):
         """
         set a new value for sum(p)
         """
@@ -162,6 +187,8 @@ class GMix(object):
         rat = psum/psum0
         self._data['p'] *= rat
         self._data['pnorm'] = self._data['p']*self._data['norm']
+    # alias
+    set_psum=set_flux
 
     def fill(self, pars):
         """
@@ -470,34 +497,55 @@ class GMixModel(GMix):
         self._model      = _gmix_model_dict[model]
         self._model_name = _gmix_string_dict[self._model]
 
-        #self._set_fill_func()
-
         self._ngauss = _gmix_ngauss_dict[self._model]
         self._npars  = _gmix_npars_dict[self._model]
 
         self.reset()
         self.fill(pars)
 
-    def _set_fill_func(self):
+    def get_cen(self):
         """
-        set the fill function
+        get the center position (row,col)
         """
-        if self._model==GMIX_GAUSS:
-            self._fill_func=_fill_gauss
-        elif self._model==GMIX_EXP:
-            self._fill_func=_fill_exp
-        elif self._model==GMIX_DEV:
-            self._fill_func=_fill_dev
-        elif self._model==GMIX_TURB:
-            self._fill_func=_fill_turb
-        elif self._model==GMIX_BDC:
-            self._fill_func=_fill_bdc
-        elif self._model==GMIX_BDF:
-            self._fill_func=_fill_bdf
-        else:
-            raise GMixFatalError("unsupported model: "
-                                 "'%s'" % self._model_name)
+        return self._pars[0], self._pars[1]
+    
+    def set_cen(self, row, col):
+        """
+        Move the mixture to a new center
 
+        set pars as well
+        """
+        pars=self._pars
+        row0,col0=pars[0],pars[1]
+
+        row_shift = row - row0
+        col_shift = col - col0
+
+        self._data['row'] += row_shift
+        self._data['col'] += col_shift
+
+        pars[0] = row
+        pars[1] = col
+
+    def get_g1g2T(self):
+        """
+        Get g1,g2 and T for the total gmix.
+        """
+        return self._pars[2], self._pars[3], self._pars[4]
+
+    def get_e1e2T(self):
+        """
+        Get g1,g2 and T for the total gmix.
+        """
+        g1,g2,T=self._pars[2], self._pars[3], self._pars[4]
+        e1,e2=g1g2_to_e1e2(g1,g2)
+        return e1,e2,T
+
+    def get_T(self):
+        """
+        Get g1,g2 and T for the total gmix.
+        """
+        return self._pars[4]
 
     def fill(self, pars_in):
         """
@@ -523,7 +571,6 @@ class GMixModel(GMix):
         self._pars = pars
 
         _gmix.gmix_fill(self._data, pars, self._model)
-        #self._fill_func(self._data, pars)
 
 
 def get_coellip_npars(ngauss):

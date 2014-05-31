@@ -101,7 +101,6 @@ class Shape(ShapeBase):
         self.set_g1g2(g1rot, g2rot)
 
 
-#@jit(argtypes=[ float64, float64 ])
 @autojit
 def g1g2_to_e1e2(g1, g2):
     """
@@ -128,7 +127,7 @@ def g1g2_to_e1e2(g1, g2):
     
     return e1,e2
 
-@jit(argtypes=[float64,float64])
+@autojit(argtypes=[float64,float64])
 def e1e2_to_g1g2(e1, e2):
 
     e = numpy.sqrt(e1*e1 + e2*e2)
