@@ -6,8 +6,12 @@ from __future__ import print_function
 import numpy
 import numba
 from numba import jit, autojit, float64, int64
+
 from . import gmix
 from .gmix import GMix
+
+from . import _gmix
+
 from .gexceptions import GMixRangeError, GMixMaxIterEM
 from .priors import srandu
 
@@ -58,6 +62,8 @@ class GMixEM(object):
 
         self._obs=obs
 
+        self._counts=obs.image.sum()
+
         self._gm        = None
         self._sums      = None
         self._result    = None
@@ -86,6 +92,50 @@ class GMixEM(object):
         return im
 
     def go(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
+        """
+        Run the em algorithm from the input starting guesses
+
+        parameters
+        ----------
+        gmix_guess: GMix
+            A gaussian mixture (GMix or child class) representing
+            a starting guess for the algorithm
+        sky_guess: number
+            A guess at the sky value
+        maxiter: number, optional
+            The maximum number of iterations, default 100
+        tol: number, optional
+            The tolerance in the moments that implies convergence,
+            default 1.e-6
+        """
+
+        self._gm        = gmix_guess.copy()
+        self._ngauss    = len(self._gm)
+        self._sums      = numpy.zeros(self._ngauss, dtype=_sums_dtype)
+        self._sky_guess = sky_guess
+        self._maxiter   = maxiter
+        self._tol       = tol
+
+        # will raise GMixRangeError, but not GMixMaxIterEM, which
+        # we handle below
+        numiter, fdiff = _gmix.em_run(self._gm._data,
+                                      self._obs.image,
+                                      self._obs.jacobian._data,
+                                      self._sums,
+                                      numpy.float64(self._sky_guess),
+                                      self._counts,
+                                      self._tol,
+                                      self._maxiter)
+
+        self._result={'numiter':numiter,
+                      'fdiff':fdiff}
+
+        if numiter >= maxiter:
+            raise GMixMaxIterEM("reached max iter: %s" % maxiter)
+    # alias
+    run_em=go
+
+    def go_old(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
         """
         Run the em algorithm from the input starting guesses
 
