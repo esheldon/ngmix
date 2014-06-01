@@ -1,5 +1,7 @@
 from ._gmix import GMixRangeError
 from ._gmix import GMixFatalError
+from ._gmix import GMixFatalError
+#from ._gmix import GMixMaxIterEM
 
 class GMixMaxIterEM(Exception):
     """
