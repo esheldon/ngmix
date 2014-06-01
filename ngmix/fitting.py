@@ -29,6 +29,8 @@ from pprint import pprint
 from . import gmix
 from .gmix import GMix, GMixList, MultiBandGMixList
 
+from . import _gmix
+
 from .jacobian import Jacobian, UnitJacobian
 
 from . import priors
@@ -320,6 +322,13 @@ class FitterBase(object):
         """
         initialize the list of lists of gaussian mixtures
         """
+        psf=self.obs[0][0].psf
+        if psf is None:
+            dopsf=False
+            print("no psf")
+        else:
+            dopsf=True
+
         gmix_all0 = MultiBandGMixList()
         gmix_all  = MultiBandGMixList()
 
@@ -331,10 +340,15 @@ class FitterBase(object):
             band_pars=self._get_band_pars(pars, band)
 
             for obs in obs_list:
-                psf_gmix=obs.psf.gmix
+                if dopsf:
+                    psf_gmix=obs.psf.gmix
 
-                gm0=gmix.make_gmix_model(band_pars, self.model)
-                gm=gm0.convolve(psf_gmix)
+                    gm0=gmix.make_gmix_model(band_pars, self.model)
+                    gm=gm0.convolve(psf_gmix)
+                else:
+                    gm0=gmix.make_gmix_model(band_pars, self.model)
+                    gm=gm0
+
 
                 gmix_list0.append(gm0)
                 gmix_list.append(gm)
@@ -350,6 +364,11 @@ class FitterBase(object):
         Fill the list of lists of gmix objects for the given parameters
         """
 
+        psf=self.obs[0][0].psf
+        if psf is None:
+            self._fill_gmix_all_nopsf(pars)
+            return
+
         for band,obs_list in enumerate(self.obs):
             gmix_list0=self._gmix_all0[band]
             gmix_list=self._gmix_all[band]
@@ -359,22 +378,34 @@ class FitterBase(object):
 
             for i,obs in enumerate(obs_list):
 
-                psf_gmix = obs.psf.gmix
+                psf_gmix=obs.psf.gmix
 
                 gm0=gmix_list0[i]
                 gm=gmix_list[i]
 
+                gm0.fill(band_pars)
+                _gmix.convolve_fill(gm0._data, psf_gmix._data, gm._data)
+
+    def _fill_gmix_all_nopsf(self, pars):
+        """
+        Fill the list of lists of gmix objects for the given parameters
+        """
+
+        for band,obs_list in enumerate(self.obs):
+            gmix_list=self._gmix_all[band]
+
+            # pars for this band, in linear space
+            band_pars=self._get_band_pars(pars, band)
+
+            for i,obs in enumerate(obs_list):
+
+                gm=gmix_list0[i]
+
                 try:
-                    gm0.fill(band_pars)
-                    '''
-                    if self.model==gmix.GMIX_SERSIC:
-                        gm0.fill(band_pars)
-                    else:
-                        self._fill_gmix_func(gm0._data, band_pars)
-                    gmix._convolve_fill(gm._data, gm0._data, psf_gmix._data)
-                    '''
+                    gm.fill(band_pars)
                 except ZeroDivisionError:
                     raise GMixRangeError("zero division")
+
 
     def _get_priors(self, pars):
         """
@@ -680,7 +711,6 @@ class LMSimple(FitterBase):
         if self.prior is None:
             nprior=0
         else:
-            # make them sqrt(chi2)=sqrt(-2*ln(p))
             nprior=self.prior.fill_fdiff(pars, fdiff)
 
         return nprior
@@ -2510,14 +2540,6 @@ class MCMCSimpleJointLogPars(MCMCSimple):
         return names
 
 
-
-class MCMCGaussPSF(MCMCSimple):
-    def __init__(self, image, weight, jacobian, **keys):
-        raise RuntimeError("adapt to new system")
-        model=gmix.GMIX_GAUSS
-        if 'psf' in keys:
-            raise RuntimeError("don't send psf= when fitting a psf")
-        super(MCMCGaussPSF,self).__init__(image, weight, jacobian, model, **keys)
 
 
 def print_pars(pars, stream=stdout, fmt='%10.6g',front=None):

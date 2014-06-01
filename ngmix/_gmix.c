@@ -186,6 +186,7 @@ static const double PyGMix_fvals_exp[] = {
     2.1623306025075739};
 
 static const double PyGMix_pvals_dev[] = {
+    6.5288960012625658e-05,
     0.00044199216814302695, 
     0.0020859587871659754, 
     0.0075913681418996841, 
@@ -424,6 +425,7 @@ static PyObject * PyGMix_gmix_fill(PyObject* self, PyObject* args) {
         // raise an exception
         return NULL;
     } else {
+        Py_INCREF(Py_None);
         return Py_None;
     }
 }
@@ -439,7 +441,7 @@ static int convolve_fill(const struct PyGMix_Gauss2D *gmix, npy_intp n_gauss,
 
     ntot = n_gauss*psf_n_gauss;
     if (ntot != out_n_gauss) {
-        PyErr_Format(GMixRangeError, 
+        PyErr_Format(GMixFatalError, 
                      "target gmix is wrong size %ld, expected %ld",
                      out_n_gauss, ntot);
         goto _convolve_fill_bail;
@@ -513,6 +515,7 @@ static PyObject * PyGMix_convolve_fill(PyObject* self, PyObject* args) {
         // raise an exception
         return NULL;
     } else {
+        Py_INCREF(Py_None);
         return Py_None;
     }
 }
@@ -575,6 +578,7 @@ static PyObject * PyGMix_render(PyObject* self, PyObject* args) {
         } // cols
     } // rows
 
+    Py_INCREF(Py_None);
     return Py_None;
 }
 
@@ -650,6 +654,7 @@ static PyObject * PyGMix_render_jacob(PyObject* self, PyObject* args) {
         } // cols
     } // rows
 
+    Py_INCREF(Py_None);
     return Py_None;
 }
 
