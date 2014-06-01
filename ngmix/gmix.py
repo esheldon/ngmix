@@ -55,6 +55,9 @@ class GMix(object):
     """
     def __init__(self, ngauss=None, pars=None):
 
+        self._model      = GMIX_FULL
+        self._model_name = 'full'
+
         if ngauss is None and pars is None:
             raise GMixFatalError("send ngauss= or pars=")
 
@@ -103,20 +106,40 @@ class GMix(object):
         """
         get the center position (row,col)
         """
-        row,col,psum=_get_cen(self._data)
+        d=self._data
+        psum=d['p'].sum()
+        rowsum=(d['row']*d['p']).sum()
+        colsum=(d['col']*d['p']).sum()
+
+        row=rowsum/psum
+        col=colsum/psum
+
         return row,col
     
     def set_cen(self, row, col):
         """
         Move the mixture to a new center
         """
-        _set_cen(self._data, row, col)
+        row0,col0 = self.get_cen()
+        row_shift = row - row0
+        col_shift = col - col0
+
+        self._data['row'] += row_shift
+        self._data['col'] += col_shift
 
     def get_T(self):
         """
         get weighted average T sum(p*T)/sum(p)
+
+        Warning: only really works if the centers are the same
         """
-        T,psum=_get_T(self._data)
+        d=self._data
+        print(self)
+        psum=d['p'].sum()
+
+        irrsum=(d['irr']*d['p']).sum()
+        iccsum=(d['icc']*d['p']).sum()
+        T = (irrsum + iccsum)/psum
         return T
 
     def get_e1e2T(self):
@@ -125,7 +148,17 @@ class GMix(object):
 
         Warning: only really works if the centers are the same
         """
-        e1,e2,T=_get_e1e2T(self._data)
+
+        d=self._data
+        ipsum=1.0/d['p'].sum()
+
+        irr=(d['irr']*d['p']).sum()*ipsum
+        irc=(d['irc']*d['p']).sum()*ipsum
+        icc=(d['icc']*d['p']).sum()*ipsum
+        T = irr + icc
+
+        e1=(icc-irr)/T
+        e2=2.0*irc/T
         return e1,e2,T
 
     def get_g1g2T(self):
@@ -134,17 +167,19 @@ class GMix(object):
 
         Warning: only really works if the centers are the same
         """
-        e1,e2,T=_get_e1e2T(self._data)
+        e1,e2,T=self.get_e1e2T()
         g1,g2=e1e2_to_g1g2(e1,e2)
         return g1,g2,T
 
-    def get_psum(self):
+    def get_flux(self):
         """
         get sum(p)
         """
         return self._data['p'].sum()
+    # alias
+    get_psum=get_flux
 
-    def set_psum(self, psum):
+    def set_flux(self, psum):
         """
         set a new value for sum(p)
         """
@@ -152,6 +187,8 @@ class GMix(object):
         rat = psum/psum0
         self._data['p'] *= rat
         self._data['pnorm'] = self._data['p']*self._data['norm']
+    # alias
+    set_psum=set_flux
 
     def fill(self, pars):
         """
@@ -168,14 +205,9 @@ class GMix(object):
 
              Should have length 6*ngauss
         """
-        parr=array(pars, dtype='f8', copy=False) 
-        npars=parr.size
-        npars_expected = self._data.size*6
-        if npars != npars_expected:
-            raise GMixFatalError("expected len(pars)=%d but "
-                                 "got %d" % (npars_expected,npars))
-        
-        _fill_full(self._data, parr)
+
+        pars=array(pars, dtype='f8', copy=False) 
+        _gmix.gmix_fill(self._data, pars, self._model)
 
     def copy(self):
         """
@@ -198,9 +230,10 @@ class GMix(object):
                             " got type %s" % type(psf))
 
         ng=len(self)*len(psf)
-        gmix = GMix(ngauss=ng)
-        convolve_fill(gmix, self, psf)
-        return gmix
+        output = GMix(ngauss=ng)
+        #convolve_fill(gmix, self, psf)
+        _gmix.convolve_fill(self._data, psf._data, output._data)
+        return output
 
     def make_image(self, dims, nsub=1, jacobian=None):
         """
@@ -464,34 +497,55 @@ class GMixModel(GMix):
         self._model      = _gmix_model_dict[model]
         self._model_name = _gmix_string_dict[self._model]
 
-        self._set_fill_func()
-
         self._ngauss = _gmix_ngauss_dict[self._model]
         self._npars  = _gmix_npars_dict[self._model]
 
         self.reset()
         self.fill(pars)
 
-    def _set_fill_func(self):
+    def get_cen(self):
         """
-        set the fill function
+        get the center position (row,col)
         """
-        if self._model==GMIX_GAUSS:
-            self._fill_func=_fill_gauss
-        elif self._model==GMIX_EXP:
-            self._fill_func=_fill_exp
-        elif self._model==GMIX_DEV:
-            self._fill_func=_fill_dev
-        elif self._model==GMIX_TURB:
-            self._fill_func=_fill_turb
-        elif self._model==GMIX_BDC:
-            self._fill_func=_fill_bdc
-        elif self._model==GMIX_BDF:
-            self._fill_func=_fill_bdf
-        else:
-            raise GMixFatalError("unsupported model: "
-                                 "'%s'" % self._model_name)
+        return self._pars[0], self._pars[1]
+    
+    def set_cen(self, row, col):
+        """
+        Move the mixture to a new center
 
+        set pars as well
+        """
+        pars=self._pars
+        row0,col0=pars[0],pars[1]
+
+        row_shift = row - row0
+        col_shift = col - col0
+
+        self._data['row'] += row_shift
+        self._data['col'] += col_shift
+
+        pars[0] = row
+        pars[1] = col
+
+    def get_g1g2T(self):
+        """
+        Get g1,g2 and T for the total gmix.
+        """
+        return self._pars[2], self._pars[3], self._pars[4]
+
+    def get_e1e2T(self):
+        """
+        Get g1,g2 and T for the total gmix.
+        """
+        g1,g2,T=self._pars[2], self._pars[3], self._pars[4]
+        e1,e2=g1g2_to_e1e2(g1,g2)
+        return e1,e2,T
+
+    def get_T(self):
+        """
+        Get g1,g2 and T for the total gmix.
+        """
+        return self._pars[4]
 
     def fill(self, pars_in):
         """
@@ -516,7 +570,7 @@ class GMixModel(GMix):
 
         self._pars = pars
 
-        self._fill_func(self._data, pars)
+        _gmix.gmix_fill(self._data, pars, self._model)
 
 
 def get_coellip_npars(ngauss):
@@ -1010,6 +1064,20 @@ _gmix_ngauss_dict={GMIX_GAUSS:1,
                    GMIX_COELLIP4:4}
 
 
+_gauss2d_dtype=[('p','f8'),
+                ('row','f8'),
+                ('col','f8'),
+                ('irr','f8'),
+                ('irc','f8'),
+                ('icc','f8'),
+                ('det','f8'),
+                ('drr','f8'),
+                ('drc','f8'),
+                ('dcc','f8'),
+                ('norm','f8'),
+                ('pnorm','f8')]
+
+'''
 _gauss2d=numba.struct([('p',float64),
                        ('row',float64),
                        ('col',float64),
@@ -1024,7 +1092,7 @@ _gauss2d=numba.struct([('p',float64),
                        ('pnorm',float64)],packed=True)
 
 _gauss2d_dtype=_gauss2d.get_dtype()
-
+'''
 
 def get_model_num(model):
     """
@@ -1048,31 +1116,7 @@ def get_model_npars(model):
     return _gmix_npars_dict[mi]
 
 
-# have to send whole array
-@jit(argtypes=[_gauss2d[:], int64, float64, float64, float64, float64, float64, float64])
-def _gauss2d_set(self, i, p, row, col, irr, irc, icc):
-
-    det = irr*icc - irc*irc
-    if det < 1.0e-200:
-        raise GMixRangeError("found det <= 0: %s" % det)
-
-    self[i].p=p
-    self[i].row=row
-    self[i].col=col
-    self[i].irr=irr
-    self[i].irc=irc
-    self[i].icc=icc
-
-    self[i].det = det
-
-    idet=1.0/det
-    self[i].drr = irr*idet
-    self[i].drc = irc*idet
-    self[i].dcc = icc*idet
-    self[i].norm = 1./(2*numpy.pi*numpy.sqrt(det))
-
-    self[i].pnorm = self[i].p*self[i].norm
-
+'''
 @jit(argtypes=[ _gauss2d[:], float64[:] ] )
 def _fill_coellip(self, pars):
 
@@ -1101,8 +1145,6 @@ def _fill_coellip(self, pars):
                      (T/2.)*e2,
                      (T/2.)*(1+e1))
 
-
-
 @jit(argtypes=[ _gauss2d[:], float64[:], float64[:], float64[:] ] )
 def _fill_simple(self, pars, fvals, pvals):
     row=pars[0]
@@ -1128,7 +1170,6 @@ def _fill_simple(self, pars, fvals, pvals):
                      (T_i/2.)*(1-e1), 
                      (T_i/2.)*e2,
                      (T_i/2.)*(1+e1))
-
 
 _gauss_fvals = array([1.0],dtype='f8')
 _gauss_pvals = array([1.0],dtype='f8')
@@ -1250,9 +1291,10 @@ _turb_pvals = array([0.596510042804182,0.4034898268889178,1.303069003078001e-07]
 @jit(argtypes=[ _gauss2d[:], float64[:] ] )
 def _fill_turb(self, pars):
     _fill_simple(self, pars, _turb_fvals, _turb_pvals)
+'''
 
 
-
+'''
 @jit(argtypes=[ _gauss2d[:] ])
 def _get_cen(self):
     row=0.0
@@ -1270,7 +1312,6 @@ def _get_cen(self):
     col /= psum
 
     return row, col, psum
-
 @jit(argtypes=[ _gauss2d[:], float64, float64 ])
 def _set_cen(self, row, col):
 
@@ -1331,16 +1372,6 @@ def _get_e1e2T(self):
 
     return e1, e2, T
 
-
-@jit(argtypes=[ _gauss2d[:] ])
-def _get_wmomsum(self):
-    ngauss=self.size
-    wmom=0.0
-    for i in xrange(ngauss):
-        wmom += self[i].p*(self[i].irr + self[i].icc)
-    return wmom
-
-
 @jit(argtypes=[_gauss2d[:], float64[:]] )
 def _fill_full(self, pars):
 
@@ -1357,7 +1388,9 @@ def _fill_full(self, pars):
                      pars[beg+3],
                      pars[beg+4],
                      pars[beg+5])
+'''
 
+'''
 def convolve_fill(self, gmix, psf):
     """
     Fill "self" with gmix convolved with psf
@@ -1393,7 +1426,6 @@ def _convolve_fill(self, obj_gmix, psf_gmix):
             _gauss2d_set(self, iself, p, row, col, irr, irc, icc)
 
             iself += 1
-
 @jit(argtypes=[ _gauss2d[:], float64[:,:], int64 ])
 def _render_slow(self, image, nsub):
     """
@@ -1545,17 +1577,14 @@ def _gauss2d_like(self, row, col):
 # evaluate a single point
 #@jit(argtypes=[ _gauss2d[:], int64, float64[:], float64, float64 ])
 #def _gauss2d_loglike(self, i0, expvals, row, col):
-'''
 @jit(argtypes=[ _gauss2d[:], float64, float64 ])
 def _gauss2d_loglike(self, row, col):
     #like = _gauss2d_like(self, i0, expvals, row, col)
     like = _gauss2d_like(self, row, col)
     loglike = numpy.log( like )
     return loglike
-'''
 
 
-'''
 @jit(argtypes=[ _gauss2d[:], float64[:,:], int64, _jacobian[:], int64, float64[:] ])
 def _render_jacob_fast3(self, image, nsub, j, i0, expvals):
     """
@@ -1770,9 +1799,6 @@ def _loglike_jacob_fast3(self, image, weight, j, i0, expvals):
 
     return loglike, s2n_numer, s2n_denom
 
-'''
-
-'''
 @jit(argtypes=[ _gauss2d[:], float64[:,:], float64[:,:], _jacobian[:], float64[:], int64, int64, float64[:] ])
 def _fdiff_jacob_fast3(self, image, weight, j, fdiff, start, i0, expvals):
     """

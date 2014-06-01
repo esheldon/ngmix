@@ -4,7 +4,6 @@ from numba import float64, int64, void, autojit, jit
 
 from .gexceptions import GMixRangeError, GMixFatalError
 
-#@jit(argtypes=[float64,float64,float64,float64])
 @autojit
 def shear_reduced(g1, g2, s1, s2):
     """
@@ -101,7 +100,6 @@ class Shape(ShapeBase):
         self.set_g1g2(g1rot, g2rot)
 
 
-#@jit(argtypes=[ float64, float64 ])
 @autojit
 def g1g2_to_e1e2(g1, g2):
     """
@@ -128,7 +126,7 @@ def g1g2_to_e1e2(g1, g2):
     
     return e1,e2
 
-@jit(argtypes=[float64,float64])
+@autojit
 def e1e2_to_g1g2(e1, e2):
 
     e = numpy.sqrt(e1*e1 + e2*e2)
@@ -179,7 +177,7 @@ def g1g2_to_eta1eta2_array(g1, g2):
     return eta1,eta2, good
 
 
-@jit(argtypes=[float64,float64])
+@autojit
 def g1g2_to_eta1eta2(g1, g2):
     """
     convert reduced shear g1,g2 to eta
@@ -223,7 +221,7 @@ def eta1eta2_to_g1g2_array(eta1,eta2):
 
     return g1,g2,good
 
-@jit(argtypes=[float64,float64])
+@autojit
 def eta1eta2_to_g1g2(eta1,eta2):
     """
     convert from eta to reduced style 

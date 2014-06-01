@@ -7,7 +7,7 @@ from .gmix import GMix
 from .gmix import GMixModel
 
 from . import jacobian
-from .jacobian import Jacobian
+from .jacobian import Jacobian, UnitJacobian
 from . import fastmath
 
 from . import priors

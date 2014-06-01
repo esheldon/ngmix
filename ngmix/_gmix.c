@@ -9,40 +9,85 @@
 #include <numpy/arrayobject.h> 
 #include "_gmix.h"
 
+// exceptions
+static PyObject* GMixRangeError;
+static PyObject* GMixFatalError;
+
 /*
     convert reduced shear g1,g2 to standard ellipticity
     parameters e1,e2
 
     return 0 means out of range
 */
-int g1g2_to_e1e2(double g1, double g2, double *e1, double *e2) {
-    int status=0;
+static int g1g2_to_e1e2(double g1, double g2, double *e1, double *e2) {
     double g=sqrt(g1*g1 + g2*g2);
 
     if (g >= 1) {
-        fprintf(stderr,"g out of bounds: %g\n", g);
-        return status;
+        PyErr_Format(GMixRangeError, "g out of bounds: %g", g);
+        return 0;
     }
     if (g == 0.0) {
         *e1=0;
         *e2=0;
+    } else {
+
+        double eta = 2*atanh(g);
+        double e = tanh(eta);
+        if (e >= 1.) {
+            // round off?
+            e = 0.99999999;
+        }
+
+        double fac = e/g;
+
+        *e1 = fac*g1;
+        *e2 = fac*g2;
     }
 
-    double eta = 2*atanh(g);
-    double e = tanh(eta);
-    if (e >= 1.) {
-        // round off?
-        e = 0.99999999;
-    }
-
-    double fac = e/g;
-
-    *e1 = fac*g1;
-    *e2 = fac*g2;
-    
-    status=1;
-    return status;
+    return 1;
 }
+
+static double gmix_get_T(struct PyGMix_Gauss2D *gmix,
+                         npy_intp n_gauss)
+{
+
+    double T=0.0, psum=0;
+    npy_intp i=0;
+
+    for (i=0; i<n_gauss; i++) {
+        struct PyGMix_Gauss2D *gauss=&gmix[i];
+
+        psum += gauss->p;
+        T += gauss->p*(gauss->irr + gauss->icc);
+    }
+    T /= psum;
+    return T;
+}
+
+static void gmix_get_cen(const struct PyGMix_Gauss2D *self,
+                         npy_intp n_gauss,
+                         double* row,
+                         double *col,
+                         double *psum)
+{
+    npy_intp i=0;
+    *row=0;
+    *col=0;
+    *psum=0;
+
+    for (i=0; i<n_gauss; i++) {
+        const struct PyGMix_Gauss2D *gauss=&self[i];
+
+        double p=gauss->p;
+        *row += p*gauss->row;
+        *col += p*gauss->col;
+        *psum += p;
+    }
+    (*row) /= (*psum);
+    (*col) /= (*psum);
+}
+
+
 
 /* 
    zero return value means bad determinant, out of range
@@ -56,12 +101,14 @@ static int gauss2d_set(struct PyGMix_Gauss2D *self,
                        double irc,
                        double icc) {
 
-    int status=0;
 
     double det = irr*icc - irc*irc;
     if (det < 1.0e-200) {
-        fprintf(stderr,"gmix error: det too low: %.16g\n", det);
-        return status;
+        // PyErr_Format doesn't format floats
+        fprintf(stderr,"gauss2d det too low: %.16g", det);
+        PyErr_Format(GMixRangeError, "gauss2d det too low");
+        //PyErr_Format(GMixRangeError, "gauss2d det too low: %.16g", det);
+        return 0;
     }
 
     self->p=p;
@@ -81,34 +128,47 @@ static int gauss2d_set(struct PyGMix_Gauss2D *self,
 
     self->pnorm = self->p*self->norm;
 
-    status=1;
-    return status;
+    return 1;
 }
 
-static inline int get_ngauss(int model) {
-    int status=1;
+static inline int get_n_gauss(int model, int *status) {
+    int n_gauss=0;
+
+    *status=1;
     switch (model) {
+        case PyGMIX_GMIX_GAUSS:
+            n_gauss=1;
+            break;
         case PyGMIX_GMIX_EXP:
-            return 6;
+            n_gauss=6;
+            break;
         case PyGMIX_GMIX_DEV:
-            return 10;
+            n_gauss=10;
+            break;
         case PyGMIX_GMIX_TURB:
-            return 3;
+            n_gauss=3;
+            break;
         case PyGMIX_GMIX_BDC:
-            return 16;
+            n_gauss=16;
+            break;
         case PyGMIX_GMIX_BDF:
-            return 16;
+            n_gauss=16;
+            break;
         case PyGMIX_GMIX_SERSIC:
-            return 10;
+            n_gauss=10;
+            break;
         default:
-            fprintf(stderr,"cannot get ngauss for model %d\n", model);
-            status=0;
+            PyErr_Format(GMixFatalError, 
+                         "cannot get n_gauss for model %d", model);
+            n_gauss=-1;
+            *status=0;
     }
 
-    return status;
+    return n_gauss;
 }
 
-// for counts
+// pvals->counts
+// fvals->T
 static const double PyGMix_pvals_exp[] = {
     0.00061601229677880041, 
     0.0079461395724623237, 
@@ -116,7 +176,7 @@ static const double PyGMix_pvals_exp[] = {
     0.21797364640726541, 
     0.45496740582554868, 
     0.26521634184240478};
-// for T
+
 static const double PyGMix_fvals_exp[] = {
     0.002467115141477932, 
     0.018147435573256168, 
@@ -125,25 +185,116 @@ static const double PyGMix_fvals_exp[] = {
     0.79782256866993773, 
     2.1623306025075739};
 
-int gmix_fill_simple(struct PyGMix_Gauss2D *self,
-                     npy_intp n_gauss,
-                     const double* pars,
-                     npy_intp n_pars,
-                     int model,
-                     const double* fvals,
-                     const double* pvals) {
+static const double PyGMix_pvals_dev[] = {
+    6.5288960012625658e-05,
+    0.00044199216814302695, 
+    0.0020859587871659754, 
+    0.0075913681418996841, 
+    0.02260266219257237, 
+    0.056532254390212859, 
+    0.11939049233042602, 
+    0.20969545753234975, 
+    0.29254151133139222, 
+    0.28905301416582552};
+
+static const double PyGMix_fvals_dev[] = {
+    3.068330909892871e-07,
+    3.551788624668698e-06,
+    2.542810833482682e-05,
+    0.0001466508940804874,
+    0.0007457199853069548,
+    0.003544702600428794,
+    0.01648881157673708,
+    0.07893194619504579,
+    0.4203787615506401,
+    3.055782252301236};
+
+static const double PyGMix_pvals_turb[] = {
+    0.596510042804182,0.4034898268889178,1.303069003078001e-07};
+
+static const double PyGMix_fvals_turb[] = {
+    0.5793612389470884,1.621860687127999,7.019347162356363};
+
+static const double PyGMix_pvals_gauss[] = {1.0};
+static const double PyGMix_fvals_gauss[] = {1.0};
+
+
+/*
+   when an error occurs and exception is set. Use goto pattern
+   for errors to simplify code.
+*/
+static int gmix_fill_full(struct PyGMix_Gauss2D *self,
+                          npy_intp n_gauss,
+                          const double* pars,
+                          npy_intp n_pars)
+{
+
+    int status=0;
+    npy_intp i=0, beg=0;
+
+    if ( (n_pars % 6) != 0) {
+        PyErr_Format(GMixFatalError, 
+                     "full pars should be multiple of 6, got %ld", n_pars);
+        goto _gmix_fill_full_bail;
+    }
+
+    for (i=0; i<n_gauss; i++) {
+        beg=i*6;
+
+        status=gauss2d_set(&self[i],
+                           pars[beg+0],
+                           pars[beg+1],
+                           pars[beg+2],
+                           pars[beg+3],
+                           pars[beg+4],
+                           pars[beg+5]);
+
+        // an exception will be set
+        if (!status) {
+            goto _gmix_fill_full_bail;
+        }
+
+    }
+
+    status=1;
+
+_gmix_fill_full_bail:
+    return status;
+}
+
+
+
+/*
+   when an error occurs and exception is set. Use goto pattern
+   for errors to simplify code.
+*/
+static int gmix_fill_simple(struct PyGMix_Gauss2D *self,
+                            npy_intp n_gauss,
+                            const double* pars,
+                            npy_intp n_pars,
+                            int model,
+                            const double* fvals,
+                            const double* pvals)
+{
 
     int status=0;
     npy_intp i=0;
+
     if (n_pars != 6) {
-        fprintf(stderr,"simple pars should be size 6\n");
-        return status;
+        PyErr_Format(GMixFatalError, 
+                     "simple pars should be size 6, got %ld", n_pars);
+        goto _gmix_fill_simple_bail;
     }
-    int n_gauss_expected=get_ngauss(model);
+
+    int n_gauss_expected=get_n_gauss(model, &status);
+    if (!status) {
+        goto _gmix_fill_simple_bail;
+    }
     if (n_gauss != n_gauss_expected) {
-        fprintf(stderr,"for model %d expected %d gauss, got %ld\n",
-                model, n_gauss_expected, n_gauss);
-        return status;
+        PyErr_Format(GMixFatalError, 
+                     "for model %d expected %d gauss, got %ld",
+                     model, n_gauss_expected, n_gauss);
+        goto _gmix_fill_simple_bail;
     }
 
     double row=pars[0];
@@ -154,9 +305,10 @@ int gmix_fill_simple(struct PyGMix_Gauss2D *self,
     double counts=pars[5];
 
     double e1,e2;
+    // can set exception inside
     status=g1g2_to_e1e2(g1, g2, &e1, &e2);
     if (!status) {
-        return status;
+        goto _gmix_fill_simple_bail;
     }
 
 
@@ -164,24 +316,38 @@ int gmix_fill_simple(struct PyGMix_Gauss2D *self,
         double T_i_2 = 0.5*T*fvals[i];
         double counts_i=counts*pvals[i];
 
-        gauss2d_set(&self[i],
-                    counts_i,
-                    row,
-                    col, 
-                    T_i_2*(1-e1), 
-                    T_i_2*e2,
-                    T_i_2*(1+e1));
+        status=gauss2d_set(&self[i],
+                           counts_i,
+                           row,
+                           col, 
+                           T_i_2*(1-e1), 
+                           T_i_2*e2,
+                           T_i_2*(1+e1));
+        // an exception will be set
+        if (!status) {
+            goto _gmix_fill_simple_bail;
+        }
     }
 
     status=1;
+
+_gmix_fill_simple_bail:
     return status;
 }
 
-int gmix_fill(struct PyGMix_Gauss2D *self,
-              npy_intp n_gauss,
-              const double* pars,
-              npy_intp n_pars,
-              int model) {
+/*
+
+   Set an exception on error
+
+   Use goto pattern to simplify code
+
+*/
+static int gmix_fill(struct PyGMix_Gauss2D *self,
+                     npy_intp n_gauss,
+                     const double* pars,
+                     npy_intp n_pars,
+                     int model)
+{
 
     int status=0;
     switch (model) {
@@ -192,13 +358,45 @@ int gmix_fill(struct PyGMix_Gauss2D *self,
                                     PyGMix_fvals_exp,
                                     PyGMix_pvals_exp);
             break;
+        case PyGMIX_GMIX_DEV:
+            status=gmix_fill_simple(self, n_gauss,
+                                    pars, n_pars,
+                                    model,
+                                    PyGMix_fvals_dev,
+                                    PyGMix_pvals_dev);
+            break;
+
+        case PyGMIX_GMIX_TURB:
+            status=gmix_fill_simple(self, n_gauss,
+                                    pars, n_pars,
+                                    model,
+                                    PyGMix_fvals_turb,
+                                    PyGMix_pvals_turb);
+            break;
+        case PyGMIX_GMIX_GAUSS:
+            status=gmix_fill_simple(self, n_gauss,
+                                    pars, n_pars,
+                                    model,
+                                    PyGMix_fvals_gauss,
+                                    PyGMix_pvals_gauss);
+            break;
+
+        case PyGMIX_GMIX_FULL:
+            status=gmix_fill_full(self, n_gauss, pars, n_pars);
+            break;
+
         default:
-            fprintf(stderr,"gmix error: Bad gmix model: %d\n", model);
-            status=0;
+            PyErr_Format(GMixFatalError, 
+                         "gmix error: Bad gmix model: %d", model);
+            goto _gmix_fill_bail;
             break;
     }
 
+    status=1;
+
+_gmix_fill_bail:
     return status;
+
 }
 
 static PyObject * PyGMix_gmix_fill(PyObject* self, PyObject* args) {
@@ -223,12 +421,112 @@ static PyObject * PyGMix_gmix_fill(PyObject* self, PyObject* args) {
     npy_intp n_pars = PyArray_SIZE(pars_obj);
 
     int res=gmix_fill(gmix, n_gauss, pars, n_pars, model);
-
-    return PyInt_FromLong( (long) res );
+    if (!res) {
+        // raise an exception
+        return NULL;
+    } else {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
 }
+
+
+static int convolve_fill(const struct PyGMix_Gauss2D *gmix, npy_intp n_gauss,
+                         const struct PyGMix_Gauss2D *psf, npy_intp psf_n_gauss,
+                         struct PyGMix_Gauss2D *out, npy_intp out_n_gauss)
+{
+    int status=0;
+    npy_intp ntot, iobj=0, ipsf=0, itot=0;
+    double psf_rowcen=0, psf_colcen=0, psf_psum=0;
+
+    ntot = n_gauss*psf_n_gauss;
+    if (ntot != out_n_gauss) {
+        PyErr_Format(GMixFatalError, 
+                     "target gmix is wrong size %ld, expected %ld",
+                     out_n_gauss, ntot);
+        goto _convolve_fill_bail;
+    }
+
+    gmix_get_cen(psf, psf_n_gauss, &psf_rowcen, &psf_colcen, &psf_psum);
+    double psf_ipsum=1.0/psf_psum;
+
+    itot=0;
+    for (iobj=0; iobj<n_gauss; iobj++) {
+        const struct PyGMix_Gauss2D *obj_gauss=&gmix[iobj];
+
+        for (ipsf=0; ipsf<psf_n_gauss; ipsf++) {
+            const struct PyGMix_Gauss2D *psf_gauss=&psf[ipsf];
+
+            double p = obj_gauss->p*psf_gauss->p*psf_ipsum;
+
+            double row = obj_gauss->row + (psf_gauss->row-psf_rowcen);
+            double col = obj_gauss->col + (psf_gauss->col-psf_colcen);
+
+            double irr = obj_gauss->irr + psf_gauss->irr;
+            double irc = obj_gauss->irc + psf_gauss->irc;
+            double icc = obj_gauss->icc + psf_gauss->icc;
+
+            status=gauss2d_set(&out[itot], 
+                               p, row, col, irr, irc, icc);
+            // an exception will be set
+            if (!status) {
+                goto _convolve_fill_bail;
+            }
+
+            itot++;
+        }
+    }
+
+    status=1;
+_convolve_fill_bail:
+    return status;
+}
+
+static PyObject * PyGMix_convolve_fill(PyObject* self, PyObject* args) {
+    PyObject* gmix_obj=NULL;
+    PyObject* psf_gmix_obj=NULL;
+    PyObject* out_gmix_obj=NULL;
+
+    struct PyGMix_Gauss2D *gmix=NULL;
+    struct PyGMix_Gauss2D *psf_gmix=NULL;
+    struct PyGMix_Gauss2D *out_gmix=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOO",
+                          &gmix_obj, 
+                          &psf_gmix_obj,
+                          &out_gmix_obj)) {
+
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    npy_intp n_gauss=PyArray_SIZE(gmix_obj);
+
+    psf_gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(psf_gmix_obj);
+    npy_intp psf_n_gauss =PyArray_SIZE(psf_gmix_obj);
+
+    out_gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(out_gmix_obj);
+    npy_intp out_n_gauss =PyArray_SIZE(out_gmix_obj);
+
+    int res=convolve_fill(gmix, n_gauss,
+                          psf_gmix, psf_n_gauss,
+                          out_gmix, out_n_gauss);
+    if (!res) {
+        // raise an exception
+        return NULL;
+    } else {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+}
+
+
+
 
 /*
    Render the gmix in the input image, without jacobian
+
+   Error checking should be done in python.
 */
 static PyObject * PyGMix_render(PyObject* self, PyObject* args) {
 
@@ -256,7 +554,7 @@ static PyObject * PyGMix_render(PyObject* self, PyObject* args) {
     n_col=PyArray_DIM(image_obj, 1);
 
     for (row=0; row < n_row; row++) {
-        for (col=0; col < n_row; col++) {
+        for (col=0; col < n_col; col++) {
 
             tval = 0.0;
             trow = row-offset;
@@ -280,12 +578,15 @@ static PyObject * PyGMix_render(PyObject* self, PyObject* args) {
         } // cols
     } // rows
 
+    Py_INCREF(Py_None);
     return Py_None;
 }
 
 
 /*
    Render the gmix in the input image, with jacobian
+
+   Error checking should be done in python.
 */
 static PyObject * PyGMix_render_jacob(PyObject* self, PyObject* args) {
 
@@ -302,7 +603,8 @@ static PyObject * PyGMix_render_jacob(PyObject* self, PyObject* args) {
     double *ptr=NULL, u=0, v=0, stepsize=0, ustepsize=0, vstepsize=0,
            offset=0, areafac=0, tval=0,trow=0, lowcol=0;
 
-    if (!PyArg_ParseTuple(args, (char*)"OOiO", &gmix_obj, &image_obj, &nsub, &jacob_obj)) {
+    if (!PyArg_ParseTuple(args, (char*)"OOiO", 
+                          &gmix_obj, &image_obj, &nsub, &jacob_obj)) {
         return NULL;
     }
 
@@ -322,15 +624,18 @@ static PyObject * PyGMix_render_jacob(PyObject* self, PyObject* args) {
     n_col=PyArray_DIM(image_obj, 1);
 
     for (row=0; row < n_row; row++) {
-        for (col=0; col < n_row; col++) {
+        for (col=0; col < n_col; col++) {
 
             tval = 0.0;
             trow = row-offset;
             lowcol = col-offset;
 
             for (rowsub=0; rowsub<nsub; rowsub++) {
-                u=jacob->dudrow*(trow - jacob->row0) + jacob->dudcol*(lowcol - jacob->col0);
-                v=jacob->dvdrow*(trow - jacob->row0) + jacob->dvdcol*(lowcol - jacob->col0);
+                //u=jacob->dudrow*(trow - jacob->row0) + jacob->dudcol*(lowcol - jacob->col0);
+                //v=jacob->dvdrow*(trow - jacob->row0) + jacob->dvdcol*(lowcol - jacob->col0);
+                u=PYGMIX_JACOB_GETU(jacob, trow, lowcol);
+                v=PYGMIX_JACOB_GETV(jacob, trow, lowcol);
+
                 for (colsub=0; colsub<nsub; colsub++) {
 
                     tval += PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
@@ -349,12 +654,15 @@ static PyObject * PyGMix_render_jacob(PyObject* self, PyObject* args) {
         } // cols
     } // rows
 
+    Py_INCREF(Py_None);
     return Py_None;
 }
 
 
 /*
    Calculate the loglike between the gmix and the input image
+
+   Error checking should be done in python.
 */
 static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
 
@@ -373,7 +681,8 @@ static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
 
     PyObject* retval=NULL;
 
-    if (!PyArg_ParseTuple(args, (char*)"OOOO", &gmix_obj, &image_obj, &weight_obj, &jacob_obj)) {
+    if (!PyArg_ParseTuple(args, (char*)"OOOO", 
+                          &gmix_obj, &image_obj, &weight_obj, &jacob_obj)) {
         return NULL;
     }
 
@@ -386,10 +695,12 @@ static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
     jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
 
     for (row=0; row < n_row; row++) {
-        u=jacob->dudrow*(row - jacob->row0) + jacob->dudcol*(0 - jacob->col0);
-        v=jacob->dvdrow*(row - jacob->row0) + jacob->dvdcol*(0 - jacob->col0);
+        //u=jacob->dudrow*(row - jacob->row0) + jacob->dudcol*(0 - jacob->col0);
+        //v=jacob->dvdrow*(row - jacob->row0) + jacob->dvdcol*(0 - jacob->col0);
+        u=PYGMIX_JACOB_GETU(jacob, row, 0);
+        v=PYGMIX_JACOB_GETV(jacob, row, 0);
 
-        for (col=0; col < n_row; col++) {
+        for (col=0; col < n_col; col++) {
 
             ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
             if ( ivar > 0.0) {
@@ -419,6 +730,8 @@ static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
 
 /*
    Fill the input fdiff=(model-data)/err, return s2n_numer, s2n_denom
+
+   Error checking should be done in python.
 */
 static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
 
@@ -434,7 +747,7 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
     struct PyGMix_Jacobian *jacob=NULL;
 
     double data=0, ivar=0, ierr=0, u=0, v=0, *fdiff_ptr=NULL;
-    double model_val=0, diff=0;
+    double model_val=0;
     double s2n_numer=0.0, s2n_denom=0.0;
 
     PyObject* retval=NULL;
@@ -458,12 +771,13 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
     fdiff_ptr=(double *)PyArray_GETPTR1(fdiff_obj,start);
 
     for (row=0; row < n_row; row++) {
-        u=jacob->dudrow*(row - jacob->row0) + jacob->dudcol*(0 - jacob->col0);
-        v=jacob->dvdrow*(row - jacob->row0) + jacob->dvdcol*(0 - jacob->col0);
+        //u=jacob->dudrow*(row - jacob->row0) + jacob->dudcol*(0 - jacob->col0);
+        //v=jacob->dvdrow*(row - jacob->row0) + jacob->dvdcol*(0 - jacob->col0);
+        u=PYGMIX_JACOB_GETU(jacob, row, 0);
+        v=PYGMIX_JACOB_GETV(jacob, row, 0);
 
-        for (col=0; col < n_row; col++) {
 
-            //printf("row: %ld col: %ld start: %d\n", row, col, start);
+        for (col=0; col < n_col; col++) {
 
             ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
             if ( ivar > 0.0) {
@@ -471,8 +785,6 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
 
                 data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
                 model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
-
-                diff = model_val-data;
 
                 (*fdiff_ptr) = (model_val-data)*ierr;
                 s2n_numer += data*model_val*ivar;
@@ -495,33 +807,289 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
     return retval;
 }
 
+/*
+ *
+   Expectation maximization image fitting
+ *
+ */
 
-static PyObject * PyGMix_test(PyObject* self, PyObject* args) {
 
-    PyObject *gmix_obj=NULL;
-    PyObject *jacob_obj=NULL;
-    npy_intp n_gauss=0, n_jacob=0;
+static void em_clear_sums(struct PyGMix_EM_Sums *sums, npy_intp n_gauss)
+{
+    memset(sums, 0, n_gauss*sizeof(struct PyGMix_EM_Sums));
+}
 
-    if (!PyArg_ParseTuple(args, (char*)"OO", &gmix_obj, &jacob_obj)) {
+/*
+static void em_sums_print(const struct PyGMix_EM_Sums *sums, npy_intp n_gauss)
+{
+    npy_intp i=0;
+    for (i=0; i<n_gauss; i++) {
+        const struct PyGMix_EM_Sums *sum=&sums[i];
+
+        fprintf(stderr,"%ld: %g %g %g %g %g %g %g %g %g %g %g %g\n",
+                i+1,
+                sum->gi,
+                sum->trowsum,
+                sum->tcolsum,
+                sum->tu2sum,
+                sum->tuvsum,
+                sum->tv2sum,
+
+                sum->pnew,
+                sum->rowsum,
+                sum->colsum,
+                sum->u2sum,
+                sum->uvsum,
+                sum->v2sum);
+
+    }
+}
+*/
+
+static 
+int em_set_gmix_from_sums(struct PyGMix_Gauss2D *gmix,
+                           npy_intp n_gauss,
+                           const struct PyGMix_EM_Sums *sums)
+{
+    int status=0;
+    npy_intp i=0;
+    for (i=0; i<n_gauss; i++) {
+        const struct PyGMix_EM_Sums *sum=&sums[i];
+        struct PyGMix_Gauss2D *gauss=&gmix[i];
+
+        double p=sum->pnew;
+        double pinv=1.0/p;
+
+        status=gauss2d_set(gauss,
+                           p,
+                           sum->rowsum*pinv,
+                           sum->colsum*pinv,
+                           sum->u2sum*pinv,
+                           sum->uvsum*pinv,
+                           sum->v2sum*pinv);
+
+        // an exception will be set
+        if (!status) {
+            goto _em_set_gmix_from_sums_bail;
+        }
+    }
+    status=1;
+_em_set_gmix_from_sums_bail:
+    return status;
+}
+
+
+/*
+   input gmix is guess and will eventually hold the final
+   stage of the iteration
+*/
+static int em_run(PyObject* image_obj,
+                  double sky,
+                  double counts,
+                  const struct PyGMix_Jacobian* jacob,
+                  struct PyGMix_Gauss2D *gmix, // holds the guess
+                  npy_intp n_gauss,
+                  struct PyGMix_EM_Sums *sums,
+                  double tol,
+                  long maxiter,
+                  long *numiter,
+                  double *frac_diff)
+{
+    int status=0;
+    double skysum=0;
+    npy_intp row=0, col=0, i=0;
+
+    npy_intp n_row=PyArray_DIM(image_obj, 0);
+    npy_intp n_col=PyArray_DIM(image_obj, 1);
+    npy_intp n_points=PyArray_SIZE(image_obj);
+
+    double scale=jacob->sdet;
+    double area = n_points*scale*scale;
+
+    double nsky = sky/counts;
+    double psky = sky/(counts/area);
+
+    double T_last=-9999.0;
+
+    (*numiter)=0;
+    while ( (*numiter) < maxiter) {
+        skysum=0.0;
+        em_clear_sums(sums, n_gauss);
+
+        for (row=0; row<n_row; row++) {
+
+            double u=PYGMIX_JACOB_GETU(jacob, row, 0);
+            double v=PYGMIX_JACOB_GETV(jacob, row, 0);
+
+            for (col=0; col<n_col; col++) {
+
+                double imnorm=*(double*)PyArray_GETPTR2(image_obj,row,col);
+                imnorm /= counts;
+
+                double gtot=0.0;
+                for (i=0; i<n_gauss; i++) {
+                    struct PyGMix_EM_Sums *sum=&sums[i];
+                    const struct PyGMix_Gauss2D *gauss=&gmix[i];
+
+                    double udiff = u-gauss->row;
+                    double vdiff = v-gauss->col;
+
+                    double u2 = udiff*udiff;
+                    double v2 = vdiff*vdiff;
+                    double uv = udiff*vdiff;
+
+                    double chi2=
+                        gauss->dcc*u2 + gauss->drr*v2 - 2.0*gauss->drc*uv;
+
+                    if (chi2 < PYGMIX_MAX_CHI2 && chi2 >= 0.0) {
+                        sum->gi = gauss->pnorm*expd( -0.5*chi2 );
+                    } else {
+                        sum->gi = 0.0;
+                    }
+                    gtot += sum->gi;
+                    sum->trowsum = u*sum->gi;
+                    sum->tcolsum = v*sum->gi;
+                    sum->tu2sum  = u2*sum->gi;
+                    sum->tuvsum  = uv*sum->gi;
+                    sum->tv2sum  = v2*sum->gi;
+
+                } // gaussians
+
+                gtot += nsky;
+
+                if (gtot == 0) {
+                    PyErr_Format(GMixRangeError, "em gtot = 0");
+                    goto _rm_run_bail;
+                }
+
+                double igrat = imnorm/gtot;
+                for (i=0; i<n_gauss; i++) {
+                    struct PyGMix_EM_Sums *sum=&sums[i];
+
+                    // wtau is gi[pix]/gtot[pix]*imnorm[pix]
+                    // which is Dave's tau*imnorm = wtau
+                    double wtau = sum->gi*igrat;
+
+                    sum->pnew += wtau;
+
+                    // row*gi/gtot*imnorm;
+                    sum->rowsum += sum->trowsum*igrat;
+                    sum->colsum += sum->tcolsum*igrat;
+                    sum->u2sum  += sum->tu2sum*igrat;
+                    sum->uvsum  += sum->tuvsum*igrat;
+                    sum->v2sum  += sum->tv2sum*igrat;
+
+                }
+
+                skysum += nsky*imnorm/gtot;
+                u += jacob->dudcol;
+                v += jacob->dvdcol;
+            } //cols
+        } // rows
+
+
+        status=em_set_gmix_from_sums(gmix, n_gauss, sums);
+        if (!status) {
+            break;
+        }
+
+        psky = skysum;
+        nsky = psky/area;
+
+        double T = gmix_get_T(gmix, n_gauss);
+        (*frac_diff) = fabs((T-T_last)/T);
+
+        if ( (*frac_diff) < tol) {
+            break;
+        }
+
+        T_last = T;
+
+        (*numiter) += 1;
+
+    } // iteration
+
+    status=1;
+_rm_run_bail:
+    return status;
+}
+
+static PyObject * PyGMix_em_run(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    PyObject* image_obj=NULL;
+    //PyObject* weight_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    PyObject* sums_obj=NULL;
+    double sky=0, counts=0, tol=0;
+    long maxiter=0;
+    npy_intp n_gauss=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+    struct PyGMix_EM_Sums* sums=NULL;
+    long numiter=0;
+    double frac_diff=0;
+    int status=0;
+
+
+    // weight object is currently ignored
+    if (!PyArg_ParseTuple(args, (char*)"OOOOdddl", 
+                          &gmix_obj,
+                          &image_obj,
+                          //&weight_obj,
+                          &jacob_obj,
+                          &sums_obj,
+                          &sky, &counts, &tol, &maxiter)) {
         return NULL;
     }
 
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
     n_gauss=PyArray_SIZE(gmix_obj);
-    n_jacob=PyArray_SIZE(jacob_obj);
 
-    printf("n_gauss: %ld\n", n_gauss);
-    printf("n_jacob (should be 1): %ld\n", n_jacob);
-    return Py_None;
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    sums=(struct PyGMix_EM_Sums* )  PyArray_DATA(sums_obj);
+
+    status=em_run(image_obj,
+                  sky,
+                  counts,
+                  jacob,
+                  gmix,
+                  n_gauss,
+                  sums,
+                  tol,
+                  maxiter,
+                  &numiter,
+                  &frac_diff);
+
+    if (!status) {
+        // raise an exception
+        return NULL;
+    } else {
+        PyObject* retval=PyTuple_New(2);
+        PyTuple_SetItem(retval,0,PyInt_FromLong(numiter));
+        PyTuple_SetItem(retval,1,PyFloat_FromDouble(frac_diff));
+        return retval;
+    }
+}
+
+static PyObject * PyGMix_test(PyObject* self, PyObject* args) {
+    PyErr_Format(GMixRangeError, "testing GMixRangeError");
+    return NULL;
 }
 
 static PyMethodDef pygauss2d_funcs[] = {
     {"test",        (PyCFunction)PyGMix_test,         METH_VARARGS,  "test\n\nprint and return."},
+
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
     {"fill_fdiff",  (PyCFunction)PyGMix_fill_fdiff,  METH_VARARGS,  "fill fdiff for LM\n"},
     {"render",      (PyCFunction)PyGMix_render, METH_VARARGS,  "render without jacobian\n"},
     {"render_jacob",(PyCFunction)PyGMix_render_jacob, METH_VARARGS,  "render with jacobian\n"},
 
     {"gmix_fill",(PyCFunction)PyGMix_gmix_fill, METH_VARARGS,  "Fill the input gmix with the input pars\n"},
+    {"convolve_fill",(PyCFunction)PyGMix_convolve_fill, METH_VARARGS,  "convolve gaussian with psf and store in output\n"},
+
+    {"em_run",(PyCFunction)PyGMix_em_run, METH_VARARGS,  "run the em algorithm\n"},
     {NULL}  /* Sentinel */
 };
 
@@ -545,7 +1113,7 @@ static PyMethodDef pygauss2d_funcs[] = {
 PyMODINIT_FUNC
 init_gmix(void) 
 {
-    PyObject* m;
+    PyObject* m=NULL;
 
 
 #if PY_MAJOR_VERSION >= 3
@@ -560,6 +1128,30 @@ init_gmix(void)
         return;
     }
 #endif
+
+    /* register exceptions */
+    if (GMixRangeError == NULL) {
+        /* NULL = baseclass will be "exception" */
+        GMixRangeError = PyErr_NewException("_gmix.GMixRangeError", NULL, NULL);
+        if (GMixRangeError) {
+            Py_INCREF(GMixRangeError);
+            PyModule_AddObject(m, "GMixRangeError", GMixRangeError);
+        } else {
+            return;
+        }
+    }
+    /* register exceptions */
+    if (GMixFatalError == NULL) {
+        /* NULL = baseclass will be "exception" */
+        GMixFatalError = PyErr_NewException("_gmix.GMixFatalError", NULL, NULL);
+        if (GMixFatalError) {
+            Py_INCREF(GMixFatalError);
+            PyModule_AddObject(m, "GMixFatalError", GMixFatalError);
+        } else {
+            return;
+        }
+    }
+
 
     // for numpy
     import_array();

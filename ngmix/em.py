@@ -6,9 +6,12 @@ from __future__ import print_function
 import numpy
 import numba
 from numba import jit, autojit, float64, int64
+
 from . import gmix
-from .gmix import GMix, _gauss2d_set, _gauss2d, _get_wmomsum
-from .gmix import _exp3_ivals, _exp3_lookup
+from .gmix import GMix
+
+from . import _gmix
+
 from .gexceptions import GMixRangeError, GMixMaxIterEM
 from .priors import srandu
 
@@ -58,6 +61,8 @@ class GMixEM(object):
     def __init__(self, obs):
 
         self._obs=obs
+
+        self._counts=obs.image.sum()
 
         self._gm        = None
         self._sums      = None
@@ -111,6 +116,50 @@ class GMixEM(object):
         self._maxiter   = maxiter
         self._tol       = tol
 
+        # will raise GMixRangeError, but not GMixMaxIterEM, which
+        # we handle below
+        numiter, fdiff = _gmix.em_run(self._gm._data,
+                                      self._obs.image,
+                                      self._obs.jacobian._data,
+                                      self._sums,
+                                      numpy.float64(self._sky_guess),
+                                      self._counts,
+                                      self._tol,
+                                      self._maxiter)
+
+        self._result={'numiter':numiter,
+                      'fdiff':fdiff}
+
+        if numiter >= maxiter:
+            raise GMixMaxIterEM("reached max iter: %s" % maxiter)
+    # alias
+    run_em=go
+
+    def go_old(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
+        """
+        Run the em algorithm from the input starting guesses
+
+        parameters
+        ----------
+        gmix_guess: GMix
+            A gaussian mixture (GMix or child class) representing
+            a starting guess for the algorithm
+        sky_guess: number
+            A guess at the sky value
+        maxiter: number, optional
+            The maximum number of iterations, default 100
+        tol: number, optional
+            The tolerance in the moments that implies convergence,
+            default 1.e-6
+        """
+
+        self._gm        = gmix_guess.copy()
+        self._ngauss    = len(self._gm)
+        self._sums      = numpy.zeros(self._ngauss, dtype=_sums_dtype)
+        self._sky_guess = sky_guess
+        self._maxiter   = maxiter
+        self._tol       = tol
+
         try:
             numiter, fdiff = _run_em(self._obs.image,
                                      self._gm._data,
@@ -118,9 +167,9 @@ class GMixEM(object):
                                      self._obs.jacobian._data,
                                      numpy.float64(self._sky_guess),
                                      numpy.int64(self._maxiter),
-                                     numpy.float64(self._tol),
-                                     _exp3_ivals[0],
-                                     _exp3_lookup)
+                                     numpy.float64(self._tol))
+                                     #_exp3_ivals[0],
+                                     #_exp3_lookup)
         except ZeroDivisionError:
             raise GMixRangeError("divide by zero")
 
@@ -130,6 +179,7 @@ class GMixEM(object):
         if numiter >= maxiter:
             raise GMixMaxIterEM("reached max iter: %s" % maxiter)
 
+'''
 _sums=numba.struct([('gi',float64),
                     # scratch on a given pixel
                     ('trowsum',float64),
@@ -146,8 +196,26 @@ _sums=numba.struct([('gi',float64),
                     ('v2sum',float64)])
 
 _sums_dtype=_sums.get_dtype()
+'''
+
+_sums_dtype=[('gi','f8'),
+             # scratch on a given pixel
+             ('trowsum','f8'),
+             ('tcolsum','f8'),
+             ('tu2sum','f8'),
+             ('tuvsum','f8'),
+             ('tv2sum','f8'),
+             # sums over all pixels
+             ('pnew','f8'),
+             ('rowsum','f8'),
+             ('colsum','f8'),
+             ('u2sum','f8'),
+             ('uvsum','f8'),
+             ('v2sum','f8')]
 
 
+
+'''
 @autojit
 def _clear_sums(sums):
     ngauss=sums.size
@@ -164,6 +232,31 @@ def _clear_sums(sums):
         sums[i].u2sum=0
         sums[i].uvsum=0
         sums[i].v2sum=0
+
+# have to send whole array
+@jit(argtypes=[_gauss2d[:], int64, float64, float64, float64, float64, float64, float64])
+def _gauss2d_set(self, i, p, row, col, irr, irc, icc):
+
+    det = irr*icc - irc*irc
+    if det < 1.0e-200:
+        raise GMixRangeError("found det <= 0: %s" % det)
+
+    self[i].p=p
+    self[i].row=row
+    self[i].col=col
+    self[i].irr=irr
+    self[i].irc=irc
+    self[i].icc=icc
+
+    self[i].det = det
+
+    idet=1.0/det
+    self[i].drr = irr*idet
+    self[i].drc = irc*idet
+    self[i].dcc = icc*idet
+    self[i].norm = 1./(2*numpy.pi*numpy.sqrt(det))
+
+    self[i].pnorm = self[i].p*self[i].norm
 
 @autojit
 def _set_gmix_from_sums(gmix, sums):
@@ -186,11 +279,21 @@ def _gauss2d_verify(self):
         if self[i].det < 1.0e-200:
             raise GMixRangeError("det <= 0: %s" % self[i].det)
 
+@jit(argtypes=[ _gauss2d[:] ])
+def _get_wmomsum(self):
+    ngauss=self.size
+    wmom=0.0
+    for i in xrange(ngauss):
+        wmom += self[i].p*(self[i].irr + self[i].icc)
+    return wmom
 
-#@autojit(locals=dict(psum=float64, skysum=float64))
-@jit(argtypes=[float64[:,:],_gauss2d[:],_sums[:],_jacobian[:],float64,int64,float64,int64,float64[:]],
+
+#@jit(argtypes=[float64[:,:],_gauss2d[:],_sums[:],_jacobian[:],float64,int64,float64,int64,float64[:]],
+#     locals=dict(psum=float64, skysum=float64))
+#def _run_em(image, gmix, sums, j, sky, maxiter, tol, i0, expvals):
+@jit(argtypes=[float64[:,:],_gauss2d[:],_sums[:],_jacobian[:],float64,int64,float64],
      locals=dict(psum=float64, skysum=float64))
-def _run_em(image, gmix, sums, j, sky, maxiter, tol, i0, expvals):
+def _run_em(image, gmix, sums, j, sky, maxiter, tol):
     """
     this is a mess until we get inlining in numba
     """
@@ -210,7 +313,7 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol, i0, expvals):
 
     iiter=0
     while iiter < maxiter:
-        _gauss2d_verify(gmix)
+        #_gauss2d_verify(gmix)
 
         psum=0.0
         skysum=0.0
@@ -234,9 +337,10 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol, i0, expvals):
                     uv = udiff*vdiff
 
                     chi2=gmix[i].dcc*u2 + gmix[i].drr*v2 - 2.0*gmix[i].drc*uv
-                    #sums[i].gi = gmix[i].norm*gmix[i].p*numpy.exp( -0.5*chi2 )
+                    sums[i].gi = gmix[i].norm*gmix[i].p*numpy.exp( -0.5*chi2 )
                     # note a bigger range is needed than for rendering since we
                     # need to sample the space
+                    """
                     if chi2 < 50.0 and chi2 >= 0.0:
                         pnorm = gmix[i].pnorm
                         x = -0.5*chi2
@@ -251,6 +355,7 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol, i0, expvals):
                         expval *= fexp
 
                         sums[i].gi = pnorm*expval
+                    """
                     gtot += sums[i].gi
 
                     sums[i].trowsum = u*sums[i].gi
@@ -296,7 +401,7 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol, i0, expvals):
         iiter += 1
 
     return iiter, fdiff
-
+'''
 
 def test_1gauss(counts=100.0, noise=0.0, maxiter=100, show=False):
     import time

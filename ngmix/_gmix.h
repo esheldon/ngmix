@@ -48,6 +48,26 @@ struct __attribute__((__packed__)) PyGMix_Jacobian {
     double sdet;
 };
 
+struct __attribute__((__packed__)) PyGMix_EM_Sums {
+    double gi;
+
+    // scratch on a given pixel
+    double trowsum;
+    double tcolsum;
+    double tu2sum;
+    double tuvsum;
+    double tv2sum;
+
+    // sums over all pixels
+    double pnew;
+    double rowsum;
+    double colsum;
+    double u2sum;
+    double uvsum;
+    double v2sum;
+};
+
+
 /*
  *
  * fast exponential function
@@ -112,7 +132,7 @@ static double _exp3_lookup[] = {  5.10908903e-12,   1.38879439e-11,   3.77513454
         + (gauss)->drr*_v*_v                                   \
         - 2.0*(gauss)->drc*_u*_v;                              \
                                                                \
-    if (_chi2 < PYGMIX_MAX_CHI2) {                             \
+    if (_chi2 < PYGMIX_MAX_CHI2 && _chi2 >= 0.0) {                             \
         _g_val = (gauss)->pnorm*expd( -0.5*_chi2 );            \
     }                                                          \
                                                                \
@@ -130,6 +150,20 @@ static double _exp3_lookup[] = {  5.10908903e-12,   1.38879439e-11,   3.77513454
     _gm_val;                                                   \
 })
 
+
+#define PYGMIX_JACOB_GETU(jacob, row, col) ({           \
+    double _u_val;                                      \
+    _u_val=(jacob)->dudrow*((row) - (jacob)->row0)        \
+           + (jacob)->dudcol*((col) - (jacob)->col0);     \
+    _u_val;                                             \
+})
+
+#define PYGMIX_JACOB_GETV(jacob, row, col) ({           \
+    double _v_val;                                      \
+    _v_val=(jacob)->dvdrow*((row) - (jacob)->row0)        \
+           + (jacob)->dvdcol*((col) - (jacob)->col0);     \
+    _v_val;                                             \
+})
 
 
 #endif
