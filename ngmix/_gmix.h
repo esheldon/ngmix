@@ -48,6 +48,26 @@ struct __attribute__((__packed__)) PyGMix_Jacobian {
     double sdet;
 };
 
+struct __attribute__((__packed__)) PyGMix_EM_Sums {
+    double gi;
+
+    // scratch on a given pixel
+    double trowsum;
+    double tcolsum;
+    double tu2sum;
+    double tuvsum;
+    double tv2sum;
+
+    // sums over all pixels
+    double pnew;
+    double rowsum;
+    double colsum;
+    double u2sum;
+    double uvsum;
+    double v2sum;
+};
+
+
 /*
  *
  * fast exponential function

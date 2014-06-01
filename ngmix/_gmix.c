@@ -776,6 +776,32 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
     return retval;
 }
 
+/*
+ *
+   Expectation maximization image fitting
+ *
+ */
+
+/*
+   input gmix is guess and will eventually hold the final
+   stage of the iteration
+*/
+static int run_em(const double *image,
+                  npy_intp nrow,
+                  npy_intp ncol,
+                  double sky,
+                  double counts,
+                  const struct PyGMix_Jacobian* jacob,
+                  struct PyGMix_Gauss2D *gmix, // holds the guess
+                  npy_intp n_gauss,
+                  long maxiter,
+                  double tol)
+{
+    int status=0;
+
+    return status;
+}
+
 
 static PyObject * PyGMix_test(PyObject* self, PyObject* args) {
     PyErr_Format(GMixRangeError, "testing GMixRangeError");
