@@ -134,6 +134,7 @@ class GMix(object):
         Warning: only really works if the centers are the same
         """
         d=self._data
+        print(self)
         psum=d['p'].sum()
 
         irrsum=(d['irr']*d['p']).sum()

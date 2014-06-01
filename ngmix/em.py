@@ -179,6 +179,7 @@ class GMixEM(object):
         if numiter >= maxiter:
             raise GMixMaxIterEM("reached max iter: %s" % maxiter)
 
+'''
 _sums=numba.struct([('gi',float64),
                     # scratch on a given pixel
                     ('trowsum',float64),
@@ -195,6 +196,23 @@ _sums=numba.struct([('gi',float64),
                     ('v2sum',float64)])
 
 _sums_dtype=_sums.get_dtype()
+'''
+
+_sums_dtype=[('gi','f8'),
+             # scratch on a given pixel
+             ('trowsum','f8'),
+             ('tcolsum','f8'),
+             ('tu2sum','f8'),
+             ('tuvsum','f8'),
+             ('tv2sum','f8'),
+             # sums over all pixels
+             ('pnew','f8'),
+             ('rowsum','f8'),
+             ('colsum','f8'),
+             ('u2sum','f8'),
+             ('uvsum','f8'),
+             ('v2sum','f8')]
+
 
 
 '''

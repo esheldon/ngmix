@@ -29,20 +29,21 @@ static int g1g2_to_e1e2(double g1, double g2, double *e1, double *e2) {
     if (g == 0.0) {
         *e1=0;
         *e2=0;
+    } else {
+
+        double eta = 2*atanh(g);
+        double e = tanh(eta);
+        if (e >= 1.) {
+            // round off?
+            e = 0.99999999;
+        }
+
+        double fac = e/g;
+
+        *e1 = fac*g1;
+        *e2 = fac*g2;
     }
 
-    double eta = 2*atanh(g);
-    double e = tanh(eta);
-    if (e >= 1.) {
-        // round off?
-        e = 0.99999999;
-    }
-
-    double fac = e/g;
-
-    *e1 = fac*g1;
-    *e2 = fac*g2;
-    
     return 1;
 }
 

@@ -94,7 +94,7 @@ class FitterBase(object):
         self._set_npars()
 
         # the function to be called to fill a gaussian mixture
-        self._set_fill_call()
+        #self._set_fill_call()
 
         self._set_totpix()
 
@@ -365,11 +365,14 @@ class FitterBase(object):
                 gm=gmix_list[i]
 
                 try:
+                    gm0.fill(band_pars)
+                    '''
                     if self.model==gmix.GMIX_SERSIC:
                         gm0.fill(band_pars)
                     else:
                         self._fill_gmix_func(gm0._data, band_pars)
                     gmix._convolve_fill(gm._data, gm0._data, psf_gmix._data)
+                    '''
                 except ZeroDivisionError:
                     raise GMixRangeError("zero division")
 
