@@ -383,8 +383,9 @@ class FitterBase(object):
                 gm0=gmix_list0[i]
                 gm=gmix_list[i]
 
-                gm0.fill(band_pars)
-                _gmix.convolve_fill(gm0._data, psf_gmix._data, gm._data)
+                #gm0.fill(band_pars)
+                _gmix.gmix_fill(gm0._data, band_pars, gm0._model)
+                _gmix.convolve_fill(gm._data, gm0._data, psf_gmix._data)
 
     def _fill_gmix_all_nopsf(self, pars):
         """

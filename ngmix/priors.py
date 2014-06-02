@@ -18,6 +18,8 @@ from numpy.random import randn
 from . import gmix
 from .gexceptions import GMixRangeError
 
+from . import _gmix
+
 from . import shape
 
 LOWVAL=-9999.0e47
@@ -1329,10 +1331,12 @@ def make_gprior_cosmos_sersic(type='erf'):
     """
     if type=='spline':
         return GPriorCosmosSersicSpline()
-    else:
+    elif type=='erf':
         pars=[0.0250834, 1.98317, 0.0793992, 0.706151, 0.124546]
         print("great3 sersic cgc g pars:",pars)
         return GPriorMErf(pars)
+    else:
+        raise ValueError("bad cosmos g prior: %s" % type)
 
 
 class GPriorM(GPriorBase):
@@ -1557,15 +1561,16 @@ class GPriorMErf(GPriorBase):
 
 
 
-class Normal(object):
+class Normal(_gmix.Normal):
     """
-    This class provides a uniform interface consistent with LogNormal
+    This class provides an interface consistent with LogNormal
+
+    C class defined get_lnprob_scalar(x) and get_prob_scalar(x)
     """
     def __init__(self, cen, sigma):
-
-        self.cen = array(cen, copy=False)
-        self.sigma = sigma
-        self.s2inv = 1./self.sigma**2
+        self.cen=cen
+        self.sigma=sigma
+        super(Normal,self).__init__(cen, sigma)
 
     def sample(self, *args):
         """
@@ -1573,31 +1578,6 @@ class Normal(object):
         """
         rand=self.cen + self.sigma*numpy.random.randn(*args)
         return rand
-
-    def get_lnprob(self, p):
-        """
-        log probability
-        """
-        diff = self.cen-p
-        lnp = -0.5*diff*diff*self.s2inv
-        return lnp
-
-    # aliases
-    get_lnprob_array  = get_lnprob
-    get_lnprob_scalar = get_lnprob
-
-    def get_prob(self,p):
-        """
-        probability
-        """
-        lnp = self.get_lnprob(p)
-        return numpy.exp(lnp)
-
-    # aliases
-    get_prob_array  = get_prob
-    get_prob_scalar = get_prob
-
-
 
 class LogNormal(object):
     """
@@ -2158,7 +2138,7 @@ def scipy_to_lognorm(shape, scale):
 
     return meanx, sigmax
 
-class CenPrior(object):
+class CenPrior(_gmix.Normal2D):
     """
     Independent gaussians in each dimension
     """
@@ -2168,29 +2148,8 @@ class CenPrior(object):
         self.cen2 = cen2
         self.sigma1 = sigma1
         self.sigma2 = sigma2
-        self.s2inv1 = 1./self.sigma1**2
-        self.s2inv2 = 1./self.sigma2**2
 
-    def get_lnprob(self,p1, p2):
-        """
-        log probability
-        """
-        d1 = self.cen1-p1
-        d2 = self.cen2-p2
-        lnp = -0.5*d1*d1*self.s2inv1 - 0.5*d2*d2*self.s2inv2
-
-        return lnp
-
-    get_lnprob_array=get_lnprob
-
-    def get_prob(self,p1, p2):
-        """
-        probability, max 1
-        """
-        lnp = self.get_lnprob(p1, p2)
-        return exp(lnp)
-
-    get_prob_array=get_prob
+        super(CenPrior,self).__init__(cen1,cen2,sigma1,sigma2)
 
     def sample(self, n=None):
         """
@@ -2204,53 +2163,6 @@ class CenPrior(object):
             rand2=self.cen2 + self.sigma2*numpy.random.randn(n)
 
         return rand1, rand2
-
-    def sample_brute(self, nrand=None):
-        """
-        Get nrand random deviates from the distribution using brute force
-
-        This is really to check that our probabilities are being calculated
-        correctly, by comparing to the regular sampler
-        """
-
-        # 10 sigma
-        maxval1 = self.cen1 + 5.0*self.sigma1
-        maxval2 = self.cen2 + 5.0*self.sigma2
-
-        if nrand is None:
-            is_scalar=True
-            nrand=1
-        else:
-            is_scalar=False
-
-        r1=numpy.zeros(nrand)
-        r2=numpy.zeros(nrand)
-
-        ngood=0
-        nleft=nrand
-        while ngood < nrand:
-            
-            rvals1 = maxval1*srandu(nleft)
-            rvals2 = maxval2*srandu(nleft)
-
-            # between 0,1 which is max for prob
-            h = randu(nleft)
-
-            pvals = self.get_prob_array(rvals1, rvals2)
-
-            w,=numpy.where(h < pvals)
-            if w.size > 0:
-                r1[ngood:ngood+w.size] = rvals1[w]
-                r2[ngood:ngood+w.size] = rvals2[w]
-                ngood += w.size
-                nleft -= w.size
- 
-        if is_scalar:
-            r1=r1[0]
-            r2=r2[0]
-
-        return r1,r2
-
 
 
 
@@ -2779,17 +2691,15 @@ _g_cosmos_k = 3
 '''
 
 
-class Disk2D(object):
+class ZDisk2D(_gmix.ZDisk2D):
     """
-    uniform over a disk, [0,r)
+    uniform over a disk centered at zero [0,0] with radius r
     """
-    def __init__(self, cen, radius):
-
-        self.cen = array(cen, copy=False)
-        if self.cen.size != 2:
-            raise ValueError("cen should have two elements")
+    def __init__(self, radius):
         self.radius = radius
         self.radius_sq = radius**2
+
+        super(ZDisk2D,self).__init__(radius)
 
     def sample1d(self, n):
         """
@@ -2812,20 +2722,9 @@ class Disk2D(object):
         x=radius*cos(theta)
         y=radius*sin(theta)
 
-        x += self.cen[0]
-        y += self.cen[1]
-
         return x,y
 
-    def get_lnprob_scalar1d(self, r):
-        """
-        log probability 0.0 inside of disk, outside raises
-        an exception
-        """
-        if r >= self.radius:
-            raise GMixRangeError("position out of disk")
-        return 0.0
-
+    '''
     def get_lnprob_array1d(self, r):
         """
         log probability 0.0 inside of disk, outside raises
@@ -2837,18 +2736,6 @@ class Disk2D(object):
             raise GMixRangeError("some positions were out of disk")
 
         return zeros(x.size)
-
-    def get_prob_scalar1d(self, r):
-        """
-        probability, 1.0 inside disk, outside raises exception
-
-        does not raise an exception
-        """
-        if r >= self.radius:
-            p=0.0
-        else:
-            p=1.0
-        return p
 
     def get_prob_array1d(self, r):
         """
@@ -2863,23 +2750,6 @@ class Disk2D(object):
             p[w]=0.0
         return p
 
-    def get_lnprob_scalar2d(self, x, y):
-        """
-        log probability 0.0 inside of disk, outside raises
-        an exception
-        """
-
-        r2 = x**2 + y**2
-        if r2 >= self.radius_sq:
-            p=0.0
-        else:
-            p=1.0
-        return p
-
-
-        return self.get_lnprob_scalar1d(r)
-
-
     def get_lnprob_array2d(self, x, y):
         """
         log probability 0.0 inside of disk, outside raises
@@ -2889,16 +2759,6 @@ class Disk2D(object):
         r = sqrt(x**2 + y**2)
         return self.get_lnprob_array1d(r)
 
-
-    def get_prob_scalar2d(self, x, y):
-        """
-        probability, 1.0 inside disk, outside raises exception
-
-        does not raise an exception
-        """
-        r = sqrt(x**2 + y**2)
-        return self.get_prob_scalar1d(r)
-
     def get_prob_array2d(self, x, y):
         """
         probability, 1.0 inside disk, outside raises exception
@@ -2907,6 +2767,6 @@ class Disk2D(object):
         """
         r = sqrt(x**2 + y**2)
         return self.get_prob_array1d(r)
-
+    '''
 
 

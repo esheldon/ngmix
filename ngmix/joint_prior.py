@@ -224,7 +224,7 @@ class JointPriorSimpleHybrid(GMixND):
         log probability for scalar input (meaning one point)
         """
 
-        lnp = self.cen_prior.get_lnprob(pars[0],pars[1])
+        lnp = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
         lnp += self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
         lnp += self.TF_prior.get_lnprob_scalar(pars[4:4+2], **keys)
 
@@ -1002,7 +1002,7 @@ def make_uniform_simple_sep(cen, cen_width, T_range, F_range):
     """
 
     cen_prior=priors.CenPrior(cen[0], cen[1], cen_width[0], cen_width[1])
-    g_prior=priors.Disk2D([0.0, 0.0], 1.0)
+    g_prior=priors.ZDisk2D(1.0)
     T_prior=priors.FlatPrior(T_range[0], T_range[1])
     F_prior=priors.FlatPrior(F_range[0], F_range[1])
 
@@ -1059,7 +1059,7 @@ class PriorSimpleSep(object):
         log probability for scalar input (meaning one point)
         """
 
-        lnp = self.cen_prior.get_lnprob(pars[0],pars[1])
+        lnp = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
         lnp += self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
         lnp += self.T_prior.get_lnprob_scalar(pars[4], **keys)
 
@@ -1074,7 +1074,7 @@ class PriorSimpleSep(object):
         set sqrt(-2ln(p)) ~ (model-data)/err
         """
         index=0
-        fdiff[index] = self.cen_prior.get_lnprob(pars[0],pars[1])
+        fdiff[index] = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
         index += 1
         fdiff[index] = self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
         index += 1

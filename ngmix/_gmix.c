@@ -436,19 +436,19 @@ static PyObject * PyGMix_gmix_fill(PyObject* self, PyObject* args) {
 }
 
 
-static int convolve_fill(const struct PyGMix_Gauss2D *gmix, npy_intp n_gauss,
-                         const struct PyGMix_Gauss2D *psf, npy_intp psf_n_gauss,
-                         struct PyGMix_Gauss2D *out, npy_intp out_n_gauss)
+static int convolve_fill(struct PyGMix_Gauss2D *self, npy_intp self_n_gauss,
+                         const struct PyGMix_Gauss2D *gmix, npy_intp n_gauss,
+                         const struct PyGMix_Gauss2D *psf, npy_intp psf_n_gauss)
 {
     int status=0;
     npy_intp ntot, iobj=0, ipsf=0, itot=0;
     double psf_rowcen=0, psf_colcen=0, psf_psum=0;
 
     ntot = n_gauss*psf_n_gauss;
-    if (ntot != out_n_gauss) {
+    if (ntot != self_n_gauss) {
         PyErr_Format(GMixFatalError, 
                      "target gmix is wrong size %ld, expected %ld",
-                     out_n_gauss, ntot);
+                     self_n_gauss, ntot);
         goto _convolve_fill_bail;
     }
 
@@ -471,7 +471,7 @@ static int convolve_fill(const struct PyGMix_Gauss2D *gmix, npy_intp n_gauss,
             double irc = obj_gauss->irc + psf_gauss->irc;
             double icc = obj_gauss->icc + psf_gauss->icc;
 
-            status=gauss2d_set(&out[itot], 
+            status=gauss2d_set(&self[itot], 
                                p, row, col, irr, irc, icc);
             // an exception will be set
             if (!status) {
@@ -488,21 +488,24 @@ _convolve_fill_bail:
 }
 
 static PyObject * PyGMix_convolve_fill(PyObject* self, PyObject* args) {
+    PyObject* self_gmix_obj=NULL;
     PyObject* gmix_obj=NULL;
     PyObject* psf_gmix_obj=NULL;
-    PyObject* out_gmix_obj=NULL;
 
     struct PyGMix_Gauss2D *gmix=NULL;
     struct PyGMix_Gauss2D *psf_gmix=NULL;
-    struct PyGMix_Gauss2D *out_gmix=NULL;
+    struct PyGMix_Gauss2D *self_gmix=NULL;
 
     if (!PyArg_ParseTuple(args, (char*)"OOO",
+                          &self_gmix_obj,
                           &gmix_obj, 
-                          &psf_gmix_obj,
-                          &out_gmix_obj)) {
+                          &psf_gmix_obj)) {
 
         return NULL;
     }
+
+    self_gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(self_gmix_obj);
+    npy_intp self_n_gauss =PyArray_SIZE(self_gmix_obj);
 
     gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
     npy_intp n_gauss=PyArray_SIZE(gmix_obj);
@@ -510,12 +513,11 @@ static PyObject * PyGMix_convolve_fill(PyObject* self, PyObject* args) {
     psf_gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(psf_gmix_obj);
     npy_intp psf_n_gauss =PyArray_SIZE(psf_gmix_obj);
 
-    out_gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(out_gmix_obj);
-    npy_intp out_n_gauss =PyArray_SIZE(out_gmix_obj);
 
-    int res=convolve_fill(gmix, n_gauss,
-                          psf_gmix, psf_n_gauss,
-                          out_gmix, out_n_gauss);
+    int res=convolve_fill(self_gmix, self_n_gauss,
+                          gmix, n_gauss,
+                          psf_gmix, psf_n_gauss);
+                          
     if (!res) {
         // raise an exception
         return NULL;
@@ -1078,6 +1080,12 @@ static PyObject * PyGMix_em_run(PyObject* self, PyObject* args) {
     }
 }
 
+/*
+
+   must be at least 6 pars.
+
+   pars 4 and 5 are converted
+*/
 static 
 PyObject * PyGMix_convert_simple_double_logpars(PyObject* self, PyObject* args) {
 
@@ -1107,8 +1115,6 @@ PyObject * PyGMix_convert_simple_double_logpars(PyObject* self, PyObject* args) 
     return Py_None;
 }
 
-
-
 static PyObject * PyGMix_test(PyObject* self, PyObject* args) {
     PyErr_Format(GMixRangeError, "testing GMixRangeError");
     return NULL;
@@ -1131,13 +1137,396 @@ static PyMethodDef pygauss2d_funcs[] = {
     {NULL}  /* Sentinel */
 };
 
+
+
+/*
+ *
+ * prior classes
+ *
+ */
+
+/* class representing a 1-d normal distribution */
+
+struct PyGMixNormal {
+    PyObject_HEAD
+    double cen;
+    double sigma;
+    double s2inv;
+};
+
+static int
+PyGMixNormal_init(struct PyGMixNormal* self, PyObject *args)
+{
+    if (!PyArg_ParseTuple(args, (char*)"dd", &self->cen, &self->sigma)) {
+        return -1;
+    }
+
+    self->s2inv = 1.0/(self->sigma*self->sigma);
+
+    return 0;
+}
+
+static PyObject* PyGMixNormal_get_lnprob_scalar(struct PyGMixNormal* self,
+                                                 PyObject *args)
+{
+    double x, diff, lnp;
+    if (!PyArg_ParseTuple(args, (char*)"d", &x)) {
+        return NULL;
+    }
+
+    diff = self->cen-x;
+    lnp = -0.5*diff*diff*self->s2inv;
+
+    return PyFloat_FromDouble(lnp);
+
+}
+static PyObject* PyGMixNormal_get_prob_scalar(struct PyGMixNormal* self,
+                                               PyObject *args)
+{
+    double x, diff, lnp, p;
+    if (!PyArg_ParseTuple(args, (char*)"d", &x)) {
+        return NULL;
+    }
+
+    diff = self->cen-x;
+    lnp = -0.5*diff*diff*self->s2inv;
+    p = exp(lnp);
+
+    return PyFloat_FromDouble(p);
+
+}
+
+
+static PyMethodDef PyGMixNormal_methods[] = {
+    {"get_lnprob_scalar", (PyCFunction)PyGMixNormal_get_lnprob_scalar, METH_VARARGS, "nget ln(prob) for the input x value."},
+    {"get_prob_scalar", (PyCFunction)PyGMixNormal_get_prob_scalar, METH_VARARGS, "get prob for the input x value."},
+    {NULL}  /* Sentinel */
+};
+
+
+static PyTypeObject PyGMixNormalType = {
+#if PY_MAJOR_VERSION >= 3
+    PyVarObject_HEAD_INIT(NULL, 0)
+#else
+    PyObject_HEAD_INIT(NULL)
+    0,                         /*ob_size*/
+#endif
+    "_gmix.Normal",            /*tp_name*/
+    sizeof(struct PyGMixNormal), /*tp_basicsize*/
+    0,                         /*tp_itemsize*/
+    0,                         /*tp_dealloc*/
+    0,                         /*tp_print*/
+    0,                         /*tp_getattr*/
+    0,                         /*tp_setattr*/
+    0,                         /*tp_compare*/
+    0,                         /*tp_repr*/
+    0,                         /*tp_as_number*/
+    0,                         /*tp_as_sequence*/
+    0,                         /*tp_as_mapping*/
+    0,                         /*tp_hash */
+    0,                         /*tp_call*/
+    0,                         /*tp_str*/
+    0,                         /*tp_getattro*/
+    0,                         /*tp_setattro*/
+    0,                         /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /*tp_flags*/
+    "PyGMix Normal distribution",           /* tp_doc */
+    0,                     /* tp_traverse */
+    0,                     /* tp_clear */
+    0,                     /* tp_richcompare */
+    0,                     /* tp_weaklistoffset */
+    0,                     /* tp_iter */
+    0,                     /* tp_iternext */
+    PyGMixNormal_methods,             /* tp_methods */
+    0,             /* tp_members */
+    0,                         /* tp_getset */
+    0,                         /* tp_base */
+    0,                         /* tp_dict */
+    0,                         /* tp_descr_get */
+    0,                         /* tp_descr_set */
+    0,                         /* tp_dictoffset */
+    //0,     /* tp_init */
+    (initproc)PyGMixNormal_init,      /* tp_init */
+    0,                         /* tp_alloc */
+    //PyGMixObject_new,                 /* tp_new */
+    PyType_GenericNew,                 /* tp_new */
+};
+
+
+/* class representing a 2-d normal distribution */
+
+struct PyGMixNormal2D {
+    PyObject_HEAD
+    double cen1;
+    double cen2;
+    double sigma1;
+    double sigma2;
+    double s2inv1;
+    double s2inv2;
+};
+
+static int
+PyGMixNormal2D_init(struct PyGMixNormal2D* self, PyObject *args)
+{
+    if (!PyArg_ParseTuple(args, (char*)"dddd", 
+                          &self->cen1, &self->cen2,
+                          &self->sigma1, &self->sigma2)) {
+        return -1;
+    }
+
+    self->s2inv1 = 1.0/(self->sigma1*self->sigma1);
+    self->s2inv2 = 1.0/(self->sigma2*self->sigma2);
+
+    return 0;
+}
+
+static PyObject* PyGMixNormal2D_get_lnprob_scalar(struct PyGMixNormal2D* self,
+                                                  PyObject *args)
+{
+    double x1, x2, d1, d2, lnp;
+    if (!PyArg_ParseTuple(args, (char*)"dd", &x1, &x2)) {
+        return NULL;
+    }
+
+    d1 = self->cen1-x1;
+    d2 = self->cen2-x2;
+    lnp = -0.5*d1*d1*self->s2inv1 - 0.5*d2*d2*self->s2inv2;
+
+    return PyFloat_FromDouble(lnp);
+
+}
+static PyObject* PyGMixNormal2D_get_prob_scalar(struct PyGMixNormal2D* self,
+                                               PyObject *args)
+{
+    double x1, x2, d1, d2, lnp, p;
+    if (!PyArg_ParseTuple(args, (char*)"dd", &x1, &x2)) {
+        return NULL;
+    }
+
+    d1 = self->cen1-x1;
+    d2 = self->cen2-x2;
+    lnp = -0.5*d1*d1*self->s2inv1 - 0.5*d2*d2*self->s2inv2;
+
+    p=exp(lnp);
+    return PyFloat_FromDouble(p);
+}
+
+
+static PyMethodDef PyGMixNormal2D_methods[] = {
+    {"get_lnprob_scalar", (PyCFunction)PyGMixNormal2D_get_lnprob_scalar, METH_VARARGS, "nget ln(prob) for the input location."},
+    {"get_prob_scalar", (PyCFunction)PyGMixNormal2D_get_prob_scalar, METH_VARARGS, "get prob for the input location."},
+    {NULL}  /* Sentinel */
+};
+
+
+static PyTypeObject PyGMixNormal2DType = {
+#if PY_MAJOR_VERSION >= 3
+    PyVarObject_HEAD_INIT(NULL, 0)
+#else
+    PyObject_HEAD_INIT(NULL)
+    0,                         /*ob_size*/
+#endif
+    "_gmix.Normal2D",            /*tp_name*/
+    sizeof(struct PyGMixNormal2D), /*tp_basicsize*/
+    0,                         /*tp_itemsize*/
+    0,                         /*tp_dealloc*/
+    0,                         /*tp_print*/
+    0,                         /*tp_getattr*/
+    0,                         /*tp_setattr*/
+    0,                         /*tp_compare*/
+    0,                         /*tp_repr*/
+    0,                         /*tp_as_number*/
+    0,                         /*tp_as_sequence*/
+    0,                         /*tp_as_mapping*/
+    0,                         /*tp_hash */
+    0,                         /*tp_call*/
+    0,                         /*tp_str*/
+    0,                         /*tp_getattro*/
+    0,                         /*tp_setattro*/
+    0,                         /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /*tp_flags*/
+    "PyGMix Normal2D distribution",           /* tp_doc */
+    0,                     /* tp_traverse */
+    0,                     /* tp_clear */
+    0,                     /* tp_richcompare */
+    0,                     /* tp_weaklistoffset */
+    0,                     /* tp_iter */
+    0,                     /* tp_iternext */
+    PyGMixNormal2D_methods,             /* tp_methods */
+    0,             /* tp_members */
+    0,                         /* tp_getset */
+    0,                         /* tp_base */
+    0,                         /* tp_dict */
+    0,                         /* tp_descr_get */
+    0,                         /* tp_descr_set */
+    0,                         /* tp_dictoffset */
+    //0,     /* tp_init */
+    (initproc)PyGMixNormal2D_init,      /* tp_init */
+    0,                         /* tp_alloc */
+    //PyGMixObject_new,                 /* tp_new */
+    PyType_GenericNew,                 /* tp_new */
+};
+
+
+/* class representing a 2-d disk with max radius */
+
+struct PyGMixZDisk2D {
+    PyObject_HEAD
+    double radius;
+    double radius_sq;
+};
+
+static int
+PyGMixZDisk2D_init(struct PyGMixZDisk2D* self, PyObject *args)
+{
+    if (!PyArg_ParseTuple(args, (char*)"d", 
+                          &self->radius)) {
+        return -1;
+    }
+
+    self->radius_sq = self->radius*self->radius;
+    return 0;
+}
+
+static PyObject* PyGMixZDisk2D_get_lnprob_scalar1d(struct PyGMixZDisk2D* self,
+                                                   PyObject *args)
+{
+    double r;
+    if (!PyArg_ParseTuple(args, (char*)"d", &r)) {
+        return NULL;
+    }
+
+    if (r >= self->radius) {
+        PyErr_Format(GMixRangeError, "position out of bounds");
+        return NULL;
+    } else {
+        return PyFloat_FromDouble(0.0);
+    }
+
+}
+static PyObject* PyGMixZDisk2D_get_prob_scalar1d(struct PyGMixZDisk2D* self,
+                                                 PyObject *args)
+{
+    double r, retval;
+    if (!PyArg_ParseTuple(args, (char*)"d", &r)) {
+        return NULL;
+    }
+
+    if (r >= self->radius) {
+        retval=0.0; 
+    } else {
+        retval=1.0;
+    }
+    return PyFloat_FromDouble(retval);
+}
+
+
+static PyObject* PyGMixZDisk2D_get_lnprob_scalar2d(struct PyGMixZDisk2D* self,
+                                                   PyObject *args)
+{
+    double x, y, r2;
+    if (!PyArg_ParseTuple(args, (char*)"dd", &x, &y)) {
+        return NULL;
+    }
+
+    r2 = x*x + y*y;
+    if (r2 >= self->radius_sq) {
+        PyErr_Format(GMixRangeError, "position out of bounds");
+        return NULL;
+    } else {
+        return PyFloat_FromDouble(0.0);
+    }
+
+}
+static PyObject* PyGMixZDisk2D_get_prob_scalar2d(struct PyGMixZDisk2D* self,
+                                                 PyObject *args)
+{
+    double x, y, r2, retval;
+    if (!PyArg_ParseTuple(args, (char*)"dd", &x, &y)) {
+        return NULL;
+    }
+
+    r2 = x*x + y*y;
+
+    if (r2 >= self->radius_sq) {
+        retval=0.0; 
+    } else {
+        retval=1.0;
+    }
+    return PyFloat_FromDouble(retval);
+}
+
+
+static PyMethodDef PyGMixZDisk2D_methods[] = {
+    {"get_lnprob_scalar1d", (PyCFunction)PyGMixZDisk2D_get_lnprob_scalar1d, METH_VARARGS, "0 inside disk, throw exception outside"},
+    {"get_prob_scalar1d", (PyCFunction)PyGMixZDisk2D_get_prob_scalar1d, METH_VARARGS, "1 inside disk, 0 outside"},
+
+    {"get_lnprob_scalar2d", (PyCFunction)PyGMixZDisk2D_get_lnprob_scalar2d, METH_VARARGS, "0 inside disk, throw exception outside"},
+    {"get_prob_scalar2d", (PyCFunction)PyGMixZDisk2D_get_prob_scalar2d, METH_VARARGS, "1 inside disk, 0 outside"},
+    {NULL}  /* Sentinel */
+};
+
+
+static PyTypeObject PyGMixZDisk2DType = {
+#if PY_MAJOR_VERSION >= 3
+    PyVarObject_HEAD_INIT(NULL, 0)
+#else
+    PyObject_HEAD_INIT(NULL)
+    0,                         /*ob_size*/
+#endif
+    "_gmix.ZDisk2D",            /*tp_name*/
+    sizeof(struct PyGMixZDisk2D), /*tp_basicsize*/
+    0,                         /*tp_itemsize*/
+    0,                         /*tp_dealloc*/
+    0,                         /*tp_print*/
+    0,                         /*tp_getattr*/
+    0,                         /*tp_setattr*/
+    0,                         /*tp_compare*/
+    0,                         /*tp_repr*/
+    0,                         /*tp_as_number*/
+    0,                         /*tp_as_sequence*/
+    0,                         /*tp_as_mapping*/
+    0,                         /*tp_hash */
+    0,                         /*tp_call*/
+    0,                         /*tp_str*/
+    0,                         /*tp_getattro*/
+    0,                         /*tp_setattro*/
+    0,                         /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /*tp_flags*/
+    "PyGMix ZDisk2D distribution",           /* tp_doc */
+    0,                     /* tp_traverse */
+    0,                     /* tp_clear */
+    0,                     /* tp_richcompare */
+    0,                     /* tp_weaklistoffset */
+    0,                     /* tp_iter */
+    0,                     /* tp_iternext */
+    PyGMixZDisk2D_methods,             /* tp_methods */
+    0,             /* tp_members */
+    0,                         /* tp_getset */
+    0,                         /* tp_base */
+    0,                         /* tp_dict */
+    0,                         /* tp_descr_get */
+    0,                         /* tp_descr_set */
+    0,                         /* tp_dictoffset */
+    //0,     /* tp_init */
+    (initproc)PyGMixZDisk2D_init,      /* tp_init */
+    0,                         /* tp_alloc */
+    //PyGMixObject_new,                 /* tp_new */
+    PyType_GenericNew,                 /* tp_new */
+};
+
+
+
+
+
+
 #if PY_MAJOR_VERSION >= 3
     static struct PyModuleDef moduledef = {
         PyModuleDef_HEAD_INIT,
         "_gmix",      /* m_name */
         "Defines the funcs associated with gmix",  /* m_doc */
         -1,                  /* m_size */
-        fitstype_funcs,      /* m_methods */
+        pygauss2d_funcs,      /* m_methods */
         NULL,                /* m_reload */
         NULL,                /* m_traverse */
         NULL,                /* m_clear */
@@ -1153,14 +1542,40 @@ init_gmix(void)
 {
     PyObject* m=NULL;
 
+    PyGMixNormalType.tp_new = PyType_GenericNew;
+    PyGMixNormal2DType.tp_new = PyType_GenericNew;
+    PyGMixZDisk2DType.tp_new = PyType_GenericNew;
 
 #if PY_MAJOR_VERSION >= 3
+    if (PyType_Ready(&PyGMixNormalType) < 0) {
+        return NULL;
+    }
+    if (PyType_Ready(&PyGMixNormal2DType) < 0) {
+        return NULL;
+    }
+    if (PyType_Ready(&PyGMixZDisk2DType) < 0) {
+        return NULL;
+    }
+
+
     m = PyModule_Create(&moduledef);
     if (m==NULL) {
         return NULL;
     }
 
 #else
+    if (PyType_Ready(&PyGMixNormalType) < 0) {
+        return;
+    }
+    if (PyType_Ready(&PyGMixNormal2DType) < 0) {
+        return;
+    }
+    if (PyType_Ready(&PyGMixZDisk2DType) < 0) {
+        return;
+    }
+
+
+
     m = Py_InitModule3("_gmix", pygauss2d_funcs, "Define gmix funcs.");
     if (m==NULL) {
         return;
@@ -1189,6 +1604,15 @@ init_gmix(void)
             return;
         }
     }
+
+
+    Py_INCREF(&PyGMixNormalType);
+    PyModule_AddObject(m, "Normal", (PyObject *)&PyGMixNormalType);
+    Py_INCREF(&PyGMixNormal2DType);
+    PyModule_AddObject(m, "Normal2D", (PyObject *)&PyGMixNormal2DType);
+    Py_INCREF(&PyGMixZDisk2DType);
+    PyModule_AddObject(m, "ZDisk2D", (PyObject *)&PyGMixZDisk2DType);
+
 
 
     // for numpy

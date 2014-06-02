@@ -230,8 +230,7 @@ class GMix(object):
 
         ng=len(self)*len(psf)
         output = GMix(ngauss=ng)
-        #convolve_fill(gmix, self, psf)
-        _gmix.convolve_fill(self._data, psf._data, output._data)
+        _gmix.convolve_fill(output._data, self._data, psf._data)
         return output
 
     def make_image(self, dims, nsub=1, jacobian=None):
@@ -491,13 +490,16 @@ class GMixModel(GMix):
     """
     def __init__(self, pars, model, logpars=False):
 
-        self._logpars=logpars
+        self._use_logpars=logpars
 
         self._model      = _gmix_model_dict[model]
         self._model_name = _gmix_string_dict[self._model]
 
         self._ngauss = _gmix_ngauss_dict[self._model]
         self._npars  = _gmix_npars_dict[self._model]
+
+        if self._use_logpars:
+            self._linpars=zeros(self._npars)
 
         self.reset()
         self.fill(pars)
@@ -556,11 +558,13 @@ class GMixModel(GMix):
             The parameters; some may be in log space and are converted
         """
 
-        if self._logpars:
-            pars = array(pars_in, dtype='f8', copy=True) 
-            pars[4:4+2] = 10.0**pars[4:4+2]
+        pars_in = array(pars_in, dtype='f8', copy=False) 
+
+        if self._use_logpars:
+            pars=self._linpars
+            _gmix.convert_simple_double_logpars(pars_in, pars, 0)
         else:
-            pars = array(pars_in, dtype='f8', copy=False) 
+            pars = pars_in
 
         if pars.size != self._npars:
             err="model '%s' requires %s pars, got %s"
