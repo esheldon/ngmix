@@ -1,7 +1,7 @@
 from __future__ import print_function
 
 import numpy
-from numpy import where, log10, zeros, exp, sqrt
+from numpy import where, log10, zeros, ones, exp, sqrt
 from numpy.random import random as randu
 
 from . import shape
@@ -1063,11 +1063,14 @@ class PriorSimpleSep(object):
         lnp += self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
         lnp += self.T_prior.get_lnprob_scalar(pars[4], **keys)
 
-        for i in xrange(self.nband):
-            F_prior=self.F_priors[i]
+        #for i in xrange(self.nband):
+        #    F_prior=self.F_priors[i]
+
+        for i, F_prior in enumerate(self.F_priors):
             lnp += F_prior.get_lnprob_scalar(pars[5+i], **keys)
 
         return lnp
+
 
     def fill_fdiff(self, pars, fdiff, **keys):
         """

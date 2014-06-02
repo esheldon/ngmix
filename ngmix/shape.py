@@ -1,13 +1,21 @@
 import numpy
-import numba
-from numba import float64, int64, void, autojit, jit
 
 from .gexceptions import GMixRangeError, GMixFatalError
 
-@autojit
 def shear_reduced(g1, g2, s1, s2):
     """
     addition formula for reduced shear
+
+    parameters
+    ----------
+    g1,g2: scalar or array
+        "reduced shear" shapes
+    s1,s2: scalar or array
+        "reduced shear" shapes to use as shear
+
+    outputs
+    -------
+    g1,g2 after shear
     """
 
     A = 1 + g1*s1 + g2*s2
@@ -22,40 +30,14 @@ def shear_reduced(g1, g2, s1, s2):
 
     return g1o,g2o
 
-@autojit
-def shear_eta(eta1, eta2, s1, s2):
-    """
-    Shear the input etas
-    """
 
-    g1,g2=eta1eta2_to_g1g2(eta1,eta2)
-    g1s,g2s=shear_reduced(g1,g2,s1,s2)
-    eta1_s, eta2_s = g1g2_to_eta1eta2(g1s,g2s)
-    return eta1_s, eta2_s
-
-class ShapeBase(object):
-    """
-    This base class provides non-jitted methods.
-    """
-    def copy(self):
-        """
-        Make a new Shape object with the same ellipticity parameters
-        """
-        s = Shape(self.g1, self.g2)
-        return s
-
-    def __repr__(self):
-        return '(%.16g, %.16g)' % (self.g1,self.g2)
-
-@jit
-class Shape(ShapeBase):
+class Shape(object):
     """
     Shape object.  Currently only for reduced shear style shapes
 
     This version is jitted, but inherits non-jitted methods
     from ShapeBase
     """
-    @void(float64, float64)
     def __init__(self, g1, g2):
         self.g1 = g1
         self.g2 = g2
@@ -65,7 +47,6 @@ class Shape(ShapeBase):
         if g >= 1.0:
             raise GMixRangeError("g out of range: %.16g" % g)
 
-    @void(float64,float64)
     def set_g1g2(self, g1, g2):
         """
         Set reduced shear style ellipticity
@@ -77,7 +58,6 @@ class Shape(ShapeBase):
         if g >= 1.0:
             raise GMixRangeError("g out of range: %.16g" % g)
 
-    @void(float64, float64)
     def shear(self, s1, s2):
         """
         shear the shape.
@@ -85,7 +65,6 @@ class Shape(ShapeBase):
         g1,g2 = shear_reduced(self.g1,self.g2, s1, s2)
         self.set_g1g2(g1, g2)
 
-    @void(float64)
     def rotate(self, theta_radians):
         """
         Rotate the shape by the input angle
@@ -99,12 +78,30 @@ class Shape(ShapeBase):
 
         self.set_g1g2(g1rot, g2rot)
 
+    def copy(self):
+        """
+        Make a new Shape object with the same ellipticity parameters
+        """
+        s = Shape(self.g1, self.g2)
+        return s
 
-@autojit
+    def __repr__(self):
+        return '(%.16g, %.16g)' % (self.g1,self.g2)
+
 def g1g2_to_e1e2(g1, g2):
     """
     convert reduced shear g1,g2 to standard ellipticity
     parameters e1,e2
+
+    parameters
+    ----------
+    g1,g2: scalars
+        Reduced shear space shapes
+
+    outputs
+    -------
+    e1,e2: tuple of scalars
+        shapes in (ixx-iyy)/(ixx+iyy) style space
     """
     g=numpy.sqrt(g1*g1 + g2*g2)
 
@@ -126,8 +123,21 @@ def g1g2_to_e1e2(g1, g2):
     
     return e1,e2
 
-@autojit
 def e1e2_to_g1g2(e1, e2):
+    """
+    convert e1,e2 to reduced shear style ellipticity
+
+    parameters
+    ----------
+    e1,e2: tuple of scalars
+        shapes in (ixx-iyy)/(ixx+iyy) style space
+
+    outputs
+    -------
+    g1,g2: scalars
+        Reduced shear space shapes
+
+    """
 
     e = numpy.sqrt(e1*e1 + e2*e2)
     if e >= 1.:
@@ -177,11 +187,21 @@ def g1g2_to_eta1eta2_array(g1, g2):
     return eta1,eta2, good
 
 
-@autojit
 def g1g2_to_eta1eta2(g1, g2):
     """
-    convert reduced shear g1,g2 to eta
+    convert reduced shear g1,g2 to eta style ellipticity
+
+    parameters
+    ----------
+    g1,g2: scalars
+        Reduced shear space shapes
+
+    outputs
+    -------
+    eta1,eta2: tuple of scalars
+        eta space shapes
     """
+
     g=numpy.sqrt(g1*g1 + g2*g2)
 
     if g >= 1.:
@@ -221,11 +241,21 @@ def eta1eta2_to_g1g2_array(eta1,eta2):
 
     return g1,g2,good
 
-@autojit
 def eta1eta2_to_g1g2(eta1,eta2):
     """
-    convert from eta to reduced style 
+    convert eta style shpaes to reduced shear shapes
+
+    parameters
+    ----------
+    eta1,eta2: tuple of scalars
+        eta space shapes
+
+    outputs
+    -------
+    g1,g2: scalars
+        Reduced shear space shapes
     """
+
     eta=numpy.sqrt(eta1*eta1 + eta2*eta2)
 
     g = numpy.tanh(0.5*eta)
@@ -245,7 +275,6 @@ def eta1eta2_to_g1g2(eta1,eta2):
 
 
 
-@autojit
 def dgs_by_dgo_jacob(g1, g2, s1, s2):
     """
     jacobian of the transformation
@@ -265,57 +294,5 @@ def dgs_by_dgo_jacob(g1, g2, s1, s2):
 
     jacob = num/denom
     return jacob
-
-@autojit
-def detas_by_detao_jacob_num(eta1, eta2, s1, s2, h):
-    """
-    jacobian of the transformation
-        |dgs/dgo|_{shear}
-
-    parameters
-    ----------
-    eta1,eta2: numbers or arrays
-        shape pars for "observed" image
-    s1,s2: numbers or arrays
-        shape pars for shear, applied negative
-    """
-
-    fac=1.0/(2.0*h)
-    eta1_1_1,eta2_1_1 = shear_eta(eta1+h, eta2, s1, s2)
-    eta1_1_2,eta2_1_2 = shear_eta(eta1-h, eta2, s1, s2)
-
-    eta1_2_1,eta2_2_1 = shear_eta(eta1, eta2+h, s1, s2)
-    eta1_2_2,eta2_2_2 = shear_eta(eta1, eta2-h, s1, s2)
-
-    eta1s_by_eta1o = (eta1_1_1-eta1_1_2)*fac
-    eta2s_by_eta1o = (eta2_1_1-eta2_1_2)*fac
-
-    eta1s_by_eta2o = (eta1_2_1-eta1_2_2)*fac
-    eta2s_by_eta2o = (eta2_2_1-eta2_2_2)*fac
-
-    return eta1s_by_eta1o*eta2s_by_eta2o - eta1s_by_eta2o*eta2s_by_eta1o
-
-def compare_g_eta_jacob(s1, s2, h=1.0e-6):
-    import esutil as eu
-
-    n=100
-    g1=numpy.linspace(-0.7,0.7,n)
-    g2=numpy.linspace(-0.7,0.7,n)
-    #g2=numpy.zeros(n)
-
-    eta1,eta2,good=g1g2_to_eta1eta2_array(g1,g2)
-
-    jg=numpy.zeros(n)
-    jeta=numpy.zeros(n)
-
-    for i in xrange(n):
-        jg[i] = dgs_by_dgo_jacob(g1[i],g2[i],s1,s2)
-        jeta[i] = detas_by_detao_jacob_num(eta1[i],eta2[i],s1,s2,h)
-
-    plt=eu.plotting.bscatter(g1, jg, color='blue', xlabel='g1', show=False)
-    eu.plotting.bscatter(g1, jeta, color='red', plt=plt)
-
-    plt=eu.plotting.bscatter(g2, jg, color='blue', xlabel='g2', show=False)
-    eu.plotting.bscatter(g2, jeta, color='red', plt=plt)
 
 

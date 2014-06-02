@@ -1,8 +1,8 @@
 from __future__ import print_function
 import numpy
 from numpy import array, zeros, exp, log10, log, dot, sqrt
-import numba
-from numba import float64, int64, autojit, jit
+#import numba
+#from numba import float64, int64, autojit, jit
 from . import fastmath
 from .jacobian import Jacobian
 from .shape import g1g2_to_e1e2, e1e2_to_g1g2
@@ -1080,22 +1080,6 @@ _gauss2d_dtype=[('p','f8'),
                 ('norm','f8'),
                 ('pnorm','f8')]
 
-'''
-_gauss2d=numba.struct([('p',float64),
-                       ('row',float64),
-                       ('col',float64),
-                       ('irr',float64),
-                       ('irc',float64),
-                       ('icc',float64),
-                       ('det',float64),
-                       ('drr',float64),
-                       ('drc',float64),
-                       ('dcc',float64),
-                       ('norm',float64),
-                       ('pnorm',float64)],packed=True)
-
-_gauss2d_dtype=_gauss2d.get_dtype()
-'''
 
 def get_model_num(model):
     """
@@ -1391,9 +1375,6 @@ def _fill_full(self, pars):
                      pars[beg+3],
                      pars[beg+4],
                      pars[beg+5])
-'''
-
-'''
 def convolve_fill(self, gmix, psf):
     """
     Fill "self" with gmix convolved with psf
@@ -1875,7 +1856,8 @@ def _fdiff_jacob_fast3(self, image, weight, j, fdiff, start, i0, expvals):
 
 class GMixND(object):
     """
-    Gaussian mixture in arbitrary dimensions
+    Gaussian mixture in arbitrary dimensions.  A bit awkward
+    in dim=1 e.g. becuase assumes means are [ndim,npars]
     """
     def __init__(self, weights, means, covars):
         # copy both to avoid it getting changed under us and to
@@ -1888,18 +1870,76 @@ class GMixND(object):
 
         sh=means.shape
         if len(sh) == 1:
-            self.ndim=1
-        else:
-            self.ndim = sh[1]
+            raise ValueError("means must be 2-d even for ndim=1")
+
+        self.ndim = sh[1]
 
         self._calc_icovars_and_norms()
 
         self.tmp_lnprob = zeros(self.ngauss)
 
 
-    def get_prob_scalar(self, pars):
+
+    def get_lnprob_scalar(self, pars_in):
         """
-        Use a numba compile function
+        (x-xmean) icovar (x-xmean)
+        """
+        dolog=1
+        pars=numpy.asanyarray(pars_in, dtype='f8')
+        lnp=_gmix.gmixnd_get_prob_scalar(self.log_pnorms,
+                                         self.means,
+                                         self.icovars,
+                                         self.tmp_lnprob,
+                                         pars,
+                                         dolog)
+        return lnp
+
+    def get_prob_scalar(self, pars_in):
+        """
+        (x-xmean) icovar (x-xmean)
+        """
+        dolog=0
+        pars=numpy.asanyarray(pars_in, dtype='f8')
+        p=_gmix.gmixnd_get_prob_scalar(self.log_pnorms,
+                                       self.means,
+                                       self.icovars,
+                                       self.tmp_lnprob,
+                                       pars,
+                                       dolog)
+        return p
+
+
+    def get_lnprob_array(self, pars):
+        """
+        array input
+        """
+        dolog=1
+        n=pars.shape[0]
+        lnp=zeros(n)
+
+        for i in xrange(n):
+            lnp[i] = self.get_lnprob_scalar(pars[i,:])
+
+        return lnp
+
+    def get_prob_array(self, pars):
+        """
+        array input
+        """
+        dolog=0
+        n=pars.shape[0]
+        p=zeros(n)
+
+        for i in xrange(n):
+            p[i] = self.get_prob_scalar(pars[i,:])
+
+        return p
+
+
+    '''
+    def get_prob_scalar_old(self, pars):
+        """
+        Use a compile function
         """
         dolog=0
         if self.ndim==3:
@@ -1927,7 +1967,7 @@ class GMixND(object):
         else:
             raise RuntimeError("only have fast formula for 1,2,3 dims")
 
-    def get_lnprob_scalar(self, pars):
+    def get_lnprob_scalar_old(self, pars):
         """
         (x-xmean) icovar (x-xmean)
         """
@@ -1958,7 +1998,7 @@ class GMixND(object):
             raise RuntimeError("only have fast formula for 1,2,3 dims")
         return lnp
 
-    def get_prob_array(self, pars):
+    def get_prob_array_old(self, pars):
         """
         array input
         """
@@ -1995,7 +2035,7 @@ class GMixND(object):
             raise RuntimeError("only have fast formula for 1,2,3 dims")
         return p
 
-    def get_lnprob_array(self, pars):
+    def get_lnprob_array_old(self, pars):
         """
         array input
         """
@@ -2032,6 +2072,8 @@ class GMixND(object):
 
         return lnp
 
+    '''
+
 
     def _calc_icovars_and_norms(self):
         """
@@ -2062,6 +2104,7 @@ class GMixND(object):
         self.log_pnorms = log(self.pnorms)
         self.icovars = icovars
 
+'''
 
 @autojit
 def _get_gmixnd_array_3d(log_pnorms, means, icovars, tmp_lnprob, x, dolog, output):
@@ -2210,4 +2253,4 @@ def _get_gmixnd_1d(log_pnorms, means, icovars, tmp_lnprob, x, dolog):
         out=p*exp(lnpmax)
 
     return out
-
+'''

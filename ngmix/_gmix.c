@@ -1115,6 +1115,150 @@ PyObject * PyGMix_convert_simple_double_logpars(PyObject* self, PyObject* args) 
     return Py_None;
 }
 
+/*
+
+   full-covariance, nd-gaussian evaluations
+
+   can do either log or linear
+       log_pnorms, means, icovars, tmp_lnprob, x, dolog
+
+   make sure they are arrays from python
+*/
+
+static int gmixnd_get_prob_args_check(PyObject* log_pnorms,
+                                      PyObject* means,
+                                      PyObject* icovars,
+                                      PyObject* tmp_lnprob,
+                                      PyObject* pars,
+                                      npy_intp *n_gauss,
+                                      int *n_dim)
+{
+    int status=0;
+
+    int n_dim_means=PyArray_NDIM(means);
+    if (n_dim_means != 2) {
+        PyErr_Format(GMixFatalError, "means dim must be 2, got %d", n_dim_means);
+        goto _gmixnd_get_prob_args_check_bail;
+    }
+    int n_dim_icovars=PyArray_NDIM(icovars);
+    if (n_dim_icovars != 3) {
+        PyErr_Format(GMixFatalError, "icovars dim must be 3, got %d", n_dim_icovars);
+        goto _gmixnd_get_prob_args_check_bail;
+    }
+
+    (*n_gauss)=PyArray_SIZE(log_pnorms);
+    (*n_dim)=PyArray_DIM(means,1);
+
+    if (*n_dim > 10) {
+        PyErr_Format(GMixFatalError, "dim must be <= 10, got %d", *n_dim);
+        goto _gmixnd_get_prob_args_check_bail;
+    }
+
+    npy_intp n_pars=PyArray_SIZE(pars);
+    if (n_pars != (*n_dim)) {
+        PyErr_Format(GMixFatalError, "n_dim is %d but n_pars is %ld",
+                     (*n_dim), n_pars);
+        goto _gmixnd_get_prob_args_check_bail;
+    }
+    npy_intp n_tmp=PyArray_SIZE(tmp_lnprob);
+    if (n_tmp != (*n_gauss)) {
+        PyErr_Format(GMixFatalError, "n_gauss is %ld but n_tmp_lnprob is %ld",
+                     (*n_gauss), n_tmp);
+        goto _gmixnd_get_prob_args_check_bail;
+    }
+
+    status=1;
+_gmixnd_get_prob_args_check_bail:
+    return status;
+}
+
+static 
+PyObject * PyGMix_gmixnd_get_prob_scalar(PyObject* self, PyObject* args) {
+
+    PyObject* log_pnorms=NULL;
+    PyObject* means=NULL;
+    PyObject* icovars=NULL;
+    PyObject* tmp_lnprob=NULL;
+    PyObject* pars=NULL;
+    double* tmp_lnprob_ptr=NULL;
+
+    // up to 10 dims allowed
+    double xdiff[10];
+    int dolog=0;
+    npy_intp i=0, n_gauss=0;
+    double p=0.0, retval=0;
+    double lnpmax=-9.99e9;
+    int n_dim=0, idim1=0, idim2=0;
+
+    // weight object is currently ignored
+    if (!PyArg_ParseTuple(args, (char*)"OOOOOi", 
+                          &log_pnorms,
+                          &means,
+                          &icovars,
+                          &tmp_lnprob,
+                          &pars,
+                          &dolog)) {
+        return NULL;
+    }
+
+
+    if (!gmixnd_get_prob_args_check(log_pnorms,
+                                    means,
+                                    icovars,
+                                    tmp_lnprob,
+                                    pars,
+                                    &n_gauss,
+                                    &n_dim)) {
+        return NULL;
+    }
+
+    tmp_lnprob_ptr = (double *) PyArray_DATA(tmp_lnprob);
+
+    for (i=0; i<n_gauss; i++) {
+
+        double logpnorm = *(double *) PyArray_GETPTR1(log_pnorms, i);
+
+        for (idim1=0; idim1<n_dim; idim1++) {
+            double par=*(double *) PyArray_GETPTR1(pars, idim1);
+            double mean=*(double *) PyArray_GETPTR2(means, i, idim1);
+
+            xdiff[idim1] = par-mean;
+        }
+
+        double chi2=0;
+        for (idim1=0; idim1<n_dim; idim1++) {
+            for (idim2=0; idim2<n_dim; idim2++) {
+                double icov=*(double *) PyArray_GETPTR3(icovars, i, idim1, idim2);
+
+                chi2 += xdiff[idim1]*xdiff[idim2]*icov;
+            }
+        }
+
+        double lnp = -0.5*chi2 + logpnorm;
+        if (lnp > lnpmax) {
+            lnpmax=lnp;
+        }
+        tmp_lnprob_ptr[i] = lnp;
+    }    
+
+    p=0;
+    for (i=0; i<n_gauss; i++) {
+        p += exp(tmp_lnprob_ptr[i] - lnpmax);
+    }
+
+    if (dolog) {
+        retval = log(p) + lnpmax;
+    } else {
+        retval = p*exp(lnpmax);
+    }
+
+    return PyFloat_FromDouble(retval);
+
+}
+
+
+
+
 static PyObject * PyGMix_test(PyObject* self, PyObject* args) {
     PyErr_Format(GMixRangeError, "testing GMixRangeError");
     return NULL;
@@ -1133,6 +1277,9 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"em_run",(PyCFunction)PyGMix_em_run, METH_VARARGS,  "run the em algorithm\n"},
 
     {"convert_simple_double_logpars",        (PyCFunction)PyGMix_convert_simple_double_logpars,         METH_VARARGS,  "convert log10 to linear.\n"},
+
+    {"gmixnd_get_prob_scalar",        (PyCFunction)PyGMix_gmixnd_get_prob_scalar,         METH_VARARGS,  "get prob or log prob for scalar arg, nd gaussian"},
+
     {"test",        (PyCFunction)PyGMix_test,         METH_VARARGS,  "test\n\nprint and return."},
     {NULL}  /* Sentinel */
 };
@@ -1253,7 +1400,7 @@ static PyTypeObject PyGMixNormalType = {
 };
 
 
-/* class representing a 2-d normal distribution */
+/* class representing a 2-d circular normal distribution */
 
 struct PyGMixNormal2D {
     PyObject_HEAD
