@@ -14,8 +14,6 @@ from numpy import where, array, exp, log, log10, sqrt, cos, sin, zeros, ones, di
 from numpy import pi
 from numpy.random import random as randu
 from numpy.random import randn
-import numba
-from numba import jit, autojit, float64, void
 
 from . import gmix
 from .gexceptions import GMixRangeError
@@ -2625,6 +2623,7 @@ class TFluxPriorCosmosDev(TFluxPriorCosmosBase):
                    [ 0.05215542,  0.01733399]]])
 
 
+'''
 class TPriorCosmosBase(object):
     """
     From fitting double gaussians to log(T) (actually log10
@@ -2711,6 +2710,7 @@ def _2gauss_prob_array(means, ivars, weights, vals, output):
     for i in xrange(n):
         val=vals[i]
         output[i] = _2gauss_prob_scalar(val)
+'''
 
 
 def srandu(num=None):

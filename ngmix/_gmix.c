@@ -1,7 +1,12 @@
 /*
  
-   Operate on padded structures that map to C structures, as created
-   using numba.struct
+   Instead of defining types here, represent them with numpy arrays with
+   fields.  These map to unpadded structs (defined in _gmix.h).  This allows us
+   to do all memory allocation in python instead of here in C.  The principle
+   is to never allocate memory in this code except for tuples of scalar return
+   values. The only incref we do should be for Py_None This should avoid the
+   dredded memory leaks or forgotten incref/decref bugs that plague C
+   extensions.
 
  */
 

@@ -4,8 +4,6 @@ Fit an image with a gaussian mixture using the EM algorithm
 from __future__ import print_function
 
 import numpy
-import numba
-from numba import jit, autojit, float64, int64
 
 from . import gmix
 from .gmix import GMix
@@ -15,7 +13,7 @@ from . import _gmix
 from .gexceptions import GMixRangeError, GMixMaxIterEM
 from .priors import srandu
 
-from .jacobian import Jacobian, _jacobian
+from .jacobian import Jacobian
 
 from .observation import Observation
 
@@ -122,7 +120,7 @@ class GMixEM(object):
                                       self._obs.image,
                                       self._obs.jacobian._data,
                                       self._sums,
-                                      numpy.float64(self._sky_guess),
+                                      self._sky_guess,
                                       self._counts,
                                       self._tol,
                                       self._maxiter)
@@ -179,24 +177,6 @@ class GMixEM(object):
         if numiter >= maxiter:
             raise GMixMaxIterEM("reached max iter: %s" % maxiter)
 
-'''
-_sums=numba.struct([('gi',float64),
-                    # scratch on a given pixel
-                    ('trowsum',float64),
-                    ('tcolsum',float64),
-                    ('tu2sum',float64),
-                    ('tuvsum',float64),
-                    ('tv2sum',float64),
-                    # sums over all pixels
-                    ('pnew',float64),
-                    ('rowsum',float64),
-                    ('colsum',float64),
-                    ('u2sum',float64),
-                    ('uvsum',float64),
-                    ('v2sum',float64)])
-
-_sums_dtype=_sums.get_dtype()
-'''
 
 _sums_dtype=[('gi','f8'),
              # scratch on a given pixel
@@ -295,7 +275,7 @@ def _get_wmomsum(self):
      locals=dict(psum=float64, skysum=float64))
 def _run_em(image, gmix, sums, j, sky, maxiter, tol):
     """
-    this is a mess until we get inlining in numba
+    this is a mess without inlining
     """
     nrows,ncols=image.shape
     counts=numpy.sum(image)

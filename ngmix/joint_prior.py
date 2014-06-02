@@ -475,7 +475,7 @@ class JointPriorSimpleLinPars(GMixND):
 
     def get_prob_scalar1d(self, pars, throw=False):
         """
-        Use a numba compile function
+        just do bound schecking and call the super
         """
         if not self.check_bounds_scalar(pars,throw=throw):
             return 0.0

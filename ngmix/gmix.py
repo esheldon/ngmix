@@ -4,7 +4,7 @@ from numpy import array, zeros, exp, log10, log, dot, sqrt
 import numba
 from numba import float64, int64, autojit, jit
 from . import fastmath
-from .jacobian import Jacobian, _jacobian
+from .jacobian import Jacobian
 from .shape import g1g2_to_e1e2, e1e2_to_g1g2
 
 from .gexceptions import GMixRangeError, GMixFatalError
@@ -134,7 +134,6 @@ class GMix(object):
         Warning: only really works if the centers are the same
         """
         d=self._data
-        print(self)
         psum=d['p'].sum()
 
         irrsum=(d['irr']*d['p']).sum()
