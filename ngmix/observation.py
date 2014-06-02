@@ -1,5 +1,4 @@
 import numpy
-from numpy import ndarray
 from .jacobian import Jacobian, UnitJacobian
 from .gmix import GMix
 
@@ -28,9 +27,8 @@ class Observation(object):
                  gmix=None,
                  psf=None):
 
-        assert isinstance(image,ndarray),"image must be of type ndarray"
+        self.image=numpy.asanyarray(image, dtype='f8')
         assert len(image.shape)==2,"image must be 2d"
-        self.image=image.astype('f8', copy=False)
 
         self.meta={}
 
@@ -49,11 +47,11 @@ class Observation(object):
         """
 
         if weight is not None:
-            assert isinstance(weight,ndarray),"weight must be of type ndarray"
-            weight=weight.astype('f8', copy=False)
-
+            weight=numpy.asanyarray(weight, dtype='f8')
             assert len(weight.shape)==2,"weight must be 2d"
+
             assert (weight.shape==self.image.shape),"image and weight must be same shape"
+
         else:
             weight = numpy.zeros(self.image.shape) + 1.0
 
