@@ -604,6 +604,8 @@ class LMSimple(FitterBase):
 
         self.fdiff_size=self.totpix + n_prior_pars
 
+        self._band_pars=zeros(6)
+
     def run_lm(self, guess):
         """
         Run leastsq and set the result
@@ -645,12 +647,22 @@ class LMSimple(FitterBase):
         """
         Get linear pars for the specified band
         """
+
+        pars=self._band_pars
+        _gmix.convert_simple_double_logpars(log_pars, pars, band)
+        return pars
+
+    def _get_band_pars_old(self, log_pars, band):
+        """
+        Get linear pars for the specified band
+        """
         pars=log_pars[ [0,1,2,3,4,5+band] ].copy()
 
         pars[4] = 10.0**pars[4]
         pars[5] = 10.0**pars[5]
 
         return pars
+
 
 
     def _calc_fdiff(self, pars, get_s2nsums=False):
@@ -1197,6 +1209,8 @@ class MCMCSimple(MCMCBase):
         self.g1i = 2
         self.g2i = 3
 
+        self._band_pars=zeros(6)
+
     def calc_result(self, weights=None, linear=False):
         """
         Some extra stats for simple models
@@ -1215,6 +1229,15 @@ class MCMCSimple(MCMCBase):
             self._result['g_cov'] = self._result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
 
     def _get_band_pars(self, log_pars, band):
+        """
+        Get linear pars for the specified band
+        """
+
+        pars=self._band_pars
+        _gmix.convert_simple_double_logpars(log_pars, pars, band)
+        return pars
+ 
+    def _get_band_pars_old(self, log_pars, band):
         """
         Get linear pars for the specified band
         """

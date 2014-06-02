@@ -1078,13 +1078,43 @@ static PyObject * PyGMix_em_run(PyObject* self, PyObject* args) {
     }
 }
 
+static 
+PyObject * PyGMix_convert_simple_double_logpars(PyObject* self, PyObject* args) {
+
+    PyObject* logpars_obj=NULL;
+    PyObject* pars_obj=NULL;
+    int band=0;
+
+    // weight object is currently ignored
+    if (!PyArg_ParseTuple(args, (char*)"OOi", 
+                          &logpars_obj,
+                          &pars_obj,
+                          &band)) {
+        return NULL;
+    }
+
+    double* logpars=PyArray_DATA(logpars_obj);
+    double* pars=PyArray_DATA(pars_obj);
+
+    pars[0] = logpars[0];
+    pars[1] = logpars[1];
+    pars[2] = logpars[2];
+    pars[3] = logpars[3];
+    pars[4] = pow(10.0, logpars[4]);
+    pars[5] = pow(10.0, logpars[5+band]);
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+
+
 static PyObject * PyGMix_test(PyObject* self, PyObject* args) {
     PyErr_Format(GMixRangeError, "testing GMixRangeError");
     return NULL;
 }
 
 static PyMethodDef pygauss2d_funcs[] = {
-    {"test",        (PyCFunction)PyGMix_test,         METH_VARARGS,  "test\n\nprint and return."},
 
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
     {"fill_fdiff",  (PyCFunction)PyGMix_fill_fdiff,  METH_VARARGS,  "fill fdiff for LM\n"},
@@ -1095,6 +1125,9 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"convolve_fill",(PyCFunction)PyGMix_convolve_fill, METH_VARARGS,  "convolve gaussian with psf and store in output\n"},
 
     {"em_run",(PyCFunction)PyGMix_em_run, METH_VARARGS,  "run the em algorithm\n"},
+
+    {"convert_simple_double_logpars",        (PyCFunction)PyGMix_convert_simple_double_logpars,         METH_VARARGS,  "convert log10 to linear.\n"},
+    {"test",        (PyCFunction)PyGMix_test,         METH_VARARGS,  "test\n\nprint and return."},
     {NULL}  /* Sentinel */
 };
 

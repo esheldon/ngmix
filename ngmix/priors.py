@@ -2844,8 +2844,7 @@ class Disk2D(object):
 
         does not raise an exception
         """
-        r2 = x**2 + y**2
-        if r2 >= self.radius_sq:
+        if r >= self.radius:
             p=0.0
         else:
             p=1.0
@@ -2870,7 +2869,14 @@ class Disk2D(object):
         an exception
         """
 
-        r = sqrt(x**2 + y**2)
+        r2 = x**2 + y**2
+        if r2 >= self.radius_sq:
+            p=0.0
+        else:
+            p=1.0
+        return p
+
+
         return self.get_lnprob_scalar1d(r)
 
 
