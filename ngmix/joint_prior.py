@@ -5,7 +5,6 @@ from numpy import where, log10, zeros, exp, sqrt
 from numpy.random import random as randu
 
 from . import shape
-from .shape import g1g2_to_eta1eta2, eta1eta2_to_g1g2_array, g1g2_to_eta1eta2_array
 from .gexceptions import GMixRangeError
 
 from . import priors

@@ -100,12 +100,6 @@ class GPriorBase(object):
         """
         h2=1./(2.*h)
 
-        #g1new,g2new=shape.shear_reduced(g1, g2, h, 0.0)
-        #ff = self.get_prob_array2d(g1new, g2new)
-
-        #g1new,g2new=shape.shear_reduced(g1, g2, -h, 0.0)
-        #fb = self.get_prob_array2d(g1new, g2new)
-
         ff = self.get_prob_array2d(g1+h, g2)
         fb = self.get_prob_array2d(g1-h, g2)
 
@@ -120,12 +114,6 @@ class GPriorBase(object):
 
         """
         h2=1./(2.*h)
-
-        #g1new,g2new=shape.shear_reduced(g1, g2, 0.0, h)
-        #ff = self.get_prob_array2d(g1new, g2new)
-
-        #g1new,g2new=shape.shear_reduced(g1, g2, 0.0, -h)
-        #fb = self.get_prob_array2d(g1new, g2new)
 
         ff = self.get_prob_array2d(g1, g2+h)
         fb = self.get_prob_array2d(g1, g2-h)

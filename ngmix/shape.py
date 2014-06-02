@@ -245,7 +245,6 @@ def eta1eta2_to_g1g2(eta1,eta2):
 
 
 
-#@jit(argtypes=[float64,float64,float64,float64])
 @autojit
 def dgs_by_dgo_jacob(g1, g2, s1, s2):
     """
