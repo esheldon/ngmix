@@ -1476,11 +1476,12 @@ class MHSimple(MCMCSimple):
 
         parameters
         ----------
+        state: optional
+            A random number generator with method .uniform()
+            e.g. an instance of numpy.random.RandomState
         seed: integer, optional
             If state= is not set, the random state is set to
             numpy.random.RandomState(seed=seed)
-        state: optional
-            A random number generator with method .uniform()
         """
         if state is not None:
             self.random_state=state
