@@ -25,6 +25,7 @@ static PyObject* GMixFatalError;
     return 0 means out of range
 */
 static int g1g2_to_e1e2(double g1, double g2, double *e1, double *e2) {
+    double eta, e, fac;
     double g=sqrt(g1*g1 + g2*g2);
 
     if (g >= 1) {
@@ -36,14 +37,14 @@ static int g1g2_to_e1e2(double g1, double g2, double *e1, double *e2) {
         *e2=0;
     } else {
 
-        double eta = 2*atanh(g);
-        double e = tanh(eta);
+        eta = 2*atanh(g);
+        e = tanh(eta);
         if (e >= 1.) {
             // round off?
             e = 0.99999999;
         }
 
-        double fac = e/g;
+        fac = e/g;
 
         *e1 = fac*g1;
         *e2 = fac*g2;
@@ -107,7 +108,9 @@ static int gauss2d_set(struct PyGMix_Gauss2D *self,
                        double icc) {
 
 
-    double det = irr*icc - irc*irc;
+    double det, idet;
+
+    det = irr*icc - irc*irc;
     if (det < 1.0e-200) {
         // PyErr_Format doesn't format floats
         fprintf(stderr,"gauss2d det too low: %.16g", det);
@@ -125,7 +128,7 @@ static int gauss2d_set(struct PyGMix_Gauss2D *self,
 
     self->det = det;
 
-    double idet=1.0/det;
+    idet=1.0/det;
     self->drr = irr*idet;
     self->drc = irc*idet;
     self->dcc = icc*idet;
@@ -282,7 +285,8 @@ static int gmix_fill_simple(struct PyGMix_Gauss2D *self,
                             const double* pvals)
 {
 
-    int status=0;
+    int status=0, n_gauss_expected;
+    double row,col,g1,g2,T,counts,e1,e2,T_i_2,counts_i;
     npy_intp i=0;
 
     if (n_pars != 6) {
@@ -291,7 +295,7 @@ static int gmix_fill_simple(struct PyGMix_Gauss2D *self,
         goto _gmix_fill_simple_bail;
     }
 
-    int n_gauss_expected=get_n_gauss(model, &status);
+    n_gauss_expected=get_n_gauss(model, &status);
     if (!status) {
         goto _gmix_fill_simple_bail;
     }
@@ -302,14 +306,13 @@ static int gmix_fill_simple(struct PyGMix_Gauss2D *self,
         goto _gmix_fill_simple_bail;
     }
 
-    double row=pars[0];
-    double col=pars[1];
-    double g1=pars[2];
-    double g2=pars[3];
-    double T=pars[4];
-    double counts=pars[5];
+    row=pars[0];
+    col=pars[1];
+    g1=pars[2];
+    g2=pars[3];
+    T=pars[4];
+    counts=pars[5];
 
-    double e1,e2;
     // can set exception inside
     status=g1g2_to_e1e2(g1, g2, &e1, &e2);
     if (!status) {
@@ -318,8 +321,8 @@ static int gmix_fill_simple(struct PyGMix_Gauss2D *self,
 
 
     for (i=0; i<n_gauss; i++) {
-        double T_i_2 = 0.5*T*fvals[i];
-        double counts_i=counts*pvals[i];
+        T_i_2 = 0.5*T*fvals[i];
+        counts_i=counts*pvals[i];
 
         status=gauss2d_set(&self[i],
                            counts_i,
@@ -407,6 +410,10 @@ _gmix_fill_bail:
 static PyObject * PyGMix_gmix_fill(PyObject* self, PyObject* args) {
     PyObject* gmix_obj=NULL;
     PyObject* pars_obj=NULL;
+    const double* pars;
+    npy_intp n_gauss, n_pars;
+    int res;
+
     int model=0;
 
     struct PyGMix_Gauss2D *gmix=NULL;
@@ -420,12 +427,12 @@ static PyObject * PyGMix_gmix_fill(PyObject* self, PyObject* args) {
     }
 
     gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
-    npy_intp n_gauss=PyArray_SIZE(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
 
-    const double *pars=(double *) PyArray_DATA(pars_obj);
-    npy_intp n_pars = PyArray_SIZE(pars_obj);
+    pars=(double *) PyArray_DATA(pars_obj);
+    n_pars = PyArray_SIZE(pars_obj);
 
-    int res=gmix_fill(gmix, n_gauss, pars, n_pars, model);
+    res=gmix_fill(gmix, n_gauss, pars, n_pars, model);
     if (!res) {
         // raise an exception
         return NULL;
@@ -442,7 +449,7 @@ static int convolve_fill(struct PyGMix_Gauss2D *self, npy_intp self_n_gauss,
 {
     int status=0;
     npy_intp ntot, iobj=0, ipsf=0, itot=0;
-    double psf_rowcen=0, psf_colcen=0, psf_psum=0;
+    double psf_rowcen=0, psf_colcen=0, psf_psum=0, psf_ipsum;
 
     ntot = n_gauss*psf_n_gauss;
     if (ntot != self_n_gauss) {
@@ -453,7 +460,7 @@ static int convolve_fill(struct PyGMix_Gauss2D *self, npy_intp self_n_gauss,
     }
 
     gmix_get_cen(psf, psf_n_gauss, &psf_rowcen, &psf_colcen, &psf_psum);
-    double psf_ipsum=1.0/psf_psum;
+    psf_ipsum=1.0/psf_psum;
 
     itot=0;
     for (iobj=0; iobj<n_gauss; iobj++) {
@@ -495,6 +502,8 @@ static PyObject * PyGMix_convolve_fill(PyObject* self, PyObject* args) {
     struct PyGMix_Gauss2D *gmix=NULL;
     struct PyGMix_Gauss2D *psf_gmix=NULL;
     struct PyGMix_Gauss2D *self_gmix=NULL;
+    npy_intp self_n_gauss=0, n_gauss=0, psf_n_gauss=0;
+    int res=0;
 
     if (!PyArg_ParseTuple(args, (char*)"OOO",
                           &self_gmix_obj,
@@ -505,19 +514,19 @@ static PyObject * PyGMix_convolve_fill(PyObject* self, PyObject* args) {
     }
 
     self_gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(self_gmix_obj);
-    npy_intp self_n_gauss =PyArray_SIZE(self_gmix_obj);
+    self_n_gauss =PyArray_SIZE(self_gmix_obj);
 
     gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
-    npy_intp n_gauss=PyArray_SIZE(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
 
     psf_gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(psf_gmix_obj);
-    npy_intp psf_n_gauss =PyArray_SIZE(psf_gmix_obj);
+    psf_n_gauss =PyArray_SIZE(psf_gmix_obj);
 
 
-    int res=convolve_fill(self_gmix, self_n_gauss,
-                          gmix, n_gauss,
-                          psf_gmix, psf_n_gauss);
-                          
+    res=convolve_fill(self_gmix, self_n_gauss,
+                      gmix, n_gauss,
+                      psf_gmix, psf_n_gauss);
+
     if (!res) {
         // raise an exception
         return NULL;
@@ -916,7 +925,7 @@ static int em_run(PyObject* image_obj,
     double nsky = sky/counts;
     double psky = sky/(counts/area);
 
-    double T_last=-9999.0;
+    double T=0, T_last=-9999.0, igrat=0;
 
     (*numiter)=0;
     while ( (*numiter) < maxiter) {
@@ -930,10 +939,11 @@ static int em_run(PyObject* image_obj,
 
             for (col=0; col<n_col; col++) {
 
+                double gtot=0.0;
                 double imnorm=*(double*)PyArray_GETPTR2(image_obj,row,col);
+
                 imnorm /= counts;
 
-                double gtot=0.0;
                 for (i=0; i<n_gauss; i++) {
                     struct PyGMix_EM_Sums *sum=&sums[i];
                     const struct PyGMix_Gauss2D *gauss=&gmix[i];
@@ -969,7 +979,7 @@ static int em_run(PyObject* image_obj,
                     goto _rm_run_bail;
                 }
 
-                double igrat = imnorm/gtot;
+                igrat = imnorm/gtot;
                 for (i=0; i<n_gauss; i++) {
                     struct PyGMix_EM_Sums *sum=&sums[i];
 
@@ -1003,7 +1013,7 @@ static int em_run(PyObject* image_obj,
         psky = skysum;
         nsky = psky/area;
 
-        double T = gmix_get_T(gmix, n_gauss);
+        T = gmix_get_T(gmix, n_gauss);
         (*frac_diff) = fabs((T-T_last)/T);
 
         if ( (*frac_diff) < tol) {
@@ -1074,7 +1084,7 @@ static PyObject * PyGMix_em_run(PyObject* self, PyObject* args) {
         return NULL;
     } else {
         PyObject* retval=PyTuple_New(2);
-        PyTuple_SetItem(retval,0,PyInt_FromLong(numiter));
+        PyTuple_SetItem(retval,0,PyLong_FromLong(numiter));
         PyTuple_SetItem(retval,1,PyFloat_FromDouble(frac_diff));
         return retval;
     }
@@ -1092,6 +1102,7 @@ PyObject * PyGMix_convert_simple_double_logpars(PyObject* self, PyObject* args) 
     PyObject* logpars_obj=NULL;
     PyObject* pars_obj=NULL;
     int band=0;
+    double *logpars=NULL, *pars=NULL;
 
     // weight object is currently ignored
     if (!PyArg_ParseTuple(args, (char*)"OOi", 
@@ -1101,8 +1112,8 @@ PyObject * PyGMix_convert_simple_double_logpars(PyObject* self, PyObject* args) 
         return NULL;
     }
 
-    double* logpars=PyArray_DATA(logpars_obj);
-    double* pars=PyArray_DATA(pars_obj);
+    logpars=PyArray_DATA(logpars_obj);
+    pars=PyArray_DATA(pars_obj);
 
     pars[0] = logpars[0];
     pars[1] = logpars[1];
@@ -1133,14 +1144,15 @@ static int gmixnd_get_prob_args_check(PyObject* log_pnorms,
                                       npy_intp *n_gauss,
                                       int *n_dim)
 {
-    int status=0;
+    int status=0, n_dim_means=0, n_dim_icovars=0;
+    npy_intp n_pars=0, n_tmp=0;
 
-    int n_dim_means=PyArray_NDIM(means);
+    n_dim_means=PyArray_NDIM(means);
     if (n_dim_means != 2) {
         PyErr_Format(GMixFatalError, "means dim must be 2, got %d", n_dim_means);
         goto _gmixnd_get_prob_args_check_bail;
     }
-    int n_dim_icovars=PyArray_NDIM(icovars);
+    n_dim_icovars=PyArray_NDIM(icovars);
     if (n_dim_icovars != 3) {
         PyErr_Format(GMixFatalError, "icovars dim must be 3, got %d", n_dim_icovars);
         goto _gmixnd_get_prob_args_check_bail;
@@ -1154,13 +1166,13 @@ static int gmixnd_get_prob_args_check(PyObject* log_pnorms,
         goto _gmixnd_get_prob_args_check_bail;
     }
 
-    npy_intp n_pars=PyArray_SIZE(pars);
+    n_pars=PyArray_SIZE(pars);
     if (n_pars != (*n_dim)) {
         PyErr_Format(GMixFatalError, "n_dim is %d but n_pars is %ld",
                      (*n_dim), n_pars);
         goto _gmixnd_get_prob_args_check_bail;
     }
-    npy_intp n_tmp=PyArray_SIZE(tmp_lnprob);
+    n_tmp=PyArray_SIZE(tmp_lnprob);
     if (n_tmp != (*n_gauss)) {
         PyErr_Format(GMixFatalError, "n_gauss is %ld but n_tmp_lnprob is %ld",
                      (*n_gauss), n_tmp);
@@ -1187,7 +1199,7 @@ PyObject * PyGMix_gmixnd_get_prob_scalar(PyObject* self, PyObject* args) {
     int dolog=0;
     npy_intp i=0, n_gauss=0;
     double p=0.0, retval=0;
-    double lnpmax=-9.99e9;
+    double lnpmax=-9.99e9, logpnorm=0, chi2=0, lnp=0, par=0, mean=0, icov=0;
     int n_dim=0, idim1=0, idim2=0;
 
     // weight object is currently ignored
@@ -1216,25 +1228,25 @@ PyObject * PyGMix_gmixnd_get_prob_scalar(PyObject* self, PyObject* args) {
 
     for (i=0; i<n_gauss; i++) {
 
-        double logpnorm = *(double *) PyArray_GETPTR1(log_pnorms, i);
+        logpnorm = *(double *) PyArray_GETPTR1(log_pnorms, i);
 
         for (idim1=0; idim1<n_dim; idim1++) {
-            double par=*(double *) PyArray_GETPTR1(pars, idim1);
-            double mean=*(double *) PyArray_GETPTR2(means, i, idim1);
+            par=*(double *) PyArray_GETPTR1(pars, idim1);
+            mean=*(double *) PyArray_GETPTR2(means, i, idim1);
 
             xdiff[idim1] = par-mean;
         }
 
-        double chi2=0;
+        chi2=0;
         for (idim1=0; idim1<n_dim; idim1++) {
             for (idim2=0; idim2<n_dim; idim2++) {
-                double icov=*(double *) PyArray_GETPTR3(icovars, i, idim1, idim2);
+                icov=*(double *) PyArray_GETPTR3(icovars, i, idim1, idim2);
 
                 chi2 += xdiff[idim1]*xdiff[idim2]*icov;
             }
         }
 
-        double lnp = -0.5*chi2 + logpnorm;
+        lnp = -0.5*chi2 + logpnorm;
         if (lnp > lnpmax) {
             lnpmax=lnp;
         }
@@ -1737,7 +1749,11 @@ init_gmix(void)
             Py_INCREF(GMixRangeError);
             PyModule_AddObject(m, "GMixRangeError", GMixRangeError);
         } else {
+#if PY_MAJOR_VERSION >= 3
+            return NULL;
+#else
             return;
+#endif
         }
     }
     /* register exceptions */
@@ -1748,7 +1764,11 @@ init_gmix(void)
             Py_INCREF(GMixFatalError);
             PyModule_AddObject(m, "GMixFatalError", GMixFatalError);
         } else {
+#if PY_MAJOR_VERSION >= 3
+            return NULL;
+#else
             return;
+#endif
         }
     }
 
@@ -1764,4 +1784,9 @@ init_gmix(void)
 
     // for numpy
     import_array();
+
+#if PY_MAJOR_VERSION >= 3
+    return m;
+#endif
+
 }
