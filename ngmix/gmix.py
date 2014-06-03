@@ -1,4 +1,12 @@
 from __future__ import print_function
+
+try:
+    xrange = xrange
+    # We have Python 2
+except:
+    xrange = range
+    # We have Python 3
+
 import numpy
 from numpy import array, zeros, exp, log10, log, dot, sqrt
 from . import fastmath

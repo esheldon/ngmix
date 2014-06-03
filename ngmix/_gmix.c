@@ -1697,7 +1697,11 @@ static PyTypeObject PyGMixZDisk2DType = {
 #define PyMODINIT_FUNC void
 #endif
 PyMODINIT_FUNC
+#if PY_MAJOR_VERSION >= 3
+PyInit__gmix(void)
+#else
 init_gmix(void) 
+#endif
 {
     PyObject* m=NULL;
 

@@ -7,6 +7,13 @@ I haven't forced the max prob to be 1.0 yet, but should
 """
 from __future__ import print_function
 
+try:
+    xrange = xrange
+    # We have Python 2
+except:
+    xrange = range
+    # We have Python 3
+
 import math
 
 import numpy

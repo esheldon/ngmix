@@ -1,8 +1,16 @@
 """
 class PQR
 """
-
 from __future__ import print_function
+
+try:
+    xrange = xrange
+    # We have Python 2
+except:
+    xrange = range
+    # We have Python 3
+
+
 import numpy
 from numpy import array, where, zeros
 from .gexceptions import GMixRangeError, GMixFatalError

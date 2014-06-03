@@ -20,6 +20,13 @@
 # import emcee if needed
 from __future__ import print_function
 
+try:
+    xrange = xrange
+    # We have Python 2
+except:
+    xrange = range
+    # We have Python 3
+
 from sys import stdout
 import numpy
 from numpy import array, zeros, diag, exp, sqrt, where, log10, isfinite
@@ -41,6 +48,7 @@ from .gexceptions import GMixRangeError, GMixFatalError
 from .observation import Observation,ObsList,MultiBandObsList
 
 from . import stats
+
 
 MAX_TAU=0.1
 MIN_ARATE=0.2
