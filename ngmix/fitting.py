@@ -1117,16 +1117,17 @@ class MCMCBase(FitterBase):
         names=self.get_par_names()
 
         if separate:
+            # returns a tuple burn_plt, hist_plt
             plotfunc =mcmc.plot_results_separate
         else:
             plotfunc =mcmc.plot_results
 
         pdict={}
         pdict['trials']=plotfunc(self.trials,
-                                     names=names,
-                                     title=title,
-                                     show=show,
-                                     **keys)
+                                 names=names,
+                                 title=title,
+                                 show=show,
+                                 **keys)
 
 
         if weights is not None:
@@ -1267,6 +1268,282 @@ class MCMCSimple(MCMCBase):
         return names
 
 
+class MH(object):
+    """
+    Run a Monte Carlo Markov Chain (MCMC) using metropolis hastings.
+    
+    parameters
+    ----------
+    lnprob_func: function or method
+        A function to calculate the log proability given the input
+        parameters.  Can be a method of a class.
+            ln_prob = lnprob_func(pars)
+            
+    stepper: function or method 
+        A function to take a step given the input parameters.
+        Can be a method of a class.
+            newpars = stepper(pars)
+
+    seed: floating point, optional
+        An optional seed for the random number generator.
+
+    examples
+    ---------
+    m=mcmc.MCMC(lnprob_func, stepper, seed=34231)
+    m.run(pars_start, nstep)
+    trials = m.get_trials()
+    loglike = m.get_loglike()
+    arate = m.get_acceptance_rate()
+
+    """
+    def __init__(self, lnprob_func, stepper,
+                 seed=None, random_state=None):
+        self._lnprob_func=lnprob_func
+        self._stepper=stepper
+
+        self.set_random_state(seed=seed, state=random_state)
+        self.reset(seed=seed)
+
+    def reset(self, seed=None):
+        """
+        Clear all data
+        """
+        self._trials=None
+        self._loglike=None
+        self._accepted=None
+
+    def set_random_state(self, seed=None, state=None):
+        """
+        set the random state
+
+        parameters
+        ----------
+        seed: integer, optional
+            If state= is not set, the random state is set to
+            numpy.random.RandomState(seed=seed)
+        state: optional
+            A random number generator with method .uniform()
+        """
+        if state is not None:
+            self._random_state=state
+        else:
+            self._random_state=numpy.random.RandomState(seed=seed)
+
+    def run_mcmc(self, pars_start, nstep):
+        """
+        Run the MCMC chain.  Append new steps if trials already
+        exist in the chain.
+
+        parameters
+        ----------
+        pars_start: sequence
+            Starting point for the chain in the n-d parameter space.
+        nstep: integer
+            Number of steps in the chain.
+        """
+        
+        self._init_data(pars_start, nstep)
+
+        for i in xrange(1,nstep):
+            self._step()
+
+        self._arate=self._accepted.sum()/float(self._accepted.size)
+        return self._trials[-1,:]
+
+    def get_trials(self):
+        """
+        Get the trials array
+        """
+        return self._trials
+
+    def get_loglike(self):
+        """
+        Get the trials array
+        """
+        return self._loglike
+    get_lnprob=get_loglike
+
+    def get_acceptance_rate(self):
+        """
+        Get the acceptance rate
+        """
+        return self._arate
+    get_arate=get_acceptance_rate
+
+    def get_accepted(self):
+        """
+        Get the accepted array
+        """
+        return self._accepted
+
+    def _step(self):
+        """
+        Take the next step in the MCMC chain.  
+        
+        Calls the stepper lnprob_func methods sent during construction.  If the
+        new loglike is not greater than the previous, or a uniformly generated
+        random number is greater than the the ratio of new to old likelihoods,
+        the new step is not used, and the new parameters are the same as the
+        old.  Otherwise the new step is kept.
+
+        This is an internal function that is called by the .run method.
+        It is not intended for call by the user.
+        """
+
+        index=self._current
+
+        oldpars=self._oldpars
+        oldlike=self._oldlike
+
+        # Take a step and evaluate the likelihood
+        newpars = self._stepper(oldpars)
+        newlike = self._lnprob_func(newpars)
+
+        log_likeratio = newlike-oldlike
+
+        randnum = self._random_state.uniform()
+        log_randnum = numpy.log(randnum)
+
+        # we allow use of -infinity as a sign we are out of bounds
+        if (isfinite(newlike) 
+                and ( (newlike > oldlike) | (log_randnum < log_likeratio)) ):
+
+            self._accepted[index]  = 1
+            self._loglike[index]   = newlike
+            self._trials[index, :] = newpars
+
+            self._oldpars = newpars
+            self._oldlike = newlike
+
+        else:
+            self._accepted[index] = 0
+            self._loglike[index]  = oldlike
+            self._trials[index,:] = oldpars
+
+        self._current += 1
+
+    def _init_data(self, pars_start, nstep):
+        """
+        Set the trials and accept array.
+        """
+
+        pars_start=array(pars_start,dtype='f8',copy=False)
+        npars = pars_start.size
+
+        self._trials   = numpy.zeros( (nstep, npars) )
+        self._loglike  = numpy.zeros(nstep)
+        self._accepted = numpy.zeros(nstep, dtype='i1')
+        self._current  = 1
+
+        self._oldpars = pars_start.copy()
+        self._oldlike = self._lnprob_func(pars_start)
+
+        self._trials[0,:] = pars_start
+        self._loglike[0]  = self._oldlike
+        self._accepted[0] = 1
+
+
+class MHSimple(MCMCSimple):
+    def __init__(self, obs, model, step_sizes, **keys):
+        """
+        not inheriting init from MCMCSsimple or MCMCbase
+        """
+        FitterBase.__init__(self, obs, model, **keys)
+
+        self.trials=None
+
+        # where g1,g2 are located in a pars array
+        self.g1i = 2
+        self.g2i = 3
+
+        self._band_pars=zeros(6)
+
+        step_sizes=numpy.asanyarray(step_sizes, dtype='f8')
+        ns=step_sizes.size
+        mess="step_sizes has size=%d, expected %d" % (ns,self.npars)
+        assert (ns == self.npars),mess
+
+        self.step_sizes=step_sizes
+
+        seed=keys.get('seed',None)
+        state=keys.get('random_state',None)
+        self.set_random_state(seed=seed, state=state)
+
+
+    def set_random_state(self, seed=None, state=None):
+        """
+        set the random state
+
+        parameters
+        ----------
+        seed: integer, optional
+            If state= is not set, the random state is set to
+            numpy.random.RandomState(seed=seed)
+        state: optional
+            A random number generator with method .uniform()
+        """
+        if state is not None:
+            self.random_state=state
+        else:
+            self.random_state=numpy.random.RandomState(seed=seed)
+
+    def run_mcmc(self, pos, nstep):
+        """
+        user can run steps
+        """
+
+        if not hasattr(self,'sampler'):
+            self._setup_sampler_and_data(pos)
+
+        sampler=self.sampler
+        sampler.reset()
+        self.pos = sampler.run_mcmc(pos, nstep)
+
+        trials = sampler.get_trials()
+        lnprobs = sampler.get_lnprob()
+
+        w=lnprobs.argmax()
+        bp=lnprobs[w]
+        if self.best_lnprob is None or bp > self.best_lnprob:
+            self.best_lnprob=bp
+            self.best_pars=trials[w,:]
+
+        self.arate = sampler.get_arate()
+
+        self.trials  = trials
+
+        return self.pos
+
+
+    def take_step(self, pos):
+        """
+        Take gaussian steps
+        """
+        return pos+self.step_sizes*self.random_state.normal(size=self.npars)
+
+    def _setup_sampler_and_data(self, pos):
+        """
+        Try to initialize the gaussian mixtures. If failure, most
+        probablly a GMixRangeError will be raised
+        """
+
+        self.flags=0
+        self.pos=pos
+
+        npars=pos.size
+        mess="pos has npars=%d, expected %d" % (npars,self.npars)
+        assert (npars==self.npars),mess
+
+        # initialize all the gmix objects; may raise an error
+        self._init_gmix_all(pos)
+
+        self.sampler = MH(self.calc_lnprob, self.take_step,
+                          random_state=self.random_state)
+        self.best_lnprob=None
+
+    def _set_tau(self):
+        # we don't calculate this currently
+        self.tau=9999.0
 
 class MCMCSersic(MCMCSimple):
     def __init__(self, obs, **keys):
