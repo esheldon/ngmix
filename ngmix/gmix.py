@@ -870,7 +870,7 @@ def fit_sersic_splines(type, ngauss, order):
     """
     from scipy.interpolate import InterpolatedUnivariateSpline
 
-    print("fitting",type,"sersic splines, ngauss",ngauss,"order",order)
+    #print("fitting",type,"sersic splines, ngauss",ngauss,"order",order)
 
     if type=='T':
         start=0
