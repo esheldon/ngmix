@@ -258,6 +258,23 @@ class JointPriorSimpleHybrid(GMixND):
 
         return lnp
 
+    def fill_fdiff(self, pars, fdiff, **keys):
+        """
+        set sqrt(-2ln(p)) ~ (model-data)/err
+        """
+        index=0
+        fdiff[index] = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
+        index += 1
+        fdiff[index] = self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
+        index += 1
+        fdiff[index] =  self.TF_prior.get_lnprob_scalar(pars[4:4+2], **keys)
+        index += 1
+
+        fdiff[0:index] = sqrt(-2*fdiff[0:index])
+        return index
+
+
+
     def sample(self, n=None):
         """
         Get random samples
