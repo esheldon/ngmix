@@ -426,6 +426,60 @@ class FitterBase(object):
         else:
             return self.prior.get_lnprob_scalar(pars)
 
+    def plot_residuals(self, title=None, show=False,
+                       width=1920, height=1200):
+        import images
+        import biggles
+
+        biggles.configure('screen','width', width)
+        biggles.configure('screen','height', height)
+
+        try:
+            self._fill_gmix_all(self._result['pars'])
+        except GMixRangeError as gerror:
+            print(str(gerror))
+            return None
+
+        plist=[]
+        for band in xrange(self.nband):
+
+            band_list=[]
+
+            obs_list=self.obs[band]
+            gmix_list=self._gmix_all[band]
+            
+            nim=len(gmix_list)
+
+            ttitle='band: %s' % band
+            if title is not None:
+                ttitle='%s %s' % (title, ttitle)
+
+            for i in xrange(nim):
+
+                this_title = '%s cutout: %d' % (ttitle, i+1)
+
+                obs=obs_list[i]
+                gm=gmix_list[i]
+
+                im=obs.image
+                wt=obs.weight
+                j=obs.jacobian
+
+                model=gm.make_image(im.shape,jacobian=j)
+
+                showim = im*wt
+                showmod = model*wt
+
+                sub_tab=images.compare_images(showim, showmod,show=False)
+                sub_tab.title=this_title
+
+                band_list.append(sub_tab)
+
+                if show:
+                    sub_tab.show()
+
+            plist.append(band_list)
+        return plist
 
 
 class TemplateFluxFitter(FitterBase):
@@ -1138,9 +1192,9 @@ class MCMCBase(FitterBase):
                                       show=show)
 
         if do_residual:
-            pdict['resid']=self._plot_residuals(title=title,show=show,
-                                                width=width,
-                                                height=height)
+            pdict['resid']=self.plot_residuals(title=title,show=show,
+                                               width=width,
+                                               height=height)
 
         if show and prompt:
             key=raw_input('hit a key: ')
@@ -1149,60 +1203,6 @@ class MCMCBase(FitterBase):
 
         return pdict
 
-    def _plot_residuals(self, title=None, show=False,
-                        width=1920, height=1200):
-        import images
-        import biggles
-
-        biggles.configure('screen','width', width)
-        biggles.configure('screen','height', height)
-
-        try:
-            self._fill_gmix_all(self._result['pars'])
-        except GMixRangeError as gerror:
-            print(str(gerror))
-            return None
-
-        plist=[]
-        for band in xrange(self.nband):
-
-            band_list=[]
-
-            obs_list=self.obs[band]
-            gmix_list=self._gmix_all[band]
-            
-            nim=len(gmix_list)
-
-            ttitle='band: %s' % band
-            if title is not None:
-                ttitle='%s %s' % (title, ttitle)
-
-            for i in xrange(nim):
-
-                this_title = '%s cutout: %d' % (ttitle, i+1)
-
-                obs=obs_list[i]
-                gm=gmix_list[i]
-
-                im=obs.image
-                wt=obs.weight
-                j=obs.jacobian
-
-                model=gm.make_image(im.shape,jacobian=j)
-
-                showim = im*wt
-                showmod = model*wt
-
-                sub_tab=images.compare_images(showim, showmod,show=False)
-                sub_tab.title=this_title
-
-                band_list.append(sub_tab)
-
-                if show:
-                    sub_tab.show()
-
-            plist.append(band_list)
-        return plist
 
     def get_par_names(self):
         raise RuntimeError("over-ride me")
