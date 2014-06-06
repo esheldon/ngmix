@@ -1286,11 +1286,18 @@ class MH(object):
 
     seed: floating point, optional
         An optional seed for the random number generator.
+    random_state: optional
+        A random number generator with method .uniform()
+        e.g. numpy.random.RandomState.  Takes precedence over
+        seed
 
     examples
     ---------
-    m=mcmc.MCMC(lnprob_func, stepper, seed=34231)
+    m=mcmc.MH(lnprob_func, stepper, seed=34231)
     m.run(pars_start, nstep)
+
+    means, cov = m.get_stats()
+
     trials = m.get_trials()
     loglike = m.get_loglike()
     arate = m.get_acceptance_rate()
@@ -1304,13 +1311,45 @@ class MH(object):
         self.set_random_state(seed=seed, state=random_state)
         self.reset(seed=seed)
 
-    def reset(self, seed=None):
+    def get_trials(self):
         """
-        Clear all data
+        Get the trials array
         """
-        self._trials=None
-        self._loglike=None
-        self._accepted=None
+        return self._trials
+
+    def get_loglike(self):
+        """
+        Get the log like array
+        """
+        return self._loglike
+    get_lnprob=get_loglike
+
+    def get_acceptance_rate(self):
+        """
+        Get the acceptance rate
+        """
+        return self._arate
+    get_arate=get_acceptance_rate
+
+    def get_accepted(self):
+        """
+        Get the accepted array
+        """
+        return self._accepted
+
+
+    def get_stats(self, weights=None):
+        """
+        get mean and covariance.
+
+        parameters
+        ----------
+        weights: array
+            Extra weights to apply.
+        """
+        from .stats import calc_mcmc_stats
+        stats = calc_mcmc_stats(self._trials, weights=weights)
+        return stats
 
     def set_random_state(self, seed=None, state=None):
         """
@@ -1323,6 +1362,8 @@ class MH(object):
             numpy.random.RandomState(seed=seed)
         state: optional
             A random number generator with method .uniform()
+            e.g. numpy.random.RandomState.  Takes precedence over
+            seed
         """
         if state is not None:
             self._random_state=state
@@ -1349,32 +1390,6 @@ class MH(object):
 
         self._arate=self._accepted.sum()/float(self._accepted.size)
         return self._trials[-1,:]
-
-    def get_trials(self):
-        """
-        Get the trials array
-        """
-        return self._trials
-
-    def get_loglike(self):
-        """
-        Get the trials array
-        """
-        return self._loglike
-    get_lnprob=get_loglike
-
-    def get_acceptance_rate(self):
-        """
-        Get the acceptance rate
-        """
-        return self._arate
-    get_arate=get_acceptance_rate
-
-    def get_accepted(self):
-        """
-        Get the accepted array
-        """
-        return self._accepted
 
     def _step(self):
         """
@@ -1422,6 +1437,14 @@ class MH(object):
 
         self._current += 1
 
+    def reset(self, seed=None):
+        """
+        Clear all data
+        """
+        self._trials=None
+        self._loglike=None
+        self._accepted=None
+
     def _init_data(self, pars_start, nstep):
         """
         Set the trials and accept array.
@@ -1441,6 +1464,173 @@ class MH(object):
         self._trials[0,:] = pars_start
         self._loglike[0]  = self._oldlike
         self._accepted[0] = 1
+
+class MHTemp(MH):
+    """
+    Run a Monte Carlo Markov Chain (MCMC) using metropolis hastings
+    with the specified temperature.
+    
+    parameters
+    ----------
+    lnprob_func: function or method
+        A function to calculate the log proability given the input
+        parameters.  Can be a method of a class.
+            ln_prob = lnprob_func(pars)
+    stepper: function or method 
+        A function to take a step given the input parameters.
+        Can be a method of a class.
+            newpars = stepper(pars)
+    T: float
+        Temperature.
+
+    seed: floating point, optional
+        An optional seed for the random number generator.
+    state: optional
+        A random number generator with method .uniform()
+        e.g. numpy.random.RandomState.  Takes precedence over
+        seed
+
+    examples
+    ---------
+    T=1.5
+    m=mcmc.MHTemp(lnprob_func, stepper, T, seed=34231)
+    m.run(pars_start, nstep)
+    trials = m.get_trials()
+
+    means,cov = m.get_stats()
+
+    # the above uses the weights, so is equivalent to
+    # the following
+
+    weights = m.get_weights()
+
+    wsum=weights.sum()
+    mean0 = (weights*trials[:,0]).sum()/wsum
+
+    fdiff0 = trials[:,0]-mean0
+    var00 = (weights*fdiff0*fdiff0).sum()/wsum
+
+    fdiff1 = trials[:,1]-mean1
+
+    var01 = (weights*fdiff0*fdiff1).sum()/wsum
+
+    etc. for the other parameters and covariances
+    """
+
+    def __init__(self, lnprob_func, stepper, T,
+                 seed=None, random_state=None):
+
+        super(MHTemp,self).__init__(lnprob_func, stepper,
+                                    seed=seed,
+                                    random_state=random_state)
+        self.T=T
+        self.Tinv=1.0/self.T
+
+    def get_stats(self, weights=None):
+        """
+        get mean and covariance.
+
+        parameters
+        ----------
+        weights: array
+            Extra weights to apply.
+        """
+        this_weights = self.get_weights()
+
+        if weights is not None:
+            weights = this_weights * weights
+        else:
+            weights = this_weights
+        
+        return super(MHTemp,self).get_stats(weights=weights)
+
+    def get_loglike_T(self):
+        """
+        Get the log like array ln(like)/T
+        """
+        return self._loglike_T
+
+    def get_weights(self):
+        """
+        get weights that put the loglike back at temp=1
+        """
+        if not hasattr(self,'_weights'):
+            self._max_loglike = self._loglike.max()
+            logdiff = self._loglike-self._max_loglike
+            self._weights = numpy.exp(logdiff*(1.0 - self.Tinv))
+        return self._weights
+
+    def _step(self):
+        """
+        Take the next step in the MCMC chain.  
+        
+        Calls the stepper lnprob_func methods sent during construction.  If the
+        new loglike is not greater than the previous, or a uniformly generated
+        random number is greater than the the ratio of new to old likelihoods,
+        the new step is not used, and the new parameters are the same as the
+        old.  Otherwise the new step is kept.
+
+        This is an internal function that is called by the .run method.
+        It is not intended for call by the user.
+        """
+
+        index=self._current
+
+        oldpars=self._oldpars
+        oldlike_T=self._oldlike_T
+
+        # Take a step and evaluate the likelihood
+        newpars = self._stepper(oldpars)
+        newlike = self._lnprob_func(newpars)
+        newlike_T = newlike*self.Tinv
+
+        log_likeratio = newlike_T-oldlike_T
+
+        randnum = self._random_state.uniform()
+        log_randnum = numpy.log(randnum)
+
+        # we allow use of -infinity as a sign we are out of bounds
+        if (isfinite(newlike_T) 
+                and ( (newlike_T > oldlike_T) | (log_randnum < log_likeratio)) ):
+
+            self._accepted[index]  = 1
+            self._loglike[index]   = newlike
+            self._loglike_T[index]   = newlike_T
+            self._trials[index, :] = newpars
+
+            self._oldpars = newpars
+            self._oldlike = newlike
+            self._oldlike_T = newlike_T
+
+        else:
+            self._accepted[index] = 0
+            self._loglike[index]  = oldlike
+            self._loglike_T[index]  = oldlike_T
+            self._trials[index,:] = oldpars
+
+        self._current += 1
+
+    def reset(self, seed=None):
+        """
+        Clear all data
+        """
+        super(MHTemp,self).reset(seed=seed)
+        self._loglike_T=None
+
+    def _init_data(self, pars_start, nstep):
+        """
+        Set the trials and accept array.
+        """
+        super(MHTemp,self)._init_data(pars_start, nstep)
+
+        T=self.T
+        oldlike_T = self._oldlike*self.Tinv
+
+        loglike_T = self._loglike.copy()
+        loglike_T[0] = oldlike_T
+
+        self._oldlike_T=oldlike_T
+        self.loglike_T = loglike_T
 
 
 class MHSimple(MCMCSimple):
@@ -3155,6 +3345,138 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27, g
         #images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
         #mcmc.plot_results(mc_obj.get_trials())
 
+
+def test_model_mh(model,
+                  counts_obj=100.0,
+                  noise_obj=0.001,
+                  show=False):
+    """
+    Test fitting the specified model.
+
+    Send g_prior to do some lensfit/pqr calculations
+    """
+    import mcmc
+    from . import em
+
+
+    burnin=5000
+    nstep=5000
+
+    dims=[25,25]
+    cen=[dims[0]/2., dims[1]/2.]
+
+    #
+    # simulation
+    #
+
+    # PSF pars
+    counts_psf=100.0
+    noise_psf=0.01
+    g1_psf=0.05
+    g2_psf=-0.01
+    T_psf=4.0
+
+    # object pars
+    g1_obj=0.1
+    g2_obj=0.05
+    T_obj=16.0
+
+    pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
+    gm_psf=gmix.GMixModel(pars_psf, "gauss")
+
+    pars_obj = array([0.0, 0.0, g1_obj, g2_obj, T_obj, counts_obj])
+    npars=pars_obj.size
+    gm_obj0=gmix.GMixModel(pars_obj, model)
+
+    gm=gm_obj0.convolve(gm_psf)
+
+    im_psf=gm_psf.make_image(dims)
+    im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
+    wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
+
+    im_obj=gm.make_image(dims)
+    im_obj[:,:] += noise_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
+    wt_obj=zeros(im_obj.shape) + 1./noise_obj**2
+
+    #
+    # fitting
+    #
+
+
+    # psf using EM
+    im_psf_sky,sky=em.prep_image(im_psf)
+    psf_obs = Observation(im_psf_sky)
+    mc_psf=em.GMixEM(psf_obs)
+
+    emo_guess=gm_psf.copy()
+    emo_guess._data['p'] = 1.0
+    emo_guess._data['row'] += 0.1*srandu()
+    emo_guess._data['col'] += 0.1*srandu()
+    emo_guess._data['irr'] += 0.5*srandu()
+    emo_guess._data['irc'] += 0.1*srandu()
+    emo_guess._data['icc'] += 0.5*srandu()
+
+    mc_psf.go(emo_guess, sky)
+    res_psf=mc_psf.get_result()
+    print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
+
+    psf_fit=mc_psf.get_gmix()
+
+    psf_obs.set_gmix(psf_fit)
+
+    obs=Observation(im_obj, weight=wt_obj, psf=psf_obs)
+
+    lm_pars={'maxfev': 300,
+             'ftol':   1.0e-6,
+             'xtol':   1.0e-6,
+             'epsfcn': 1.0e-6}
+
+    lm_fitter=LMSimple(obs, model, lm_pars=lm_pars)
+    guess=pars_obj.copy()
+
+    # must be log!
+    guess[4]=log10(guess[4])
+    guess[5]=log10(guess[5])
+
+    lm_fitter.run_lm(guess)
+    lm_res=lm_fitter.get_result()
+
+    mh_guess=lm_res['pars'].copy()
+
+    step_sizes = 0.5*lm_res['pars_err']
+    print_pars(lm_res['pars'], front="lm result:")
+    print_pars(lm_res['pars_err'], front="lm err:   ")
+    mh_fitter=MHSimple(obs, model, step_sizes)
+
+    pos=mh_fitter.run_mcmc(mh_guess, burnin)
+    pos=mh_fitter.run_mcmc(pos, nstep)
+    mh_fitter.calc_result()
+    mh_fitter.calc_lin_result()
+
+    res_obj=mh_fitter.get_result()
+    res_obj_lin=mh_fitter.get_lin_result()
+
+    print_pars(res_obj['pars'],     front='log pars_obj: ')
+    print_pars(res_obj['pars_err'], front='log perr_obj: ')
+    print_pars(pars_obj,            front='true pars:')
+    print_pars(res_obj_lin['pars'],     front='pars_obj: ')
+    print_pars(res_obj_lin['pars_err'], front='perr_obj: ')
+
+    print('T: %.4g +/- %.4g' % (res_obj_lin['pars'][4], res_obj_lin['pars_err'][4]))
+    print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'])
+
+    gmfit0=mh_fitter.get_gmix()
+    gmfit=gmfit0.convolve(psf_fit)
+
+    if show:
+        import images
+        imfit_psf=mc_psf.make_image(counts=im_psf.sum())
+        images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
+
+        mh_fitter.make_plots(do_residual=True,show=True,prompt=False)
+        #imfit_obj=gmfit.make_image(im_obj.shape, jacobian=j)
+        #images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
+        #mcmc.plot_results(mh_fitter.get_trials())
 
 
 def test_many_model_coellip(ntrial,
