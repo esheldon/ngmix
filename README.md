@@ -24,8 +24,8 @@ examples
     # PSF is a single gaussian
     psf_pars=[12.0, 12.0, -0.03, 0.02, 4.0, 1.0]
 
-    gmix0=ngmix.gmix.GMixModel(pars,"exp")
-    psf_gmix=ngmix.gmix.GMixModel(psf_pars,"gauss")
+    gmix0=ngmix.GMixModel(pars,"exp")
+    psf_gmix=ngmix.GMixModel(psf_pars,"gauss")
 
     gmix=gmix0.convolve(psf_gmix)
 
@@ -44,16 +44,17 @@ examples
     # fit in "sky coordinates".  We do this by making a jacobian to represent
     # the transformation, and make sure the center is at our best guess of the
     # object location.  In this case we make a unit jacobian.  for non-unit,
-    # see the ngmix.jacobian.Jacobian class. 
+    # see the ngmix.Jacobian class. 
 
 
     # fit the PSF
     # it is best to fit the PSF using an EM algorithm
     psf_dims=[24,24]
     psf_im=psf_gmix.make_image(psf_dims, nsub=16)
+    # For EM, image must have non-zero sky and no negative pixel values
     imsky,sky=ngmix.em.prep_image(psf_im)
 
-    jacob=ngmix.jacobian.UnitJacobian(psf_pars[0], psf_pars[1])
+    jacob=ngmix.UnitJacobian(psf_pars[0], psf_pars[1])
     psf_obs=Observation(imsky, jacobian=psf_jacob)
 
     em=ngmix.em.GMixEM(psf_obs)
@@ -69,7 +70,7 @@ examples
     # the weight image for the fit; can be complex in principle
     weight=numpy.zeros(image.shape) + 1/sigma**2
 
-    jacob=ngmix.jacobian.UnitJacobian(pars[0], pars[1])
+    jacob=ngmix.UnitJacobian(pars[0], pars[1])
 
     # When constructing the Observation we include a weight map and a psf
     # observation
