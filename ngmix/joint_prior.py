@@ -217,6 +217,25 @@ class JointPriorSimpleHybrid(GMixND):
         self.g_prior=g_prior
         self.TF_prior=TF_prior
 
+    def get_widths(self, n=10000):
+        """
+        estimate the width in each dimension
+        """
+        if not hasattr(self, '_sigma_estimates'):
+            import esutil as eu
+            samples=self.sample(n)
+            sigmas = samples.std(axis=0)
+            self._sigma_estimates=sigmas
+
+            '''
+            print("means  of TF:",samples.mean(axis=0))
+            print("sigmas of TF:",sigmas)
+
+            eu.plotting.bhist(samples[:,4], binsize=0.2*sigmas[4], xlabel='log10(T)')
+            eu.plotting.bhist(samples[:,5], binsize=0.2*sigmas[5], xlabel='log10(F)')
+            '''
+        return self._sigma_estimates
+
     def get_prob_scalar(self, pars, **keys):
         """
         probability for scalar input (meaning one point)
@@ -270,7 +289,10 @@ class JointPriorSimpleHybrid(GMixND):
         fdiff[index] =  self.TF_prior.get_lnprob_scalar(pars[4:4+2], **keys)
         index += 1
 
-        fdiff[0:index] = sqrt(-2*fdiff[0:index])
+        chi2 = -2*fdiff[0:index]
+        chi2.clip(min=0.0, max=None, out=chi2)
+        fdiff[0:index] = sqrt(chi2)
+
         return index
 
 
@@ -299,6 +321,8 @@ class JointPriorSimpleHybrid(GMixND):
         samples[:,4] = TF[:,0]
         samples[:,5] = TF[:,1]
 
+        if is_scalar:
+            samples = samples[0,:]
         return samples
 
 
@@ -425,6 +449,8 @@ class JointPriorSersicHybrid(JointPriorSimpleHybrid):
         samples[:,0:0+6] = tsamples
         samples[:,6] = self.n_prior.sample(n)
 
+        if is_scalar:
+            samples = samples[0,:]
         return samples
 
     def check_bounds_scalar(self, pars, throw=True):
@@ -1113,7 +1139,10 @@ class PriorSimpleSep(object):
             fdiff[index] = F_prior.get_lnprob_scalar(pars[5+i], **keys)
             index += 1
 
-        fdiff[0:index] = sqrt(-2*fdiff[0:index])
+        chi2 = -2*fdiff[0:index]
+        chi2.clip(min=0.0, max=None, out=chi2)
+        fdiff[0:index] = sqrt(chi2)
+
         return index
 
 

@@ -29,7 +29,7 @@ except:
 
 from sys import stdout
 import numpy
-from numpy import array, zeros, diag, exp, sqrt, where, log10, isfinite
+from numpy import array, zeros, diag, exp, sqrt, where, log, log10, isfinite
 import time
 from pprint import pprint
 
@@ -668,6 +668,35 @@ class LMSimple(FitterBase):
         self.fdiff_size=self.totpix + n_prior_pars
 
         self._band_pars=zeros(6)
+
+    def get_lin_result(self):
+        """
+        return result in linear space
+        """
+        if not hasattr(self, '_lin_result'):
+            # this will raise an exception of there is not result yet
+            res=self.get_result()
+
+            lin_res={}
+            lin_res.update(res)
+            if res['flags']==0:
+                perr_log=res['pars_err']
+
+                pars=res['pars'].copy()
+                perr=perr_log.copy()
+
+                pars[4:4+2]=10.0**pars[4:4+2]
+                perr[4:4+2] = pars[4:4+2]*perr_log[4:4+2]*log(10)
+
+                lin_res['pars'] = pars
+                lin_res['pars_err'] = perr
+            else:
+                lin_res['pars']=res['pars']*0 + PDEF
+                lin_res['pars_err']=res['pars']*0 + CDEF
+
+            self._lin_result=lin_res
+
+        return self._lin_result
 
     def run_lm(self, guess):
         """
@@ -3346,10 +3375,24 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27, g
         #mcmc.plot_results(mc_obj.get_trials())
 
 
-def test_model_mh(model,
-                  counts_obj=100.0,
-                  noise_obj=0.001,
-                  show=False):
+def get_mh_prior(T, F):
+    from . import priors, joint_prior
+    cen_prior=priors.CenPrior(0.0, 0.0, 0.5, 0.5)
+    g_prior = priors.make_gprior_cosmos_sersic(type='erf')
+
+    Twidth=0.3*T
+    logTmean, logTsigma=priors.lognorm_convert(T, Twidth, base=10.0)
+    T_prior = priors.Normal(logTmean, logTsigma)
+
+    Fwidth=0.3*T
+    logFmean, logFsigma=priors.lognorm_convert(F, Fwidth, base=10.0)
+    F_prior = priors.Normal(logFmean, logFsigma)
+
+    prior = joint_prior.PriorSimpleSep(cen_prior, g_prior, T_prior, F_prior)
+
+    return prior
+
+def test_model_mh(model, noise_obj=0.01, show=False):
     """
     Test fitting the specified model.
 
@@ -3365,6 +3408,8 @@ def test_model_mh(model,
     dims=[25,25]
     cen=[dims[0]/2., dims[1]/2.]
 
+    jacob=UnitJacobian(cen[0],cen[1])
+
     #
     # simulation
     #
@@ -3377,9 +3422,16 @@ def test_model_mh(model,
     T_psf=4.0
 
     # object pars
-    g1_obj=0.1
-    g2_obj=0.05
+    counts_obj=100.0
     T_obj=16.0
+
+    prior=get_mh_prior(T_obj, counts_obj)
+
+    g1_obj, g2_obj = prior.g_prior.sample2d(1)
+    g1_obj=g1_obj[0]
+    g2_obj=g2_obj[0]
+    #g1_obj=0.1
+    #g2_obj=0.05
 
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
     gm_psf=gmix.GMixModel(pars_psf, "gauss")
@@ -3390,11 +3442,11 @@ def test_model_mh(model,
 
     gm=gm_obj0.convolve(gm_psf)
 
-    im_psf=gm_psf.make_image(dims)
+    im_psf=gm_psf.make_image(dims, jacobian=jacob)
     im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
     wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
 
-    im_obj=gm.make_image(dims)
+    im_obj=gm.make_image(dims, jacobian=jacob)
     im_obj[:,:] += noise_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
     wt_obj=zeros(im_obj.shape) + 1./noise_obj**2
 
@@ -3405,48 +3457,57 @@ def test_model_mh(model,
 
     # psf using EM
     im_psf_sky,sky=em.prep_image(im_psf)
-    psf_obs = Observation(im_psf_sky)
+    psf_obs = Observation(im_psf_sky, jacobian=jacob)
     mc_psf=em.GMixEM(psf_obs)
 
     emo_guess=gm_psf.copy()
     emo_guess._data['p'] = 1.0
-    emo_guess._data['row'] += 0.1*srandu()
-    emo_guess._data['col'] += 0.1*srandu()
-    emo_guess._data['irr'] += 0.5*srandu()
-    emo_guess._data['irc'] += 0.1*srandu()
-    emo_guess._data['icc'] += 0.5*srandu()
+    emo_guess._data['row'] += 0.01*srandu()
+    emo_guess._data['col'] += 0.01*srandu()
+    emo_guess._data['irr'] += 0.01*srandu()
+    emo_guess._data['irc'] += 0.01*srandu()
+    emo_guess._data['icc'] += 0.01*srandu()
 
     mc_psf.go(emo_guess, sky)
     res_psf=mc_psf.get_result()
     print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
 
     psf_fit=mc_psf.get_gmix()
+    print("psf gmix:")
+    print(psf_fit)
+    print()
 
+    # first fit with LM
     psf_obs.set_gmix(psf_fit)
-
-    obs=Observation(im_obj, weight=wt_obj, psf=psf_obs)
+    obs=Observation(im_obj, jacobian=jacob, weight=wt_obj, psf=psf_obs)
 
     lm_pars={'maxfev': 300,
              'ftol':   1.0e-6,
              'xtol':   1.0e-6,
              'epsfcn': 1.0e-6}
 
-    lm_fitter=LMSimple(obs, model, lm_pars=lm_pars)
-    guess=pars_obj.copy()
+    lm_fitter=LMSimple(obs, model, lm_pars=lm_pars, prior=prior)
 
     # must be log!
-    guess[4]=log10(guess[4])
-    guess[5]=log10(guess[5])
+    #guess=pars_obj.copy()
+    #guess[4]=log10(guess[4])
+    #guess[5]=log10(guess[5])
+    guess=prior.sample()
 
     lm_fitter.run_lm(guess)
-    lm_res=lm_fitter.get_result()
+    lm_res_log=lm_fitter.get_result()
+    lm_res_lin=lm_fitter.get_lin_result()
 
-    mh_guess=lm_res['pars'].copy()
+    mh_guess=lm_res_log['pars'].copy()
+    step_sizes = 0.5*lm_res_log['pars_err'].copy()
 
-    step_sizes = 0.5*lm_res['pars_err']
-    print_pars(lm_res['pars'], front="lm result:")
-    print_pars(lm_res['pars_err'], front="lm err:   ")
-    mh_fitter=MHSimple(obs, model, step_sizes)
+    print_pars(lm_res_log['pars'], front="log lm result:")
+    print_pars(lm_res_log['pars_err'], front="log lm err:   ")
+    print_pars(lm_res_lin['pars'], front="lm result:")
+    print_pars(lm_res_lin['pars_err'], front="lm err:   ")
+    print()
+
+    mh_fitter=MHSimple(obs, model, step_sizes, prior=prior)
 
     pos=mh_fitter.run_mcmc(mh_guess, burnin)
     pos=mh_fitter.run_mcmc(pos, nstep)
@@ -3463,7 +3524,7 @@ def test_model_mh(model,
     print_pars(res_obj_lin['pars_err'], front='perr_obj: ')
 
     print('T: %.4g +/- %.4g' % (res_obj_lin['pars'][4], res_obj_lin['pars_err'][4]))
-    print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'])
+    print("arate:",res_obj['arate'],"s2n:",res_obj['s2n_w'],"tau:",res_obj['tau'])
 
     gmfit0=mh_fitter.get_gmix()
     gmfit=gmfit0.convolve(psf_fit)
@@ -3474,10 +3535,6 @@ def test_model_mh(model,
         images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
 
         mh_fitter.make_plots(do_residual=True,show=True,prompt=False)
-        #imfit_obj=gmfit.make_image(im_obj.shape, jacobian=j)
-        #images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
-        #mcmc.plot_results(mh_fitter.get_trials())
-
 
 def test_many_model_coellip(ntrial,
                             model,
