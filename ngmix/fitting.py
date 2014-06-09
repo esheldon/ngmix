@@ -1606,6 +1606,7 @@ class MHTemp(MH):
         index=self._current
 
         oldpars=self._oldpars
+        oldlike=self._oldlike
         oldlike_T=self._oldlike_T
 
         # Take a step and evaluate the likelihood
@@ -1659,9 +1660,9 @@ class MHTemp(MH):
         loglike_T[0] = oldlike_T
 
         self._oldlike_T=oldlike_T
-        self.loglike_T = loglike_T
+        self._loglike_T = loglike_T
 
-
+   
 class MHSimple(MCMCSimple):
     def __init__(self, obs, model, step_sizes, **keys):
         """
@@ -1764,6 +1765,32 @@ class MHSimple(MCMCSimple):
     def _set_tau(self):
         # we don't calculate this currently
         self.tau=9999.0
+
+class MHTempSimple(MHSimple):
+    def __init__(self, obs, model, step_sizes, **keys):
+        super(MHTempSimple,self).__init__(obs, model, step_sizes, **keys)
+        self.temp=keys.get('temp',1.0)
+ 
+    def _setup_sampler_and_data(self, pos):
+        """
+        Try to initialize the gaussian mixtures. If failure, most
+        probablly a GMixRangeError will be raised
+        """
+
+        self.flags=0
+        self.pos=pos
+
+        npars=pos.size
+        mess="pos has npars=%d, expected %d" % (npars,self.npars)
+        assert (npars==self.npars),mess
+
+        # initialize all the gmix objects; may raise an error
+        self._init_gmix_all(pos)
+
+        self.sampler = MHTemp(self.calc_lnprob, self.take_step, self.temp,
+                              random_state=self.random_state)
+        self.best_lnprob=None
+
 
 class MCMCSersic(MCMCSimple):
     def __init__(self, obs, **keys):
@@ -3392,7 +3419,7 @@ def get_mh_prior(T, F):
 
     return prior
 
-def test_model_mh(model, noise_obj=0.01, show=False):
+def test_model_mh(model, noise_obj=0.01, show=False, temp=None):
     """
     Test fitting the specified model.
 
@@ -3507,7 +3534,12 @@ def test_model_mh(model, noise_obj=0.01, show=False):
     print_pars(lm_res_lin['pars_err'], front="lm err:   ")
     print()
 
-    mh_fitter=MHSimple(obs, model, step_sizes, prior=prior)
+    if temp is not None:
+        print("doing temperature:",temp)
+        mh_fitter=MHTempSimple(obs, model, step_sizes,
+                               temp=temp, prior=prior)
+    else:
+        mh_fitter=MHSimple(obs, model, step_sizes, prior=prior)
 
     pos=mh_fitter.run_mcmc(mh_guess, burnin)
     pos=mh_fitter.run_mcmc(pos, nstep)
