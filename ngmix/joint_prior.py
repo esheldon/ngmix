@@ -1095,6 +1095,19 @@ class PriorSimpleSep(object):
 
         self.F_priors=F_prior
 
+    def get_widths(self, n=10000):
+        """
+        estimate the width in each dimension
+        """
+        if not hasattr(self, '_sigma_estimates'):
+            import esutil as eu
+            samples=self.sample(n)
+            sigmas = samples.std(axis=0)
+            self._sigma_estimates=sigmas
+
+        return self._sigma_estimates
+
+
     def get_prob_scalar(self, pars, **keys):
         """
         probability for scalar input (meaning one point)
