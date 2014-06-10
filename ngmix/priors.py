@@ -1193,7 +1193,86 @@ class FlatPrior(FlatPriorBase):
             raise GMixRangeError("value %s out of range: "
                                  "[%s,%s]" % (val, self.minval, self.maxval))
         return retval
-       
+
+class TwoSidedErf(object):
+    """
+    A two-sided error function that evaluates to 1 in the middle.
+    """
+    def __init__(self, minval, width_at_min, maxval, width_at_max, positive=False):
+
+        self.minval=minval
+        self.width_at_min=width_at_min
+
+        self.maxval=maxval
+        self.width_at_max=width_at_max
+
+        self.positive=positive
+
+    def get_prob_scalar(self, val):
+        """
+        get the probability of the point
+        """
+        if self.positive:
+            if val <= 0.0:
+                return 0.0
+
+        return self._get_prob_nocheck(val)
+
+    def get_lnprob_scalar(self, val):
+        """
+        get the probability of the point
+        """
+
+        p = self.get_prob_scalar(val)
+
+        if p <= 0.0:
+            lnp=LOWVAL
+        else:
+            lnp=log(p)
+        return lnp
+
+
+    def get_prob_array(self, vals):
+        """
+        get the probability of the point
+        """
+
+        if self.positive:
+            pvals=numpy.zeros(vals.size)
+            w,=numpy.where(vals > 0.0)
+            if w.size > 0:
+                pvals[w] = self._get_prob_nocheck(vals[w])
+        else:
+            pvals=self._get_prob_nocheck(vals)
+        
+        return pvals
+
+    def get_lnprob_array(self, vals):
+        """
+        get the probability of the point
+        """
+
+        lnp = numpy.zeros(vals.size) + LOWVAL
+
+        p = self.get_prob_array(vals)
+        w,=numpy.where(p > 0.0)
+
+        if w.size > 0:
+            lnp[w] = numpy.log( p[w] )
+        return lnp
+
+
+    def _get_prob_nocheck(self, val):
+        """
+        works for both array and scalar
+        """
+        from scipy.special import erf
+
+        p1 = 0.5*erf((self.maxval-val)/self.width_at_max)
+        p2 = 0.5*erf((val-self.minval)/self.width_at_min)
+
+        return p1+p2
+
 
 class GPriorGreat3Exp(GPriorBase):
     """
