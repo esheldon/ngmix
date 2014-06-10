@@ -1196,7 +1196,10 @@ class FlatPrior(FlatPriorBase):
 
 class TwoSidedErf(object):
     """
-    A two-sided error function that evaluates to 1 in the middle.
+    A two-sided error function that evaluates to 1 in the middle, zero at
+    extremes.
+
+    A limitation seems to be the accuracy of the erf....
     """
     def __init__(self, minval, width_at_min, maxval, width_at_max, positive=False):
 
