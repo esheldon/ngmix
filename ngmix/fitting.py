@@ -3419,7 +3419,12 @@ def get_mh_prior(T, F):
 
     return prior
 
-def test_model_mh(model, noise_obj=0.01, show=False, temp=None):
+def test_model_mh(model,
+                  burnin=5000,
+                  nstep=5000,
+                  noise_obj=0.01,
+                  show=False,
+                  temp=None):
     """
     Test fitting the specified model.
 
@@ -3429,8 +3434,6 @@ def test_model_mh(model, noise_obj=0.01, show=False, temp=None):
     from . import em
 
 
-    burnin=5000
-    nstep=5000
 
     dims=[25,25]
     cen=[dims[0]/2., dims[1]/2.]
