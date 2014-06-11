@@ -282,8 +282,16 @@ class JointPriorSimpleHybrid(GMixND):
         set sqrt(-2ln(p)) ~ (model-data)/err
         """
         index=0
-        fdiff[index] = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
+
+        #fdiff[index] = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
+
+        lnp1,lnp2=self.cen_prior.get_lnprob_scalar_sep(pars[0],pars[1])
+
+        fdiff[index] = lnp1
         index += 1
+        fdiff[index] = lnp2
+        index += 1
+
         fdiff[index] = self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
         index += 1
         fdiff[index] =  self.TF_prior.get_lnprob_scalar(pars[4:4+2], **keys)
@@ -1140,8 +1148,16 @@ class PriorSimpleSep(object):
         set sqrt(-2ln(p)) ~ (model-data)/err
         """
         index=0
-        fdiff[index] = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
+
+        #fdiff[index] = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
+
+        lnp1,lnp2=self.cen_prior.get_lnprob_scalar_sep(pars[0],pars[1])
+
+        fdiff[index] = lnp1
         index += 1
+        fdiff[index] = lnp2
+        index += 1
+
         fdiff[index] = self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
         index += 1
         fdiff[index] =  self.T_prior.get_lnprob_scalar(pars[4], **keys)

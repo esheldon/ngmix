@@ -662,8 +662,8 @@ class LMSimple(FitterBase):
         # xtol (tol in solution), etc
         self.lm_pars=keys['lm_pars']
 
-        # center + shape + T + fluxes
-        n_prior_pars=1 + 1 + 1 + self.nband
+        # center1 + center2 + shape1 + shape2 + T + fluxes
+        n_prior_pars=1 + 1 + 1 + 1 + 1 + self.nband
 
         self.fdiff_size=self.totpix + n_prior_pars
 
@@ -1018,13 +1018,16 @@ class MCMCBase(FitterBase):
         self.trials=None
 
 
-    def get_trials(self):
+    def get_trials(self, linear=False):
         """
         Get the set of trials from the production run
         """
-        if self.trials is None:
-            raise RuntimeError("you need to run the mcmc chain first")
-        return self.trials
+        if linear:
+            return self.get_lin_trials()
+        else:
+            if self.trials is None:
+                raise RuntimeError("you need to run the mcmc chain first")
+            return self.trials
 
     def get_lin_trials(self):
         """
@@ -1070,17 +1073,43 @@ class MCMCBase(FitterBase):
 
         return self.pos
 
+    def get_weights(self):
+        """
+        default weights are none
+        """
+        return None
+
+    def get_stats(self, linear=False, weights=None):
+        """
+        get mean and covariance.
+
+        parameters
+        ----------
+        weights: array
+            Extra weights to apply.
+        """
+        this_weights = self.get_weights()
+
+        if this_weights is not None and weights is not None:
+            weights = this_weights * weights
+        elif this_weights is not None:
+            weights=this_weights
+        else:
+            # input weights are used, None or no
+            pass
+        
+        trials=self.get_trials(linear=linear)
+
+        pars,pars_cov = stats.calc_mcmc_stats(trials, weights=weights)
+        return pars, pars_cov
+
+
     def calc_result(self, weights=None, linear=False):
         """
         Calculate the mcmc stats and the "best fit" stats
         """
 
-        if linear:
-            trials=self.get_lin_trials()
-        else:
-            trials=self.get_trials()
-
-        pars,pars_cov = stats.calc_mcmc_stats(trials, weights=weights)
+        pars,pars_cov = self.get_stats(weights=weights, linear=linear)
 
         pars_err=sqrt(diag(pars_cov))
 
@@ -1689,7 +1718,6 @@ class MHSimple(MCMCSimple):
         state=keys.get('random_state',None)
         self.set_random_state(seed=seed, state=state)
 
-
     def set_random_state(self, seed=None, state=None):
         """
         set the random state
@@ -1767,10 +1795,21 @@ class MHSimple(MCMCSimple):
         self.tau=9999.0
 
 class MHTempSimple(MHSimple):
+    """
+    Run with a temperature != 1.  Use the weights when
+    getting stats
+    """
     def __init__(self, obs, model, step_sizes, **keys):
         super(MHTempSimple,self).__init__(obs, model, step_sizes, **keys)
         self.temp=keys.get('temp',1.0)
+        print("MHTempSimple doing temperature:",self.temp)
  
+    def get_weights(self):
+        """
+        Get the temperature weights
+        """
+        return self.sampler.get_weights()
+
     def _setup_sampler_and_data(self, pos):
         """
         Try to initialize the gaussian mixtures. If failure, most
@@ -3455,18 +3494,19 @@ def test_model_mh(model,
     counts_obj=100.0
     T_obj=16.0
 
-    prior=get_mh_prior(T_obj, counts_obj)
-
-    g1_obj, g2_obj = prior.g_prior.sample2d(1)
-    g1_obj=g1_obj[0]
-    g2_obj=g2_obj[0]
-    #g1_obj=0.1
-    #g2_obj=0.05
-
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
     gm_psf=gmix.GMixModel(pars_psf, "gauss")
 
-    pars_obj = array([0.0, 0.0, g1_obj, g2_obj, T_obj, counts_obj])
+    prior=get_mh_prior(T_obj, counts_obj)
+
+    pars_obj = prior.sample()
+
+    #g1_obj, g2_obj = prior.g_prior.sample2d(1)
+    #g1_obj=g1_obj[0]
+    #g2_obj=g2_obj[0]
+
+    #pars_obj = array([0.0, 0.0, g1_obj, g2_obj, T_obj, counts_obj])
+
     npars=pars_obj.size
     gm_obj0=gmix.GMixModel(pars_obj, model)
 

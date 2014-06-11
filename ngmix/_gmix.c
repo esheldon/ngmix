@@ -1470,10 +1470,33 @@ static PyObject* PyGMixNormal2D_get_prob_scalar(struct PyGMixNormal2D* self,
     return PyFloat_FromDouble(p);
 }
 
+static PyObject* PyGMixNormal2D_get_lnprob_scalar_sep(struct PyGMixNormal2D* self,
+                                                      PyObject *args)
+{
+    double x1, x2, d1, d2, lnp1, lnp2;
+    PyObject* retval=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"dd", &x1, &x2)) {
+        return NULL;
+    }
+
+    d1 = self->cen1-x1;
+    d2 = self->cen2-x2;
+    lnp1 = -0.5*d1*d1*self->s2inv1;
+    lnp2 = -0.5*d2*d2*self->s2inv2;
+
+    retval=PyTuple_New(2);
+    PyTuple_SetItem(retval,0,PyFloat_FromDouble(lnp1));
+    PyTuple_SetItem(retval,1,PyFloat_FromDouble(lnp2));
+
+    return retval;
+}
+
 
 static PyMethodDef PyGMixNormal2D_methods[] = {
     {"get_lnprob_scalar", (PyCFunction)PyGMixNormal2D_get_lnprob_scalar, METH_VARARGS, "nget ln(prob) for the input location."},
     {"get_prob_scalar", (PyCFunction)PyGMixNormal2D_get_prob_scalar, METH_VARARGS, "get prob for the input location."},
+    {"get_lnprob_scalar_sep", (PyCFunction)PyGMixNormal2D_get_lnprob_scalar_sep, METH_VARARGS, "get prob for the input location, separately for each dimension."},
     {NULL}  /* Sentinel */
 };
 
