@@ -3536,6 +3536,7 @@ def test_model_mh(model, noise_obj=0.01, show=False, temp=None):
 
     if temp is not None:
         print("doing temperature:",temp)
+        step_sizes *= sqrt(temp)
         mh_fitter=MHTempSimple(obs, model, step_sizes,
                                temp=temp, prior=prior)
     else:
