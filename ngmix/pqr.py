@@ -17,7 +17,11 @@ from .gexceptions import GMixRangeError, GMixFatalError
 
 _def_shear_expand=array([0.0, 0.0])
 
-def calc_pqr(g, g_prior, shear_expand=_def_shear_expand, remove_prior=False):
+def calc_pqr(g,
+             g_prior,
+             shear_expand=_def_shear_expand,
+             remove_prior=False,
+             weights=None):
     """
     calculate the P,Q,R terms from Bernstein & Armstrong
 
@@ -32,9 +36,16 @@ def calc_pqr(g, g_prior, shear_expand=_def_shear_expand, remove_prior=False):
     remove_prior: bool, optional
         Remove the prior value from the Q,R terms.  This is needed
         if the prior was used in likelihood exploration.
+    weights: array
+        Weights for each point in n-d space.  Cannot 
+        use this with remove_prior=True
     """
 
-    o=PQR(g, g_prior, shear_expand=shear_expand, remove_prior=remove_prior)
+    o=PQR(g,
+          g_prior,
+          shear_expand=shear_expand,
+          remove_prior=remove_prior,
+          weights=weights)
     P,Q,R = o.get_pqr()
 
     return P,Q,R
@@ -78,8 +89,11 @@ def calc_shear(P, Q, R, get_sums=False):
         return g1g2, C
 
 class PQR(object):
-    def __init__(self, g, g_prior,
-                 shear_expand=_def_shear_expand, remove_prior=False):
+    def __init__(self, g,
+                 g_prior,
+                 weights=None,
+                 shear_expand=_def_shear_expand,
+                 remove_prior=False):
         """
         A class to calculate the P,Q,R terms from Bernstein & Armstrong
 
@@ -94,15 +108,22 @@ class PQR(object):
         remove_prior: bool, optional
             Remove the prior value from the Q,R terms.  This is needed
             if the prior was used in likelihood exploration.
+        weights: array
+            Weights for each point in n-d space.  Cannot 
+            use this with remove_prior=True
         """
 
         self._g=g
         self._g_prior=g_prior
+        self._weights=weights
 
         self._shear_expand=array(shear_expand)
         assert self._shear_expand.size==2,"shear expand should have two elements"
 
         self._remove_prior=remove_prior
+
+        if self._remove_prior and self._weights is not None:
+            raise RuntimeError("need to support removing prior and weights")
 
         self._calc_pqr()
 
@@ -181,9 +202,27 @@ class PQR(object):
             R = Ri.sum(axis=0)/Pinv_sum
 
         else:
-            P = Pi.mean()
-            Q = Qi.mean(axis=0)
-            R = Ri.mean(axis=0)
+
+            weights=self._weights
+            if weights is not None:
+                wsum=weights.sum()
+                iwsum=1.0/wsum
+                Q=zeros(2)
+                R=zeros( (2,2) )
+
+                P = (Pi*weights).sum()*iwsum
+                Q[0] = (Qi[:,0]*weights).sum()*iwsum
+                Q[1] = (Qi[:,1]*weights).sum()*iwsum
+
+                R[0,0] = (Ri[:,0,0]*weights).sum()*iwsum
+                R[0,1] = (Ri[:,0,1]*weights).sum()*iwsum
+                R[1,0] =  R[0,1]
+                R[1,1] = (Ri[:,1,1]*weights).sum()*iwsum
+
+            else:
+                P = Pi.mean()
+                Q = Qi.mean(axis=0)
+                R = Ri.mean(axis=0)
 
         self._nuse=Pi.size
 
