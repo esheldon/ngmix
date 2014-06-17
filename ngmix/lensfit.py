@@ -48,7 +48,12 @@ def calc_shear(g, g_sens):
     return shear
 
 class LensfitSensitivity(object):
-    def __init__(self, g, g_prior, remove_prior=False, h=_default_h):
+    def __init__(self,
+                 g,
+                 g_prior,
+                 weights=None,
+                 remove_prior=False,
+                 h=_default_h):
         """
         parameters
         ----------
@@ -56,6 +61,9 @@ class LensfitSensitivity(object):
             g values [N,2]
         g_prior:
             The g prior object.
+        weights: array
+            Weights for each point in n-d space.  Cannot 
+            use this with remove_prior=True
         remove_prior: bool, optional
             Remove the prior value from the Q,R terms.  This is needed
             if the prior was used in likelihood exploration.
@@ -63,8 +71,13 @@ class LensfitSensitivity(object):
 
         self._g=g
         self._g_prior=g_prior
+        self._weights=weights
+
         self._remove_prior=remove_prior
         self._h=h
+
+        if self._remove_prior and self._weights is not None:
+            raise RuntimeError("need to support removing prior and weights")
 
         self._calc_g_sens()
 
@@ -121,10 +134,19 @@ class LensfitSensitivity(object):
 
             self._nuse=w.size
         else:
-            # need weighted mean shape
-            psum=prior.sum()
-            g1mean = (g1*prior).sum()/psum
-            g2mean = (g2*prior).sum()/psum
+            extra_weights=self._weights
+
+            if extra_weights is not None:
+                doweights=True
+                weights = prior*extra_weights
+                wsum = weights.sum()
+            else:
+                doweights=False
+                weights = prior
+                wsum = prior.sum()
+
+            g1mean = (g1*weights).sum()/wsum
+            g2mean = (g2*weights).sum()/wsum
 
             g1diff = g1mean-g1
             g2diff = g2mean-g2
@@ -132,8 +154,17 @@ class LensfitSensitivity(object):
             R1 = g1diff*dpri_by_g1
             R2 = g2diff*dpri_by_g2
 
-            g_sens[0] = 1 - R1.sum()/psum
-            g_sens[1] = 1 - R2.sum()/psum
+            if doweights:
+                # wsum is (w*prior).sum()
+                R1sum = (R1*extra_weights).sum()
+                R2sum = (R2*extra_weights).sum()
+            else:
+                # wsum is prior.sum()
+                R1sum = R1.sum()
+                R2sum = R2.sum()
+
+            g_sens[0] = 1 - R1sum/wsum
+            g_sens[1] = 1 - R2sum/wsum
 
             self._nuse=g1.size
 
