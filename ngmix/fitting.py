@@ -134,7 +134,10 @@ class FitterBase(object):
         Get a gaussian mixture at the "best" parameter set, which
         definition depends on the sub-class
         """
-        pars=self._result['pars']
+        if not hasattr(self, '_lin_result'):
+            raise RuntimeError("linear result not present")
+        linres=self.get_lin_result()
+        pars=linres['pars']
         return gmix.make_gmix_model(pars, self.model)
 
     def _set_obs(self, obs_in):
@@ -1123,8 +1126,9 @@ class MCMCBase(FitterBase):
              'tau':self.tau,
              'arate':self.arate}
 
-        fit_stats = self.get_fit_stats(pars)
-        res.update(fit_stats)
+        if not linear:
+            fit_stats = self.get_fit_stats(pars)
+            res.update(fit_stats)
 
         if linear:
             self._lin_result=res
