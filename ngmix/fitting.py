@@ -4697,8 +4697,9 @@ def test_lm_metacal(model, noise_obj=0.01, npair=100):
             obs = _make_obs(sheared_pars, model, noise_image,
                             jacob, wt_obj, psf_obs)
 
-            guess=pars_obj_0
+            guess=pars_obj_0.copy()
             res=_do_lm_fit(obs, prior, model, guess)
+            stop
 
             # now metacal
             pars_meas = res['pars']
