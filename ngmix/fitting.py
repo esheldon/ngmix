@@ -4629,7 +4629,11 @@ def _do_lm_fit(obs, prior, model, guess):
 
     return res
 
-def test_lm_metacal(model, shear=0.04, noise_obj=0.01, npair=100):
+def test_lm_metacal(model,
+                    shear=0.04,
+                    T_obj=16.0,
+                    noise_obj=0.01,
+                    npair=100):
     from .shape import Shape
     from . import em
     import lensing
@@ -4757,6 +4761,10 @@ def test_lm_metacal(model, shear=0.04, noise_obj=0.01, npair=100):
         except RetryError:
             print("retrying")
             pass
+        except GMixRangeError:
+            print("retrying range error")
+            pass
+
 
 
     g_mean = g_vals.mean(axis=0)
