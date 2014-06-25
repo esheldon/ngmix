@@ -3454,6 +3454,9 @@ def get_mh_prior(T, F):
     from . import priors, joint_prior
     cen_prior=priors.CenPrior(0.0, 0.0, 0.5, 0.5)
     g_prior = priors.make_gprior_cosmos_sersic(type='erf')
+    g_prior_flat = priors.ZDisk2D(1.0)
+    #g_prior_flat = priors.ZDisk2DErf(1.0, width=0.001)
+    #g_prior_flat = priors.ZDisk2DErf(1.0, width=0.001)
 
     Twidth=0.3*T
     logTmean, logTsigma=priors.lognorm_convert(T, Twidth, base=10.0)
@@ -3465,7 +3468,10 @@ def get_mh_prior(T, F):
 
     prior = joint_prior.PriorSimpleSep(cen_prior, g_prior, T_prior, F_prior)
 
-    return prior
+    prior_gflat = joint_prior.PriorSimpleSep(cen_prior, g_prior_flat,
+                                             T_prior, F_prior)
+
+    return prior, prior_gflat
 
 def test_model_mh(model,
                   burnin=5000,
@@ -3506,7 +3512,7 @@ def test_model_mh(model,
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
     gm_psf=gmix.GMixModel(pars_psf, "gauss")
 
-    prior=get_mh_prior(T_obj, counts_obj)
+    prior,prior_gflat=get_mh_prior(T_obj, counts_obj)
 
     pars_obj = prior.sample()
 
@@ -4603,8 +4609,8 @@ def _do_lm_fit(obs, prior, model, guess):
              'xtol':   1.0e-6,
              'epsfcn': 1.0e-6}
 
-    #lm_fitter=LMSimple(obs, model, lm_pars=lm_pars, prior=prior)
-    lm_fitter=LMSimple(obs, model, lm_pars=lm_pars)
+    lm_fitter=LMSimple(obs, model, lm_pars=lm_pars, prior=prior)
+    #lm_fitter=LMSimple(obs, model, lm_pars=lm_pars)
 
     nmax=1000
     i=0
@@ -4620,6 +4626,14 @@ def _do_lm_fit(obs, prior, model, guess):
 
             if res['flags']==0:
                 break
+                '''
+                g=sqrt( res['g'][0]**2 + res['g'][1]**2 )
+                if g < 0.97:
+                    print("good")
+                    break
+                else:
+                    print("bad g: %g" % g)
+                '''
         except GMixRangeError as err:
             print("caught range error: %s" % str(err))
 
@@ -4659,7 +4673,7 @@ def test_lm_metacal(model,
     counts_obj=100.0
     T_obj=16.0
 
-    prior=get_mh_prior(T_obj, counts_obj)
+    prior,prior_gflat=get_mh_prior(T_obj, counts_obj)
 
     g_vals=zeros( (npair*2,2) )
     g_err_vals=zeros(npair*2)
@@ -4667,103 +4681,121 @@ def test_lm_metacal(model,
     s2n_vals=zeros(npair*2)
 
     for ii in xrange(npair):
-        try:
-            if (ii % 100) == 0:
-                print("%d/%d" % (ii,npair))
+        while True:
+            try:
+                if (ii % 100) == 0:
+                    print("%d/%d" % (ii,npair))
 
-            pars_obj_0 = prior.sample()
+                pars_obj_0 = prior.sample()
 
-            shape1=Shape(pars_obj_0[2], pars_obj_0[3])
+                shape1=Shape(pars_obj_0[2], pars_obj_0[3])
 
-            shape2=shape1.copy()
-            shape2.rotate(numpy.pi/2.)
+                shape2=shape1.copy()
+                shape2.rotate(numpy.pi/2.)
 
-            pars_psf = [pars_obj_0[0], pars_obj_0[1], g1_psf, g2_psf,
-                        T_psf, counts_psf]
-            gm_psf=gmix.GMixModel(pars_psf, "gauss")
-            im_psf=gm_psf.make_image(dims, jacobian=jacob)
+                pars_psf = [pars_obj_0[0], pars_obj_0[1], g1_psf, g2_psf,
+                            T_psf, counts_psf]
+                gm_psf=gmix.GMixModel(pars_psf, "gauss")
+                im_psf=gm_psf.make_image(dims, jacobian=jacob)
 
-            noise_im_psf=noise_psf*numpy.random.randn(npix)
-            noise_im_psf = noise_im_psf.reshape(dims)
-            im_psf[:,:] += noise_im_psf
+                noise_im_psf=noise_psf*numpy.random.randn(npix)
+                noise_im_psf = noise_im_psf.reshape(dims)
+                im_psf[:,:] += noise_im_psf
 
-            im_psf_sky,sky=em.prep_image(im_psf)
-            psf_obs = Observation(im_psf_sky, jacobian=jacob)
+                im_psf_sky,sky=em.prep_image(im_psf)
+                psf_obs = Observation(im_psf_sky, jacobian=jacob)
 
-            mc_psf=em.GMixEM(psf_obs)
+                mc_psf=em.GMixEM(psf_obs)
 
-            emo_guess=gm_psf.copy()
-            emo_guess._data['p'] = 1.0
-            emo_guess._data['row'] += 0.01*srandu()
-            emo_guess._data['col'] += 0.01*srandu()
-            emo_guess._data['irr'] += 0.01*srandu()
-            emo_guess._data['irc'] += 0.01*srandu()
-            emo_guess._data['icc'] += 0.01*srandu()
+                emo_guess=gm_psf.copy()
+                emo_guess._data['p'] = 1.0
+                emo_guess._data['row'] += 0.01*srandu()
+                emo_guess._data['col'] += 0.01*srandu()
+                emo_guess._data['irr'] += 0.01*srandu()
+                emo_guess._data['irc'] += 0.01*srandu()
+                emo_guess._data['icc'] += 0.01*srandu()
 
-            mc_psf.go(emo_guess, sky)
-            res_psf=mc_psf.get_result()
-            psf_fit=mc_psf.get_gmix()
-            #print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
+                mc_psf.go(emo_guess, sky)
+                res_psf=mc_psf.get_result()
+                psf_fit=mc_psf.get_gmix()
+                #print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
 
-            psf_obs.set_gmix(psf_fit)
+                psf_obs.set_gmix(psf_fit)
 
-            for ipair in [1,2]:
+                for ipair in [1,2]:
 
-                noise_image = noise_obj*numpy.random.randn(npix)
-                noise_image = noise_image.reshape(dims)
+                    noise_image = noise_obj*numpy.random.randn(npix)
+                    noise_image = noise_image.reshape(dims)
 
-                sheared_pars = pars_obj_0.copy()
-                if ipair==1:
-                    i=2*ii
-                    sh = shape1.copy()
-                if ipair==2:
-                    i=2*ii+1
-                    sh = shape2.copy()
+                    sheared_pars = pars_obj_0.copy()
+                    if ipair==1:
+                        i=2*ii
+                        sh = shape1.copy()
+                    if ipair==2:
+                        i=2*ii+1
+                        sh = shape2.copy()
 
-                sh.shear(shear.g1, shear.g2)
-                sheared_pars[2]=sh.g1
-                sheared_pars[3]=sh.g2
+                    sh.shear(shear.g1, shear.g2)
+                    sheared_pars[2]=sh.g1
+                    sheared_pars[3]=sh.g2
 
-                obs = _make_obs(sheared_pars, model, noise_image,
-                                jacob, wt_obj, psf_obs)
+                    obs = _make_obs(sheared_pars, model, noise_image,
+                                    jacob, wt_obj, psf_obs)
 
-                #guess=pars_obj_0.copy()
-                guess=prior.sample()
-                res=_do_lm_fit(obs, prior, model, guess)
-                #print_pars(sheared_pars,front="pars true:")
-                #print_pars(res['pars'],front="meas:")
-                #stop
+                    #guess=pars_obj_0.copy()
+                    #guess=prior.sample()
+                    max_lnprob=-9999.e59
+                    res=None
+                    for irep in xrange(1):
+                        #guess=pars_obj_0.copy()
+                        guess=prior.sample()
+                        #tres=_do_lm_fit(obs, prior, model, guess)
+                        tres=_do_lm_fit(obs, prior_gflat, model, guess)
+                        if tres['lnprob'] > max_lnprob:
+                            max_lnprob=tres['lnprob']
+                            res=tres
+                            #print("max lnprob:",max_lnprob)
+                    
+                    gg=res['g']
+                    g=sqrt(gg[0]**2 + gg[1]**2)
+                    if g > 0.97:
+                        raise RetryError("g too big")
+                    #print_pars(sheared_pars,front="pars true:")
+                    #print_pars(res['pars'],front="meas:")
+                    #stop
 
-                # now metacal
-                pars_meas = res['pars']
-                pars_lo=_make_sheared_pars(pars_meas, -h, 0.0)
-                pars_hi=_make_sheared_pars(pars_meas, +h, 0.0)
+                    # now metacal
+                    pars_meas = res['pars']
+                    pars_lo=_make_sheared_pars(pars_meas, -h, 0.0)
+                    pars_hi=_make_sheared_pars(pars_meas, +h, 0.0)
 
-                obs_lo = _make_obs(pars_lo, model, noise_image,
-                                   jacob, wt_obj, psf_obs)
-                obs_hi = _make_obs(pars_hi, model, noise_image,
-                                   jacob, wt_obj, psf_obs)
+                    obs_lo = _make_obs(pars_lo, model, noise_image,
+                                       jacob, wt_obj, psf_obs)
+                    obs_hi = _make_obs(pars_hi, model, noise_image,
+                                       jacob, wt_obj, psf_obs)
 
-                guess=pars_meas
-                res_lo=_do_lm_fit(obs_lo, prior, model, guess)
-                res_hi=_do_lm_fit(obs_hi, prior, model, guess)
+                    guess=pars_meas
+                    res_lo=_do_lm_fit(obs_lo, prior, model, guess)
+                    res_hi=_do_lm_fit(obs_hi, prior, model, guess)
 
-                pars_lo=res_lo['pars']
-                pars_hi=res_hi['pars']
+                    pars_lo=res_lo['pars']
+                    pars_hi=res_hi['pars']
 
-                gsens_vals[i] = (pars_hi[2]-pars_lo[2])/(2.*h)
-                s2n_vals[i]=res['s2n_w']
+                    gsens_vals[i] = (pars_hi[2]-pars_lo[2])/(2.*h)
+                    s2n_vals[i]=res['s2n_w']
 
-                g_vals[i,0] = res['pars'][2]
-                g_vals[i,1] = res['pars'][3]
-                g_err_vals[i] = res['pars_err'][2]
+                    g_vals[i,0] = res['pars'][2]
+                    g_vals[i,1] = res['pars'][3]
+                    g_err_vals[i] = res['pars_err'][2]
 
-        except RetryError:
-            print("retrying")
-            pass
-        except GMixRangeError:
-            print("retrying range error")
-            pass
+                break
+
+            except RetryError:
+                print("retrying")
+                pass
+            except GMixRangeError:
+                print("retrying range error")
+                pass
 
 
 
@@ -4786,6 +4818,8 @@ def test_lm_metacal(model,
     shear, shear_cov = lensing.shear.shear_jackknife(g_vals)
     print("%g +/- %g" % (shear[0], sqrt(shear_cov[0,0])))
     print("%g +/- %g" % (shear[0]/gsens_mean, sqrt(shear_cov[0,0]/gsens_mean)))
+
+    return g_vals
 
 def _do_lm_metacal(pars_obj, shear=None):
     """
@@ -4814,7 +4848,7 @@ def _do_lm_metacal(pars_obj, shear=None):
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
     gm_psf=gmix.GMixModel(pars_psf, "gauss")
 
-    prior=get_mh_prior(T_obj, counts_obj)
+    prior,prior_gflat=get_mh_prior(T_obj, counts_obj)
 
     if pars_obj is None:
         pars_obj0 = prior.sample()
