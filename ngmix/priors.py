@@ -2858,4 +2858,105 @@ class ZDisk2D(_gmix.ZDisk2D):
         return self.get_prob_array1d(r)
     '''
 
+class ZDisk2DErf(object):
+    """
+    uniform over a disk centered at zero [0,0] with radius r
+    """
+    def __init__(self, radius, width=0.001):
+        self.radius = radius
+        self.radius_sq = radius**2
+
+        self.width=width
+
+    def get_prob_scalar1d(self, val):
+        """
+        works for both array and scalar
+        """
+        #from scipy.special import erf
+        from ._gmix import erf
+
+        erf_val=erf( (self.radius-val-6*self.width)/self.width )
+        retval=0.5*(1.0+erf_val)
+
+        return retval
+
+    def get_lnprob_scalar1d(self, val):
+        """
+        works for both array and scalar
+        """
+        #from scipy.special import erf
+        from ._gmix import erf
+
+        erf_val=erf( (self.radius-val-6*self.width)/self.width )
+        linval=0.5*(1.0+erf_val)
+
+        if linval <= 0.0:
+            retval=LOWVAL
+        else:
+            retval=log( linval )
+
+        return retval
+
+    def get_lnprob_scalar2d(self, g1, g2):
+        g=sqrt(g1**2 + g2**2)
+        return self.get_lnprob_scalar1d(g)
+
+    def get_prob_array1d(self, vals):
+        """
+        works for both array and scalar
+        """
+        from ._gmix import erf_array
+
+        vals=numpy.array(vals, ndmin=1, dtype='f8', copy=False)
+
+        arg = (self.radius-vals-6.0*self.width)/self.width
+        erf_vals=numpy.zeros(vals.size)
+
+        erf_array(arg, erf_vals)
+        return 0.5*(1.0+erf_vals)
+
+    def get_lnprob_array1d(self, vals):
+        """
+        works for both array and scalar
+        """
+        from ._gmix import erf_array
+
+        vals=numpy.array(vals, ndmin=1, dtype='f8', copy=False)
+
+        arg = (self.radius-vals-6.0*self.width)/self.width
+        erf_vals=numpy.zeros(vals.size)
+
+        erf_array(arg, erf_vals)
+        lin_vals = 0.5*(1.0+erf_vals)
+
+        retvals = LOWVAL + zeros(lin_vals.size)
+        w,=numpy.where( lin_vals > 0.0 )
+        if w.size > 0:
+            retvals[w] = log( lin_vals[w] )
+
+        return retvals
+
+
+    def sample1d(self, n):
+        """
+        Get samples in 1-d radius
+        """
+        r2 = self.radius_sq*randu(n)
+
+        r = sqrt(r2)
+        return r
+
+    def sample2d(self, n):
+        """
+        Get samples.  Send no args to get a scalar.
+        """
+
+        radius=self.sample1d(n)
+
+        theta=2.0*numpy.pi*randu(n)
+
+        x=radius*cos(theta)
+        y=radius*sin(theta)
+
+        return x,y
 

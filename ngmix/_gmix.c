@@ -1276,6 +1276,61 @@ static PyObject * PyGMix_test(PyObject* self, PyObject* args) {
     return NULL;
 }
 
+static PyObject* PyGMix_erf(PyObject* self, PyObject* args)
+{
+    double val=0, out=0;
+    long double lval=0;
+    if (!PyArg_ParseTuple(args, (char*)"d", &val)) {
+        return NULL;
+    }
+
+    lval=(long double) val;
+
+    out=(double)erfl(lval);
+    /*
+    if (! isfinite(out) ) {
+        if (val < 0.0) {
+            out=-1.0;
+        } else {
+            out= 1.0;
+        }
+    }
+    */
+
+    return Py_BuildValue("d", out);
+
+}
+static PyObject* PyGMix_erf_array(PyObject* self, PyObject* args)
+{
+    PyObject *arr, *out;
+    double *pin, *pout, tmp;
+    npy_intp num, i;
+    long double lval=0;
+    if (!PyArg_ParseTuple(args, (char*)"OO", &arr, &out)) {
+        return NULL;
+    }
+
+    num=PyArray_SIZE(arr);
+    for (i=0; i<num; i++) {
+        pin = PyArray_GETPTR1( arr, i );
+        pout = PyArray_GETPTR1( out, i );
+
+        lval=(long double) (*pin);
+        tmp=(double) erfl(lval);
+
+        *pout = tmp;
+        /*
+        if (! isfinite(*pout)) {
+            *pout=0.0;
+        }
+        */
+    }
+
+    return Py_BuildValue("");
+
+}
+
+
 static PyMethodDef pygauss2d_funcs[] = {
 
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
@@ -1293,6 +1348,8 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"gmixnd_get_prob_scalar",        (PyCFunction)PyGMix_gmixnd_get_prob_scalar,         METH_VARARGS,  "get prob or log prob for scalar arg, nd gaussian"},
 
     {"test",        (PyCFunction)PyGMix_test,         METH_VARARGS,  "test\n\nprint and return."},
+    {"erf",         (PyCFunction)PyGMix_erf,         METH_VARARGS,  "erf with better precision."},
+    {"erf_array",         (PyCFunction)PyGMix_erf_array,         METH_VARARGS,  "erf with better precision."},
     {NULL}  /* Sentinel */
 };
 
