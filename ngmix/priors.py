@@ -2937,26 +2937,46 @@ class ZDisk2DErf(object):
         return retvals
 
 
-    def sample1d(self, n):
+
+class UDisk2DCut(object):
+    """
+    uniform over a disk centered at zero [0,0] with radius r
+    """
+    def __init__(self, maxval=0.97):
+
+        self.maxval=maxval
+        self.fac = 1.0/(1.0-maxval)
+
+
+    def get_lnprob_scalar1d(self, val):
         """
-        Get samples in 1-d radius
-        """
-        r2 = self.radius_sq*randu(n)
-
-        r = sqrt(r2)
-        return r
-
-    def sample2d(self, n):
-        """
-        Get samples.  Send no args to get a scalar.
+        works for both array and scalar
         """
 
-        radius=self.sample1d(n)
 
-        theta=2.0*numpy.pi*randu(n)
+        maxval=self.maxval
+        if val > maxval:
+            vdiff = (val-maxval)*self.fac
+            retval=prior=-numpy.arctanh( vdiff )**2
+        else:
+            retval=0.0
 
-        x=radius*cos(theta)
-        y=radius*sin(theta)
+        return retval
 
-        return x,y
+    def get_lnprob_array1d(self, vals):
+        """
+        works for both array and scalar
+        """
+
+        vals=numpy.array(vals, ndmin=1, copy=False)
+        retvals=zeros(vals.size)
+
+        maxval=self.maxval
+        w,=numpy.where(vals > maxval)
+        if w.size > 0:
+            vdiff = (vals[w]-maxval)*self.fac
+            retvals[w]=prior=-numpy.arctanh( vdiff )**2
+
+        return retvals
+
 
