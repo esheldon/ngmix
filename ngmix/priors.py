@@ -2942,10 +2942,10 @@ class UDisk2DCut(object):
     """
     uniform over a disk centered at zero [0,0] with radius r
     """
-    def __init__(self, maxval=0.97):
+    def __init__(self, cutval=0.97):
 
-        self.maxval=maxval
-        self.fac = 1.0/(1.0-maxval)
+        self.cutval=cutval
+        self.fac = 1.0/(1.0-cutval)
 
 
     def get_lnprob_scalar1d(self, val):
@@ -2954,14 +2954,21 @@ class UDisk2DCut(object):
         """
 
 
-        maxval=self.maxval
-        if val > maxval:
-            vdiff = (val-maxval)*self.fac
-            retval=prior=-numpy.arctanh( vdiff )**2
+        cutval=self.cutval
+        if val > cutval:
+            vdiff = (val-cutval)*self.fac
+            retval=-numpy.arctanh( vdiff )**2
         else:
             retval=0.0
 
         return retval
+    def get_lnprob_scalar2d(self, x1, x2):
+        """
+        works for both array and scalar
+        """
+
+        x=sqrt(x1**2 + x2**2)
+        return self.get_lnprob_scalar1d(x)
 
     def get_lnprob_array1d(self, vals):
         """
@@ -2971,12 +2978,19 @@ class UDisk2DCut(object):
         vals=numpy.array(vals, ndmin=1, copy=False)
         retvals=zeros(vals.size)
 
-        maxval=self.maxval
-        w,=numpy.where(vals > maxval)
+        cutval=self.cutval
+        w,=numpy.where(vals > cutval)
         if w.size > 0:
-            vdiff = (vals[w]-maxval)*self.fac
-            retvals[w]=prior=-numpy.arctanh( vdiff )**2
+            vdiff = (vals[w]-cutval)*self.fac
+            retvals[w]=-numpy.arctanh( vdiff )**2
 
         return retvals
 
+    def get_lnprob_array2d(self, x1, x2):
+        """
+        works for both array and scalar
+        """
+
+        x=sqrt(x1**2 + x2**2)
+        return self.get_lnprob_array1d(x)
 
