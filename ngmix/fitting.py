@@ -3454,9 +3454,10 @@ def get_mh_prior(T, F):
     from . import priors, joint_prior
     cen_prior=priors.CenPrior(0.0, 0.0, 0.5, 0.5)
     g_prior = priors.make_gprior_cosmos_sersic(type='erf')
-    g_prior_flat = priors.UDisk2DCut(1.0)
+    #g_prior_flat = priors.UDisk2DCut(cutval=0.97)
     #g_prior_flat = priors.ZDisk2DErf(1.0, width=0.001)
     #g_prior_flat = priors.ZDisk2DErf(1.0, width=0.001)
+    g_prior_flat = priors.ZDisk2D(1.0)
 
     Twidth=0.3*T
     logTmean, logTsigma=priors.lognorm_convert(T, Twidth, base=10.0)
@@ -4602,24 +4603,46 @@ class RetryError(Exception):
     def __str__(self):
         return repr(self.value)
 
+def _add_noise_obs(obs, frac=0.1):
+    wm=numpy.median(obs.weight)
+    n = sqrt(1.0/wm)
+    new_im = obs.image.copy()
 
-def _do_lm_fit(obs, prior, model, guess):
+    new_noise = frac*n
+    new_im += new_noise*numpy.random.randn(new_im.size).reshape(new_im.shape)
+
+    new_total_noise = sqrt(n**2 + new_noise**2)
+    new_wt = 0.0*obs.weight + 1.0/new_total_noise**2
+
+    new_obs=Observation(new_im,
+                        weight=new_wt,
+                        jacobian=obs.jacobian,
+                        psf=obs.psf)
+    return new_obs
+                            
+
+
+def _do_lm_fit(obs, prior, sample_prior, model):
     lm_pars={'maxfev': 300,
              'ftol':   1.0e-6,
              'xtol':   1.0e-6,
              'epsfcn': 1.0e-6}
 
-    lm_fitter=LMSimple(obs, model, lm_pars=lm_pars, prior=prior)
-    #lm_fitter=LMSimple(obs, model, lm_pars=lm_pars)
+    #lm_fitter=LMSimple(obs, model, lm_pars=lm_pars, prior=prior)
+    lm_fitter=LMSimple(obs, model, lm_pars=lm_pars)
 
     nmax=1000
     i=0
     while True:
-        if i > 0:
+        #if i > 0:
             #print_pars(guess,front="draw from prior:")
-            guess=prior.sample()
+        #    guess=prior.sample()
+        guess=sample_prior.sample()
 
         try:
+
+            guess[2]=0.1*srandu()
+            guess[3]=0.1*srandu()
             lm_fitter.run_lm(guess)
         
             res=lm_fitter.get_result()
@@ -4680,6 +4703,7 @@ def test_lm_metacal(model,
     gsens_vals=zeros(npair*2)
     s2n_vals=zeros(npair*2)
 
+    nretry=0
     for ii in xrange(npair):
         while True:
             try:
@@ -4742,27 +4766,21 @@ def test_lm_metacal(model,
                     obs = _make_obs(sheared_pars, model, noise_image,
                                     jacob, wt_obj, psf_obs)
 
-                    #guess=pars_obj_0.copy()
-                    #guess=prior.sample()
                     max_lnprob=-9999.e59
                     res=None
                     for irep in xrange(1):
-                        #guess=pars_obj_0.copy()
-                        guess=prior.sample()
-                        #tres=_do_lm_fit(obs, prior, model, guess)
-                        tres=_do_lm_fit(obs, prior_gflat, model, guess)
+
+                        tres=_do_lm_fit(obs, prior_gflat, prior, model)
                         if tres['lnprob'] > max_lnprob:
                             max_lnprob=tres['lnprob']
                             res=tres
-                            #print("max lnprob:",max_lnprob)
-                    
+
                     gg=res['g']
                     g=sqrt(gg[0]**2 + gg[1]**2)
                     if g > 0.97:
-                        raise RetryError("g too big")
-                    #print_pars(sheared_pars,front="pars true:")
-                    #print_pars(res['pars'],front="meas:")
-                    #stop
+                        nretry += 1
+                        raise RetryError("bad g")
+                    
 
                     # now metacal
                     pars_meas = res['pars']
@@ -4774,9 +4792,9 @@ def test_lm_metacal(model,
                     obs_hi = _make_obs(pars_hi, model, noise_image,
                                        jacob, wt_obj, psf_obs)
 
-                    guess=pars_meas
-                    res_lo=_do_lm_fit(obs_lo, prior, model, guess)
-                    res_hi=_do_lm_fit(obs_hi, prior, model, guess)
+                    #guess=pars_meas
+                    res_lo=_do_lm_fit(obs_lo, prior_gflat, prior, model)
+                    res_hi=_do_lm_fit(obs_hi, prior_gflat, prior, model)
 
                     pars_lo=res_lo['pars']
                     pars_hi=res_hi['pars']
@@ -4815,9 +4833,16 @@ def test_lm_metacal(model,
     print(gsens_mean)
     print("%g +/- %g" % (shear_mean[0], shear_err))
 
-    shear, shear_cov = lensing.shear.shear_jackknife(g_vals)
+    chunksize=int(g_vals.shape[0]/100.)
+    if chunksize < 1:
+        chunksize=1
+    print("chunksize:",chunksize)
+
+    shear, shear_cov = lensing.shear.shear_jackknife(g_vals,
+                                                     chunksize=chunksize)
     print("%g +/- %g" % (shear[0], sqrt(shear_cov[0,0])))
     print("%g +/- %g" % (shear[0]/gsens_mean, sqrt(shear_cov[0,0]/gsens_mean)))
+    print("nretry:",nretry)
 
     return g_vals
 
