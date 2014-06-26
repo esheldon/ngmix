@@ -3454,7 +3454,7 @@ def get_mh_prior(T, F):
     from . import priors, joint_prior
     cen_prior=priors.CenPrior(0.0, 0.0, 0.5, 0.5)
     g_prior = priors.make_gprior_cosmos_sersic(type='erf')
-    g_prior_flat = priors.ZDisk2D(1.0)
+    g_prior_flat = priors.UDisk2DCut(1.0)
     #g_prior_flat = priors.ZDisk2DErf(1.0, width=0.001)
     #g_prior_flat = priors.ZDisk2DErf(1.0, width=0.001)
 
