@@ -4844,7 +4844,7 @@ def test_lm_metacal(model,
     print("%g +/- %g" % (shear[0]/gsens_mean, sqrt(shear_cov[0,0]/gsens_mean)))
     print("nretry:",nretry)
 
-    return g_vals
+    return g_vals, shear, shear_cov
 
 def _do_lm_metacal(pars_obj, shear=None):
     """
