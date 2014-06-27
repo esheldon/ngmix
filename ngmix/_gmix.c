@@ -25,7 +25,7 @@ static PyObject* GMixFatalError;
     return 0 means out of range
 */
 static int g1g2_to_e1e2(double g1, double g2, double *e1, double *e2) {
-    double eta, e, fac;
+    double eta=0, e=0, fac=0;
     double g=sqrt(g1*g1 + g2*g2);
 
     if (g >= 1) {
@@ -108,7 +108,7 @@ static int gauss2d_set(struct PyGMix_Gauss2D *self,
                        double icc) {
 
 
-    double det, idet;
+    double det=0, idet=0;
 
     det = irr*icc - irc*irc;
     if (det < 1.0e-200) {
@@ -285,8 +285,10 @@ static int gmix_fill_simple(struct PyGMix_Gauss2D *self,
                             const double* pvals)
 {
 
-    int status=0, n_gauss_expected;
-    double row,col,g1,g2,T,counts,e1,e2,T_i_2,counts_i;
+    int status=0, n_gauss_expected=0;
+    double row=0,col=0,g1=0,g2=0,
+           T=0,counts=0,e1=0,e2=0,
+           T_i_2=0,counts_i=0;
     npy_intp i=0;
 
     if (n_pars != 6) {
@@ -410,9 +412,9 @@ _gmix_fill_bail:
 static PyObject * PyGMix_gmix_fill(PyObject* self, PyObject* args) {
     PyObject* gmix_obj=NULL;
     PyObject* pars_obj=NULL;
-    const double* pars;
-    npy_intp n_gauss, n_pars;
-    int res;
+    const double* pars=NULL;
+    npy_intp n_gauss=0, n_pars=0;
+    int res=0;
 
     int model=0;
 
@@ -448,8 +450,8 @@ static int convolve_fill(struct PyGMix_Gauss2D *self, npy_intp self_n_gauss,
                          const struct PyGMix_Gauss2D *psf, npy_intp psf_n_gauss)
 {
     int status=0;
-    npy_intp ntot, iobj=0, ipsf=0, itot=0;
-    double psf_rowcen=0, psf_colcen=0, psf_psum=0, psf_ipsum;
+    npy_intp ntot=0, iobj=0, ipsf=0, itot=0;
+    double psf_rowcen=0, psf_colcen=0, psf_psum=0, psf_ipsum=0;
 
     ntot = n_gauss*psf_n_gauss;
     if (ntot != self_n_gauss) {
@@ -1302,9 +1304,9 @@ static PyObject* PyGMix_erf(PyObject* self, PyObject* args)
 }
 static PyObject* PyGMix_erf_array(PyObject* self, PyObject* args)
 {
-    PyObject *arr, *out;
-    double *pin, *pout, tmp;
-    npy_intp num, i;
+    PyObject *arr=NULL, *out=NULL;
+    double *pin=NULL, *pout=NULL, tmp=0;
+    npy_intp num=0, i=0;
     long double lval=0;
     if (!PyArg_ParseTuple(args, (char*)"OO", &arr, &out)) {
         return NULL;
@@ -1385,7 +1387,7 @@ PyGMixNormal_init(struct PyGMixNormal* self, PyObject *args)
 static PyObject* PyGMixNormal_get_lnprob_scalar(struct PyGMixNormal* self,
                                                  PyObject *args)
 {
-    double x, diff, lnp;
+    double x=0, diff=0, lnp=0;
     if (!PyArg_ParseTuple(args, (char*)"d", &x)) {
         return NULL;
     }
@@ -1399,7 +1401,7 @@ static PyObject* PyGMixNormal_get_lnprob_scalar(struct PyGMixNormal* self,
 static PyObject* PyGMixNormal_get_prob_scalar(struct PyGMixNormal* self,
                                                PyObject *args)
 {
-    double x, diff, lnp, p;
+    double x=0, diff=0, lnp=0, p=0;
     if (!PyArg_ParseTuple(args, (char*)"d", &x)) {
         return NULL;
     }
@@ -1499,7 +1501,7 @@ PyGMixNormal2D_init(struct PyGMixNormal2D* self, PyObject *args)
 static PyObject* PyGMixNormal2D_get_lnprob_scalar(struct PyGMixNormal2D* self,
                                                   PyObject *args)
 {
-    double x1, x2, d1, d2, lnp;
+    double x1=0, x2=0, d1=0, d2=0, lnp=0;
     if (!PyArg_ParseTuple(args, (char*)"dd", &x1, &x2)) {
         return NULL;
     }
@@ -1514,7 +1516,7 @@ static PyObject* PyGMixNormal2D_get_lnprob_scalar(struct PyGMixNormal2D* self,
 static PyObject* PyGMixNormal2D_get_prob_scalar(struct PyGMixNormal2D* self,
                                                PyObject *args)
 {
-    double x1, x2, d1, d2, lnp, p;
+    double x1=0, x2=0, d1=0, d2=0, lnp=0, p=0;
     if (!PyArg_ParseTuple(args, (char*)"dd", &x1, &x2)) {
         return NULL;
     }
@@ -1530,7 +1532,7 @@ static PyObject* PyGMixNormal2D_get_prob_scalar(struct PyGMixNormal2D* self,
 static PyObject* PyGMixNormal2D_get_lnprob_scalar_sep(struct PyGMixNormal2D* self,
                                                       PyObject *args)
 {
-    double x1, x2, d1, d2, lnp1, lnp2;
+    double x1=0, x2=0, d1=0, d2=0, lnp1=0, lnp2=0;
     PyObject* retval=NULL;
 
     if (!PyArg_ParseTuple(args, (char*)"dd", &x1, &x2)) {
@@ -1630,7 +1632,7 @@ PyGMixZDisk2D_init(struct PyGMixZDisk2D* self, PyObject *args)
 static PyObject* PyGMixZDisk2D_get_lnprob_scalar1d(struct PyGMixZDisk2D* self,
                                                    PyObject *args)
 {
-    double r;
+    double r=0;
     if (!PyArg_ParseTuple(args, (char*)"d", &r)) {
         return NULL;
     }
@@ -1646,7 +1648,7 @@ static PyObject* PyGMixZDisk2D_get_lnprob_scalar1d(struct PyGMixZDisk2D* self,
 static PyObject* PyGMixZDisk2D_get_prob_scalar1d(struct PyGMixZDisk2D* self,
                                                  PyObject *args)
 {
-    double r, retval;
+    double r=0, retval=0;
     if (!PyArg_ParseTuple(args, (char*)"d", &r)) {
         return NULL;
     }
@@ -1663,7 +1665,7 @@ static PyObject* PyGMixZDisk2D_get_prob_scalar1d(struct PyGMixZDisk2D* self,
 static PyObject* PyGMixZDisk2D_get_lnprob_scalar2d(struct PyGMixZDisk2D* self,
                                                    PyObject *args)
 {
-    double x, y, r2;
+    double x=0, y=0, r2=0;
     if (!PyArg_ParseTuple(args, (char*)"dd", &x, &y)) {
         return NULL;
     }
@@ -1680,7 +1682,7 @@ static PyObject* PyGMixZDisk2D_get_lnprob_scalar2d(struct PyGMixZDisk2D* self,
 static PyObject* PyGMixZDisk2D_get_prob_scalar2d(struct PyGMixZDisk2D* self,
                                                  PyObject *args)
 {
-    double x, y, r2, retval;
+    double x=0, y=0, r2=0, retval=0;
     if (!PyArg_ParseTuple(args, (char*)"dd", &x, &y)) {
         return NULL;
     }
