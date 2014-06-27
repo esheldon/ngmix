@@ -4583,14 +4583,17 @@ def _make_sheared_pars(pars, shear_g1, shear_g2):
 
     return shpars
 
-def _make_obs(pars, model, noise_image, jacob, weight, psf):
+def _make_obs(pars, model, noise_image, jacob, weight, psf_obs, nsub):
+    """
+    note nsub is 1 here since we are using the fit to the observed data
+    """
     gm0=gmix.GMixModel(pars, model, logpars=True)
-    gm=gm0.convolve(psf.gmix)
-    im = gm.make_image(noise_image.shape, jacobian=jacob, nsub=16)
+    gm=gm0.convolve(psf_obs.gmix)
+    im = gm.make_image(noise_image.shape, jacobian=jacob, nsub=nsub)
 
     im += noise_image
 
-    obs=Observation(im, jacobian=jacob, weight=weight, psf=psf)
+    obs=Observation(im, jacobian=jacob, weight=weight, psf=psf_obs)
 
     return obs
 
@@ -4628,8 +4631,8 @@ def _do_lm_fit(obs, prior, sample_prior, model):
              'xtol':   1.0e-6,
              'epsfcn': 1.0e-6}
 
-    #lm_fitter=LMSimple(obs, model, lm_pars=lm_pars, prior=prior)
-    lm_fitter=LMSimple(obs, model, lm_pars=lm_pars)
+    lm_fitter=LMSimple(obs, model, lm_pars=lm_pars, prior=prior)
+    #lm_fitter=LMSimple(obs, model, lm_pars=lm_pars)
 
     nmax=1000
     i=0
@@ -4668,6 +4671,7 @@ def _do_lm_fit(obs, prior, sample_prior, model):
 
 def test_lm_metacal(model,
                     shear=0.04,
+                    T_psf=4.0,
                     T_obj=16.0,
                     noise_obj=0.01,
                     npair=100):
@@ -4676,25 +4680,27 @@ def test_lm_metacal(model,
     import lensing
 
     shear=Shape(shear, 0.0)
-    h=0.02
-    #h=0.05
-
-    dims=[25,25]
-    npix=dims[0]*dims[1]
-    cen=[dims[0]/2., dims[1]/2.]
-    jacob=UnitJacobian(cen[0],cen[1])
-    wt_obj = zeros(dims) + 1.0/noise_obj**2
+    h=0.01
+    #h=shear.g1
 
 
     # PSF pars
     counts_psf=100.0
     noise_psf=0.001
-    g1_psf=0.05
-    g2_psf=-0.01
-    T_psf=4.0
+    g1_psf=0.00
+    g2_psf=0.00
 
     counts_obj=100.0
-    T_obj=16.0
+
+    T_tot = T_obj + T_psf
+    sigma_tot=sqrt(T_tot/2.0)
+    dims=[int(round(2*7*sigma_tot))]*2
+    print("dims:",dims)
+    npix=dims[0]*dims[1]
+    cen=[dims[0]/2., dims[1]/2.]
+    jacob=UnitJacobian(cen[0],cen[1])
+    wt_obj = zeros(dims) + 1.0/noise_obj**2
+
 
     prior,prior_gflat=get_mh_prior(T_obj, counts_obj)
 
@@ -4703,6 +4709,7 @@ def test_lm_metacal(model,
     gsens_vals=zeros(npair*2)
     s2n_vals=zeros(npair*2)
 
+    nsub_render=16
     nretry=0
     for ii in xrange(npair):
         while True:
@@ -4711,6 +4718,7 @@ def test_lm_metacal(model,
                     print("%d/%d" % (ii,npair))
 
                 pars_obj_0 = prior.sample()
+                #print(pars_obj_0)
 
                 shape1=Shape(pars_obj_0[2], pars_obj_0[3])
 
@@ -4720,7 +4728,7 @@ def test_lm_metacal(model,
                 pars_psf = [pars_obj_0[0], pars_obj_0[1], g1_psf, g2_psf,
                             T_psf, counts_psf]
                 gm_psf=gmix.GMixModel(pars_psf, "gauss")
-                im_psf=gm_psf.make_image(dims, jacobian=jacob, nsub=16)
+                im_psf=gm_psf.make_image(dims, jacobian=jacob, nsub=nsub_render)
 
                 noise_im_psf=noise_psf*numpy.random.randn(npix)
                 noise_im_psf = noise_im_psf.reshape(dims)
@@ -4763,38 +4771,37 @@ def test_lm_metacal(model,
                     sheared_pars[2]=sh.g1
                     sheared_pars[3]=sh.g2
 
+                    # simulated observation, here we integrate over pixels
+                    # but the obs should get psf_obs set
                     obs = _make_obs(sheared_pars, model, noise_image,
-                                    jacob, wt_obj, psf_obs)
+                                    jacob, wt_obj, psf_obs, nsub_render)
 
-                    max_lnprob=-9999.e59
-                    res=None
-                    for irep in xrange(1):
-
-                        tres=_do_lm_fit(obs, prior_gflat, prior, model)
-                        if tres['lnprob'] > max_lnprob:
-                            max_lnprob=tres['lnprob']
-                            res=tres
-
-                    gg=res['g']
-                    g=sqrt(gg[0]**2 + gg[1]**2)
-                    if g > 0.97:
-                        nretry += 1
-                        raise RetryError("bad g")
-                    
+                    #res=_do_lm_fit(obs, prior_gflat, prior, model)
+                    res=_do_lm_fit(obs, prior, prior, model)
+                    check_g(res['g'])
 
                     # now metacal
-                    pars_meas = res['pars']
+                    pars_meas = res['pars'].copy()
                     pars_lo=_make_sheared_pars(pars_meas, -h, 0.0)
                     pars_hi=_make_sheared_pars(pars_meas, +h, 0.0)
 
-                    obs_lo = _make_obs(pars_lo, model, noise_image,
-                                       jacob, wt_obj, psf_obs)
-                    obs_hi = _make_obs(pars_hi, model, noise_image,
-                                       jacob, wt_obj, psf_obs)
+                    noise_image_mc = noise_obj*numpy.random.randn(npix)
+                    noise_image_mc = noise_image_mc.reshape(dims)
 
-                    #guess=pars_meas
-                    res_lo=_do_lm_fit(obs_lo, prior_gflat, prior, model)
-                    res_hi=_do_lm_fit(obs_hi, prior_gflat, prior, model)
+                    # nsub=1 here since all are observed models
+                    obs_lo = _make_obs(pars_lo, model, noise_image_mc,
+                                       jacob, wt_obj,
+                                       psf_obs, 1)
+                    obs_hi = _make_obs(pars_hi, model, noise_image_mc,
+                                       jacob, wt_obj,
+                                       psf_obs, 1)
+
+                    #res_lo=_do_lm_fit(obs_lo, prior_gflat, prior, model)
+                    res_lo=_do_lm_fit(obs_lo, prior, prior, model)
+                    check_g(res_lo['g'])
+                    #res_hi=_do_lm_fit(obs_hi, prior_gflat, prior, model)
+                    res_hi=_do_lm_fit(obs_hi, prior, prior, model)
+                    check_g(res_hi['g'])
 
                     pars_lo=res_lo['pars']
                     pars_hi=res_hi['pars']
@@ -4849,5 +4856,10 @@ def test_lm_metacal(model,
     print("nretry:",nretry)
 
     return g_vals, gsens_mean, shear, shear_cov, shear_fix, shear_cov_fix, s2n
+
+def check_g(g):
+    gtot=sqrt(g[0]**2 + g[1]**2)
+    if gtot > 0.97:
+        raise RetryError("bad g")
 
 
