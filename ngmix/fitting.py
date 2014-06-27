@@ -4586,7 +4586,7 @@ def _make_sheared_pars(pars, shear_g1, shear_g2):
 def _make_obs(pars, model, noise_image, jacob, weight, psf):
     gm0=gmix.GMixModel(pars, model, logpars=True)
     gm=gm0.convolve(psf.gmix)
-    im = gm.make_image(noise_image.shape, jacobian=jacob)
+    im = gm.make_image(noise_image.shape, jacobian=jacob, nsub=16)
 
     im += noise_image
 
@@ -4720,7 +4720,7 @@ def test_lm_metacal(model,
                 pars_psf = [pars_obj_0[0], pars_obj_0[1], g1_psf, g2_psf,
                             T_psf, counts_psf]
                 gm_psf=gmix.GMixModel(pars_psf, "gauss")
-                im_psf=gm_psf.make_image(dims, jacobian=jacob)
+                im_psf=gm_psf.make_image(dims, jacobian=jacob, nsub=16)
 
                 noise_im_psf=noise_psf*numpy.random.randn(npix)
                 noise_im_psf = noise_im_psf.reshape(dims)
