@@ -4828,7 +4828,8 @@ def test_lm_metacal(model,
     shear_err2_inv = ( 1.0/err2 ).sum()
     shear_err = sqrt( 1.0/shear_err2_inv )/gsens_mean
 
-    print('s2n:',s2n_vals.mean())
+    s2n=s2n_vals.mean()
+    print('s2n:',s2n)
     print("%g +/- %g" % (g_mean[0], g_err[0]))
     print(gsens_mean)
     print("%g +/- %g" % (shear_mean[0], shear_err))
@@ -4840,10 +4841,13 @@ def test_lm_metacal(model,
 
     shear, shear_cov = lensing.shear.shear_jackknife(g_vals,
                                                      chunksize=chunksize)
+    shear_fix=shear/gsens_mean
+    shear_cov_fix=shear_cov/gsens_mean**2
+
     print("%g +/- %g" % (shear[0], sqrt(shear_cov[0,0])))
     print("%g +/- %g" % (shear[0]/gsens_mean, sqrt(shear_cov[0,0]/gsens_mean)))
     print("nretry:",nretry)
 
-    return g_vals, shear, shear_cov
+    return g_vals, gsens_mean, shear, shear_cov, shear_fix, shear_cov_fix, s2n
 
 
