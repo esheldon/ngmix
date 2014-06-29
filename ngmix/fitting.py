@@ -4625,14 +4625,16 @@ def _add_noise_obs(obs, frac=0.1):
                             
 
 
-def _do_lm_fit(obs, prior, sample_prior, model):
+def _do_lm_fit(obs, prior, sample_prior, model, prior_during=True):
     lm_pars={'maxfev': 300,
              'ftol':   1.0e-6,
              'xtol':   1.0e-6,
              'epsfcn': 1.0e-6}
 
-    lm_fitter=LMSimple(obs, model, lm_pars=lm_pars, prior=prior)
-    #lm_fitter=LMSimple(obs, model, lm_pars=lm_pars)
+    if prior_during:
+        lm_fitter=LMSimple(obs, model, lm_pars=lm_pars, prior=prior)
+    else:
+        lm_fitter=LMSimple(obs, model, lm_pars=lm_pars)
 
     nmax=1000
     i=0
@@ -4644,8 +4646,8 @@ def _do_lm_fit(obs, prior, sample_prior, model):
 
         try:
 
-            guess[2]=0.1*srandu()
-            guess[3]=0.1*srandu()
+            #guess[2]=0.1*srandu()
+            #guess[3]=0.1*srandu()
             lm_fitter.run_lm(guess)
         
             res=lm_fitter.get_result()
@@ -4669,18 +4671,54 @@ def _do_lm_fit(obs, prior, sample_prior, model):
 
     return res
 
+
 def test_lm_metacal(model,
                     shear=0.04,
                     T_psf=4.0,
                     T_obj=16.0,
                     noise_obj=0.01,
-                    npair=100):
+                    npair=100,
+                    nsub_render=16,
+                    dim=None,
+                    prior_during=True):
+
+    """
+    notes
+
+    nsub_render=1
+
+        testing both prior during and not during
+
+        the metacal is unbiased when applying the prior
+        
+        regular seems to be unbiased when not applying the prior
+
+    nsub_render=16
+
+        and rendering the metacal images without sub-pixel integration
+
+            - during, no subpixel in metacal images
+                - biased
+            - during, with subpixel in metacal images
+                - 1-2% biased
+            - not during, with subpixel in metacal images
+                - about the same
+            - trying h=0.02 instead of 0.01
+                - prior during does look better.  I'm actually using +/- h as
+                steps, which equals the shear I'm using of 0.04, maybe that is
+                key.  Or it could be even larger would be better...
+
+                next batch looks worse though... still 1.3% biased
+
+                - not prior during a bit more biased
+
+    """
     from .shape import Shape
     from . import em
     import lensing
 
     shear=Shape(shear, 0.0)
-    h=0.01
+    h=0.02
     #h=shear.g1
 
 
@@ -4694,7 +4732,9 @@ def test_lm_metacal(model,
 
     T_tot = T_obj + T_psf
     sigma_tot=sqrt(T_tot/2.0)
-    dims=[int(round(2*7*sigma_tot))]*2
+    if dim is None:
+        dim=int(round(2*5*sigma_tot))
+    dims=[dim]*2
     print("dims:",dims)
     npix=dims[0]*dims[1]
     cen=[dims[0]/2., dims[1]/2.]
@@ -4704,12 +4744,11 @@ def test_lm_metacal(model,
 
     prior,prior_gflat=get_mh_prior(T_obj, counts_obj)
 
-    g_vals=zeros( (npair*2,2) )
+    g_vals=zeros( (npair*2, 2) )
     g_err_vals=zeros(npair*2)
-    gsens_vals=zeros(npair*2)
+    gsens_vals=g_vals.copy()
     s2n_vals=zeros(npair*2)
 
-    nsub_render=16
     nretry=0
     for ii in xrange(npair):
         while True:
@@ -4777,7 +4816,7 @@ def test_lm_metacal(model,
                                     jacob, wt_obj, psf_obs, nsub_render)
 
                     #res=_do_lm_fit(obs, prior_gflat, prior, model)
-                    res=_do_lm_fit(obs, prior, prior, model)
+                    res=_do_lm_fit(obs, prior, prior, model, prior_during=prior_during)
                     check_g(res['g'])
 
                     # now metacal
@@ -4791,22 +4830,24 @@ def test_lm_metacal(model,
                     # nsub=1 here since all are observed models
                     obs_lo = _make_obs(pars_lo, model, noise_image_mc,
                                        jacob, wt_obj,
-                                       psf_obs, 1)
+                                       psf_obs, nsub_render)
+                                       #psf_obs, 1)
                     obs_hi = _make_obs(pars_hi, model, noise_image_mc,
                                        jacob, wt_obj,
-                                       psf_obs, 1)
+                                       psf_obs, nsub_render)
+                                       #psf_obs, 1)
 
                     #res_lo=_do_lm_fit(obs_lo, prior_gflat, prior, model)
-                    res_lo=_do_lm_fit(obs_lo, prior, prior, model)
+                    res_lo=_do_lm_fit(obs_lo, prior, prior, model, prior_during=prior_during)
                     check_g(res_lo['g'])
                     #res_hi=_do_lm_fit(obs_hi, prior_gflat, prior, model)
-                    res_hi=_do_lm_fit(obs_hi, prior, prior, model)
+                    res_hi=_do_lm_fit(obs_hi, prior, prior, model, prior_during=prior_during)
                     check_g(res_hi['g'])
 
                     pars_lo=res_lo['pars']
                     pars_hi=res_hi['pars']
 
-                    gsens_vals[i] = (pars_hi[2]-pars_lo[2])/(2.*h)
+                    gsens_vals[i,:] = (pars_hi[2]-pars_lo[2])/(2.*h)
                     s2n_vals[i]=res['s2n_w']
 
                     g_vals[i,0] = res['pars'][2]
@@ -4826,19 +4867,19 @@ def test_lm_metacal(model,
 
     g_mean = g_vals.mean(axis=0)
     g_err = g_vals.std(axis=0)/sqrt(2*npair)
-    gsens_mean=gsens_vals.mean()
+    gsens_mean=gsens_vals.mean(axis=0)
 
-    shear_mean =g_mean/gsens_mean
+    shear_mean =g_mean/gsens_mean[0]
 
     # soften
     err2 = g_err_vals**2 + 0.001
     shear_err2_inv = ( 1.0/err2 ).sum()
-    shear_err = sqrt( 1.0/shear_err2_inv )/gsens_mean
+    shear_err = sqrt( 1.0/shear_err2_inv )/gsens_mean[0]
 
     s2n=s2n_vals.mean()
     print('s2n:',s2n)
     print("%g +/- %g" % (g_mean[0], g_err[0]))
-    print(gsens_mean)
+    print(gsens_mean[0])
     print("%g +/- %g" % (shear_mean[0], shear_err))
 
     chunksize=int(g_vals.shape[0]/100.)
@@ -4848,14 +4889,14 @@ def test_lm_metacal(model,
 
     shear, shear_cov = lensing.shear.shear_jackknife(g_vals,
                                                      chunksize=chunksize)
-    shear_fix=shear/gsens_mean
-    shear_cov_fix=shear_cov/gsens_mean**2
+    shear_fix=shear/gsens_mean[0]
+    shear_cov_fix=shear_cov/gsens_mean[0]**2
 
     print("%g +/- %g" % (shear[0], sqrt(shear_cov[0,0])))
-    print("%g +/- %g" % (shear[0]/gsens_mean, sqrt(shear_cov[0,0]/gsens_mean)))
+    print("%g +/- %g" % (shear[0]/gsens_mean[0], sqrt(shear_cov[0,0]/gsens_mean[0])))
     print("nretry:",nretry)
 
-    return g_vals, gsens_mean, shear, shear_cov, shear_fix, shear_cov_fix, s2n
+    return g_vals, gsens_vals, gsens_mean, shear, shear_cov, shear_fix, shear_cov_fix, s2n
 
 def check_g(g):
     gtot=sqrt(g[0]**2 + g[1]**2)
