@@ -746,6 +746,131 @@ class GPriorBase(object):
                          fracdiff[ishear,0],fracdiff[ishear,1])
             print(mess)
 
+    def test_anze_shear_recovery(self,
+                                 smin,
+                                 smax,
+                                 nshear,
+                                 doring=True,
+                                 npair=10000,
+                                 h=1.e-6,
+                                 show=False,
+                                 eps=None):
+        """
+        Test how well we recover the shear with no noise.
+
+        parameters
+        ----------
+        smin: float
+            min shear to test
+        smax: float
+            max shear to test
+        nshear:
+            number of shear values to test
+        npair: integer, optional
+            Number of pairs to use at each shear test value
+
+        The idea is to measure the same P,Q but instead of constructing the
+        covariance matrix part from sheared data we do it from zero-shear data
+
+        """
+        import lensing
+        from .shape import Shape, shear_reduced
+
+        shear1_true=numpy.linspace(smin, smax, nshear)
+        shear2_true=numpy.zeros(nshear)
+
+        shear1_meas=numpy.zeros(nshear)
+        shear2_meas=numpy.zeros(nshear)
+        shear1_meas_err=numpy.zeros(nshear)
+        shear2_meas_err=numpy.zeros(nshear)
+        
+ 
+        theta=numpy.pi/2.0
+        twotheta = 2.0*theta
+        cos2angle = numpy.cos(twotheta)
+        sin2angle = numpy.sin(twotheta)
+
+        g1=numpy.zeros(npair*2)
+        g2=numpy.zeros(npair*2)
+        for ishear in xrange(nshear):
+            print("-"*70)
+            s1=shear1_true[ishear]
+            s2=shear2_true[ishear]
+
+            # ring
+            g1[0:npair],g2[0:npair] = self.sample2d(npair)
+            g1[npair:] =  g1[0:npair]*cos2angle + g2[0:npair]*sin2angle
+            g2[npair:] = -g1[0:npair]*sin2angle + g2[0:npair]*cos2angle
+
+            g1s, g2s = shear_reduced(g1, g2, s1, s2)
+
+            Pns,Qns,Rns=self.get_pqr_num(g1, g2, h=h)
+            P,Q,R=self.get_pqr_num(g1s, g2s, h=h)
+
+            # PQR for unsheared data; should really not re-use the g1,g2
+            # but we can fix that later
+            P_sum_ns,Q_sum_ns,Cinv_sum_ns=lensing.pqr.get_pqr_sums(Pns, Qns, Rns)
+
+            # P,Q,R for sheared data
+            P_sum,Q_sum,Cinv_sum=lensing.pqr.get_pqr_sums(P, Q, R)
+
+            # use zero shear one for Cinv
+            shear_meas_i, C = lensing.pqr.combine_pqr_sums(P_sum, Q_sum, Cinv_sum_ns)
+            #shear_meas_i, C = lensing.pqr.combine_pqr_sums(P_sum, Q_sum, Cinv_sum)
+
+            shear1_meas[ishear] = shear_meas_i[0]
+            shear2_meas[ishear] = shear_meas_i[1]
+
+            mess='true: %.6f,%.6f meas: %.6f,%.6f'
+            print(mess % (s1,s2,shear_meas_i[0],shear_meas_i[1]))
+
+        fracdiff=shear1_meas/shear1_true-1
+        fracdiff_err=shear1_meas_err/shear1_true
+
+        if eps or show:
+            import biggles
+            biggles.configure('default','fontsize_min',3)
+            plt=biggles.FramedPlot()
+            #plt.xlabel=r'$\gamma_{true}$'
+            #plt.ylabel=r'$\Delta \gamma/\gamma$'
+            plt.xlabel=r'$g_{true}$'
+            plt.ylabel=r'$\Delta g/g$'
+            plt.aspect_ratio=1.0
+
+            plt.add( biggles.FillBetween([0.0,smax], [0.004,0.004], 
+                                         [0.0,smax], [-0.004,-0.004],
+                                          color='grey90') )
+            plt.add( biggles.FillBetween([0.0,smax], [0.001,0.001], 
+                                         [0.0,smax], [-0.001,-0.001],
+                                          color='grey80') )
+            plt.add( biggles.Curve([0.0,smax],[0.0,0.0]) )
+
+            psize=2.25
+            pts=biggles.Points(shear1_true, fracdiff,
+                               type='filled circle',size=psize,
+                               color='blue')
+            pts.label='measured'
+            plt.add(pts)
+
+
+            coeffs=numpy.polyfit(shear1_true, fracdiff, 2)
+            poly=numpy.poly1d(coeffs)
+
+            curve=biggles.Curve(shear1_true, poly(shear1_true), type='solid',
+                                color='black')
+            curve.label=r'$\Delta g/g = %.1f g^2$' % coeffs[0]
+            plt.add(curve)
+
+            plt.add( biggles.PlotKey(0.1, 0.2, [pts,curve], halign='left') )
+
+            if eps:
+                print('writing:',eps)
+                plt.write_eps(eps)
+
+            if show:
+                plt.show()
+            print(poly)
+
 
 
 class GPriorBA(GPriorBase):
