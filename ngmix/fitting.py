@@ -3454,9 +3454,6 @@ def get_mh_prior(T, F):
     from . import priors, joint_prior
     cen_prior=priors.CenPrior(0.0, 0.0, 0.5, 0.5)
     g_prior = priors.make_gprior_cosmos_sersic(type='erf')
-    #g_prior_flat = priors.UDisk2DCut(cutval=0.97)
-    #g_prior_flat = priors.ZDisk2DErf(1.0, width=0.001)
-    #g_prior_flat = priors.ZDisk2DErf(1.0, width=0.001)
     g_prior_flat = priors.ZDisk2D(1.0)
 
     Twidth=0.3*T
@@ -4639,29 +4636,18 @@ def _do_lm_fit(obs, prior, sample_prior, model, prior_during=True):
     nmax=1000
     i=0
     while True:
-        #if i > 0:
-            #print_pars(guess,front="draw from prior:")
-        #    guess=prior.sample()
+
         guess=sample_prior.sample()
 
         try:
 
-            #guess[2]=0.1*srandu()
-            #guess[3]=0.1*srandu()
             lm_fitter.run_lm(guess)
         
             res=lm_fitter.get_result()
 
             if res['flags']==0:
                 break
-                '''
-                g=sqrt( res['g'][0]**2 + res['g'][1]**2 )
-                if g < 0.97:
-                    print("good")
-                    break
-                else:
-                    print("bad g: %g" % g)
-                '''
+
         except GMixRangeError as err:
             print("caught range error: %s" % str(err))
 
@@ -4717,6 +4703,7 @@ def test_lm_metacal(model,
     from . import em
     import lensing
 
+    print("nsub for rendering:",nsub_render)
     shear=Shape(shear, 0.0)
     h=0.02
     #h=shear.g1
@@ -4730,9 +4717,9 @@ def test_lm_metacal(model,
 
     counts_obj=100.0
 
-    T_tot = T_obj + T_psf
-    sigma_tot=sqrt(T_tot/2.0)
     if dim is None:
+        T_tot = T_obj + T_psf
+        sigma_tot=sqrt(T_tot/2.0)
         dim=int(round(2*5*sigma_tot))
     dims=[dim]*2
     print("dims:",dims)
@@ -4865,22 +4852,11 @@ def test_lm_metacal(model,
 
 
 
-    g_mean = g_vals.mean(axis=0)
-    g_err = g_vals.std(axis=0)/sqrt(2*npair)
     gsens_mean=gsens_vals.mean(axis=0)
-
-    shear_mean =g_mean/gsens_mean[0]
-
-    # soften
-    err2 = g_err_vals**2 + 0.001
-    shear_err2_inv = ( 1.0/err2 ).sum()
-    shear_err = sqrt( 1.0/shear_err2_inv )/gsens_mean[0]
 
     s2n=s2n_vals.mean()
     print('s2n:',s2n)
-    print("%g +/- %g" % (g_mean[0], g_err[0]))
-    print(gsens_mean[0])
-    print("%g +/- %g" % (shear_mean[0], shear_err))
+    print("g_sens:",gsens_mean[0])
 
     chunksize=int(g_vals.shape[0]/100.)
     if chunksize < 1:
@@ -4893,10 +4869,20 @@ def test_lm_metacal(model,
     shear_cov_fix=shear_cov/gsens_mean[0]**2
 
     print("%g +/- %g" % (shear[0], sqrt(shear_cov[0,0])))
-    print("%g +/- %g" % (shear[0]/gsens_mean[0], sqrt(shear_cov[0,0]/gsens_mean[0])))
+    print("%g +/- %g" % (shear_fix[0], sqrt(shear_cov_fix[0,0])))
     print("nretry:",nretry)
 
-    return g_vals, gsens_vals, gsens_mean, shear, shear_cov, shear_fix, shear_cov_fix, s2n
+    out={'g':g_vals,
+         'g_sens':gsens_vals,
+         'gsens_mean':gsens_mean,
+         'shear':shear,
+         'shear_cov':shear_cov,
+         'shear_fix':shear_fix,
+         'shear_cov_fix':shear_cov_fix,
+         's2n_vals':s2n_vals,
+         's2n_mean':s2n}
+
+    return out
 
 def check_g(g):
     gtot=sqrt(g[0]**2 + g[1]**2)
