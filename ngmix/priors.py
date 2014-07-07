@@ -130,7 +130,7 @@ class GPriorBase(object):
         return (ff - fb)*h2
 
  
-    def get_pqr_num(self, g1in, g2in, s1=0.0, s2=0.0, h=1.e-6):
+    def get_pqr_num(self, g1in, g2in, s1=0.0, s2=0.0, get_S=False, h=1.e-6):
         """
         Evaluate 
             P
@@ -160,6 +160,8 @@ class GPriorBase(object):
         h2=1./(2.*h)
         hsq=1./h**2
 
+        twoh=2*h
+
         P=self.get_pj(g1, g2, s1, s2)
 
         Q1_p   = self.get_pj(g1, g2, s1+h, s2)
@@ -176,6 +178,14 @@ class GPriorBase(object):
         R11 = (Q1_p - 2*P + Q1_m)*hsq
         R22 = (Q2_p - 2*P + Q2_m)*hsq
         R12 = (R12_pp - Q1_p - Q2_p + 2*P - Q1_m - Q2_m + R12_mm)*hsq*0.5
+
+        d1_2p = self.get_pj(g1, g2, s1+twoh, s2)
+        d1_2m = self.get_pj(g1, g2, s1-twoh, s2)
+        d2_2p = self.get_pj(g1, g2, s1, s2+twoh)
+        d2_2m = self.get_pj(g1, g2, s1, s2-twoh)
+
+        S111 = (d1_2p - 2*Q1_p + 2*Q1_m - d1_2m)/(2*h**3)
+        S222 = (d2_2p - 2*Q2_p + 2*Q2_m - d2_2m)/(2*h**3)
 
         np=g1.size
         Q = numpy.zeros( (np,2) )
@@ -194,6 +204,115 @@ class GPriorBase(object):
             R = R[0,:,:]
 
         return P, Q, R
+
+    def get_pqrs_num(self, g1in, g2in, s1=0.0, s2=0.0, get_S=False, h=1.e-6):
+        """
+        Evaluate 
+            P
+            Q
+            R
+            S
+        From Slosar
+
+        P is this prior times the jacobian at shear==0
+
+        Q is the gradient of P*J evaluated at shear==0
+
+            [ d(P*J)/ds1, d(P*J)/ds2]_{s=0}
+
+        R is grad of grad of P*J at shear==0
+            [ d(P*J)/dg1ds1  d(P*J)/dg1ds2 ]
+            [ d(P*J)/dg1ds2  d(P*J)/dg2ds2 ]_{s=0}
+
+        S is grad of grad of grad of P*J at shear==0
+
+        Derivatives are calculated using finite differencing
+        """
+        if numpy.isscalar(g1in):
+            isscalar=True
+        else:
+            isscalar=False
+
+        g1 = array(g1in, dtype='f8', ndmin=1, copy=False)
+        g2 = array(g2in, dtype='f8', ndmin=1, copy=False)
+        h2=1./(2.*h)
+        hsq=1./h**2
+        h3 = 1.0/h**3
+
+        twoh=2*h
+
+        P=self.get_pj(g1, g2, s1, s2)
+
+
+        f_p_0  = self.get_pj(g1, g2, s1+h, s2)
+        f_m_0  = self.get_pj(g1, g2, s1-h, s2)
+        f_0_p  = self.get_pj(g1, g2, s1,   s2+h)
+        f_0_m  = self.get_pj(g1, g2, s1,   s2-h)
+
+        f_p_p  = self.get_pj(g1, g2, s1+h, s2+h)
+        f_m_m  = self.get_pj(g1, g2, s1-h, s2-h)
+
+        f_pp_0 = self.get_pj(g1, g2, s1+twoh, s2)
+        f_mm_0 = self.get_pj(g1, g2, s1-twoh, s2)
+        f_0_pp = self.get_pj(g1, g2, s1, s2+twoh)
+        f_0_mm = self.get_pj(g1, g2, s1, s2-twoh)
+
+        f_pp_p = self.get_pj(g1, g2, s1+twoh, s2+h)
+        f_mm_p = self.get_pj(g1, g2, s1-twoh, s2+h)
+        f_pp_m = self.get_pj(g1, g2, s1+twoh, s2-h)
+        f_mm_m = self.get_pj(g1, g2, s1-twoh, s2-h)
+
+        f_p_pp = self.get_pj(g1, g2, s1+h, s2+twoh)
+        f_m_pp = self.get_pj(g1, g2, s1-h, s2+twoh)
+        f_p_mm = self.get_pj(g1, g2, s1+h, s2-twoh)
+        f_m_mm = self.get_pj(g1, g2, s1-h, s2-twoh)
+
+        Q1 = (f_p_0 - f_m_0)*h2
+        Q2 = (f_0_p - f_0_m)*h2
+
+        R11 = (f_p_0 - 2*P + f_m_0)*hsq
+        R22 = (f_0_p - 2*P + f_0_m)*hsq
+        R12 = (f_p_p - f_p_0 - f_0_p + 2*P - f_m_0 - f_0_m + f_m_m)*hsq*0.5
+
+        S111 = (f_pp_0 - 2*f_p_0 + 2*f_m_0 - f_mm_0)*0.5*h3
+        S222 = (f_0_pp - 2*f_0_p + 2*f_0_m - f_0_mm)*0.5*h3
+
+        S112 = (f_pp_p - 2*f_0_p +  f_mm_p - f_pp_m + 2*f_0_m - f_mm_m)*(1.0/8.0)*h3
+
+        S122 = (f_p_pp - 2*f_p_0 +  f_m_pp - f_p_mm + 2*f_m_0 - f_m_mm)*(1.0/8.0)*h3
+
+
+        np=g1.size
+        Q = numpy.zeros( (np,2) )
+        R = numpy.zeros( (np,2,2) )
+        S = numpy.zeros( (np,2,2,2) )
+
+        Q[:,0] = Q1
+        Q[:,1] = Q2
+        R[:,0,0] = R11
+        R[:,0,1] = R12
+        R[:,1,0] = R12
+        R[:,1,1] = R22
+
+        S[:,0,0,0] = S111
+        S[:,0,1,0] = S112
+        S[:,1,0,0] = S[:,0,1,0]
+        S[:,1,1,0] = S122
+
+        S[:,0,0,1] = S[:,0,1,0]
+        S[:,0,1,1] = S[:,1,1,0]
+        S[:,1,0,1] = S[:,1,1,0]
+        S[:,1,1,1] = S222
+
+
+        if isscalar:
+            P = P[0]
+            Q = Q[0,:]
+            R = R[0,:,:]
+            S = S[0,:,:,:]
+
+        return P, Q, R, S
+
 
     def get_pj(self, g1, g2, s1, s2):
         """
@@ -746,7 +865,7 @@ class GPriorBase(object):
                          fracdiff[ishear,0],fracdiff[ishear,1])
             print(mess)
 
-    def test_anze_shear_recovery(self,
+    def test_pqrs_shear_recovery(self,
                                  smin,
                                  smax,
                                  nshear,
@@ -775,6 +894,7 @@ class GPriorBase(object):
         """
         import lensing
         from .shape import Shape, shear_reduced
+        from . import pqr
 
         shear1_true=numpy.linspace(smin, smax, nshear)
         shear2_true=numpy.zeros(nshear)
@@ -784,6 +904,11 @@ class GPriorBase(object):
         shear1_meas_err=numpy.zeros(nshear)
         shear2_meas_err=numpy.zeros(nshear)
         
+        shear1_meas2=numpy.zeros(nshear)
+        shear2_meas2=numpy.zeros(nshear)
+        shear1_meas2_err=numpy.zeros(nshear)
+        shear2_meas2_err=numpy.zeros(nshear)
+ 
  
         theta=numpy.pi/2.0
         twotheta = 2.0*theta
@@ -804,8 +929,10 @@ class GPriorBase(object):
 
             g1s, g2s = shear_reduced(g1, g2, s1, s2)
 
-            Pns,Qns,Rns=self.get_pqr_num(g1, g2, h=h)
-            P,Q,R=self.get_pqr_num(g1s, g2s, h=h)
+            #Pns,Qns,Rns=self.get_pqr_num(g1, g2, h=h)
+            Pns,Qns,Rns,Sns=self.get_pqrs_num(g1, g2, h=h)
+            #P,Q,R=self.get_pqr_num(g1s, g2s, h=h)
+            P,Q,R,S=self.get_pqrs_num(g1s, g2s, h=h)
 
             # PQR for unsheared data; should really not re-use the g1,g2
             # but we can fix that later
@@ -818,14 +945,28 @@ class GPriorBase(object):
             shear_meas_i, C = lensing.pqr.combine_pqr_sums(P_sum, Q_sum, Cinv_sum_ns)
             #shear_meas_i, C = lensing.pqr.combine_pqr_sums(P_sum, Q_sum, Cinv_sum)
 
+            # higher order
+            W,Winv = pqr.make_W(Pns,Qns,Rns,Sns)
+            Umean = pqr.make_Umean(P,Q,R,S)
+
+            resvec = numpy.dot(Winv, Umean)
+
+
             shear1_meas[ishear] = shear_meas_i[0]
             shear2_meas[ishear] = shear_meas_i[1]
 
-            mess='true: %.6f,%.6f meas: %.6f,%.6f'
-            print(mess % (s1,s2,shear_meas_i[0],shear_meas_i[1]))
+            shear1_meas2[ishear] = resvec[0]
+            shear2_meas2[ishear] = resvec[1]
+
+            mess='true: %.6f,%.6f meas: %.6f,%.6f meas2: %.6f,%.6f'
+            print(mess % (s1,s2,shear_meas_i[0],shear_meas_i[1],shear1_meas2[ishear],shear2_meas2[ishear]))
 
         fracdiff=shear1_meas/shear1_true-1
         fracdiff_err=shear1_meas_err/shear1_true
+
+        # use same error as first order for now
+        fracdiff2=shear2_meas/shear1_true-1
+        fracdiff2_err=fracdiff_err
 
         if eps or show:
             import biggles
