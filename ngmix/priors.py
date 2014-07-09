@@ -233,16 +233,23 @@ class GPriorBase(object):
         else:
             isscalar=False
 
-        g1 = array(g1in, dtype='f8', ndmin=1, copy=False)
-        g2 = array(g2in, dtype='f8', ndmin=1, copy=False)
-        h2=1./(2.*h)
-        hsq=1./h**2
-        h3 = 1.0/h**3
+        g1 = array(g1in, ndmin=1, copy=False)
+        g2 = array(g2in, ndmin=1, copy=False)
+
+        # numpy scalar
+        h = array(h,dtype=g1.dtype)
+        s1 = array(s1,dtype=g1.dtype)
+        s2 = array(s2,dtype=g1.dtype)
+
+        h2  = 1.0/(2.*h)
+        hsq = 1.0/h**2
+        hcub  = 1.0/h**3
 
         twoh=2*h
 
         P=self.get_pj(g1, g2, s1, s2)
 
+        f_0_0  = P
 
         f_p_0  = self.get_pj(g1, g2, s1+h, s2)
         f_m_0  = self.get_pj(g1, g2, s1-h, s2)
@@ -254,8 +261,8 @@ class GPriorBase(object):
 
         f_pp_0 = self.get_pj(g1, g2, s1+twoh, s2)
         f_mm_0 = self.get_pj(g1, g2, s1-twoh, s2)
-        f_0_pp = self.get_pj(g1, g2, s1, s2+twoh)
-        f_0_mm = self.get_pj(g1, g2, s1, s2-twoh)
+        f_0_pp = self.get_pj(g1, g2, s1,      s2+twoh)
+        f_0_mm = self.get_pj(g1, g2, s1,      s2-twoh)
 
         f_pp_p = self.get_pj(g1, g2, s1+twoh, s2+h)
         f_mm_p = self.get_pj(g1, g2, s1-twoh, s2+h)
@@ -270,16 +277,19 @@ class GPriorBase(object):
         Q1 = (f_p_0 - f_m_0)*h2
         Q2 = (f_0_p - f_0_m)*h2
 
-        R11 = (f_p_0 - 2*P + f_m_0)*hsq
-        R22 = (f_0_p - 2*P + f_0_m)*hsq
-        R12 = (f_p_p - f_p_0 - f_0_p + 2*P - f_m_0 - f_0_m + f_m_m)*hsq*0.5
+        R11 = (f_p_0 - 2*f_0_0 + f_m_0)*hsq
+        R22 = (f_0_p - 2*f_0_0 + f_0_m)*hsq
+        R12 = (f_p_p - f_p_0 - f_0_p + 2*f_0_0 - f_m_0 - f_0_m + f_m_m)*hsq*0.5
 
-        S111 = (f_pp_0 - 2*f_p_0 + 2*f_m_0 - f_mm_0)*0.5*h3
-        S222 = (f_0_pp - 2*f_0_p + 2*f_0_m - f_0_mm)*0.5*h3
+        S111 = (f_pp_0 - 2*f_p_0 + 2*f_m_0 - f_mm_0)*0.5*hcub
+        S222 = (f_0_pp - 2*f_0_p + 2*f_0_m - f_0_mm)*0.5*hcub
+        # xvals = (-2*h, -h, 0, h, +2*h)/
+        # coeffs = -1./2,   1.,     0,      -1.,    1./2]
+        # with 1/2h^3 in there
+        # coeffs = -1.,   2.,     0,      -2.,    1.]
 
-        S112 = (f_pp_p - 2*f_0_p +  f_mm_p - f_pp_m + 2*f_0_m - f_mm_m)*(1.0/8.0)*h3
-
-        S122 = (f_p_pp - 2*f_p_0 +  f_m_pp - f_p_mm + 2*f_m_0 - f_m_mm)*(1.0/8.0)*h3
+        S112 = (f_pp_p - 2*f_0_p +  f_mm_p - f_pp_m + 2*f_0_m - f_mm_m)*(1.0/8.0)*hcub
+        S122 = (f_p_pp - 2*f_p_0 +  f_p_mm - f_m_pp + 2*f_m_0 - f_m_mm)*(1.0/8.0)*hcub
 
 
         np=g1.size
@@ -294,14 +304,27 @@ class GPriorBase(object):
         R[:,1,0] = R12
         R[:,1,1] = R22
 
+        '''
+        S[:,0,0,0] = S111
+        S[:,0,0,1] = S112
+        S[:,0,1,0] = S112 # = S121
+        S[:,0,1,1] = S122
+
+        S[:,1,0,0] = S112 # = S211
+        S[:,1,0,1] = S122 # = S212
+        S[:,1,1,0] = S122 # = S221
+        S[:,1,1,1] = S222
+        '''
+
+        #orig
         S[:,0,0,0] = S111
         S[:,0,1,0] = S112
-        S[:,1,0,0] = S[:,0,1,0]
+        S[:,1,0,0] = S112
         S[:,1,1,0] = S122
 
-        S[:,0,0,1] = S[:,0,1,0]
-        S[:,0,1,1] = S[:,1,1,0]
-        S[:,1,0,1] = S[:,1,1,0]
+        S[:,0,0,1] = S112
+        S[:,0,1,1] = S122
+        S[:,1,0,1] = S122
         S[:,1,1,1] = S222
 
 
@@ -866,14 +889,16 @@ class GPriorBase(object):
             print(mess)
 
     def test_pqrs_shear_recovery(self,
-                                 smin,
-                                 smax,
-                                 nshear,
-                                 doring=True,
-                                 npair=10000,
+                                 shears,
+                                 W,
+                                 chunksize,
+                                 nchunks,
                                  h=1.e-6,
+                                 ring=True,
                                  show=False,
-                                 eps=None):
+                                 show_err=False,
+                                 eps=None,
+                                 dtype='f8'):
         """
         Test how well we recover the shear with no noise.
 
@@ -896,77 +921,48 @@ class GPriorBase(object):
         from .shape import Shape, shear_reduced
         from . import pqr
 
-        shear1_true=numpy.linspace(smin, smax, nshear)
-        shear2_true=numpy.zeros(nshear)
+        nshear=len(shears)
+        try:
+            n=len(nchunks)
+            print("nchunks for each sent")
+        except:
+            nchunks = [nchunks]*nshear
+            print("same nchunks for all")
 
-        shear1_meas=numpy.zeros(nshear)
-        shear2_meas=numpy.zeros(nshear)
-        shear1_meas_err=numpy.zeros(nshear)
-        shear2_meas_err=numpy.zeros(nshear)
+        shear1_true=numpy.array(shears,dtype=dtype)
+        shear2_true=numpy.array(shears,dtype=dtype)
+
+        shear1_meas=numpy.zeros(nshear,dtype=dtype)
+        shear2_meas=numpy.zeros(nshear,dtype=dtype)
+        shear1_err=numpy.zeros(nshear,dtype=dtype)
+        shear2_err=numpy.zeros(nshear,dtype=dtype)
         
-        shear1_meas2=numpy.zeros(nshear)
-        shear2_meas2=numpy.zeros(nshear)
-        shear1_meas2_err=numpy.zeros(nshear)
-        shear2_meas2_err=numpy.zeros(nshear)
- 
- 
-        theta=numpy.pi/2.0
-        twotheta = 2.0*theta
-        cos2angle = numpy.cos(twotheta)
-        sin2angle = numpy.sin(twotheta)
-
-        g1=numpy.zeros(npair*2)
-        g2=numpy.zeros(npair*2)
         for ishear in xrange(nshear):
             print("-"*70)
             s1=shear1_true[ishear]
             s2=shear2_true[ishear]
 
-            # ring
-            g1[0:npair],g2[0:npair] = self.sample2d(npair)
-            g1[npair:] =  g1[0:npair]*cos2angle + g2[0:npair]*sin2angle
-            g2[npair:] = -g1[0:npair]*sin2angle + g2[0:npair]*cos2angle
+            s1m,s1e,s2m,s2e=self.test_pqrs_shear_one(s1,s2,
+                                                     W,
+                                                     chunksize,
+                                                     nchunks[ishear],
+                                                     ring=ring,
+                                                     dtype=dtype)
 
-            g1s, g2s = shear_reduced(g1, g2, s1, s2)
+            shear1_meas[ishear] = s1m
+            shear2_meas[ishear] = s2m
+            shear1_err[ishear] = s1e
+            shear2_err[ishear] = s2e
 
-            #Pns,Qns,Rns=self.get_pqr_num(g1, g2, h=h)
-            Pns,Qns,Rns,Sns=self.get_pqrs_num(g1, g2, h=h)
-            #P,Q,R=self.get_pqr_num(g1s, g2s, h=h)
-            P,Q,R,S=self.get_pqrs_num(g1s, g2s, h=h)
-
-            # PQR for unsheared data; should really not re-use the g1,g2
-            # but we can fix that later
-            P_sum_ns,Q_sum_ns,Cinv_sum_ns=lensing.pqr.get_pqr_sums(Pns, Qns, Rns)
-
-            # P,Q,R for sheared data
-            P_sum,Q_sum,Cinv_sum=lensing.pqr.get_pqr_sums(P, Q, R)
-
-            # use zero shear one for Cinv
-            shear_meas_i, C = lensing.pqr.combine_pqr_sums(P_sum, Q_sum, Cinv_sum_ns)
-            #shear_meas_i, C = lensing.pqr.combine_pqr_sums(P_sum, Q_sum, Cinv_sum)
-
-            # higher order
-            W,Winv = pqr.make_W(Pns,Qns,Rns,Sns)
-            Umean = pqr.make_Umean(P,Q,R,S)
-
-            resvec = numpy.dot(Winv, Umean)
-
-
-            shear1_meas[ishear] = shear_meas_i[0]
-            shear2_meas[ishear] = shear_meas_i[1]
-
-            shear1_meas2[ishear] = resvec[0]
-            shear2_meas2[ishear] = resvec[1]
-
-            mess='true: %.6f,%.6f meas: %.6f,%.6f meas2: %.6f,%.6f'
-            print(mess % (s1,s2,shear_meas_i[0],shear_meas_i[1],shear1_meas2[ishear],shear2_meas2[ishear]))
+            fdiff1=s1m/s1-1
+            fdiff1_err=s1e/s1
+            fdiff2=s2m/s2-1
+            fdiff2_err=s2e/s2
+            mess='true: %.6f,%.6f meas: %.6f +/- %.6f,%.6f +/- %.6f fdiff: %.6f +/- %.6f %.6f +/- %.6f'
+            print(mess % (s1,s2,s1m,s1e,s2m,s2e,fdiff1,fdiff1_err,fdiff2,fdiff2_err))
 
         fracdiff=shear1_meas/shear1_true-1
-        fracdiff_err=shear1_meas_err/shear1_true
-
-        # use same error as first order for now
-        fracdiff2=shear2_meas/shear1_true-1
-        fracdiff2_err=fracdiff_err
+        fracdiff_err = shear1_err/shear1_true
 
         if eps or show:
             import biggles
@@ -978,6 +974,8 @@ class GPriorBase(object):
             plt.ylabel=r'$\Delta g/g$'
             plt.aspect_ratio=1.0
 
+            strue=shear1_true.astype('f8')
+            smax=strue.max()
             plt.add( biggles.FillBetween([0.0,smax], [0.004,0.004], 
                                          [0.0,smax], [-0.004,-0.004],
                                           color='grey90') )
@@ -987,22 +985,30 @@ class GPriorBase(object):
             plt.add( biggles.Curve([0.0,smax],[0.0,0.0]) )
 
             psize=2.25
-            pts=biggles.Points(shear1_true, fracdiff,
+
+            pts1=biggles.Points(strue, fracdiff.astype('f8'),
                                type='filled circle',size=psize,
                                color='blue')
-            pts.label='measured'
-            plt.add(pts)
+            pts1.label='measured'
+            plt.add(pts1)
 
+            if show_err:
+                err1=biggles.SymmetricErrorBarsY(strue,
+                                                 fracdiff.astype('f8'),
+                                                 fracdiff_err.astype('f8'),
+                                                 color='blue')
+                plt.add(err1)
 
-            coeffs=numpy.polyfit(shear1_true, fracdiff, 2)
+            coeffs=numpy.polyfit(strue, fracdiff.astype('f8'), 2)
             poly=numpy.poly1d(coeffs)
+            print(poly)
 
-            curve=biggles.Curve(shear1_true, poly(shear1_true), type='solid',
+            curve=biggles.Curve(strue, poly(strue), type='solid',
                                 color='black')
             curve.label=r'$\Delta g/g = %.1f g^2$' % coeffs[0]
             plt.add(curve)
 
-            plt.add( biggles.PlotKey(0.1, 0.2, [pts,curve], halign='left') )
+            plt.add( biggles.PlotKey(0.1, 0.2, [pts1,curve], halign='left') )
 
             if eps:
                 print('writing:',eps)
@@ -1010,8 +1016,155 @@ class GPriorBase(object):
 
             if show:
                 plt.show()
-            print(poly)
 
+    def test_pqrs_shear_one(self,
+                            shear1,
+                            shear2,
+                            W,
+                            chunksize,
+                            nchunks,
+                            h=1.e-6,
+                            ring=True,
+                            dtype='f8'):
+        """
+        Test how well we recover the shear with no noise.
+
+        parameters
+        ----------
+        smin: float
+            min shear to test
+        smax: float
+            max shear to test
+        nshear:
+            number of shear values to test
+        npair: integer, optional
+            Number of pairs to use at each shear test value
+
+        The idea is to measure the same P,Q but instead of constructing the
+        covariance matrix part from sheared data we do it from zero-shear data
+
+        """
+        import lensing
+        from .shape import shear_reduced
+        from . import pqr
+
+        W8 = array(W, dtype='f8', copy=False)
+        Winv = numpy.linalg.inv(W8)
+        Winv = array(Winv, dtype=dtype, copy=False)
+ 
+        theta=numpy.pi/2.0
+        twotheta = 2.0*theta
+        cos2angle = numpy.cos(twotheta)
+        sin2angle = numpy.sin(twotheta)
+
+        npair=chunksize
+        g1=numpy.zeros(npair*2, dtype=dtype)
+        g2=numpy.zeros(npair*2, dtype=dtype)
+
+        shear1_each=numpy.zeros(nchunks, dtype=dtype)
+        shear2_each=numpy.zeros(nchunks, dtype=dtype)
+        for i in xrange(nchunks):
+            if (i % 10) == 0:
+                print("    chunk: %s/%s" % (i+1,nchunks))
+            g1[0:npair],g2[0:npair] = self.sample2d(npair)
+
+            if ring:
+                g1[npair:] =  g1[0:npair]*cos2angle + g2[0:npair]*sin2angle
+                g2[npair:] = -g1[0:npair]*sin2angle + g2[0:npair]*cos2angle
+            else:
+                g1[npair:],g2[npair:] = self.sample2d(npair)
+
+            g1s, g2s = shear_reduced(g1, g2, shear1, shear2)
+
+            P,Q,R,S=self.get_pqrs_num(g1s, g2s, h=h)
+
+            Usum_tmp = pqr.make_Usum(P,Q,R,S)
+
+
+            if i==0:
+                Usum  = Usum_tmp.copy()
+            else:
+                Usum += Usum_tmp
+
+            Umean_tmp = Usum_tmp * ( 1.0/(npair*2) )
+            restmp = numpy.dot(Winv, Umean_tmp)
+            shear1_each[i] = restmp[0]
+            shear2_each[i] = restmp[1]
+
+            #print(g1.dtype,g2.dtype, g1s.dtype,g2s.dtype, Usum_tmp.dtype,
+            #      Usum.dtype)
+
+        ntot = chunksize*nchunks*2
+        Umean = Usum * (1.0/ntot)
+        resvec = numpy.dot(Winv, Umean)
+
+        shear1_meas = resvec[0]
+        shear2_meas = resvec[1]
+
+        shear1_err = shear1_each.std()/sqrt(nchunks)
+        shear2_err = shear2_each.std()/sqrt(nchunks)
+        
+        return shear1_meas, shear1_err, shear2_meas, shear2_err
+
+    def test_make_pqrs_W(self,
+                         chunksize, # pairs
+                         nchunks,   # pairs
+                         h=1.e-6,
+                         dtype='f8',
+                         ring=True):
+        """
+        Make a W matrix
+        """
+        import images
+
+        import lensing
+        from .shape import Shape, shear_reduced
+        from . import pqr
+
+        theta=numpy.pi/2.0
+        twotheta = 2.0*theta
+        cos2angle = numpy.cos(twotheta)
+        sin2angle = numpy.sin(twotheta)
+
+        npair=chunksize
+        g1=numpy.zeros(npair*2, dtype=dtype)
+        g2=numpy.zeros(npair*2, dtype=dtype)
+
+        # for clarity
+        nsofar=0
+
+        for i in xrange(nchunks):
+            print("chunk: %s/%s" % (i+1,nchunks))
+
+            print("generating",npair*2,"shapes")
+            g1[0:npair],g2[0:npair] = self.sample2d(npair)
+
+            if ring:
+                g1[npair:] =  g1[0:npair]*cos2angle + g2[0:npair]*sin2angle
+                g2[npair:] = -g1[0:npair]*sin2angle + g2[0:npair]*cos2angle
+            else:
+                g1[npair:],g2[npair:] = self.sample2d(npair)
+
+            g1=numpy.array(g1, dtype=dtype, copy=False)
+            g2=numpy.array(g2, dtype=dtype, copy=False)
+
+            print("getting pqrs")
+            Pns,Qns,Rns,Sns=self.get_pqrs_num(g1, g2, h=h)
+
+            Wsum_tmp = pqr.make_Wsum(Pns,Qns,Rns,Sns)
+            if i==0:
+                Wsum = Wsum_tmp.copy()
+            else:
+                Wsum += Wsum_tmp
+
+            nsofar += 2*npair
+            Wtmp = Wsum * (1.0/nsofar)
+            images.imprint(Wtmp,fmt='%15g')
+            print('-'*70)
+
+        ntot = (chunksize*nchunks*2)
+        W = Wsum * (1.0/ntot)
+        return W
 
 
 class GPriorBA(GPriorBase):
