@@ -947,6 +947,7 @@ class GPriorBase(object):
                                                      chunksize,
                                                      nchunks[ishear],
                                                      ring=ring,
+                                                     h=h,
                                                      dtype=dtype)
 
             shear1_meas[ishear] = s1m
@@ -961,6 +962,11 @@ class GPriorBase(object):
             mess='true: %.6f,%.6f meas: %.6f +/- %.6f,%.6f +/- %.6f fdiff: %.6f +/- %.6f %.6f +/- %.6f'
             print(mess % (s1,s2,s1m,s1e,s2m,s2e,fdiff1,fdiff1_err,fdiff2,fdiff2_err))
 
+        shear1_true=shear1_true.astype('f8')
+        shear2_true=shear2_true.astype('f8')
+        shear1_meas=shear1_meas.astype('f8')
+        shear2_meas=shear2_meas.astype('f8')
+
         fracdiff=shear1_meas/shear1_true-1
         fracdiff_err = shear1_err/shear1_true
 
@@ -974,8 +980,7 @@ class GPriorBase(object):
             plt.ylabel=r'$\Delta g/g$'
             plt.aspect_ratio=1.0
 
-            strue=shear1_true.astype('f8')
-            smax=strue.max()
+            smax=shear1_true.max()
             plt.add( biggles.FillBetween([0.0,smax], [0.004,0.004], 
                                          [0.0,smax], [-0.004,-0.004],
                                           color='grey90') )
@@ -986,24 +991,24 @@ class GPriorBase(object):
 
             psize=2.25
 
-            pts1=biggles.Points(strue, fracdiff.astype('f8'),
+            pts1=biggles.Points(shear1_true, fracdiff.astype('f8'),
                                type='filled circle',size=psize,
                                color='blue')
             pts1.label='measured'
             plt.add(pts1)
 
             if show_err:
-                err1=biggles.SymmetricErrorBarsY(strue,
+                err1=biggles.SymmetricErrorBarsY(shear1_true,
                                                  fracdiff.astype('f8'),
                                                  fracdiff_err.astype('f8'),
                                                  color='blue')
                 plt.add(err1)
 
-            coeffs=numpy.polyfit(strue, fracdiff.astype('f8'), 2)
+            coeffs=numpy.polyfit(shear1_true, fracdiff.astype('f8'), 2)
             poly=numpy.poly1d(coeffs)
             print(poly)
 
-            curve=biggles.Curve(strue, poly(strue), type='solid',
+            curve=biggles.Curve(shear1_true, poly(shear1_true), type='solid',
                                 color='black')
             curve.label=r'$\Delta g/g = %.1f g^2$' % coeffs[0]
             plt.add(curve)
@@ -1017,6 +1022,12 @@ class GPriorBase(object):
             if show:
                 plt.show()
 
+    def get_num(self, svals):
+        sref=[0.01,0.02,0.04,0.08,0.10,0.15]
+        nref=[4000,1000,400,100,100,100]
+        ivals=numpy.interp(svals, sref, nref).astype('i8')
+        return ivals
+        
     def test_pqrs_shear_one(self,
                             shear1,
                             shear2,
