@@ -487,7 +487,17 @@ def _plot_shears(shears, show=True, eps=None, png=None):
     if show:
         tab.show()
 
-def make_Umean(P,Q,R,S):
+def make_Umean(P,Q,S):
+    """
+    Make the mean U vector from the real data
+    """
+
+    Usum = make_Usum(P,Q,S)
+
+    Umean = Usum * (1.0/P.size)
+    return Umean
+
+def make_Umean_old(P,Q,R,S):
     """
     Make the mean U vector from the real data
     """
@@ -497,7 +507,27 @@ def make_Umean(P,Q,R,S):
     Umean = Usum * (1.0/P.size)
     return Umean
 
-def make_Usum(P,Q,R,S):
+
+def make_Usum(P,Q,S):
+    """
+    Make the sum U vector from the real data
+    """
+
+    U1,U3 = make_Uarrays(P, Q, S)
+
+    Uvec = zeros(6, dtype=P.dtype)
+
+    Uvec[0] = U1[:,0].sum()
+    Uvec[1] = U1[:,1].sum()
+
+    Uvec[2] = U3[:,0,0,0].sum()
+    Uvec[3] = U3[:,0,0,1].sum()
+    Uvec[4] = U3[:,0,1,1].sum()
+    Uvec[5] = U3[:,1,1,1].sum()
+
+    return Uvec
+
+def make_Usum_old(P,Q,R,S):
     """
     Make the sum U vector from the real data
     """
@@ -521,7 +551,36 @@ def make_Usum(P,Q,R,S):
     return Uvec
 
 
-def make_Wsum(P, Q, R, S):
+
+def make_Wsum(P, Q, S, force_zeros=False):
+    """
+    Get Wsum and W inverse from unsheared sim data
+    """
+
+    U1,U3 = make_Uarrays(P, Q, S)
+
+    # this is actually wsum
+    W=zeros( (6,6) , dtype=P.dtype)
+
+    if force_zeros:
+        W[0,0]=(U1[:,0]*U1[:,0]).sum(); W[0,1]=0                       ; W[0,2]=(U1[:,0]*U3[:,0,0,0]).sum()    ; W[0,3]=0                               ; W[0,4]=(U1[:,0]*U3[:,0,1,1]).sum()    ; W[0,5]=0
+        W[1,0]=W[0,1]                 ; W[1,1]=(U1[:,1]*U1[:,1]).sum() ; W[1,2]=0                              ; W[1,3]=(U1[:,1]*U3[:,0,0,1]).sum( )    ; W[1,4]=0                              ; W[1,5]=(U1[:,1]*U3[:,1,1,1]).sum()
+        W[2,0]=W[0,2]                 ; W[2,1]=W[1,2]                  ; W[2,2]=(U3[:,0,0,0]*U3[:,0,0,0]).sum(); W[2,3]=0                               ; W[2,4]=(U3[:,0,0,0]*U3[:,0,1,1]).sum(); W[2,5]=0
+        W[3,0]=W[0,3]                 ; W[3,1]=W[1,3]                  ; W[3,2]=W[2,3]                         ; W[3,3]=(U3[:,0,0,1]*U3[:,0,0,1]).sum() ; W[3,4]=0                              ; W[3,5]=(U3[:,0,0,1]*U3[:,1,1,1]).sum()
+        W[4,0]=W[0,4]                 ; W[4,1]=W[1,4]                  ; W[4,2]=W[2,4]                         ; W[4,3]=W[3,4]                          ; W[4,4]=(U3[:,0,1,1]*U3[:,0,1,1]).sum(); W[4,5]=0
+        W[5,0]=W[0,5]                 ; W[5,1]=W[1,5]                  ; W[5,2]=W[2,5]                         ; W[5,3]=W[3,5]                          ; W[5,4]=W[4,5]                         ; W[5,5]=(U3[:,1,1,1]*U3[:,1,1,1]).sum()
+    else:
+        W[0,0]=(U1[:,0]*U1[:,0]).sum(); W[0,1]=(U1[:,0]*U1[:,1]).sum() ; W[0,2]=(U1[:,0]*U3[:,0,0,0]).sum()    ; W[0,3]=(U1[:,0]*U3[:,0,0,1]).sum()     ; W[0,4]=(U1[:,0]*U3[:,0,1,1]).sum()    ; W[0,5]=(U1[:,0]*U3[:,1,1,1]).sum()
+        W[1,0]=W[0,1]                 ; W[1,1]=(U1[:,1]*U1[:,1]).sum() ; W[1,2]=(U1[:,1]*U3[:,0,0,0]).sum()    ; W[1,3]=(U1[:,1]*U3[:,0,0,1]).sum( )    ; W[1,4]=(U1[:,1]*U3[:,0,1,1]).sum()    ; W[1,5]=(U1[:,1]*U3[:,1,1,1]).sum()
+        W[2,0]=W[0,2]                 ; W[2,1]=W[1,2]                  ; W[2,2]=(U3[:,0,0,0]*U3[:,0,0,0]).sum(); W[2,3]=(U3[:,0,0,0]*U3[:,0,0,1]).sum() ; W[2,4]=(U3[:,0,0,0]*U3[:,0,1,1]).sum(); W[2,5]=(U3[:,0,0,0]*U3[:,1,1,1]).sum()
+        W[3,0]=W[0,3]                 ; W[3,1]=W[1,3]                  ; W[3,2]=W[2,3]                         ; W[3,3]=(U3[:,0,0,1]*U3[:,0,0,1]).sum() ; W[3,4]=(U3[:,0,0,1]*U3[:,0,1,1]).sum(); W[3,5]=(U3[:,0,0,1]*U3[:,1,1,1]).sum()
+        W[4,0]=W[0,4]                 ; W[4,1]=W[1,4]                  ; W[4,2]=W[2,4]                         ; W[4,3]=W[3,4]                          ; W[4,4]=(U3[:,0,1,1]*U3[:,0,1,1]).sum(); W[4,5]=(U3[:,0,1,1]*U3[:,1,1,1]).sum()
+        W[5,0]=W[0,5]                 ; W[5,1]=W[1,5]                  ; W[5,2]=W[2,5]                         ; W[5,3]=W[3,5]                          ; W[5,4]=W[4,5]                         ; W[5,5]=(U3[:,1,1,1]*U3[:,1,1,1]).sum()
+
+    # this is Wsum
+    return W
+
+def make_Wsum_old(P, Q, R, S):
     """
     Get Wsum and W inverse from unsheared sim data
     """
@@ -580,6 +639,7 @@ def make_Wsum(P, Q, R, S):
     # this is Wsum
     return W
 
+
 def make_W(P,Q,R,S):
     """
     make the W and Winv matrices
@@ -596,7 +656,25 @@ def make_W(P,Q,R,S):
 
     return W, Winv
 
-def make_Uarrays(P,Q,R,S):
+def make_Uarrays(P,Q,S):
+    """
+    U1 = Q/P
+    U2 = R/P
+    U3 = S/P
+    """
+    from numpy import newaxis
+
+    Pinv = 1/P
+
+    U1 = Q.copy()
+    U3 = S.copy()
+
+    U1 *= Pinv[:,newaxis]
+    U3 *= Pinv[:,newaxis,newaxis,newaxis]
+
+    return U1,U3
+
+def make_Uarrays_old(P,Q,R,S):
     """
     U1 = Q/P
     U2 = R/P

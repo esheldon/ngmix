@@ -889,39 +889,31 @@ class GPriorBase(object):
             print(mess)
 
     def test_pqrs_shear_recovery(self,
-                                 shears,
-                                 W,
+                                 shears1,
+                                 shears2,
+                                 Winv,
                                  chunksize,
                                  nchunks,
-                                 h=1.e-6,
+                                 h=1.e-5,
                                  ring=True,
                                  show=False,
-                                 show_err=False,
                                  eps=None,
+                                 print_step=1000,
                                  dtype='f8'):
         """
         Test how well we recover the shear with no noise.
-
-        parameters
-        ----------
-        smin: float
-            min shear to test
-        smax: float
-            max shear to test
-        nshear:
-            number of shear values to test
-        npair: integer, optional
-            Number of pairs to use at each shear test value
-
-        The idea is to measure the same P,Q but instead of constructing the
-        covariance matrix part from sheared data we do it from zero-shear data
-
+        
+        6x6 matrix with forced zeros
+            'f8' W from 200 million seeing 1.0e-3 errors at shear 0.2
+        6x6 matrix without forced zeros
+            'f8' W from 200 million similar to forced zeros
+        tried zeroing on the inverse instead, about the same
         """
         import lensing
         from .shape import Shape, shear_reduced
         from . import pqr
 
-        nshear=len(shears)
+        nshear=len(shears1)
         try:
             n=len(nchunks)
             print("nchunks for each sent")
@@ -929,8 +921,8 @@ class GPriorBase(object):
             nchunks = [nchunks]*nshear
             print("same nchunks for all")
 
-        shear1_true=numpy.array(shears,dtype=dtype)
-        shear2_true=numpy.array(shears,dtype=dtype)
+        shear1_true=numpy.array(shears1,dtype=dtype)
+        shear2_true=numpy.array(shears2,dtype=dtype)
 
         shear1_meas=numpy.zeros(nshear,dtype=dtype)
         shear2_meas=numpy.zeros(nshear,dtype=dtype)
@@ -943,11 +935,12 @@ class GPriorBase(object):
             s2=shear2_true[ishear]
 
             s1m,s1e,s2m,s2e=self.test_pqrs_shear_one(s1,s2,
-                                                     W,
+                                                     Winv,
                                                      chunksize,
                                                      nchunks[ishear],
                                                      ring=ring,
                                                      h=h,
+                                                     print_step=print_step,
                                                      dtype=dtype)
 
             shear1_meas[ishear] = s1m
@@ -959,7 +952,7 @@ class GPriorBase(object):
             fdiff1_err=s1e/s1
             fdiff2=s2m/s2-1
             fdiff2_err=s2e/s2
-            mess='true: %.6f,%.6f meas: %.6f +/- %.6f,%.6f +/- %.6f fdiff: %.6f +/- %.6f %.6f +/- %.6f'
+            mess='true: %.7f,%.7f meas: %.7f +/- %.7f,%.7f +/- %.7f fdiff: %.6f +/- %.6f %.6f +/- %.6f'
             print(mess % (s1,s2,s1m,s1e,s2m,s2e,fdiff1,fdiff1_err,fdiff2,fdiff2_err))
 
         shear1_true=shear1_true.astype('f8')
@@ -972,7 +965,7 @@ class GPriorBase(object):
 
         if eps or show:
             import biggles
-            biggles.configure('default','fontsize_min',3)
+            biggles.configure('default','fontsize_min',2)
             plt=biggles.FramedPlot()
             #plt.xlabel=r'$\gamma_{true}$'
             #plt.ylabel=r'$\Delta \gamma/\gamma$'
@@ -980,10 +973,11 @@ class GPriorBase(object):
             plt.ylabel=r'$\Delta g/g$'
             plt.aspect_ratio=1.0
 
+            plt.yrange=[-0.0015,0.0015]
             smax=shear1_true.max()
-            plt.add( biggles.FillBetween([0.0,smax], [0.004,0.004], 
-                                         [0.0,smax], [-0.004,-0.004],
-                                          color='grey90') )
+            #plt.add( biggles.FillBetween([0.0,smax], [0.004,0.004], 
+            #                             [0.0,smax], [-0.004,-0.004],
+            #                              color='grey90') )
             plt.add( biggles.FillBetween([0.0,smax], [0.001,0.001], 
                                          [0.0,smax], [-0.001,-0.001],
                                           color='grey80') )
@@ -997,12 +991,11 @@ class GPriorBase(object):
             pts1.label='measured'
             plt.add(pts1)
 
-            if show_err:
-                err1=biggles.SymmetricErrorBarsY(shear1_true,
-                                                 fracdiff.astype('f8'),
-                                                 fracdiff_err.astype('f8'),
-                                                 color='blue')
-                plt.add(err1)
+            err1=biggles.SymmetricErrorBarsY(shear1_true,
+                                             fracdiff.astype('f8'),
+                                             fracdiff_err.astype('f8'),
+                                             color='blue')
+            plt.add(err1)
 
             coeffs=numpy.polyfit(shear1_true, fracdiff.astype('f8'), 2)
             poly=numpy.poly1d(coeffs)
@@ -1031,11 +1024,12 @@ class GPriorBase(object):
     def test_pqrs_shear_one(self,
                             shear1,
                             shear2,
-                            W,
+                            Winv,
                             chunksize,
                             nchunks,
-                            h=1.e-6,
+                            h=1.e-5,
                             ring=True,
+                            print_step=1000,
                             dtype='f8'):
         """
         Test how well we recover the shear with no noise.
@@ -1059,9 +1053,9 @@ class GPriorBase(object):
         from .shape import shear_reduced
         from . import pqr
 
-        W8 = array(W, dtype='f8', copy=False)
-        Winv = numpy.linalg.inv(W8)
-        Winv = array(Winv, dtype=dtype, copy=False)
+        #W8 = array(W, dtype='f8', copy=False)
+        #Winv = numpy.linalg.inv(W8)
+        #Winv = array(Winv, dtype=dtype, copy=False)
  
         theta=numpy.pi/2.0
         twotheta = 2.0*theta
@@ -1075,7 +1069,7 @@ class GPriorBase(object):
         shear1_each=numpy.zeros(nchunks, dtype=dtype)
         shear2_each=numpy.zeros(nchunks, dtype=dtype)
         for i in xrange(nchunks):
-            if (i % 10) == 0:
+            if (i % print_step) == 0:
                 print("    chunk: %s/%s" % (i+1,nchunks))
             g1[0:npair],g2[0:npair] = self.sample2d(npair)
 
@@ -1088,9 +1082,8 @@ class GPriorBase(object):
             g1s, g2s = shear_reduced(g1, g2, shear1, shear2)
 
             P,Q,R,S=self.get_pqrs_num(g1s, g2s, h=h)
-
-            Usum_tmp = pqr.make_Usum(P,Q,R,S)
-
+            #Usum_tmp = pqr.make_Usum(P,Q,R,S)
+            Usum_tmp = pqr.make_Usum(P,Q,S)
 
             if i==0:
                 Usum  = Usum_tmp.copy()
@@ -1120,7 +1113,7 @@ class GPriorBase(object):
     def test_make_pqrs_W(self,
                          chunksize, # pairs
                          nchunks,   # pairs
-                         h=1.e-6,
+                         h=1.e-5,
                          dtype='f8',
                          ring=True):
         """
@@ -1162,7 +1155,8 @@ class GPriorBase(object):
             print("getting pqrs")
             Pns,Qns,Rns,Sns=self.get_pqrs_num(g1, g2, h=h)
 
-            Wsum_tmp = pqr.make_Wsum(Pns,Qns,Rns,Sns)
+            #Wsum_tmp = pqr.make_Wsum(Pns,Qns,Rns,Sns)
+            Wsum_tmp = pqr.make_Wsum(Pns,Qns,Sns)
             if i==0:
                 Wsum = Wsum_tmp.copy()
             else:
