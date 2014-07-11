@@ -905,9 +905,15 @@ class GPriorBase(object):
         
         6x6 matrix with forced zeros
             'f8' W from 200 million seeing 1.0e-3 errors at shear 0.2
+            and a bit rough looking
         6x6 matrix without forced zeros
             'f8' W from 200 million similar to forced zeros
         tried zeroing on the inverse instead, about the same
+
+        6x6 matrix without forced zeros
+            'f16' W from 2 billion.  Looks the best.
+                3e-4 at sh=0.15 8e-4 at sh=0.2
+            'f8' W from 2 billion.  Creating W matrix now
         """
         import lensing
         from .shape import Shape, shear_reduced
@@ -997,6 +1003,7 @@ class GPriorBase(object):
                                              color='blue')
             plt.add(err1)
 
+            """
             coeffs=numpy.polyfit(shear1_true, fracdiff.astype('f8'), 2)
             poly=numpy.poly1d(coeffs)
             print(poly)
@@ -1007,6 +1014,7 @@ class GPriorBase(object):
             plt.add(curve)
 
             plt.add( biggles.PlotKey(0.1, 0.2, [pts1,curve], halign='left') )
+            """
 
             if eps:
                 print('writing:',eps)
@@ -1055,7 +1063,7 @@ class GPriorBase(object):
 
         #W8 = array(W, dtype='f8', copy=False)
         #Winv = numpy.linalg.inv(W8)
-        #Winv = array(Winv, dtype=dtype, copy=False)
+        Winv = array(Winv, dtype=dtype, copy=False)
  
         theta=numpy.pi/2.0
         twotheta = 2.0*theta
