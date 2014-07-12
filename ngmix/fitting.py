@@ -4923,12 +4923,15 @@ def test_lm_psf_simple(model,
     fitter.run_lm(guess)
 
     res=fitter.get_result()
+    lin_res=fitter.get_lin_result()
 
     print("flags:",res['flags'])
     print_pars(pars,            front='truth: ')
     print_pars(res['pars'],     front='fit:   ')
     print_pars(res['pars_err'], front='err:   ')
     print_pars(guess,           front='guess: ')
+    print_pars(lin_res['pars'],     front='lin fit:   ')
+    print_pars(lin_res['pars_err'], front='lin err:   ')
 
 
 def check_g(g):
