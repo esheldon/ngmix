@@ -92,6 +92,9 @@ class FitterBase(object):
     def __init__(self, obs, model, **keys):
         self.keys=keys
 
+        # psf fitters might not have this set to 1
+        self.nsub=keys.get('nsub',1)
+
         self._set_obs(obs)
 
         self.prior = keys.get('prior',None)
@@ -335,10 +338,9 @@ class FitterBase(object):
         """
         psf=self.obs[0][0].psf
         if psf is None:
-            dopsf=False
-            print("no psf")
+            self.dopsf=False
         else:
-            dopsf=True
+            self.dopsf=True
 
         gmix_all0 = MultiBandGMixList()
         gmix_all  = MultiBandGMixList()
@@ -351,15 +353,14 @@ class FitterBase(object):
             band_pars=self._get_band_pars(pars, band)
 
             for obs in obs_list:
-                if dopsf:
+                if self.dopsf:
                     psf_gmix=obs.psf.gmix
 
                     gm0=gmix.make_gmix_model(band_pars, self.model)
                     gm=gm0.convolve(psf_gmix)
                 else:
                     gm0=gmix.make_gmix_model(band_pars, self.model)
-                    gm=gm0
-
+                    gm=gm0.copy()
 
                 gmix_list0.append(gm0)
                 gmix_list.append(gm)
@@ -375,8 +376,7 @@ class FitterBase(object):
         Fill the list of lists of gmix objects for the given parameters
         """
 
-        psf=self.obs[0][0].psf
-        if psf is None:
+        if not self.dopsf:
             self._fill_gmix_all_nopsf(pars)
             return
 
@@ -404,6 +404,7 @@ class FitterBase(object):
         """
 
         for band,obs_list in enumerate(self.obs):
+            gmix_list0=self._gmix_all0[band]
             gmix_list=self._gmix_all[band]
 
             # pars for this band, in linear space
@@ -411,10 +412,12 @@ class FitterBase(object):
 
             for i,obs in enumerate(obs_list):
 
-                gm=gmix_list0[i]
+                gm0=gmix_list0[i]
+                gm=gmix_list[i]
 
                 try:
-                    gm.fill(band_pars)
+                    _gmix.gmix_fill(gm0._data, band_pars, gm0._model)
+                    _gmix.gmix_fill(gm._data, band_pars, gm._model)
                 except ZeroDivisionError:
                     raise GMixRangeError("zero division")
 
@@ -791,14 +794,15 @@ class LMSimple(FitterBase):
 
                 for obs,gm in zip(obs_list, gmix_list):
 
-                    res = gm.fill_fdiff(obs, fdiff, start=start)
+                    res = gm.fill_fdiff(obs, fdiff, start=start, nsub=self.nsub)
 
                     s2n_numer += res[0]
                     s2n_denom += res[1]
 
                     start += obs.image.size
 
-        except GMixRangeError:
+        except GMixRangeError as err:
+            print(str(err))
             fdiff[:] = LOWVAL
             s2n_numer=0.0
             s2n_denom=BIGVAL
@@ -827,28 +831,6 @@ class LMSimple(FitterBase):
 
         return nprior
 
-        '''
-        raise RuntimeError("adapt to new system, also "
-                           "should be sqrt(chi2)=sqrt(-2*ln(p))")
-
-        index=0
-        fdiff[index] = -self.cen_prior.get_lnprob(pars[0], pars[1])
-        index += 1
-
-        if self.g_prior is not None:
-            fdiff[index] = -self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
-        index += 1
-
-        fdiff[index] = -self.T_prior.get_lnprob_scalar(pars[4])
-        index += 1
-        for i,cp in enumerate(self.counts_prior):
-            counts=pars[5+i]
-            fdiff[index] = -cp.get_lnprob_scalar(counts)
-            index += 1
-
-        # this leaves us after the priors
-        return index
-        '''
 
 class LMSersic(LMSimple):
     def __init__(self, image, weight, jacobian, guess, **keys):
@@ -4657,7 +4639,6 @@ def _do_lm_fit(obs, prior, sample_prior, model, prior_during=True):
 
     return res
 
-
 def test_lm_metacal(model,
                     shear=0.04,
                     T_psf=4.0,
@@ -4883,6 +4864,72 @@ def test_lm_metacal(model,
          's2n_mean':s2n}
 
     return out
+
+def test_lm_psf_simple(model,
+                       nsub_render=16,
+                       nsub_fit=16,
+                       noise=1.0e-8,
+                       g1=0.0,
+                       g2=0.0,
+                       T=4.0):
+    """
+    test levenberg marquardt fit of psf
+    """
+    from numpy.random import randn
+    import images
+
+    sigma=sqrt(T/2.0)
+    dim=int(round(2*5*sigma))
+
+    dims=[dim]*2
+
+    cen=(dim-1.)/2.
+
+    logT=log10(T)
+    logFlux=log10(1.0)
+    pars=array([cen,cen,g1,g2,logT,logFlux],dtype='f8')
+    gm=gmix.GMixModel(pars, model, logpars=True)
+
+    im=gm.make_image(dims, nsub=nsub_render)
+
+    noise_im = noise*randn(dim*dim).reshape(im.shape)
+    im += noise_im
+    #images.view(im)
+
+    wt=im*0 + 1.0/noise**2
+    obs = Observation(im,weight=wt)
+
+    guess = pars.copy()
+    guess[0] += 0.5*srandu()
+    guess[1] += 0.5*srandu()
+    
+    while True:
+        guess[2] = g1 + 0.1*srandu()
+        guess[3] = g2 + 0.1*srandu()
+        g=sqrt(guess[2]**2 + guess[3]**2)
+        if g < 1.0:
+            break
+
+    # note log parameters in fit!
+    guess[4] += 0.02*srandu()
+    guess[5] += 0.02*srandu()
+
+    lm_pars={'maxfev': 300,
+             'ftol':   1.0e-6,
+             'xtol':   1.0e-6,
+             'epsfcn': 1.0e-6}
+
+    fitter=LMSimple(obs, model, nsub=nsub_fit, lm_pars=lm_pars)
+    fitter.run_lm(guess)
+
+    res=fitter.get_result()
+
+    print("flags:",res['flags'])
+    print_pars(pars,            front='truth: ')
+    print_pars(res['pars'],     front='fit:   ')
+    print_pars(res['pars_err'], front='err:   ')
+    print_pars(guess,           front='guess: ')
+
 
 def check_g(g):
     gtot=sqrt(g[0]**2 + g[1]**2)

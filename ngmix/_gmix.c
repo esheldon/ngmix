@@ -112,9 +112,11 @@ static int gauss2d_set(struct PyGMix_Gauss2D *self,
 
     det = irr*icc - irc*irc;
     if (det < 1.0e-200) {
+        char detstr[25];
+        snprintf(detstr,24,"%g", det);
         // PyErr_Format doesn't format floats
         //fprintf(stderr,"gauss2d det too low: %.16g", det);
-        PyErr_Format(GMixRangeError, "gauss2d det too low");
+        PyErr_Format(GMixRangeError, "gauss2d det too low: %s", detstr);
         //PyErr_Format(GMixRangeError, "gauss2d det too low: %.16g", det);
         return 0;
     }
@@ -789,11 +791,8 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
     fdiff_ptr=(double *)PyArray_GETPTR1(fdiff_obj,start);
 
     for (row=0; row < n_row; row++) {
-        //u=jacob->dudrow*(row - jacob->row0) + jacob->dudcol*(0 - jacob->col0);
-        //v=jacob->dvdrow*(row - jacob->row0) + jacob->dvdcol*(0 - jacob->col0);
         u=PYGMIX_JACOB_GETU(jacob, row, 0);
         v=PYGMIX_JACOB_GETV(jacob, row, 0);
-
 
         for (col=0; col < n_col; col++) {
 
@@ -824,6 +823,106 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
     PyTuple_SetItem(retval,1,PyFloat_FromDouble(s2n_denom));
     return retval;
 }
+
+/*
+   Fill the input fdiff=(model-data)/err, return s2n_numer, s2n_denom
+   with sub-pixel integration
+
+   Error checking should be done in python.
+*/
+static PyObject * PyGMix_fill_fdiff_sub(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    PyObject* image_obj=NULL;
+    PyObject* weight_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    PyObject* fdiff_obj=NULL;
+    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+    int start=0, nsub=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    double data=0, ivar=0, ierr=0, u=0, v=0, *fdiff_ptr=NULL;
+    double model_val=0;
+    double s2n_numer=0.0, s2n_denom=0.0;
+    double stepsize=0, offset=0, areafac=0, trow=0, tcol=0;
+    npy_intp rowsub=0, colsub=0;
+
+    PyObject* retval=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOOOii", 
+                          &gmix_obj, &image_obj, &weight_obj, &jacob_obj,
+                          &fdiff_obj, &start, &nsub)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    stepsize = 1./nsub;
+    offset = (nsub-1)*stepsize/2.;
+    areafac = 1./(nsub*nsub);
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    // we might start somewhere after the priors
+    // note fdiff is 1-d
+    fdiff_ptr=(double *)PyArray_GETPTR1(fdiff_obj,start);
+
+    for (row=0; row < n_row; row++) {
+        u=PYGMIX_JACOB_GETU(jacob, row, 0);
+        v=PYGMIX_JACOB_GETV(jacob, row, 0);
+
+        for (col=0; col < n_col; col++) {
+
+            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
+            if ( ivar > 0.0) {
+                model_val=0.;
+
+                trow = row-offset;
+
+                for (rowsub=0; rowsub<nsub; rowsub++) {
+                    tcol = col-offset;
+                    for (colsub=0; colsub<nsub; colsub++) {
+
+                        model_val += PYGMIX_GMIX_EVAL(gmix, n_gauss, trow, tcol);
+
+                        tcol += stepsize;
+                    } // colsub
+
+                    trow += stepsize;
+                } // rowsub
+
+                model_val *= areafac;
+
+                ierr=sqrt(ivar);
+                data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
+
+                (*fdiff_ptr) = (model_val-data)*ierr;
+                s2n_numer += data*model_val*ivar;
+                s2n_denom += model_val*model_val*ivar;
+            } else {
+                (*fdiff_ptr) = 0.0;
+            }
+
+            fdiff_ptr++;
+
+            u += jacob->dudcol;
+            v += jacob->dvdcol;
+
+        }
+    }
+
+    retval=PyTuple_New(2);
+    PyTuple_SetItem(retval,0,PyFloat_FromDouble(s2n_numer));
+    PyTuple_SetItem(retval,1,PyFloat_FromDouble(s2n_denom));
+    return retval;
+}
+
 
 /*
  *
@@ -1337,6 +1436,7 @@ static PyMethodDef pygauss2d_funcs[] = {
 
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
     {"fill_fdiff",  (PyCFunction)PyGMix_fill_fdiff,  METH_VARARGS,  "fill fdiff for LM\n"},
+    {"fill_fdiff_sub",  (PyCFunction)PyGMix_fill_fdiff_sub,  METH_VARARGS,  "fill fdiff for LM with sub-pixel integration\n"},
     {"render",      (PyCFunction)PyGMix_render, METH_VARARGS,  "render without jacobian\n"},
     {"render_jacob",(PyCFunction)PyGMix_render_jacob, METH_VARARGS,  "render with jacobian\n"},
 

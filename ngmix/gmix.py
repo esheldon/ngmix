@@ -287,7 +287,7 @@ class GMix(object):
 
         return image
 
-    def fill_fdiff(self, obs, fdiff, start=0):
+    def fill_fdiff(self, obs, fdiff, start=0, nsub=1):
         """
         Fill fdiff=(model-data)/err given the input Observation
 
@@ -308,13 +308,23 @@ class GMix(object):
         if nuse < image.size:
             raise ValueError("fdiff from start must have "
                              "len >= %d, got %d" % (image.size,nuse))
+        assert nsub >= 1,"nsub must be >= 1"
 
-        s2n_numer,s2n_denom=_gmix.fill_fdiff(self._data,
-                                             image,
-                                             obs.weight,
-                                             obs.jacobian._data,
-                                             fdiff,
-                                             start)
+        if nsub > 1:
+            s2n_numer,s2n_denom=_gmix.fill_fdiff_sub(self._data,
+                                                     image,
+                                                     obs.weight,
+                                                     obs.jacobian._data,
+                                                     fdiff,
+                                                     start,
+                                                     nsub)
+        else:
+            s2n_numer,s2n_denom=_gmix.fill_fdiff(self._data,
+                                                 image,
+                                                 obs.weight,
+                                                 obs.jacobian._data,
+                                                 fdiff,
+                                                 start)
 
         return s2n_numer,s2n_denom
 
@@ -510,6 +520,15 @@ class GMixModel(GMix):
         self.reset()
         self.fill(pars)
 
+    def copy(self):
+        """
+        Get a new GMix with the same parameters
+        """
+        gmix = GMixModel(self._pars_in,
+                         self._model_name,
+                         logpars=self._use_logpars)
+        return gmix
+
     def get_cen(self):
         """
         get the center position (row,col)
@@ -564,7 +583,10 @@ class GMixModel(GMix):
             The parameters; some may be in log space and are converted
         """
 
+
         pars_in = array(pars_in, dtype='f8', copy=False) 
+
+        self._pars_in = pars_in
 
         if self._use_logpars:
             pars=self._linpars
