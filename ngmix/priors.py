@@ -130,7 +130,7 @@ class GPriorBase(object):
         return (ff - fb)*h2
 
  
-    def get_pqr_num(self, g1in, g2in, s1=0.0, s2=0.0, get_S=False, h=1.e-6):
+    def get_pqr_num(self, g1in, g2in, s1=0.0, s2=0.0, h=1.e-6):
         """
         Evaluate 
             P
@@ -205,7 +205,7 @@ class GPriorBase(object):
 
         return P, Q, R
 
-    def get_pqrs_num(self, g1in, g2in, s1=0.0, s2=0.0, get_S=False, h=1.e-6):
+    def get_pqrs_num(self, g1in, g2in, h=1.e-5):
         """
         Evaluate 
             P
@@ -224,22 +224,21 @@ class GPriorBase(object):
             [ d(P*J)/dg1ds1  d(P*J)/dg1ds2 ]
             [ d(P*J)/dg1ds2  d(P*J)/dg2ds2 ]_{s=0}
 
-        S is grad of grad of grad of P*J at shear==0
-
         Derivatives are calculated using finite differencing
         """
+
         if numpy.isscalar(g1in):
             isscalar=True
         else:
             isscalar=False
+
 
         g1 = array(g1in, ndmin=1, copy=False)
         g2 = array(g2in, ndmin=1, copy=False)
 
         # numpy scalar
         h = array(h,dtype=g1.dtype)
-        s1 = array(s1,dtype=g1.dtype)
-        s2 = array(s2,dtype=g1.dtype)
+        zero=numpy.array(0.0, dtype=g1.dtype)
 
         h2  = 1.0/(2.*h)
         hsq = 1.0/h**2
@@ -247,32 +246,32 @@ class GPriorBase(object):
 
         twoh=2*h
 
-        P=self.get_pj(g1, g2, s1, s2)
+        P=self.get_pj(g1, g2, zero, zero)
 
         f_0_0  = P
 
-        f_p_0  = self.get_pj(g1, g2, s1+h, s2)
-        f_m_0  = self.get_pj(g1, g2, s1-h, s2)
-        f_0_p  = self.get_pj(g1, g2, s1,   s2+h)
-        f_0_m  = self.get_pj(g1, g2, s1,   s2-h)
+        f_p_0  = self.get_pj(g1, g2, +h, zero)
+        f_m_0  = self.get_pj(g1, g2, -h, zero)
+        f_0_p  = self.get_pj(g1, g2, zero,   +h)
+        f_0_m  = self.get_pj(g1, g2, zero,   -h)
 
-        f_p_p  = self.get_pj(g1, g2, s1+h, s2+h)
-        f_m_m  = self.get_pj(g1, g2, s1-h, s2-h)
+        f_p_p  = self.get_pj(g1, g2, +h, +h)
+        f_m_m  = self.get_pj(g1, g2, -h, -h)
 
-        f_pp_0 = self.get_pj(g1, g2, s1+twoh, s2)
-        f_mm_0 = self.get_pj(g1, g2, s1-twoh, s2)
-        f_0_pp = self.get_pj(g1, g2, s1,      s2+twoh)
-        f_0_mm = self.get_pj(g1, g2, s1,      s2-twoh)
+        f_pp_0 = self.get_pj(g1, g2, +twoh, zero)
+        f_mm_0 = self.get_pj(g1, g2, -twoh, zero)
+        f_0_pp = self.get_pj(g1, g2, zero,      +twoh)
+        f_0_mm = self.get_pj(g1, g2, zero,      -twoh)
 
-        f_pp_p = self.get_pj(g1, g2, s1+twoh, s2+h)
-        f_mm_p = self.get_pj(g1, g2, s1-twoh, s2+h)
-        f_pp_m = self.get_pj(g1, g2, s1+twoh, s2-h)
-        f_mm_m = self.get_pj(g1, g2, s1-twoh, s2-h)
+        f_pp_p = self.get_pj(g1, g2, +twoh, +h)
+        f_mm_p = self.get_pj(g1, g2, -twoh, +h)
+        f_pp_m = self.get_pj(g1, g2, +twoh, -h)
+        f_mm_m = self.get_pj(g1, g2, -twoh, -h)
 
-        f_p_pp = self.get_pj(g1, g2, s1+h, s2+twoh)
-        f_m_pp = self.get_pj(g1, g2, s1-h, s2+twoh)
-        f_p_mm = self.get_pj(g1, g2, s1+h, s2-twoh)
-        f_m_mm = self.get_pj(g1, g2, s1-h, s2-twoh)
+        f_p_pp = self.get_pj(g1, g2, +h, +twoh)
+        f_m_pp = self.get_pj(g1, g2, -h, +twoh)
+        f_p_mm = self.get_pj(g1, g2, +h, -twoh)
+        f_m_mm = self.get_pj(g1, g2, -h, -twoh)
 
         Q1 = (f_p_0 - f_m_0)*h2
         Q2 = (f_0_p - f_0_m)*h2
@@ -283,14 +282,8 @@ class GPriorBase(object):
 
         S111 = (f_pp_0 - 2*f_p_0 + 2*f_m_0 - f_mm_0)*0.5*hcub
         S222 = (f_0_pp - 2*f_0_p + 2*f_0_m - f_0_mm)*0.5*hcub
-        # xvals = (-2*h, -h, 0, h, +2*h)/
-        # coeffs = -1./2,   1.,     0,      -1.,    1./2]
-        # with 1/2h^3 in there
-        # coeffs = -1.,   2.,     0,      -2.,    1.]
-
         S112 = (f_pp_p - 2*f_0_p +  f_mm_p - f_pp_m + 2*f_0_m - f_mm_m)*(1.0/8.0)*hcub
         S122 = (f_p_pp - 2*f_p_0 +  f_p_mm - f_m_pp + 2*f_m_0 - f_m_mm)*(1.0/8.0)*hcub
-
 
         np=g1.size
         Q = numpy.zeros( (np,2) )
@@ -304,18 +297,6 @@ class GPriorBase(object):
         R[:,1,0] = R12
         R[:,1,1] = R22
 
-        '''
-        S[:,0,0,0] = S111
-        S[:,0,0,1] = S112
-        S[:,0,1,0] = S112 # = S121
-        S[:,0,1,1] = S122
-
-        S[:,1,0,0] = S112 # = S211
-        S[:,1,0,1] = S122 # = S212
-        S[:,1,1,0] = S122 # = S221
-        S[:,1,1,1] = S222
-        '''
-
         #orig
         S[:,0,0,0] = S111
         S[:,0,1,0] = S112
@@ -326,7 +307,6 @@ class GPriorBase(object):
         S[:,0,1,1] = S122
         S[:,1,0,1] = S122
         S[:,1,1,1] = S222
-
 
         if isscalar:
             P = P[0]

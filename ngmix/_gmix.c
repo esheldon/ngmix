@@ -29,7 +29,9 @@ static int g1g2_to_e1e2(double g1, double g2, double *e1, double *e2) {
     double g=sqrt(g1*g1 + g2*g2);
 
     if (g >= 1) {
-        PyErr_Format(GMixRangeError, "g out of bounds: %g", g);
+        char gstr[25];
+        snprintf(gstr,24,"%g", g);
+        PyErr_Format(GMixRangeError, "g out of bounds: %s", gstr);
         return 0;
     }
     if (g == 0.0) {
