@@ -125,12 +125,13 @@ class PQR(object):
         if self._remove_prior and self._weights is not None:
             raise RuntimeError("need to support removing prior and weights")
 
-        self._calc_pqr()
-
     def get_pqr(self):
         """
-        get P,Q,R
+        get P,Q,R from Bernstein & Armstrong
         """
+        if not hasattr(self,'_R'):
+            self._calc_pqr()
+
         return self._P,self._Q,self._R
     
     def get_nuse(self):
@@ -227,6 +228,66 @@ class PQR(object):
         self._nuse=Pi.size
 
         return P,Q,R
+
+class PQRS(object):
+    def __init__(self, g, g_prior):
+        """
+        A class to calculate the P,Q,R,S terms from Slosar
+
+        parameters
+        ----------
+        g: 2-d array
+            g values [N,2]
+        g_prior:
+            The g prior object.
+        """
+        self._g=g
+        self._g_prior=g_prior
+
+    def get_pqrs(self):
+        """
+        get P,Q,R,S from Slosar
+        """
+        if not hasattr(self,'_S'):
+            self._calc_pqrs()
+
+        return self._P,self._Q,self._R, self._S
+    
+    def get_nuse(self):
+        """
+        get number of points used.  Will be less than the input number
+        of points if remove_prior is set and some prior values were zero
+        """
+        return self._nuse
+
+    def _calc_pqrs(self):
+        """
+        calculate the P,Q,R,S
+        """
+
+        g_prior=self._g_prior
+
+        g1=self._g[:,0]
+        g2=self._g[:,1]
+
+        Pi,Qi,Ri,Si = g_prior.get_pqrs_num(g1, g2)
+
+        self._P,self._Q,self._R,self._S = self._get_mean_pqrs(Pi,Qi,Ri,Si)
+
+    def _get_mean_pqrs(self, Pi, Qi, Ri, Si):
+        """
+        Get the mean P,Q,R,S marginalized the likelihood.
+        """
+
+        P = Pi.mean()
+        Q = Qi.mean(axis=0)
+        R = Ri.mean(axis=0)
+        S = Si.mean(axis=0)
+
+        self._nuse=Pi.size
+
+        return P,Q,R,S
+
 
 
 def calc_pqr_sums(P,Q,R):
