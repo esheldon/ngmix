@@ -4865,15 +4865,16 @@ def test_lm_metacal(model,
 
     return out
 
-def test_lm_psf_simple(model,
-                       nsub_render=16,
-                       nsub_fit=16,
-                       noise=1.0e-8,
-                       g1=0.0,
-                       g2=0.0,
-                       T=4.0):
+def test_lm_psf_simple_sub(model,
+                           nsub_render=16,
+                           nsub_fit=16,
+                           noise=1.0e-8,
+                           g1=0.0,
+                           g2=0.0,
+                           T=4.0):
     """
-    test levenberg marquardt fit of psf
+    test levenberg marquardt fit of psf with possible sub-pixel
+    integration
     """
     from numpy.random import randn
     import images
