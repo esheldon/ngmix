@@ -709,7 +709,7 @@ class LMSimple(FitterBase):
         Run leastsq and set the result
         """
 
-        guess=array(guess, ndmin=1)
+        guess=array(guess, ndmin=1, copy=False)
 
         #if not hasattr(self,'_gmix_all0'):
         #    self._setup_data(guess)
