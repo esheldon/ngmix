@@ -9,6 +9,7 @@ except:
 
 import numpy
 from numpy import array, zeros, exp, log10, log, dot, sqrt
+from scipy.special import gamma
 from . import fastmath
 from .jacobian import Jacobian
 from .shape import g1g2_to_e1e2, e1e2_to_g1g2
@@ -376,6 +377,30 @@ class GMix(object):
                                                       obs.image,
                                                       obs.weight,
                                                       obs.jacobian._data)
+
+        if get_s2nsums:
+            return loglike,s2n_numer,s2n_denom
+        else:
+            return loglike
+
+    def get_loglike_robust(self, obs, nu, get_s2nsums=False):
+        """
+        Calculate the log likelihood given the input Observation
+        using robust likelihood
+
+        parameters
+        ----------
+        obs: Observation
+            The Observation to compare with. See ngmix.observation.Observation
+            The Observation must have a weight map set
+        nu: parameter for robust likelihood - nu > 2, nu -> \infty is a Gaussian (or chi^2)
+        """
+        logfactor = gammaln((nu+1.0)/2.0) - gammaln(nu/2.0) - 0.5*log(numpy.pi*nu)
+        loglike,s2n_numer,s2n_denom=_gmix.get_loglike_rboust(self._data,
+                                                             obs.image,
+                                                             obs.weight,
+                                                             obs.jacobian._data,
+                                                             nu,logfactor)
 
         if get_s2nsums:
             return loglike,s2n_numer,s2n_denom
