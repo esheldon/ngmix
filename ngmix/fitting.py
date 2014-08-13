@@ -1011,7 +1011,13 @@ class MCMCBase(FitterBase):
         self.mca_a=keys.get('mca_a',2.0)
 
         self.trials=None
-
+        
+        #robust fitting
+        if 'nu' in keys:
+            self.nu = keys['nu']
+        else:
+            self.nu = 0.0
+        
 
     def get_trials(self, linear=False):
         """
@@ -1186,7 +1192,8 @@ class MCMCBase(FitterBase):
         sampler = emcee.EnsembleSampler(self.nwalkers, 
                                         self.npars, 
                                         self.calc_lnprob,
-                                        a=self.mca_a)
+                                        a=self.mca_a,
+                                        kwargs={'nu':self.nu})
         if self.random_state is not None:
 
             # this is a property, runs set_state internally. sadly this will
