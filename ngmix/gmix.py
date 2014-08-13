@@ -9,7 +9,6 @@ except:
 
 import numpy
 from numpy import array, zeros, exp, log10, log, dot, sqrt
-from scipy.special import gamma
 from . import fastmath
 from .jacobian import Jacobian
 from .shape import g1g2_to_e1e2, e1e2_to_g1g2
@@ -395,6 +394,7 @@ class GMix(object):
             The Observation must have a weight map set
         nu: parameter for robust likelihood - nu > 2, nu -> \infty is a Gaussian (or chi^2)
         """
+        from scipy.special import gammaln
         logfactor = gammaln((nu+1.0)/2.0) - gammaln(nu/2.0) - 0.5*log(numpy.pi*nu)
         loglike,s2n_numer,s2n_denom=_gmix.get_loglike_rboust(self._data,
                                                              obs.image,
