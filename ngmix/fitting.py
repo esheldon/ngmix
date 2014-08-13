@@ -1175,13 +1175,17 @@ class MCMCBase(FitterBase):
         auto-correlation
         """
         import emcee
-        if emcee.ensemble.acor is not None:
-            acor=self.sampler.acor
-            nstep=self.trials.shape[0]
-            tau = (acor/nstep).max()
-        else:
-            tau=9999.0
-
+        tau = 9999.0
+        if hasattr(emcee.ensemble,'acor'):
+            if emcee.ensemble.acor is not None:
+                acor=self.sampler.acor
+                nstep=self.trials.shape[0]
+                tau = (acor/nstep).max()
+        elif hasattr(emcee.ensemble,'autocorr'):
+            if emcee.ensemble.autocorr is not None:
+                acor=self.sampler.acor
+                nstep=self.trials.shape[0]
+                tau = (acor/nstep).max()
         self.tau=tau
 
     def _make_sampler(self):
