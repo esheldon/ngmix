@@ -257,7 +257,7 @@ class FitterBase(object):
         return self.eff_npix
 
 
-    def calc_lnprob(self, pars, get_s2nsums=False, get_priors=False):
+    def calc_lnprob(self, pars, get_s2nsums=False, get_priors=False, nu=0.0):
         """
         This is all we use for mcmc approaches, but also used generally for the
         "get_fit_stats" method.  For the max likelihood fitter we also have a
@@ -279,8 +279,11 @@ class FitterBase(object):
                 gmix_list=self._gmix_all[band]
 
                 for obs,gm in zip(obs_list, gmix_list):
-
-                    res = gm.get_loglike(obs, get_s2nsums=True)
+                    
+                    if nu > 2.0:
+                        res = gm.get_loglike_robust(obs, nu, get_s2nsums=True)
+                    else:
+                        res = gm.get_loglike(obs, get_s2nsums=True)
 
                     ln_prob += res[0]
                     s2n_numer += res[1]
