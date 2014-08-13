@@ -1013,11 +1013,7 @@ class MCMCBase(FitterBase):
         self.trials=None
         
         #robust fitting
-        if 'nu' in keys:
-            self.nu = keys['nu']
-        else:
-            self.nu = 0.0
-        
+        self.nu = keys.get('nu', 0.0)
 
     def get_trials(self, linear=False):
         """
