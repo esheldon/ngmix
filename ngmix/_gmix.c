@@ -771,7 +771,7 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
 
     double data=0, ivar=0, u=0, v=0;
     double model_val=0, diff=0;
-    double s2n_numer=0.0, s2n_denom=0.0, loglike, loglike_sum = 0.0, loglike_prod = 1.0, nupow;
+    double s2n_numer=0.0, s2n_denom=0.0, loglike=0.0, nupow;
 
     PyObject* retval=NULL;
 
@@ -805,8 +805,7 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
                 model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
 
                 diff = model_val-data;
-		loglike_sum += logfactor;
-                loglike_prod *= pow(1.0+diff*diff*ivar/nu,nupow);
+		loglike += logfactor + nupow*log(1.0+diff*diff*ivar/nu);
                 s2n_numer += data*model_val*ivar;
                 s2n_denom += model_val*model_val*ivar;
             }
@@ -816,8 +815,6 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
 
         }
     }
-
-    loglike = log(loglike_prod) + loglike_sum;
 
     retval=PyTuple_New(3);
     PyTuple_SetItem(retval,0,PyFloat_FromDouble(loglike));

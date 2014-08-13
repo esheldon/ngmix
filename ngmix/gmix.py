@@ -396,7 +396,7 @@ class GMix(object):
         """
         from scipy.special import gammaln
         logfactor = gammaln((nu+1.0)/2.0) - gammaln(nu/2.0) - 0.5*log(numpy.pi*nu)
-        loglike,s2n_numer,s2n_denom=_gmix.get_loglike_rboust(self._data,
+        loglike,s2n_numer,s2n_denom=_gmix.get_loglike_robust(self._data,
                                                              obs.image,
                                                              obs.weight,
                                                              obs.jacobian._data,
