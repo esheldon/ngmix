@@ -113,6 +113,9 @@ class FitterBase(object):
 
         self._gmix_all=None
 
+        #robust fitting
+        self.nu = keys.get('nu', 0.0)
+
     def get_result(self):
         """
         Result will not be non-None until go() is run
@@ -257,7 +260,7 @@ class FitterBase(object):
         return self.eff_npix
 
 
-    def calc_lnprob(self, pars, get_s2nsums=False, get_priors=False, nu=0.0):
+    def calc_lnprob(self, pars, get_s2nsums=False, get_priors=False):
         """
         This is all we use for mcmc approaches, but also used generally for the
         "get_fit_stats" method.  For the max likelihood fitter we also have a
@@ -280,7 +283,7 @@ class FitterBase(object):
 
                 for obs,gm in zip(obs_list, gmix_list):
                     
-                    if nu > 2.0:
+                    if self.nu > 2.0:
                         res = gm.get_loglike_robust(obs, nu, get_s2nsums=True)
                     else:
                         res = gm.get_loglike(obs, get_s2nsums=True)
@@ -1011,9 +1014,6 @@ class MCMCBase(FitterBase):
         self.mca_a=keys.get('mca_a',2.0)
 
         self.trials=None
-        
-        #robust fitting
-        self.nu = keys.get('nu', 0.0)
 
     def get_trials(self, linear=False):
         """
@@ -1192,8 +1192,8 @@ class MCMCBase(FitterBase):
         sampler = emcee.EnsembleSampler(self.nwalkers, 
                                         self.npars, 
                                         self.calc_lnprob,
-                                        a=self.mca_a,
-                                        kwargs={'nu':self.nu})
+                                        a=self.mca_a)
+
         if self.random_state is not None:
 
             # this is a property, runs set_state internally. sadly this will
@@ -1720,6 +1720,7 @@ class MHSimple(MCMCSimple):
         seed=keys.get('seed',None)
         state=keys.get('random_state',None)
         self.set_random_state(seed=seed, state=state)
+
 
     def set_random_state(self, seed=None, state=None):
         """
