@@ -751,6 +751,82 @@ static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
 }
 
 /*
+   Calculate the loglike between the gmix and the input image
+
+   Error checking should be done in python.
+   
+   logfactor = log(gamma((nu+1)/2)/(gamma(nu/2)*sqrt(pi*nu)))
+*/
+static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    PyObject* image_obj=NULL;
+    PyObject* weight_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    double nu,logfactor;
+    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    double data=0, ivar=0, u=0, v=0;
+    double model_val=0, diff=0;
+    double s2n_numer=0.0, s2n_denom=0.0, loglike, loglike_sum = 0.0, loglike_prod = 1.0, nupow;
+
+    PyObject* retval=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOOdd", 
+                          &gmix_obj, &image_obj, &weight_obj, &jacob_obj, 
+			  &nu, &logfactor)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    
+    nupow = -0.5*(nu+1.0);
+    
+    for (row=0; row < n_row; row++) {
+        //u=jacob->dudrow*(row - jacob->row0) + jacob->dudcol*(0 - jacob->col0);
+        //v=jacob->dvdrow*(row - jacob->row0) + jacob->dvdcol*(0 - jacob->col0);
+        u=PYGMIX_JACOB_GETU(jacob, row, 0);
+        v=PYGMIX_JACOB_GETV(jacob, row, 0);
+
+        for (col=0; col < n_col; col++) {
+
+            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
+            if ( ivar > 0.0) {
+                data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
+                model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
+
+                diff = model_val-data;
+		loglike_sum += logfactor;
+                loglike_prod *= pow(1.0+diff*diff*ivar/nu,nupow);
+                s2n_numer += data*model_val*ivar;
+                s2n_denom += model_val*model_val*ivar;
+            }
+
+            u += jacob->dudcol;
+            v += jacob->dvdcol;
+
+        }
+    }
+
+    loglike = log(loglike_prod) + loglike_sum;
+
+    retval=PyTuple_New(3);
+    PyTuple_SetItem(retval,0,PyFloat_FromDouble(loglike));
+    PyTuple_SetItem(retval,1,PyFloat_FromDouble(s2n_numer));
+    PyTuple_SetItem(retval,2,PyFloat_FromDouble(s2n_denom));
+    return retval;
+}
+
+/*
    Fill the input fdiff=(model-data)/err, return s2n_numer, s2n_denom
 
    Error checking should be done in python.
@@ -1437,6 +1513,7 @@ static PyObject* PyGMix_erf_array(PyObject* self, PyObject* args)
 static PyMethodDef pygauss2d_funcs[] = {
 
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
+    {"get_loglike_robust", (PyCFunction)PyGMix_get_loglike_robust,  METH_VARARGS,  "calculate likelihood with robust metric\n"},
     {"fill_fdiff",  (PyCFunction)PyGMix_fill_fdiff,  METH_VARARGS,  "fill fdiff for LM\n"},
     {"fill_fdiff_sub",  (PyCFunction)PyGMix_fill_fdiff_sub,  METH_VARARGS,  "fill fdiff for LM with sub-pixel integration\n"},
     {"render",      (PyCFunction)PyGMix_render, METH_VARARGS,  "render without jacobian\n"},
