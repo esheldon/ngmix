@@ -3,7 +3,10 @@ ngmix
 
 Gaussian mixture models for 2d images, implemented in python
 
-Note this is under heavy development.  No stable API is yet provided.
+Notes
+    - this code is under heavy development.  No stable API is yet provided.
+    - The C++ just a toy and has not been run or tested.  Use the python code
+
 
 examples
 --------
