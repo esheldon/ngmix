@@ -50,6 +50,8 @@ class GMix(object):
         Get a new GMix that is the convolution of the GMix with the input psf
     get_T():
         get T=sum(p*T_i)/sum(p)
+    get_sigma():
+        get sigma=sqrt(T/2)
     get_psum():
         get sum(p)
     set_psum(psum):
@@ -147,6 +149,13 @@ class GMix(object):
         T = (irrsum + iccsum)/psum
         return T
 
+    def get_sigma(self):
+        """
+        get sigma=sqrt(T/2)
+        """
+        T=self.get_T()
+        return sqrt(T/2.)
+
     def get_e1e2T(self):
         """
         Get e1,e2 and T for the total gmix.
@@ -176,6 +185,39 @@ class GMix(object):
         g1,g2=e1e2_to_g1g2(e1,e2)
         return g1,g2,T
 
+    def get_e1e2sigma(self):
+        """
+        Get e1,e2 and sigma for the total gmix.
+
+        Warning: only really works if the centers are the same
+        """
+
+        d=self._data
+        ipsum=1.0/d['p'].sum()
+
+        irr=(d['irr']*d['p']).sum()*ipsum
+        irc=(d['irc']*d['p']).sum()*ipsum
+        icc=(d['icc']*d['p']).sum()*ipsum
+        T = irr + icc
+
+        e1=(icc-irr)/T
+        e2=2.0*irc/T
+
+        sigma=sqrt(T/2)
+        return e1,e2,sigma
+
+    def get_g1g2sigma(self):
+        """
+        Get g1,g2 and sigma for the total gmix.
+
+        Warning: only really works if the centers are the same
+        """
+        e1,e2,T=self.get_e1e2T()
+        g1,g2=e1e2_to_g1g2(e1,e2)
+
+        sigma=sqrt(T/2)
+        return g1,g2,sigma
+
     def get_flux(self):
         """
         get sum(p)
@@ -193,9 +235,8 @@ class GMix(object):
         self._data['p'] *= rat
 
         # we will need to reset the pnorm values
-        self._norms_set=False
+        self._data['norm_set']=0
 
-        #self._data['pnorm'] = self._data['p']*self._data['norm']
     # alias
     set_psum=set_flux
 
@@ -218,16 +259,12 @@ class GMix(object):
         pars=array(pars, dtype='f8', copy=False) 
         _gmix.gmix_fill(self._data, pars, self._model)
 
-        # we need to reset the normalization and pnorm
-        self._norms_set=False
-
     def copy(self):
         """
         Get a new GMix with the same parameters
         """
         gmix = GMix(self._ngauss)
         gmix._data[:] = self._data[:]
-        gmix._norms_set=self._norms_set
         return gmix
 
     def convolve(self, psf):
@@ -259,9 +296,6 @@ class GMix(object):
             Defines a grid for sub-pixel integration 
         """
 
-        # set normalizations if not already done
-        self.set_norms()
-
         image=numpy.zeros(dims, dtype='f8')
         if jacobian is not None:
             _gmix.render_jacob(self._data,
@@ -290,9 +324,6 @@ class GMix(object):
         start: int, optional
             Where to start in the array, default 0
         """
-
-        # set normalizations if not already done
-        self.set_norms()
 
         nuse=fdiff.size-start
 
@@ -333,9 +364,6 @@ class GMix(object):
             The Observation must have a weight map set
         """
 
-        # set normalizations if not already done
-        self.set_norms()
-
         loglike,s2n_numer,s2n_denom=_gmix.get_loglike(self._data,
                                                       obs.image,
                                                       obs.weight,
@@ -360,9 +388,6 @@ class GMix(object):
         """
         from scipy.special import gammaln
 
-        # set normalizations if not already done
-        self.set_norms()
-
         logfactor = gammaln((nu+1.0)/2.0) - gammaln(nu/2.0) - 0.5*log(numpy.pi*nu)
         loglike,s2n_numer,s2n_denom=_gmix.get_loglike_robust(self._data,
                                                              obs.image,
@@ -375,24 +400,11 @@ class GMix(object):
         else:
             return loglike
 
-
-    def set_norms(self):
-        """
-        set the normalizations for gaussian evaluation.
-
-        We don't set this until needed, because we allow T < 0 in some cases
-        during shear measurements
-        """
-        if not self._norms_set:
-            _gmix.set_norms(self._data)
-            self._norms_set=True
-
     def reset(self):
         """
         Replace the data array with a zeroed one.
         """
         self._data = zeros(self._ngauss, dtype=_gauss2d_dtype)
-        self._norms_set=False
 
     def __len__(self):
         return self._ngauss
@@ -1069,6 +1081,7 @@ _gauss2d_dtype=[('p','f8'),
                 ('irc','f8'),
                 ('icc','f8'),
                 ('det','f8'),
+                ('norm_set','i4'),
                 ('drr','f8'),
                 ('drc','f8'),
                 ('dcc','f8'),

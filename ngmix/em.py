@@ -89,7 +89,7 @@ class GMixEM(object):
             im *= (counts/im.sum())
         return im
 
-    def go(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
+    def run_em(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
         """
         Run the em algorithm from the input starting guesses
 
@@ -106,6 +106,7 @@ class GMixEM(object):
             The tolerance in the moments that implies convergence,
             default 1.e-6
         """
+
 
         self._gm        = gmix_guess.copy()
         self._ngauss    = len(self._gm)
@@ -131,52 +132,7 @@ class GMixEM(object):
         if numiter >= maxiter:
             raise GMixMaxIterEM("reached max iter: %s" % maxiter)
     # alias
-    run_em=go
-
-    def go_old(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
-        """
-        Run the em algorithm from the input starting guesses
-
-        parameters
-        ----------
-        gmix_guess: GMix
-            A gaussian mixture (GMix or child class) representing
-            a starting guess for the algorithm
-        sky_guess: number
-            A guess at the sky value
-        maxiter: number, optional
-            The maximum number of iterations, default 100
-        tol: number, optional
-            The tolerance in the moments that implies convergence,
-            default 1.e-6
-        """
-
-        self._gm        = gmix_guess.copy()
-        self._ngauss    = len(self._gm)
-        self._sums      = numpy.zeros(self._ngauss, dtype=_sums_dtype)
-        self._sky_guess = sky_guess
-        self._maxiter   = maxiter
-        self._tol       = tol
-
-        try:
-            numiter, fdiff = _run_em(self._obs.image,
-                                     self._gm._data,
-                                     self._sums,
-                                     self._obs.jacobian._data,
-                                     numpy.float64(self._sky_guess),
-                                     numpy.int64(self._maxiter),
-                                     numpy.float64(self._tol))
-                                     #_exp3_ivals[0],
-                                     #_exp3_lookup)
-        except ZeroDivisionError:
-            raise GMixRangeError("divide by zero")
-
-        self._result={'numiter':numiter,
-                      'fdiff':fdiff}
-
-        if numiter >= maxiter:
-            raise GMixMaxIterEM("reached max iter: %s" % maxiter)
-
+    go=run_em
 
 _sums_dtype=[('gi','f8'),
              # scratch on a given pixel

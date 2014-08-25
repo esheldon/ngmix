@@ -106,9 +106,6 @@ class FitterBase(object):
         self.model_name=gmix.get_model_name(self.model)
         self._set_npars()
 
-        # the function to be called to fill a gaussian mixture
-        #self._set_fill_call()
-
         self._set_totpix()
 
         self._gmix_all=None
@@ -120,18 +117,21 @@ class FitterBase(object):
         """
         Result will not be non-None until go() is run
         """
-        if not hasattr(self, '_result'):
-            raise ValueError("No result, you must run_mcmc and calc_result!")
 
+        if not hasattr(self,'_result'):
+            raise ValueError("No result, you must run_mcmc and calc_result first")
+        
         return self._result
 
     def get_lin_result(self):
         """
         Result will not be non-None until go() is run
         """
-        if not hasattr(self, '_lin_result'):
-            raise ValueError("No lin result, you must run_mcmc and calc_lin_result!")
+        if not self._use_logpars:
+            return self.get_result()
 
+        if not hasattr(self,'_lin_result'):
+            raise ValueError("No result, you must run_mcmc and calc_result first")
         return self._lin_result
 
 
@@ -140,8 +140,6 @@ class FitterBase(object):
         Get a gaussian mixture at the "best" parameter set, which
         definition depends on the sub-class
         """
-        if not hasattr(self, '_lin_result'):
-            raise RuntimeError("linear result not present")
         linres=self.get_lin_result()
         pars=linres['pars']
         return gmix.make_gmix_model(pars, self.model)
@@ -189,6 +187,7 @@ class FitterBase(object):
         self.npars=gmix.get_model_npars(self.model) + self.nband-1
 
 
+    '''
     def _set_fill_call(self):
         """
         making the call directly to the jitted function saves
@@ -215,7 +214,7 @@ class FitterBase(object):
         else:
             raise GMixFatalError("unsupported model: "
                                  "'%s'" % self.model_name)
-
+    '''
 
 
     def get_dof(self):
@@ -263,7 +262,7 @@ class FitterBase(object):
     def calc_lnprob(self, pars, get_s2nsums=False, get_priors=False):
         """
         This is all we use for mcmc approaches, but also used generally for the
-        "get_fit_stats" method.  For the max likelihood fitter we also have a
+        "_get_fit_stats" method.  For the max likelihood fitter we also have a
         _get_ydiff method
         """
 
@@ -308,9 +307,11 @@ class FitterBase(object):
             else:
                 return ln_prob
 
-    def get_fit_stats(self, pars):
+    def _get_fit_stats(self, pars):
         """
         Get some fit statistics for the input pars.
+
+        pars must be in the default scaling!
         """
         npars=self.npars
 
@@ -446,8 +447,10 @@ class FitterBase(object):
         biggles.configure('screen','width', width)
         biggles.configure('screen','height', height)
 
+        # default scaling
+        res=self.get_result()
         try:
-            self._fill_gmix_all(self._result['pars'])
+            self._fill_gmix_all(res['pars'])
         except GMixRangeError as gerror:
             print(str(gerror))
             return None
@@ -516,6 +519,8 @@ class TemplateFluxFitter(FitterBase):
 
     """
     def __init__(self, obs, **keys):
+
+        self._use_logpars=False
         self.keys=keys
         self.do_psf=keys.get('do_psf',False)
         self.cen=keys.get('cen',None)
@@ -669,6 +674,9 @@ class LMSimple(FitterBase):
     def __init__(self, obs, model, **keys):
         super(LMSimple,self).__init__(obs, model, **keys)
 
+        # currently only log pars
+        self._use_logpars=True
+
         # this is a dict
         # can contain maxfev (maxiter), ftol (tol in sum of squares)
         # xtol (tol in solution), etc
@@ -727,7 +735,7 @@ class LMSimple(FitterBase):
         if result['flags']==0:
             result['g'] = result['pars'][2:2+2].copy()
             result['g_cov'] = result['pars_cov'][2:2+2, 2:2+2].copy()
-            stat_dict=self.get_fit_stats(result['pars'])
+            stat_dict=self._get_fit_stats(result['pars'])
             result.update(stat_dict)
 
         self._result=result
@@ -754,27 +762,16 @@ class LMSimple(FitterBase):
         except ZeroDivisionError:
             raise GMixRangeError("got zero division")
 
-    def _get_band_pars(self, log_pars, band):
+    def _get_band_pars(self, pars_in, band):
         """
         Get linear pars for the specified band
         """
 
+        raise RuntimeError("deal with not log pars")
         pars=self._band_pars
-        _gmix.convert_simple_double_logpars(log_pars, pars, band)
-        return pars
-
-    def _get_band_pars_old(self, log_pars, band):
-        """
-        Get linear pars for the specified band
-        """
-        pars=log_pars[ [0,1,2,3,4,5+band] ].copy()
-
-        pars[4] = 10.0**pars[4]
-        pars[5] = 10.0**pars[5]
+        _gmix.convert_simple_double_logpars(pars_in, pars, band)
 
         return pars
-
-
 
     def _calc_fdiff(self, pars, get_s2nsums=False):
         """
@@ -856,6 +853,7 @@ class LMSersic(LMSimple):
         self.fdiff_size=self.totpix + n_prior_pars
 
     def _get_band_pars(self, pars, band):
+        raise RuntimeError("deal with logpars")
         if band > 0:
             raise ValueError("support more than one band")
         return pars.copy()
@@ -1005,6 +1003,8 @@ class MCMCBase(FitterBase):
     def __init__(self, obs, model, **keys):
         super(MCMCBase,self).__init__(obs, model, **keys)
 
+        self._use_logpars=keys.get('use_logpars',False)
+
         # this should be a numpy.random.RandomState object, unlike emcee which
         # through the random_state parameter takes the tuple state
         self.random_state = keys.get('random_state',None)
@@ -1013,30 +1013,32 @@ class MCMCBase(FitterBase):
         self.nwalkers=keys['nwalkers']
         self.mca_a=keys.get('mca_a',2.0)
 
-        self.trials=None
-
-    def get_trials(self, linear=False):
+    def get_trials(self):
         """
         Get the set of trials from the production run
         """
-        if linear:
-            return self.get_lin_trials()
-        else:
-            if self.trials is None:
-                raise RuntimeError("you need to run the mcmc chain first")
-            return self.trials
+
+        if not hasattr(self,'_trials'):
+            raise RuntimeError("you need to run the mcmc chain first")
+
+        return self._trials
 
     def get_lin_trials(self):
         """
-        Get trials with all parameters in linear space
+        Get trials with T,F in linear space
         """
-        if not hasattr(self, 'lin_trials'):
-            lin_trials=self.get_trials().copy()
-            lin_trials[:,4] = 10.0**lin_trials[:,4]
-            lin_trials[:,5:] = 10.0**lin_trials[:,5:]
-            self.lin_trials=lin_trials
 
-        return self.lin_trials
+        if not self._use_logpars:
+            return self.get_trials()
+
+        if not hasattr(self,"_lin_trials"):
+            logt=self.get_trials()
+            lin_trials=logt.copy()
+            lin_trials[:,4] = 10.0**logt[:,4]
+            lin_trials[:,5:] = 10.0**logt[:,5:]
+            self._lin_trials=lin_trials
+
+        return self._lin_trials
 
     def get_sampler(self):
         """
@@ -1066,7 +1068,7 @@ class MCMCBase(FitterBase):
         arates = sampler.acceptance_fraction
         self.arate = arates.mean()
 
-        self.trials  = sampler.flatchain
+        self._trials  = sampler.flatchain
 
         return self.pos
 
@@ -1095,23 +1097,48 @@ class MCMCBase(FitterBase):
             # input weights are used, None or no
             pass
         
-        trials=self.get_trials(linear=linear)
+        trials=self.get_trials()
+
+        pars,pars_cov = stats.calc_mcmc_stats(trials, weights=weights)
+
+        return pars, pars_cov
+
+    def get_lin_stats(self, weights=None):
+        """
+        get mean and covariance.
+
+        parameters
+        ----------
+        weights: array
+            Extra weights to apply.
+        """
+
+        if not self._use_logpars:
+            return self._stats
+
+        this_weights = self.get_weights()
+
+        if this_weights is not None and weights is not None:
+            weights = this_weights * weights
+        elif this_weights is not None:
+            weights=this_weights
+        else:
+            # input weights are used, None or no
+            pass
+        
+        trials=self.get_lin_trials()
 
         pars,pars_cov = stats.calc_mcmc_stats(trials, weights=weights)
         return pars, pars_cov
 
-
-    def calc_result(self, weights=None, linear=False):
+    def calc_result(self, weights=None):
         """
         Calculate the mcmc stats and the "best fit" stats
         """
 
-        pars,pars_cov = self.get_stats(weights=weights, linear=linear)
-
+        pars,pars_cov = self.get_stats(weights=weights)
         pars_err=sqrt(diag(pars_cov))
-
         self._set_tau()
-
         res={'model':self.model_name,
              'flags':self.flags,
              'pars':pars,
@@ -1120,20 +1147,29 @@ class MCMCBase(FitterBase):
              'tau':self.tau,
              'arate':self.arate}
 
-        if not linear:
-            fit_stats = self.get_fit_stats(pars)
-            res.update(fit_stats)
+        fit_stats = self._get_fit_stats(pars)
+        res.update(fit_stats)
 
-        if linear:
-            self._lin_result=res
+        self._result=res
+        
+        if self._use_logpars:
+            # can also do linear
+
+            pars_lin,pars_lin_cov = self.get_lin_stats(weights=weights)
+            pars_lin_err=sqrt(diag(pars_lin_cov))
+
+
+            lin_res={'model':self.model_name,
+                     'flags':self.flags,
+                     'pars':pars_lin,
+                     'pars_cov':pars_lin_cov,
+                     'pars_err':pars_lin_err,
+                     'tau':self.tau,
+                     'arate':self.arate}
+            lin_res.update(fit_stats)
+            self._lin_result=lin_res
         else:
-            self._result=res
-
-    def calc_lin_result(self, weights=None):
-        """
-        Calculate the mcmc stats and the "best fit" stats
-        """
-        self.calc_result(weights=weights, linear=True)
+            self._lin_result=self._result
 
     def _setup_sampler_and_data(self, pos):
         """
@@ -1172,15 +1208,17 @@ class MCMCBase(FitterBase):
         """
         import emcee
         tau = 9999.0
+
+        trials=self.get_trials()
         if hasattr(emcee.ensemble,'acor'):
             if emcee.ensemble.acor is not None:
                 acor=self.sampler.acor
-                nstep=self.trials.shape[0]
+                nstep=trials.shape[0]
                 tau = (acor/nstep).max()
         elif hasattr(emcee.ensemble,'autocorr'):
             if emcee.ensemble.autocorr is not None:
                 acor=self.sampler.acor
-                nstep=self.trials.shape[0]
+                nstep=trials.shape[0]
                 tau = (acor/nstep).max()
         self.tau=tau
 
@@ -1237,8 +1275,9 @@ class MCMCBase(FitterBase):
         else:
             plotfunc =mcmc.plot_results
 
+        trials=self.get_trials()
         pdict={}
-        pdict['trials']=plotfunc(self.trials,
+        pdict['trials']=plotfunc(trials,
                                  names=names,
                                  title=title,
                                  show=show,
@@ -1246,7 +1285,7 @@ class MCMCBase(FitterBase):
 
 
         if weights is not None:
-            pdict['wtrials']=plotfunc(self.trials,
+            pdict['wtrials']=plotfunc(trials,
                                       weights=weights,
                                       names=names,
                                       title='%s weighted' % title,
@@ -1282,50 +1321,53 @@ class MCMCSimple(MCMCBase):
 
         self._band_pars=zeros(6)
 
-    def calc_result(self, weights=None, linear=False):
+    def calc_result(self, weights=None):
         """
         Some extra stats for simple models
         """
 
-        super(MCMCSimple,self).calc_result(weights=weights, linear=linear)
+        super(MCMCSimple,self).calc_result(weights=weights)
 
         g1i=self.g1i
         g2i=self.g2i
 
-        if linear:
-            self._lin_result['g'] = self._lin_result['pars'][g1i:g1i+2].copy()
-            self._lin_result['g_cov'] = self._lin_result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
-        else:
-            self._result['g'] = self._result['pars'][g1i:g1i+2].copy()
-            self._result['g_cov'] = self._result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
+        self._result['g'] = self._result['pars'][g1i:g1i+2].copy()
+        self._result['g_cov'] = self._result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
 
-    def _get_band_pars(self, log_pars, band):
+        if self._use_logpars:
+            self._lin_result['g'] = self._result['g']
+            self._lin_result['g_cov'] = self._result['g_cov']
+
+    def _get_band_pars(self, pars_in, band):
         """
         Get linear pars for the specified band
         """
 
         pars=self._band_pars
-        _gmix.convert_simple_double_logpars(log_pars, pars, band)
-        return pars
- 
-    def _get_band_pars_old(self, log_pars, band):
-        """
-        Get linear pars for the specified band
-        """
-        pars=log_pars[ [0,1,2,3,4,5+band] ].copy()
-
-        pars[4] = 10.0**pars[4]
-        pars[5] = 10.0**pars[5]
+        if self._use_logpars:
+            _gmix.convert_simple_double_logpars(pars_in, pars, band)
+        else:
+            pars[0:5] = pars_in[0:5]
+            pars[5] = pars_in[5+band]
 
         return pars
 
     def get_par_names(self):
-        names=['cen1','cen2', 'g1','g2', r'$log_{10}(T)$']
-        if self.nband == 1:
-            names += [r'$log_{10}(F)$']
+        if self._use_logpars:
+            names=['cen1','cen2', 'g1','g2', r'$log_{10}(T)$']
+            if self.nband == 1:
+                names += [r'$log_{10}(F)$']
+            else:
+                for band in xrange(self.nband):
+                    names += [r'$log_{10}(F_%s)$' % band]
         else:
-            for band in xrange(self.nband):
-                names += [r'$log_{10}(F_%s)$' % band]
+            names=['cen1','cen2', 'g1','g2', 'T']
+            if self.nband == 1:
+                names += ['F']
+            else:
+                for band in xrange(self.nband):
+                    names += ['F_%s' % band]
+
         return names
 
 
@@ -1702,7 +1744,7 @@ class MHSimple(MCMCSimple):
         """
         FitterBase.__init__(self, obs, model, **keys)
 
-        self.trials=None
+        self._use_logpars=keys.get('use_logpars',True)
 
         # where g1,g2 are located in a pars array
         self.g1i = 2
@@ -1763,7 +1805,7 @@ class MHSimple(MCMCSimple):
 
         self.arate = sampler.get_arate()
 
-        self.trials  = trials
+        self._trials=trials
 
         return self.pos
 
@@ -1914,7 +1956,12 @@ class MCMCSersic(MCMCSimple):
         arates = sampler.acceptance_fraction
         self.arate = arates.mean()
 
-        self.trials  = sampler.flatchain
+        trials  = sampler.flatchain
+        if self._use_logpars:
+            self._log_trials=trials
+        else:
+            self._lin_trials=trials
+
 
         return self.pos
 
@@ -1965,6 +2012,7 @@ class MCMCSersic(MCMCSimple):
         pass
 
     def _get_band_pars(self, pars, band):
+        raise RuntimeError("deal with logpars")
         if band > 0:
             raise ValueError("support multi-band for sersic")
         return pars.copy()
@@ -2009,6 +2057,7 @@ class MCMCSersicJointHybrid(MCMCSersic):
         """
         Extract pars for the specified band and convert to linear
         """
+        raise RuntimeError("deal with non logpars")
         if band != 0:
             raise ValueError("deal with more than one band")
         linpars=pars.copy()
@@ -2359,6 +2408,7 @@ class MCMCSimpleFixed(MCMCSimple):
         return lnp
 
     def _get_band_pars(self, pars, band):
+        raise RuntimeError("deal with logpars")
         bpars= self.fixed_pars[ [0,1,2,3,4,5+band] ]
         bpars[2:2+2] = pars
         return bpars
@@ -2432,6 +2482,7 @@ class MCMCBDC(MCMCSimple):
         pars are 
             [c1,c2,g1,g2,Tb,Td, Fb1,Fb2,Fb3, ..., Fd1,Fd2,Fd3 ...]
         """
+        raise RuntimeError("deal with logpars")
         Fbstart=6
         Fdstart=6+self.nband
         return pars[ [0,1,2,3,4,5, Fbstart+band, Fdstart+band] ]
@@ -2519,6 +2570,7 @@ class MCMCBDF(MCMCSimple):
         pars are 
             [c1,c2,g1,g2,T, Fb1,Fb2,Fb3, ..., Fd1,Fd2,Fd3 ...]
         """
+        raise RuntimeError("deal with logpars")
         Fbstart=5
         Fdstart=5+self.nband
         return pars[ [0,1,2,3,4, Fbstart+band, Fdstart+band] ].copy()
@@ -2728,6 +2780,7 @@ class MCMCSimpleJointHybrid(MCMCSimple):
         Extract pars for the specified band and convert to linear
         """
         from .shape import eta1eta2_to_g1g2
+        raise RuntimeError("deal with non logpars")
         linpars=pars[ [0,1,2,3,4,5+band] ].copy()
 
         linpars[4] = 10.0**linpars[4]
@@ -2862,6 +2915,7 @@ class MCMCBDFJointHybrid(MCMCSimpleJointHybrid):
         """
         Extract pars for the specified band and convert to linear
         """
+        raise RuntimeError("deal with non logpars")
         Fbstart=5
         Fdstart=5+self.nband
 
@@ -3038,6 +3092,7 @@ class MCMCSimpleJointLogPars(MCMCSimple):
         """
         Extract pars for the specified band and convert to linear
         """
+        raise RuntimeError("deal with non logpars")
         from .shape import eta1eta2_to_g1g2
         linpars=pars[ [0,1,2,3,4,5+band] ].copy()
 
@@ -3313,7 +3368,7 @@ def test_gauss_psf_jacob(counts_sky=100.0, noise_sky=0.001, nimages=10, jfac=10.
     
     mcmc.plot_results(mc.get_trials())
 
-def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27, g_prior=None, show=False):
+def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27, g_prior=None, show=False):
     """
     Test fitting the specified model.
 
@@ -3350,8 +3405,13 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27, g
     # object pars
     g1_obj=0.1
     g2_obj=0.05
-    Tpix_obj=16.0
-    Tsky_obj=Tpix_obj*jfac2
+
+    if Tsky is None:
+        Tpix_obj=16.0
+        Tsky_obj=Tpix_obj*jfac2
+    else:
+        Tsky_obj=Tsky
+        Tpix_obj=Tsky/jfac2
 
     counts_sky_obj=counts_sky
     noise_sky_obj=noise_sky
@@ -3393,15 +3453,16 @@ def test_model(model, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27, g
     emo_guess._data['irc'] += 0.1*srandu()
     emo_guess._data['icc'] += 0.5*srandu()
 
-    mc_psf.go(emo_guess, sky)
+    mc_psf.run_em(emo_guess, sky)
     res_psf=mc_psf.get_result()
     print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
 
     psf_fit=mc_psf.get_gmix()
 
+    psf_obs.set_gmix(psf_fit)
 
-    obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf_gmix=psf_fit)
-    mc_obj=MCMCSimple(obs, model, nwalkers=nwalkers)
+    obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
+    mc_obj=MCMCSimple(obs, model, nwalkers=nwalkers, use_logpars=False)
 
     guess=zeros( (nwalkers, npars) )
     guess[:,0] = 0.1*srandu(nwalkers)

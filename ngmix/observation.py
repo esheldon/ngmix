@@ -75,7 +75,8 @@ class Observation(object):
         Set a psf Observation
         """
         if psf is not None:
-            assert isinstance(psf,Observation),"psf must be of Observation"
+            mess="psf must be of Observation, got %s" % type(psf)
+            assert isinstance(psf,Observation),mess
         self.psf=psf
 
     def get_psf(self):
@@ -116,7 +117,8 @@ class Observation(object):
         Set a psf gmix.
         """
         if gmix is not None:
-            assert isinstance(gmix,GMix),"gmix must be of type GMix"
+            mess="gmix must be of type GMix, got %s" % type(gmix)
+            assert isinstance(gmix,GMix),mess
         self.gmix=gmix
 
     def get_gmix(self):

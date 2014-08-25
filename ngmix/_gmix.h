@@ -26,6 +26,8 @@ struct __attribute__((__packed__)) PyGMix_Gauss2D {
 
     double det;
 
+    int32_t norm_set;
+
     double drr;
     double drc;
     double dcc;
