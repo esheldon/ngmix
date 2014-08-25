@@ -3376,6 +3376,7 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
     """
     import mcmc
     from . import em
+    from . import joint_prior
 
 
     nwalkers=80
@@ -3461,8 +3462,9 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
 
     psf_obs.set_gmix(psf_fit)
 
+    prior=joint_prior.make_uniform_simple_sep([0.0,0.0],[0.1,0.1],[-2,100],[-10,1000])
     obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
-    mc_obj=MCMCSimple(obs, model, nwalkers=nwalkers, use_logpars=False)
+    mc_obj=MCMCSimple(obs, model, nwalkers=nwalkers, use_logpars=False, prior=prior)
 
     guess=zeros( (nwalkers, npars) )
     guess[:,0] = 0.1*srandu(nwalkers)
@@ -3477,6 +3479,10 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
     pos=mc_obj.run_mcmc(guess, burnin)
     pos=mc_obj.run_mcmc(pos, nstep)
     mc_obj.calc_result()
+
+    trials=mc_obj.get_trials()
+    print("T minmax:",trials[:,4].min(), trials[:,4].max())
+    print("F minmax:",trials[:,5].min(), trials[:,5].max())
 
     res_obj=mc_obj.get_result()
 
