@@ -100,7 +100,37 @@ static void gmix_get_cen(const struct PyGMix_Gauss2D *self,
 /* 
    zero return value means bad determinant, out of range
    
+   note for gaussians we plan to convolve with a psf we might
+   not care that det < 0, so we don't always evaluate
 */
+
+static int gauss2d_set_norm(struct PyGMix_Gauss2D *self)
+{
+    int status=0;
+    double idet=0;
+    if (self->det < 1.0e-200) {
+
+        // PyErr_Format doesn't format floats
+        char detstr[25];
+        snprintf(detstr,24,"%g", self->det);
+        PyErr_Format(GMixRangeError, "gauss2d det too low: %s", detstr);
+        status=0;
+
+    } else {
+
+        idet=1.0/self->det;
+        self->drr = self->irr*idet;
+        self->drc = self->irc*idet;
+        self->dcc = self->icc*idet;
+        self->norm = 1./(2*M_PI*sqrt(self->det));
+
+        self->pnorm = self->p*self->norm;
+        status=1;
+    }
+
+    return status;
+
+}
 static int gauss2d_set(struct PyGMix_Gauss2D *self,
                        double p,
                        double row,
@@ -110,18 +140,8 @@ static int gauss2d_set(struct PyGMix_Gauss2D *self,
                        double icc) {
 
 
-    double det=0, idet=0;
+    //double det=0, idet=0;
 
-    det = irr*icc - irc*irc;
-    if (det < 1.0e-200) {
-        char detstr[25];
-        snprintf(detstr,24,"%g", det);
-        // PyErr_Format doesn't format floats
-        //fprintf(stderr,"gauss2d det too low: %.16g", det);
-        PyErr_Format(GMixRangeError, "gauss2d det too low: %s", detstr);
-        //PyErr_Format(GMixRangeError, "gauss2d det too low: %.16g", det);
-        return 0;
-    }
 
     self->p=p;
     self->row=row;
@@ -130,15 +150,25 @@ static int gauss2d_set(struct PyGMix_Gauss2D *self,
     self->irc=irc;
     self->icc=icc;
 
-    self->det = det;
+    self->det = irr*icc - irc*irc;
 
-    idet=1.0/det;
+    /*
+    if (self->det < 1.0e-200) {
+        // PyErr_Format doesn't format floats
+        char detstr[25];
+        snprintf(detstr,24,"%g", self->det);
+        PyErr_Format(GMixRangeError, "gauss2d det too low: %s", detstr);
+        return 0;
+    }
+
+    idet=1.0/self->det;
     self->drr = irr*idet;
     self->drc = irc*idet;
     self->dcc = icc*idet;
-    self->norm = 1./(2*M_PI*sqrt(det));
+    self->norm = 1./(2*M_PI*sqrt(self->det));
 
     self->pnorm = self->p*self->norm;
+    */
 
     return 1;
 }
@@ -275,6 +305,35 @@ _gmix_fill_full_bail:
 }
 
 
+/*
+   when an error occurs and exception is set. Use goto pattern
+   for errors to simplify code.
+*/
+static int gmix_set_norms(struct PyGMix_Gauss2D *self,
+                          npy_intp n_gauss)
+{
+
+    int status=0;
+    npy_intp i=0;
+
+    for (i=0; i<n_gauss; i++) {
+
+        status=gauss2d_set_norm(&self[i]);
+
+        // an exception will be set
+        if (!status) {
+            status=0;
+            goto _gmix_set_norms_bail;
+        }
+
+    }
+
+    status=1;
+
+_gmix_set_norms_bail:
+    return status;
+}
+
 
 /*
    when an error occurs and exception is set. Use goto pattern
@@ -405,8 +464,6 @@ static int gmix_fill(struct PyGMix_Gauss2D *self,
             goto _gmix_fill_bail;
             break;
     }
-
-    status=1;
 
 _gmix_fill_bail:
     return status;
@@ -543,6 +600,30 @@ static PyObject * PyGMix_convolve_fill(PyObject* self, PyObject* args) {
 }
 
 
+
+static PyObject * PyGMix_gmix_set_norms(PyObject* self, PyObject* args) {
+    PyObject* gmix_obj=NULL;
+    npy_intp n_gauss=0;
+    int status=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"O", &gmix_obj)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    status=gmix_set_norms(gmix, n_gauss);
+    if (!status) {
+        // raise an exception
+        return NULL;
+    } else {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+}
 
 
 /*
@@ -1038,6 +1119,12 @@ static void em_sums_print(const struct PyGMix_EM_Sums *sums, npy_intp n_gauss)
 }
 */
 
+/*
+
+   note for em we immediately set the normalization, unlike shear measurements
+   where we allow T <= 0.0
+
+*/
 static 
 int em_set_gmix_from_sums(struct PyGMix_Gauss2D *gmix,
                            npy_intp n_gauss,
@@ -1059,6 +1146,8 @@ int em_set_gmix_from_sums(struct PyGMix_Gauss2D *gmix,
                            sum->u2sum*pinv,
                            sum->uvsum*pinv,
                            sum->v2sum*pinv);
+
+        status=gauss2d_set_norm(gauss);
 
         // an exception will be set
         if (!status) {
@@ -1518,6 +1607,7 @@ static PyMethodDef pygauss2d_funcs[] = {
 
     {"gmix_fill",(PyCFunction)PyGMix_gmix_fill, METH_VARARGS,  "Fill the input gmix with the input pars\n"},
     {"convolve_fill",(PyCFunction)PyGMix_convolve_fill, METH_VARARGS,  "convolve gaussian with psf and store in output\n"},
+    {"set_norms",(PyCFunction)PyGMix_gmix_set_norms, METH_VARARGS,  "set the normalizations used during evaluation of the gaussians\n"},
 
     {"em_run",(PyCFunction)PyGMix_em_run, METH_VARARGS,  "run the em algorithm\n"},
 

@@ -191,7 +191,11 @@ class GMix(object):
         psum0 = self._data['p'].sum()
         rat = psum/psum0
         self._data['p'] *= rat
-        self._data['pnorm'] = self._data['p']*self._data['norm']
+
+        # we will need to reset the pnorm values
+        self._norms_set=False
+
+        #self._data['pnorm'] = self._data['p']*self._data['norm']
     # alias
     set_psum=set_flux
 
@@ -214,12 +218,16 @@ class GMix(object):
         pars=array(pars, dtype='f8', copy=False) 
         _gmix.gmix_fill(self._data, pars, self._model)
 
+        # we need to reset the normalization and pnorm
+        self._norms_set=False
+
     def copy(self):
         """
         Get a new GMix with the same parameters
         """
         gmix = GMix(self._ngauss)
         gmix._data[:] = self._data[:]
+        gmix._norms_set=self._norms_set
         return gmix
 
     def convolve(self, psf):
@@ -250,6 +258,10 @@ class GMix(object):
         nsub: integer, optional
             Defines a grid for sub-pixel integration 
         """
+
+        # set normalizations if not already done
+        self.set_norms()
+
         image=numpy.zeros(dims, dtype='f8')
         if jacobian is not None:
             _gmix.render_jacob(self._data,
@@ -263,29 +275,6 @@ class GMix(object):
 
         return image
 
-    def make_image_old(self, dims, nsub=1, jacobian=None):
-        """
-        Render the mixture into a new image
-
-        parameters
-        ----------
-        dims: 2-element sequence
-            dimensions [nrows, ncols]
-        nsub: integer, optional
-            Defines a grid for sub-pixel integration 
-        """
-        image=numpy.zeros(dims, dtype='f8')
-        if jacobian is not None:
-            _render_jacob_fast3(self._data,
-                                image,
-                                nsub,
-                                jacobian._data,
-                                _exp3_ivals[0],
-                                _exp3_lookup)
-        else:
-            _render_fast3(self._data, image, nsub, _exp3_ivals[0], _exp3_lookup)
-
-        return image
 
     def fill_fdiff(self, obs, fdiff, start=0, nsub=1):
         """
@@ -301,6 +290,9 @@ class GMix(object):
         start: int, optional
             Where to start in the array, default 0
         """
+
+        # set normalizations if not already done
+        self.set_norms()
 
         nuse=fdiff.size-start
 
@@ -328,38 +320,6 @@ class GMix(object):
 
         return s2n_numer,s2n_denom
 
-    def fill_fdiff_old(self, obs, fdiff, start=0):
-        """
-        Fill fdiff=(model-data)/err given the input Observation
-
-        parameters
-        ----------
-        obs: Observation
-            The Observation to compare with. See ngmix.observation.Observation
-            The Observation must have a weight map set
-        fdiff: 1-d array
-            The fdiff to fill
-        start: int, optional
-            Where to start in the array, default 0
-        """
-
-        nuse=fdiff.size-start
-
-        image=obs.image
-        if nuse < image.size:
-            raise ValueError("fdiff from start must have "
-                             "len >= %d, got %d" % (image.size,nuse))
-
-        s2n_numer,s2n_denom=_fdiff_jacob_fast3(self._data,
-                                               image,
-                                               obs.weight,
-                                               obs.jacobian._data,
-                                               fdiff,
-                                               start,
-                                               _exp3_ivals[0],
-                                               _exp3_lookup)
-
-        return s2n_numer,s2n_denom
 
     def get_loglike(self, obs, get_s2nsums=False):
         """
@@ -372,6 +332,10 @@ class GMix(object):
             The Observation to compare with. See ngmix.observation.Observation
             The Observation must have a weight map set
         """
+
+        # set normalizations if not already done
+        self.set_norms()
+
         loglike,s2n_numer,s2n_denom=_gmix.get_loglike(self._data,
                                                       obs.image,
                                                       obs.weight,
@@ -395,6 +359,10 @@ class GMix(object):
         nu: parameter for robust likelihood - nu > 2, nu -> \infty is a Gaussian (or chi^2)
         """
         from scipy.special import gammaln
+
+        # set normalizations if not already done
+        self.set_norms()
+
         logfactor = gammaln((nu+1.0)/2.0) - gammaln(nu/2.0) - 0.5*log(numpy.pi*nu)
         loglike,s2n_numer,s2n_denom=_gmix.get_loglike_robust(self._data,
                                                              obs.image,
@@ -407,50 +375,24 @@ class GMix(object):
         else:
             return loglike
 
-    def get_loglike_old(self, obs, get_s2nsums=False):
+
+    def set_norms(self):
         """
-        Calculate the log likelihood given the input Observation
+        set the normalizations for gaussian evaluation.
 
-
-        parameters
-        ----------
-        obs: Observation
-            The Observation to compare with. See ngmix.observation.Observation
-            The Observation must have a weight map set
+        We don't set this until needed, because we allow T < 0 in some cases
+        during shear measurements
         """
-
-        loglike,s2n_numer,s2n_denom=_loglike_jacob_fast3(self._data,
-                                                         obs.image,
-                                                         obs.weight,
-                                                         obs.jacobian._data,
-                                                         _exp3_ivals[0],
-                                                         _exp3_lookup)
-
-        if get_s2nsums:
-            return loglike,s2n_numer,s2n_denom
-        else:
-            return loglike
-
+        if not self._norms_set:
+            _gmix.set_norms(self._data)
+            self._norms_set=True
 
     def reset(self):
         """
         Replace the data array with a zeroed one.
         """
         self._data = zeros(self._ngauss, dtype=_gauss2d_dtype)
-
-
-    def get_loglike_rowcol(self, row, col):
-        """
-        Evaluate a single row, col
-        """
-        return _gauss2d_loglike(self._data, row, col)
-
-    def get_like_rowcol(self, row, col):
-        """
-        Evaluate a single row, col
-        """
-        return _gauss2d_like(self._data, row, col)
-
+        self._norms_set=False
 
     def __len__(self):
         return self._ngauss
