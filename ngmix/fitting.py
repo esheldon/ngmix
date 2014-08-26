@@ -447,8 +447,9 @@ class FitterBase(object):
         biggles.configure('screen','width', width)
         biggles.configure('screen','height', height)
 
-        # default scaling
-        res=self.get_result()
+        # need to be in log space, since fill wants them in log space
+
+        res=self.get_log_result()
         try:
             self._fill_gmix_all(res['pars'])
         except GMixRangeError as gerror:
@@ -1148,7 +1149,7 @@ class MCMCBase(FitterBase):
         fit_stats = self._get_fit_stats(pars)
         log_res.update(fit_stats)
 
-        self._log_result=res
+        self._log_result=log_res
         
 
         pars_lin,pars_lin_cov = self.get_lin_stats(weights=weights)
@@ -1338,6 +1339,8 @@ class MCMCSimple(MCMCBase):
 
         pars=self._band_pars
         _gmix.convert_simple_double_logpars(pars_in, pars, band)
+        #print_pars(pars_in,front="pars in:")
+        #print_pars(pars,   front="pars:   ")
 
         return pars
 
@@ -3350,7 +3353,8 @@ def test_gauss_psf_jacob(counts_sky=100.0, noise_sky=0.001, nimages=10, jfac=10.
     
     mcmc.plot_results(mc.get_trials())
 
-def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27, g_prior=None, show=False):
+def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27,
+               g_prior=None, show=False):
     """
     Test fitting the specified model.
 
@@ -3365,15 +3369,13 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
     burnin=800
     nstep=800
 
-    dims=[25,25]
-    cen=[dims[0]/2., dims[1]/2.]
-
-    jfac2=jfac**2
-    j=Jacobian(cen[0],cen[1], jfac, 0.0, 0.0, jfac)
 
     #
     # simulation
     #
+
+    jfac2=jfac**2
+
 
     # PSF pars
     counts_sky_psf=100.0
@@ -3395,6 +3397,11 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
     else:
         Tsky_obj=Tsky
         Tpix_obj=Tsky/jfac2
+
+    sigma=sqrt( (Tpix_obj + Tpix_psf)/2. )
+    dims=[2*5.0*sigma]*2
+    cen=[dims[0]/2., dims[1]/2.]
+    j=Jacobian(cen[0],cen[1], jfac, 0.0, 0.0, jfac)
 
     counts_sky_obj=counts_sky
     noise_sky_obj=noise_sky
@@ -3444,9 +3451,10 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
 
     psf_obs.set_gmix(psf_fit)
 
-    prior=joint_prior.make_uniform_simple_sep([0.0,0.0],[0.1,0.1],[-2,100],[-10,1000])
+    prior=joint_prior.make_uniform_simple_sep([0.0,0.0],[0.1,0.1],[-1.5,3.5],[-1.5,4.5])
+    #prior=None
     obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
-    mc_obj=MCMCSimple(obs, model, nwalkers=nwalkers, use_logpars=False, prior=prior)
+    mc_obj=MCMCSimple(obs, model, nwalkers=nwalkers, prior=prior)
 
     guess=zeros( (nwalkers, npars) )
     guess[:,0] = 0.1*srandu(nwalkers)
@@ -3455,8 +3463,10 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
     # intentionally bad guesses
     guess[:,2] = 0.1*srandu(nwalkers)
     guess[:,3] = 0.1*srandu(nwalkers)
-    guess[:,4] = 0.5*Tsky_obj*(1.0 + 0.1*srandu(nwalkers))
-    guess[:,5] = 2.0*counts_sky_obj*(1.0 + 0.1*srandu(nwalkers))
+    #guess[:,4] = log10(1 + 0.5*Tsky_obj*(1.0 + 0.1*srandu(nwalkers)) )
+    #guess[:,5] = log10(1 + 2.0*counts_sky_obj*(1.0 + 0.1*srandu(nwalkers)) )
+    guess[:,4] = log10(1 + Tsky_obj*(1.0 + 0.1*srandu(nwalkers)) )
+    guess[:,5] = log10(1 + counts_sky_obj*(1.0 + 0.1*srandu(nwalkers)) )
 
     pos=mc_obj.run_mcmc(guess, burnin)
     pos=mc_obj.run_mcmc(pos, nstep)
@@ -3474,8 +3484,8 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
     print('Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2))
     print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'])
 
-    gmfit0=mc_obj.get_gmix()
-    gmfit=gmfit0.convolve(psf_fit)
+    #gmfit0=mc_obj.get_gmix()
+    #gmfit=gmfit0.convolve(psf_fit)
 
     if g_prior is not None:
         from . import lensfit
