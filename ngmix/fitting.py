@@ -113,27 +113,27 @@ class FitterBase(object):
         #robust fitting
         self.nu = keys.get('nu', 0.0)
 
-    def get_result(self):
+    def get_log_result(self):
         """
-        Result will not be non-None until go() is run
+        Result will not be non-None until sampler is run
         """
 
-        if not hasattr(self,'_result'):
+        if not hasattr(self,'_log_result'):
             raise ValueError("No result, you must run_mcmc and calc_result first")
         
-        return self._result
+        return self._log_result
 
     def get_lin_result(self):
         """
-        Result will not be non-None until go() is run
+        Result will not be non-None until sampler is run
         """
-        if not self._use_logpars:
-            return self.get_result()
 
         if not hasattr(self,'_lin_result'):
             raise ValueError("No result, you must run_mcmc and calc_result first")
         return self._lin_result
 
+    # get_result is an alias for get_lin_result
+    get_result=get_lin_result
 
     def get_gmix(self):
         """
@@ -520,7 +520,6 @@ class TemplateFluxFitter(FitterBase):
     """
     def __init__(self, obs, **keys):
 
-        self._use_logpars=False
         self.keys=keys
         self.do_psf=keys.get('do_psf',False)
         self.cen=keys.get('cen',None)
@@ -673,9 +672,6 @@ class LMSimple(FitterBase):
     """
     def __init__(self, obs, model, **keys):
         super(LMSimple,self).__init__(obs, model, **keys)
-
-        # currently only log pars
-        self._use_logpars=True
 
         # this is a dict
         # can contain maxfev (maxiter), ftol (tol in sum of squares)
@@ -1116,9 +1112,6 @@ class MCMCBase(FitterBase):
         weights: array
             Extra weights to apply.
         """
-
-        if not self._use_logpars:
-            return self._stats
 
         this_weights = self.get_weights()
 
@@ -1950,12 +1943,7 @@ class MCMCSersic(MCMCSimple):
         arates = sampler.acceptance_fraction
         self.arate = arates.mean()
 
-        trials  = sampler.flatchain
-        if self._use_logpars:
-            self._log_trials=trials
-        else:
-            self._lin_trials=trials
-
+        self._log_trials=trials
 
         return self.pos
 
