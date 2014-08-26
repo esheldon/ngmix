@@ -1737,7 +1737,7 @@ class TwoSidedErf(object):
             pvals=self.get_prob_array(randx)
             randy=numpy.random.uniform(size=nleft)
 
-            w,=where(pvals < randy)
+            w,=where(randy < pvals)
             if w.size > 0:
                 rvals[ngood:ngood+w.size] = randx[w]
                 ngood += w.size
