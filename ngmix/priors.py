@@ -1613,7 +1613,7 @@ class TwoSidedErf(object):
 
     A limitation seems to be the accuracy of the erf....
     """
-    def __init__(self, minval, width_at_min, maxval, width_at_max, positive=False):
+    def __init__(self, minval, width_at_min, maxval, width_at_max):
 
         self.minval=minval
         self.width_at_min=width_at_min
@@ -1621,17 +1621,16 @@ class TwoSidedErf(object):
         self.maxval=maxval
         self.width_at_max=width_at_max
 
-        self.positive=positive
-
     def get_prob_scalar(self, val):
         """
         get the probability of the point
         """
-        if self.positive:
-            if val <= 0.0:
-                return 0.0
+        from ._gmix import erf
 
-        return self._get_prob_nocheck_scalar(val)
+        p1 = 0.5*erf((self.maxval-val)/self.width_at_max)
+        p2 = 0.5*erf((val-self.minval)/self.width_at_min)
+
+        return p1+p2
 
     def get_lnprob_scalar(self, val):
         """
@@ -1652,49 +1651,9 @@ class TwoSidedErf(object):
         get the probability of the point
         """
 
-        if self.positive:
-            pvals=numpy.zeros(vals.size)
-            w,=numpy.where(vals > 0.0)
-            if w.size > 0:
-                pvals[w] = self._get_prob_nocheck_array(vals[w])
-        else:
-            pvals=self._get_prob_nocheck_array(vals)
-        
-        return pvals
-
-    def get_lnprob_array(self, vals):
-        """
-        get the probability of the point
-        """
-
-        lnp = numpy.zeros(vals.size) + LOWVAL
-
-        p = self.get_prob_array(vals)
-        w,=numpy.where(p > 0.0)
-
-        if w.size > 0:
-            lnp[w] = numpy.log( p[w] )
-        return lnp
-
-
-    def _get_prob_nocheck_scalar(self, val):
-        """
-        works for scalars
-        """
-        from ._gmix import erf
-
-        p1 = 0.5*erf((self.maxval-val)/self.width_at_max)
-        p2 = 0.5*erf((val-self.minval)/self.width_at_min)
-
-        return p1+p2
-
-
-
-    def _get_prob_nocheck_array(self, vals):
-        """
-        works for arrays
-        """
         from ._gmix import erf_array
+
+        vals=array(vals, ndmin=1, dtype='f8', copy=False)
 
         arg1=zeros(vals.size)
         arg2=zeros(vals.size)
@@ -1710,6 +1669,19 @@ class TwoSidedErf(object):
         p2 *= 0.5
 
         return p1+p2
+
+    def get_lnprob_array(self, vals):
+        """
+        get the probability of the point
+        """
+
+        p = self.get_prob_array(vals)
+
+        lnp = numpy.zeros(p.size) + LOWVAL
+        w,=numpy.where(p > 0.0)
+        if w.size > 0:
+            lnp[w] = numpy.log( p[w] )
+        return lnp
 
     def sample(self, nrand=None):
         """

@@ -1436,11 +1436,10 @@ PyObject * PyGMix_convert_simple_double_logpars(PyObject* self, PyObject* args) 
     pars[1] = logpars[1];
     pars[2] = logpars[2];
     pars[3] = logpars[3];
-    pars[4] = pow(10.0, logpars[4]);
-    pars[5] = pow(10.0, logpars[5+band]);
+    pars[4] = pow(10.0, logpars[4])      - 1.0;
+    pars[5] = pow(10.0, logpars[5+band]) - 1.0;
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 /*
@@ -1604,15 +1603,6 @@ static PyObject* PyGMix_erf(PyObject* self, PyObject* args)
     lval=(long double) val;
 
     out=(double)erfl(lval);
-    /*
-    if (! isfinite(out) ) {
-        if (val < 0.0) {
-            out=-1.0;
-        } else {
-            out= 1.0;
-        }
-    }
-    */
 
     return Py_BuildValue("d", out);
 
@@ -1636,11 +1626,6 @@ static PyObject* PyGMix_erf_array(PyObject* self, PyObject* args)
         tmp=(double) erfl(lval);
 
         *pout = tmp;
-        /*
-        if (! isfinite(*pout)) {
-            *pout=0.0;
-        }
-        */
     }
 
     return Py_BuildValue("");

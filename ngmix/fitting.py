@@ -1003,8 +1003,6 @@ class MCMCBase(FitterBase):
     def __init__(self, obs, model, **keys):
         super(MCMCBase,self).__init__(obs, model, **keys)
 
-        self._use_logpars=keys.get('use_logpars',False)
-
         # this should be a numpy.random.RandomState object, unlike emcee which
         # through the random_state parameter takes the tuple state
         self.random_state = keys.get('random_state',None)
@@ -1013,32 +1011,38 @@ class MCMCBase(FitterBase):
         self.nwalkers=keys['nwalkers']
         self.mca_a=keys.get('mca_a',2.0)
 
-    def get_trials(self):
+    def get_log_trials(self):
         """
-        Get the set of trials from the production run
+        Get the set of trials with T and F in log(1+x) space
         """
 
-        if not hasattr(self,'_trials'):
+        if not hasattr(self,'_log_trials'):
             raise RuntimeError("you need to run the mcmc chain first")
 
-        return self._trials
+        return self._log_trials
 
     def get_lin_trials(self):
         """
         Get trials with T,F in linear space
         """
 
-        if not self._use_logpars:
-            return self.get_trials()
-
         if not hasattr(self,"_lin_trials"):
-            logt=self.get_trials()
+            logt=self.get_log_trials()
             lin_trials=logt.copy()
-            lin_trials[:,4] = 10.0**logt[:,4]
-            lin_trials[:,5:] = 10.0**logt[:,5:]
+
+            T=10.0**logt[:,4]
+            T -= 1
+            F=10.0**logt[:,5:]
+            F -= 1
+
+            lin_trials[:,4] = T
+            lin_trials[:,5:] = F
             self._lin_trials=lin_trials
 
         return self._lin_trials
+
+    # get trials is an alias for getting the trials in linear space
+    get_trials=get_lin_trials
 
     def get_sampler(self):
         """
@@ -1068,7 +1072,7 @@ class MCMCBase(FitterBase):
         arates = sampler.acceptance_fraction
         self.arate = arates.mean()
 
-        self._trials  = sampler.flatchain
+        self._log_trials  = sampler.flatchain
 
         return self.pos
 
@@ -1078,7 +1082,7 @@ class MCMCBase(FitterBase):
         """
         return None
 
-    def get_stats(self, linear=False, weights=None):
+    def get_log_stats(self, weights=None):
         """
         get mean and covariance.
 
@@ -1097,7 +1101,7 @@ class MCMCBase(FitterBase):
             # input weights are used, None or no
             pass
         
-        trials=self.get_trials()
+        trials=self.get_log_trials()
 
         pars,pars_cov = stats.calc_mcmc_stats(trials, weights=weights)
 
@@ -1136,40 +1140,36 @@ class MCMCBase(FitterBase):
         Calculate the mcmc stats and the "best fit" stats
         """
 
-        pars,pars_cov = self.get_stats(weights=weights)
+        pars,pars_cov = self.get_log_stats(weights=weights)
         pars_err=sqrt(diag(pars_cov))
         self._set_tau()
-        res={'model':self.model_name,
-             'flags':self.flags,
-             'pars':pars,
-             'pars_cov':pars_cov,
-             'pars_err':pars_err,
-             'tau':self.tau,
-             'arate':self.arate}
+        log_res={'model':self.model_name,
+                 'flags':self.flags,
+                 'pars':pars,
+                 'pars_cov':pars_cov,
+                 'pars_err':pars_err,
+                 'tau':self.tau,
+                 'arate':self.arate}
 
+        # note get_fits_stats expects pars in log space
         fit_stats = self._get_fit_stats(pars)
-        res.update(fit_stats)
+        log_res.update(fit_stats)
 
-        self._result=res
+        self._log_result=res
         
-        if self._use_logpars:
-            # can also do linear
 
-            pars_lin,pars_lin_cov = self.get_lin_stats(weights=weights)
-            pars_lin_err=sqrt(diag(pars_lin_cov))
+        pars_lin,pars_lin_cov = self.get_lin_stats(weights=weights)
+        pars_lin_err=sqrt(diag(pars_lin_cov))
 
-
-            lin_res={'model':self.model_name,
-                     'flags':self.flags,
-                     'pars':pars_lin,
-                     'pars_cov':pars_lin_cov,
-                     'pars_err':pars_lin_err,
-                     'tau':self.tau,
-                     'arate':self.arate}
-            lin_res.update(fit_stats)
-            self._lin_result=lin_res
-        else:
-            self._lin_result=self._result
+        lin_res={'model':self.model_name,
+                 'flags':self.flags,
+                 'pars':pars_lin,
+                 'pars_cov':pars_lin_cov,
+                 'pars_err':pars_lin_err,
+                 'tau':self.tau,
+                 'arate':self.arate}
+        lin_res.update(fit_stats)
+        self._lin_result=lin_res
 
     def _setup_sampler_and_data(self, pos):
         """
@@ -1331,12 +1331,12 @@ class MCMCSimple(MCMCBase):
         g1i=self.g1i
         g2i=self.g2i
 
-        self._result['g'] = self._result['pars'][g1i:g1i+2].copy()
-        self._result['g_cov'] = self._result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
+        self._log_result['g'] = self._log_result['pars'][g1i:g1i+2].copy()
+        self._log_result['g_cov'] = self._log_result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
 
-        if self._use_logpars:
-            self._lin_result['g'] = self._result['g']
-            self._lin_result['g_cov'] = self._result['g_cov']
+        self._lin_result['g'] = self._log_result['g']
+        self._lin_result['g_cov'] = self._log_result['g_cov']
+
 
     def _get_band_pars(self, pars_in, band):
         """
@@ -1344,16 +1344,12 @@ class MCMCSimple(MCMCBase):
         """
 
         pars=self._band_pars
-        if self._use_logpars:
-            _gmix.convert_simple_double_logpars(pars_in, pars, band)
-        else:
-            pars[0:5] = pars_in[0:5]
-            pars[5] = pars_in[5+band]
+        _gmix.convert_simple_double_logpars(pars_in, pars, band)
 
         return pars
 
-    def get_par_names(self):
-        if self._use_logpars:
+    def get_par_names(self, dolog=False):
+        if dolog:
             names=['cen1','cen2', 'g1','g2', r'$log_{10}(T)$']
             if self.nband == 1:
                 names += [r'$log_{10}(F)$']
@@ -1744,8 +1740,6 @@ class MHSimple(MCMCSimple):
         """
         FitterBase.__init__(self, obs, model, **keys)
 
-        self._use_logpars=keys.get('use_logpars',True)
-
         # where g1,g2 are located in a pars array
         self.g1i = 2
         self.g2i = 3
@@ -1805,7 +1799,7 @@ class MHSimple(MCMCSimple):
 
         self.arate = sampler.get_arate()
 
-        self._trials=trials
+        self._log_trials=trials
 
         return self.pos
 
