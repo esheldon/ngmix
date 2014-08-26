@@ -283,7 +283,7 @@ class FitterBase(object):
                 for obs,gm in zip(obs_list, gmix_list):
                     
                     if self.nu > 2.0:
-                        res = gm.get_loglike_robust(obs, nu, get_s2nsums=True)
+                        res = gm.get_loglike_robust(obs, self.nu, get_s2nsums=True)
                     else:
                         res = gm.get_loglike(obs, get_s2nsums=True)
 

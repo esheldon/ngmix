@@ -1631,7 +1631,7 @@ class TwoSidedErf(object):
             if val <= 0.0:
                 return 0.0
 
-        return self._get_prob_nocheck(val)
+        return self._get_prob_nocheck_scalar(val)
 
     def get_lnprob_scalar(self, val):
         """
@@ -1656,9 +1656,9 @@ class TwoSidedErf(object):
             pvals=numpy.zeros(vals.size)
             w,=numpy.where(vals > 0.0)
             if w.size > 0:
-                pvals[w] = self._get_prob_nocheck(vals[w])
+                pvals[w] = self._get_prob_nocheck_array(vals[w])
         else:
-            pvals=self._get_prob_nocheck(vals)
+            pvals=self._get_prob_nocheck_array(vals)
         
         return pvals
 
@@ -1677,14 +1677,37 @@ class TwoSidedErf(object):
         return lnp
 
 
-    def _get_prob_nocheck(self, val):
+    def _get_prob_nocheck_scalar(self, val):
         """
-        works for both array and scalar
+        works for scalars
         """
-        from scipy.special import erf
+        from ._gmix import erf
 
         p1 = 0.5*erf((self.maxval-val)/self.width_at_max)
         p2 = 0.5*erf((val-self.minval)/self.width_at_min)
+
+        return p1+p2
+
+
+
+    def _get_prob_nocheck_array(self, vals):
+        """
+        works for arrays
+        """
+        from ._gmix import erf_array
+
+        arg1=zeros(vals.size)
+        arg2=zeros(vals.size)
+        p1=zeros(vals.size)
+        p2=zeros(vals.size)
+
+        arg1 = (self.maxval-vals)/self.width_at_max
+        arg2 = (vals-self.minval)/self.width_at_min
+        erf_array(arg1, p1)
+        erf_array(arg2, p2)
+
+        p1 *= 0.5
+        p2 *= 0.5
 
         return p1+p2
 
