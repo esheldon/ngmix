@@ -1725,8 +1725,6 @@ class TwoSidedErf(object):
         xmin=self.minval-5.0*self.width_at_min
         xmax=self.maxval+5.0*self.width_at_max
 
-        print(xmin,xmax)
-
         rvals=zeros(nrand)
 
         ngood=0
