@@ -1711,6 +1711,40 @@ class TwoSidedErf(object):
 
         return p1+p2
 
+    def sample(self, nrand=None):
+        """
+        draw random samples; not perfect, only goes from
+        -5,5 sigma past each side
+        """
+        if nrand is None:
+            nrand=1
+            is_scalar=True
+        else:
+            is_scalar=False
+        
+        xmin=self.minval-5.0*self.width_at_min
+        xmax=self.maxval+5.0*self.width_at_max
+
+        rvals=zeros(nrand)
+
+        ngood=0
+        nleft=nrand
+        while ngood < nrand:
+            tmp=numpy.random.uniform(low=xmin, high=xmax, size=nleft)
+
+            pvals=self.get_prob_array(tmp)
+            rone=numpy.random.uniform(size=nleft)
+
+            w,=where(pvals < rone)
+            if w.size > 0:
+                rvals[ngood:ngood+w.size] = tmp[w]
+                ngood += w.size
+                nleft -= w.size
+        
+        if is_scalar:
+            rvals=rvals[0]
+
+        return rvals
 
 class GPriorGreat3Exp(GPriorBase):
     """
