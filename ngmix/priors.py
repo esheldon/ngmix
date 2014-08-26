@@ -1739,7 +1739,7 @@ class TwoSidedErf(object):
 
             w,=where(pvals < randy)
             if w.size > 0:
-                rvals[ngood:ngood+w.size] = tmp[w]
+                rvals[ngood:ngood+w.size] = randx[w]
                 ngood += w.size
                 nleft -= w.size
         
