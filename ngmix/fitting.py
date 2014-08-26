@@ -261,6 +261,8 @@ class FitterBase(object):
 
     def calc_lnprob(self, pars, get_s2nsums=False, get_priors=False):
         """
+        pars here are in log space.  immediately convert to linear space.
+
         This is all we use for mcmc approaches, but also used generally for the
         "_get_fit_stats" method.  For the max likelihood fitter we also have a
         _get_ydiff method
@@ -270,11 +272,13 @@ class FitterBase(object):
         s2n_denom=0.0
         try:
 
+            lin_pars = self._get_lin_pars(pars)
+
             # these are the log pars (if working in log space)
-            ln_priors = self._get_priors(pars)
+            ln_priors = self._get_priors(lin_pars)
             ln_prob = 0.0
 
-            self._fill_gmix_all(pars)
+            self._fill_gmix_all(lin_pars)
             for band in xrange(self.nband):
 
                 obs_list=self.obs[band]
@@ -380,6 +384,8 @@ class FitterBase(object):
 
     def _fill_gmix_all(self, pars):
         """
+        input pars are in linear space
+
         Fill the list of lists of gmix objects for the given parameters
         """
 
@@ -447,9 +453,7 @@ class FitterBase(object):
         biggles.configure('screen','width', width)
         biggles.configure('screen','height', height)
 
-        # need to be in log space, since fill wants them in log space
-
-        res=self.get_log_result()
+        res=self.get_lin_result()
         try:
             self._fill_gmix_all(res['pars'])
         except GMixRangeError as gerror:
@@ -583,12 +587,12 @@ class TemplateFluxFitter(FitterBase):
             flags=BAD_VAR
             flux_err=9999.0
 
-        self._result={'model':self.model_name,
-                      'flags':flags,
-                      'chi2per':chi2per,
-                      'dof':dof,
-                      'flux':flux,
-                      'flux_err':flux_err}
+        self._lin_result={'model':self.model_name,
+                          'flags':flags,
+                          'chi2per':chi2per,
+                          'dof':dof,
+                          'flux':flux,
+                          'flux_err':flux_err}
 
     def _set_obs(self, obs_in):
         """
@@ -764,7 +768,7 @@ class LMSimple(FitterBase):
         Get linear pars for the specified band
         """
 
-        raise RuntimeError("deal with not log pars")
+        raise RuntimeError("adapt to new system")
         pars=self._band_pars
         _gmix.convert_simple_double_logpars(pars_in, pars, band)
 
@@ -1013,10 +1017,10 @@ class MCMCBase(FitterBase):
         Get the set of trials with T and F in log(1+x) space
         """
 
-        if not hasattr(self,'_log_trials'):
+        if not hasattr(self,'_trials'):
             raise RuntimeError("you need to run the mcmc chain first")
 
-        return self._log_trials
+        return self._trials
 
     def get_lin_trials(self):
         """
@@ -1069,7 +1073,7 @@ class MCMCBase(FitterBase):
         arates = sampler.acceptance_fraction
         self.arate = arates.mean()
 
-        self._log_trials  = sampler.flatchain
+        self._trials  = sampler.flatchain
 
         return self.pos
 
@@ -1313,6 +1317,7 @@ class MCMCSimple(MCMCBase):
         self.g1i = 2
         self.g2i = 3
 
+        self._lin_pars=zeros(5+self.nband)
         self._band_pars=zeros(6)
 
     def calc_result(self, weights=None):
@@ -1332,16 +1337,23 @@ class MCMCSimple(MCMCBase):
         self._lin_result['g_cov'] = self._log_result['g_cov']
 
 
+    def _get_lin_pars(self, pars_in):
+        """
+        get linear pars
+        """
+
+        pars=self._lin_pars
+        _gmix.convert_simple_double_logpars(pars_in, pars)
+        return pars
+
     def _get_band_pars(self, pars_in, band):
         """
         Get linear pars for the specified band
         """
 
         pars=self._band_pars
-        _gmix.convert_simple_double_logpars(pars_in, pars, band)
-        #print_pars(pars_in,front="pars in:")
-        #print_pars(pars,   front="pars:   ")
-
+        pars[0:5] = pars_in[0:5]
+        pars[5] = pars_in[5+band]
         return pars
 
     def get_par_names(self, dolog=False):
@@ -1795,7 +1807,7 @@ class MHSimple(MCMCSimple):
 
         self.arate = sampler.get_arate()
 
-        self._log_trials=trials
+        self._trials=trials
 
         return self.pos
 
@@ -1946,7 +1958,7 @@ class MCMCSersic(MCMCSimple):
         arates = sampler.acceptance_fraction
         self.arate = arates.mean()
 
-        self._log_trials=trials
+        self._trials=trials
 
         return self.pos
 
@@ -3451,7 +3463,10 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
 
     psf_obs.set_gmix(psf_fit)
 
-    prior=joint_prior.make_uniform_simple_sep([0.0,0.0],[0.1,0.1],[-1.5,3.5],[-1.5,4.5])
+    prior=joint_prior.make_uniform_simple_sep([0.0,0.0],
+                                              [0.1,0.1],
+                                              [-0.97,3500.],
+                                              [-0.97,1.0e9])
     #prior=None
     obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
     mc_obj=MCMCSimple(obs, model, nwalkers=nwalkers, prior=prior)

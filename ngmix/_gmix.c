@@ -1418,27 +1418,28 @@ PyObject * PyGMix_convert_simple_double_logpars(PyObject* self, PyObject* args) 
 
     PyObject* logpars_obj=NULL;
     PyObject* pars_obj=NULL;
-    int band=0;
+    int i, npars;
     double *logpars=NULL, *pars=NULL;
 
     // weight object is currently ignored
-    if (!PyArg_ParseTuple(args, (char*)"OOi", 
+    if (!PyArg_ParseTuple(args, (char*)"OO", 
                           &logpars_obj,
-                          &pars_obj,
-                          &band)) {
+                          &pars_obj)) {
         return NULL;
     }
 
     logpars=PyArray_DATA(logpars_obj);
     pars=PyArray_DATA(pars_obj);
 
-    pars[0] = logpars[0];
-    pars[1] = logpars[1];
-    pars[2] = logpars[2];
-    pars[3] = logpars[3];
-    pars[4] = pow(10.0, logpars[4])      - 1.0;
-    pars[5] = pow(10.0, logpars[5+band]) - 1.0;
+    npars=PyArray_SIZE(logpars_obj);
 
+    for (i=0; i<npars; i++) {
+        if (i < 4) {
+            pars[i] = logpars[i];
+        } else {
+            pars[i] = pow(10.0, logpars[i]) - 1.0;
+        }
+    }
     Py_RETURN_NONE;
 }
 
