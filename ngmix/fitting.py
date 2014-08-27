@@ -259,7 +259,7 @@ class FitterBase(object):
         return self.eff_npix
 
 
-    def calc_lnprob(self, pars, get_s2nsums=False, get_priors=False):
+    def calc_lnprob(self, log_pars, get_s2nsums=False, get_priors=False):
         """
         pars here are in log space.  immediately convert to linear space.
 
@@ -272,7 +272,7 @@ class FitterBase(object):
         s2n_denom=0.0
         try:
 
-            lin_pars = self._get_lin_pars(pars)
+            lin_pars = self._get_lin_pars(log_pars)
 
             # these are the log pars (if working in log space)
             ln_priors = self._get_priors(lin_pars)
@@ -315,7 +315,7 @@ class FitterBase(object):
         """
         Get some fit statistics for the input pars.
 
-        pars must be in the default scaling!
+        pars must be in the log scaling!
         """
         npars=self.npars
 
@@ -345,6 +345,8 @@ class FitterBase(object):
 
     def _init_gmix_all(self, pars):
         """
+        input pars are in linear space
+
         initialize the list of lists of gaussian mixtures
         """
         psf=self.obs[0][0].psf
@@ -688,6 +690,7 @@ class LMSimple(FitterBase):
 
         self.fdiff_size=self.totpix + n_prior_pars
 
+        self._lin_pars=zeros(5+self.nband)
         self._band_pars=zeros(6)
 
     def get_lin_result(self):
@@ -696,21 +699,25 @@ class LMSimple(FitterBase):
         """
         if not hasattr(self, '_lin_result'):
             # this will raise an exception of there is not result yet
-            res=self.get_result()
+            res=self.get_log_result()
 
             lin_res={}
             lin_res.update(res)
             if res['flags']==0:
+
+                pars_log=res['pars']
                 perr_log=res['pars_err']
 
-                pars=res['pars'].copy()
-                perr=perr_log.copy()
+                pars_lin=pars_log.copy()
+                perr_lin=perr_log.copy()
 
-                pars[4:4+2]=10.0**pars[4:4+2]
-                perr[4:4+2] = pars[4:4+2]*perr_log[4:4+2]*log(10)
+                pars_lin[4:] = 10.0**pars_log[4:] - 1
 
-                lin_res['pars'] = pars
-                lin_res['pars_err'] = perr
+                # note this is not 10^y-1, just 10^y
+                perr_lin[4:] = 10.0**pars_log[4:] * perr_log[4:] * log(10)
+
+                lin_res['pars'] = pars_lin
+                lin_res['pars_err'] = perr_lin
             else:
                 lin_res['pars']=res['pars']*0 + PDEF
                 lin_res['pars_err']=res['pars']*0 + CDEF
@@ -724,14 +731,12 @@ class LMSimple(FitterBase):
         Run leastsq and set the result
         """
 
-        guess=array(guess, ndmin=1, copy=False)
+        lin_pos0, log_pos0 =self._prep_position(guess)
 
-        #if not hasattr(self,'_gmix_all0'):
-        #    self._setup_data(guess)
-        self._setup_data(guess)
+        self._setup_data(lin_pos0)
 
         dof=self.get_dof()
-        result = run_leastsq(self._calc_fdiff, guess, dof, **self.lm_pars)
+        result = run_leastsq(self._calc_fdiff, log_pos0, dof, **self.lm_pars)
 
         if result['flags']==0:
             result['g'] = result['pars'][2:2+2].copy()
@@ -739,7 +744,25 @@ class LMSimple(FitterBase):
             stat_dict=self._get_fit_stats(result['pars'])
             result.update(stat_dict)
 
-        self._result=result
+        self._log_result=result
+
+    def _prep_position(self, input_position_linear):
+        """
+        make sure position doesn't have T or F values less than -1
+        """
+
+        lin_pos=array(input_position_linear,ndmin=1,dtype='f8')
+
+        w,=where(lin_pos[4:] < -0.9999)
+        if w.size > 0:
+            print("%d positions had T,F_i < -1, resetting" % w[0].size)
+            lin_pos[4+w] = 0.1*srandu(w.size)
+
+        log_pos = lin_pos.copy()
+        log10(1.0 + log_pos[4:], log_pos[4:])
+        return lin_pos, log_pos
+
+
 
     def _setup_data(self, guess):
         """
@@ -763,19 +786,35 @@ class LMSimple(FitterBase):
         except ZeroDivisionError:
             raise GMixRangeError("got zero division")
 
+    def _get_lin_pars(self, pars_in):
+        """
+        get linear pars
+        """
+
+        pars=self._lin_pars
+        _gmix.convert_simple_double_logpars(pars_in, pars)
+        return pars
+
     def _get_band_pars(self, pars_in, band):
         """
         Get linear pars for the specified band
         """
 
-        raise RuntimeError("adapt to new system")
         pars=self._band_pars
-        _gmix.convert_simple_double_logpars(pars_in, pars, band)
-
+        pars[0:5] = pars_in[0:5]
+        pars[5] = pars_in[5+band]
         return pars
 
-    def _calc_fdiff(self, pars, get_s2nsums=False):
+        #raise RuntimeError("adapt to new system")
+        #pars=self._band_pars
+        #_gmix.convert_simple_double_logpars(pars_in, pars, band)
+        #return pars
+
+    def _calc_fdiff(self, log_pars, get_s2nsums=False):
         """
+
+        pars are in log space, immediately converted to linear
+
         vector with (model-data)/error.
 
         The npars elements contain -ln(prior)
@@ -789,9 +828,11 @@ class LMSimple(FitterBase):
 
         try:
 
-            self._fill_gmix_all(pars)
+            lin_pars = self._get_lin_pars(log_pars)
 
-            start=self._fill_priors(pars, fdiff)
+            self._fill_gmix_all(lin_pars)
+
+            start=self._fill_priors(lin_pars, fdiff)
 
             for band in xrange(self.nband):
 
@@ -996,9 +1037,8 @@ def _test_cov(pcov):
 
 class MCMCBase(FitterBase):
     """
-    A base class for MCMC runs.  Inherits from overall fitter base class, which provides
-    the get_result() method.
-
+    A base class for MCMC runs using emcee.
+    
     Extra user-facing methods are run_mcmc(), calc_result(), get_trials(), get_sampler(), make_plots()
     """
     def __init__(self, obs, model, **keys):
@@ -1028,17 +1068,7 @@ class MCMCBase(FitterBase):
         """
 
         if not hasattr(self,"_lin_trials"):
-            logt=self.get_log_trials()
-            lin_trials=logt.copy()
-
-            T=10.0**logt[:,4]
-            T -= 1
-            F=10.0**logt[:,5:]
-            F -= 1
-
-            lin_trials[:,4] = T
-            lin_trials[:,5:] = F
-            self._lin_trials=lin_trials
+            raise RuntimeError("you need to run the mcmc chain first")
 
         return self._lin_trials
 
@@ -1051,31 +1081,69 @@ class MCMCBase(FitterBase):
         """
         return self.sampler
 
-    def run_mcmc(self, pos, nstep):
+    def run_mcmc(self, input_position_linear, nstep):
         """
-        user can run steps
+        run steps, starting at the input position(s)
+
+        input and output pos are in linear space
         """
 
+        lin_pos0,log_pos0=self._prep_position(input_position_linear)
+
         if not hasattr(self,'sampler'):
-            self._setup_sampler_and_data(pos)
+            self._setup_sampler_and_data(lin_pos0)
 
         sampler=self.sampler
         sampler.reset()
-        self.pos, prob, state = sampler.run_mcmc(pos, nstep)
+        log_pos, prob, state = sampler.run_mcmc(log_pos0, nstep)
+
+        trials  = sampler.flatchain
+        self._trials=trials
+        self._lin_trials=self._convert_trials_to_lin(trials)
 
         lnprobs = sampler.lnprobability.reshape(self.nwalkers*nstep)
         w=lnprobs.argmax()
         bp=lnprobs[w]
         if self.best_lnprob is None or bp > self.best_lnprob:
             self.best_lnprob=bp
-            self.best_pars=sampler.flatchain[w,:]
+            self.best_pars=self._lin_trials[w,:]
 
         arates = sampler.acceptance_fraction
         self.arate = arates.mean()
 
-        self._trials  = sampler.flatchain
+        lin_pos=log_pos.copy()
+        lin_pos[:,4:] = 10.0**lin_pos[:,4:] - 1.
+        return lin_pos
 
-        return self.pos
+    def _prep_position(self, input_position_linear):
+        """
+        make sure position doesn't have T or F values less than -1
+
+        and get log pars as well
+        """
+
+        lin_pos=array(input_position_linear,dtype='f8')
+
+        w=where(lin_pos[:,4:] < -0.9999)
+        if w[0].size > 0:
+            print("%d positions had T,F_i < -1, resetting" % w[0].size)
+            lin_pos[w[0], 4+w[1]] = 0.1*srandu(w[0].size)
+
+        log_pos = lin_pos.copy()
+        log10(1.0 + log_pos[:,4:], log_pos[:,4:])
+
+        return lin_pos, log_pos
+
+    def _convert_trials_to_lin(self, logt):
+        lin_trials=logt.copy()
+
+        lpars  = 10.0**logt[:,4:]
+        lpars -= 1
+
+        lin_trials[:,4:] = lpars
+
+        return lin_trials
+
 
     def get_weights(self):
         """
@@ -1172,11 +1240,12 @@ class MCMCBase(FitterBase):
     def _setup_sampler_and_data(self, pos):
         """
         try very hard to initialize the mixtures
+
+        we work in T,F as log(1+x) so watch for low values
         """
 
         self.flags=0
         self.tau=0.0
-        self.pos=pos
 
         npars=pos.shape[1]
         mess="pos has npars=%d, expected %d" % (npars,self.npars)
@@ -1188,7 +1257,7 @@ class MCMCBase(FitterBase):
         ok=False
         for i in xrange(self.nwalkers):
             try:
-                self._init_gmix_all(self.pos[i,:])
+                self._init_gmix_all(pos[i,:])
                 ok=True
                 break
             except GMixRangeError as gerror:
@@ -1355,6 +1424,7 @@ class MCMCSimple(MCMCBase):
         pars[0:5] = pars_in[0:5]
         pars[5] = pars_in[5+band]
         return pars
+
 
     def get_par_names(self, dolog=False):
         if dolog:
@@ -1745,6 +1815,8 @@ class MHSimple(MCMCSimple):
     def __init__(self, obs, model, step_sizes, **keys):
         """
         not inheriting init from MCMCSsimple or MCMCbase
+
+        step sizes in linear space
         """
         FitterBase.__init__(self, obs, model, **keys)
 
@@ -1752,6 +1824,7 @@ class MHSimple(MCMCSimple):
         self.g1i = 2
         self.g2i = 3
 
+        self._lin_pars=zeros(5+self.nband)
         self._band_pars=zeros(6)
 
         step_sizes=numpy.asanyarray(step_sizes, dtype='f8')
@@ -1759,12 +1832,20 @@ class MHSimple(MCMCSimple):
         mess="step_sizes has size=%d, expected %d" % (ns,self.npars)
         assert (ns == self.npars),mess
 
-        self.step_sizes=step_sizes
+        self.step_sizes_lin=step_sizes
 
         seed=keys.get('seed',None)
         state=keys.get('random_state',None)
         self.set_random_state(seed=seed, state=state)
 
+    def _set_step_sizes_log(self, pars):
+        """
+        step sizes in log space depend on step sizes in linear space and the nominal
+        value in linear space..  ugh..
+        """
+        self.step_sizes_log=self.step_sizes_lin.copy()
+
+        self.step_sizes_log[4:] = self.step_sizes_lin[4:]/(1+pars[4:])/log(10)
 
     def set_random_state(self, seed=None, state=None):
         """
@@ -1784,42 +1865,69 @@ class MHSimple(MCMCSimple):
         else:
             self.random_state=numpy.random.RandomState(seed=seed)
 
-    def run_mcmc(self, pos, nstep):
+    def run_mcmc(self, input_position_linear, nstep):
         """
-        user can run steps
+        run steps, starting at the input position
         """
 
+        lin_pos0, log_pos0 =self._prep_position(input_position_linear)
+        print(lin_pos0)
+        print(log_pos0)
+
+        self._set_step_sizes_log(lin_pos0)
+
         if not hasattr(self,'sampler'):
-            self._setup_sampler_and_data(pos)
+            self._setup_sampler_and_data(lin_pos0)
 
         sampler=self.sampler
         sampler.reset()
-        self.pos = sampler.run_mcmc(pos, nstep)
+
+        log_pos = sampler.run_mcmc(log_pos0, nstep)
 
         trials = sampler.get_trials()
         lnprobs = sampler.get_lnprob()
+
+        self._trials=trials
+        self._lin_trials=self._convert_trials_to_lin(trials)
 
         w=lnprobs.argmax()
         bp=lnprobs[w]
         if self.best_lnprob is None or bp > self.best_lnprob:
             self.best_lnprob=bp
-            self.best_pars=trials[w,:]
+            self.best_pars=self._lin_trials[w,:]
 
         self.arate = sampler.get_arate()
 
-        self._trials=trials
+        lin_pos=log_pos.copy()
+        lin_pos[4:] = 10.0**lin_pos[4:] - 1.
+        return lin_pos
 
-        return self.pos
+    def _prep_position(self, input_position_linear):
+        """
+        make sure position doesn't have T or F values less than -1
+        """
 
+        lin_pos=array(input_position_linear,dtype='f8')
+
+        w,=where(lin_pos[4:] < -0.9999)
+        if w.size > 0:
+            print("%d positions had T,F_i < -1, resetting" % w[0].size)
+            lin_pos[4+w] = 0.1*srandu(w.size)
+
+        log_pos = lin_pos.copy()
+        log10(1.0 + log_pos[4:], log_pos[4:])
+        return lin_pos, log_pos
 
     def take_step(self, pos):
         """
         Take gaussian steps
         """
-        return pos+self.step_sizes*self.random_state.normal(size=self.npars)
+        return pos+self.step_sizes_log*self.random_state.normal(size=self.npars)
 
     def _setup_sampler_and_data(self, pos):
         """
+        pos in linear space
+
         Try to initialize the gaussian mixtures. If failure, most
         probablly a GMixRangeError will be raised
         """
@@ -1837,6 +1945,7 @@ class MHSimple(MCMCSimple):
         self.sampler = MH(self.calc_lnprob, self.take_step,
                           random_state=self.random_state)
         self.best_lnprob=None
+
 
     def _set_tau(self):
         # we don't calculate this currently
@@ -3379,7 +3488,7 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
 
     nwalkers=80
     burnin=800
-    nstep=800
+    nstep=200
 
 
     #
@@ -3478,10 +3587,8 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
     # intentionally bad guesses
     guess[:,2] = 0.1*srandu(nwalkers)
     guess[:,3] = 0.1*srandu(nwalkers)
-    #guess[:,4] = log10(1 + 0.5*Tsky_obj*(1.0 + 0.1*srandu(nwalkers)) )
-    #guess[:,5] = log10(1 + 2.0*counts_sky_obj*(1.0 + 0.1*srandu(nwalkers)) )
-    guess[:,4] = log10(1 + Tsky_obj*(1.0 + 0.1*srandu(nwalkers)) )
-    guess[:,5] = log10(1 + counts_sky_obj*(1.0 + 0.1*srandu(nwalkers)) )
+    guess[:,4] = Tsky_obj*(1.0 + 0.1*srandu(nwalkers))
+    guess[:,5] = counts_sky_obj*(1.0 + 0.1*srandu(nwalkers))
 
     pos=mc_obj.run_mcmc(guess, burnin)
     pos=mc_obj.run_mcmc(pos, nstep)
@@ -3526,12 +3633,10 @@ def get_mh_prior(T, F):
     g_prior_flat = priors.ZDisk2D(1.0)
 
     Twidth=0.3*T
-    logTmean, logTsigma=priors.lognorm_convert(T, Twidth, base=10.0)
-    T_prior = priors.Normal(logTmean, logTsigma)
+    T_prior = priors.LogNormal(T, Twidth)
 
     Fwidth=0.3*T
-    logFmean, logFsigma=priors.lognorm_convert(F, Fwidth, base=10.0)
-    F_prior = priors.Normal(logFmean, logFsigma)
+    F_prior = priors.LogNormal(F, Fwidth)
 
     prior = joint_prior.PriorSimpleSep(cen_prior, g_prior, T_prior, F_prior)
 
@@ -3640,25 +3745,20 @@ def test_model_mh(model,
 
     lm_fitter=LMSimple(obs, model, lm_pars=lm_pars, prior=prior)
 
-    # must be log!
-    #guess=pars_obj.copy()
-    #guess[4]=log10(guess[4])
-    #guess[5]=log10(guess[5])
     guess=prior.sample()
+    print_pars(guess, front="lm guess:")
 
     lm_fitter.run_lm(guess)
-    lm_res_log=lm_fitter.get_result()
-    lm_res_lin=lm_fitter.get_lin_result()
+    lm_res=lm_fitter.get_lin_result()
 
-    mh_guess=lm_res_log['pars'].copy()
-    step_sizes = 0.5*lm_res_log['pars_err'].copy()
+    mh_guess=lm_res['pars'].copy()
+    step_sizes = 0.5*lm_res['pars_err'].copy()
 
-    print_pars(lm_res_log['pars'], front="log lm result:")
-    print_pars(lm_res_log['pars_err'], front="log lm err:   ")
-    print_pars(lm_res_lin['pars'], front="lm result:")
-    print_pars(lm_res_lin['pars_err'], front="lm err:   ")
+    print_pars(lm_res['pars'], front="lm result:")
+    print_pars(lm_res['pars_err'], front="lm err:   ")
     print()
 
+    print_pars(step_sizes, front="step sizes:")
     if temp is not None:
         print("doing temperature:",temp)
         step_sizes *= sqrt(temp)
@@ -3670,18 +3770,14 @@ def test_model_mh(model,
     pos=mh_fitter.run_mcmc(mh_guess, burnin)
     pos=mh_fitter.run_mcmc(pos, nstep)
     mh_fitter.calc_result()
-    mh_fitter.calc_lin_result()
 
     res_obj=mh_fitter.get_result()
-    res_obj_lin=mh_fitter.get_lin_result()
 
-    print_pars(res_obj['pars'],     front='log pars_obj: ')
-    print_pars(res_obj['pars_err'], front='log perr_obj: ')
     print_pars(pars_obj,            front='true pars:')
-    print_pars(res_obj_lin['pars'],     front='pars_obj: ')
-    print_pars(res_obj_lin['pars_err'], front='perr_obj: ')
+    print_pars(res_obj['pars'],     front='pars_obj: ')
+    print_pars(res_obj['pars_err'], front='perr_obj: ')
 
-    print('T: %.4g +/- %.4g' % (res_obj_lin['pars'][4], res_obj_lin['pars_err'][4]))
+    print('T: %.4g +/- %.4g' % (res_obj['pars'][4], res_obj['pars_err'][4]))
     print("arate:",res_obj['arate'],"s2n:",res_obj['s2n_w'],"tau:",res_obj['tau'])
 
     gmfit0=mh_fitter.get_gmix()

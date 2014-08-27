@@ -1408,10 +1408,8 @@ static PyObject * PyGMix_em_run(PyObject* self, PyObject* args) {
 }
 
 /*
-
-   must be at least 6 pars.
-
-   pars 4 and 5 are converted
+   convert log pars to linear pars
+   pars 4: are converted
 */
 static 
 PyObject * PyGMix_convert_simple_double_logpars(PyObject* self, PyObject* args) {
