@@ -224,6 +224,7 @@ class FitterBase(object):
         _get_ydiff method
         """
 
+        nsub=self.nsub
         s2n_numer=0.0
         s2n_denom=0.0
         try:
@@ -241,9 +242,9 @@ class FitterBase(object):
                 for obs,gm in zip(obs_list, gmix_list):
                     
                     if self.nu > 2.0:
-                        res = gm.get_loglike_robust(obs, self.nu, get_s2nsums=True)
+                        res = gm.get_loglike_robust(obs, self.nu, nsub=nsub, get_s2nsums=True)
                     else:
-                        res = gm.get_loglike(obs, get_s2nsums=True)
+                        res = gm.get_loglike(obs, nsub=nsub, get_s2nsums=True)
 
                     ln_prob += res[0]
                     s2n_numer += res[1]
@@ -441,7 +442,7 @@ class FitterBase(object):
                 wt=obs.weight
                 j=obs.jacobian
 
-                model=gm.make_image(im.shape,jacobian=j)
+                model=gm.make_image(im.shape,jacobian=j, nsub=self.nsub)
 
                 showim = im*wt
                 showmod = model*wt
@@ -696,11 +697,6 @@ class LMSimple(FitterBase):
         pars[5] = pars_in[5+band]
         return pars
 
-        #raise RuntimeError("adapt to new system")
-        #pars=self._band_pars
-        #_gmix.convert_simple_double_logpars(pars_in, pars, band)
-        #return pars
-
     def _calc_fdiff(self, pars, get_s2nsums=False):
         """
 
@@ -783,7 +779,7 @@ class LMSersic(LMSimple):
         self.fdiff_size=self.totpix + n_prior_pars
 
     def _get_band_pars(self, pars, band):
-        raise RuntimeError("deal with logpars")
+        raise RuntimeError("adapt to new style")
         if band > 0:
             raise ValueError("support more than one band")
         return pars.copy()
@@ -1937,7 +1933,7 @@ class MCMCSersicJointHybrid(MCMCSersic):
         """
         Extract pars for the specified band and convert to linear
         """
-        raise RuntimeError("deal with non logpars")
+        raise RuntimeError("adapt to new style")
         if band != 0:
             raise ValueError("deal with more than one band")
         linpars=pars.copy()
@@ -2032,6 +2028,7 @@ class MCMCSersicJointHybrid(MCMCSersic):
         Get a gaussian mixture at the "best" parameter set, which
         definition depends on the sub-class
         """
+        raise RuntimeError("adapt to new style")
         logpars=self._result['pars']
         pars=logpars.copy()
         pars[4] = 10.0**logpars[4]
@@ -2288,7 +2285,7 @@ class MCMCSimpleFixed(MCMCSimple):
         return lnp
 
     def _get_band_pars(self, pars, band):
-        raise RuntimeError("deal with logpars")
+        raise RuntimeError("adapt to new style")
         bpars= self.fixed_pars[ [0,1,2,3,4,5+band] ]
         bpars[2:2+2] = pars
         return bpars
@@ -2362,7 +2359,7 @@ class MCMCBDC(MCMCSimple):
         pars are 
             [c1,c2,g1,g2,Tb,Td, Fb1,Fb2,Fb3, ..., Fd1,Fd2,Fd3 ...]
         """
-        raise RuntimeError("deal with logpars")
+        raise RuntimeError("adapt to new style")
         Fbstart=6
         Fdstart=6+self.nband
         return pars[ [0,1,2,3,4,5, Fbstart+band, Fdstart+band] ]
@@ -2450,7 +2447,7 @@ class MCMCBDF(MCMCSimple):
         pars are 
             [c1,c2,g1,g2,T, Fb1,Fb2,Fb3, ..., Fd1,Fd2,Fd3 ...]
         """
-        raise RuntimeError("deal with logpars")
+        raise RuntimeError("adapt to new style")
         Fbstart=5
         Fdstart=5+self.nband
         return pars[ [0,1,2,3,4, Fbstart+band, Fdstart+band] ].copy()
@@ -2660,7 +2657,7 @@ class MCMCSimpleJointHybrid(MCMCSimple):
         Extract pars for the specified band and convert to linear
         """
         from .shape import eta1eta2_to_g1g2
-        raise RuntimeError("deal with non logpars")
+        raise RuntimeError("adapt to new style")
         linpars=pars[ [0,1,2,3,4,5+band] ].copy()
 
         linpars[4] = 10.0**linpars[4]
@@ -2752,6 +2749,7 @@ class MCMCSimpleJointHybrid(MCMCSimple):
         Get a gaussian mixture at the "best" parameter set, which
         definition depends on the sub-class
         """
+        raise RuntimeError("adapt to new style")
         logpars=self._result['pars']
         pars=logpars.copy()
         pars[4] = 10.0**logpars[4]
@@ -2795,7 +2793,7 @@ class MCMCBDFJointHybrid(MCMCSimpleJointHybrid):
         """
         Extract pars for the specified band and convert to linear
         """
-        raise RuntimeError("deal with non logpars")
+        raise RuntimeError("adapt to new style")
         Fbstart=5
         Fdstart=5+self.nband
 
@@ -2812,6 +2810,7 @@ class MCMCBDFJointHybrid(MCMCSimpleJointHybrid):
         Get a gaussian mixture at the "best" parameter set, which
         definition depends on the sub-class
         """
+        raise RuntimeError("adapt to new style")
         logpars=self._result['pars']
         pars=logpars.copy()
         pars[4] = 10.0**logpars[4]
@@ -2954,7 +2953,7 @@ class MCMCSimpleJointLogPars(MCMCSimple):
     Simple with a joint prior on [g1,g2,T,Fb,Fd]
     """
     def __init__(self, image, weight, jacobian, model, **keys):
-        raise RuntimeError("adapt to new system")
+        raise RuntimeError("adapt to new style")
         super(MCMCSimpleJointLogPars,self).__init__(image, weight, jacobian, model, **keys)
 
         if self.full_guess is None:
@@ -3104,149 +3103,70 @@ def _get_as_list(arg, argname, allow_none=False):
         return [arg]
 
 
-
-def test_gauss_psf_graph(counts=100.0, noise=0.1, nimages=10, n=10, groups=True, jfac=0.27):
-    import pylab
-    import cProfile
-
-    import pycallgraph
-    from pycallgraph import PyCallGraph
-    from pycallgraph.output import GraphvizOutput
-
-    graphviz = GraphvizOutput()
-    output='profile-nimages%02d.png' % nimages
-    print('profile image:',output)
-    graphviz.output_file = output
-    config=pycallgraph.Config(groups=groups)
-
-    dims=[25,25]
-    cen=[dims[0]/2., dims[1]/2.]
-
-    g1=0.1
-    g2=0.05
-    T=8.0
-
-    pars = [cen[0],cen[1], g1, g2, T, counts]
-    gm=gmix.GMixModel(pars, "gauss")
-
-    im=gm.make_image(dims)
-
-    im[:,:] += noise*numpy.random.randn(im.size).reshape(im.shape)
-    wt=zeros(im.shape) + 1./noise**2
-    j=Jacobian(cen[0], cen[1], jfac, 0.0, 0.0, jfac)
-
-    imlist=[im]*nimages
-    wtlist=[wt]*nimages
-    jlist=[j]*nimages
-
-    # one run to warm up the jit compiler
-    mc=MCMCGaussPSF(im, wt, j)
-    mc.go()
-
-    with PyCallGraph(config=config, output=graphviz):
-        for i in xrange(n):
-            mc=MCMCGaussPSF(imlist, wtlist, jlist)
-            mc.go()
-
-            res=mc.get_result()
-
-            print(res['g'])
-
-def test_gauss_psf(counts=100.0, noise=0.001, n=10, nimages=10, jfac=0.27):
+def test_mcmc_psf(model="gauss",
+                  g1=0.0,
+                  g2=0.0,
+                  T=1.10, # about Tpix=4
+                  flux=100.0,
+                  noise=0.1,
+                  jfac=1.0,
+                  nsub_render=1,
+                  nsub_fit=1):
     """
     timing tests
     """
     import pylab
     import time
 
+    nwalkers=80
+    burnin=400
+    nstep=400
 
-    dims=[25,25]
-    cen=[dims[0]/2., dims[1]/2.]
+    print("making sim")
+    sigma_pix=sqrt(T/2.)/jfac
+    dim=2.0*5.0*sigma_pix
+    dims=[dim]*2
+    cen=[(dim-1)/2.]*2
 
-    g1=0.1
-    g2=0.05
-    T=8.0
-
-    pars = [cen[0],cen[1], g1, g2, T, counts]
-    gm=gmix.GMixModel(pars, "gauss")
-
-    im=gm.make_image(dims)
-
-    im[:,:] += noise*numpy.random.randn(im.size).reshape(im.shape)
-    wt=zeros(im.shape) + 1./noise**2
     j=Jacobian(cen[0], cen[1], jfac, 0.0, 0.0, jfac)
 
-    imlist=[im]*nimages
-    wtlist=[wt]*nimages
-    jlist=[j]*nimages
+    pars = array( [0.0, 0.0, g1, g2, T, flux], dtype='f8' )
+    gm=gmix.GMixModel(pars, model)
+
+    im=gm.make_image(dims, jacobian=j, nsub=nsub_render)
+
+    im[:,:] += noise*numpy.random.randn(im.size).reshape(im.shape)
+
+    wt=zeros(im.shape) + 1./noise**2
+
+    obs=Observation(im, weight=wt, jacobian=j)
+
+    print("making guess")
+    guess=zeros( (nwalkers, pars.size) )
+    guess[:,0] = 0.1*srandu(nwalkers)
+    guess[:,1] = 0.1*srandu(nwalkers)
+    guess[:,2] = g1 + 0.1*srandu(nwalkers)
+    guess[:,3] = g2 + 0.1*srandu(nwalkers)
+    guess[:,4] = T*(1.0 + 0.1*srandu(nwalkers))
+    guess[:,5] = flux*(1.0 + 0.1*srandu(nwalkers))
 
     # one run to warm up the jit compiler
-    mc=MCMCGaussPSF(im, wt, j)
-    mc.go()
+    mc=MCMCSimple(obs, model, nwalkers=nwalkers, nsub=nsub_fit)
+    print("burnin")
+    pos=mc.run_mcmc(guess, burnin)
+    print("steps")
+    pos=mc.run_mcmc(pos, nstep)
 
-    t0=time.time()
-    for i in xrange(n):
-        mc=MCMCGaussPSF(imlist, wtlist, jlist)
-        mc.go()
+    mc.calc_result()
 
-        res=mc.get_result()
-
-        print_pars(res['pars'],front='pars:')
-
-    sec=time.time()-t0
-    secper=sec/n
-    print(secper,'seconds per')
-
-    return sec,secper
-
-def test_gauss_psf_jacob(counts_sky=100.0, noise_sky=0.001, nimages=10, jfac=10.0):
-    """
-    testing jacobian stuff
-    """
-    import images
-    import mcmc
-    dims=[25,25]
-    cen=[dims[0]/2., dims[1]/2.]
-
-    j=Jacobian(cen[0],cen[1], jfac, 0.0, 0.0, jfac)
-
-    g1=0.1
-    g2=0.05
-    # in pixel coords
-    Tpix=8.0
-    Tsky=8.0*jfac**2
-    counts_pix=counts_sky/jfac**2
-    noise_pix=noise_sky/jfac**2
-
-
-    pars = [0.0, 0.0, g1, g2, Tsky, counts_sky]
-    gm=gmix.GMixModel(pars, "gauss")
-
-    im=gm.make_image(dims, jacobian=j)
-
-    im[:,:] += noise_pix*numpy.random.randn(im.size).reshape(im.shape)
-    wt=zeros(im.shape) + 1./noise_pix**2
-
-    imlist=[im]*nimages
-    wtlist=[wt]*nimages
-    jlist=[j]*nimages
-
-
-    mc=MCMCGaussPSF(imlist, wtlist, jlist, T=Tsky, counts=counts_sky, burnin=400)
-    mc.go()
 
     res=mc.get_result()
 
-    print_pars(res['pars'], front='pars:')
-    print_pars(res['pars_err'], front='perr:')
+    print_pars(pars,            front='true:')
+    print_pars(res['pars'],     front='pars:')
+    print_pars(res['pars_err'], front='err: ')
 
-    gmfit=mc.get_gmix()
-    imfit=gmfit.make_image(im.shape, jacobian=j)
-
-    imdiff=im-imfit
-    images.compare_images(im, imfit, label1='data',label2='fit')
-    
-    mcmc.plot_results(mc.get_trials())
+    mc.make_plots(do_residual=True,show=True,prompt=False)
 
 def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27,
                g_prior=None, show=False):
@@ -4522,7 +4442,8 @@ def _make_obs(pars, model, noise_image, jacob, weight, psf_obs, nsub):
     """
     note nsub is 1 here since we are using the fit to the observed data
     """
-    gm0=gmix.GMixModel(pars, model, logpars=True)
+    raise ValueError("adapt to new style")
+    gm0=gmix.GMixModel(pars, model)
     gm=gm0.convolve(psf_obs.gmix)
     im = gm.make_image(noise_image.shape, jacobian=jacob, nsub=nsub)
 
@@ -4824,10 +4745,11 @@ def test_lm_metacal(model,
 def test_lm_psf_simple_sub(model,
                            nsub_render=16,
                            nsub_fit=16,
-                           noise=1.0e-8,
                            g1=0.0,
                            g2=0.0,
-                           T=4.0):
+                           T=4.0,
+                           flux=100.0,
+                           noise=0.1):
     """
     test levenberg marquardt fit of psf with possible sub-pixel
     integration
@@ -4842,10 +4764,8 @@ def test_lm_psf_simple_sub(model,
 
     cen=(dim-1.)/2.
 
-    logT=log10(T)
-    logFlux=log10(1.0)
-    pars=array([cen,cen,g1,g2,logT,logFlux],dtype='f8')
-    gm=gmix.GMixModel(pars, model, logpars=True)
+    pars=array([cen,cen,g1,g2,T,flux],dtype='f8')
+    gm=gmix.GMixModel(pars, model)
 
     im=gm.make_image(dims, nsub=nsub_render)
 
@@ -4877,7 +4797,9 @@ def test_lm_psf_simple_sub(model,
              'epsfcn': 1.0e-6}
 
     fitter=LMSimple(obs, model, nsub=nsub_fit, lm_pars=lm_pars)
+    print("running lm")
     fitter.run_lm(guess)
+    print("done running lm")
 
     res=fitter.get_result()
 

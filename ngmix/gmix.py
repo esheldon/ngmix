@@ -352,7 +352,7 @@ class GMix(object):
         return s2n_numer,s2n_denom
 
 
-    def get_loglike(self, obs, get_s2nsums=False):
+    def get_loglike(self, obs, nsub=1, get_s2nsums=False):
         """
         Calculate the log likelihood given the input Observation
 
@@ -364,17 +364,25 @@ class GMix(object):
             The Observation must have a weight map set
         """
 
-        loglike,s2n_numer,s2n_denom=_gmix.get_loglike(self._data,
-                                                      obs.image,
-                                                      obs.weight,
-                                                      obs.jacobian._data)
+        if nsub > 1:
+            loglike,s2n_numer,s2n_denom=_gmix.get_loglike_sub(self._data,
+                                                              obs.image,
+                                                              obs.weight,
+                                                              obs.jacobian._data,
+                                                              nsub)
+
+        else:
+            loglike,s2n_numer,s2n_denom=_gmix.get_loglike(self._data,
+                                                          obs.image,
+                                                          obs.weight,
+                                                          obs.jacobian._data)
 
         if get_s2nsums:
             return loglike,s2n_numer,s2n_denom
         else:
             return loglike
 
-    def get_loglike_robust(self, obs, nu, get_s2nsums=False):
+    def get_loglike_robust(self, obs, nu, nsub=1, get_s2nsums=False):
         """
         Calculate the log likelihood given the input Observation
         using robust likelihood
@@ -387,6 +395,8 @@ class GMix(object):
         nu: parameter for robust likelihood - nu > 2, nu -> \infty is a Gaussian (or chi^2)
         """
         from scipy.special import gammaln
+
+        assert nsub==1,"nsub must be 1 for robust"
 
         logfactor = gammaln((nu+1.0)/2.0) - gammaln(nu/2.0) - 0.5*log(numpy.pi*nu)
         loglike,s2n_numer,s2n_denom=_gmix.get_loglike_robust(self._data,
@@ -483,18 +493,13 @@ class GMixModel(GMix):
     model: string or gmix type
         e.g. 'exp' or GMIX_EXP
     """
-    def __init__(self, pars, model, logpars=False):
-
-        self._use_logpars=logpars
+    def __init__(self, pars, model):
 
         self._model      = _gmix_model_dict[model]
         self._model_name = _gmix_string_dict[self._model]
 
         self._ngauss = _gmix_ngauss_dict[self._model]
         self._npars  = _gmix_npars_dict[self._model]
-
-        if self._use_logpars:
-            self._linpars=zeros(self._npars)
 
         self.reset()
         self.fill(pars)
@@ -503,9 +508,7 @@ class GMixModel(GMix):
         """
         Get a new GMix with the same parameters
         """
-        gmix = GMixModel(self._pars_in,
-                         self._model_name,
-                         logpars=self._use_logpars)
+        gmix = GMixModel(self._pars, self._model_name)
         return gmix
 
     def get_cen(self):
@@ -552,7 +555,7 @@ class GMixModel(GMix):
         """
         return self._pars[4]
 
-    def fill(self, pars_in):
+    def fill(self, pars):
         """
         Fill in the gaussian mixture with new parameters
 
@@ -563,15 +566,7 @@ class GMixModel(GMix):
         """
 
 
-        pars_in = array(pars_in, dtype='f8', copy=False) 
-
-        self._pars_in = pars_in
-
-        if self._use_logpars:
-            pars=self._linpars
-            _gmix.convert_simple_double_logpars(pars_in, pars, 0)
-        else:
-            pars = pars_in
+        pars = array(pars, dtype='f8', copy=True) 
 
         if pars.size != self._npars:
             err="model '%s' requires %s pars, got %s"
