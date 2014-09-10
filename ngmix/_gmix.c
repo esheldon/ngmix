@@ -961,7 +961,7 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
     PyObject* image_obj=NULL;
     PyObject* weight_obj=NULL;
     PyObject* jacob_obj=NULL;
-    double nu,logfactor;
+    double nu;
     npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
 
     struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
@@ -969,14 +969,14 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
 
     double data=0, ivar=0, u=0, v=0;
     double model_val=0, diff=0;
-    double s2n_numer=0.0, s2n_denom=0.0, loglike=0.0, nupow;
+    double s2n_numer=0.0, s2n_denom=0.0, loglike=0.0, nupow=0, logfactor=0;
     int status=0;
 
     PyObject* retval=NULL;
 
-    if (!PyArg_ParseTuple(args, (char*)"OOOOdd", 
+    if (!PyArg_ParseTuple(args, (char*)"OOOOd", 
                           &gmix_obj, &image_obj, &weight_obj, &jacob_obj, 
-			  &nu, &logfactor)) {
+                          &nu)) {
         return NULL;
     }
 
@@ -994,6 +994,7 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
 
     jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
     
+    logfactor = lgamma((nu+1.0)/2.0) - lgamma(nu/2.0) - 0.5*log(M_PI*nu);
     nupow = -0.5*(nu+1.0);
     
     for (row=0; row < n_row; row++) {
@@ -1010,7 +1011,7 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
                 model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
 
                 diff = model_val-data;
-		loglike += logfactor + nupow*log(1.0+diff*diff*ivar/nu);
+                loglike += logfactor + nupow*log(1.0+diff*diff*ivar/nu);
                 s2n_numer += data*model_val*ivar;
                 s2n_denom += model_val*model_val*ivar;
             }

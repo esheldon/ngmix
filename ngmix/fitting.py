@@ -1097,6 +1097,7 @@ class MCMCBase(FitterBase):
         import emcee
         tau = 9999.0
 
+        '''
         trials=self.get_trials()
         if hasattr(emcee.ensemble,'acor'):
             if emcee.ensemble.acor is not None:
@@ -1108,6 +1109,7 @@ class MCMCBase(FitterBase):
                 acor=self.sampler.acor
                 nstep=trials.shape[0]
                 tau = (acor/nstep).max()
+        '''
         self.tau=tau
 
     def _make_sampler(self):
@@ -1126,7 +1128,7 @@ class MCMCBase(FitterBase):
             # fail silently which is the stupidest thing I have ever seen in my
             # entire life.  If I want to set the state it is important to me!
             
-            print('    replacing random state')
+            print('            replacing random state')
             #sampler.random_state=self.random_state.get_state()
 
             # OK, we will just hope that _random doesn't change names in the future.
@@ -3175,14 +3177,13 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
 
     Send g_prior to do some lensfit/pqr calculations
     """
-    import mcmc
     from . import em
     from . import joint_prior
 
 
     nwalkers=80
     burnin=800
-    nstep=200
+    nstep=800
 
 
     #

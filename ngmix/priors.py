@@ -3313,7 +3313,6 @@ class ZDisk2DErf(object):
         """
         works for both array and scalar
         """
-        #from scipy.special import erf
         from ._gmix import erf
 
         erf_val=erf( (self.radius-val-6*self.width)/self.width )
@@ -3325,7 +3324,6 @@ class ZDisk2DErf(object):
         """
         works for both array and scalar
         """
-        #from scipy.special import erf
         from ._gmix import erf
 
         erf_val=erf( (self.radius-val-6*self.width)/self.width )
