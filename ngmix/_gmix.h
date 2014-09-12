@@ -136,12 +136,13 @@ static double _exp3_lookup[] = {  5.10908903e-12,   1.38879439e-11,   3.77513454
         + (gauss)->drr*_v*_v                                   \
         - 2.0*(gauss)->drc*_u*_v;                              \
                                                                \
-    if (_chi2 < PYGMIX_MAX_CHI2 && _chi2 >= 0.0) {                             \
+    if (_chi2 < PYGMIX_MAX_CHI2 && _chi2 >= 0.0) {             \
         _g_val = (gauss)->pnorm*expd( -0.5*_chi2 );            \
     }                                                          \
                                                                \
     _g_val;                                                    \
 })
+
 
 #define PYGMIX_GMIX_EVAL(gmix, n_gauss, rowval, colval) ({     \
     int _i=0;                                                  \
