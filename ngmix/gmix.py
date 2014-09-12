@@ -394,11 +394,8 @@ class GMix(object):
             The Observation must have a weight map set
         nu: parameter for robust likelihood - nu > 2, nu -> \infty is a Gaussian (or chi^2)
         """
-        #from scipy.special import gammaln
-
         assert nsub==1,"nsub must be 1 for robust"
 
-        #logfactor = gammaln((nu+1.0)/2.0) - gammaln(nu/2.0) - 0.5*log(numpy.pi*nu)
         loglike,s2n_numer,s2n_denom=_gmix.get_loglike_robust(self._data,
                                                              obs.image,
                                                              obs.weight,
