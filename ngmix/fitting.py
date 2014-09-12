@@ -3170,7 +3170,7 @@ def test_mcmc_psf(model="gauss",
 
     mc.make_plots(do_residual=True,show=True,prompt=False)
 
-def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, jfac=0.27,
+def test_model(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
                g_prior=None, show=False):
     """
     Test fitting the specified model.
@@ -3179,6 +3179,7 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
     """
     from . import em
     from . import joint_prior
+    import time
 
 
     nwalkers=80
@@ -3190,56 +3191,38 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
     # simulation
     #
 
-    jfac2=jfac**2
-
-
     # PSF pars
-    counts_sky_psf=100.0
-    counts_pix_psf=counts_sky_psf/jfac2
-    noise_sky_psf=0.01
-    noise_pix_psf=noise_sky_psf/jfac2
+    counts_psf=100.0
+    noise_psf=0.01
     g1_psf=0.05
     g2_psf=-0.01
-    Tpix_psf=4.0
-    Tsky_psf=Tpix_psf*jfac2
+    T_psf=4.0
 
     # object pars
     g1_obj=0.1
     g2_obj=0.05
 
-    if Tsky is None:
-        Tpix_obj=16.0
-        Tsky_obj=Tpix_obj*jfac2
-    else:
-        Tsky_obj=Tsky
-        Tpix_obj=Tsky/jfac2
-
-    sigma=sqrt( (Tpix_obj + Tpix_psf)/2. )
-    dims=[2*5.0*sigma]*2
+    sigma=sqrt( (T + T_psf)/2. )
+    dims=[2.*5.*sigma]*2
     cen=[dims[0]/2., dims[1]/2.]
-    j=Jacobian(cen[0],cen[1], jfac, 0.0, 0.0, jfac)
+    j=UnitJacobian(cen[0],cen[1])
 
-    counts_sky_obj=counts_sky
-    noise_sky_obj=noise_sky
-    counts_pix_obj=counts_sky_obj/jfac2
-    noise_pix_obj=noise_sky_obj/jfac2
-
-    pars_psf = [0.0, 0.0, g1_psf, g2_psf, Tsky_psf, counts_sky_psf]
+    pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
     gm_psf=gmix.GMixModel(pars_psf, "gauss")
 
-    pars_obj = array([0.0, 0.0, g1_obj, g2_obj, Tsky_obj, counts_sky_obj])
+    pars_obj = array([0.0, 0.0, g1_obj, g2_obj, T, counts])
     npars=pars_obj.size
     gm_obj0=gmix.GMixModel(pars_obj, model)
 
     gm=gm_obj0.convolve(gm_psf)
 
     im_psf=gm_psf.make_image(dims, jacobian=j)
-    im_psf[:,:] += noise_pix_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
-    wt_psf=zeros(im_psf.shape) + 1./noise_pix_psf**2
+    im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
+    wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
 
     im_obj=gm.make_image(dims, jacobian=j)
-    im_obj[:,:] += noise_pix_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
-    wt_obj=zeros(im_obj.shape) + 1./noise_pix_obj**2
+    im_obj[:,:] += noise*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
+    wt_obj=zeros(im_obj.shape) + 1./noise**2
 
     #
     # fitting
@@ -3282,12 +3265,14 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
     # intentionally bad guesses
     guess[:,2] = 0.1*srandu(nwalkers)
     guess[:,3] = 0.1*srandu(nwalkers)
-    guess[:,4] = Tsky_obj*(1.0 + 0.1*srandu(nwalkers))
-    guess[:,5] = counts_sky_obj*(1.0 + 0.1*srandu(nwalkers))
+    guess[:,4] = T*(1.0 + 0.1*srandu(nwalkers))
+    guess[:,5] = counts*(1.0 + 0.1*srandu(nwalkers))
 
+    t0=time.time()
     pos=mc_obj.run_mcmc(guess, burnin)
     pos=mc_obj.run_mcmc(pos, nstep)
     mc_obj.calc_result()
+    tm=time.time()-t0
 
     trials=mc_obj.get_trials()
     print("T minmax:",trials[:,4].min(), trials[:,4].max())
@@ -3298,7 +3283,7 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
     print_pars(pars_obj,            front='true pars:')
     print_pars(res_obj['pars'],     front='pars_obj: ')
     print_pars(res_obj['pars_err'], front='perr_obj: ')
-    print('Tpix: %.4g +/- %.4g' % (res_obj['pars'][4]/jfac2, res_obj['pars_err'][4]/jfac2))
+    print('T: %.4g +/- %.4g' % (res_obj['pars'][4], res_obj['pars_err'][4]))
     print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'])
 
     #gmfit0=mc_obj.get_gmix()
@@ -3320,6 +3305,7 @@ def test_model(model, Tsky=None, counts_sky=100.0, noise_sky=0.001, nimages=1, j
         #images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
         #mcmc.plot_results(mc_obj.get_trials())
 
+    return tm
 
 def get_mh_prior(T, F):
     from . import priors, joint_prior
