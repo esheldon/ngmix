@@ -365,6 +365,7 @@ class GMix(object):
         """
 
         if nsub > 1:
+            #print("using nsub:",nsub)
             loglike,s2n_numer,s2n_denom=_gmix.get_loglike_sub(self._data,
                                                               obs.image,
                                                               obs.weight,
@@ -394,6 +395,7 @@ class GMix(object):
             The Observation must have a weight map set
         nu: parameter for robust likelihood - nu > 2, nu -> \infty is a Gaussian (or chi^2)
         """
+        #print("using robust")
         assert nsub==1,"nsub must be 1 for robust"
 
         loglike,s2n_numer,s2n_denom=_gmix.get_loglike_robust(self._data,
