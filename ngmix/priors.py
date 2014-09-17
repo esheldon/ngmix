@@ -3254,6 +3254,19 @@ class ZDisk2D(_gmix.ZDisk2D):
 
         return x,y
 
+    def get_prob_array2d(self, x, y):
+        """
+        probability, 1.0 inside disk, outside raises exception
+
+        does not raise an exception
+        """
+        x=numpy.array(x, dtype='f8', ndmin=1, copy=False)
+        y=numpy.array(y, dtype='f8', ndmin=1, copy=False)
+        out=numpy.zeros(x.size, dtype='f8')
+
+        super(ZDisk2D,self).get_prob_array2d(x,y,out)
+        return out
+
     '''
     def get_lnprob_array1d(self, r):
         """

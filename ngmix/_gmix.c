@@ -2082,6 +2082,7 @@ static PyObject* PyGMixZDisk2D_get_lnprob_scalar2d(struct PyGMixZDisk2D* self,
     }
 
 }
+
 static PyObject* PyGMixZDisk2D_get_prob_scalar2d(struct PyGMixZDisk2D* self,
                                                  PyObject *args)
 {
@@ -2100,6 +2101,34 @@ static PyObject* PyGMixZDisk2D_get_prob_scalar2d(struct PyGMixZDisk2D* self,
     return PyFloat_FromDouble(retval);
 }
 
+static PyObject* PyGMixZDisk2D_get_prob_array2d(struct PyGMixZDisk2D* self,
+                                                PyObject *args)
+{
+    PyObject *xobj=NULL, *yobj=NULL, *probobj=NULL;
+    npy_intp nx=0, i=0;
+    double x=0, y=0, r2=0, *probptr=0;
+    if (!PyArg_ParseTuple(args, (char*)"OOO", &xobj, &yobj, &probobj)) {
+        return NULL;
+    }
+
+    nx=PyArray_SIZE(xobj);
+
+    for (i=0; i<nx; i++) {
+        x= *( (double*) PyArray_GETPTR1(xobj, i) );
+        y= *( (double*) PyArray_GETPTR1(yobj, i) );
+        probptr = (double*) PyArray_GETPTR1(probobj, i);
+
+        r2 = x*x + y*y;
+
+        if (r2 >= self->radius_sq) {
+            *probptr=0.0; 
+        } else {
+            *probptr=1.0; 
+        }
+    }
+    Py_RETURN_NONE;
+}
+
 
 static PyMethodDef PyGMixZDisk2D_methods[] = {
     {"get_lnprob_scalar1d", (PyCFunction)PyGMixZDisk2D_get_lnprob_scalar1d, METH_VARARGS, "0 inside disk, throw exception outside"},
@@ -2107,6 +2136,7 @@ static PyMethodDef PyGMixZDisk2D_methods[] = {
 
     {"get_lnprob_scalar2d", (PyCFunction)PyGMixZDisk2D_get_lnprob_scalar2d, METH_VARARGS, "0 inside disk, throw exception outside"},
     {"get_prob_scalar2d", (PyCFunction)PyGMixZDisk2D_get_prob_scalar2d, METH_VARARGS, "1 inside disk, 0 outside"},
+    {"get_prob_array2d", (PyCFunction)PyGMixZDisk2D_get_prob_array2d, METH_VARARGS, "1 inside disk, 0 outside"},
     {NULL}  /* Sentinel */
 };
 
