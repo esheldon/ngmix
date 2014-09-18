@@ -7,7 +7,6 @@ Notes
     - this code is under heavy development.  No stable API is yet provided.
     - The C++ just a toy and has not been run or tested.  Use the python code
 
-
 examples
 --------
 
@@ -151,5 +150,5 @@ dependencies
 ------------
 
 * numpy
-* scipy
+* scipy: optional needed for generating random samples from shape PDFs.
 * emcee: optional for doing MCMC fitting: http://dan.iel.fm/emcee/current/ Affine invariant MCMC sampler.
