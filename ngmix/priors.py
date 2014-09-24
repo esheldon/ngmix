@@ -1613,7 +1613,7 @@ class TwoSidedErf(object):
 
     A limitation seems to be the accuracy of the erf....
     """
-    def __init__(self, minval, width_at_min, maxval, width_at_max, positive=False):
+    def __init__(self, minval, width_at_min, maxval, width_at_max):
 
         self.minval=minval
         self.width_at_min=width_at_min
@@ -1621,17 +1621,16 @@ class TwoSidedErf(object):
         self.maxval=maxval
         self.width_at_max=width_at_max
 
-        self.positive=positive
-
     def get_prob_scalar(self, val):
         """
         get the probability of the point
         """
-        if self.positive:
-            if val <= 0.0:
-                return 0.0
+        from ._gmix import erf
 
-        return self._get_prob_nocheck(val)
+        p1 = 0.5*erf((self.maxval-val)/self.width_at_max)
+        p2 = 0.5*erf((val-self.minval)/self.width_at_min)
+
+        return p1+p2
 
     def get_lnprob_scalar(self, val):
         """
@@ -1652,42 +1651,72 @@ class TwoSidedErf(object):
         get the probability of the point
         """
 
-        if self.positive:
-            pvals=numpy.zeros(vals.size)
-            w,=numpy.where(vals > 0.0)
-            if w.size > 0:
-                pvals[w] = self._get_prob_nocheck(vals[w])
-        else:
-            pvals=self._get_prob_nocheck(vals)
-        
-        return pvals
+        from ._gmix import erf_array
+
+        vals=array(vals, ndmin=1, dtype='f8', copy=False)
+
+        arg1=zeros(vals.size)
+        arg2=zeros(vals.size)
+        p1=zeros(vals.size)
+        p2=zeros(vals.size)
+
+        arg1 = (self.maxval-vals)/self.width_at_max
+        arg2 = (vals-self.minval)/self.width_at_min
+        erf_array(arg1, p1)
+        erf_array(arg2, p2)
+
+        p1 *= 0.5
+        p2 *= 0.5
+
+        return p1+p2
 
     def get_lnprob_array(self, vals):
         """
         get the probability of the point
         """
 
-        lnp = numpy.zeros(vals.size) + LOWVAL
-
         p = self.get_prob_array(vals)
-        w,=numpy.where(p > 0.0)
 
+        lnp = numpy.zeros(p.size) + LOWVAL
+        w,=numpy.where(p > 0.0)
         if w.size > 0:
             lnp[w] = numpy.log( p[w] )
         return lnp
 
-
-    def _get_prob_nocheck(self, val):
+    def sample(self, nrand=None):
         """
-        works for both array and scalar
+        draw random samples; not perfect, only goes from
+        -5,5 sigma past each side
         """
-        from scipy.special import erf
+        if nrand is None:
+            nrand=1
+            is_scalar=True
+        else:
+            is_scalar=False
+        
+        xmin=self.minval-5.0*self.width_at_min
+        xmax=self.maxval+5.0*self.width_at_max
 
-        p1 = 0.5*erf((self.maxval-val)/self.width_at_max)
-        p2 = 0.5*erf((val-self.minval)/self.width_at_min)
+        rvals=zeros(nrand)
 
-        return p1+p2
+        ngood=0
+        nleft=nrand
+        while ngood < nrand:
+            randx=numpy.random.uniform(low=xmin, high=xmax, size=nleft)
 
+            pvals=self.get_prob_array(randx)
+            randy=numpy.random.uniform(size=nleft)
+
+            w,=where(randy < pvals)
+            if w.size > 0:
+                rvals[ngood:ngood+w.size] = randx[w]
+                ngood += w.size
+                nleft -= w.size
+        
+        if is_scalar:
+            rvals=rvals[0]
+
+        return rvals
 
 class GPriorGreat3Exp(GPriorBase):
     """
@@ -3225,6 +3254,19 @@ class ZDisk2D(_gmix.ZDisk2D):
 
         return x,y
 
+    def get_prob_array2d(self, x, y):
+        """
+        probability, 1.0 inside disk, outside raises exception
+
+        does not raise an exception
+        """
+        x=numpy.array(x, dtype='f8', ndmin=1, copy=False)
+        y=numpy.array(y, dtype='f8', ndmin=1, copy=False)
+        out=numpy.zeros(x.size, dtype='f8')
+
+        super(ZDisk2D,self).get_prob_array2d(x,y,out)
+        return out
+
     '''
     def get_lnprob_array1d(self, r):
         """
@@ -3284,7 +3326,6 @@ class ZDisk2DErf(object):
         """
         works for both array and scalar
         """
-        #from scipy.special import erf
         from ._gmix import erf
 
         erf_val=erf( (self.radius-val-6*self.width)/self.width )
@@ -3296,7 +3337,6 @@ class ZDisk2DErf(object):
         """
         works for both array and scalar
         """
-        #from scipy.special import erf
         from ._gmix import erf
 
         erf_val=erf( (self.radius-val-6*self.width)/self.width )

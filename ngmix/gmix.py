@@ -50,6 +50,8 @@ class GMix(object):
         Get a new GMix that is the convolution of the GMix with the input psf
     get_T():
         get T=sum(p*T_i)/sum(p)
+    get_sigma():
+        get sigma=sqrt(T/2)
     get_psum():
         get sum(p)
     set_psum(psum):
@@ -147,6 +149,13 @@ class GMix(object):
         T = (irrsum + iccsum)/psum
         return T
 
+    def get_sigma(self):
+        """
+        get sigma=sqrt(T/2)
+        """
+        T=self.get_T()
+        return sqrt(T/2.)
+
     def get_e1e2T(self):
         """
         Get e1,e2 and T for the total gmix.
@@ -176,6 +185,39 @@ class GMix(object):
         g1,g2=e1e2_to_g1g2(e1,e2)
         return g1,g2,T
 
+    def get_e1e2sigma(self):
+        """
+        Get e1,e2 and sigma for the total gmix.
+
+        Warning: only really works if the centers are the same
+        """
+
+        d=self._data
+        ipsum=1.0/d['p'].sum()
+
+        irr=(d['irr']*d['p']).sum()*ipsum
+        irc=(d['irc']*d['p']).sum()*ipsum
+        icc=(d['icc']*d['p']).sum()*ipsum
+        T = irr + icc
+
+        e1=(icc-irr)/T
+        e2=2.0*irc/T
+
+        sigma=sqrt(T/2)
+        return e1,e2,sigma
+
+    def get_g1g2sigma(self):
+        """
+        Get g1,g2 and sigma for the total gmix.
+
+        Warning: only really works if the centers are the same
+        """
+        e1,e2,T=self.get_e1e2T()
+        g1,g2=e1e2_to_g1g2(e1,e2)
+
+        sigma=sqrt(T/2)
+        return g1,g2,sigma
+
     def get_flux(self):
         """
         get sum(p)
@@ -191,7 +233,10 @@ class GMix(object):
         psum0 = self._data['p'].sum()
         rat = psum/psum0
         self._data['p'] *= rat
-        self._data['pnorm'] = self._data['p']*self._data['norm']
+
+        # we will need to reset the pnorm values
+        self._data['norm_set']=0
+
     # alias
     set_psum=set_flux
 
@@ -250,6 +295,7 @@ class GMix(object):
         nsub: integer, optional
             Defines a grid for sub-pixel integration 
         """
+
         image=numpy.zeros(dims, dtype='f8')
         if jacobian is not None:
             _gmix.render_jacob(self._data,
@@ -263,29 +309,6 @@ class GMix(object):
 
         return image
 
-    def make_image_old(self, dims, nsub=1, jacobian=None):
-        """
-        Render the mixture into a new image
-
-        parameters
-        ----------
-        dims: 2-element sequence
-            dimensions [nrows, ncols]
-        nsub: integer, optional
-            Defines a grid for sub-pixel integration 
-        """
-        image=numpy.zeros(dims, dtype='f8')
-        if jacobian is not None:
-            _render_jacob_fast3(self._data,
-                                image,
-                                nsub,
-                                jacobian._data,
-                                _exp3_ivals[0],
-                                _exp3_lookup)
-        else:
-            _render_fast3(self._data, image, nsub, _exp3_ivals[0], _exp3_lookup)
-
-        return image
 
     def fill_fdiff(self, obs, fdiff, start=0, nsub=1):
         """
@@ -328,40 +351,8 @@ class GMix(object):
 
         return s2n_numer,s2n_denom
 
-    def fill_fdiff_old(self, obs, fdiff, start=0):
-        """
-        Fill fdiff=(model-data)/err given the input Observation
 
-        parameters
-        ----------
-        obs: Observation
-            The Observation to compare with. See ngmix.observation.Observation
-            The Observation must have a weight map set
-        fdiff: 1-d array
-            The fdiff to fill
-        start: int, optional
-            Where to start in the array, default 0
-        """
-
-        nuse=fdiff.size-start
-
-        image=obs.image
-        if nuse < image.size:
-            raise ValueError("fdiff from start must have "
-                             "len >= %d, got %d" % (image.size,nuse))
-
-        s2n_numer,s2n_denom=_fdiff_jacob_fast3(self._data,
-                                               image,
-                                               obs.weight,
-                                               obs.jacobian._data,
-                                               fdiff,
-                                               start,
-                                               _exp3_ivals[0],
-                                               _exp3_lookup)
-
-        return s2n_numer,s2n_denom
-
-    def get_loglike(self, obs, get_s2nsums=False):
+    def get_loglike(self, obs, nsub=1, get_s2nsums=False):
         """
         Calculate the log likelihood given the input Observation
 
@@ -372,17 +363,27 @@ class GMix(object):
             The Observation to compare with. See ngmix.observation.Observation
             The Observation must have a weight map set
         """
-        loglike,s2n_numer,s2n_denom=_gmix.get_loglike(self._data,
-                                                      obs.image,
-                                                      obs.weight,
-                                                      obs.jacobian._data)
+
+        if nsub > 1:
+            #print("using nsub:",nsub)
+            loglike,s2n_numer,s2n_denom=_gmix.get_loglike_sub(self._data,
+                                                              obs.image,
+                                                              obs.weight,
+                                                              obs.jacobian._data,
+                                                              nsub)
+
+        else:
+            loglike,s2n_numer,s2n_denom=_gmix.get_loglike(self._data,
+                                                          obs.image,
+                                                          obs.weight,
+                                                          obs.jacobian._data)
 
         if get_s2nsums:
             return loglike,s2n_numer,s2n_denom
         else:
             return loglike
 
-    def get_loglike_robust(self, obs, nu, get_s2nsums=False):
+    def get_loglike_robust(self, obs, nu, nsub=1, get_s2nsums=False):
         """
         Calculate the log likelihood given the input Observation
         using robust likelihood
@@ -394,63 +395,25 @@ class GMix(object):
             The Observation must have a weight map set
         nu: parameter for robust likelihood - nu > 2, nu -> \infty is a Gaussian (or chi^2)
         """
-        from scipy.special import gammaln
-        logfactor = gammaln((nu+1.0)/2.0) - gammaln(nu/2.0) - 0.5*log(numpy.pi*nu)
+        #print("using robust")
+        assert nsub==1,"nsub must be 1 for robust"
+
         loglike,s2n_numer,s2n_denom=_gmix.get_loglike_robust(self._data,
                                                              obs.image,
                                                              obs.weight,
                                                              obs.jacobian._data,
-                                                             nu,logfactor)
+                                                             nu)
 
         if get_s2nsums:
             return loglike,s2n_numer,s2n_denom
         else:
             return loglike
-
-    def get_loglike_old(self, obs, get_s2nsums=False):
-        """
-        Calculate the log likelihood given the input Observation
-
-
-        parameters
-        ----------
-        obs: Observation
-            The Observation to compare with. See ngmix.observation.Observation
-            The Observation must have a weight map set
-        """
-
-        loglike,s2n_numer,s2n_denom=_loglike_jacob_fast3(self._data,
-                                                         obs.image,
-                                                         obs.weight,
-                                                         obs.jacobian._data,
-                                                         _exp3_ivals[0],
-                                                         _exp3_lookup)
-
-        if get_s2nsums:
-            return loglike,s2n_numer,s2n_denom
-        else:
-            return loglike
-
 
     def reset(self):
         """
         Replace the data array with a zeroed one.
         """
         self._data = zeros(self._ngauss, dtype=_gauss2d_dtype)
-
-
-    def get_loglike_rowcol(self, row, col):
-        """
-        Evaluate a single row, col
-        """
-        return _gauss2d_loglike(self._data, row, col)
-
-    def get_like_rowcol(self, row, col):
-        """
-        Evaluate a single row, col
-        """
-        return _gauss2d_like(self._data, row, col)
-
 
     def __len__(self):
         return self._ngauss
@@ -529,18 +492,13 @@ class GMixModel(GMix):
     model: string or gmix type
         e.g. 'exp' or GMIX_EXP
     """
-    def __init__(self, pars, model, logpars=False):
-
-        self._use_logpars=logpars
+    def __init__(self, pars, model):
 
         self._model      = _gmix_model_dict[model]
         self._model_name = _gmix_string_dict[self._model]
 
         self._ngauss = _gmix_ngauss_dict[self._model]
         self._npars  = _gmix_npars_dict[self._model]
-
-        if self._use_logpars:
-            self._linpars=zeros(self._npars)
 
         self.reset()
         self.fill(pars)
@@ -549,9 +507,7 @@ class GMixModel(GMix):
         """
         Get a new GMix with the same parameters
         """
-        gmix = GMixModel(self._pars_in,
-                         self._model_name,
-                         logpars=self._use_logpars)
+        gmix = GMixModel(self._pars, self._model_name)
         return gmix
 
     def get_cen(self):
@@ -578,6 +534,7 @@ class GMixModel(GMix):
         pars[0] = row
         pars[1] = col
 
+    '''
     def get_g1g2T(self):
         """
         Get g1,g2 and T for the total gmix.
@@ -597,8 +554,9 @@ class GMixModel(GMix):
         Get g1,g2 and T for the total gmix.
         """
         return self._pars[4]
+    '''
 
-    def fill(self, pars_in):
+    def fill(self, pars):
         """
         Fill in the gaussian mixture with new parameters
 
@@ -609,15 +567,7 @@ class GMixModel(GMix):
         """
 
 
-        pars_in = array(pars_in, dtype='f8', copy=False) 
-
-        self._pars_in = pars_in
-
-        if self._use_logpars:
-            pars=self._linpars
-            _gmix.convert_simple_double_logpars(pars_in, pars, 0)
-        else:
-            pars = pars_in
+        pars = array(pars, dtype='f8', copy=True) 
 
         if pars.size != self._npars:
             err="model '%s' requires %s pars, got %s"
@@ -1127,6 +1077,7 @@ _gauss2d_dtype=[('p','f8'),
                 ('irc','f8'),
                 ('icc','f8'),
                 ('det','f8'),
+                ('norm_set','i4'),
                 ('drr','f8'),
                 ('drc','f8'),
                 ('dcc','f8'),

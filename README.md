@@ -3,7 +3,9 @@ ngmix
 
 Gaussian mixture models for 2d images, implemented in python
 
-Note this is under heavy development.  No stable API is yet provided.
+Notes
+    - this code is under heavy development.  No stable API is yet provided.
+    - The C++ just a toy and has not been run or tested.  Use the python code
 
 examples
 --------
@@ -94,8 +96,6 @@ examples
     # guess should be an array [nwalkers, npars].  It is good to
     # guess random points around your best estimate of the galaxy
     # parameters
-    #
-    # note the fitter works in log10(T) and log10(flux)
 
     eps=0.01
     guess=numpy.zeros( (nwalkers, len(pars)) )
@@ -103,24 +103,22 @@ examples
     guess[:,1] = urand(size=nwalkers, low=-eps, high=eps)
     guess[:,2] = pars[2] + urand(size=nwalkers, low=-eps, high=eps).clip(min=-0.5, max=0.5)
     guess[:,3] = pars[3] + urand(size=nwalkers, low=-eps, high=eps).clip(min=-0.5, max=0.5)
-    guess[:,4] = numpy.log10(pars[4]) + urand(size=nwalkers, low=-eps, high=eps)
-    guess[:,5] = numpy.log10(pars[5]) + urand(size=nwalkers, low=-eps, high=eps)
+    guess[:,4] = pars[4]*(1.0 + urand(size=nwalkers, low=-eps, high=eps))
+    guess[:,5] = pars[5]*(1.0 + urand(size=nwalkers, low=-eps, high=eps))
 
     pos=fitter.run_mcmc(guess, burnin)
     pos=fitter.run_mcmc(pos, nstep)
 
-    fitter.calc_result()     # log10(T), log10(flux)
-    fitter.calc_lin_result() # T, flux in linear space
+    fitter.calc_result()
 
-    res=fitter.get_result()         # log10 space
-    lin_res=fitter.get_lin_result() # linear space
+    res=fitter.get_result()
 
     ngmix.print_pars(pars, front="truth:")
-    ngmix.print_pars(lin_res['pars'],front="meas: ")
-    ngmix.print_pars(lin_res['pars_err'],front="err:  ")
+    ngmix.print_pars(res['pars'],front="meas: ")
+    ngmix.print_pars(res['pars_err'],front="err:  ")
     #print res['pars_cov'] # full covariance matrix
 
-    # note the trials are in the .trials attribute
+    # note the trials can be gotten with get_trial()
 
 
     # Fit multiple images of the same object. Send an ObsList to the fitter.
@@ -148,5 +146,5 @@ dependencies
 ------------
 
 * numpy
-* scipy
+* scipy: optional needed for generating random samples from shape PDFs.
 * emcee: optional for doing MCMC fitting: http://dan.iel.fm/emcee/current/ Affine invariant MCMC sampler.

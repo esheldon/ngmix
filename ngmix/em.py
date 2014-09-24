@@ -89,7 +89,7 @@ class GMixEM(object):
             im *= (counts/im.sum())
         return im
 
-    def go(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
+    def run_em(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
         """
         Run the em algorithm from the input starting guesses
 
@@ -106,6 +106,7 @@ class GMixEM(object):
             The tolerance in the moments that implies convergence,
             default 1.e-6
         """
+
 
         self._gm        = gmix_guess.copy()
         self._ngauss    = len(self._gm)
@@ -131,52 +132,7 @@ class GMixEM(object):
         if numiter >= maxiter:
             raise GMixMaxIterEM("reached max iter: %s" % maxiter)
     # alias
-    run_em=go
-
-    def go_old(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
-        """
-        Run the em algorithm from the input starting guesses
-
-        parameters
-        ----------
-        gmix_guess: GMix
-            A gaussian mixture (GMix or child class) representing
-            a starting guess for the algorithm
-        sky_guess: number
-            A guess at the sky value
-        maxiter: number, optional
-            The maximum number of iterations, default 100
-        tol: number, optional
-            The tolerance in the moments that implies convergence,
-            default 1.e-6
-        """
-
-        self._gm        = gmix_guess.copy()
-        self._ngauss    = len(self._gm)
-        self._sums      = numpy.zeros(self._ngauss, dtype=_sums_dtype)
-        self._sky_guess = sky_guess
-        self._maxiter   = maxiter
-        self._tol       = tol
-
-        try:
-            numiter, fdiff = _run_em(self._obs.image,
-                                     self._gm._data,
-                                     self._sums,
-                                     self._obs.jacobian._data,
-                                     numpy.float64(self._sky_guess),
-                                     numpy.int64(self._maxiter),
-                                     numpy.float64(self._tol))
-                                     #_exp3_ivals[0],
-                                     #_exp3_lookup)
-        except ZeroDivisionError:
-            raise GMixRangeError("divide by zero")
-
-        self._result={'numiter':numiter,
-                      'fdiff':fdiff}
-
-        if numiter >= maxiter:
-            raise GMixMaxIterEM("reached max iter: %s" % maxiter)
-
+    go=run_em
 
 _sums_dtype=[('gi','f8'),
              # scratch on a given pixel
@@ -383,19 +339,13 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol):
     return iiter, fdiff
 '''
 
-def test_1gauss(counts=100.0, noise=0.0, maxiter=100, show=False):
+def test_1gauss(counts=1.0, noise=0.0, T=8.0, maxiter=4000, g1=0.0, g2=0.0, show=False, verbose=True):
     import time
     dims=[25,25]
     cen=[dims[0]/2., dims[1]/2.]
 
-    g1=0.1
-    g2=0.05
-    T=8.0
-
     pars = [cen[0],cen[1], g1, g2, T, counts]
     gm=gmix.GMixModel(pars, "gauss")
-    print('gmix true:')
-    print(gm)
 
     im0=gm.make_image(dims)
 
@@ -413,21 +363,32 @@ def test_1gauss(counts=100.0, noise=0.0, maxiter=100, show=False):
     gm_guess._data['irc'] += 0.5*srandu()
     gm_guess._data['icc'] += 0.5*srandu()
 
-    print('guess:')
-    print(gm_guess)
     
     tm0=time.time()
     em=GMixEM(obs)
-    em.go(gm_guess, sky, maxiter=maxiter)
+    em.run_em(gm_guess, sky, maxiter=maxiter)
     tm=time.time()-tm0
-    print('time:',tm,'seconds')
+
 
     gmfit=em.get_gmix()
     res=em.get_result()
-    print('best fit:')
-    print(gmfit)
-    print('results')
-    print(res)
+
+    if verbose:
+        print('guess:')
+        print(gm_guess)
+
+        print('time:',tm,'seconds')
+        print()
+
+        print()
+        print('results')
+        print(res)
+
+        print()
+        print('gmix true:')
+        print(gm)
+        print('best fit:')
+        print(gmfit)
 
     if show:
         import images
@@ -435,6 +396,46 @@ def test_1gauss(counts=100.0, noise=0.0, maxiter=100, show=False):
         imfit *= (im0.sum()/imfit.sum())
 
         images.compare_images(im, imfit)
+
+    return gmfit
+
+def test_1gauss_T_recovery(noise, T = 8.0, counts=1.0, ntrial=100, show=True, png=None):
+    import biggles
+
+    T_true=T
+
+    T_meas=numpy.zeros(ntrial)
+    for i in xrange(ntrial):
+        while True:
+            try:
+                gm=test_1gauss(noise=noise, T=T_true, counts=counts, verbose=False)
+                T=gm.get_T()
+                T_meas[i]=T
+                break
+            except GMixRangeError:
+                pass
+            except GMixMaxIterEM:
+                pass
+
+    mean=T_meas.mean()
+    std=T_meas.std()
+    print("<T>:",mean,"sigma(T):",std)
+    binsize=0.2*std
+    plt=biggles.plot_hist(T_meas, binsize=binsize, visible=False)
+    plt.add( biggles.Point(T_true, 0.0, type='filled circle', size=2, color='red') )
+    plt.title='Flux: %g T: %g noise: %g' % (counts, T_true, noise)
+
+    xmin=mean-4.0*std
+    xmax=mean+4.0*std
+
+    plt.xrange=[xmin, xmax]
+
+    if show:
+        plt.show()
+
+    if png is not None:
+        print(png)
+        plt.write_img(800, 800, png)
 
 def test_1gauss_jacob(counts_sky=100.0, noise_sky=0.0, maxiter=100, jfac=0.27, show=False):
     import time
@@ -496,6 +497,7 @@ def test_1gauss_jacob(counts_sky=100.0, noise_sky=0.0, maxiter=100, jfac=0.27, s
 
         images.compare_images(im, imfit)
 
+    return gmfit
 
 def test_2gauss(counts=100.0, noise=0.0, maxiter=100,show=False):
     import time
