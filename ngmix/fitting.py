@@ -627,6 +627,67 @@ class TemplateFluxFitter(FitterBase):
         return self.eff_npix
 
 
+import scipy.optimize
+class MaxSimple(FitterBase):
+    """
+    A class for direct maximization of the likelihood.
+    Useful for seeding model parameters.
+    """
+    def __init__(self, obs, model, method='Nelder-Mead', **keys):
+        super(MaxSimple,self).__init__(obs, model, **keys)
+        self._obs = obs
+        self._model = model
+        self.method = method
+        self._band_pars = numpy.zeros(6)
+        
+    def _setup_data(self, guess):
+        """
+        try very hard to initialize the mixtures
+        """
+
+        if hasattr(self,'_result'):
+            del self._result
+
+        self.flags=0
+
+        npars=guess.size
+        mess="guess has npars=%d, expected %d" % (npars,self.npars)
+        assert (npars==self.npars),mess
+
+        try:
+            # this can raise GMixRangeError
+            self._init_gmix_all(guess)
+        except ZeroDivisionError:
+            raise GMixRangeError("got zero division")
+
+    def _get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+        """
+
+        pars=self._band_pars
+        pars[0:5] = pars_in[0:5]
+        pars[5] = pars_in[5+band]
+        return pars
+
+    def neglnprob(self, pars):
+        return -1.0*self.calc_lnprob(pars)
+
+    def run_max(self, guess):
+        """
+        Run maximizer and set the result.
+        """
+
+        guess=numpy.array(guess,dtype='f8',copy=False)
+        self._setup_data(guess)
+        
+        result = scipy.optimize.minimize(self.neglnprob, guess, method=self.method)
+        if 'x' in result:
+            result['pars'] = result['x']
+        
+        self._result = result
+
+
 class LMSimple(FitterBase):
     """
     A class for doing a fit using levenberg marquardt
