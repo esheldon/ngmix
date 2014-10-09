@@ -715,6 +715,10 @@ class MaxSimple(FitterBase):
         self._setup_data(guess)
         
         result = scipy.optimize.minimize(self.neglnprob, guess, method=self.method)
+        if result['success']:
+            result['flags'] = 0
+        else:
+            result['flags'] = 1
         if 'x' in result:
             result['pars'] = result['x']
         
@@ -1100,7 +1104,11 @@ class MCMCBase(FitterBase):
         arates = sampler.acceptance_fraction
         self.arate = arates.mean()
 
+        self._last_pos=pos
         return pos
+
+    def get_last_pos(self):
+        return self._last_pos
 
     def get_weights(self):
         """
