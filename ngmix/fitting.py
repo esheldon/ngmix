@@ -177,11 +177,27 @@ class FitterBase(object):
         """
         Effective def based on effective number of pixels
         """
-        eff_npix=self.get_effective_npix()
-        dof = eff_npix-self.npars
+        #npix=self.get_effective_npix()
+        npix=self.get_npix()
+        dof = npix-self.npars
         if dof <= 0:
             dof = 1.e-6
         return dof
+
+    def get_npix(self):
+        """
+        just get the total number of pixels in all images
+        """
+        if not hasattr(self, '_npix'):
+            npix=0
+            for obs_list in self.obs:
+                for obs in obs_list:
+                    npix += obs.image.size
+
+            self._npix=npix
+
+        return self._npix
+
 
     def get_effective_npix(self):
         """
@@ -193,6 +209,7 @@ class FitterBase(object):
 
             eff_npix = sum(weights)maxweight
         """
+        raise RuntimeError("this is bogus")
         if not hasattr(self, 'eff_npix'):
             wtmax = 0.0
             wtsum = 0.0
@@ -282,7 +299,8 @@ class FitterBase(object):
             s2n=0.0
 
         dof=self.get_dof()
-        eff_npix=self.get_effective_npix()
+        #eff_npix=self.get_effective_npix()
+        eff_npix=self.get_npix()
 
         chi2=lnprob/(-0.5)
         chi2per = chi2/dof
@@ -604,6 +622,7 @@ class TemplateFluxFitter(FitterBase):
 
             eff_npix = sum(weights)maxweight
         """
+        raise RuntimeError("this is bogus")
         if not hasattr(self, 'eff_npix'):
             wtmax = 0.0
             wtsum = 0.0
@@ -625,6 +644,20 @@ class TemplateFluxFitter(FitterBase):
             self.eff_npix=eff_npix
 
         return self.eff_npix
+
+    def get_npix(self):
+        """
+        just get the total number of pixels in all images
+        """
+        if not hasattr(self, '_npix'):
+            npix=0
+            for obs in self.obs:
+                npix += obs.image.size
+
+            self._npix=npix
+
+        return self._npix
+
 
 
 import scipy.optimize
@@ -702,9 +735,9 @@ class LMSimple(FitterBase):
         self.lm_pars=keys['lm_pars']
 
         # center1 + center2 + shape1 + shape2 + T + fluxes
-        n_prior_pars=1 + 1 + 1 + 1 + 1 + self.nband
+        self.n_prior_pars=1 + 1 + 1 + 1 + 1 + self.nband
 
-        self.fdiff_size=self.totpix + n_prior_pars
+        self.fdiff_size=self.totpix + self.n_prior_pars
 
         self._band_pars=zeros(6)
 
@@ -718,7 +751,7 @@ class LMSimple(FitterBase):
         self._setup_data(guess)
 
         dof=self.get_dof()
-        result = run_leastsq(self._calc_fdiff, guess, dof, **self.lm_pars)
+        result = run_leastsq(self._calc_fdiff, guess, dof, self.n_prior_pars, **self.lm_pars)
 
         if result['flags']==0:
             result['g'] = result['pars'][2:2+2].copy()
@@ -847,7 +880,7 @@ class LMSersic(LMSimple):
 
 
 NOTFINITE_BIT=11
-def run_leastsq(func, guess, dof, **keys):
+def run_leastsq(func, guess, dof, n_prior_pars, **keys):
     """
     run leastsq from scipy.optimize.  Deal with certain
     types of errors
@@ -861,6 +894,10 @@ def run_leastsq(func, guess, dof, **keys):
         the function to minimize
     guess:
         guess at pars
+    dof:
+        number of degrees of freedom, for error calculation
+    n_prior_pars:
+        number of slots in fdiff for priors
 
     some useful keywords
     maxfev:
@@ -905,7 +942,7 @@ def run_leastsq(func, guess, dof, **keys):
             fdiff=func(pars)
 
             # npars: to remove priors
-            s_sq = (fdiff[npars:]**2).sum()/dof
+            s_sq = (fdiff[n_prior_pars:]**2).sum()/dof
             pcov = pcov0 * s_sq 
 
             cflags = _test_cov(pcov)
