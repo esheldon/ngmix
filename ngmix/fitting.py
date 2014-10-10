@@ -1067,11 +1067,33 @@ class MCMCBase(FitterBase):
 
         return self._best_pars.copy()
 
+    def get_best_lnprob(self):
+        """
+        get the highest probability
+        """
+        if not hasattr(self,'_lnprobs'):
+            raise RuntimeError("you need to run the mcmc chain first")
+
+        return self._best_lnprob
+
+
     def get_sampler(self):
         """
         get the emcee sampler
         """
         return self.sampler
+
+    def get_arate(self):
+        """
+        get the acceptance rate
+        """
+        return self.arate
+
+    def get_tau(self):
+        """
+        2*tau/nstep
+        """
+        return self.tau
 
     def run_mcmc(self, pos0, nstep):
         """
@@ -1796,6 +1818,7 @@ class MHSimple(MCMCSimple):
 
         self.arate = sampler.get_arate()
 
+        self._last_pos=pos
         return pos
 
     def take_step(self, pos):
@@ -1827,8 +1850,20 @@ class MHSimple(MCMCSimple):
 
 
     def _set_tau(self):
-        # we don't calculate this currently
-        self.tau=9999.0
+        """
+        auto-correlation scale lenght*2 divided by the number of steps
+        """
+        import emcee
+
+        trials=self.get_trials()
+
+        # actually 2*tau
+        tau2 = emcee.autocorr.integrated_time(trials,window=100)
+        tau2 = tau2.max()
+
+        nstep=self.trials.shape[0]
+        self.tau=tau2/nstep
+
 
 class MHTempSimple(MHSimple):
     """
