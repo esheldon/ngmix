@@ -1067,11 +1067,33 @@ class MCMCBase(FitterBase):
 
         return self._best_pars.copy()
 
+    def get_best_lnprob(self):
+        """
+        get the highest probability
+        """
+        if not hasattr(self,'_lnprobs'):
+            raise RuntimeError("you need to run the mcmc chain first")
+
+        return self._best_lnprob
+
+
     def get_sampler(self):
         """
         get the emcee sampler
         """
         return self.sampler
+
+    def get_arate(self):
+        """
+        get the acceptance rate
+        """
+        return self._arate
+
+    def get_tau(self):
+        """
+        2*tau/nstep
+        """
+        return self._tau
 
     def run_mcmc(self, pos0, nstep):
         """
@@ -1099,10 +1121,11 @@ class MCMCBase(FitterBase):
         bp=lnprobs[w]
         if self._best_lnprob is None or bp > self._best_lnprob:
             self._best_lnprob=bp
-            self._best_pars=self._trials[w,:]
+            self._best_pars=trials[w,:]
 
         arates = sampler.acceptance_fraction
-        self.arate = arates.mean()
+        self._arate = arates.mean()
+        self._set_tau()
 
         self._last_pos=pos
         return pos
@@ -1148,14 +1171,13 @@ class MCMCBase(FitterBase):
 
         pars,pars_cov = self.get_stats(weights=weights)
         pars_err=sqrt(diag(pars_cov))
-        self._set_tau()
         res={'model':self.model_name,
              'flags':self.flags,
              'pars':pars,
              'pars_cov':pars_cov,
              'pars_err':pars_err,
-             'tau':self.tau,
-             'arate':self.arate}
+             'tau':self._tau,
+             'arate':self._arate}
 
         # note get_fits_stats expects pars in log space
         fit_stats = self._get_fit_stats(pars)
@@ -1172,7 +1194,7 @@ class MCMCBase(FitterBase):
         """
 
         self.flags=0
-        self.tau=0.0
+        self._tau=0.0
 
         npars=pos.shape[1]
         mess="pos has npars=%d, expected %d" % (npars,self.npars)
@@ -1198,12 +1220,10 @@ class MCMCBase(FitterBase):
 
     def _set_tau(self):
         """
-        auto-correlation
+        auto-correlation for emcee
         """
         import emcee
-        tau = 9999.0
 
-        '''
         trials=self.get_trials()
         if hasattr(emcee.ensemble,'acor'):
             if emcee.ensemble.acor is not None:
@@ -1215,8 +1235,7 @@ class MCMCBase(FitterBase):
                 acor=self.sampler.acor
                 nstep=trials.shape[0]
                 tau = (acor/nstep).max()
-        '''
-        self.tau=tau
+        self._tau=tau
 
     def _make_sampler(self):
         """
@@ -1234,7 +1253,7 @@ class MCMCBase(FitterBase):
             # fail silently which is the stupidest thing I have ever seen in my
             # entire life.  If I want to set the state it is important to me!
             
-            print('            replacing random state')
+            #print('            replacing random state')
             #sampler.random_state=self.random_state.get_state()
 
             # OK, we will just hope that _random doesn't change names in the future.
@@ -1792,10 +1811,12 @@ class MHSimple(MCMCSimple):
         bp=lnprobs[w]
         if self._best_lnprob is None or bp > self._best_lnprob:
             self._best_lnprob=bp
-            self._best_pars=self._trials[w,:]
+            self._best_pars=trials[w,:]
 
-        self.arate = sampler.get_arate()
+        self._arate = sampler.get_arate()
+        self._set_tau()
 
+        self._last_pos=pos
         return pos
 
     def take_step(self, pos):
@@ -1827,8 +1848,20 @@ class MHSimple(MCMCSimple):
 
 
     def _set_tau(self):
-        # we don't calculate this currently
-        self.tau=9999.0
+        """
+        auto-correlation scale lenght*2 divided by the number of steps
+        """
+        import emcee
+
+        trials=self.get_trials()
+
+        # actually 2*tau
+        tau2 = emcee.autocorr.integrated_time(trials,window=100)
+        tau2 = tau2.max()
+
+        nstep=trials.shape[0]
+        self._tau=tau2/nstep
+
 
 class MHTempSimple(MHSimple):
     """
@@ -1883,7 +1916,7 @@ class MCMCSersic(MCMCSimple):
         """
 
         self.flags=0
-        self.tau=0.0
+        self._tau=0.0
         self.pos=pos
         self.npars=pos.shape[1]
 
@@ -1944,7 +1977,7 @@ class MCMCSersic(MCMCSimple):
             self._best_pars=sampler.flatchain[w,:]
 
         arates = sampler.acceptance_fraction
-        self.arate = arates.mean()
+        self._arate = arates.mean()
 
         self._trials=trials
 
@@ -2078,7 +2111,7 @@ class MCMCSersicJointHybrid(MCMCSersic):
         """
 
         g_prior=self.joint_prior.g_prior
-        trials=self.trials
+        trials=self._trials
         g1=trials[:,2]
         g2=trials[:,3]
 
@@ -2149,7 +2182,7 @@ class MCMCSersicJointHybrid(MCMCSersic):
 
     def _get_g_prior_vals(self):
         if not hasattr(self,'joint_prior_vals'):
-            trials=self.trials
+            trials=self._trials
             g1,g2=trials[:,2],trials[:,3]
             self.joint_prior_vals = self.joint_prior.g_prior.get_prob_array2d(g1,g2)
         return self.joint_prior_vals
@@ -2633,9 +2666,9 @@ class MCMCBDFJoint(MCMCBDF):
 
         sh=self.shear_expand
         if sh is None:
-            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:])
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self._trials[:, 2:])
         else:
-            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:],
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self._trials[:, 2:],
                                                     s1=sh[0],s2=sh[1])
         P,Q,R = self._get_mean_pqr(Pi,Qi,Ri)
 
@@ -2670,7 +2703,7 @@ class MCMCBDFJoint(MCMCBDF):
         sampler = self._make_sampler()
         self.sampler=sampler
 
-        self.tau=9999.0
+        self._tau=9999.0
 
         Tfracdiff_max=self.Tfracdiff_max
 
@@ -2720,11 +2753,11 @@ class MCMCBDFJoint(MCMCBDF):
         sampler.reset()
         self.last_pos, prob, state = sampler.run_mcmc(self.last_pos, self.nstep)
 
-        self.trials  = sampler.flatchain
-        self.joint_prior_vals = self.joint_prior.get_prob_array(self.trials[:,2:], throw=False)
+        self._trials  = sampler.flatchain
+        self.joint_prior_vals = self.joint_prior.get_prob_array(self._trials[:,2:], throw=False)
 
         arates = sampler.acceptance_fraction
-        self.arate = arates.mean()
+        self._arate = arates.mean()
 
         lnprobs = sampler.lnprobability.reshape(self.nwalkers*self.nstep)
         w=lnprobs.argmax()
@@ -2799,7 +2832,7 @@ class MCMCSimpleJointHybrid(MCMCSimple):
         """
 
         g_prior=self.joint_prior.g_prior
-        trials=self.trials
+        trials=self._trials
         g1=trials[:,2]
         g2=trials[:,3]
 
@@ -2869,7 +2902,7 @@ class MCMCSimpleJointHybrid(MCMCSimple):
 
     def _get_g_prior_vals(self):
         if not hasattr(self,'joint_prior_vals'):
-            trials=self.trials
+            trials=self._trials
             g1,g2=trials[:,2],trials[:,3]
             self.joint_prior_vals = self.joint_prior.g_prior.get_prob_array2d(g1,g2)
         return self.joint_prior_vals
@@ -3004,9 +3037,9 @@ class MCMCSimpleJointLinPars(MCMCSimple):
         print("get pqr joint simple")
         sh=self.shear_expand
         if sh is None:
-            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:,2:])
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self._trials[:,2:])
         else:
-            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:,2:],
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self._trials[:,2:],
                                                     s1=sh[0],
                                                     s2=sh[1])
         
@@ -3051,7 +3084,7 @@ class MCMCSimpleJointLinPars(MCMCSimple):
     
     def _get_joint_prior_vals(self):
         if not hasattr(self,'joint_prior_vals'):
-            eabs_pars=self._get_eabs_pars(self.trials)
+            eabs_pars=self._get_eabs_pars(self._trials)
             self.joint_prior_vals = self.joint_prior.get_prob_array(eabs_pars)
         return self.joint_prior_vals
 
@@ -3117,9 +3150,9 @@ class MCMCSimpleJointLogPars(MCMCSimple):
         print("get pqr joint simple")
         sh=self.shear_expand
         if sh is None:
-            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:])
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self._trials[:, 2:])
         else:
-            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:],
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self._trials[:, 2:],
                                                     s1=sh[0],
                                                     s2=sh[1])
         
@@ -3164,7 +3197,7 @@ class MCMCSimpleJointLogPars(MCMCSimple):
     
     def _get_joint_prior_vals(self):
         if not hasattr(self,'joint_prior_vals'):
-            self.joint_prior_vals = self.joint_prior.get_prob_array(self.trials[:,2:])
+            self.joint_prior_vals = self.joint_prior.get_prob_array(self._trials[:,2:])
         return self.joint_prior_vals
 
     def get_par_names(self):
