@@ -1762,12 +1762,22 @@ class MHSimple(MCMCSimple):
         set the step sizes to the input
         """
         step_sizes=numpy.asanyarray(step_sizes, dtype='f8')
-        ns=step_sizes.size
-        mess="step_sizes has size=%d, expected %d" % (ns,self.npars)
-        assert (ns == self.npars),mess
-
+        sdim = step_sizes.shape
+        if len(sdim) == 1:
+            ns=step_sizes.size
+            mess="step_sizes has size=%d, expected %d" % (ns,self.npars)
+            assert (ns == self.npars),mess
+        elif len(sdim) == 2:
+            assert (sdim[0] == sdim[1]),"step_sizes needs to be a square matrix, has dims %dx%d." % sdim
+            ns=sdim[0]
+            mess="step_sizes has size=%d, expected %d" % (ns,self.npars)
+            assert (ns == self.npars),mess
+            assert numpy.all(numpy.linalg.eigvals(step_sizes) > 0),"step_sizes must be positive definite."
+        else:
+            assert len(sdim) <= 2, "step_sizes cannot have dimension greater than 2, has %d dims." % len(sdim)
         self._step_sizes=step_sizes
-
+        self._ndim_step_sizes = len(sdim)
+        
     def set_random_state(self, seed=None, state=None):
         """
         set the random state
@@ -1823,7 +1833,10 @@ class MHSimple(MCMCSimple):
         """
         Take gaussian steps
         """
-        return pos+self._step_sizes*self.random_state.normal(size=self.npars)
+        if self._ndim_step_sizes == 1:
+            return pos+self._step_sizes*self.random_state.normal(size=self.npars)
+        else:
+            return numpy.random.multivariate_normal(pos, self._step_sizes)
 
     def _setup_sampler_and_data(self, pos):
         """
