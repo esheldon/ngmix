@@ -1768,7 +1768,8 @@ class MHSimple(MCMCSimple):
             mess="step_sizes has size=%d, expected %d" % (ns,self.npars)
             assert (ns == self.npars),mess
         elif len(sdim) == 2:
-            assert (sdim[0] == sdim[1]),"step_sizes needs to be a square matrix, has dims %dx%d." % sdim
+            mess="step_sizes needs to be a square matrix, has dims %dx%d." % sdim
+            assert (sdim[0] == sdim[1]),mess
             ns=sdim[0]
             mess="step_sizes has size=%d, expected %d" % (ns,self.npars)
             assert (ns == self.npars),mess
