@@ -3171,6 +3171,7 @@ def test_mcmc_psf(model="gauss",
     mc.make_plots(do_residual=True,show=True,prompt=False)
 
 def test_model(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
+               nwalkers=80, burnin=800, nstep=800,
                g_prior=None, show=False):
     """
     Test fitting the specified model.
@@ -3180,12 +3181,6 @@ def test_model(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
     from . import em
     from . import joint_prior
     import time
-
-
-    nwalkers=80
-    burnin=800
-    nstep=800
-
 
     #
     # simulation
