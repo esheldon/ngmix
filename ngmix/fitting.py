@@ -177,11 +177,27 @@ class FitterBase(object):
         """
         Effective def based on effective number of pixels
         """
-        eff_npix=self.get_effective_npix()
-        dof = eff_npix-self.npars
+        #npix=self.get_effective_npix()
+        npix=self.get_npix()
+        dof = npix-self.npars
         if dof <= 0:
             dof = 1.e-6
         return dof
+
+    def get_npix(self):
+        """
+        just get the total number of pixels in all images
+        """
+        if not hasattr(self, '_npix'):
+            npix=0
+            for obs_list in self.obs:
+                for obs in obs_list:
+                    npix += obs.image.size
+
+            self._npix=npix
+
+        return self._npix
+
 
     def get_effective_npix(self):
         """
@@ -193,6 +209,7 @@ class FitterBase(object):
 
             eff_npix = sum(weights)maxweight
         """
+        raise RuntimeError("this is bogus")
         if not hasattr(self, 'eff_npix'):
             wtmax = 0.0
             wtsum = 0.0
@@ -282,7 +299,8 @@ class FitterBase(object):
             s2n=0.0
 
         dof=self.get_dof()
-        eff_npix=self.get_effective_npix()
+        #eff_npix=self.get_effective_npix()
+        eff_npix=self.get_npix()
 
         chi2=lnprob/(-0.5)
         chi2per = chi2/dof
@@ -604,6 +622,7 @@ class TemplateFluxFitter(FitterBase):
 
             eff_npix = sum(weights)maxweight
         """
+        raise RuntimeError("this is bogus")
         if not hasattr(self, 'eff_npix'):
             wtmax = 0.0
             wtsum = 0.0
@@ -626,6 +645,85 @@ class TemplateFluxFitter(FitterBase):
 
         return self.eff_npix
 
+    def get_npix(self):
+        """
+        just get the total number of pixels in all images
+        """
+        if not hasattr(self, '_npix'):
+            npix=0
+            for obs in self.obs:
+                npix += obs.image.size
+
+            self._npix=npix
+
+        return self._npix
+
+
+
+import scipy.optimize
+class MaxSimple(FitterBase):
+    """
+    A class for direct maximization of the likelihood.
+    Useful for seeding model parameters.
+    """
+    def __init__(self, obs, model, method='Nelder-Mead', **keys):
+        super(MaxSimple,self).__init__(obs, model, **keys)
+        self._obs = obs
+        self._model = model
+        self.method = method
+        self._band_pars = numpy.zeros(6)
+        
+    def _setup_data(self, guess):
+        """
+        try very hard to initialize the mixtures
+        """
+
+        if hasattr(self,'_result'):
+            del self._result
+
+        self.flags=0
+
+        npars=guess.size
+        mess="guess has npars=%d, expected %d" % (npars,self.npars)
+        assert (npars==self.npars),mess
+
+        try:
+            # this can raise GMixRangeError
+            self._init_gmix_all(guess)
+        except ZeroDivisionError:
+            raise GMixRangeError("got zero division")
+
+    def _get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+        """
+
+        pars=self._band_pars
+        pars[0:5] = pars_in[0:5]
+        pars[5] = pars_in[5+band]
+        return pars
+
+    def neglnprob(self, pars):
+        return -1.0*self.calc_lnprob(pars)
+
+    def run_max(self, guess):
+        """
+        Run maximizer and set the result.
+        """
+
+        guess=numpy.array(guess,dtype='f8',copy=False)
+        self._setup_data(guess)
+        
+        result = scipy.optimize.minimize(self.neglnprob, guess, method=self.method)
+        if result['success']:
+            result['flags'] = 0
+        else:
+            result['flags'] = 1
+        if 'x' in result:
+            result['pars'] = result['x']
+        
+        self._result = result
+
 
 class LMSimple(FitterBase):
     """
@@ -641,9 +739,9 @@ class LMSimple(FitterBase):
         self.lm_pars=keys['lm_pars']
 
         # center1 + center2 + shape1 + shape2 + T + fluxes
-        n_prior_pars=1 + 1 + 1 + 1 + 1 + self.nband
+        self.n_prior_pars=1 + 1 + 1 + 1 + 1 + self.nband
 
-        self.fdiff_size=self.totpix + n_prior_pars
+        self.fdiff_size=self.totpix + self.n_prior_pars
 
         self._band_pars=zeros(6)
 
@@ -657,7 +755,7 @@ class LMSimple(FitterBase):
         self._setup_data(guess)
 
         dof=self.get_dof()
-        result = run_leastsq(self._calc_fdiff, guess, dof, **self.lm_pars)
+        result = run_leastsq(self._calc_fdiff, guess, dof, self.n_prior_pars, **self.lm_pars)
 
         if result['flags']==0:
             result['g'] = result['pars'][2:2+2].copy()
@@ -786,7 +884,7 @@ class LMSersic(LMSimple):
 
 
 NOTFINITE_BIT=11
-def run_leastsq(func, guess, dof, **keys):
+def run_leastsq(func, guess, dof, n_prior_pars, **keys):
     """
     run leastsq from scipy.optimize.  Deal with certain
     types of errors
@@ -800,6 +898,10 @@ def run_leastsq(func, guess, dof, **keys):
         the function to minimize
     guess:
         guess at pars
+    dof:
+        number of degrees of freedom, for error calculation
+    n_prior_pars:
+        number of slots in fdiff for priors
 
     some useful keywords
     maxfev:
@@ -844,7 +946,7 @@ def run_leastsq(func, guess, dof, **keys):
             fdiff=func(pars)
 
             # npars: to remove priors
-            s_sq = (fdiff[npars:]**2).sum()/dof
+            s_sq = (fdiff[n_prior_pars:]**2).sum()/dof
             pcov = pcov0 * s_sq 
 
             cflags = _test_cov(pcov)
@@ -965,11 +1067,33 @@ class MCMCBase(FitterBase):
 
         return self._best_pars.copy()
 
+    def get_best_lnprob(self):
+        """
+        get the highest probability
+        """
+        if not hasattr(self,'_lnprobs'):
+            raise RuntimeError("you need to run the mcmc chain first")
+
+        return self._best_lnprob
+
+
     def get_sampler(self):
         """
         get the emcee sampler
         """
         return self.sampler
+
+    def get_arate(self):
+        """
+        get the acceptance rate
+        """
+        return self._arate
+
+    def get_tau(self):
+        """
+        2*tau/nstep
+        """
+        return self._tau
 
     def run_mcmc(self, pos0, nstep):
         """
@@ -997,12 +1121,17 @@ class MCMCBase(FitterBase):
         bp=lnprobs[w]
         if self._best_lnprob is None or bp > self._best_lnprob:
             self._best_lnprob=bp
-            self._best_pars=self._trials[w,:]
+            self._best_pars=trials[w,:]
 
         arates = sampler.acceptance_fraction
-        self.arate = arates.mean()
+        self._arate = arates.mean()
+        self._set_tau()
 
+        self._last_pos=pos
         return pos
+
+    def get_last_pos(self):
+        return self._last_pos
 
     def get_weights(self):
         """
@@ -1042,14 +1171,13 @@ class MCMCBase(FitterBase):
 
         pars,pars_cov = self.get_stats(weights=weights)
         pars_err=sqrt(diag(pars_cov))
-        self._set_tau()
         res={'model':self.model_name,
              'flags':self.flags,
              'pars':pars,
              'pars_cov':pars_cov,
              'pars_err':pars_err,
-             'tau':self.tau,
-             'arate':self.arate}
+             'tau':self._tau,
+             'arate':self._arate}
 
         # note get_fits_stats expects pars in log space
         fit_stats = self._get_fit_stats(pars)
@@ -1066,7 +1194,7 @@ class MCMCBase(FitterBase):
         """
 
         self.flags=0
-        self.tau=0.0
+        self._tau=0.0
 
         npars=pos.shape[1]
         mess="pos has npars=%d, expected %d" % (npars,self.npars)
@@ -1092,12 +1220,10 @@ class MCMCBase(FitterBase):
 
     def _set_tau(self):
         """
-        auto-correlation
+        auto-correlation for emcee
         """
         import emcee
-        tau = 9999.0
 
-        '''
         trials=self.get_trials()
         if hasattr(emcee.ensemble,'acor'):
             if emcee.ensemble.acor is not None:
@@ -1109,8 +1235,7 @@ class MCMCBase(FitterBase):
                 acor=self.sampler.acor
                 nstep=trials.shape[0]
                 tau = (acor/nstep).max()
-        '''
-        self.tau=tau
+        self._tau=tau
 
     def _make_sampler(self):
         """
@@ -1128,7 +1253,7 @@ class MCMCBase(FitterBase):
             # fail silently which is the stupidest thing I have ever seen in my
             # entire life.  If I want to set the state it is important to me!
             
-            print('            replacing random state')
+            #print('            replacing random state')
             #sampler.random_state=self.random_state.get_state()
 
             # OK, we will just hope that _random doesn't change names in the future.
@@ -1637,12 +1762,23 @@ class MHSimple(MCMCSimple):
         set the step sizes to the input
         """
         step_sizes=numpy.asanyarray(step_sizes, dtype='f8')
-        ns=step_sizes.size
-        mess="step_sizes has size=%d, expected %d" % (ns,self.npars)
-        assert (ns == self.npars),mess
-
+        sdim = step_sizes.shape
+        if len(sdim) == 1:
+            ns=step_sizes.size
+            mess="step_sizes has size=%d, expected %d" % (ns,self.npars)
+            assert (ns == self.npars),mess
+        elif len(sdim) == 2:
+            mess="step_sizes needs to be a square matrix, has dims %dx%d." % sdim
+            assert (sdim[0] == sdim[1]),mess
+            ns=sdim[0]
+            mess="step_sizes has size=%d, expected %d" % (ns,self.npars)
+            assert (ns == self.npars),mess
+            assert numpy.all(numpy.linalg.eigvals(step_sizes) > 0),"step_sizes must be positive definite."
+        else:
+            assert len(sdim) <= 2, "step_sizes cannot have dimension greater than 2, has %d dims." % len(sdim)
         self._step_sizes=step_sizes
-
+        self._ndim_step_sizes = len(sdim)
+        
     def set_random_state(self, seed=None, state=None):
         """
         set the random state
@@ -1686,17 +1822,22 @@ class MHSimple(MCMCSimple):
         bp=lnprobs[w]
         if self._best_lnprob is None or bp > self._best_lnprob:
             self._best_lnprob=bp
-            self._best_pars=self._trials[w,:]
+            self._best_pars=trials[w,:]
 
-        self.arate = sampler.get_arate()
+        self._arate = sampler.get_arate()
+        self._set_tau()
 
+        self._last_pos=pos
         return pos
 
     def take_step(self, pos):
         """
         Take gaussian steps
         """
-        return pos+self._step_sizes*self.random_state.normal(size=self.npars)
+        if self._ndim_step_sizes == 1:
+            return pos+self._step_sizes*self.random_state.normal(size=self.npars)
+        else:
+            return numpy.random.multivariate_normal(pos, self._step_sizes)
 
     def _setup_sampler_and_data(self, pos):
         """
@@ -1721,8 +1862,20 @@ class MHSimple(MCMCSimple):
 
 
     def _set_tau(self):
-        # we don't calculate this currently
-        self.tau=9999.0
+        """
+        auto-correlation scale lenght*2 divided by the number of steps
+        """
+        import emcee
+
+        trials=self.get_trials()
+
+        # actually 2*tau
+        tau2 = emcee.autocorr.integrated_time(trials,window=100)
+        tau2 = tau2.max()
+
+        nstep=trials.shape[0]
+        self._tau=tau2/nstep
+
 
 class MHTempSimple(MHSimple):
     """
@@ -1777,7 +1930,7 @@ class MCMCSersic(MCMCSimple):
         """
 
         self.flags=0
-        self.tau=0.0
+        self._tau=0.0
         self.pos=pos
         self.npars=pos.shape[1]
 
@@ -1838,7 +1991,7 @@ class MCMCSersic(MCMCSimple):
             self._best_pars=sampler.flatchain[w,:]
 
         arates = sampler.acceptance_fraction
-        self.arate = arates.mean()
+        self._arate = arates.mean()
 
         self._trials=trials
 
@@ -1972,7 +2125,7 @@ class MCMCSersicJointHybrid(MCMCSersic):
         """
 
         g_prior=self.joint_prior.g_prior
-        trials=self.trials
+        trials=self._trials
         g1=trials[:,2]
         g2=trials[:,3]
 
@@ -2043,7 +2196,7 @@ class MCMCSersicJointHybrid(MCMCSersic):
 
     def _get_g_prior_vals(self):
         if not hasattr(self,'joint_prior_vals'):
-            trials=self.trials
+            trials=self._trials
             g1,g2=trials[:,2],trials[:,3]
             self.joint_prior_vals = self.joint_prior.g_prior.get_prob_array2d(g1,g2)
         return self.joint_prior_vals
@@ -2527,9 +2680,9 @@ class MCMCBDFJoint(MCMCBDF):
 
         sh=self.shear_expand
         if sh is None:
-            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:])
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self._trials[:, 2:])
         else:
-            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:],
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self._trials[:, 2:],
                                                     s1=sh[0],s2=sh[1])
         P,Q,R = self._get_mean_pqr(Pi,Qi,Ri)
 
@@ -2564,7 +2717,7 @@ class MCMCBDFJoint(MCMCBDF):
         sampler = self._make_sampler()
         self.sampler=sampler
 
-        self.tau=9999.0
+        self._tau=9999.0
 
         Tfracdiff_max=self.Tfracdiff_max
 
@@ -2614,11 +2767,11 @@ class MCMCBDFJoint(MCMCBDF):
         sampler.reset()
         self.last_pos, prob, state = sampler.run_mcmc(self.last_pos, self.nstep)
 
-        self.trials  = sampler.flatchain
-        self.joint_prior_vals = self.joint_prior.get_prob_array(self.trials[:,2:], throw=False)
+        self._trials  = sampler.flatchain
+        self.joint_prior_vals = self.joint_prior.get_prob_array(self._trials[:,2:], throw=False)
 
         arates = sampler.acceptance_fraction
-        self.arate = arates.mean()
+        self._arate = arates.mean()
 
         lnprobs = sampler.lnprobability.reshape(self.nwalkers*self.nstep)
         w=lnprobs.argmax()
@@ -2693,7 +2846,7 @@ class MCMCSimpleJointHybrid(MCMCSimple):
         """
 
         g_prior=self.joint_prior.g_prior
-        trials=self.trials
+        trials=self._trials
         g1=trials[:,2]
         g2=trials[:,3]
 
@@ -2763,7 +2916,7 @@ class MCMCSimpleJointHybrid(MCMCSimple):
 
     def _get_g_prior_vals(self):
         if not hasattr(self,'joint_prior_vals'):
-            trials=self.trials
+            trials=self._trials
             g1,g2=trials[:,2],trials[:,3]
             self.joint_prior_vals = self.joint_prior.g_prior.get_prob_array2d(g1,g2)
         return self.joint_prior_vals
@@ -2898,9 +3051,9 @@ class MCMCSimpleJointLinPars(MCMCSimple):
         print("get pqr joint simple")
         sh=self.shear_expand
         if sh is None:
-            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:,2:])
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self._trials[:,2:])
         else:
-            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:,2:],
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self._trials[:,2:],
                                                     s1=sh[0],
                                                     s2=sh[1])
         
@@ -2945,7 +3098,7 @@ class MCMCSimpleJointLinPars(MCMCSimple):
     
     def _get_joint_prior_vals(self):
         if not hasattr(self,'joint_prior_vals'):
-            eabs_pars=self._get_eabs_pars(self.trials)
+            eabs_pars=self._get_eabs_pars(self._trials)
             self.joint_prior_vals = self.joint_prior.get_prob_array(eabs_pars)
         return self.joint_prior_vals
 
@@ -3011,9 +3164,9 @@ class MCMCSimpleJointLogPars(MCMCSimple):
         print("get pqr joint simple")
         sh=self.shear_expand
         if sh is None:
-            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:])
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self._trials[:, 2:])
         else:
-            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self.trials[:, 2:],
+            Pi,Qi,Ri = self.joint_prior.get_pqr_num(self._trials[:, 2:],
                                                     s1=sh[0],
                                                     s2=sh[1])
         
@@ -3058,7 +3211,7 @@ class MCMCSimpleJointLogPars(MCMCSimple):
     
     def _get_joint_prior_vals(self):
         if not hasattr(self,'joint_prior_vals'):
-            self.joint_prior_vals = self.joint_prior.get_prob_array(self.trials[:,2:])
+            self.joint_prior_vals = self.joint_prior.get_prob_array(self._trials[:,2:])
         return self.joint_prior_vals
 
     def get_par_names(self):
