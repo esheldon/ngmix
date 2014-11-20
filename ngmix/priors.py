@@ -1275,7 +1275,7 @@ class GPriorBA(GPriorBase):
 
             output[w] = omgsq[w]*expval
 
-            output[w] *= 2*numpy.pi*g
+            output[w] *= 2*numpy.pi*g[w]
 
     def dbyg1_scalar(self, g1, g2):
         """
