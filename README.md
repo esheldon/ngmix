@@ -118,7 +118,7 @@ examples
     ngmix.print_pars(res['pars_err'],front="err:  ")
     #print res['pars_cov'] # full covariance matrix
 
-    # note the trials can be gotten with get_trial()
+    # note the trials can be gotten with get_trials()
 
 
     # Fit multiple images of the same object. Send an ObsList to the fitter.
