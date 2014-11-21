@@ -28,9 +28,12 @@ from numpy.random import uniform as urand
 gal_jacob=ngmix.UnitJacobian(16.0, 16.0)
 psf_jacob=ngmix.UnitJacobian(12.0, 12.0)
 
-# cen1,cen2,g1,g2,T,flux
-# note T=ixx+iyy, and center is zero, corresponding to offset relative
-# to the jacobian center, so is zero
+# pars correspond to
+#     [cen1, cen2, g1, g2, T, flux]
+#
+# note T=ixx+iyy, and the center corresponds to an offset relative to the
+# jacobian center.  Use cen1,cen2=0,0 for no offset
+
 pars=[0.0, 0.0, 0.2, -0.1, 16.0, 100.0]
 
 # PSF is a single gaussian
