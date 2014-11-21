@@ -42,10 +42,16 @@ psf_pars=[0.0, 0.0, -0.03, 0.02, 4.0, 1.0]
 gmix0=ngmix.GMixModel(pars,"exp")
 psf_gmix=ngmix.GMixModel(psf_pars,"gauss")
 
+# convolution with the PSF
 gmix=gmix0.convolve(psf_gmix)
+
+# render the image, integrating the model over the pixels
+# with a sub-pixel grid 16x16
 
 dims=[32,32]
 image=gmix.make_image(dims, nsub=16, jacobian=gal_jacob)
+
+# add some noise
 
 sigma=0.01
 noise = sigma*numpy.random.randn(image.size).reshape(image.shape)
@@ -56,8 +62,7 @@ noisy_image = image + noise
 # fit the data
 #
 
-# fit the PSF
-# it is best to fit the PSF using an EM algorithm
+# fit the PSF using an EM algorithm
 psf_dims=[24,24]
 psf_im=psf_gmix.make_image(psf_dims, nsub=16, jacobian=psf_jacob)
 
@@ -67,7 +72,7 @@ imsky,sky=ngmix.em.prep_image(psf_im)
 psf_obs=Observation(imsky, jacobian=psf_jacob)
 
 em=ngmix.em.GMixEM(psf_obs)
-# guess truth
+# for simplicity, guess pars before pixelization
 guess=psf_gmix.copy()
 em.go(guess, sky, tol=1.e-5)
 
