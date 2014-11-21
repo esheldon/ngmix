@@ -8,7 +8,7 @@ Notes
 
 examples
 --------
-
+```python
     import ngmix
     from ngmix.observation import Observation, ObsList, MultiBandObsList
     import numpy
@@ -140,7 +140,7 @@ examples
     mb_obs_list.append( obs_list_z ) 
 
     fitter=ngmix.fitting.MCMCSimple(mb_obs_list, model, nwalkers=nwalkers)
-
+```
 dependencies
 ------------
 
