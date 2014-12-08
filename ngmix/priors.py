@@ -1852,7 +1852,9 @@ def make_gprior_cosmos_dev():
 
 def make_gprior_cosmos_sersic(type='erf'):
     """
-    Fitting to Lackner ellipticities
+    Fitting to Lackner ellipticities, see
+    espydir/cosmos/lackner_fits.py
+        fit_sersic
     A:        0.0250834 +/- 0.00198797
     a:        1.98317 +/- 0.187965
     g0:       0.0793992 +/- 0.00256969
@@ -3315,31 +3317,41 @@ class ZDisk2D(_gmix.ZDisk2D):
 class ZDisk2DErf(object):
     """
     uniform over a disk centered at zero [0,0] with radius r
+
+    the cutoff begins at radius-6*width so that the prob is
+    completely zero by the point of the radius
     """
-    def __init__(self, radius, width=0.001):
-        self.radius = radius
-        self.radius_sq = radius**2
+    def __init__(self, max_radius=1.0, rolloff_point=0.98, width=0.005):
+        self.rolloff_point=rolloff_point
+        self.radius = max_radius
+        self.radius_sq = max_radius**2
 
         self.width=width
 
     def get_prob_scalar1d(self, val):
         """
-        works for both array and scalar
+        scalar only
         """
         from ._gmix import erf
 
-        erf_val=erf( (self.radius-val-6*self.width)/self.width )
+        if val > self.radius:
+            return 0.0
+
+        erf_val=erf( (val-self.rolloff_point)/self.width )
         retval=0.5*(1.0+erf_val)
 
         return retval
 
     def get_lnprob_scalar1d(self, val):
         """
-        works for both array and scalar
+        scalar only
         """
         from ._gmix import erf
 
-        erf_val=erf( (self.radius-val-6*self.width)/self.width )
+        if val > self.radius:
+            return LOWVAL
+
+        erf_val=erf( (val-self.rolloff_point)/self.width )
         linval=0.5*(1.0+erf_val)
 
         if linval <= 0.0:
@@ -3361,11 +3373,17 @@ class ZDisk2DErf(object):
 
         vals=numpy.array(vals, ndmin=1, dtype='f8', copy=False)
 
-        arg = (self.radius-vals-6.0*self.width)/self.width
+        arg=(self.rolloff_point-vals)/self.width
         erf_vals=numpy.zeros(vals.size)
 
         erf_array(arg, erf_vals)
-        return 0.5*(1.0+erf_vals)
+        prob=0.5*(1.0+erf_vals)
+
+        w,=numpy.where(vals >= self.radius)
+        if w.size > 0:
+            prob[w]=0.0
+
+        return prob
 
     def get_lnprob_array1d(self, vals):
         """
@@ -3373,20 +3391,14 @@ class ZDisk2DErf(object):
         """
         from ._gmix import erf_array
 
-        vals=numpy.array(vals, ndmin=1, dtype='f8', copy=False)
+        prob = self.get_prob_array1d(vals)
 
-        arg = (self.radius-vals-6.0*self.width)/self.width
-        erf_vals=numpy.zeros(vals.size)
-
-        erf_array(arg, erf_vals)
-        lin_vals = 0.5*(1.0+erf_vals)
-
-        retvals = LOWVAL + zeros(lin_vals.size)
-        w,=numpy.where( lin_vals > 0.0 )
+        lnprob = LOWVAL + zeros(prob.size)
+        w,=numpy.where( prob > 0.0 )
         if w.size > 0:
-            retvals[w] = log( lin_vals[w] )
+            lnprob[w] = log( prob[w] )
 
-        return retvals
+        return lnprob
 
 
 

@@ -660,7 +660,6 @@ class TemplateFluxFitter(FitterBase):
 
 
 
-import scipy.optimize
 class MaxSimple(FitterBase):
     """
     A class for direct maximization of the likelihood.
@@ -672,6 +671,8 @@ class MaxSimple(FitterBase):
         self._model = model
         self.method = method
         self._band_pars = numpy.zeros(6)
+
+        self._tolerance=keys.get('tol',1.0e-6)
         
     def _setup_data(self, guess):
         """
@@ -710,18 +711,25 @@ class MaxSimple(FitterBase):
         """
         Run maximizer and set the result.
         """
+        import scipy.optimize
 
         guess=numpy.array(guess,dtype='f8',copy=False)
         self._setup_data(guess)
         
-        result = scipy.optimize.minimize(self.neglnprob, guess, method=self.method)
+        result = scipy.optimize.minimize(self.neglnprob, guess, method=self.method,
+                                         tol=self._tolerance)
         if result['success']:
             result['flags'] = 0
         else:
             result['flags'] = 1
         if 'x' in result:
-            result['pars'] = result['x']
+            pars=result['x']
+            result['pars'] = pars
         
+            # based on last entry
+            fit_stats = self._get_fit_stats(pars)
+            result.update(fit_stats)
+
         self._result = result
 
 
