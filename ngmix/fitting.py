@@ -672,7 +672,10 @@ class MaxSimple(FitterBase):
         self.method = method
         self._band_pars = numpy.zeros(6)
 
-        self._tolerance=keys.get('tol',1.0e-6)
+        self.options={}
+        if 'maxiter' in keys:
+            self.options['maxiter']=keys['maxiter']
+        #self._tolerance=keys.get('tol',1.0e-6)
         
     def _setup_data(self, guess):
         """
@@ -717,7 +720,8 @@ class MaxSimple(FitterBase):
         self._setup_data(guess)
         
         result = scipy.optimize.minimize(self.neglnprob, guess, method=self.method,
-                                         tol=self._tolerance)
+                                         options=self.options)
+                                         #tol=self._tolerance)
         if result['success']:
             result['flags'] = 0
         else:
