@@ -80,6 +80,12 @@ class GMix(object):
         else:
             self._ngauss=ngauss
             self.reset()
+        
+        self._set_f8_type()
+
+    def _set_f8_type(self):
+        tmp=numpy.zeros(1)
+        self._f8_type=tmp.dtype.descr[0]
 
     def get_data(self):
         """
@@ -297,6 +303,22 @@ class GMix(object):
         """
 
         image=numpy.zeros(dims, dtype='f8')
+        self._fill_image(image, nsub=nsub, jacobian=jacobian)
+        return image
+
+    def _fill_image(self, image, nsub=1, jacobian=None):
+        """
+        Internal routine.  Render the mixture into a new image.  No error
+        checking on the image!
+
+        parameters
+        ----------
+        image: 2-d double array
+            image to render into
+        nsub: integer, optional
+            Defines a grid for sub-pixel integration 
+        """
+
         if jacobian is not None:
             _gmix.render_jacob(self._data,
                                image,
@@ -306,8 +328,6 @@ class GMix(object):
             _gmix.render(self._data,
                          image,
                          nsub)
-
-        return image
 
 
     def fill_fdiff(self, obs, fdiff, start=0, nsub=1):
@@ -409,6 +429,47 @@ class GMix(object):
         else:
             return loglike
 
+    def get_loglike_submean(self, obs, model_image, nsub=1, get_s2nsums=False):
+        """
+        Calculate the log likelihood given the input Observation, subtracting
+        the mean of the image and model.  The model is first rendered into the
+        input image so that rendering does not happen twice
+
+
+        parameters
+        ----------
+        obs: Observation
+            The Observation to compare with. See ngmix.observation.Observation
+            The Observation must have a weight map set
+            The Observation must have image_mean set
+        model_image: 2-d double array
+            image to render model into
+        nsub: integer, optional
+            Defines a grid for sub-pixel integration 
+        """
+
+        image=obs.image
+
+        assert model_image.dtype.descr[0][1] == self._f8_type,"image must be native double"
+        assert len(model_image.shape)==2,"image must be 2-d"
+        assert model_image.shape==image.shape,"image and model must be same shape"
+
+        self._fill_image(model_image, nsub=nsub, jacobian=obs.jacobian)
+
+        model_mean=_gmix.get_image_mean(model_image, obs.weight)
+
+        loglike,s2n_numer,s2n_denom=_gmix.get_loglike_images_submean(image,
+                                                                     obs.image_mean,
+                                                                     obs.weight,
+                                                                     model_image,
+                                                                     model_mean)
+
+        if get_s2nsums:
+            return loglike,s2n_numer,s2n_denom
+        else:
+            return loglike
+
+
     def reset(self):
         """
         Replace the data array with a zeroed one.
@@ -494,6 +555,7 @@ class GMixModel(GMix):
     """
     def __init__(self, pars, model):
 
+        self._set_f8_type()
         self._model      = _gmix_model_dict[model]
         self._model_name = _gmix_string_dict[self._model]
 

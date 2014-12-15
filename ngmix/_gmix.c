@@ -778,6 +778,48 @@ static PyObject * PyGMix_render_jacob(PyObject* self, PyObject* args) {
 
 
 /*
+   Calculate the image mean, accounting for weight function.
+*/
+
+static PyObject * PyGMix_get_image_mean(PyObject* self, PyObject* args) {
+
+    PyObject* image_obj=NULL;
+    PyObject* weight_obj=NULL;
+    npy_intp n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+
+    double data=0, ivar=0;
+    double wsum=0, imsum=0, wmean=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OO", &image_obj, &weight_obj)) {
+        return NULL;
+    }
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+
+            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
+            if ( ivar > 0.0) {
+                data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
+
+                wsum += ivar;
+                imsum += ivar*data;
+            }
+        }
+    }
+
+    if (wsum > 0) {
+        wmean = imsum/wsum;
+    }
+
+    return Py_BuildValue("d", wmean);
+}
+
+
+
+/*
    Calculate the loglike between the gmix and the input image
 
    Error checking should be done in python.
@@ -852,6 +894,63 @@ static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
     PyTuple_SetItem(retval,2,PyFloat_FromDouble(s2n_denom));
     return retval;
 }
+
+/*
+   Calculate the loglike between the input image and the model image,
+   subtracting off the mean in each case
+
+   Error checking should be done in python.
+*/
+static PyObject * PyGMix_get_loglike_images_submean(PyObject* self, PyObject* args) {
+
+    PyObject* image_obj=NULL;
+    PyObject* weight_obj=NULL;
+    PyObject* model_image_obj=NULL;
+    npy_intp n_row=0, n_col=0, row=0, col=0;
+
+    double image_mean=0, model_mean=0;
+    double data=0, ivar=0;
+    double model_val=0, diff=0;
+    double s2n_numer=0.0, s2n_denom=0.0, loglike = 0.0;
+
+    PyObject* retval=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OdOOd", 
+                          &image_obj, &image_mean, &weight_obj, &model_image_obj, &model_mean)) {
+        return NULL;
+    }
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+
+            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
+            if ( ivar > 0.0) {
+                data      = *( (double*)PyArray_GETPTR2(image_obj,row,col) );
+                model_val = *( (double*)PyArray_GETPTR2(model_image_obj,row,col) );
+
+                data -= image_mean;
+                model_val -= model_mean;
+
+                diff = model_val-data;
+                loglike += diff*diff*ivar;
+                s2n_numer += data*model_val*ivar;
+                s2n_denom += model_val*model_val*ivar;
+            }
+        }
+    }
+
+    loglike *= (-0.5);
+
+    retval=PyTuple_New(3);
+    PyTuple_SetItem(retval,0,PyFloat_FromDouble(loglike));
+    PyTuple_SetItem(retval,1,PyFloat_FromDouble(s2n_numer));
+    PyTuple_SetItem(retval,2,PyFloat_FromDouble(s2n_denom));
+    return retval;
+}
+
 
 static PyObject * PyGMix_get_loglike_sub(PyObject* self, PyObject* args) {
 
@@ -1734,9 +1833,14 @@ static PyObject* PyGMix_erf_array(PyObject* self, PyObject* args)
 
 static PyMethodDef pygauss2d_funcs[] = {
 
+    {"get_image_mean", (PyCFunction)PyGMix_get_image_mean,  METH_VARARGS,  "calculate mean with weight\n"},
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
+    {"get_loglike_images_submean", (PyCFunction)PyGMix_get_loglike_images_submean,  METH_VARARGS,  "calculate likelihood between images, subtracting mean\n"},
+
+
     {"get_loglike_sub", (PyCFunction)PyGMix_get_loglike_sub,  METH_VARARGS,  "calculate likelihood\n"},
     {"get_loglike_robust", (PyCFunction)PyGMix_get_loglike_robust,  METH_VARARGS,  "calculate likelihood with robust metric\n"},
+
     {"fill_fdiff",  (PyCFunction)PyGMix_fill_fdiff,  METH_VARARGS,  "fill fdiff for LM\n"},
     {"fill_fdiff_sub",  (PyCFunction)PyGMix_fill_fdiff_sub,  METH_VARARGS,  "fill fdiff for LM with sub-pixel integration\n"},
     {"render",      (PyCFunction)PyGMix_render, METH_VARARGS,  "render without jacobian\n"},
