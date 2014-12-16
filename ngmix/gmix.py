@@ -85,7 +85,7 @@ class GMix(object):
 
     def _set_f8_type(self):
         tmp=numpy.zeros(1)
-        self._f8_type=tmp.dtype.descr[0]
+        self._f8_type=tmp.dtype.descr[0][1]
 
     def get_data(self):
         """
@@ -429,7 +429,7 @@ class GMix(object):
         else:
             return loglike
 
-    def get_loglike_submean(self, obs, model_image, nsub=1, get_s2nsums=False):
+    def get_loglike_margsky(self, obs, model_image, nsub=1, get_s2nsums=False):
         """
         Calculate the log likelihood given the input Observation, subtracting
         the mean of the image and model.  The model is first rendered into the
@@ -450,15 +450,17 @@ class GMix(object):
 
         image=obs.image
 
-        assert model_image.dtype.descr[0][1] == self._f8_type,"image must be native double"
+        dt=model_image.dtype.descr[0][1]
+        assert dt == self._f8_type,"image must be '%s', got '%s'" % (self._f8_type,dt)
         assert len(model_image.shape)==2,"image must be 2-d"
         assert model_image.shape==image.shape,"image and model must be same shape"
 
+        model_image[:,:]=0
         self._fill_image(model_image, nsub=nsub, jacobian=obs.jacobian)
 
         model_mean=_gmix.get_image_mean(model_image, obs.weight)
 
-        loglike,s2n_numer,s2n_denom=_gmix.get_loglike_images_submean(image,
+        loglike,s2n_numer,s2n_denom=_gmix.get_loglike_images_margsky(image,
                                                                      obs.image_mean,
                                                                      obs.weight,
                                                                      model_image,

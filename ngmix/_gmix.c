@@ -901,7 +901,7 @@ static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
 
    Error checking should be done in python.
 */
-static PyObject * PyGMix_get_loglike_images_submean(PyObject* self, PyObject* args) {
+static PyObject * PyGMix_get_loglike_images_margsky(PyObject* self, PyObject* args) {
 
     PyObject* image_obj=NULL;
     PyObject* weight_obj=NULL;
@@ -909,7 +909,7 @@ static PyObject * PyGMix_get_loglike_images_submean(PyObject* self, PyObject* ar
     npy_intp n_row=0, n_col=0, row=0, col=0;
 
     double image_mean=0, model_mean=0;
-    double data=0, ivar=0;
+    double data=0, ivar=0, data_mod=0, model_mod=0;
     double model_val=0, diff=0;
     double s2n_numer=0.0, s2n_denom=0.0, loglike = 0.0;
 
@@ -931,13 +931,13 @@ static PyObject * PyGMix_get_loglike_images_submean(PyObject* self, PyObject* ar
                 data      = *( (double*)PyArray_GETPTR2(image_obj,row,col) );
                 model_val = *( (double*)PyArray_GETPTR2(model_image_obj,row,col) );
 
-                data -= image_mean;
-                model_val -= model_mean;
+                data_mod=data-image_mean;
+                model_mod=model_val-model_mean;
 
-                diff = model_val-data;
+                diff = model_mod - data_mod;
                 loglike += diff*diff*ivar;
-                s2n_numer += data*model_val*ivar;
-                s2n_denom += model_val*model_val*ivar;
+                s2n_numer += data_mod*model_mod*ivar;
+                s2n_denom += model_mod*model_mod*ivar;
             }
         }
     }
@@ -1835,7 +1835,7 @@ static PyMethodDef pygauss2d_funcs[] = {
 
     {"get_image_mean", (PyCFunction)PyGMix_get_image_mean,  METH_VARARGS,  "calculate mean with weight\n"},
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
-    {"get_loglike_images_submean", (PyCFunction)PyGMix_get_loglike_images_submean,  METH_VARARGS,  "calculate likelihood between images, subtracting mean\n"},
+    {"get_loglike_images_margsky", (PyCFunction)PyGMix_get_loglike_images_margsky,  METH_VARARGS,  "calculate likelihood between images, subtracting mean\n"},
 
 
     {"get_loglike_sub", (PyCFunction)PyGMix_get_loglike_sub,  METH_VARARGS,  "calculate likelihood\n"},

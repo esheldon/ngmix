@@ -92,6 +92,10 @@ class FitterBase(object):
     def __init__(self, obs, model, **keys):
         self.keys=keys
 
+        self.margsky = keys.get('margsky', False)
+        #if self.margsky:
+        #    print("will analytically marginalize the sky")
+
         # psf fitters might not have this set to 1
         self.nsub=keys.get('nsub',1)
 
@@ -112,6 +116,7 @@ class FitterBase(object):
 
         #robust fitting
         self.nu = keys.get('nu', 0.0)
+
 
     def get_result(self):
         """
@@ -152,7 +157,14 @@ class FitterBase(object):
             raise ValueError("obs should be Observation, ObsList, or MultiBandObsList")
 
         self.nband=len(obs)
+
         self.obs=obs
+        if self.margsky:
+            for band_obs in self.obs:
+                for tobs in band_obs:
+                    tobs.model_image=tobs.image*0
+                    tobs.image_mean=_gmix.get_image_mean(tobs.image, tobs.weight)
+
 
     def _set_totpix(self):
         """
@@ -260,6 +272,9 @@ class FitterBase(object):
                     
                     if self.nu > 2.0:
                         res = gm.get_loglike_robust(obs, self.nu, nsub=nsub, get_s2nsums=True)
+                    elif self.margsky:
+                        res = gm.get_loglike_margsky(obs, obs.model_image, 
+                                                     nsub=nsub, get_s2nsums=True)
                     else:
                         res = gm.get_loglike(obs, nsub=nsub, get_s2nsums=True)
 
@@ -3466,6 +3481,242 @@ def test_model(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
         #mcmc.plot_results(mc_obj.get_trials())
 
     return tm
+
+
+#def test_model_margsky_many(T_psf=4.0, margsky=True, addsky=True):
+def test_model_margsky_many(T_psf=4.0, show=False, ntrial=10):
+    """
+    ntrial is number to average over for each Tfrac
+    """
+    import biggles
+    plt=biggles.FramedPlot()
+    xlabel=r'$\sigma_{gal}/\sigma_{psf}$'
+    plt.xlabel=xlabel
+    plt.ylabel=r'$\Delta e$'
+
+    splt=biggles.FramedPlot()
+    splt.xlabel=xlabel
+    splt.ylabel=r'$ellip error per measurement$'
+
+    model='exp'
+    Tfracs = numpy.array([0.5**2,0.75**2,1.0**2,1.5**2,2.0**2])
+    #Tfracs = numpy.array([1.0])
+
+    sigmafracs = numpy.sqrt(Tfracs)
+    
+    plt.add(biggles.Curve(Tfracs, Tfracs*0))
+
+    e1colors=['blue','steelblue']
+    e2colors=['red','orange']
+    e1types=['filled circle','circle']
+    e2types=['filled square','square']
+    e1ctypes=['solid','dotted']
+    e2ctypes=['dashed','dotdashed']
+
+    e1labels=[r'$e_1$',r'$e_1 margsky$']
+    e2labels=[r'$e_2$',r'$e_2 margsky$']
+
+    plist=[]
+    for imarg,margsky in enumerate([False,True]):
+        print("-"*70)
+        print("marg:",margsky)
+
+        g1=numpy.zeros(len(Tfracs))
+        g1err=numpy.zeros(len(Tfracs))
+        g1std=numpy.zeros(len(Tfracs))
+        g2=numpy.zeros(len(Tfracs))
+        g2err=numpy.zeros(len(Tfracs))
+        g2std=numpy.zeros(len(Tfracs))
+
+        for i,Tfrac in enumerate(Tfracs):
+            print("="*70)
+            print("Tfrac:",Tfrac)
+            T=Tfrac*T_psf
+
+            e1s=numpy.zeros(ntrial)
+            e2s=numpy.zeros(ntrial)
+            for trial in xrange(ntrial):
+                print("    trial",trial+1)
+                res= test_model_margsky(model, T=T, T_psf=T_psf,
+                                        margsky=margsky,
+                                        addsky=True)
+                e1s[trial] = res['g'][0]
+                e2s[trial] = res['g'][1]
+
+            g1[i],g2[i] = e1s.mean(), e2s.mean()
+            g1std[i],g2std[i] = e1s.std(), e2s.std()
+            g1err[i],g2err[i] = e1s.std()/sqrt(ntrial), e2s.std()/sqrt(ntrial)
+        
+        e1pts=biggles.Points(sigmafracs, g1, color=e1colors[imarg], type=e1types[imarg])
+        e2pts=biggles.Points(sigmafracs, g2, color=e2colors[imarg], type=e2types[imarg])
+        e1c=biggles.Curve(sigmafracs, g1, color=e1colors[imarg], type=e1ctypes[imarg])
+        e2c=biggles.Curve(sigmafracs, g2, color=e2colors[imarg], type=e2ctypes[imarg])
+        e1errp=biggles.SymmetricErrorBarsY(sigmafracs, g1, g1err,color=e1colors[imarg])
+        e2errp=biggles.SymmetricErrorBarsY(sigmafracs, g2, g2err,color=e2colors[imarg])
+
+        e1pts.label=e1labels[imarg]
+        e2pts.label=e2labels[imarg]
+
+        plist += [e1pts, e2pts]
+
+        plt.add(e1pts,e1c,e1errp,e2pts,e2c,e2errp)
+
+        e1spts=biggles.Points(sigmafracs, g1std, color=e1colors[imarg], type=e1types[imarg])
+        e2spts=biggles.Points(sigmafracs, g2std, color=e2colors[imarg], type=e2types[imarg])
+        e1sc=biggles.Curve(sigmafracs, g1std, color=e1colors[imarg], type=e1ctypes[imarg])
+        e2sc=biggles.Curve(sigmafracs, g2std, color=e2colors[imarg], type=e2ctypes[imarg])
+
+        splt.add(e1spts,e1sc,e2spts,e2sc)
+
+
+    key=biggles.PlotKey(0.9,0.9,plist,halign='right')
+    plt.add(key)
+    splt.add(key)
+
+    epsfile='margsky-test.eps'
+    print("writing:",epsfile)
+    plt.write_eps(epsfile)
+
+    sepsfile='margsky-test-std.eps'
+    print("writing:",sepsfile)
+    splt.write_eps(sepsfile)
+
+
+    if show:
+        plt.show()
+        splt.show()
+
+def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
+                       nwalkers=80, burnin=800, nstep=800,
+                       addsky=False,
+                       margsky=True,
+                       show=False):
+    """
+    Test fitting the specified model.
+    """
+    from . import em
+    from . import joint_prior
+    import time
+
+    #
+    # simulation
+    #
+
+    # PSF pars
+    counts_psf=100.0
+    noise_psf=0.01
+    g1_psf=0.05
+    g2_psf=0.00
+
+    # object pars
+    g1_obj=0.0
+    g2_obj=0.0
+
+    sigma=sqrt( (T + T_psf)/2. )
+    dim=int(2*5*sigma)
+    if (dim % 2) == 0:
+        dim+=1
+    dims=[dim]*2
+    cen=[(dims[0]-1)/2., (dims[1]-1)/2.]
+    j=UnitJacobian(cen[0],cen[1])
+
+    pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
+    gm_psf=gmix.GMixModel(pars_psf, "gauss")
+
+    pars_obj = array([0.0, 0.0, g1_obj, g2_obj, T, counts])
+    npars=pars_obj.size
+    gm_obj0=gmix.GMixModel(pars_obj, model)
+
+    gm=gm_obj0.convolve(gm_psf)
+
+    im_psf=gm_psf.make_image(dims, jacobian=j)
+    im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
+    wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
+
+    im_obj=gm.make_image(dims, jacobian=j)
+    im_obj[:,:] += noise*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
+    wt_obj=zeros(im_obj.shape) + 1./noise**2
+
+    if addsky:
+        print("adding sky")
+        sky=0.1*im_obj.max()
+        im_obj += sky
+
+    #
+    # fitting
+    #
+
+
+    # psf using EM
+    im_psf_sky,sky=em.prep_image(im_psf)
+    psf_obs = Observation(im_psf_sky, jacobian=j)
+    mc_psf=em.GMixEM(psf_obs)
+
+    emo_guess=gm_psf.copy()
+    emo_guess._data['p'] = 1.0
+    emo_guess._data['row'] += 0.1*srandu()
+    emo_guess._data['col'] += 0.1*srandu()
+    emo_guess._data['irr'] += 0.5*srandu()
+    emo_guess._data['irc'] += 0.1*srandu()
+    emo_guess._data['icc'] += 0.5*srandu()
+
+    mc_psf.run_em(emo_guess, sky)
+    res_psf=mc_psf.get_result()
+    print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
+
+    psf_fit=mc_psf.get_gmix()
+
+    psf_obs.set_gmix(psf_fit)
+
+    prior=joint_prior.make_uniform_simple_sep([0.0,0.0],
+                                              [0.1,0.1],
+                                              [-0.97,3500.],
+                                              [-0.97,1.0e9])
+    #prior=None
+    obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
+    mc_obj=MCMCSimple(obs, model, nwalkers=nwalkers, prior=prior, margsky=margsky)
+
+    guess=zeros( (nwalkers, npars) )
+    guess[:,0] = 0.1*srandu(nwalkers)
+    guess[:,1] = 0.1*srandu(nwalkers)
+
+    # intentionally bad guesses
+    guess[:,2] = 0.1*srandu(nwalkers)
+    guess[:,3] = 0.1*srandu(nwalkers)
+    guess[:,4] = T*(1.0 + 0.1*srandu(nwalkers))
+    guess[:,5] = counts*(1.0 + 0.1*srandu(nwalkers))
+
+    t0=time.time()
+    pos=mc_obj.run_mcmc(guess, burnin)
+    pos=mc_obj.run_mcmc(pos, nstep)
+    mc_obj.calc_result()
+    tm=time.time()-t0
+
+    trials=mc_obj.get_trials()
+    print("T minmax:",trials[:,4].min(), trials[:,4].max())
+    print("F minmax:",trials[:,5].min(), trials[:,5].max())
+
+    res_obj=mc_obj.get_result()
+
+    print_pars(pars_obj,            front='true pars:')
+    print_pars(res_obj['pars'],     front='pars_obj: ')
+    print_pars(res_obj['pars_err'], front='perr_obj: ')
+    print('T: %.4g +/- %.4g' % (res_obj['pars'][4], res_obj['pars_err'][4]))
+    print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'])
+
+    if show:
+        import images
+        imfit_psf=mc_psf.make_image(counts=im_psf.sum())
+        images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
+
+        mc_obj.make_plots(do_residual=True,show=True,prompt=False)
+        #imfit_obj=gmfit.make_image(im_obj.shape, jacobian=j)
+        #images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
+        #mcmc.plot_results(mc_obj.get_trials())
+
+    return res_obj
+
+
 
 def get_mh_prior(T, F):
     from . import priors, joint_prior
