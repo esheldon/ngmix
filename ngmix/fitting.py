@@ -3488,9 +3488,10 @@ def test_model_margsky_many(T_psf=4.0, show=False, ntrial=10):
     """
     ntrial is number to average over for each Tfrac
     """
+    import esutil as eu
     import biggles
     plt=biggles.FramedPlot()
-    xlabel=r'$\sigma_{gal}/\sigma_{psf}$'
+    xlabel=r'$\sigma^2_{psf}/\sigma^2_{gal}$'
     plt.xlabel=xlabel
     plt.ylabel=r'$\Delta e$'
 
@@ -3499,12 +3500,14 @@ def test_model_margsky_many(T_psf=4.0, show=False, ntrial=10):
     splt.ylabel=r'$ellip error per measurement$'
 
     model='exp'
+    # Tobj/Tpsf
     Tfracs = numpy.array([0.5**2,0.75**2,1.0**2,1.5**2,2.0**2])
-    #Tfracs = numpy.array([1.0])
-
-    sigmafracs = numpy.sqrt(Tfracs)
+    #Tfracs = numpy.array([2.0**2])
+    # Tpsf/Tobj
+    Pfracs =1.0/Tfracs 
+    Pfracs.sort()
     
-    plt.add(biggles.Curve(Tfracs, Tfracs*0))
+    plt.add(biggles.Curve(Pfracs, Pfracs*0))
 
     e1colors=['blue','steelblue']
     e2colors=['red','orange']
@@ -3528,31 +3531,52 @@ def test_model_margsky_many(T_psf=4.0, show=False, ntrial=10):
         g2err=numpy.zeros(len(Tfracs))
         g2std=numpy.zeros(len(Tfracs))
 
-        for i,Tfrac in enumerate(Tfracs):
+        for i,Pfrac in enumerate(Pfracs):
             print("="*70)
-            print("Tfrac:",Tfrac)
+            Tfrac = 1.0/Pfrac
             T=Tfrac*T_psf
 
-            e1s=numpy.zeros(ntrial)
-            e2s=numpy.zeros(ntrial)
-            for trial in xrange(ntrial):
-                print("    trial",trial+1)
-                res= test_model_margsky(model, T=T, T_psf=T_psf,
-                                        margsky=margsky,
-                                        addsky=True)
-                e1s[trial] = res['g'][0]
-                e2s[trial] = res['g'][1]
+            print("Pfrac:",Pfrac,"Tfrac:",Tfrac)
 
-            g1[i],g2[i] = e1s.mean(), e2s.mean()
-            g1std[i],g2std[i] = e1s.std(), e2s.std()
-            g1err[i],g2err[i] = e1s.std()/sqrt(ntrial), e2s.std()/sqrt(ntrial)
+            e1s=numpy.zeros(ntrial)
+            e1s_err=numpy.zeros(ntrial)
+            e2s=numpy.zeros(ntrial)
+            e2s_err=numpy.zeros(ntrial)
+            for trial in xrange(ntrial):
+                print("trial:",trial+1)
+                for retry in xrange(100):
+                    res= test_model_margsky(model, T=T, T_psf=T_psf,
+                                            margsky=margsky,
+                                            addsky=True)
+                    if 0.49 < res['arate'] < 0.55:
+                        break
+                    print("        try:",retry+1,"arate:",res['arate'])
+
+                e1s[trial] = res['g'][0]
+                e1s_err[trial] = sqrt( res['g_cov'][0,0] )
+                e2s[trial] = res['g'][1]
+                e2s_err[trial] = sqrt( res['g_cov'][1,1] )
+
+            mn,sig,err=eu.stat.sigma_clip(e1s, weights=1.0/e1s_err**2,get_err=True,verbose=True)
+            g1[i] = mn
+            g1err[i] = err
+            g1std[i] = sig
+
+            mn,sig,err=eu.stat.sigma_clip(e2s, weights=1.0/e2s_err**2,get_err=True,verbose=True)
+            g2[i] = mn
+            g2err[i] = err
+            g2std[i] = sig
+
+            #g1[i],g2[i] = e1s.mean(), e2s.mean()
+            #g1std[i],g2std[i] = e1s.std(), e2s.std()
+            #g1err[i],g2err[i] = e1s.std()/sqrt(ntrial), e2s.std()/sqrt(ntrial)
         
-        e1pts=biggles.Points(sigmafracs, g1, color=e1colors[imarg], type=e1types[imarg])
-        e2pts=biggles.Points(sigmafracs, g2, color=e2colors[imarg], type=e2types[imarg])
-        e1c=biggles.Curve(sigmafracs, g1, color=e1colors[imarg], type=e1ctypes[imarg])
-        e2c=biggles.Curve(sigmafracs, g2, color=e2colors[imarg], type=e2ctypes[imarg])
-        e1errp=biggles.SymmetricErrorBarsY(sigmafracs, g1, g1err,color=e1colors[imarg])
-        e2errp=biggles.SymmetricErrorBarsY(sigmafracs, g2, g2err,color=e2colors[imarg])
+        e1pts=biggles.Points(Pfracs, g1, color=e1colors[imarg], type=e1types[imarg])
+        e2pts=biggles.Points(Pfracs, g2, color=e2colors[imarg], type=e2types[imarg])
+        e1c=biggles.Curve(Pfracs, g1, color=e1colors[imarg], type=e1ctypes[imarg])
+        e2c=biggles.Curve(Pfracs, g2, color=e2colors[imarg], type=e2ctypes[imarg])
+        e1errp=biggles.SymmetricErrorBarsY(Pfracs, g1, g1err,color=e1colors[imarg])
+        e2errp=biggles.SymmetricErrorBarsY(Pfracs, g2, g2err,color=e2colors[imarg])
 
         e1pts.label=e1labels[imarg]
         e2pts.label=e2labels[imarg]
@@ -3561,10 +3585,10 @@ def test_model_margsky_many(T_psf=4.0, show=False, ntrial=10):
 
         plt.add(e1pts,e1c,e1errp,e2pts,e2c,e2errp)
 
-        e1spts=biggles.Points(sigmafracs, g1std, color=e1colors[imarg], type=e1types[imarg])
-        e2spts=biggles.Points(sigmafracs, g2std, color=e2colors[imarg], type=e2types[imarg])
-        e1sc=biggles.Curve(sigmafracs, g1std, color=e1colors[imarg], type=e1ctypes[imarg])
-        e2sc=biggles.Curve(sigmafracs, g2std, color=e2colors[imarg], type=e2ctypes[imarg])
+        e1spts=biggles.Points(Pfracs, g1std, color=e1colors[imarg], type=e1types[imarg])
+        e2spts=biggles.Points(Pfracs, g2std, color=e2colors[imarg], type=e2types[imarg])
+        e1sc=biggles.Curve(Pfracs, g1std, color=e1colors[imarg], type=e1ctypes[imarg])
+        e2sc=biggles.Curve(Pfracs, g2std, color=e2colors[imarg], type=e2ctypes[imarg])
 
         splt.add(e1spts,e1sc,e2spts,e2sc)
 
@@ -3605,7 +3629,7 @@ def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
     # PSF pars
     counts_psf=100.0
     noise_psf=0.01
-    g1_psf=0.05
+    g1_psf=0.30
     g2_psf=0.00
 
     # object pars
@@ -3638,8 +3662,9 @@ def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
     wt_obj=zeros(im_obj.shape) + 1./noise**2
 
     if addsky:
-        print("adding sky")
-        sky=0.1*im_obj.max()
+        #print("adding sky")
+        #sky=0.1*im_obj.max()
+        sky=0.04*counts
         im_obj += sky
 
     #
@@ -3662,16 +3687,16 @@ def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
 
     mc_psf.run_em(emo_guess, sky)
     res_psf=mc_psf.get_result()
-    print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
+    #print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
 
     psf_fit=mc_psf.get_gmix()
 
     psf_obs.set_gmix(psf_fit)
 
-    prior=joint_prior.make_uniform_simple_sep([0.0,0.0],
-                                              [0.1,0.1],
-                                              [-0.97,3500.],
-                                              [-0.97,1.0e9])
+    prior=joint_prior.make_uniform_simple_sep([0.0,0.0], # cen
+                                              [0.1,0.1], # cen width
+                                              [-0.97,1.0e9], # T
+                                              [-0.97,1.0e9]) # counts
     #prior=None
     obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
     mc_obj=MCMCSimple(obs, model, nwalkers=nwalkers, prior=prior, margsky=margsky)
@@ -3690,19 +3715,17 @@ def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
     pos=mc_obj.run_mcmc(guess, burnin)
     pos=mc_obj.run_mcmc(pos, nstep)
     mc_obj.calc_result()
+    res_obj=mc_obj.get_result()
     tm=time.time()-t0
 
+
     trials=mc_obj.get_trials()
-    print("T minmax:",trials[:,4].min(), trials[:,4].max())
-    print("F minmax:",trials[:,5].min(), trials[:,5].max())
 
-    res_obj=mc_obj.get_result()
-
-    print_pars(pars_obj,            front='true pars:')
-    print_pars(res_obj['pars'],     front='pars_obj: ')
-    print_pars(res_obj['pars_err'], front='perr_obj: ')
-    print('T: %.4g +/- %.4g' % (res_obj['pars'][4], res_obj['pars_err'][4]))
-    print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'])
+    print_pars(pars_obj,            front='    true pars:')
+    print_pars(res_obj['pars'],     front='    pars_obj: ')
+    print_pars(res_obj['pars_err'], front='    perr_obj: ')
+    print('    T: %.4g +/- %.4g' % (res_obj['pars'][4], res_obj['pars_err'][4]))
+    print("    s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'])
 
     if show:
         import images

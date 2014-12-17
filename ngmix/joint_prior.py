@@ -1089,7 +1089,7 @@ class PriorSimpleSep(object):
                  T_prior,
                  F_prior):
 
-        print("JointPriorSimpleSep")
+        #print("JointPriorSimpleSep")
 
         self.cen_prior=cen_prior
         self.g_prior=g_prior
