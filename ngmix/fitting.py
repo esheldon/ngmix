@@ -3483,13 +3483,13 @@ def test_model(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
     return tm
 
 
-#def test_model_margsky_many(T_psf=4.0, margsky=True, addsky=True):
-def test_model_margsky_many(T_psf=4.0, show=False, ntrial=10):
+def test_model_margsky_many(Tfracs=None, T_psf=4.0, show=False, ntrial=10, skyfac=0.0, noise=0.001):
     """
     ntrial is number to average over for each Tfrac
     """
     import esutil as eu
     import biggles
+    import time
     plt=biggles.FramedPlot()
     xlabel=r'$\sigma^2_{psf}/\sigma^2_{gal}$'
     plt.xlabel=xlabel
@@ -3501,8 +3501,12 @@ def test_model_margsky_many(T_psf=4.0, show=False, ntrial=10):
 
     model='exp'
     # Tobj/Tpsf
-    Tfracs = numpy.array([0.5**2,0.75**2,1.0**2,1.5**2,2.0**2])
+    if Tfracs is None:
+        Tfracs = numpy.array([0.5**2,0.75**2,1.0**2,1.5**2,2.0**2])
+    else:
+        Tfracs = numpy.array(Tfracs, dtype='f8')
     #Tfracs = numpy.array([2.0**2])
+    #Tfracs = numpy.array([0.5**2])
     # Tpsf/Tobj
     Pfracs =1.0/Tfracs 
     Pfracs.sort()
@@ -3523,6 +3527,8 @@ def test_model_margsky_many(T_psf=4.0, show=False, ntrial=10):
     for imarg,margsky in enumerate([False,True]):
         print("-"*70)
         print("marg:",margsky)
+
+        tm0=time.time()
 
         g1=numpy.zeros(len(Tfracs))
         g1err=numpy.zeros(len(Tfracs))
@@ -3547,7 +3553,8 @@ def test_model_margsky_many(T_psf=4.0, show=False, ntrial=10):
                 for retry in xrange(100):
                     res= test_model_margsky(model, T=T, T_psf=T_psf,
                                             margsky=margsky,
-                                            addsky=True)
+                                            noise=noise,
+                                            skyfac=skyfac)
                     if 0.49 < res['arate'] < 0.55:
                         break
                     print("        try:",retry+1,"arate:",res['arate'])
@@ -3557,11 +3564,13 @@ def test_model_margsky_many(T_psf=4.0, show=False, ntrial=10):
                 e2s[trial] = res['g'][1]
                 e2s_err[trial] = sqrt( res['g_cov'][1,1] )
 
+            print("av e1 with sigma clip")
             mn,sig,err=eu.stat.sigma_clip(e1s, weights=1.0/e1s_err**2,get_err=True,verbose=True)
             g1[i] = mn
             g1err[i] = err
             g1std[i] = sig
 
+            print("av e2 with sigma clip")
             mn,sig,err=eu.stat.sigma_clip(e2s, weights=1.0/e2s_err**2,get_err=True,verbose=True)
             g2[i] = mn
             g2err[i] = err
@@ -3592,16 +3601,18 @@ def test_model_margsky_many(T_psf=4.0, show=False, ntrial=10):
 
         splt.add(e1spts,e1sc,e2spts,e2sc)
 
+        print("time:",time.time()-tm0)
+
 
     key=biggles.PlotKey(0.9,0.9,plist,halign='right')
     plt.add(key)
     splt.add(key)
 
-    epsfile='margsky-test.eps'
+    epsfile='margsky-test-skyfac%.4f.eps' % skyfac
     print("writing:",epsfile)
     plt.write_eps(epsfile)
 
-    sepsfile='margsky-test-std.eps'
+    sepsfile='margsky-test-skyfac%.4f-std.eps' % skyfac
     print("writing:",sepsfile)
     splt.write_eps(sepsfile)
 
@@ -3610,9 +3621,44 @@ def test_model_margsky_many(T_psf=4.0, show=False, ntrial=10):
         plt.show()
         splt.show()
 
+def make_symmetic(image, cen, weight, jacob):
+    """
+    trim the image so it has equal number of pixels on every side
+    """
+    dim1,dim2=image.shape
+    d11 = cen[0]
+    d12 = dim1-cen[0]
+    d21 = cen[1]
+    d22 = dim2-cen[0]
+
+    minw1=0
+    maxw1=dim1
+    minw2=0
+    maxw2=dim2
+
+    if d11 < d12:
+        z = cen[0] + d11 + 1
+        if z < dim1:
+            weight[z:,:] = 0.
+    elif d12 < d11:
+        z = cen[0] - d12
+        if z > 0:
+            weight[0:z+1,:] = 0.
+
+    if d21 < d22:
+        z = cen[0] + d21 + 1
+        if z < dim2:
+            weight[:,z:] = 0.
+    elif d22 < d21:
+        z = cen[0] - d22
+        if z > 0:
+            weight[:,0:z+1] = 0.
+
+    
+
 def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
                        nwalkers=80, burnin=800, nstep=800,
-                       addsky=False,
+                       skyfac=0.0,
                        margsky=True,
                        show=False):
     """
@@ -3641,8 +3687,9 @@ def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
     if (dim % 2) == 0:
         dim+=1
     dims=[dim]*2
-    cen=[(dims[0]-1)/2., (dims[1]-1)/2.]
-    j=UnitJacobian(cen[0],cen[1])
+    cen=(dims[0]-1)/2.
+    cen += 2
+    j=UnitJacobian(cen,cen)
 
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
     gm_psf=gmix.GMixModel(pars_psf, "gauss")
@@ -3652,8 +3699,11 @@ def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
     gm_obj0=gmix.GMixModel(pars_obj, model)
 
     gm=gm_obj0.convolve(gm_psf)
-
-    im_psf=gm_psf.make_image(dims, jacobian=j)
+    
+    pcen=(dim-1)/2.
+    pj=UnitJacobian(pcen,pcen)
+    #pj=j
+    im_psf=gm_psf.make_image(dims, jacobian=pj)
     im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
     wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
 
@@ -3661,11 +3711,8 @@ def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
     im_obj[:,:] += noise*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
     wt_obj=zeros(im_obj.shape) + 1./noise**2
 
-    if addsky:
-        #print("adding sky")
-        #sky=0.1*im_obj.max()
-        sky=0.04*counts
-        im_obj += sky
+    sky=skyfac*counts
+    im_obj += sky
 
     #
     # fitting
@@ -3674,7 +3721,7 @@ def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
 
     # psf using EM
     im_psf_sky,sky=em.prep_image(im_psf)
-    psf_obs = Observation(im_psf_sky, jacobian=j)
+    psf_obs = Observation(im_psf_sky, jacobian=pj)
     mc_psf=em.GMixEM(psf_obs)
 
     emo_guess=gm_psf.copy()
@@ -3694,7 +3741,7 @@ def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
     psf_obs.set_gmix(psf_fit)
 
     prior=joint_prior.make_uniform_simple_sep([0.0,0.0], # cen
-                                              [0.1,0.1], # cen width
+                                              [1.0,1.0], # cen width
                                               [-0.97,1.0e9], # T
                                               [-0.97,1.0e9]) # counts
     #prior=None
