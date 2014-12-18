@@ -574,11 +574,11 @@ class GMixModel(GMix):
         gmix = GMixModel(self._pars, self._model_name)
         return gmix
 
-    def get_cen(self):
-        """
-        get the center position (row,col)
-        """
-        return self._pars[0], self._pars[1]
+    #def get_cen(self):
+    #    """
+    #    get the center position (row,col)
+    #    """
+    #    return self._pars[0], self._pars[1]
     
     def set_cen(self, row, col):
         """
@@ -587,7 +587,7 @@ class GMixModel(GMix):
         set pars as well
         """
         pars=self._pars
-        row0,col0=pars[0],pars[1]
+        row0,col0=self.get_cen()
 
         row_shift = row - row0
         col_shift = col - col0
