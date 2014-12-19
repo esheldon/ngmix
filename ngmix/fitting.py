@@ -858,7 +858,6 @@ class LMSimple(FitterBase):
                     start += obs.image.size
 
         except GMixRangeError as err:
-            print(str(err))
             fdiff[:] = LOWVAL
             s2n_numer=0.0
             s2n_denom=BIGVAL
