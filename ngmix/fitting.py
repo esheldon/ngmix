@@ -30,6 +30,8 @@ except:
 from sys import stdout
 import numpy
 from numpy import array, zeros, diag, exp, sqrt, where, log, log10, isfinite
+from numpy import linalg
+from numpy.linalg.linalg import LinAlgError
 import time
 from pprint import pprint
 
@@ -63,7 +65,7 @@ LOW_ARATE=2**1
 LM_SINGULAR_MATRIX = 2**4
 LM_NEG_COV_EIG = 2**5
 LM_NEG_COV_DIAG = 2**6
-LM_EIG_NOTFINITE = 2**7
+EIG_NOTFINITE = 2**7
 LM_FUNC_NOTFINITE = 2**8
 
 LM_DIV_ZERO = 2**9
@@ -759,16 +761,37 @@ class MaxSimple(FitterBase):
 
     def calc_cov(self, h=1.0e-3, m=3.):
         """
-        calculate the covariance matrix at the best-fit point, adding
-        'pars_cov', 'pars_err', and 'g_cov' to the result array
-        """
-        res=self.get_result()
-        cov = self.get_cov(res['pars'], h=h, m=m)
-        err = sqrt(diag(cov))
+        Run get_cov() to calculate the covariance matrix at the best-fit point.
+        If all goes well, add 'pars_cov', 'pars_err', and 'g_cov' to the result
+        array
 
-        res['pars_cov'] = cov
-        res['pars_err']= err
-        res['g_cov'] = cov[2:2+2, 2:2+2]
+        Note in get_cov, if the Hessian is singular, a diagonal cov matrix is
+        attempted to be inverted. If that finally fails LinAlgError is raised.
+        In that case we catch it and set a flag EIG_NOTFINITE and the cov is
+        not added to the result dict
+
+        Also if there are negative diagonal elements of the cov matrix, the 
+        EIG_NOTFINITE flag is set and the cov is not added to the result dict
+        """
+
+        res=self.get_result()
+
+        try:
+            cov = self.get_cov(res['pars'], h=h, m=m)
+            err = sqrt(diag(cov))
+            w,=where(isfinite(err))
+            if w.size != err.size:
+                # whoa, we probably have negative diagonals.
+                cov=None
+        except LinAlgError:
+            cov = None
+
+        if cov is None:
+            res['flags'] += EIG_NOTFINITE 
+        else:
+            res['pars_cov'] = cov
+            res['pars_err']= err
+            res['g_cov'] = cov[2:2+2, 2:2+2]
 
     def get_cov(self, pars, h=1.0e-3, m=3.):
         """
@@ -777,6 +800,9 @@ class MaxSimple(FitterBase):
         This method understands the natural bounds on ellipticity.
         If the ellipticity is larger than 1-m*h then it is scaled
         back, perserving the angle.
+
+        If the Hessian is singular, an attempt is made to invert
+        a diagonal version. If that fails, LinAlgError is raised.
 
         parameters
         ----------
@@ -792,10 +818,8 @@ class MaxSimple(FitterBase):
         Raises
         ------
         LinAlgError:
-            If the hessian is singular.
-        GMixRangeError:
-            If any of the positions evaluated are out of bounds
-            e.g. if priors have bounds limits.
+            If the hessian is singular a diagonal version is tried
+            and if that fails finally a LinAlgError is raised.
         """
         import covmatrix
 
@@ -815,7 +839,18 @@ class MaxSimple(FitterBase):
             pars[2] = g1
             pars[3] = g2
 
-        cov=covmatrix.calc_cov(self.calc_lnprob, pars, h)
+        # we could call covmatrix.get_cov directly but we want to fall back
+        # to a diagonal hessian if it is singular
+
+        hess=covmatrix.calc_hess(self.calc_lnprob, pars, h)
+
+        try:
+            cov = -linalg.inv(hess)
+        except LinAlgError:
+            # pull out a diagonal version of the hessian
+            # this might still fail
+            hdiag=diag(diag(hess))
+            cov = -linalg.inv(hess)
         return cov
 
 class LMSimple(FitterBase):
@@ -1109,7 +1144,7 @@ def _test_cov(pcov):
             flags += LM_NEG_COV_DIAG 
 
     except numpy.linalg.linalg.LinAlgError:
-        flags += LM_EIG_NOTFINITE 
+        flags += EIG_NOTFINITE 
 
     return flags
 
@@ -5362,7 +5397,8 @@ def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
             nwalkers=80, burnin=800, nstep=800,
             g1=0.1,
             g2=0.05,
-            g_prior=None, show=False):
+            g_prior=None, show=False,
+            do_emcee=True):
     """
     Fit with nelder-mead, calculating cov matrix with our code
 
@@ -5371,6 +5407,9 @@ def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
     from . import em
     from . import joint_prior
     import time
+    import images
+
+    fmt='%12.6f'
 
     #
     # simulation
@@ -5443,56 +5482,71 @@ def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
     #
 
     print("fitting with nelder-mead")
-    guess=zeros( npars )
-    guess[0] = 0.1*srandu()
-    guess[1] = 0.1*srandu()
-
-    # intentionally bad guesses
-    guess[2], guess[3] = get_g_guesses(0.0, 0.0, width=0.1)
-    guess[4] = T*(1.0 + 0.1*srandu())
-    guess[5] = counts*(1.0 + 0.1*srandu())
-
     nm_fitter=MaxSimple(obs, model, prior=prior)
-    t0=time.time()
-    nm_fitter.run_max(guess)
-    nm_res=nm_fitter.get_result()
-    nm_cov=nm_fitter.get_cov(nm_res['pars'])
-    print("time for nm:", time.time()-t0)
+    guess=zeros( npars )
+    while True:
+        guess[0] = 0.1*srandu()
+        guess[1] = 0.1*srandu()
+
+        # intentionally bad guesses
+        guess[2], guess[3] = get_g_guesses(0.0, 0.0, width=0.1)
+        guess[4] = T*(1.0 + 0.1*srandu())
+        guess[5] = counts*(1.0 + 0.1*srandu())
+
+        t0=time.time()
+        nm_fitter.run_max(guess)
+        nm_res=nm_fitter.get_result()
+        print("time for nm:", time.time()-t0)
+
+        # we could also just check EIG_NOTFINITE but then there would
+        # be no errors
+        if (nm_res['flags'] & EIG_NOTFINITE) == 0:
+            break
+        else:
+            print("    bad cov, trying again with a new guess")
+            print_pars(nm_res['pars'],              front='    pars were:', fmt=fmt)
 
     #
     # emcee fitting
     # 
-    print("fitting with emcee")
-    emcee_fitter=MCMCSimple(obs, model, nwalkers=nwalkers, prior=prior)
+    if do_emcee:
+        print("fitting with emcee")
+        emcee_fitter=MCMCSimple(obs, model, nwalkers=nwalkers, prior=prior)
 
-    guess=zeros( (nwalkers, npars) )
-    guess[:,0] = 0.1*srandu(nwalkers)
-    guess[:,1] = 0.1*srandu(nwalkers)
+        guess=zeros( (nwalkers, npars) )
+        guess[:,0] = 0.1*srandu(nwalkers)
+        guess[:,1] = 0.1*srandu(nwalkers)
 
-    # intentionally good guesses
-    for i in xrange(nwalkers):
-        guess[i,2], guess[i,3] = get_g_guesses(pars_obj[2],pars_obj[3],width=0.01)
-    guess[:,4] = T*(1.0 + 0.01*srandu(nwalkers))
-    guess[:,5] = counts*(1.0 + 0.01*srandu(nwalkers))
+        # intentionally good guesses
+        for i in xrange(nwalkers):
+            guess[i,2], guess[i,3] = get_g_guesses(pars_obj[2],pars_obj[3],width=0.01)
+        guess[:,4] = T*(1.0 + 0.01*srandu(nwalkers))
+        guess[:,5] = counts*(1.0 + 0.01*srandu(nwalkers))
 
-    t0=time.time()
-    pos=emcee_fitter.run_mcmc(guess, burnin)
-    pos=emcee_fitter.run_mcmc(pos, nstep)
-    emcee_fitter.calc_result()
-    print("time for emcee:", time.time()-t0)
+        t0=time.time()
+        pos=emcee_fitter.run_mcmc(guess, burnin)
+        pos=emcee_fitter.run_mcmc(pos, nstep)
+        emcee_fitter.calc_result()
+        print("time for emcee:", time.time()-t0)
 
-    emcee_res=emcee_fitter.get_result()
+        emcee_res=emcee_fitter.get_result()
 
-    fmt='%12.6f'
     print_pars(pars_obj,              front='true pars: ', fmt=fmt)
 
-    print_pars(emcee_res['pars'],     front='emcee pars:', fmt=fmt)
+    if do_emcee:
+        print_pars(emcee_res['pars'],     front='emcee pars:', fmt=fmt)
     print_pars(nm_res['pars'],        front='nm pars:   ', fmt=fmt)
-    print_pars(emcee_res['pars_err'], front='emcee err: ', fmt=fmt)
+    if do_emcee:
+        print_pars(emcee_res['pars_err'], front='emcee err: ', fmt=fmt)
     print_pars(nm_res['pars_err'],    front='nm err:    ', fmt=fmt)
 
-    print("s2n:",emcee_res['s2n_w'],"arate:",emcee_res['arate'],"tau:",emcee_res['tau'])
+    print("\ns2n:",nm_res['s2n_w'])
 
-    if show:
-        emcee_fitter.make_plots(do_residual=True,show=True,prompt=False)
+    if do_emcee:
+        print("s2n:",emcee_res['s2n_w'],"arate:",emcee_res['arate'],"tau:",emcee_res['tau'])
 
+        if show:
+            emcee_fitter.make_plots(do_residual=True,show=True,prompt=False)
+
+    print("\nnm cov:")
+    images.imprint(nm_res['pars_cov'], fmt='%12.6g')
