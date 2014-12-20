@@ -737,20 +737,86 @@ class MaxSimple(FitterBase):
         result = scipy.optimize.minimize(self.neglnprob, guess, method=self.method,
                                          options=self.options)
                                          #tol=self._tolerance)
+        self._result = result
+
         if result['success']:
             result['flags'] = 0
         else:
             result['flags'] = 1
+
         if 'x' in result:
             pars=result['x']
             result['pars'] = pars
+            result['g'] = pars[2:2+2]
         
             # based on last entry
             fit_stats = self._get_fit_stats(pars)
             result.update(fit_stats)
 
-        self._result = result
+            if self.method=='Nelder-Mead':
+                self.calc_cov()
 
+
+    def calc_cov(self, h=1.0e-3, m=3.):
+        """
+        calculate the covariance matrix at the best-fit point, adding
+        'pars_cov', 'pars_err', and 'g_cov' to the result array
+        """
+        res=self.get_result()
+        cov = self.get_cov(res['pars'], h=h, m=m)
+        err = sqrt(diag(cov))
+
+        res['pars_cov'] = cov
+        res['pars_err']= err
+        res['g_cov'] = cov[2:2+2, 2:2+2]
+
+    def get_cov(self, pars, h=1.0e-3, m=3.):
+        """
+        calculate the covariance matrix at the specified point
+
+        This method understands the natural bounds on ellipticity.
+        If the ellipticity is larger than 1-m*h then it is scaled
+        back, perserving the angle.
+
+        parameters
+        ----------
+        pars: array
+            Array of parameters at which to evaluate the cov matrix
+        h: step size, optional
+            Step size for finite differences, default 1.0e-3
+        m: scalar
+            The max allowed ellipticity is 1-m*h.
+            Note the derivatives require evaluations at +/- h,
+            so m should be greater than 1. Default is 3.
+
+        Raises
+        ------
+        LinAlgError:
+            If the hessian is singular.
+        GMixRangeError:
+            If any of the positions evaluated are out of bounds
+            e.g. if priors have bounds limits.
+        """
+        import covmatrix
+
+        pars=numpy.array(pars)
+
+        g1=pars[2]
+        g2=pars[3]
+
+        g=sqrt(g1**2 + g2**2)
+
+        maxg=1.0-m*h
+
+        if g > maxg:
+            fac = maxg/g
+            g1 *= fac
+            g2 *= fac
+            pars[2] = g1
+            pars[3] = g2
+
+        cov=covmatrix.calc_cov(self.calc_lnprob, pars, h)
+        return cov
 
 class LMSimple(FitterBase):
     """
@@ -5282,4 +5348,151 @@ def check_g(g):
     if gtot > 0.97:
         raise RetryError("bad g")
 
+def get_g_guesses(g10, g20, width=0.01):
+    while True:
+        g1 = g10 + width*srandu()
+        g2 = g20 + width*srandu()
+        g=sqrt(g1**2 + g2**2)
+        if g < 1.0:
+            break
+
+    return g1,g2
+
+def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
+            nwalkers=80, burnin=800, nstep=800,
+            g1=0.1,
+            g2=0.05,
+            g_prior=None, show=False):
+    """
+    Fit with nelder-mead, calculating cov matrix with our code
+
+    compare with a mcmc fit using emcee
+    """
+    from . import em
+    from . import joint_prior
+    import time
+
+    #
+    # simulation
+    #
+
+    # PSF pars
+    counts_psf=100.0
+    noise_psf=0.01
+    g1_psf=0.05
+    g2_psf=-0.01
+    T_psf=4.0
+
+    sigma=sqrt( (T + T_psf)/2. )
+    dims=[2.*5.*sigma]*2
+    cen=[dims[0]/2., dims[1]/2.]
+    j=UnitJacobian(cen[0],cen[1])
+
+    pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
+    gm_psf=gmix.GMixModel(pars_psf, "gauss")
+
+    pars_obj = array([0.0, 0.0, g1, g2, T, counts])
+    npars=pars_obj.size
+    gm_obj0=gmix.GMixModel(pars_obj, model)
+
+    gm=gm_obj0.convolve(gm_psf)
+
+    im_psf=gm_psf.make_image(dims, jacobian=j)
+    im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
+    wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
+
+    im_obj=gm.make_image(dims, jacobian=j)
+    im_obj[:,:] += noise*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
+    wt_obj=zeros(im_obj.shape) + 1./noise**2
+
+    #
+    # fitting
+    #
+
+
+    # psf using EM
+    im_psf_sky,sky=em.prep_image(im_psf)
+    psf_obs = Observation(im_psf_sky, jacobian=j)
+    mc_psf=em.GMixEM(psf_obs)
+
+    emo_guess=gm_psf.copy()
+    emo_guess._data['p'] = 1.0
+    emo_guess._data['row'] += 0.1*srandu()
+    emo_guess._data['col'] += 0.1*srandu()
+    emo_guess._data['irr'] += 0.5*srandu()
+    emo_guess._data['irc'] += 0.1*srandu()
+    emo_guess._data['icc'] += 0.5*srandu()
+
+    mc_psf.run_em(emo_guess, sky)
+    res_psf=mc_psf.get_result()
+    print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
+
+    psf_fit=mc_psf.get_gmix()
+
+    psf_obs.set_gmix(psf_fit)
+
+    prior=joint_prior.make_uniform_simple_sep([0.0,0.0], # cen
+                                              [0.1,0.1], #cen width
+                                              [-0.97,3500.], # T
+                                              [-0.97,1.0e9]) # counts
+    #prior=None
+    obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
+
+    #
+    # nm fitting
+    #
+
+    print("fitting with nelder-mead")
+    guess=zeros( npars )
+    guess[0] = 0.1*srandu()
+    guess[1] = 0.1*srandu()
+
+    # intentionally bad guesses
+    guess[2], guess[3] = get_g_guesses(0.0, 0.0, width=0.1)
+    guess[4] = T*(1.0 + 0.1*srandu())
+    guess[5] = counts*(1.0 + 0.1*srandu())
+
+    nm_fitter=MaxSimple(obs, model, prior=prior)
+    t0=time.time()
+    nm_fitter.run_max(guess)
+    nm_res=nm_fitter.get_result()
+    nm_cov=nm_fitter.get_cov(nm_res['pars'])
+    print("time for nm:", time.time()-t0)
+
+    #
+    # emcee fitting
+    # 
+    print("fitting with emcee")
+    emcee_fitter=MCMCSimple(obs, model, nwalkers=nwalkers, prior=prior)
+
+    guess=zeros( (nwalkers, npars) )
+    guess[:,0] = 0.1*srandu(nwalkers)
+    guess[:,1] = 0.1*srandu(nwalkers)
+
+    # intentionally good guesses
+    for i in xrange(nwalkers):
+        guess[i,2], guess[i,3] = get_g_guesses(pars_obj[2],pars_obj[3],width=0.01)
+    guess[:,4] = T*(1.0 + 0.01*srandu(nwalkers))
+    guess[:,5] = counts*(1.0 + 0.01*srandu(nwalkers))
+
+    t0=time.time()
+    pos=emcee_fitter.run_mcmc(guess, burnin)
+    pos=emcee_fitter.run_mcmc(pos, nstep)
+    emcee_fitter.calc_result()
+    print("time for emcee:", time.time()-t0)
+
+    emcee_res=emcee_fitter.get_result()
+
+    fmt='%12.6f'
+    print_pars(pars_obj,              front='true pars: ', fmt=fmt)
+
+    print_pars(emcee_res['pars'],     front='emcee pars:', fmt=fmt)
+    print_pars(nm_res['pars'],        front='nm pars:   ', fmt=fmt)
+    print_pars(emcee_res['pars_err'], front='emcee err: ', fmt=fmt)
+    print_pars(nm_res['pars_err'],    front='nm err:    ', fmt=fmt)
+
+    print("s2n:",emcee_res['s2n_w'],"arate:",emcee_res['arate'],"tau:",emcee_res['tau'])
+
+    if show:
+        emcee_fitter.make_plots(do_residual=True,show=True,prompt=False)
 
