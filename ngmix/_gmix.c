@@ -411,6 +411,75 @@ _gmix_fill_simple_bail:
     return status;
 }
 
+
+static int gmix_fill_coellip(struct PyGMix_Gauss2D *self,
+                             npy_intp n_gauss,
+                             const double* pars,
+                             npy_intp n_pars)
+{
+
+    int status=0;//, n_gauss_expected=0;
+    double row=0,col=0,g1=0,g2=0,
+           T=0,Thalf=0,counts=0,e1=0,e2=0;
+    npy_intp i=0;
+
+    /*
+    if (n_pars != 6) {
+        PyErr_Format(GMixFatalError, 
+                     "simple pars should be size 6, got %ld", n_pars);
+        goto _gmix_fill_simple_bail;
+    }
+
+    n_gauss_expected=get_n_gauss(model, &status);
+    if (!status) {
+        goto _gmix_fill_simple_bail;
+    }
+    if (n_gauss != n_gauss_expected) {
+        PyErr_Format(GMixFatalError, 
+                     "for model %d expected %d gauss, got %ld",
+                     model, n_gauss_expected, n_gauss);
+        goto _gmix_fill_simple_bail;
+    }
+    */
+
+    row=pars[0];
+    col=pars[1];
+    g1=pars[2];
+    g2=pars[3];
+
+    // can set exception inside
+    status=g1g2_to_e1e2(g1, g2, &e1, &e2);
+    if (!status) {
+        goto _gmix_fill_coellip_bail;
+    }
+
+
+    for (i=0; i<n_gauss; i++) {
+        T = pars[4+i];
+        Thalf=0.5*T;
+        counts=pars[4+n_gauss+i];
+
+        status=gauss2d_set(&self[i],
+                           counts,
+                           row,
+                           col, 
+                           Thalf*(1-e1), 
+                           Thalf*e2,
+                           Thalf*(1+e1));
+        // an exception will be set
+        if (!status) {
+            goto _gmix_fill_coellip_bail;
+        }
+    }
+
+    status=1;
+
+_gmix_fill_coellip_bail:
+    return status;
+}
+
+
+
 /*
 
    Set an exception on error
@@ -455,6 +524,10 @@ static int gmix_fill(struct PyGMix_Gauss2D *self,
                                     model,
                                     PyGMix_fvals_gauss,
                                     PyGMix_pvals_gauss);
+            break;
+
+        case PyGMIX_GMIX_COELLIP:
+            status=gmix_fill_coellip(self, n_gauss, pars, n_pars);
             break;
 
         case PyGMIX_GMIX_FULL:

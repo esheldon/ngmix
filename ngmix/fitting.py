@@ -5398,6 +5398,7 @@ def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
             g1=0.1,
             g2=0.05,
             g_prior=None, show=False,
+            psf_fitter='em3',
             do_emcee=True):
     """
     Fit with nelder-mead, calculating cov matrix with our code
@@ -5449,7 +5450,7 @@ def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
     #
 
 
-    # psf using EM
+    # psf fitting
     im_psf_sky,sky=em.prep_image(im_psf)
     psf_obs = Observation(im_psf_sky, jacobian=j)
     mc_psf=em.GMixEM(psf_obs)

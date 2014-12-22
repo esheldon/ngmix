@@ -574,12 +574,6 @@ class GMixModel(GMix):
         gmix = GMixModel(self._pars, self._model_name)
         return gmix
 
-    #def get_cen(self):
-    #    """
-    #    get the center position (row,col)
-    #    """
-    #    return self._pars[0], self._pars[1]
-    
     def set_cen(self, row, col):
         """
         Move the mixture to a new center
@@ -597,28 +591,6 @@ class GMixModel(GMix):
 
         pars[0] = row
         pars[1] = col
-
-    '''
-    def get_g1g2T(self):
-        """
-        Get g1,g2 and T for the total gmix.
-        """
-        return self._pars[2], self._pars[3], self._pars[4]
-
-    def get_e1e2T(self):
-        """
-        Get g1,g2 and T for the total gmix.
-        """
-        g1,g2,T=self._pars[2], self._pars[3], self._pars[4]
-        e1,e2=g1g2_to_e1e2(g1,g2)
-        return e1,e2,T
-
-    def get_T(self):
-        """
-        Get g1,g2 and T for the total gmix.
-        """
-        return self._pars[4]
-    '''
 
     def fill(self, pars):
         """
@@ -649,7 +621,7 @@ def get_coellip_npars(ngauss):
 def get_coellip_ngauss(npars):
     return (npars-4)/2
 
-class GMixCoellip(GMix):
+class GMixCoellip(GMixModel):
     """
     A two-dimensional gaussian mixture, each co-centeric and co-elliptical
 
@@ -661,17 +633,13 @@ class GMixCoellip(GMix):
         Parameter array. The number of elements will depend
         on the model type.
     """
+
+
     def __init__(self, pars):
+
         self._model      = GMIX_COELLIP
         self._model_name = 'coellip'
-        self.fill(pars)
-
-    def fill(self, parsin):
-        """
-        Fill in the gaussian mixture with new parameters
-        """
-
-        pars = array(parsin, dtype='f8', copy=True) 
+        pars = array(pars, dtype='f8', copy=True) 
 
         npars=pars.size
 
@@ -684,8 +652,29 @@ class GMixCoellip(GMix):
         self._npars = npars
 
         self.reset()
+        _gmix.gmix_fill(self._data, pars, self._model)
 
-        _fill_coellip(self._data, pars)
+    def fill(self, pars):
+        """
+        Fill in the gaussian mixture with new parameters
+        """
+
+        pars = array(pars, dtype='f8', copy=True) 
+
+        if pars.size != self._npars:
+            raise ValueError("input pars have size %d, "
+                             "expected %d" % (pars.size, self._npars))
+
+        self._pars[:]=pars[:]
+
+        _gmix.gmix_fill(self._data, pars, self._model)
+
+    def copy(self):
+        """
+        Get a new GMix with the same parameters
+        """
+        gmix = GMixCoellip(self._pars)
+        return gmix
 
 
 def cbinary_search(a, x):
@@ -1064,8 +1053,6 @@ GMIX_BDF=6
 GMIX_COELLIP=7
 GMIX_SERSIC=8
 
-GMIX_COELLIP4=100
-
 _gmix_model_dict={'full':       GMIX_FULL,
                   GMIX_FULL:    GMIX_FULL,
                   'gauss':      GMIX_GAUSS,
@@ -1085,10 +1072,7 @@ _gmix_model_dict={'full':       GMIX_FULL,
                   GMIX_COELLIP: GMIX_COELLIP,
 
                   'sersic':    GMIX_SERSIC,
-                  GMIX_SERSIC: GMIX_SERSIC,
-
-                  'coellip4':    GMIX_COELLIP4,
-                  GMIX_COELLIP4: GMIX_COELLIP4}
+                  GMIX_SERSIC: GMIX_SERSIC}
 
 _gmix_string_dict={GMIX_FULL:'full',
                    'full':'full',
@@ -1109,10 +1093,8 @@ _gmix_string_dict={GMIX_FULL:'full',
                    'coellip':GMIX_COELLIP,
 
                    GMIX_SERSIC:'sersic',
-                   'sersic':GMIX_SERSIC,
+                   'sersic':GMIX_SERSIC}
 
-                   GMIX_COELLIP4:'coellip4',
-                   'coellip4':GMIX_COELLIP4}
 
 _gmix_npars_dict={GMIX_GAUSS:6,
                   GMIX_TURB:6,
@@ -1120,19 +1102,15 @@ _gmix_npars_dict={GMIX_GAUSS:6,
                   GMIX_DEV:6,
                   GMIX_BDC:8,
                   GMIX_BDF:7,
-                  GMIX_SERSIC:7,
-                  GMIX_COELLIP4:12}
+                  GMIX_SERSIC:7}
+
 _gmix_ngauss_dict={GMIX_GAUSS:1,
                    GMIX_TURB:3,
                    GMIX_EXP:6,
                    GMIX_DEV:10,
                    GMIX_BDC:16,
                    GMIX_BDF:16,
-
-                   GMIX_SERSIC:4,
-
-                   GMIX_COELLIP4:4}
-
+                   GMIX_SERSIC:4}
 
 _gauss2d_dtype=[('p','f8'),
                 ('row','f8'),

@@ -5,6 +5,7 @@ todo:
 from . import gmix
 from .gmix import GMix
 from .gmix import GMixModel
+from .gmix import GMixCoellip
 
 from . import jacobian
 from .jacobian import Jacobian, UnitJacobian
