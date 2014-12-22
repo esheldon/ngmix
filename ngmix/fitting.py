@@ -676,6 +676,39 @@ class TemplateFluxFitter(FitterBase):
         return self._npix
 
 
+class MaxCoellip(MaxSimple):
+    """
+    A class for direct maximization of the likelihood.
+    Useful for seeding model parameters.
+    """
+    def __init__(self, obs, ngauss, method='Nelder-Mead', **keys):
+
+        self._ngauss=ngauss
+
+        super(MaxCoellip,self).__init__(obs, 'coellip', **keys)
+
+        if self._nband != 1:
+            raise ValueError("MaxCoellip only supports one band")
+
+        # over-write the band pars created by MaxSimple
+        self._band_pars=zeros(self.npars)
+
+     def _set_npars(self):
+        """
+        single band, npars determined from ngauss
+        """
+        self.npars=4 + 2*self._ngauss
+
+     def _get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+        """
+
+        pars=self._band_pars
+        pars[:] = pars_in[:]
+        return pars
+
+      
 
 class MaxSimple(FitterBase):
     """
@@ -5376,6 +5409,73 @@ def test_lm_psf_simple_sub(model,
     print_pars(res['pars'],     front='fit:   ')
     print_pars(res['pars_err'], front='err:   ')
     print_pars(guess,           front='guess: ')
+
+def test_nm_psf_coellip(g1=0.0,
+                        g2=0.0,
+                        T=4.0,
+                        flux=100.0,
+                        noise=0.1):
+    """
+    test nelder mead fit of turb psf with coellip 
+    """
+    from numpy.random import randn
+    import images
+
+    ngauss=3
+
+    sigma=sqrt(T/2.0)
+    dim=int(round(2*5*sigma))
+
+    dims=[dim]*2
+
+    cen=(dim-1.)/2.
+
+    pars=array([cen,cen,g1,g2,T,flux],dtype='f8')
+    gm=gmix.GMixModel(pars, 'turb')
+
+    im=gm.make_image(dims, nsub=16)
+
+    noise_im = noise*randn(dim*dim).reshape(im.shape)
+    im += noise_im
+    #images.view(im)
+
+    wt=im*0 + 1.0/noise**2
+    obs = Observation(im,weight=wt)
+
+    npars=4+ngauss*2
+
+    # bad guess but roughly right proportions
+    Tfrac=array([0.5793612389470884,1.621860687127999,7.019347162356363])
+    Cfrac=array([0.596510042804182,0.4034898268889178,1.303069003078001e-07])
+    guess=zeros(npars)
+    Tguess=T/2.
+    Cguess=flux*2
+    guess[0]=0.5*srandu()
+    guess[1]=0.5*srandu()
+
+    while True:
+        guess[2] = g1 + 0.1*srandu()
+        guess[3] = g2 + 0.1*srandu()
+        g=sqrt(guess[2]**2 + guess[3]**2)
+        if g < 1.0:
+            break
+
+    guess[4:4+ngauss]=Tguess*Tfrac
+    guess[4+ngauss:]=Cguess*Cfrac
+
+    fitter=MaxCoellip(obs)
+    print("running nm")
+    fitter.run_max(guess)
+    print("done running nm")
+
+    res=fitter.get_result()
+
+    print("flags:",res['flags'])
+    print_pars(pars,            front='truth: ')
+    print_pars(res['pars'],     front='fit:   ')
+    print_pars(res['pars_err'], front='err:   ')
+    print_pars(guess,           front='guess: ')
+
 
 
 def check_g(g):
