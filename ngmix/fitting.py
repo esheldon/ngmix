@@ -5528,8 +5528,9 @@ def test_nm_psf_coellip(g1=0.0,
                         flux=100.0,
                         noise=0.01,
                         ngauss=2,
-                        eps=1.0e-4,
-                        seed=None):
+                        maxiter=4000,
+                        seed=None,
+                        show=False):
     """
     test nelder mead fit of turb psf with coellip 
     """
@@ -5591,16 +5592,14 @@ def test_nm_psf_coellip(g1=0.0,
     fitter=MaxCoellip(obs,ngauss)
 
     print("running nm")
-    maxiter=4000
     itry=1
     tm0=time.time()
     while True:
         print("   try:",itry)
-        fitter.run_max_nm(guess, xtol=eps, ftol=eps, maxiter=maxiter)
+        fitter.run_max(guess, maxiter=maxiter)
         res=fitter.get_result()
         if res['flags'] == 0:
             break
-        #guess=res['pars'].copy()
         guess=get_guess()
         itry+=1
     print("time:",time.time()-tm0)
@@ -5622,6 +5621,11 @@ def test_nm_psf_coellip(g1=0.0,
 
     print_pars(guess_orig,     front='oguess: ')
 
+    if show:
+        import images
+        gm=fitter.get_gmix()
+        model_im=gm.make_image(dims)
+        images.compare_images(im, model_im, label1='image',label2='model')
 
 
 def check_g(g):
