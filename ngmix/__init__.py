@@ -24,6 +24,7 @@ from .gexceptions import GMixRangeError, GMixFatalError, GMixMaxIterEM
 
 from . import fitting
 from .fitting import print_pars
+from . import simplex
 
 from . import em
 
