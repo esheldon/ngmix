@@ -676,40 +676,6 @@ class TemplateFluxFitter(FitterBase):
         return self._npix
 
 
-class MaxCoellip(MaxSimple):
-    """
-    A class for direct maximization of the likelihood.
-    Useful for seeding model parameters.
-    """
-    def __init__(self, obs, ngauss, method='Nelder-Mead', **keys):
-
-        self._ngauss=ngauss
-
-        super(MaxCoellip,self).__init__(obs, 'coellip', **keys)
-
-        if self._nband != 1:
-            raise ValueError("MaxCoellip only supports one band")
-
-        # over-write the band pars created by MaxSimple
-        self._band_pars=zeros(self.npars)
-
-     def _set_npars(self):
-        """
-        single band, npars determined from ngauss
-        """
-        self.npars=4 + 2*self._ngauss
-
-     def _get_band_pars(self, pars_in, band):
-        """
-        Get linear pars for the specified band
-        """
-
-        pars=self._band_pars
-        pars[:] = pars_in[:]
-        return pars
-
-      
-
 class MaxSimple(FitterBase):
     """
     A class for direct maximization of the likelihood.
@@ -721,15 +687,10 @@ class MaxSimple(FitterBase):
         self._model = model
         self.method = method
         self._band_pars = numpy.zeros(6)
-
-        self.options={}
-        if 'maxiter' in keys:
-            self.options['maxiter']=keys['maxiter']
-        #self._tolerance=keys.get('tol',1.0e-6)
         
     def _setup_data(self, guess):
         """
-        try very hard to initialize the mixtures
+        initialize the gaussian mixtures
         """
 
         if hasattr(self,'_result'):
@@ -760,18 +721,82 @@ class MaxSimple(FitterBase):
     def neglnprob(self, pars):
         return -1.0*self.calc_lnprob(pars)
 
-    def run_max(self, guess):
+    def run_max(self, guess, **keys):
         """
         Run maximizer and set the result.
+
+        extra keywords for nm are 
+        --------------------------
+        xtol: float, optional
+            Tolerance in the vertices, relative to the vertex with
+            the lowest function value.  Default 1.0e-4
+        ftol: float, optional
+            Tolerance in the function value, relative to the
+            lowest function value for all vertices.  Default 1.0e-4
+        maxiter: int, optional
+            Default is npars*200
+        maxfev:
+            Default is npars*200
         """
-        import scipy.optimize
+        if self.method=='Nelder-Mead':
+            self.run_max_nm(guess, **keys)
+        else:
+            import scipy.optimize
+
+            options={}
+            options.update(keys)
+
+            guess=numpy.array(guess,dtype='f8',copy=False)
+            self._setup_data(guess)
+            
+            result = scipy.optimize.minimize(self.neglnprob,
+                                             guess,
+                                             method=self.method,
+                                             options=options)
+            self._result = result
+
+            if result['success']:
+                result['flags'] = 0
+            else:
+                result['flags'] = 1
+
+            if 'x' in result:
+                pars=result['x']
+                result['pars'] = pars
+                result['g'] = pars[2:2+2]
+            
+                # based on last entry
+                fit_stats = self._get_fit_stats(pars)
+                result.update(fit_stats)
+
+    def run_max_nm(self, guess, **keys):
+        """
+        Run maximizer and set the result.
+
+        extra keywords are 
+        ------------------
+        xtol: float, optional
+            Tolerance in the vertices, relative to the vertex with
+            the lowest function value.  Default 1.0e-4
+        ftol: float, optional
+            Tolerance in the function value, relative to the
+            lowest function value for all vertices.  Default 1.0e-4
+        maxiter: int, optional
+            Default is npars*200
+        maxfev:
+            Default is npars*200
+        """
+        from .simplex import minimize_neldermead
+
+        options={}
+        options.update(keys)
 
         guess=numpy.array(guess,dtype='f8',copy=False)
         self._setup_data(guess)
         
-        result = scipy.optimize.minimize(self.neglnprob, guess, method=self.method,
-                                         options=self.options)
-                                         #tol=self._tolerance)
+        result = minimize_neldermead(self.neglnprob,
+                                     guess,
+                                     **keys)
         self._result = result
 
         if result['success']:
@@ -788,8 +813,55 @@ class MaxSimple(FitterBase):
             fit_stats = self._get_fit_stats(pars)
             result.update(fit_stats)
 
-            if self.method=='Nelder-Mead':
-                self.calc_cov()
+            self.calc_cov()
+
+    def run_max_nm_allpy(self, guess, eps=1.0e-8, maxiter=4000, monitor=False):
+        """
+        Run maximizer and set the result.
+
+        parameters
+        ----------
+        guess: array or sequence
+            starting guess
+        eps: tolerance in simplex location, optional
+            default 1.0e-8 
+        maxiter: int, optional
+            Max number of iterations, default 4000
+        monitor: bool, optional
+            If True, print out information at each step
+        """
+        from .simplex import Simplex
+
+
+        guess=numpy.array(guess,dtype='f8',copy=False)
+        self._setup_data(guess)
+
+        increments=guess.copy()
+        increments[0:0+2] = 0.1
+        increments[2:2+2] = 0.01
+        increments[4:] = 0.1
+        
+        fitter=Simplex(self.neglnprob, guess, increments)
+        pars, current_lnp, niter = fitter.minimize(eps=eps,
+                                                   maxiter=maxiter,
+                                                   monitor=monitor)
+
+        result={}
+        self._result = result
+        result['pars'] = pars
+        result['g'] = pars[2:2+2]
+        result['numiter']=niter
+
+        if niter==maxiter:
+            result['flags']=2**0
+        else:
+            result['flags']=0
+        
+        # based result['pars']
+        fit_stats = self._get_fit_stats(pars)
+        result.update(fit_stats)
+
+        self.calc_cov()
 
 
     def calc_cov(self, h=1.0e-3, m=3.):
@@ -885,6 +957,42 @@ class MaxSimple(FitterBase):
             hdiag=diag(diag(hess))
             cov = -linalg.inv(hess)
         return cov
+
+class MaxCoellip(MaxSimple):
+    """
+    A class for direct maximization of the likelihood.
+    Useful for seeding model parameters.
+    """
+    def __init__(self, obs, ngauss, method='Nelder-Mead', **keys):
+
+        self._ngauss=ngauss
+
+        super(MaxCoellip,self).__init__(obs, 'coellip', method=method, **keys)
+
+        if self.nband != 1:
+            raise ValueError("MaxCoellip only supports one band")
+
+        # over-write the band pars created by MaxSimple
+        self._band_pars=zeros(self.npars)
+
+    def _set_npars(self):
+        """
+        single band, npars determined from ngauss
+        """
+        self.npars=4 + 2*self._ngauss
+
+    def _get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+        """
+
+        pars=self._band_pars
+        pars[:] = pars_in[:]
+        return pars
+
+      
+
+
 
 class LMSimple(FitterBase):
     """
@@ -1927,6 +2035,10 @@ class MHSimple(MCMCSimple):
             ns=step_sizes.size
             mess="step_sizes has size=%d, expected %d" % (ns,self.npars)
             assert (ns == self.npars),mess
+
+            mess="step sizes must all be > 0"
+            assert numpy.all(step_sizes > 0),mess
+
         elif len(sdim) == 2:
             mess="step_sizes needs to be a square matrix, has dims %dx%d." % sdim
             assert (sdim[0] == sdim[1]),mess
@@ -5414,14 +5526,19 @@ def test_nm_psf_coellip(g1=0.0,
                         g2=0.0,
                         T=4.0,
                         flux=100.0,
-                        noise=0.1):
+                        noise=0.01,
+                        ngauss=2,
+                        eps=1.0e-4,
+                        seed=None):
     """
     test nelder mead fit of turb psf with coellip 
     """
     from numpy.random import randn
     import images
 
-    ngauss=3
+    numpy.random.seed(seed)
+
+    #ngauss=3
 
     sigma=sqrt(T/2.0)
     dim=int(round(2*5*sigma))
@@ -5444,37 +5561,66 @@ def test_nm_psf_coellip(g1=0.0,
 
     npars=4+ngauss*2
 
-    # bad guess but roughly right proportions
-    Tfrac=array([0.5793612389470884,1.621860687127999,7.019347162356363])
-    Cfrac=array([0.596510042804182,0.4034898268889178,1.303069003078001e-07])
-    guess=zeros(npars)
-    Tguess=T/2.
-    Cguess=flux*2
-    guess[0]=0.5*srandu()
-    guess[1]=0.5*srandu()
+    Tguess=T
+    Cguess=flux
 
-    while True:
-        guess[2] = g1 + 0.1*srandu()
-        guess[3] = g2 + 0.1*srandu()
-        g=sqrt(guess[2]**2 + guess[3]**2)
-        if g < 1.0:
-            break
+    def get_guess():
+        guess=zeros(npars)
+        # bad guess but roughly right proportions
+        if ngauss==3:
+            Tfrac=array([0.5793612389470884,1.621860687127999,7.019347162356363])
+            Cfrac=array([0.596510042804182,0.4034898268889178,1.303069003078001e-07])
+        else:
+            Tfrac=array([0.5,2.0])
+            Cfrac=array([0.7,0.3])
 
-    guess[4:4+ngauss]=Tguess*Tfrac
-    guess[4+ngauss:]=Cguess*Cfrac
+        width=0.1
+        guess[4:4+ngauss]=Tguess*Tfrac*(1.0 + width*srandu())
+        guess[4+ngauss:]=Cguess*Cfrac*(1.0 + width*srandu())
 
-    fitter=MaxCoellip(obs)
+        guess[0]=cen+width*srandu()
+        guess[1]=cen+width*srandu()
+
+        guess[2] = width*srandu()
+        guess[3] = width*srandu()
+        return guess
+
+    guess=get_guess()
+    guess_orig=guess.copy()
+
+    fitter=MaxCoellip(obs,ngauss)
+
     print("running nm")
-    fitter.run_max(guess)
-    print("done running nm")
+    maxiter=4000
+    itry=1
+    tm0=time.time()
+    while True:
+        print("   try:",itry)
+        fitter.run_max_nm(guess, xtol=eps, ftol=eps, maxiter=maxiter)
+        res=fitter.get_result()
+        if res['flags'] == 0:
+            break
+        #guess=res['pars'].copy()
+        guess=get_guess()
+        itry+=1
+    print("time:",time.time()-tm0)
 
-    res=fitter.get_result()
+    for key in res:
+        if key not in ['pars','pars_err','pars_cov','g','g_cov','x']:
+            print("    %s: %s" % (key, res[key]))
+    print()
 
-    print("flags:",res['flags'])
+    fitmix=fitter.get_gmix()
     print_pars(pars,            front='truth: ')
+    print("T:",fitmix.get_T(),"count:",fitmix.get_flux())
     print_pars(res['pars'],     front='fit:   ')
-    print_pars(res['pars_err'], front='err:   ')
-    print_pars(guess,           front='guess: ')
+
+    if 'pars_err' in res:
+        print_pars(res['pars_err'], front='err:   ')
+    else:
+        print("NO ERROR PRESENT")
+
+    print_pars(guess_orig,     front='oguess: ')
 
 
 
