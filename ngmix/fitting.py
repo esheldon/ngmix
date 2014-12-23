@@ -5644,16 +5644,16 @@ def get_g_guesses(g10, g20, width=0.01):
     return g1,g2
 
 def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
-            nwalkers=80, burnin=800, nstep=800,
             g1=0.1,
             g2=0.05,
             g_prior=None, show=False,
             psf_fitter='em3',
-            do_emcee=True):
+            do_emcee=False,
+            nwalkers=80, burnin=800, nstep=800):
     """
     Fit with nelder-mead, calculating cov matrix with our code
 
-    compare with a mcmc fit using emcee
+    if do_emcee is True, compare with a mcmc fit using emcee
     """
     from . import em
     from . import joint_prior
@@ -5781,6 +5781,10 @@ def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
         print("time for emcee:", time.time()-t0)
 
         emcee_res=emcee_fitter.get_result()
+
+    for key in nm_res:
+        if key not in ['pars','pars_err','pars_cov','g','g_cov','x']:
+            print("    %s: %s" % (key, nm_res[key]))
 
     print_pars(pars_obj,              front='true pars: ', fmt=fmt)
 
