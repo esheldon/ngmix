@@ -119,6 +119,8 @@ class FitterBase(object):
         #robust fitting
         self.nu = keys.get('nu', 0.0)
 
+        if 'aperture' in keys:
+            self.set_aperture(keys['aperture'])
 
     def get_result(self):
         """
@@ -134,9 +136,16 @@ class FitterBase(object):
         Get a gaussian mixture at the "best" parameter set, which
         definition depends on the sub-class
         """
-        linres=self.get_result()
-        pars=linres['pars']
+        res=self.get_result()
+        pars=res['pars']
         return gmix.make_gmix_model(pars, self.model)
+
+    def set_aperture(self, aper):
+        """
+        set the circular aperture for likelihood evaluations. only used by
+        calc_lnprob currently
+        """
+        self.obs.set_aperture(aper)
 
     def _set_obs(self, obs_in):
         """
@@ -278,7 +287,9 @@ class FitterBase(object):
                         res = gm.get_loglike_margsky(obs, obs.model_image, 
                                                      nsub=nsub, get_s2nsums=True)
                     else:
-                        res = gm.get_loglike(obs, nsub=nsub, get_s2nsums=True)
+                        res = gm.get_loglike(obs,
+                                             nsub=nsub,
+                                             get_s2nsums=True)
 
                     ln_prob += res[0]
                     s2n_numer += res[1]
@@ -3500,6 +3511,24 @@ class MCMCSimpleJointLogPars(MCMCSimple):
         return names
 
 
+def get_edge_aperture(dims, cen):
+    """
+    get circular aperture such that the entire aperture
+    is visible in all directions without hitting an edge
+
+    parameters
+    ----------
+    dims: 2-element sequence
+        dimensions of the array [dim1, dim2]
+    cen: 2-element sequence
+        [cen1, cen2]
+
+    returns
+    -------
+    min(min(cen[0],dims[0]-cen[0]),min(cen[1],dims[1]-cen[1]))
+    """
+    aperture=min(min(cen[0],dims[0]-cen[0]),min(cen[1],dims[1]-cen[1]))
+    return aperture
 
 
 def print_pars(pars, stream=stdout, fmt='%10.6g',front=None):
@@ -3865,41 +3894,6 @@ def test_model_margsky_many(Tfracs=None, T_psf=4.0, show=False, ntrial=10, skyfa
     if show:
         plt.show()
         splt.show()
-
-def make_symmetic(image, cen, weight, jacob):
-    """
-    trim the image so it has equal number of pixels on every side
-    """
-    dim1,dim2=image.shape
-    d11 = cen[0]
-    d12 = dim1-cen[0]
-    d21 = cen[1]
-    d22 = dim2-cen[0]
-
-    minw1=0
-    maxw1=dim1
-    minw2=0
-    maxw2=dim2
-
-    if d11 < d12:
-        z = cen[0] + d11 + 1
-        if z < dim1:
-            weight[z:,:] = 0.
-    elif d12 < d11:
-        z = cen[0] - d12
-        if z > 0:
-            weight[0:z+1,:] = 0.
-
-    if d21 < d22:
-        z = cen[0] + d21 + 1
-        if z < dim2:
-            weight[:,z:] = 0.
-    elif d22 < d21:
-        z = cen[0] - d22
-        if z > 0:
-            weight[:,0:z+1] = 0.
-
-    
 
 def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
                        nwalkers=80, burnin=800, nstep=800,
@@ -5643,11 +5637,55 @@ def get_g_guesses(g10, g20, width=0.01):
 
     return g1,g2
 
-def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
+def test_nm_many(n=1000, **kw):
+    import esutil as eu
+
+    cen_offset = kw.get('cen_offset',numpy.zeros(2))
+
+    g1vals=zeros(n)
+    g2vals=zeros(n)
+    g1errs=zeros(n)
+    g2errs=zeros(n)
+
+    fracprint=0.01
+    np=int(n*fracprint)
+    if np <= 0:
+        np=1
+    for i in xrange(n):
+        if ( (i+1) % np) == 0 or i==0:
+            print("%d/%d" % (i+1,n))
+
+        #kw['cen_offset']=cen_offset + numpy.random.random(2)
+        kw['cen_offset']=cen_offset + numpy.random.randn(2)
+        pars, pars_err=test_nm('exp', **kw)
+
+        g1vals[i] = pars[2]
+        g2vals[i] = pars[3]
+        g1errs[i] = pars_err[2]
+        g2errs[i] = pars_err[3]
+
+    weights=1.0/(g1errs**2 + g2errs**2)
+
+    g1mean, g1err = eu.stat.wmom(g1vals, weights, calcerr=True)
+    g2mean, g2err = eu.stat.wmom(g2vals, weights, calcerr=True)
+    print("e1: %g +/- %g" % (g1mean,g1err))
+    print("e2: %g +/- %g" % (g2mean,g2err))
+
+    return g1vals, g1errs, g2vals, g2errs
+
+def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
             g1=0.1,
             g2=0.05,
-            g_prior=None, show=False,
-            psf_fitter='em3',
+            sigma_fac=5.0,
+            g_prior=None,
+            psf_model='em2',
+            verbose=True,
+            show=False,
+            dims=None,
+            cen_offset=None,
+            aperture=None,
+            do_aperture=False, # auto-calculate aperture
+            seed=None,
             do_emcee=False,
             nwalkers=80, burnin=800, nstep=800):
     """
@@ -5659,6 +5697,9 @@ def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
     from . import joint_prior
     import time
     import images
+    from .em import GMixMaxIterEM
+
+    numpy.random.seed(seed)
 
     fmt='%12.6f'
 
@@ -5669,17 +5710,27 @@ def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
     # PSF pars
     counts_psf=100.0
     noise_psf=0.01
-    g1_psf=0.05
-    g2_psf=-0.01
+    g1_psf=0.00
+    g2_psf=0.05
     T_psf=4.0
 
+    T=2.*sigma**2
     sigma=sqrt( (T + T_psf)/2. )
-    dims=[2.*5.*sigma]*2
-    cen=[dims[0]/2., dims[1]/2.]
+
+    if dims is None:
+        dims=[2.*sigma_fac*sigma]*2
+
+    cen_orig=array( [(dims[0]-1)/2.]*2 )
+
+    if cen_offset is not None:
+        cen = cen_orig + array( cen_offset )
+    else:
+        cen = cen_orig.copy()
+
     j=UnitJacobian(cen[0],cen[1])
 
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
-    gm_psf=gmix.GMixModel(pars_psf, "gauss")
+    gm_psf=gmix.GMixModel(pars_psf, "turb")
 
     pars_obj = array([0.0, 0.0, g1, g2, T, counts])
     npars=pars_obj.size
@@ -5687,11 +5738,12 @@ def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
 
     gm=gm_obj0.convolve(gm_psf)
 
-    im_psf=gm_psf.make_image(dims, jacobian=j)
+    jpsf=UnitJacobian(cen_orig[0], cen_orig[1])
+    im_psf=gm_psf.make_image(dims, jacobian=jpsf, nsub=16)
     im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
     wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
 
-    im_obj=gm.make_image(dims, jacobian=j)
+    im_obj=gm.make_image(dims, jacobian=j, nsub=16)
     im_obj[:,:] += noise*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
     wt_obj=zeros(im_obj.shape) + 1./noise**2
 
@@ -5702,27 +5754,76 @@ def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
 
     # psf fitting
     im_psf_sky,sky=em.prep_image(im_psf)
-    psf_obs = Observation(im_psf_sky, jacobian=j)
+    psf_obs = Observation(im_psf_sky, jacobian=jpsf)
     mc_psf=em.GMixEM(psf_obs)
 
-    emo_guess=gm_psf.copy()
-    emo_guess._data['p'] = 1.0
-    emo_guess._data['row'] += 0.1*srandu()
-    emo_guess._data['col'] += 0.1*srandu()
-    emo_guess._data['irr'] += 0.5*srandu()
-    emo_guess._data['irc'] += 0.1*srandu()
-    emo_guess._data['icc'] += 0.5*srandu()
+    while True:
+        if psf_model=='em1':
+            emo_guess=gm_psf.copy()
+            emo_guess._data['p'] = 1.0
+            emo_guess._data['row'] += 0.1*srandu()
+            emo_guess._data['col'] += 0.1*srandu()
+            emo_guess._data['irr'] += 0.5*srandu()
+            emo_guess._data['irc'] += 0.1*srandu()
+            emo_guess._data['icc'] += 0.5*srandu()
+        elif psf_model=='em2':
+            gpars=zeros(2*6)
 
-    mc_psf.run_em(emo_guess, sky)
+            Tguess=array([0.6,0.3])*gm_psf.get_T()
+            pguess=array([0.5,0.2])
+            for i in xrange(2):
+                gpars[i*6 + 0] = pguess[i]*(1.0+0.05*srandu())
+                gpars[i*6 + 1] = 0.05*srandu()
+                gpars[i*6 + 2] = 0.05*srandu()
+                gpars[i*6 + 3] = 0.5*Tguess[i]*(1.0+0.05*srandu())
+                gpars[i*6 + 4] = 0.01*srandu()
+                gpars[i*6 + 5] = 0.5*Tguess[i]*(1.0+0.05*srandu())
+
+            emo_guess=GMix(pars=gpars)
+            #print("psf guess:")
+            #print(emo_guess)
+            #print('dets:',emo_guess._data['det'])
+
+        elif psf_model=='em3':
+            gpars=zeros(3*6)
+
+            #Tguess=array([0.6,0.3,0.1])*gm_psf.get_T()
+            Tguess=array([1/3.]*3)*gm_psf.get_T()
+            pguess=array([0.5,0.4,0.1])
+            for i in xrange(3):
+                gpars[i*6 + 0] = pguess[i]*(1.0+0.05*srandu())
+                gpars[i*6 + 1] = 0.05*srandu()
+                gpars[i*6 + 2] = 0.05*srandu()
+                gpars[i*6 + 3] = 0.5*Tguess[i]*(1.0+0.05*srandu())
+                gpars[i*6 + 4] = 0.01*srandu()
+                gpars[i*6 + 5] = 0.5*Tguess[i]*(1.0+0.05*srandu())
+
+            emo_guess=GMix(pars=gpars)
+            #print("psf guess:")
+            #print(emo_guess)
+            #print('dets:',emo_guess._data['det'])
+
+        try:
+            mc_psf.run_em(emo_guess, sky, maxiter=2000)
+            break
+        except GMixMaxIterEM:
+            continue
+
     res_psf=mc_psf.get_result()
-    print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
+    if verbose:
+        print("dims:",dims)
+        print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
 
     psf_fit=mc_psf.get_gmix()
+    #print("fit psf:")
+    #print(psf_fit)
 
     psf_obs.set_gmix(psf_fit)
 
+    cen_width=2
     prior=joint_prior.make_uniform_simple_sep([0.0,0.0], # cen
-                                              [0.1,0.1], #cen width
+                                              #[0.1,0.1], #cen width
+                                              [cen_width]*2, #cen width
                                               [-0.97,3500.], # T
                                               [-0.97,1.0e9]) # counts
     #prior=None
@@ -5732,12 +5833,18 @@ def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
     # nm fitting
     #
 
-    print("fitting with nelder-mead")
-    nm_fitter=MaxSimple(obs, model, prior=prior)
+    if do_aperture:
+        aperture=get_edge_aperture(dims, cen)
+        if verbose:
+            print("Using aperture:",aperture)
+    if verbose:
+        print("fitting with nelder-mead")
+
+    nm_fitter=MaxSimple(obs, model, prior=prior, aperture=aperture)
     guess=zeros( npars )
     while True:
-        guess[0] = 0.1*srandu()
-        guess[1] = 0.1*srandu()
+        guess[0] = cen_width*srandu()
+        guess[1] = cen_width*srandu()
 
         # intentionally bad guesses
         guess[2], guess[3] = get_g_guesses(0.0, 0.0, width=0.1)
@@ -5747,7 +5854,8 @@ def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
         t0=time.time()
         nm_fitter.run_max(guess)
         nm_res=nm_fitter.get_result()
-        print("time for nm:", time.time()-t0)
+        if verbose:
+            print("time for nm:", time.time()-t0)
 
         # we could also just check EIG_NOTFINITE but then there would
         # be no errors
@@ -5761,8 +5869,9 @@ def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
     # emcee fitting
     # 
     if do_emcee:
-        print("fitting with emcee")
-        emcee_fitter=MCMCSimple(obs, model, nwalkers=nwalkers, prior=prior)
+        if verbose:
+            print("fitting with emcee")
+        emcee_fitter=MCMCSimple(obs, model, nwalkers=nwalkers, prior=prior, aperture=aperture)
 
         guess=zeros( (nwalkers, npars) )
         guess[:,0] = 0.1*srandu(nwalkers)
@@ -5778,30 +5887,42 @@ def test_nm(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
         pos=emcee_fitter.run_mcmc(guess, burnin)
         pos=emcee_fitter.run_mcmc(pos, nstep)
         emcee_fitter.calc_result()
-        print("time for emcee:", time.time()-t0)
+        if verbose:
+            print("time for emcee:", time.time()-t0)
 
         emcee_res=emcee_fitter.get_result()
 
-    for key in nm_res:
-        if key not in ['pars','pars_err','pars_cov','g','g_cov','x']:
-            print("    %s: %s" % (key, nm_res[key]))
+    if verbose:
+        for key in nm_res:
+            if key not in ['pars','pars_err','pars_cov','g','g_cov','x']:
+                print("    %s: %s" % (key, nm_res[key]))
 
-    print_pars(pars_obj,              front='true pars: ', fmt=fmt)
+        print_pars(pars_obj,              front='true pars: ', fmt=fmt)
 
-    if do_emcee:
-        print_pars(emcee_res['pars'],     front='emcee pars:', fmt=fmt)
-    print_pars(nm_res['pars'],        front='nm pars:   ', fmt=fmt)
-    if do_emcee:
-        print_pars(emcee_res['pars_err'], front='emcee err: ', fmt=fmt)
-    print_pars(nm_res['pars_err'],    front='nm err:    ', fmt=fmt)
+        if do_emcee:
+            print_pars(emcee_res['pars'],     front='emcee pars:', fmt=fmt)
+        print_pars(nm_res['pars'],        front='nm pars:   ', fmt=fmt)
 
-    print("\ns2n:",nm_res['s2n_w'])
+        if do_emcee:
+            print_pars(emcee_res['pars_err'], front='emcee err: ', fmt=fmt)
+        print_pars(nm_res['pars_err'],    front='nm err:    ', fmt=fmt)
 
-    if do_emcee:
-        print("s2n:",emcee_res['s2n_w'],"arate:",emcee_res['arate'],"tau:",emcee_res['tau'])
+        print("\ns2n:",nm_res['s2n_w'])
+
+        if do_emcee:
+            print("s2n:",emcee_res['s2n_w'],"arate:",emcee_res['arate'],"tau:",emcee_res['tau'])
+
+            if show:
+                emcee_fitter.make_plots(do_residual=True,show=True,prompt=False)
+
+        #print("\nnm cov:")
+        #images.imprint(nm_res['pars_cov'], fmt='%12.6g')
 
         if show:
-            emcee_fitter.make_plots(do_residual=True,show=True,prompt=False)
+            import images
+            gm0=nm_fitter.get_gmix()
+            gm=gm0.convolve(psf_fit)
+            model_im=gm.make_image(dims,jacobian=j)
+            images.compare_images(im_obj, model_im, label1='image',label2='model')
 
-    print("\nnm cov:")
-    images.imprint(nm_res['pars_cov'], fmt='%12.6g')
+    return nm_res['pars'], nm_res['pars_err']

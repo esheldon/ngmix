@@ -1,6 +1,7 @@
 import numpy
 from .jacobian import Jacobian, UnitJacobian
 from .gmix import GMix
+import copy
 
 class Observation(object):
     """
@@ -25,6 +26,7 @@ class Observation(object):
                  weight=None,
                  jacobian=None,
                  gmix=None,
+                 aperture=None,
                  psf=None):
 
         self.image=numpy.asanyarray(image, dtype='f8')
@@ -35,6 +37,7 @@ class Observation(object):
         self.set_jacobian(jacobian)
         self.set_weight(weight)
         self.set_gmix(gmix)
+        self.set_aperture(aperture)
         self.set_psf(psf)
 
     def set_weight(self, weight):
@@ -135,6 +138,27 @@ class Observation(object):
         """
         return hasattr(self, 'gmix')
 
+    def set_aperture(self,aperture):
+        """
+        Set an aperture.
+        """
+        if aperture is not None:
+            self.aperture=float(aperture)
+        else:
+            self.aperture=None
+
+    def get_aperture(self):
+        """
+        get a copy of the aperture
+        """
+        return copy.copy(self.aperture)
+
+    def has_aperture(self):
+        """
+        returns True if the aperture is not None
+        """
+        return self.aperture is not None
+
     def update_meta_data(self, meta_dict):
         """
         Add some metadata
@@ -155,6 +179,13 @@ class ObsList(list):
         """
         assert isinstance(obs,Observation),"obs should be of type Observation, got %s" % type(obs)
         super(ObsList,self).append(obs)
+
+    def set_aperture(self, aper):
+        """
+        set aperture on all contained Observations
+        """
+        for obs in self:
+            obs.set_aperture(aper)
 
     def __setitem__(self, index, obs):
         """
@@ -179,6 +210,13 @@ class MultiBandObsList(list):
         """
         assert isinstance(obs_list,ObsList),"obs_list should be of type ObsList"
         super(MultiBandObsList,self).append(obs_list)
+
+    def set_aperture(self, aper):
+        """
+        set aperture on all contained Observations
+        """
+        for obslist in self:
+            obslist.set_aperture(aper)
 
     def __setitem__(self, index, obs_list):
         """

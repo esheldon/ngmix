@@ -382,10 +382,13 @@ class GMix(object):
         obs: Observation
             The Observation to compare with. See ngmix.observation.Observation
             The Observation must have a weight map set
+        nsub: int, optional
+            Integrate the model over each pixel using a nsubxnsub grid
+        get_s2nsums:
+            if True, returns s2n_numer and s2n_denom sums
         """
 
         if nsub > 1:
-            #print("using nsub:",nsub)
             loglike,s2n_numer,s2n_denom=_gmix.get_loglike_sub(self._data,
                                                               obs.image,
                                                               obs.weight,
@@ -393,10 +396,21 @@ class GMix(object):
                                                               nsub)
 
         else:
-            loglike,s2n_numer,s2n_denom=_gmix.get_loglike(self._data,
-                                                          obs.image,
-                                                          obs.weight,
-                                                          obs.jacobian._data)
+            aperture=obs.get_aperture()
+            if aperture is not None:
+                #print("using aper:",aperture)
+                loglike,s2n_numer,s2n_denom=_gmix.get_loglike_aper(self._data,
+                                                                   obs.image,
+                                                                   obs.weight,
+                                                                   obs.jacobian._data,
+                                                                   aperture)
+
+
+            else:
+                loglike,s2n_numer,s2n_denom=_gmix.get_loglike(self._data,
+                                                              obs.image,
+                                                              obs.weight,
+                                                              obs.jacobian._data)
 
         if get_s2nsums:
             return loglike,s2n_numer,s2n_denom
