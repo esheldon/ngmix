@@ -15,11 +15,12 @@ _status_message = {'success': 'Optimization terminated successfully.',
 
 
 def minimize_neldermead(func, x0,
-                         xtol=1e-4,
-                         ftol=1e-4,
-                         maxiter=None,
-                         maxfev=None,
-                         disp=False):
+                        xtol=1e-4,
+                        ftol=1e-4,
+                        maxiter=None,
+                        maxfev=None,
+                        disp=False,
+                        **unused_kw):
     """
     stolen from scipy.optimize, slightly modified
 
