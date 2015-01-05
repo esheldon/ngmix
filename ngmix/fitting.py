@@ -769,7 +769,7 @@ class MaxSimple(FitterBase):
             if result['success']:
                 result['flags'] = 0
             else:
-                result['flags'] = 1
+                result['flags'] = result['status']
 
             if 'x' in result:
                 pars=result['x']
