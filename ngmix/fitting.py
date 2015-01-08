@@ -798,6 +798,7 @@ class MaxSimple(FitterBase):
             Default is npars*200
         """
         from .simplex import minimize_neldermead
+        #from .simplex import minimize_neldermead_rel as minimize_neldermead
 
         options={}
         options.update(keys)
