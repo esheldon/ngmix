@@ -5647,6 +5647,8 @@ def test_nm_many(n=1000, **kw):
     g2vals=zeros(n)
     g1errs=zeros(n)
     g2errs=zeros(n)
+    nfevs=zeros(n,dtype='i4')
+    ntrys=zeros(n,dtype='i4')
 
     fracprint=0.01
     np=int(n*fracprint)
@@ -5658,12 +5660,15 @@ def test_nm_many(n=1000, **kw):
 
         #kw['cen_offset']=cen_offset + numpy.random.random(2)
         kw['cen_offset']=cen_offset + numpy.random.randn(2)
-        pars, pars_err=test_nm('exp', **kw)
+        res=test_nm('exp', **kw)
+        pars, pars_err=res['pars'],res['pars_err']
 
         g1vals[i] = pars[2]
         g2vals[i] = pars[3]
         g1errs[i] = pars_err[2]
         g2errs[i] = pars_err[3]
+        nfevs[i]=res['nfev']
+        ntrys[i]=res['ntry']
 
     weights=1.0/(g1errs**2 + g2errs**2)
 
@@ -5672,7 +5677,12 @@ def test_nm_many(n=1000, **kw):
     print("e1: %g +/- %g" % (g1mean,g1err))
     print("e2: %g +/- %g" % (g2mean,g2err))
 
-    return g1vals, g1errs, g2vals, g2errs
+    return {'g1':g1vals,
+            'g1err':g1errs,
+            'g2':g2vals,
+            'g2err':g2errs,
+            'nfev':nfevs,
+            'ntry':ntrys}
 
 def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
             g1=0.1,
@@ -5689,6 +5699,7 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
             ftol=1.e-4,
             xtol=1.e-4,
             seed=None,
+            guess_quality='bad', # use 'good' to make a good guess
             do_emcee=False,
             nwalkers=80, burnin=800, nstep=800):
     """
@@ -5843,21 +5854,24 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
     if verbose:
         print("fitting with nelder-mead")
 
-    nm_fitter=MaxSimple(obs, model, prior=prior, aperture=aperture)
+    nm_fitter=MaxSimple(obs, model, maxiter=4000, maxfev=4000, 
+                        prior=prior, aperture=aperture)
     guess=zeros( npars )
+    ntry=0
     while True:
-        #guess[0] = cen_width*srandu()
-        #guess[1] = cen_width*srandu()
-
-        # intentionally bad guesses
-        #guess[2], guess[3] = get_g_guesses(0.0, 0.0, width=0.1)
-        #guess[4] = T*(1.0 + 0.1*srandu())
-        #guess[5] = counts*(1.0 + 0.1*srandu())
-        guess[0] = 0.001*srandu()
-        guess[1] = 0.001*srandu()
-        guess[2],guess[3] = get_g_guesses(g1,g2,width=0.01)
-        guess[4] = T*(1.0 + 0.01*srandu())
-        guess[5] = counts*(1.0 + 0.01*srandu())
+        ntry += 1
+        if guess_quality=='bad':
+            guess[0] = cen_width*srandu()
+            guess[1] = cen_width*srandu()
+            guess[2], guess[3] = get_g_guesses(0.0, 0.0, width=0.1)
+            guess[4] = T*(1.0 + 0.1*srandu())
+            guess[5] = counts*(1.0 + 0.1*srandu())
+        else:
+            guess[0] = 0.001*srandu()
+            guess[1] = 0.001*srandu()
+            guess[2],guess[3] = get_g_guesses(g1,g2,width=0.01)
+            guess[4] = T*(1.0 + 0.01*srandu())
+            guess[5] = counts*(1.0 + 0.01*srandu())
 
         t0=time.time()
         nm_fitter.run_max(guess,
@@ -5877,6 +5891,8 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
             print_pars(nm_res['pars'],              front='    pars were:', fmt=fmt)
         else:
             break
+
+    nm_res['ntry'] = ntry
 
     #
     # emcee fitting
@@ -5938,4 +5954,4 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
             model_im=gm.make_image(dims,jacobian=j)
             images.compare_images(im_obj, model_im, label1='image',label2='model')
 
-    return nm_res['pars'], nm_res['pars_err']
+    return nm_res

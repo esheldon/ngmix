@@ -31,9 +31,11 @@ def minimize_neldermead(func, x0,
         disp : bool
             Set to True to print convergence messages.
         xtol : float
-            Relative error in solution `xopt` acceptable for convergence.
+            Absolute difference in simplex vertex locations in consecutive
+            iterations that signals convergence.
         ftol : float
-            Relative error in ``fun(xopt)`` acceptable for convergence.
+            Absolute difference in function value at vertex locations in
+            consecutive iterations that signals convergence.
         maxiter : int
             Maximum number of iterations to perform.
         maxfev : int
@@ -175,8 +177,8 @@ def minimize_neldermead(func, x0,
     return result
 
 def minimize_neldermead_rel(func, x0,
-                            xtol=1.0e-4,
-                            ftol=1.0e-4,
+                            xtol=1.0e-3,
+                            ftol=1.0e-3,
                             maxiter=None,
                             maxfev=None,
                             disp=False,
@@ -193,9 +195,11 @@ def minimize_neldermead_rel(func, x0,
         disp : bool
             Set to True to print convergence messages.
         xtol : float
-            Relative error in solution `xopt` acceptable for convergence.
+            Relative difference in simplex vertex locations in consecutive
+            iterations that signals convergence.
         ftol : float
-            Relative error in ``fun(xopt)`` acceptable for convergence.
+            Relative difference in function value at vertex locations in
+            consecutive iterations that signals convergence.
         maxiter : int
             Maximum number of iterations to perform.
         maxfev : int
