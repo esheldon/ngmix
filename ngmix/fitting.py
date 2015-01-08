@@ -797,8 +797,8 @@ class MaxSimple(FitterBase):
         maxfev:
             Default is npars*200
         """
-        from .simplex import minimize_neldermead
-        #from .simplex import minimize_neldermead_rel as minimize_neldermead
+        #from .simplex import minimize_neldermead
+        from .simplex import minimize_neldermead_rel as minimize_neldermead
 
         options={}
         options.update(keys)
@@ -5846,13 +5846,18 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
     nm_fitter=MaxSimple(obs, model, prior=prior, aperture=aperture)
     guess=zeros( npars )
     while True:
-        guess[0] = cen_width*srandu()
-        guess[1] = cen_width*srandu()
+        #guess[0] = cen_width*srandu()
+        #guess[1] = cen_width*srandu()
 
         # intentionally bad guesses
-        guess[2], guess[3] = get_g_guesses(0.0, 0.0, width=0.1)
-        guess[4] = T*(1.0 + 0.1*srandu())
-        guess[5] = counts*(1.0 + 0.1*srandu())
+        #guess[2], guess[3] = get_g_guesses(0.0, 0.0, width=0.1)
+        #guess[4] = T*(1.0 + 0.1*srandu())
+        #guess[5] = counts*(1.0 + 0.1*srandu())
+        guess[0] = 0.001*srandu()
+        guess[1] = 0.001*srandu()
+        guess[2],guess[3] = get_g_guesses(g1,g2,width=0.01)
+        guess[4] = T*(1.0 + 0.01*srandu())
+        guess[5] = counts*(1.0 + 0.01*srandu())
 
         t0=time.time()
         nm_fitter.run_max(guess,

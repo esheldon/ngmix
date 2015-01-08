@@ -249,8 +249,8 @@ def minimize_neldermead_rel(func, x0,
 
     while (fcalls < maxfev and iterations < maxiter):
 
-        xdiff = numpy.abs(sim[1:] - sim[0])
-        xvt = numpy.abs(sim[0])*xtol
+        xdiff = numpy.abs(sim[1:, :] - sim[0,:])
+        xvt = numpy.abs(sim[0,:])*xtol
         xcomp = (xdiff - xvt).max()
     
         fdiff = numpy.abs( (fsim[0] - fsim[1:]) ).max()
