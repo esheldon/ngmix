@@ -5686,6 +5686,8 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
             cen_offset=None,
             aperture=None,
             do_aperture=False, # auto-calculate aperture
+            ftol=1.e-4,
+            xtol=1.e-4,
             seed=None,
             do_emcee=False,
             nwalkers=80, burnin=800, nstep=800):
@@ -5853,18 +5855,23 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
         guess[5] = counts*(1.0 + 0.1*srandu())
 
         t0=time.time()
-        nm_fitter.run_max(guess)
+        nm_fitter.run_max(guess,
+                          xtol=xtol,
+                          ftol=ftol)
         nm_res=nm_fitter.get_result()
         if verbose:
             print("time for nm:", time.time()-t0)
 
         # we could also just check EIG_NOTFINITE but then there would
         # be no errors
-        if (nm_res['flags'] & EIG_NOTFINITE) == 0:
-            break
-        else:
+        if (nm_res['flags'] & 3) != 0:
+            print("    did not converge, trying again with a new guess")
+            print_pars(nm_res['pars'],              front='    pars were:', fmt=fmt)
+        elif (nm_res['flags'] & EIG_NOTFINITE) != 0:
             print("    bad cov, trying again with a new guess")
             print_pars(nm_res['pars'],              front='    pars were:', fmt=fmt)
+        else:
+            break
 
     #
     # emcee fitting
