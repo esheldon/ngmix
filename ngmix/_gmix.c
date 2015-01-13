@@ -142,8 +142,6 @@ static int gauss2d_set(struct PyGMix_Gauss2D *self,
                        double icc) {
 
 
-    //double det=0, idet=0;
-
     self->norm_set=0;
 
     self->p=p;
@@ -154,24 +152,6 @@ static int gauss2d_set(struct PyGMix_Gauss2D *self,
     self->icc=icc;
 
     self->det = irr*icc - irc*irc;
-
-    /*
-    if (self->det < 1.0e-200) {
-        // PyErr_Format doesn't format floats
-        char detstr[25];
-        snprintf(detstr,24,"%g", self->det);
-        PyErr_Format(GMixRangeError, "gauss2d det too low: %s", detstr);
-        return 0;
-    }
-
-    idet=1.0/self->det;
-    self->drr = irr*idet;
-    self->drc = irc*idet;
-    self->dcc = icc*idet;
-    self->norm = 1./(2*M_PI*sqrt(self->det));
-
-    self->pnorm = self->p*self->norm;
-    */
 
     return 1;
 }
@@ -422,25 +402,6 @@ static int gmix_fill_coellip(struct PyGMix_Gauss2D *self,
     double row=0,col=0,g1=0,g2=0,
            T=0,Thalf=0,counts=0,e1=0,e2=0;
     npy_intp i=0;
-
-    /*
-    if (n_pars != 6) {
-        PyErr_Format(GMixFatalError, 
-                     "simple pars should be size 6, got %ld", n_pars);
-        goto _gmix_fill_simple_bail;
-    }
-
-    n_gauss_expected=get_n_gauss(model, &status);
-    if (!status) {
-        goto _gmix_fill_simple_bail;
-    }
-    if (n_gauss != n_gauss_expected) {
-        PyErr_Format(GMixFatalError, 
-                     "for model %d expected %d gauss, got %ld",
-                     model, n_gauss_expected, n_gauss);
-        goto _gmix_fill_simple_bail;
-    }
-    */
 
     row=pars[0];
     col=pars[1];
