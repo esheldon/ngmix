@@ -95,8 +95,7 @@ class FitterBase(object):
         self.keys=keys
 
         self.margsky = keys.get('margsky', False)
-        #if self.margsky:
-        #    print("will analytically marginalize the sky")
+        self.use_logpars=keys.get('use_logpars',False)
 
         # psf fitters might not have this set to 1
         self.nsub=keys.get('nsub',1)
@@ -131,13 +130,13 @@ class FitterBase(object):
             raise ValueError("No result, you must run_mcmc and calc_result first")
         return self._result
 
-    def get_gmix(self):
+    def get_gmix(self, band=0):
         """
         Get a gaussian mixture at the "best" parameter set, which
         definition depends on the sub-class
         """
         res=self.get_result()
-        pars=res['pars']
+        pars=self._get_band_pars(res['pars'], band)
         return gmix.make_gmix_model(pars, self.model)
 
     def set_aperture(self, aper):
@@ -725,8 +724,13 @@ class MaxSimple(FitterBase):
         """
 
         pars=self._band_pars
-        pars[0:5] = pars_in[0:5]
-        pars[5] = pars_in[5+band]
+
+        if self.use_logpars:
+            _gmix.convert_simple_double_logpars_band(pars_in, pars, band)
+        else:
+            pars[0:5] = pars_in[0:5]
+            pars[5] = pars_in[5+band]
+
         return pars
 
     def neglnprob(self, pars):
@@ -998,8 +1002,11 @@ class MaxCoellip(MaxSimple):
         Get linear pars for the specified band
         """
 
-        pars=self._band_pars
-        pars[:] = pars_in[:]
+        if self.use_logpars:
+            _gmix.convert_simple_double_logpars(pars_in, pars)
+        else:
+            pars=self._band_pars
+            pars[:] = pars_in[:]
         return pars
 
       
@@ -1072,9 +1079,15 @@ class LMSimple(FitterBase):
         """
 
         pars=self._band_pars
-        pars[0:5] = pars_in[0:5]
-        pars[5] = pars_in[5+band]
+
+        if self.use_logpars:
+            _gmix.convert_simple_double_logpars_band(pars_in, pars, band)
+        else:
+            pars[0:5] = pars_in[0:5]
+            pars[5] = pars_in[5+band]
+
         return pars
+
 
     def _calc_fdiff(self, pars, get_s2nsums=False):
         """
@@ -1635,9 +1648,15 @@ class MCMCSimple(MCMCBase):
         """
 
         pars=self._band_pars
-        pars[0:5] = pars_in[0:5]
-        pars[5] = pars_in[5+band]
+
+        if self.use_logpars:
+            _gmix.convert_simple_double_logpars_band(pars_in, pars, band)
+        else:
+            pars[0:5] = pars_in[0:5]
+            pars[5] = pars_in[5+band]
+
         return pars
+
 
     def get_par_names(self, dolog=False):
         names=['cen1','cen2', 'g1','g2', 'T']
@@ -5959,3 +5978,123 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
             images.compare_images(im_obj, model_im, label1='image',label2='model')
 
     return nm_res
+
+def test_model_logpars(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
+                       nwalkers=80, burnin=800, nstep=800,
+                       g_prior=None, show=False, **keys):
+    """
+    Test fitting the specified model.
+
+    Send g_prior to do some lensfit/pqr calculations
+    """
+    from . import em
+    from . import joint_prior
+    import time
+
+    #
+    # simulation
+    #
+
+    # PSF pars
+    counts_psf=100.0
+    noise_psf=0.01
+    g1_psf=0.05
+    g2_psf=-0.01
+    T_psf=4.0
+
+    # object pars
+    g1_obj=0.1
+    g2_obj=0.05
+
+    sigma=sqrt( (T + T_psf)/2. )
+    dims=[2.*5.*sigma]*2
+    cen=[dims[0]/2., dims[1]/2.]
+    j=UnitJacobian(cen[0],cen[1])
+
+    pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
+    gm_psf=gmix.GMixModel(pars_psf, "gauss")
+
+    pars_obj = array([0.0, 0.0, g1_obj, g2_obj, T, counts])
+    npars=pars_obj.size
+    gm_obj0=gmix.GMixModel(pars_obj, model)
+
+    gm=gm_obj0.convolve(gm_psf)
+
+    im_psf=gm_psf.make_image(dims, jacobian=j)
+    im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
+    wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
+
+    im_obj=gm.make_image(dims, jacobian=j)
+    im_obj[:,:] += noise*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
+    wt_obj=zeros(im_obj.shape) + 1./noise**2
+
+    #
+    # fitting
+    #
+
+
+    # psf using EM
+    im_psf_sky,sky=em.prep_image(im_psf)
+    psf_obs = Observation(im_psf_sky, jacobian=j)
+    mc_psf=em.GMixEM(psf_obs)
+
+    emo_guess=gm_psf.copy()
+    emo_guess._data['p'] = 1.0
+    emo_guess._data['row'] += 0.1*srandu()
+    emo_guess._data['col'] += 0.1*srandu()
+    emo_guess._data['irr'] += 0.5*srandu()
+    emo_guess._data['irc'] += 0.1*srandu()
+    emo_guess._data['icc'] += 0.5*srandu()
+
+    mc_psf.run_em(emo_guess, sky)
+    res_psf=mc_psf.get_result()
+    print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
+
+    psf_fit=mc_psf.get_gmix()
+
+    psf_obs.set_gmix(psf_fit)
+
+    prior=joint_prior.make_erf_simple_sep([0.0,0.0],
+                                          [0.1,0.1],
+                                          [-5.,0.1,6.,0.1],
+                                          [-0.97,0.1,1.0e9,0.25e8])
+    #prior=None
+    obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
+    mc_obj=MCMCSimple(obs, model, nwalkers=nwalkers, prior=prior,
+                      use_logpars=True)
+
+    guess=zeros( (nwalkers, npars) )
+    guess[:,0] = 0.01*srandu(nwalkers)
+    guess[:,1] = 0.01*srandu(nwalkers)
+
+    # intentionally bad guesses
+    guess[:,2] = 0.01*srandu(nwalkers)
+    guess[:,3] = 0.01*srandu(nwalkers)
+    guess[:,4] = log10( T*(1.0 + 0.01*srandu(nwalkers)) )
+    guess[:,5] = counts*(1.0 + 0.01*srandu(nwalkers))
+
+    t0=time.time()
+    pos=mc_obj.run_mcmc(guess, burnin)
+    pos=mc_obj.run_mcmc(pos, nstep)
+    mc_obj.calc_result()
+    tm=time.time()-t0
+
+    trials=mc_obj.get_trials()
+    print("T minmax:",trials[:,4].min(), trials[:,4].max())
+    print("F minmax:",trials[:,5].min(), trials[:,5].max())
+
+    res_obj=mc_obj.get_result()
+
+    print_pars(pars_obj,            front='true pars:')
+    print_pars(res_obj['pars'],     front='pars_obj: ')
+    print_pars(res_obj['pars_err'], front='perr_obj: ')
+    print('T: %.4g +/- %.4g' % (res_obj['pars'][4], res_obj['pars_err'][4]))
+    print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'])
+
+    if show:
+        import images
+        mc_obj.make_plots(do_residual=True,show=True,prompt=False,**keys)
+
+    return tm
+
+

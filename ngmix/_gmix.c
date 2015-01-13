@@ -1754,7 +1754,8 @@ PyObject * PyGMix_convert_simple_double_logpars(PyObject* self, PyObject* args) 
     npars=PyArray_SIZE(logpars_obj);
 
     for (i=0; i<npars; i++) {
-        if (i < 4) {
+        //if (i < 4) {
+        if (i != 4) {
             pars[i] = logpars[i];
         } else {
             pars[i] = pow(10.0, logpars[i]);
@@ -1762,6 +1763,42 @@ PyObject * PyGMix_convert_simple_double_logpars(PyObject* self, PyObject* args) 
     }
     Py_RETURN_NONE;
 }
+
+/*
+   convert log pars to linear pars, pulling out a specific band
+
+   no error checking done here
+*/
+static 
+PyObject * PyGMix_convert_simple_double_logpars_band(PyObject* self, PyObject* args) {
+
+    PyObject* logpars_obj=NULL;
+    PyObject* pars_obj=NULL;
+    int band=0;
+    double *logpars=NULL, *pars=NULL;
+
+    // weight object is currently ignored
+    if (!PyArg_ParseTuple(args, (char*)"OOi", 
+                          &logpars_obj,
+                          &pars_obj,
+                          &band)) {
+        return NULL;
+    }
+
+    logpars=PyArray_DATA(logpars_obj);
+    pars=PyArray_DATA(pars_obj);
+
+    pars[0] = logpars[0];
+    pars[1] = logpars[1];
+    pars[2] = logpars[2];
+    pars[3] = logpars[3];
+    pars[4] = pow(10.0, logpars[4]);
+    //pars[5] = pow(10.0, logpars[5+band]);
+    pars[5] = logpars[5];
+
+    Py_RETURN_NONE;
+}
+
 
 /*
 
@@ -1977,6 +2014,7 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"em_run",(PyCFunction)PyGMix_em_run, METH_VARARGS,  "run the em algorithm\n"},
 
     {"convert_simple_double_logpars",        (PyCFunction)PyGMix_convert_simple_double_logpars,         METH_VARARGS,  "convert log10 to linear.\n"},
+    {"convert_simple_double_logpars_band",        (PyCFunction)PyGMix_convert_simple_double_logpars_band,         METH_VARARGS,  "convert log10 to linear with band specified.\n"},
 
     {"gmixnd_get_prob_scalar",        (PyCFunction)PyGMix_gmixnd_get_prob_scalar,         METH_VARARGS,  "get prob or log prob for scalar arg, nd gaussian"},
 

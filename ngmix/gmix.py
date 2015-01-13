@@ -613,7 +613,7 @@ class GMixModel(GMix):
         parameters
         ----------
         pars: ndarray or sequence
-            The parameters; some may be in log space and are converted
+            The parameters
         """
 
 

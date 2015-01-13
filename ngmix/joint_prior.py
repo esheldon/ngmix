@@ -1067,6 +1067,23 @@ def make_uniform_simple_sep(cen, cen_width, T_range, F_range):
     pr=PriorSimpleSep(cen_prior, g_prior, T_prior, F_prior)
     return pr
 
+def make_erf_simple_sep(cen, cen_width, Tpars, Fpars):
+    """
+    For testing
+
+    Make PriorSimpleSep uniform in all priors except the
+    center, which is gaussian
+    """
+
+    cen_prior=priors.CenPrior(cen[0], cen[1], cen_width[0], cen_width[1])
+    g_prior=priors.ZDisk2D(1.0)
+    T_prior=priors.TwoSidedErf(*Tpars)
+    F_prior=priors.TwoSidedErf(*Fpars)
+
+    pr=PriorSimpleSep(cen_prior, g_prior, T_prior, F_prior)
+    return pr
+
+
 def make_cosmos_simple_sep(cen, cen_width, T_range, F_range):
     """
     For testing
