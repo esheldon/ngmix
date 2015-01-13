@@ -1757,7 +1757,7 @@ PyObject * PyGMix_convert_simple_double_logpars(PyObject* self, PyObject* args) 
         if (i < 4) {
             pars[i] = logpars[i];
         } else {
-            pars[i] = pow(10.0, logpars[i]) - 1.0;
+            pars[i] = pow(10.0, logpars[i]);
         }
     }
     Py_RETURN_NONE;

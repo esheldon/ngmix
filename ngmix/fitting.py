@@ -5688,7 +5688,7 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
             g1=0.1,
             g2=0.05,
             sigma_fac=5.0,
-            g_prior=None,
+            prior_type='flat',
             psf_model='em2',
             verbose=True,
             show=False,
@@ -5834,12 +5834,16 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
 
     psf_obs.set_gmix(psf_fit)
 
-    cen_width=2
-    prior=joint_prior.make_uniform_simple_sep([0.0,0.0], # cen
-                                              #[0.1,0.1], #cen width
-                                              [cen_width]*2, #cen width
-                                              [-0.97,3500.], # T
-                                              [-0.97,1.0e9]) # counts
+    if prior_type=='flat':
+        pmaker=joint_prior.make_uniform_simple_sep
+    else:
+        pmaker=joint_prior.make_cosmos_simple_sep
+
+    cen_width=0.5
+    prior=pmaker([0.0,0.0], # cen
+                 [cen_width]*2, #cen width
+                 [-0.97,3500.], # T
+                 [-0.97,1.0e9]) # counts
     #prior=None
     obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
 

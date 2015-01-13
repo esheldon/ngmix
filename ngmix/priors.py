@@ -1865,7 +1865,7 @@ def make_gprior_cosmos_sersic(type='erf'):
         return GPriorCosmosSersicSpline()
     elif type=='erf':
         pars=[0.0250834, 1.98317, 0.0793992, 0.706151, 0.124546]
-        print("great3 sersic cgc g pars:",pars)
+        #print("great3 sersic cgc g pars:",pars)
         return GPriorMErf(pars)
     else:
         raise ValueError("bad cosmos g prior: %s" % type)
