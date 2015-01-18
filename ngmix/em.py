@@ -339,10 +339,14 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol):
     return iiter, fdiff
 '''
 
-def test_1gauss(counts=1.0, noise=0.0, T=8.0, maxiter=4000, g1=0.0, g2=0.0, show=False, verbose=True):
+def test_1gauss(counts=1.0, noise=0.0, T=4.0, maxiter=4000, g1=0.0, g2=0.0, show=False, pad=verbose=True):
     import time
-    dims=[25,25]
+
+    sigma=numpy.sqrt(T/2)
+    dim=int(2*5*sigma)
+    dims=[dim]*2
     cen=[dims[0]/2., dims[1]/2.]
+
 
     pars = [cen[0],cen[1], g1, g2, T, counts]
     gm=gmix.GMixModel(pars, "gauss")
@@ -374,6 +378,8 @@ def test_1gauss(counts=1.0, noise=0.0, T=8.0, maxiter=4000, g1=0.0, g2=0.0, show
     res=em.get_result()
 
     if verbose:
+        print("dims:",dims)
+        print("cen:",cen)
         print('guess:')
         print(gm_guess)
 
