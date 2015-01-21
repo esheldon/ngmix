@@ -339,7 +339,7 @@ def _run_em(image, gmix, sums, j, sky, maxiter, tol):
     return iiter, fdiff
 '''
 
-def test_1gauss(counts=1.0, noise=0.0, T=4.0, maxiter=4000, g1=0.0, g2=0.0, show=False, pad=verbose=True):
+def test_1gauss(counts=1.0, noise=0.0, T=4.0, maxiter=4000, g1=0.0, g2=0.0, show=False, pad=False, verbose=True):
     import time
 
     sigma=numpy.sqrt(T/2)
