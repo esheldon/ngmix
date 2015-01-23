@@ -3645,8 +3645,19 @@ def test_mcmc_psf(model="gauss",
 
     mc.make_plots(do_residual=True,show=True,prompt=False)
 
-def test_model(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
-               nwalkers=80, burnin=800, nstep=800,
+def test_model(model,
+               g1_obj=0.1,
+               g2_obj=0.05,
+               T=16.0,
+               counts=100.0,
+               g1_psf=0.0,
+               g2_psf=0.0,
+               T_psf=4.0,
+               noise=0.001,
+               nimages=1,
+               nwalkers=80,
+               burnin=800,
+               nstep=800,
                g_prior=None, show=False):
     """
     Test fitting the specified model.
@@ -3663,14 +3674,7 @@ def test_model(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
 
     # PSF pars
     counts_psf=100.0
-    noise_psf=0.01
-    g1_psf=0.05
-    g2_psf=-0.01
-    T_psf=4.0
-
-    # object pars
-    g1_obj=0.1
-    g2_obj=0.05
+    noise_psf=0.001
 
     sigma=sqrt( (T + T_psf)/2. )
     dims=[2.*5.*sigma]*2
