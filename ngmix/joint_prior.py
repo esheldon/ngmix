@@ -1145,6 +1145,11 @@ class PriorSimpleSep(object):
             import esutil as eu
             samples=self.sample(n)
             sigmas = samples.std(axis=0)
+
+            # for e1,e2 we want to allow this a bit bigger
+            sigmas[2] = 0.5
+            sigmas[3] = 0.5
+
             self._sigma_estimates=sigmas
 
         return self._sigma_estimates

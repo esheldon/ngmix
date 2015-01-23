@@ -1,4 +1,6 @@
 from __future__ import print_function
+import numpy
+from numpy import zeros
 
 try:
     xrange = xrange
@@ -7,9 +9,8 @@ except:
     xrange = range
     # We have Python 3
 
-from numpy import zeros
 
-def calc_mcmc_stats(data, weights=None):
+def calc_mcmc_stats(data, sigma_clip=False, weights=None, **kw):
     """
     Get the mean and covariance for the input mcmc trials
 
@@ -20,10 +21,42 @@ def calc_mcmc_stats(data, weights=None):
     weights: array, optional
         [N] array of weights
     """
+
+    send_data=data
+    if sigma_clip:
+        keep, ok = _get_sigma_clipped_indices(data, weights=weights, **kw)
+        if ok:
+            send_data=data[keep]
+
     if weights is not None:
-        return _calc_weighted_stats(data, weights)
+        return _calc_weighted_stats(send_data, weights)
     else:
-        return _calc_stats(data)
+        return _calc_stats(send_data)
+
+def _get_sigma_clipped_indices(data, weights=None, **kw):
+    import esutil as eu
+    npoints = data.shape[0]
+    npar = data.shape[1]
+    keep=numpy.arange(npoints)
+    ok=True
+    for i in xrange(npar):
+        if weights is None:
+            send_weights=None
+        else:
+            send_weights=weights[keep]
+
+        tmean,tstd,tind = eu.stat.sigma_clip(data[keep,i],
+                                             weights=send_weights,
+                                             get_indices=True,
+                                             **kw)
+
+        if tind.size < 4:
+            print("warning: sigma clip removed too many points, skipping sigma clip")
+            ok=False
+            break
+        keep = keep[tind]
+
+    return keep, ok
 
 def _calc_stats(data):
     ntrials=data.shape[0]

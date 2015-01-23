@@ -914,7 +914,7 @@ class MaxSimple(FitterBase):
             res['pars_err']= err
             res['g_cov'] = cov[2:2+2, 2:2+2]
 
-    def get_cov(self, pars, h=1.0e-3, m=3.):
+    def get_cov(self, pars, h=1.0e-3, m=5.):
         """
         calculate the covariance matrix at the specified point
 
@@ -934,7 +934,7 @@ class MaxSimple(FitterBase):
         m: scalar
             The max allowed ellipticity is 1-m*h.
             Note the derivatives require evaluations at +/- h,
-            so m should be greater than 1. Default is 3.
+            so m should be greater than 1.
 
         Raises
         ------
@@ -944,6 +944,7 @@ class MaxSimple(FitterBase):
         """
         import covmatrix
 
+        # get a copy as an array
         pars=numpy.array(pars)
 
         g1=pars[2]
@@ -1432,7 +1433,7 @@ class MCMCBase(FitterBase):
         """
         return None
 
-    def get_stats(self, weights=None):
+    def get_stats(self, sigma_clip=False, weights=None, **kw):
         """
         get mean and covariance.
 
@@ -1453,16 +1454,16 @@ class MCMCBase(FitterBase):
         
         trials=self.get_trials()
 
-        pars,pars_cov = stats.calc_mcmc_stats(trials, weights=weights)
+        pars,pars_cov = stats.calc_mcmc_stats(trials, sigma_clip=sigma_clip, weights=weights, **kw)
 
         return pars, pars_cov
 
-    def calc_result(self, weights=None):
+    def calc_result(self, sigma_clip=False, weights=None, **kw):
         """
         Calculate the mcmc stats and the "best fit" stats
         """
 
-        pars,pars_cov = self.get_stats(weights=weights)
+        pars,pars_cov = self.get_stats(sigma_clip=sigma_clip, weights=weights, **kw)
         pars_err=sqrt(diag(pars_cov))
         res={'model':self.model_name,
              'flags':self.flags,
@@ -1629,12 +1630,12 @@ class MCMCSimple(MCMCBase):
 
         self._band_pars=zeros(6)
 
-    def calc_result(self, weights=None):
+    def calc_result(self, **kw):
         """
         Some extra stats for simple models
         """
 
-        super(MCMCSimple,self).calc_result(weights=weights)
+        super(MCMCSimple,self).calc_result(**kw)
 
         g1i=self.g1i
         g2i=self.g2i
@@ -1739,7 +1740,7 @@ class MH(object):
         return self._accepted
 
 
-    def get_stats(self, weights=None):
+    def get_stats(self, sigma_clip=False, weights=None, **kw):
         """
         get mean and covariance.
 
@@ -1749,7 +1750,7 @@ class MH(object):
             Extra weights to apply.
         """
         from .stats import calc_mcmc_stats
-        stats = calc_mcmc_stats(self._trials, weights=weights)
+        stats = calc_mcmc_stats(self._trials, sigma_clip=sigma_clip, weights=weights, **kw)
         return stats
 
     def set_random_state(self, seed=None, state=None):
