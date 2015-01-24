@@ -770,6 +770,7 @@ class MaxSimple(FitterBase):
                                              options=options)
             self._result = result
 
+            result['model'] = self.model_name
             if result['success']:
                 result['flags'] = 0
             else:
@@ -815,6 +816,7 @@ class MaxSimple(FitterBase):
                                      **keys)
         self._result = result
 
+        result['model'] = self.model_name
         if result['success']:
             result['flags'] = 0
         else:
@@ -1522,13 +1524,11 @@ class MCMCBase(FitterBase):
         if hasattr(emcee.ensemble,'acor'):
             if emcee.ensemble.acor is not None:
                 acor=self.sampler.acor
-                nstep=trials.shape[0]
-                tau = (acor/nstep).max()
+                tau = acor.max()
         elif hasattr(emcee.ensemble,'autocorr'):
             if emcee.ensemble.autocorr is not None:
                 acor=self.sampler.acor
-                nstep=trials.shape[0]
-                tau = (acor/nstep).max()
+                tau = acor.max()
         self._tau=tau
 
     def _make_sampler(self):
@@ -2176,9 +2176,7 @@ class MHSimple(MCMCSimple):
         # actually 2*tau
         tau2 = emcee.autocorr.integrated_time(trials,window=100)
         tau2 = tau2.max()
-
-        nstep=trials.shape[0]
-        self._tau=tau2/nstep
+        self._tau=tau2
 
 
 class MHTempSimple(MHSimple):
