@@ -1147,8 +1147,10 @@ class PriorSimpleSep(object):
             sigmas = samples.std(axis=0)
 
             # for e1,e2 we want to allow this a bit bigger
-            sigmas[2] = 0.5
-            sigmas[3] = 0.5
+            # for very small objects.  Steps for MH could be
+            # as large as half this
+            sigmas[2] = 2.0
+            sigmas[3] = 2.0
 
             self._sigma_estimates=sigmas
 

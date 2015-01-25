@@ -5701,6 +5701,7 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
             cen_offset=None,
             aperture=None,
             do_aperture=False, # auto-calculate aperture
+            maxfev=4000,
             ftol=1.e-4,
             xtol=1.e-4,
             seed=None,
@@ -5884,6 +5885,8 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
 
         t0=time.time()
         nm_fitter.run_max(guess,
+                          maxfev=4000,
+                          maxiter=4000,
                           xtol=xtol,
                           ftol=ftol)
         nm_res=nm_fitter.get_result()
