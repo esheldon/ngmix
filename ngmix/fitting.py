@@ -1711,7 +1711,6 @@ class MH(object):
         self._stepper=stepper
 
         self.set_random_state(seed=seed, state=random_state)
-        self.reset(seed=seed)
 
     def get_trials(self):
         """
@@ -1838,14 +1837,6 @@ class MH(object):
             self._trials[index,:] = oldpars
 
         self._current += 1
-
-    def reset(self, seed=None):
-        """
-        Clear all data
-        """
-        self._trials=None
-        self._loglike=None
-        self._accepted=None
 
     def _init_data(self, pars_start, nstep):
         """
@@ -2013,13 +2004,6 @@ class MHTemp(MH):
 
         self._current += 1
 
-    def reset(self, seed=None):
-        """
-        Clear all data
-        """
-        super(MHTemp,self).reset(seed=seed)
-        self._loglike_T=None
-
     def _init_data(self, pars_start, nstep):
         """
         Set the trials and accept array.
@@ -2112,7 +2096,6 @@ class MHSimple(MCMCSimple):
             self._setup_sampler_and_data(pos0)
 
         sampler=self.sampler
-        sampler.reset()
 
         pos = sampler.run_mcmc(pos0, nstep)
 
@@ -3550,7 +3533,7 @@ def get_edge_aperture(dims, cen):
     return aperture
 
 
-def print_pars(pars, stream=stdout, fmt='%10.6g',front=None):
+def print_pars(pars, stream=stdout, fmt='%8.3g',front=None):
     """
     print the parameters with a uniform width
     """
