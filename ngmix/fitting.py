@@ -831,58 +831,11 @@ class MaxSimple(FitterBase):
             fit_stats = self._get_fit_stats(pars)
             result.update(fit_stats)
 
-            self.calc_cov()
+            h=1.0e-3
+            m=5.0
+            self.calc_cov(h, m)
 
-    def run_max_nm_allpy(self, guess, eps=1.0e-8, maxiter=4000, monitor=False):
-        """
-        Run maximizer and set the result.
-
-        parameters
-        ----------
-        guess: array or sequence
-            starting guess
-        eps: tolerance in simplex location, optional
-            default 1.0e-8 
-        maxiter: int, optional
-            Max number of iterations, default 4000
-        monitor: bool, optional
-            If True, print out information at each step
-        """
-        from .simplex import Simplex
-
-
-        guess=numpy.array(guess,dtype='f8',copy=False)
-        self._setup_data(guess)
-
-        increments=guess.copy()
-        increments[0:0+2] = 0.1
-        increments[2:2+2] = 0.01
-        increments[4:] = 0.1
-        
-        fitter=Simplex(self.neglnprob, guess, increments)
-        pars, current_lnp, niter = fitter.minimize(eps=eps,
-                                                   maxiter=maxiter,
-                                                   monitor=monitor)
-
-        result={}
-        self._result = result
-        result['pars'] = pars
-        result['g'] = pars[2:2+2]
-        result['numiter']=niter
-
-        if niter==maxiter:
-            result['flags']=2**0
-        else:
-            result['flags']=0
-        
-        # based result['pars']
-        fit_stats = self._get_fit_stats(pars)
-        result.update(fit_stats)
-
-        self.calc_cov()
-
-
-    def calc_cov(self, h=1.0e-3, m=3.):
+    def calc_cov(self, h, m):
         """
         Run get_cov() to calculate the covariance matrix at the best-fit point.
         If all goes well, add 'pars_cov', 'pars_err', and 'g_cov' to the result
@@ -899,24 +852,37 @@ class MaxSimple(FitterBase):
 
         res=self.get_result()
 
+        bad=True
+
         try:
             cov = self.get_cov(res['pars'], h=h, m=m)
-            err = sqrt(diag(cov))
-            w,=where(isfinite(err))
-            if w.size != err.size:
-                # whoa, we probably have negative diagonals.
-                cov=None
-        except LinAlgError:
-            cov = None
 
-        if cov is None:
-            res['flags'] += EIG_NOTFINITE 
+            cdiag = diag(cov)
+
+            w,=where(cdiag <= 0)
+            if w.size == 0:
+
+                err = sqrt(cdiag)
+                w,=where(isfinite(err))
+                if w.size != err.size:
+                    print("diagonals not finite:",err)
+                else:
+                    # everything looks OK
+                    bad=False
+            else:
+                print("diagonals negative:",cdiag)
+
+        except LinAlgError:
+            print("caught LinAlgError")
+
+        if bad:
+            res['flags'] |= EIG_NOTFINITE
         else:
             res['pars_cov'] = cov
             res['pars_err']= err
             res['g_cov'] = cov[2:2+2, 2:2+2]
 
-    def get_cov(self, pars, h=1.0e-3, m=5.):
+    def get_cov(self, pars, h, m):
         """
         calculate the covariance matrix at the specified point
 
@@ -1313,7 +1279,7 @@ def _test_cov(pcov):
             flags += LM_NEG_COV_DIAG 
 
     except numpy.linalg.linalg.LinAlgError:
-        flags += EIG_NOTFINITE 
+        flags |= EIG_NOTFINITE 
 
     return flags
 
@@ -1391,11 +1357,13 @@ class MCMCBase(FitterBase):
         """
         return self._tau
 
-    def run_mcmc(self, pos0, nstep):
+    def run_mcmc(self, pos0, nstep, thin=1, **kw):
         """
         run steps, starting at the input position(s)
 
         input and output pos are in linear space
+
+        keywords to run_mcmc/sample are passed along, such as thin
         """
 
         pos0=array(pos0, dtype='f8')
@@ -1405,10 +1373,10 @@ class MCMCBase(FitterBase):
 
         sampler=self.sampler
         sampler.reset()
-        pos, prob, state = sampler.run_mcmc(pos0, nstep)
+        pos, prob, state = sampler.run_mcmc(pos0, nstep, thin=thin, **kw)
 
         trials  = sampler.flatchain
-        lnprobs = sampler.lnprobability.reshape(self.nwalkers*nstep)
+        lnprobs = sampler.lnprobability.reshape(self.nwalkers*nstep/thin)
 
         self._trials=trials
         self._lnprobs=lnprobs
@@ -1521,6 +1489,13 @@ class MCMCBase(FitterBase):
         import emcee
 
         trials=self.get_trials()
+
+        # actually 2*tau
+        tau2 = emcee.autocorr.integrated_time(trials,window=100)
+        tau2 = tau2.max()
+        self._tau=tau2
+
+        """
         if hasattr(emcee.ensemble,'acor'):
             if emcee.ensemble.acor is not None:
                 acor=self.sampler.acor
@@ -1530,6 +1505,7 @@ class MCMCBase(FitterBase):
                 acor=self.sampler.acor
                 tau = acor.max()
         self._tau=tau
+        """
 
     def _make_sampler(self):
         """
@@ -5659,6 +5635,8 @@ def test_nm_many(n=1000, **kw):
     np=int(n*fracprint)
     if np <= 0:
         np=1
+
+    tm0=time.time()
     for i in xrange(n):
         if ( (i+1) % np) == 0 or i==0:
             print("%d/%d" % (i+1,n))
@@ -5674,6 +5652,7 @@ def test_nm_many(n=1000, **kw):
         g2errs[i] = pars_err[3]
         nfevs[i]=res['nfev']
         ntrys[i]=res['ntry']
+    print("total time:",time.time()-tm0)
 
     weights=1.0/(g1errs**2 + g2errs**2)
 
