@@ -29,7 +29,8 @@ from . import _gmix
 
 from . import shape
 
-LOWVAL=-9999.0e47
+#LOWVAL=-9999.0e47
+LOWVAL=-numpy.inf
 BIGVAL =9999.0e47
 
 class GPriorBase(object):

@@ -1378,6 +1378,27 @@ class MCMCBase(FitterBase):
         trials  = sampler.flatchain
         lnprobs = sampler.lnprobability.reshape(self.nwalkers*nstep/thin)
 
+        '''
+        # bigger than lowval
+        mlowval=LOWVAL + 100
+        for i in xrange(trials.shape[1]):
+            w,=where(numpy.abs(trials[:,i]) < 1.e15)
+            wl,=where(lnprobs > mlowval)
+
+            if wl.size==0:
+                break
+
+            if wl.size != lnprobs.size:
+                print("        trimming",lnprobs.size-wl.size,"low lnprob")
+                trials=trials[w,:]
+                lnprobs=lnprobs[w]
+
+            if w.size != lnprobs.size:
+                print("        trimming",lnprobs.size-w.size,"huge vals")
+                #trials=trials[w,:]
+                #lnprobs=lnprobs[w]
+        '''
+
         self._trials=trials
         self._lnprobs=lnprobs
 
@@ -3683,7 +3704,7 @@ def test_model(model,
 
     prior=joint_prior.make_uniform_simple_sep([0.0,0.0],
                                               [0.1,0.1],
-                                              [-0.97,3500.],
+                                              [-10.0,3500.],
                                               [-0.97,1.0e9])
     #prior=None
     obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
