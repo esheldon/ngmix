@@ -1602,6 +1602,19 @@ class MCMCBase(FitterBase):
                                                width=width,
                                                height=height)
 
+        if do_triangle:
+            try:
+                import triangle
+                figure = triangle.corner(trials, 
+                                         labels=names,
+                                         quantiles=[0.16, 0.5, 0.84],
+                                         show_titles=True,
+                                         title_args={"fontsize": 12},
+                                         bins=25)
+                pdict['triangle'] = figure
+            except:
+                print("could not do triangle")
+
         if show and prompt:
             key=raw_input('hit a key: ')
             if key=='q':
@@ -3636,7 +3649,9 @@ def test_model(model,
                nwalkers=80,
                burnin=800,
                nstep=800,
-               g_prior=None, show=False):
+               g_prior=None,
+               do_triangle=False,
+               show=False):
     """
     Test fitting the specified model.
 
@@ -3722,7 +3737,7 @@ def test_model(model,
 
     t0=time.time()
     pos=mc_obj.run_mcmc(guess, burnin)
-    pos=mc_obj.run_mcmc(pos, nstep)
+    pos=mc_obj.run_mcmc(pos, nstep, thin=2)
     mc_obj.calc_result()
     tm=time.time()-t0
 
@@ -3757,6 +3772,20 @@ def test_model(model,
         #images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
         #mcmc.plot_results(mc_obj.get_trials())
 
+    if do_triangle:
+        import triangle
+        labels=[r"$cen_1$", r"$cen_2$",
+                r"$e_1$",r"$e_2$",
+                r"$T$",r"$F$"]
+        figure = triangle.corner(trials, 
+                                 labels=labels,
+                                 quantiles=[0.16, 0.5, 0.84],
+                                 show_titles=True,
+                                 title_args={"fontsize": 12},
+                                 bins=20,
+                                 smooth=10)
+        figure.show()
+        figure.savefig('test.png')
     return tm
 
 
