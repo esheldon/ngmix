@@ -546,7 +546,7 @@ class GPriorBase(object):
         npair: integer, optional
             Number of pairs to use at each shear test value
         """
-        import lensing
+        from . import pqr
         from .shape import Shape, shear_reduced
 
         shear1_true=numpy.linspace(smin, smax, nshear)
@@ -639,8 +639,8 @@ class GPriorBase(object):
                 Q_te=Q_te[w,:]
                 R_te=R_te[w,:,:]
 
-            g1g2, C = lensing.pqr.get_pqr_shear(P,Q,R)
-            g1g2_te, C_te = lensing.pqr.get_pqr_shear(P_te,Q_te,R_te)
+            g1g2, C = pqr.calc_shear(P,Q,R)
+            g1g2_te, C_te = pqr.calc_shear(P_te,Q_te,R_te)
 
             g1g2_te[0] += s1
             g1g2_te[0] += s2
@@ -743,7 +743,7 @@ class GPriorBase(object):
         npair: integer, optional
             Number of pairs to use at each shear test value
         """
-        import lensing
+        from . import pqr
         from .shape import Shape, shear_reduced
  
         theta=numpy.pi/2.0
@@ -777,7 +777,7 @@ class GPriorBase(object):
                                    s1=shear_expand[0],
                                    s2=shear_expand[1])
 
-            shmeas, Cmeas = lensing.pqr.get_pqr_shear(P,Q,R)
+            shmeas, Cmeas = pqr.calc_shear(P,Q,R)
 
             shmeas += shear_expand
 
@@ -804,6 +804,7 @@ class GPriorBase(object):
                                     sigma=0.1,
                                     h=1.e-6,
                                     ring=False,
+                                    prior=None,
                                     show=False,
                                     eps=None):
         """
@@ -831,10 +832,16 @@ class GPriorBase(object):
             plot to make
         """
 
-        import lensing
         import biggles
         from .shape import Shape, shear_reduced
         from . import lensfit
+
+        # prior used for derivatives; can be different from self!
+        if prior is None:
+            prior=self
+        else:
+            print("self is",self,file=stderr)
+            print("Using prior:",prior,file=stderr)
 
         # only shear in g1
         shear_true=zeros( (nshear,2) )
@@ -880,7 +887,6 @@ class GPriorBase(object):
                     stderr.write('.')
 
                 glike=TruncatedGauss2D(g1s[i],g2s[i],sigma,sigma,1.0)
-                #glike=TruncatedGauss2D(g1s[i],g2s[i],sigma,sigma,0.99)
                 rg1,rg2=glike.sample(nsample)
 
                 if False:
@@ -893,7 +899,7 @@ class GPriorBase(object):
 
                 gsamples[:,0] = rg1
                 gsamples[:,1] = rg2
-                lsobj = lensfit.LensfitSensitivity(gsamples, self, h=h)
+                lsobj = lensfit.LensfitSensitivity(gsamples, prior, h=h)
                 g_sens[i,:] = lsobj.get_g_sens()
                 g_vals[i,:] = lsobj.get_g_mean()
 
@@ -1001,7 +1007,6 @@ class GPriorBase(object):
                 3e-4 at sh=0.15 8e-4 at sh=0.2
             'f8' W from 2 billion.  Creating W matrix now
         """
-        import lensing
         from .shape import Shape, shear_reduced
         from . import pqr
 
@@ -1143,7 +1148,6 @@ class GPriorBase(object):
         covariance matrix part from sheared data we do it from zero-shear data
 
         """
-        import lensing
         from .shape import shear_reduced
         from . import pqr
 
@@ -1215,7 +1219,6 @@ class GPriorBase(object):
         """
         import images
 
-        import lensing
         from .shape import Shape, shear_reduced
         from . import pqr
 
