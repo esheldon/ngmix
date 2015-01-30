@@ -785,7 +785,7 @@ class GPriorBase(object):
                                     show=False,
                                     eps=None):
         """
-        Test how well we recover the shear with no noise.
+        Test how well we recover the shear with shapes only
 
         parameters
         ----------
@@ -797,6 +797,16 @@ class GPriorBase(object):
             number of shear values to test
         npair: integer, optional
             Number of pairs to use at each shear test value
+        nsample: int, optional
+            number of samples for noisy likelihood
+        sigma: float, optional
+            width of likelihood (truncated gaussian)
+        h: float, optional
+            step size for derivatives
+        show: bool
+            show the plot?
+        eps: string
+            plot to make
         """
 
         import lensing
@@ -838,7 +848,7 @@ class GPriorBase(object):
 
             g1s, g2s = shear_reduced(g1, g2, shear_true[ishear,0], shear_true[ishear,1])
 
-            # add noise
+            # add "noise" to the likelihood
             for i in xrange(nshape):
                 #import esutil as eu
                 glike=TruncatedGauss2D(g1s[i],g2s[i],sigma,sigma,1.0)
@@ -868,6 +878,53 @@ class GPriorBase(object):
                          shear_meas[ishear,0],shear_meas[ishear,1],
                          fracdiff[ishear,0],fracdiff[ishear,1])
             print(mess)
+
+        if show or eps is not None:
+            import biggles
+            biggles.configure('default','fontsize_min',2)
+            plt=biggles.FramedPlot()
+            plt.xlabel=r'$g_{true}$'
+            plt.ylabel=r'$\Delta g/g$'
+            plt.aspect_ratio=1.0
+
+            plt.yrange=[-0.004,0.004]
+
+            smax=shear_true.max()
+            plt.add( biggles.FillBetween([0.0,smax], [0.001,0.001], 
+                                         [0.0,smax], [-0.001,-0.001],
+                                          color='grey80') )
+            plt.add( biggles.Curve([0.0,smax],[0.0,0.0]) )
+
+            psize=2.25
+
+            pts1=biggles.Points(shear_true[:,0], fracdiff[:,0].astype('f8'),
+                               type='filled circle',size=psize,
+                               color='darkgreen')
+            pts1.label='g1 measured'
+
+            pts2=biggles.Points(shear_true[:,1], fracdiff[:,1].astype('f8'),
+                               type='filled circle',size=psize,
+                               color='steelblue')
+            pts2.label='g2 measured'
+
+            key=biggles.PlotKey(0.1,0.1,[pts1,pts2],halign='left')
+            plt.add(pts1,pts2,key)
+
+            '''
+            err1=biggles.SymmetricErrorBarsY(shear_true[:,0],
+                                             fracdiff.astype('f8'),
+                                             fracdiff_err.astype('f8'),
+                                             color='blue')
+            plt.add(err1)
+            '''
+
+            if eps:
+                print('writing:',eps)
+                plt.write_eps(eps)
+
+            if show:
+                plt.show()
+
 
     def test_pqrs_shear_recovery(self,
                                  shears1,
