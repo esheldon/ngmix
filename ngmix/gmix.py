@@ -927,6 +927,7 @@ _sersic_data_10gauss=array([
 ])
 
 
+'''
 def fit_sersic_splines(type, ngauss, order):
     """
     Fit interpolated splines to the ngauss-sersic fits as a function
@@ -1056,6 +1057,7 @@ class GMixSersic(GMix):
             if err:
                 print("error occurred in F interp")
 
+'''
 
 GMIX_FULL=0
 GMIX_GAUSS=1
