@@ -3898,9 +3898,17 @@ def test_model_margsky_many(Tfracs=None, T_psf=4.0, show=False, ntrial=10, skyfa
         plt.show()
         splt.show()
 
-def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
+def test_model_margsky(model,
+                       T=16.0,
+                       counts=100.0,
+                       T_psf=4.0,
+                       g1_psf=0.0,
+                       g2_psf=0.0,
+                       noise=0.001,
                        nwalkers=80, burnin=800, nstep=800,
+                       fitter_type='mcmc',
                        skyfac=0.0,
+                       cen_offset=[0.0, 0.0],
                        margsky=True,
                        show=False):
     """
@@ -3917,8 +3925,6 @@ def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
     # PSF pars
     counts_psf=100.0
     noise_psf=0.01
-    g1_psf=0.30
-    g2_psf=0.00
 
     # object pars
     g1_obj=0.0
@@ -3929,9 +3935,11 @@ def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
     if (dim % 2) == 0:
         dim+=1
     dims=[dim]*2
-    cen=(dims[0]-1)/2.
-    cen += 2
-    j=UnitJacobian(cen,cen)
+    cen=array([(dims[0]-1)/2.]*2)
+
+    cen += array(cen_offset)
+
+    j=UnitJacobian(cen[0],cen[1])
 
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
     gm_psf=gmix.GMixModel(pars_psf, "gauss")
@@ -3953,7 +3961,7 @@ def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
     im_obj[:,:] += noise*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
     wt_obj=zeros(im_obj.shape) + 1./noise**2
 
-    sky=skyfac*counts
+    sky=skyfac*im_obj.max()
     im_obj += sky
 
     #
@@ -3978,53 +3986,74 @@ def test_model_margsky(model, T=16.0, T_psf=4.0, counts=100.0, noise=0.001,
     res_psf=mc_psf.get_result()
     #print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
 
-    psf_fit=mc_psf.get_gmix()
+    psf_gmix=mc_psf.get_gmix()
 
-    psf_obs.set_gmix(psf_fit)
+    psf_obs.set_gmix(psf_gmix)
 
     prior=joint_prior.make_uniform_simple_sep([0.0,0.0], # cen
-                                              [1.0,1.0], # cen width
+                                              [10.0,10.0], # cen width
                                               [-0.97,1.0e9], # T
                                               [-0.97,1.0e9]) # counts
     #prior=None
     obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
-    mc_obj=MCMCSimple(obs, model, nwalkers=nwalkers, prior=prior, margsky=margsky)
-
-    guess=zeros( (nwalkers, npars) )
-    guess[:,0] = 0.1*srandu(nwalkers)
-    guess[:,1] = 0.1*srandu(nwalkers)
-
-    # intentionally bad guesses
-    guess[:,2] = 0.1*srandu(nwalkers)
-    guess[:,3] = 0.1*srandu(nwalkers)
-    guess[:,4] = T*(1.0 + 0.1*srandu(nwalkers))
-    guess[:,5] = counts*(1.0 + 0.1*srandu(nwalkers))
-
     t0=time.time()
-    pos=mc_obj.run_mcmc(guess, burnin)
-    pos=mc_obj.run_mcmc(pos, nstep)
-    mc_obj.calc_result()
-    res_obj=mc_obj.get_result()
+    if fitter_type=='mcmc':
+        fitter=MCMCSimple(obs, model, nwalkers=nwalkers, prior=prior, margsky=margsky)
+
+        guess=zeros( (nwalkers, npars) )
+        guess[:,0] = 0.1*srandu(nwalkers)
+        guess[:,1] = 0.1*srandu(nwalkers)
+
+        guess[:,2] = 0.1*srandu(nwalkers)
+        guess[:,3] = 0.1*srandu(nwalkers)
+        guess[:,4] = T*(1.0 + 0.1*srandu(nwalkers))
+        guess[:,5] = counts*(1.0 + 0.1*srandu(nwalkers))
+
+        pos=fitter.run_mcmc(guess, burnin)
+        pos=fitter.run_mcmc(pos, nstep)
+        fitter.calc_result()
+
+    else:
+        guess=zeros(npars)
+        guess[0] = 0.1*srandu()
+        guess[1] = 0.1*srandu()
+
+        guess[2] = 0.1*srandu()
+        guess[3] = 0.1*srandu()
+        guess[4] = T*(1.0 + 0.05*srandu())
+        guess[5] = counts*(1.0 + 0.05*srandu())
+
+
+        fitter=MaxSimple(obs, model, maxiter=4000, maxfev=4000, 
+                         prior=prior, margsky=margsky,
+                         method=fitter_type)
+        fitter.run_max(guess)
+
     tm=time.time()-t0
 
-
-    trials=mc_obj.get_trials()
+    res_obj=fitter.get_result()
 
     print_pars(pars_obj,            front='    true pars:')
     print_pars(res_obj['pars'],     front='    pars_obj: ')
     print_pars(res_obj['pars_err'], front='    perr_obj: ')
     print('    T: %.4g +/- %.4g' % (res_obj['pars'][4], res_obj['pars_err'][4]))
-    print("    s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'])
+    if 'arate' in res_obj:
+        print("    s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'])
+    else:
+        print("    s2n:",res_obj['s2n_w'])
 
     if show:
         import images
         imfit_psf=mc_psf.make_image(counts=im_psf.sum())
         images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
 
-        mc_obj.make_plots(do_residual=True,show=True,prompt=False)
-        #imfit_obj=gmfit.make_image(im_obj.shape, jacobian=j)
-        #images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
-        #mcmc.plot_results(mc_obj.get_trials())
+        if fitter_type=='mcmc':
+            fitter.make_plots(do_residual=True,show=True,prompt=False)
+        else:
+            gm0=fitter.get_gmix()
+            gm=gm0.convolve(psf_gmix)
+            imfit_obj=gm.make_image(im_obj.shape, jacobian=j)
+            images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
 
     return res_obj
 
