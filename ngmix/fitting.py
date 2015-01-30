@@ -1558,6 +1558,7 @@ class MCMCBase(FitterBase):
                    show=False,
                    prompt=True,
                    do_residual=False,
+                   do_triangle=False,
                    width=1200,
                    height=1200,
                    separate=False,
@@ -1604,6 +1605,11 @@ class MCMCBase(FitterBase):
 
         if do_triangle:
             try:
+                # we will crash on a batch job if we don't do this.
+                # also if pyplot has already been imported, it will
+                # crash (god I hate matplotlib)
+                import matplotlib as mpl
+                mpl.use('Agg')
                 import triangle
                 figure = triangle.corner(trials, 
                                          labels=names,
