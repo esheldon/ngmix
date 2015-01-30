@@ -14,6 +14,7 @@ except:
     xrange = range
     # We have Python 3
 
+from sys import stderr 
 import math
 
 import numpy
@@ -478,7 +479,7 @@ class GPriorBase(object):
         return g1,g2
 
 
-    def set_maxval1d(self):
+    def set_maxval1d_scipy(self):
         """
         Use a simple minimizer to find the max value of the 1d 
         distribution
@@ -491,9 +492,29 @@ class GPriorBase(object):
                                       full_output=True, 
                                       disp=False)
         if warnflag != 0:
-            raise ValueError("failed to find min: warnflag %d" % warnflag)
+            raise RuntimeError("failed to find min: warnflag %d" % warnflag)
         self.maxval1d = -fval
         self.maxval1d_loc = minvalx
+
+    def set_maxval1d(self):
+        """
+        Use a simple minimizer to find the max value of the 1d 
+        distribution
+        """
+        from .simplex import minimize_neldermead
+
+        res=minimize_neldermead(self.get_prob_scalar1d_neg,
+                                0.1,
+                                maxiter=4000,
+                                maxfev=4000)
+
+        if res['status'] != 0:
+            raise RuntimeError("failed to find min, flags: %d" % res['status'])
+
+        self.maxval1d = -res['fun']
+        self.maxval1d_loc = res['x']
+
+
 
     def get_prob_scalar1d_neg(self, g, *args):
         """
@@ -782,6 +803,7 @@ class GPriorBase(object):
                                     nsample=1000,
                                     sigma=0.1,
                                     h=1.e-6,
+                                    ring=False,
                                     show=False,
                                     eps=None):
         """
@@ -810,19 +832,20 @@ class GPriorBase(object):
         """
 
         import lensing
+        import biggles
         from .shape import Shape, shear_reduced
         from . import lensfit
 
         # only shear in g1
         shear_true=zeros( (nshear,2) )
-        shear_true[:,0]=numpy.linspace(smin, smax, nshear)/sqrt(2)
-        shear_true[:,1]=numpy.linspace(smin, smax, nshear)/sqrt(2)
+        shear_true[:,0]=numpy.linspace(smin, smax, nshear)
 
 
         shear_meas=numpy.zeros( (nshear,2) )
         shear_meas_err=numpy.zeros( (nshear,2) )
 
-        fracdiff=numpy.zeros( (nshear,2) )
+        fracdiff=numpy.zeros( nshear )
+        fracdiff_err=numpy.zeros( nshear )
  
         theta=numpy.pi/2.0
         twotheta = 2.0*theta
@@ -833,98 +856,123 @@ class GPriorBase(object):
         g1=numpy.zeros(nshape)
         g2=numpy.zeros(nshape)
 
-        g_mean=zeros( (nshape,2) )
+        g_vals=zeros( (nshape,2) )
         g_sens=zeros( (nshape,2) )
 
         # for holding likelihood samples
         gsamples=numpy.zeros( (nsample, 2) )
 
         for ishear in xrange(nshear):
-            print("-"*70)
+            print("-"*70,file=stderr)
 
-            g1[0:npair],g2[0:npair] = self.sample2d(npair)
-            g1[npair:] =  g1[0:npair]*cos2angle + g2[0:npair]*sin2angle
-            g2[npair:] = -g1[0:npair]*sin2angle + g2[0:npair]*cos2angle
+            if ring:
+                g1[0:npair],g2[0:npair] = self.sample2d(npair)
+                g1[npair:] =  g1[0:npair]*cos2angle + g2[0:npair]*sin2angle
+                g2[npair:] = -g1[0:npair]*sin2angle + g2[0:npair]*cos2angle
+            else:
+                g1[:],g2[:] = self.sample2d(nshape)
 
             g1s, g2s = shear_reduced(g1, g2, shear_true[ishear,0], shear_true[ishear,1])
 
             # add "noise" to the likelihood
             for i in xrange(nshape):
-                #import esutil as eu
+                if (i % 1000) == 0:
+                    stderr.write('.')
+
                 glike=TruncatedGauss2D(g1s[i],g2s[i],sigma,sigma,1.0)
+                #glike=TruncatedGauss2D(g1s[i],g2s[i],sigma,sigma,0.99)
                 rg1,rg2=glike.sample(nsample)
-                #rg=sqrt(rg1**2 + rg2**2)
-                #eu.plotting.bhist(rg1,binsize=0.01,title='g1')
-                #eu.plotting.bhist(rg2,binsize=0.01,title='g2')
-                #key=raw_input('hit a key: ')
-                #if key.lower()=='q':
-                #    stop
+
+                if False:
+                    nbin=30
+                    plt=biggles.plot_hist(rg1,nbin=nbin, color='blue',visible=False)
+                    biggles.plot_hist(rg2,nbin=nbin, plt=plt, color='red')
+                    key=raw_input('hit a key: ')
+                    if key.lower()=='q':
+                        stop
 
                 gsamples[:,0] = rg1
                 gsamples[:,1] = rg2
                 lsobj = lensfit.LensfitSensitivity(gsamples, self, h=h)
                 g_sens[i,:] = lsobj.get_g_sens()
-                g_mean[i,:] = lsobj.get_g_mean()
+                g_vals[i,:] = lsobj.get_g_mean()
 
+            print(file=stderr)
 
-            print("g_mean:     ",g_mean.mean(axis=0))
-            print("g_sens mean:",g_sens.mean(axis=0))
+            gsens_comb = g_sens.mean(axis=1)
 
-            shear_meas[ishear,:] = g_mean.sum(axis=0)/g_sens.sum(axis=0)
-            fracdiff[ishear,:] = shear_meas[ishear,:]/shear_true[ishear,:]-1
+            if not ring:
+                # we can trim....
+                w,=where( (gsens_comb > 0) & (gsens_comb < 1.1) )
+                print("    sens trim leaves %d/%d" % (w.size, nshape),file=stderr)
+                nshape=w.size
+                gsens_comb=gsens_comb[w]
+                g_vals = g_vals[w,:]
 
-            mess='true: %.6f,%.6f meas: %.6f,%.6f frac: %.6g,%.6g'
-            mess=mess % (shear_true[ishear,0],shear_true[ishear,1],
-                         shear_meas[ishear,0],shear_meas[ishear,1],
-                         fracdiff[ishear,0],fracdiff[ishear,1])
-            print(mess)
+            gsens_mean = gsens_comb.mean()
+            g_mean = g_vals.mean(axis=0)
+            print("g_mean:     ",g_mean,file=stderr)
+            print("g_sens mean:",gsens_mean,file=stderr)
 
-        if show or eps is not None:
-            import biggles
-            biggles.configure('default','fontsize_min',2)
-            plt=biggles.FramedPlot()
-            plt.xlabel=r'$g_{true}$'
-            plt.ylabel=r'$\Delta g/g$'
-            plt.aspect_ratio=1.0
+            shear_meas[ishear,:] = g_mean/gsens_mean
+            fracdiff[ishear] = shear_meas[ishear,0]/shear_true[ishear,0]-1
 
-            plt.yrange=[-0.004,0.004]
+            if ring:
+                fracdiff_err[ishear] = sigma/sqrt(nshape)/gsens_mean
+            else:
+                serr=g_vals[:,0].std()/sqrt(nshape)/gsens_mean
+                fracerr = serr/shear_true[ishear,0]
+                fracdiff_err[ishear] = fracerr
 
-            smax=shear_true.max()
-            plt.add( biggles.FillBetween([0.0,smax], [0.001,0.001], 
-                                         [0.0,smax], [-0.001,-0.001],
-                                          color='grey80') )
-            plt.add( biggles.Curve([0.0,smax],[0.0,0.0]) )
+            mess='true: %.6f meas: %.6f frac: %.6g +/- %.6g'
+            tup = (shear_true[ishear,0],
+                   shear_meas[ishear,0],
+                   fracdiff[ishear],
+                   fracdiff_err[ishear])
+            mess=mess % tup
 
-            psize=2.25
+            print(mess,file=stderr)
 
-            pts1=biggles.Points(shear_true[:,0], fracdiff[:,0].astype('f8'),
-                               type='filled circle',size=psize,
-                               color='darkgreen')
-            pts1.label='g1 measured'
+        biggles.configure('default','fontsize_min',2)
+        plt=biggles.FramedPlot()
+        plt.xlabel=r'$g_{true}$'
+        plt.ylabel=r'$\Delta g/g$'
+        plt.aspect_ratio=1.0
 
-            pts2=biggles.Points(shear_true[:,1], fracdiff[:,1].astype('f8'),
-                               type='filled circle',size=psize,
-                               color='steelblue')
-            pts2.label='g2 measured'
+        smax=shear_true.max()
+        ym=1.1*numpy.abs(fracdiff).max()
 
-            key=biggles.PlotKey(0.1,0.1,[pts1,pts2],halign='left')
-            plt.add(pts1,pts2,key)
+        plt.yrange=[-ym, ym]
 
-            '''
-            err1=biggles.SymmetricErrorBarsY(shear_true[:,0],
-                                             fracdiff.astype('f8'),
-                                             fracdiff_err.astype('f8'),
-                                             color='blue')
-            plt.add(err1)
-            '''
+        plt.add( biggles.FillBetween([0.0,smax], [0.001,0.001], 
+                                     [0.0,smax], [-0.001,-0.001],
+                                      color='grey80') )
+        plt.add( biggles.Curve([0.0,smax],[0.0,0.0]) )
 
-            if eps:
-                print('writing:',eps)
-                plt.write_eps(eps)
+        psize=2.25
 
-            if show:
-                plt.show()
+        pts=biggles.Points(shear_true[:,0], fracdiff.astype('f8'),
+                           type='filled circle',size=psize,
+                           color='blue')
 
+        pts.label='g1 measured'
+        c=biggles.Curve(shear_true[:,0], fracdiff.astype('f8'),
+                         type='solid', color='steelblue')
+        err=biggles.SymmetricErrorBarsY(shear_true[:,0],
+                                        fracdiff,
+                                        fracdiff_err,
+                                        color='steelblue')
+
+        plt.add(pts,err,c)
+
+        if eps:
+            print('writing:',eps,file=stderr)
+            plt.write_eps(eps)
+
+        if show:
+            plt.show()
+
+        return shear_true[:,0], fracdiff, fracdiff_err
 
     def test_pqrs_shear_recovery(self,
                                  shears1,
@@ -2057,7 +2105,7 @@ class GPriorMErf(GPriorBase):
         if g < 0.0 or g >= 1.0:
             raise GMixRangeError("g out of range")
 
-        return self._get_prob_nocheck_prefac(g)
+        return self._get_prob_nocheck_prefac_scalar(g)
 
     def get_prob_scalar2d(self, g1, g2):
         """
@@ -2070,7 +2118,7 @@ class GPriorMErf(GPriorBase):
         if g < 0.0 or g >= 1.0:
             raise GMixRangeError("g out of range")
 
-        return self._get_prob_nocheck(g)
+        return self._get_prob_nocheck_scalar(g)
 
     def get_lnprob_scalar2d(self, g1, g2):
         """
@@ -2084,11 +2132,12 @@ class GPriorMErf(GPriorBase):
         """
         Get the prob for the input g values
         """
+        g=array(g, dtype='f8', ndmin=1)
 
         p=zeros(g.size)
         w,=where( (g >= 0.0) & (g < 1.0) )
         if w.size > 0:
-            p[w]=self._get_prob_nocheck_prefac(g[w])
+            p[w]=self._get_prob_nocheck_prefac_array(g[w])
         return p
 
     def get_prob_array2d(self, g1, g2):
@@ -2096,13 +2145,16 @@ class GPriorMErf(GPriorBase):
         Get the 2d prob for the input g1,g2 values
         """
 
+        g1=array(g1, dtype='f8', ndmin=1)
+        g2=array(g2, dtype='f8', ndmin=1)
+
         gsq = g1**2 + g2**2
         g = sqrt(gsq)
 
         p=zeros(g1.size)
         w,=where( (g >= 0.0) & (g < 1.0) )
         if w.size > 0:
-            p[w]=self._get_prob_nocheck(g[w])
+            p[w]=self._get_prob_nocheck_array(g[w])
         return p
 
 
@@ -2111,36 +2163,72 @@ class GPriorMErf(GPriorBase):
         Get the 2d log prob for the input g1,g2 values
         """
 
+        g1=array(g1, dtype='f8', ndmin=1)
+        g2=array(g2, dtype='f8', ndmin=1)
+
         gsq = g1**2 + g2**2
         g = sqrt(gsq)
 
         lnp=zeros(g1.size)+LOWVAL
         w,=where( (g >= 0.0) & (g < 1.0) )
         if w.size > 0:
-            p=self._get_prob_nocheck(g[w])
+            p=self._get_prob_nocheck_array(g[w])
             lnp[w] = log(p)
         return lnp
 
 
 
-    def _get_prob_nocheck_prefac(self, g):
+    def _get_prob_nocheck_prefac_scalar(self, g):
         """
         With the 2*pi*g
         """
-        return 2*pi*g*self._get_prob_nocheck(g)
+        return 2*pi*g*self._get_prob_nocheck_scalar(g)
 
-    def _get_prob_nocheck(self, g):
+    def _get_prob_nocheck_prefac_array(self, g):
         """
-        workhorse function
+        With the 2*pi*g, must be an array
+        """
+        return 2*pi*g*self._get_prob_nocheck_array(g)
+
+    def _get_prob_nocheck_scalar(self, g):
+        """
+        workhorse function, must be scalar. Error checking
+        is done in the argument parsing to erf
 
         this does not include the 2*pi*g
         """
-        from scipy.special import erf
+        from ._gmix import erf
 
         #numer1 = 2*pi*g*self.A*(1-exp( (g-1.0)/self.a ))
         numer1 = self.A*(1-exp( (g-1.0)/self.a ))
 
-        gerf=0.5*(1.0+erf((self.gmax_func-g)/self.gsigma))
+        arg=(self.gmax_func-g)/self.gsigma
+        gerf=0.5*(1.0+erf(arg))
+        numer =  numer1 * gerf
+
+        denom = (1+g)*sqrt(g**2 + self.g0sq)
+
+        model=numer/denom
+
+        return model
+
+    def _get_prob_nocheck_array(self, g):
+        """
+        workhorse function.  No error checking, must be an array
+
+        this does not include the 2*pi*g
+        """
+        from ._gmix import erf_array
+
+        #numer1 = 2*pi*g*self.A*(1-exp( (g-1.0)/self.a ))
+        numer1 = self.A*(1-exp( (g-1.0)/self.a ))
+
+        gerf0=zeros(g.size)
+        arg = (self.gmax_func-g)/self.gsigma
+        erf_array(arg, gerf0)
+
+        gerf=0.5*(1.0+gerf0)
+
         numer =  numer1 * gerf
 
         denom = (1+g)*sqrt(g**2 + self.g0sq)
