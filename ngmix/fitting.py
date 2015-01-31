@@ -3657,6 +3657,7 @@ def test_model(model,
                nstep=800,
                g_prior=None,
                do_triangle=False,
+               bins=25,
                show=False):
     """
     Test fitting the specified model.
@@ -3788,7 +3789,7 @@ def test_model(model,
                                  quantiles=[0.16, 0.5, 0.84],
                                  show_titles=True,
                                  title_args={"fontsize": 12},
-                                 bins=20,
+                                 bins=bins,
                                  smooth=10)
         figure.show()
         figure.savefig('test.png')

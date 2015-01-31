@@ -886,7 +886,7 @@ class GPriorBase(object):
                 if (i % 1000) == 0:
                     stderr.write('.')
 
-                glike=TruncatedGauss2D(g1s[i],g2s[i],sigma,sigma,1.0)
+                glike=TruncatedSimpleGauss2D(g1s[i],g2s[i],sigma,sigma,1.0)
                 rg1,rg2=glike.sample(nsample)
 
                 if False:
@@ -2848,7 +2848,8 @@ class CenPrior(_gmix.Normal2D):
 
 
 
-class TruncatedGauss2D(object):
+
+class TruncatedSimpleGauss2D(object):
     """
     Independent gaussians in each dimension, with a specified
     maximum length
