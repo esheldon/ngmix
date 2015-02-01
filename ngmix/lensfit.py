@@ -171,4 +171,72 @@ class LensfitSensitivity(object):
         self._g_mean=array([g1mean, g2mean])
         self._g_sens=g_sens
 
+def lensfit_jackknife(g, gsens,
+                      chunksize=1,
+                      get_sums=False,
+                      get_shears=False,
+                      progress=False,
+                      show=False,
+                      eps=None,
+                      png=None):
+    """
+    Get the shear covariance matrix using jackknife resampling.
+
+    The trick is that this must be done in pairs for ring tests
+
+    chunksize is the number of *pairs* to remove for each chunk
+    """
+
+    if progress:
+        import progressbar
+        pg=progressbar.ProgressBar(width=70)
+
+    ntot = g.shape[0]
+    if ( (ntot % 2) != 0 ):
+        raise  ValueError("expected factor of two, got %d" % ntot)
+    npair = ntot/2
+
+    # some may not get used
+    nchunks = npair/chunksize
+
+    g_sum = g.sum(axis=0)
+    gsens_sum = gsens.sum(axis=0)
+
+    shear = g_sum/gsens_sum
+
+    shears = numpy.zeros( (nchunks, 2) )
+    for i in xrange(nchunks):
+
+        beg = i*chunksize*2
+        end = (i+1)*chunksize*2
+        
+        if progress:
+            frac=float(i+1)/nchunks
+            pg.update(frac=frac)
+
+        j_g_sum     = g_sum     - g[beg:end, :].sum(axis=0)
+        j_gsens_sum = gsens_sum - gsens[beg:end,:].sum(axis=0)
+
+        shears[i, :] = j_g_sum/j_gsens_sum
+
+    shear_cov = numpy.zeros( (2,2) )
+    fac = (nchunks-1)/float(nchunks)
+
+    shear = shears.mean(axis=0)
+
+    shear_cov[0,0] = fac*( ((shear[0]-shears[:,0])**2).sum() )
+    shear_cov[0,1] = fac*( ((shear[0]-shears[:,0]) * (shear[1]-shears[:,1])).sum() )
+    shear_cov[1,0] = shear_cov[0,1]
+    shear_cov[1,1] = fac*( ((shear[1]-shears[:,1])**2).sum() )
+
+    if show or eps or png:
+        _plot_shears(shears, show=show, eps=eps, png=png)
+
+    if get_sums:
+        return shear, shear_cov, g_sum, gsens_sum
+    elif get_shears:
+        return shear, shear_cov, shears
+    else:
+        return shear, shear_cov
+
 
