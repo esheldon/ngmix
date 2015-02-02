@@ -257,8 +257,6 @@ class FitterBase(object):
 
     def calc_lnprob(self, pars, get_s2nsums=False, get_priors=False):
         """
-        pars here are in log space.  immediately convert to linear space.
-
         This is all we use for mcmc approaches, but also used generally for the
         "_get_fit_stats" method.  For the max likelihood fitter we also have a
         _get_ydiff method
@@ -1557,7 +1555,7 @@ class MCMCBase(FitterBase):
 
     def make_plots(self,
                    show=False,
-                   prompt=True,
+                   prompt=False,
                    do_residual=False,
                    do_triangle=False,
                    width=1200,
@@ -6424,4 +6422,745 @@ def test_eta(model,
                                width=width, height=height)
     '''
     return tm
+
+def test_covsample(model,
+                   g_prior=None,
+                   seed=None,
+                   g1_obj=0.1,
+                   g2_obj=0.05,
+                   T=16.0,
+                   counts=100.0,
+                   g1_psf=0.0,
+                   g2_psf=0.0,
+                   T_psf=4.0,
+                   noise=0.001,
+                   nwalkers=80,
+                   burnin=800,
+                   nstep=800,
+                   thin=2,
+                   nbin=50,
+                   show=False, width=1200, height=1200):
+    """
+    Test fitting the specified model.
+
+    """
+    from . import em
+    from . import joint_prior
+    import time
+    import nsim
+
+    numpy.random.seed(seed)
+
+    #
+    # simulation
+    #
+
+    # PSF pars
+    counts_psf=100.0
+    noise_psf=0.001
+
+    sigma=sqrt( (T + T_psf)/2. )
+    dims=[2.*5.*sigma]*2
+    cen=[dims[0]/2., dims[1]/2.]
+    j=UnitJacobian(cen[0],cen[1])
+
+    pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
+    gm_psf=gmix.GMixModel(pars_psf, "gauss")
+
+    pars_obj = array([0.0, 0.0, g1_obj, g2_obj, T, counts])
+    npars=pars_obj.size
+    gm_obj0=gmix.GMixModel(pars_obj, model)
+
+    gm=gm_obj0.convolve(gm_psf)
+
+    im_psf=gm_psf.make_image(dims, jacobian=j)
+    im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
+    wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
+
+    im_obj=gm.make_image(dims, jacobian=j)
+    im_obj[:,:] += noise*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
+    wt_obj=zeros(im_obj.shape) + 1./noise**2
+
+    #
+    # fitting
+    #
+
+
+    # psf using EM
+    im_psf_sky,sky=em.prep_image(im_psf)
+    psf_obs = Observation(im_psf_sky, jacobian=j)
+    mc_psf=em.GMixEM(psf_obs)
+
+    emo_guess=gm_psf.copy()
+    emo_guess._data['p'] = 1.0
+    emo_guess._data['row'] += 0.1*srandu()
+    emo_guess._data['col'] += 0.1*srandu()
+    emo_guess._data['irr'] += 0.5*srandu()
+    emo_guess._data['irc'] += 0.1*srandu()
+    emo_guess._data['icc'] += 0.5*srandu()
+
+    mc_psf.run_em(emo_guess, sky)
+    res_psf=mc_psf.get_result()
+    print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
+
+    psf_fit=mc_psf.get_gmix()
+
+    psf_obs.set_gmix(psf_fit)
+
+    if g_prior is None:
+        prior=joint_prior.make_uniform_simple_sep([0.0,0.0],
+                                                  [0.1,0.1],
+                                                  [-10.0,3500.],
+                                                  [-0.97,1.0e9])
+    else:
+        cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
+        T_prior=priors.FlatPrior(-10.0, 1.0e6)
+        F_prior=priors.FlatPrior(-0.97, 1.0e9)
+
+        prior=joint_prior.PriorSimpleSep(cen_prior,
+                                         g_prior,
+                                         T_prior,
+                                         F_prior)
+
+    obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
+
+    nm_fitter=MaxSimple(obs, model, prior=prior)
+    nm_guess=pars_obj.copy()
+    while True:
+        nm_fitter.run_max(nm_guess, maxiter=4000, maxfev=4000)
+        nm_res=nm_fitter.get_result()
+
+        if nm_res['flags']==0:
+            break
+        
+        nm_guess[0] = pars_obj[0] + 0.01*srandu()
+        nm_guess[1] = pars_obj[1] + 0.01*srandu()
+        nm_guess[2] = pars_obj[2] + 0.01*srandu()
+        nm_guess[3] = pars_obj[3] + 0.01*srandu()
+        nm_guess[4] = pars_obj[4] + 0.01*srandu()
+        nm_guess[5] = pars_obj[5] + 0.01*srandu()
+
+    nm_pars=nm_res['pars']
+
+    guess=zeros( (nwalkers, npars) )
+    guess[:,0] = nm_pars[0] + 0.01*srandu(nwalkers)
+    guess[:,1] = nm_pars[1] + 0.01*srandu(nwalkers)
+
+    guess[:,2] = nm_pars[2]*(1.0 + 0.1*randu(nwalkers))
+    guess[:,3] = nm_pars[3]*(1.0 + 0.1*randu(nwalkers))
+    #guess[:,2] = 0.1*srandu(nwalkers)
+    #guess[:,3] = 0.1*srandu(nwalkers)
+    guess[:,4] = nm_pars[4]*(1.0 + 0.1*srandu(nwalkers))
+    guess[:,5] = nm_pars[5]*(1.0 + 0.1*srandu(nwalkers))
+
+    t0=time.time()
+    mcmc_fitter=MCMCSimple(obs, model, nwalkers=nwalkers, prior=prior)
+    pos=mcmc_fitter.run_mcmc(guess, burnin)
+    pos=mcmc_fitter.run_mcmc(pos, nstep, thin=2)
+    mcmc_fitter.calc_result()
+    tm=time.time()-t0
+
+    trials=mcmc_fitter.get_trials()
+
+    sampler=nsim.sim.GCovSampler(nm_res['g'], nm_res['g_cov'],
+                                 min_err=0.001,
+                                 max_err=5.0)
+    samples = sampler.sample(trials.shape[0])
+
+    print("T minmax:",trials[:,4].min(), trials[:,4].max())
+    print("F minmax:",trials[:,5].min(), trials[:,5].max())
+
+    res_obj=mcmc_fitter.get_result()
+
+    print_pars(pars_obj,            front='true pars: ')
+    print_pars(nm_res['pars'],      front='pars max:  ')
+    print_pars(nm_res['pars_err'],  front='perr max:  ')
+    print_pars(res_obj['pars'],     front='pars mcmc: ')
+    print_pars(res_obj['pars_err'], front='perr mcmc: ')
+    print('T: %.4g +/- %.4g' % (res_obj['pars'][4], res_obj['pars_err'][4]))
+    print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'])
+
+    if show:
+        import biggles
+        import lensing
+        g1=trials[:,2]
+        g2=trials[:,3]
+        g1s=samples[:,0]
+        g2s=samples[:,1]
+
+        ming1=min( g1.min(), g1s.min() )
+        maxg1=max( g1.max(), g1s.max() )
+        ming2=min( g2.min(), g2s.min() )
+        maxg2=max( g2.max(), g2s.max() )
+        
+        mcmc_fitter.make_plots(show=True)
+
+        ifactor=1.1
+        gsamples, weights = _get_importance_samples_and_weights(mcmc_fitter,
+                                                                nm_pars,
+                                                                nm_res['pars_cov'],
+                                                                ifactor,
+                                                                trials.shape[0])
+
+        g1plt=biggles.plot_hist(g1, nbin=nbin, min=ming1, max=maxg1,
+                                color='blue',
+                                xlabel='g1',
+                                visible=False,
+                                norm=1)
+        biggles.plot_hist(g1s, nbin=nbin, min=ming1, max=maxg1,
+                          color='red',
+                          plt=g1plt,
+                          visible=False,
+                          norm=1)
+        biggles.plot_hist(gsamples[:,0],
+                          weights=weights,
+                          nbin=nbin, min=ming1, max=maxg1,
+                          color='orange',
+                          plt=g1plt,
+                          visible=False,
+                          norm=1)
+
+
+
+        g2plt=biggles.plot_hist(g2, nbin=nbin, min=ming2, max=maxg2,
+                                color='blue',
+                                xlabel='g2',
+                                visible=False,
+                                norm=1)
+        biggles.plot_hist(g2s, nbin=nbin, min=ming2, max=maxg2,
+                          color='red',
+                          plt=g2plt,
+                          visible=False,
+                          norm=1)
+        biggles.plot_hist(gsamples[:,1],
+                          weights=weights,
+                          nbin=nbin, min=ming1, max=maxg1,
+                          color='orange',
+                          plt=g2plt,
+                          visible=False,
+                          norm=1)
+
+
+        g1plt.show()
+        g2plt.show()
+
+    return tm
+
+def _get_g_importance_samples_and_weights(fitter, fullpars, fullcov, ifactor, nsample):
+    """
+    might be bogus, fixing pars besides g
+    """
+    import nsim
+
+    npars=fullpars.size
+
+    g=fullpars[2:2+2]
+    gcov=fullcov[2:2+2, 2:2+2] * ifactor**2
+
+    # truncated
+    gsampler=nsim.sim.GCovSampler(g, gcov,
+                                  min_err=0.001,
+                                  max_err=5.0)
+    gsamples = gsampler.sample(nsample)
+    proposed_lnprob = gsampler.get_lnprob(gsamples)
+
+    # full samples using fixed other pars
+    samples = zeros( (nsample, npars) )
+    samples[:,:] = fullpars[numpy.newaxis, :]
+    samples[:, 2:2+2] = gsamples
+
+    lnprob = zeros(nsample)
+    for i in xrange(nsample):
+        lnprob[i] = fitter.calc_lnprob(samples[i,:])
+
+    proposed_lnprob -= proposed_lnprob.max()
+    lnprob -= lnprob.max()
+
+    lnpdiff = lnprob - proposed_lnprob
+    weights = exp(lnpdiff)
+
+    return gsamples, weights
+
+_min_err=array([1.e-4,1.e-4,1.e-3,1.e-3,1.0e-4,1.0e-4])
+_max_err=array([1.0,1.0,5.0,5.0,1.0,1.0])
+def _get_full_importance_samples_and_weights(fitter, fullpars, fullcov, ifactor, nsample):
+    """
+    might be bogus, fixing pars besides g
+    """
+    import nsim
+    #import esutil as eu
+    from . import stats
+
+    npars=fullpars.size
+
+    pars = fullpars.copy()
+    cov  = fullcov * ifactor**2
+
+    # truncated
+    sampler=nsim.sim.GCovSamplerFull(pars, cov,
+                                     min_err=_min_err,
+                                     max_err=_max_err)
+    samples = sampler.sample(nsample)
+    proposed_lnprob = sampler.get_lnprob(samples)
+
+    lnprob = zeros(nsample)
+    for i in xrange(nsample):
+        lnprob[i] = fitter.calc_lnprob(samples[i,:])
+
+    #proposed_lnprob -= proposed_lnprob.max()
+    #lnprob -= lnprob.max()
+
+    lnpdiff = lnprob - proposed_lnprob
+    lnpdiff -= lnpdiff.max()
+    weights = exp(lnpdiff)
+
+    '''
+    keep, ok = stats.get_sigma_clipped_indices(samples,
+                                               weights=weights,
+                                               verbose=True)
+
+    samples = samples[keep,:]
+    
+    lnpdiff=lnpdiff[keep]
+    lnpdiff -= lnpdiff.max()
+    weights = exp(lnpdiff)
+    '''
+
+    return samples, weights
+
+
+
+
+def test_covsample_log(model,
+                       seed=None,
+                       g1_obj=0.1,
+                       g2_obj=0.05,
+                       T=16.0,
+                       counts=100.0,
+                       g1_psf=0.0,
+                       g2_psf=0.0,
+                       T_psf=4.0,
+                       noise=0.001,
+                       nwalkers=80,
+                       burnin=800,
+                       nstep=800,
+                       nsample=None,
+                       ifactor=2.0,
+                       thin=2,
+                       nbin=50,
+                       show=False, width=1200, height=1200):
+    """
+    Test fitting the specified model.
+
+    """
+    from . import em
+    from . import joint_prior
+    import time
+    import nsim
+    from numpy.random import randn
+
+    numpy.random.seed(seed)
+
+    if nsample is None:
+        nsample = nstep*nwalkers
+
+    g_prior = priors.GPriorBA(0.3)
+    #
+    # simulation
+    #
+
+    # PSF pars
+    counts_psf=100.0
+    noise_psf=0.001
+
+    sigma=sqrt( (T + T_psf)/2. )
+    dims=[2.*5.*sigma]*2
+    cen=[dims[0]/2., dims[1]/2.]
+    j=UnitJacobian(cen[0],cen[1])
+
+    pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
+    gm_psf=gmix.GMixModel(pars_psf, "gauss")
+
+    pars_obj = array([0.0, 0.0, g1_obj, g2_obj, T, counts])
+    npars=pars_obj.size
+    gm_obj0=gmix.GMixModel(pars_obj, model)
+
+    gm=gm_obj0.convolve(gm_psf)
+
+    im_psf=gm_psf.make_image(dims, jacobian=j)
+    im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
+    wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
+
+    im_obj=gm.make_image(dims, jacobian=j)
+    im_obj[:,:] += noise*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
+    wt_obj=zeros(im_obj.shape) + 1./noise**2
+
+    #
+    # fitting
+    #
+
+
+    # psf using EM
+    im_psf_sky,sky=em.prep_image(im_psf)
+    psf_obs = Observation(im_psf_sky, jacobian=j)
+    mc_psf=em.GMixEM(psf_obs)
+
+    emo_guess=gm_psf.copy()
+    emo_guess._data['p'] = 1.0
+    emo_guess._data['row'] += 0.1*srandu()
+    emo_guess._data['col'] += 0.1*srandu()
+    emo_guess._data['irr'] += 0.5*srandu()
+    emo_guess._data['irc'] += 0.1*srandu()
+    emo_guess._data['icc'] += 0.5*srandu()
+
+    mc_psf.run_em(emo_guess, sky)
+    res_psf=mc_psf.get_result()
+    print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
+
+    psf_fit=mc_psf.get_gmix()
+
+    psf_obs.set_gmix(psf_fit)
+
+    cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
+    #T_prior=priors.FlatPrior(-1.0, 4.0)
+    T_prior=priors.TwoSidedErf(-0.5, 0.1, 4.0, 0.1)
+    #F_prior=priors.FlatPrior(-0.97, 1.0e9)
+    #F_prior=priors.FlatPrior(-1.0, 9.0)
+    F_prior=priors.TwoSidedErf(-0.5, 0.1, 9.0, 0.1)
+
+    prior=joint_prior.PriorSimpleSep(cen_prior,
+                                     g_prior,
+                                     T_prior,
+                                     F_prior)
+
+    obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
+
+    nm_fitter=MaxSimple(obs, model, prior=prior, use_logpars=True)
+    nm_guess=pars_obj.copy()
+    #nm_guess[4] = log10( nm_guess[4] )
+    nm_guess[2] = 0.1*srandu()
+    nm_guess[3] = 0.1*srandu()
+    nm_guess[4:4+2] = log10( nm_guess[4:4+2] )
+    while True:
+        nm_fitter.run_max(nm_guess, xtol=1.0e-5, ftol=1.0e-5, maxiter=4000, maxfev=4000)
+        nm_res=nm_fitter.get_result()
+
+        if nm_res['flags']==0:
+            break
+        
+        nm_guess[0] = pars_obj[0] + 0.01*srandu()
+        nm_guess[1] = pars_obj[1] + 0.01*srandu()
+        nm_guess[2] = pars_obj[2] + 0.01*srandu()
+        nm_guess[3] = pars_obj[3] + 0.01*srandu()
+        nm_guess[4] = pars_obj[4] + 0.01*srandu()
+        nm_guess[5] = pars_obj[5] + 0.01*srandu()
+
+    nm_pars=nm_res['pars']
+    nm_err=nm_res['pars_err']
+    print("nfev:",nm_res['nfev'])
+    print_pars(nm_pars, front="nm pars: ")
+
+    guess=zeros( (nwalkers, npars) )
+    '''
+    guess[:,0] = nm_pars[0] + 0.01*srandu(nwalkers)
+    guess[:,1] = nm_pars[1] + 0.01*srandu(nwalkers)
+
+    guess[:,2] = nm_pars[2]*(1.0 + 0.01*randu(nwalkers))
+    guess[:,3] = nm_pars[3]*(1.0 + 0.01*randu(nwalkers))
+    guess[:,4] = nm_pars[4] + 0.01*srandu(nwalkers)
+    guess[:,5] = nm_pars[5] + 0.01*srandu(nwalkers)
+    '''
+
+    guess[:,0] = nm_pars[0] + nm_err[0]*randn(nwalkers)
+    guess[:,1] = nm_pars[1] + nm_err[1]*randn(nwalkers)
+
+    guess[:,2] = nm_pars[2]*(1.0 + 0.01*randu(nwalkers))
+    guess[:,3] = nm_pars[3]*(1.0 + 0.01*randu(nwalkers))
+    guess[:,4] = nm_pars[4] + nm_err[4]*randn(nwalkers)
+    guess[:,5] = nm_pars[5] + nm_err[5]*randn(nwalkers)
+
+
+    t0=time.time()
+    mcmc_fitter=MCMCSimple(obs, model, nwalkers=nwalkers, prior=prior, use_logpars=True)
+    pos=mcmc_fitter.run_mcmc(guess, burnin)
+    pos=mcmc_fitter.run_mcmc(pos, nstep, thin=2)
+    mcmc_fitter.calc_result()
+    tm=time.time()-t0
+
+    trials=mcmc_fitter.get_trials()
+
+    res_obj=mcmc_fitter.get_result()
+
+    print_pars(pars_obj,            front='true pars: ')
+    print_pars(nm_res['pars'],      front='pars max:  ')
+    print_pars(nm_res['pars_err'],  front='perr max:  ')
+    print_pars(res_obj['pars'],     front='pars mcmc: ')
+    print_pars(res_obj['pars_err'], front='perr mcmc: ')
+    print('T: %.4g +/- %.4g' % (res_obj['pars'][4], res_obj['pars_err'][4]))
+    print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'])
+    print("time:",tm)
+    print()
+
+    if show:
+        import biggles
+        import lensing
+
+        print("isamp nsample:",nsample)
+        tm0=time.time()
+        fsamples, weights = _get_full_importance_samples_and_weights(mcmc_fitter,
+                                                                     nm_res['pars'],
+                                                                     nm_res['pars_cov'],
+                                                                     ifactor,
+                                                                     nsample)
+        print("isamp time:",time.time()-tm0)
+        print("weight max:",weights.max())
+        effnum=weights.sum()
+        print("eff num:",effnum,"frac:",effnum/nsample)
+        print()
+
+        gsamples=fsamples[:,2:2+2]
+
+
+        g1=trials[:,2]
+        g2=trials[:,3]
+        g1s=gsamples[:,0]
+        g2s=gsamples[:,1]
+
+        ming1=min( g1.min(), g1s.min() )
+        maxg1=max( g1.max(), g1s.max() )
+        ming2=min( g2.min(), g2s.min() )
+        maxg2=max( g2.max(), g2s.max() )
+        
+        mcmc_fitter.make_plots(show=True)
+        lin_trials=trials.copy()
+        lin_trials[:,4] = 10.0**lin_trials[:,4]
+        lin_trials[:,5] = 10.0**lin_trials[:,5]
+        import mcmc
+        mcmc.plot_results(lin_trials)
+        linpars,lincov=mcmc.extract_stats(lin_trials)
+        linerr=sqrt(diag(lincov))
+        print_pars(linpars,front="linpars: ")
+        print_pars(linerr, front="linerrs: ")
+
+
+        g1plt=biggles.plot_hist(g1, nbin=nbin, min=ming1, max=maxg1,
+                                color='blue',
+                                xlabel='g1',
+                                visible=False,
+                                norm=1)
+        biggles.plot_hist(g1s, nbin=nbin, min=ming1, max=maxg1,
+                          color='red',
+                          plt=g1plt,
+                          visible=False,
+                          norm=1)
+        biggles.plot_hist(g1s,
+                          weights=weights,
+                          nbin=nbin, min=ming1, max=maxg1,
+                          color='orange',
+                          plt=g1plt,
+                          visible=False,
+                          norm=1)
+
+
+
+        g2plt=biggles.plot_hist(g2, nbin=nbin, min=ming2, max=maxg2,
+                                color='blue',
+                                xlabel='g2',
+                                visible=False,
+                                norm=1)
+        biggles.plot_hist(g2s, nbin=nbin, min=ming2, max=maxg2,
+                          color='red',
+                          plt=g2plt,
+                          visible=False,
+                          norm=1)
+        biggles.plot_hist(g2s,
+                          weights=weights,
+                          nbin=nbin, min=ming2, max=maxg2,
+                          color='orange',
+                          plt=g2plt,
+                          visible=False,
+                          norm=1)
+
+
+        g1plt.show()
+        g2plt.show()
+
+    return tm
+
+def test_isample(model,
+                 nsample,
+                 ifactor,
+                 seed=None,
+                 g1_obj=0.1,
+                 g2_obj=0.05,
+                 T=16.0,
+                 counts=100.0,
+                 g1_psf=0.0,
+                 g2_psf=0.0,
+                 T_psf=4.0,
+                 noise=0.001,
+                 nbin=50,
+                 show=False):
+    """
+    Test fitting the specified model.
+
+    """
+    from . import em
+    from . import joint_prior
+    import time
+    import nsim
+    from numpy.random import randn
+
+    numpy.random.seed(seed)
+
+    g_prior = priors.GPriorBA(0.3)
+    #
+    # simulation
+    #
+
+    # PSF pars
+    counts_psf=100.0
+    noise_psf=0.001
+
+    sigma=sqrt( (T + T_psf)/2. )
+    dims=[2.*5.*sigma]*2
+    cen=[dims[0]/2., dims[1]/2.]
+    j=UnitJacobian(cen[0],cen[1])
+
+    pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
+    gm_psf=gmix.GMixModel(pars_psf, "gauss")
+
+    pars_obj = array([0.0, 0.0, g1_obj, g2_obj, T, counts])
+    npars=pars_obj.size
+    gm_obj0=gmix.GMixModel(pars_obj, model)
+
+    gm=gm_obj0.convolve(gm_psf)
+
+    im_psf=gm_psf.make_image(dims, jacobian=j)
+    im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
+    wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
+
+    im_obj=gm.make_image(dims, jacobian=j)
+    im_obj[:,:] += noise*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
+    wt_obj=zeros(im_obj.shape) + 1./noise**2
+
+    #
+    # fitting
+    #
+
+
+    # psf using EM
+    im_psf_sky,sky=em.prep_image(im_psf)
+    psf_obs = Observation(im_psf_sky, jacobian=j)
+    mc_psf=em.GMixEM(psf_obs)
+
+    emo_guess=gm_psf.copy()
+    emo_guess._data['p'] = 1.0
+    emo_guess._data['row'] += 0.1*srandu()
+    emo_guess._data['col'] += 0.1*srandu()
+    emo_guess._data['irr'] += 0.5*srandu()
+    emo_guess._data['irc'] += 0.1*srandu()
+    emo_guess._data['icc'] += 0.5*srandu()
+
+    mc_psf.run_em(emo_guess, sky)
+    res_psf=mc_psf.get_result()
+    print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
+
+    psf_fit=mc_psf.get_gmix()
+
+    psf_obs.set_gmix(psf_fit)
+
+    cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
+    #T_prior=priors.FlatPrior(-1.0, 4.0)
+    T_prior=priors.TwoSidedErf(-0.5, 0.1, 4.0, 0.1)
+    #F_prior=priors.FlatPrior(-0.97, 1.0e9)
+    #F_prior=priors.FlatPrior(-1.0, 9.0)
+    F_prior=priors.TwoSidedErf(-0.5, 0.1, 9.0, 0.1)
+
+    prior=joint_prior.PriorSimpleSep(cen_prior,
+                                     g_prior,
+                                     T_prior,
+                                     F_prior)
+
+    obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
+
+    nm_fitter=MaxSimple(obs, model, prior=prior, use_logpars=True)
+    nm_guess=pars_obj.copy()
+    #nm_guess[4] = log10( nm_guess[4] )
+    nm_guess[2] = 0.1*srandu()
+    nm_guess[3] = 0.1*srandu()
+    nm_guess[4:4+2] = log10( nm_guess[4:4+2] )
+    while True:
+        tm0=time.time()
+        nm_fitter.run_max(nm_guess, xtol=1.0e-5, ftol=1.0e-5, maxiter=4000, maxfev=4000)
+        nm_res=nm_fitter.get_result()
+        nm_tm=time.time()-tm0
+
+        if nm_res['flags']==0:
+            break
+        
+        nm_guess[0] = pars_obj[0] + 0.01*srandu()
+        nm_guess[1] = pars_obj[1] + 0.01*srandu()
+        nm_guess[2] = pars_obj[2] + 0.01*srandu()
+        nm_guess[3] = pars_obj[3] + 0.01*srandu()
+        nm_guess[4] = pars_obj[4] + 0.01*srandu()
+        nm_guess[5] = pars_obj[5] + 0.01*srandu()
+
+    print("nfev:",nm_res['nfev'],"s2n:",nm_res['s2n_w'],"time:",nm_tm)
+    print_pars(nm_res['pars'],      front='pars max:  ')
+    print_pars(nm_res['pars_err'],  front='perr max:  ')
+
+    print()
+
+    print("isamp nsample:",nsample)
+    tm0=time.time()
+    samples, weights = _get_full_importance_samples_and_weights(nm_fitter,
+                                                                nm_res['pars'],
+                                                                nm_res['pars_cov'],
+                                                                ifactor,
+                                                                nsample)
+    print("isamp time:",time.time()-tm0)
+    print("weight max:",weights.max())
+    effnum=weights.sum()
+    print("eff num:",effnum,"frac:",effnum/nsample)
+    print()
+
+
+    if show:
+        import biggles
+        import lensing
+
+        g1=samples[:,2]
+        g2=samples[:,3]
+
+        g1plt=biggles.plot_hist(g1, nbin=nbin,
+                                weights=weights,
+                                color='blue',
+                                xlabel='g1',
+                                visible=False,
+                                norm=1)
+        biggles.plot_hist(g1,
+                          nbin=nbin,
+                          color='red',
+                          plt=g1plt,
+                          visible=False,
+                          norm=1)
+
+        g2plt=biggles.plot_hist(g2, nbin=nbin,
+                                weights=weights,
+                                color='blue',
+                                xlabel='g2',
+                                visible=False,
+                                norm=1)
+        biggles.plot_hist(g2,
+                          nbin=nbin,
+                          color='red',
+                          plt=g2plt,
+                          visible=False,
+                          norm=1)
+
+
+
+        g1plt.show()
+        g2plt.show()
 

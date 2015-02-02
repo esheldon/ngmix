@@ -117,6 +117,8 @@ class LensfitSensitivity(object):
         prior=self._g_prior.get_prob_array2d(g1,g2)
 
         if self._remove_prior:
+            print("        undoing prior for lensfit")
+
             w,=where( prior > 0.0 )
             if w.size == 0:
                 raise GMixRangeError("no prior values > 0")
@@ -230,6 +232,7 @@ def lensfit_jackknife(g, gsens,
     shear_cov[1,1] = fac*( ((shear[1]-shears[:,1])**2).sum() )
 
     if show or eps or png:
+        from .pqr import _plot_shears
         _plot_shears(shears, show=show, eps=eps, png=png)
 
     if get_sums:

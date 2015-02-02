@@ -24,7 +24,7 @@ def calc_mcmc_stats(data, sigma_clip=False, weights=None, **kw):
 
     send_data=data
     if sigma_clip:
-        keep, ok = _get_sigma_clipped_indices(data, weights=weights, **kw)
+        keep, ok = get_sigma_clipped_indices(data, weights=weights, **kw)
         if ok:
             send_data=data[keep]
 
@@ -33,7 +33,7 @@ def calc_mcmc_stats(data, sigma_clip=False, weights=None, **kw):
     else:
         return _calc_stats(send_data)
 
-def _get_sigma_clipped_indices(data, weights=None, **kw):
+def get_sigma_clipped_indices(data, weights=None, **kw):
     import esutil as eu
     npoints = data.shape[0]
     npar = data.shape[1]
