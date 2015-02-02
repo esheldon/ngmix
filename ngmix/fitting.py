@@ -3689,15 +3689,18 @@ def test_model(model,
                g_prior=None,
                do_triangle=False,
                bins=25,
+               seed=None,
                show=False):
     """
     Test fitting the specified model.
 
-    Send g_prior to do some lensfit/pqr calculations
+    Send g_prior to do prior during exploration
     """
     from . import em
     from . import joint_prior
     import time
+
+    numpy.random.seed(seed)
 
     #
     # simulation
@@ -3755,10 +3758,19 @@ def test_model(model,
 
     psf_obs.set_gmix(psf_fit)
 
-    prior=joint_prior.make_uniform_simple_sep([0.0,0.0],
-                                              [0.1,0.1],
-                                              [-10.0,3500.],
-                                              [-0.97,1.0e9])
+    if g_prior is None:
+        prior=joint_prior.make_uniform_simple_sep([0.0,0.0],
+                                                  [0.1,0.1],
+                                                  [-10.0,3500.],
+                                                  [-0.97,1.0e9])
+    else:
+        print("prior during")
+        cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
+        T_prior=priors.FlatPrior(-10.0, 3600.0)
+        F_prior=priors.FlatPrior(-0.97, 1.0e9)
+
+        prior=joint_prior.PriorSimpleSep(cen_prior, g_prior, T_prior, F_prior)
+
     #prior=None
     obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
     mc_obj=MCMCSimple(obs, model, nwalkers=nwalkers, prior=prior)
@@ -3793,12 +3805,6 @@ def test_model(model,
 
     #gmfit0=mc_obj.get_gmix()
     #gmfit=gmfit0.convolve(psf_fit)
-
-    if g_prior is not None:
-        from . import lensfit
-        trials = mc_obj.get_trials()
-        gsens = lensfit.calc_sensitivity(trials[:,2:2+2], g_prior)
-        print("lensfit gsens:",gsens)
 
     if show:
         import images
