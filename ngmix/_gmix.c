@@ -55,6 +55,46 @@ static int g1g2_to_e1e2(double g1, double g2, double *e1, double *e2) {
     return 1;
 }
 
+
+/*
+    convert eta1,eta2 to reduced shear g1,g2
+    return 0 means out of range
+*/
+static int eta1eta2_to_g1g2(double eta1, double eta2, double *g1, double *g2) {
+    double g=0, fac=0;
+    double eta=sqrt(eta1*eta1 + eta2*eta2);
+    //long double tmp=0;
+
+    if (eta == 0.0) {
+        *g1=0;
+        *g2=0;
+    } else {
+
+        /*
+        tmp = (long double) eta;
+        tmp *= 0.5;
+        g=(double) tanhl(tmp);
+        */
+
+        g=tanh(0.5*eta);
+
+        if (g >= 1.) {
+            return 0;
+            // round off?
+            //g = 0.99999999999999999;
+        }
+
+        fac = g/eta;
+
+        *g1 = fac*eta1;
+        *g2 = fac*eta2;
+    }
+
+    return 1;
+}
+
+
+
 static double gmix_get_T(struct PyGMix_Gauss2D *gmix,
                          npy_intp n_gauss)
 {
@@ -1794,10 +1834,51 @@ PyObject * PyGMix_convert_simple_double_logpars_band(PyObject* self, PyObject* a
     pars[3] = logpars[3];
     pars[4] = pow(10.0, logpars[4]);
     //pars[5] = pow(10.0, logpars[5+band]);
-    pars[5] = logpars[5];
+    pars[5] = logpars[5+band];
 
     Py_RETURN_NONE;
 }
+
+
+/*
+   convert eta pars to g1,g2 pars
+
+   no error checking done here
+*/
+static 
+PyObject * PyGMix_convert_simple_eta2g_band(PyObject* self, PyObject* args) {
+
+    PyObject* etapars_obj=NULL;
+    PyObject* gpars_obj=NULL;
+    int band=0;
+    double *etapars=NULL, *gpars=NULL;
+    double g1=0, g2=0;
+    int status=0;
+
+    // weight object is currently ignored
+    if (!PyArg_ParseTuple(args, (char*)"OOi", 
+                          &etapars_obj,
+                          &gpars_obj,
+                          &band)) {
+        return NULL;
+    }
+
+    etapars=PyArray_DATA(etapars_obj);
+    gpars=PyArray_DATA(gpars_obj);
+
+    status=eta1eta2_to_g1g2(etapars[2], etapars[3], &g1, &g2);
+
+
+    gpars[0] = etapars[0];
+    gpars[1] = etapars[1];
+    gpars[2] = g1;
+    gpars[3] = g2;
+    gpars[4] = etapars[4];
+    gpars[5] = etapars[5+band];
+
+    return Py_BuildValue("i", status);
+}
+
 
 
 /*
@@ -2015,6 +2096,8 @@ static PyMethodDef pygauss2d_funcs[] = {
 
     {"convert_simple_double_logpars",        (PyCFunction)PyGMix_convert_simple_double_logpars,         METH_VARARGS,  "convert log10 to linear.\n"},
     {"convert_simple_double_logpars_band",        (PyCFunction)PyGMix_convert_simple_double_logpars_band,         METH_VARARGS,  "convert log10 to linear with band specified.\n"},
+
+    {"convert_simple_eta2g_band",        (PyCFunction)PyGMix_convert_simple_eta2g_band,         METH_VARARGS,  "convert eta to g, band specified.\n"},
 
     {"gmixnd_get_prob_scalar",        (PyCFunction)PyGMix_gmixnd_get_prob_scalar,         METH_VARARGS,  "get prob or log prob for scalar arg, nd gaussian"},
 

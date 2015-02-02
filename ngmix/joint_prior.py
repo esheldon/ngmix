@@ -1100,6 +1100,22 @@ def make_cosmos_simple_sep(cen, cen_width, T_range, F_range):
     pr=PriorSimpleSep(cen_prior, g_prior, T_prior, F_prior)
     return pr
 
+def make_uniform_simple_eta_sep(cen, cen_width, T_range, F_range):
+    """
+    For testing
+
+    Make PriorSimpleSep uniform in all priors except the
+    center, which is gaussian
+    """
+
+    cen_prior=priors.CenPrior(cen[0], cen[1], cen_width[0], cen_width[1])
+    g_prior=priors.FlatEtaPrior()
+    T_prior=priors.FlatPrior(T_range[0], T_range[1])
+    F_prior=priors.FlatPrior(F_range[0], F_range[1])
+
+    pr=PriorSimpleSep(cen_prior, g_prior, T_prior, F_prior)
+    return pr
+
 
 class PriorSimpleSep(object):
     """

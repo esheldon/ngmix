@@ -31,6 +31,7 @@ from sys import stdout
 import numpy
 from numpy import array, zeros, diag, exp, sqrt, where, log, log10, isfinite
 from numpy import linalg
+from numpy.random import random as randu
 from numpy.linalg.linalg import LinAlgError
 import time
 from pprint import pprint
@@ -1677,6 +1678,36 @@ class MCMCSimple(MCMCBase):
 
     def get_par_names(self, dolog=False):
         names=['cen1','cen2', 'g1','g2', 'T']
+        if self.nband == 1:
+            names += ['F']
+        else:
+            for band in xrange(self.nband):
+                names += ['F_%s' % band]
+
+        return names
+
+class MCMCSimpleEta(MCMCSimple):
+    """
+    search eta space
+    """
+
+    def _get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+        """
+
+        pars=self._band_pars
+
+        status=_gmix.convert_simple_eta2g_band(pars_in, pars, band)
+        if status != 1:
+            raise GMixRangeError("shape out of bounds")
+        #print("eta:",pars_in[2],pars_in[3])
+        #print("g:  ",pars[2], pars[3])
+        return pars
+
+
+    def get_par_names(self, dolog=False):
+        names=['cen1','cen2', 'eta1','eta2', 'T']
         if self.nband == 1:
             names += ['F']
         else:
@@ -4060,10 +4091,10 @@ def test_model_margsky(model,
         guess[5] = counts*(1.0 + 0.05*srandu())
 
 
-        fitter=MaxSimple(obs, model, maxiter=4000, maxfev=4000, 
+        fitter=MaxSimple(obs, model,
                          prior=prior, margsky=margsky,
                          method=fitter_type)
-        fitter.run_max(guess)
+        fitter.run_max(guess, maxiter=4000, maxfev=4000)
 
     tm=time.time()-t0
 
@@ -6151,4 +6182,240 @@ def test_model_logpars(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
 
     return tm
 
+
+def test_eta(model,
+             seed=None,
+             g1_obj=0.1,
+             g2_obj=0.05,
+             T=16.0,
+             counts=100.0,
+             g1_psf=0.0,
+             g2_psf=0.0,
+             T_psf=4.0,
+             noise=0.001,
+             nwalkers=80,
+             burnin=800,
+             nstep=800,
+             thin=2,
+             nbin=50,
+             show=False, width=1200, height=1200):
+    """
+    Test fitting the specified model.
+
+    Send g_prior to do some lensfit/pqr calculations
+    """
+    from . import em
+    from . import joint_prior
+    import time
+    import nsim
+
+    numpy.random.seed(seed)
+
+    #
+    # simulation
+    #
+
+    # PSF pars
+    counts_psf=100.0
+    noise_psf=0.001
+
+    sigma=sqrt( (T + T_psf)/2. )
+    dims=[2.*5.*sigma]*2
+    cen=[dims[0]/2., dims[1]/2.]
+    j=UnitJacobian(cen[0],cen[1])
+
+    pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
+    gm_psf=gmix.GMixModel(pars_psf, "gauss")
+
+    pars_obj = array([0.0, 0.0, g1_obj, g2_obj, T, counts])
+    npars=pars_obj.size
+    gm_obj0=gmix.GMixModel(pars_obj, model)
+
+    gm=gm_obj0.convolve(gm_psf)
+
+    im_psf=gm_psf.make_image(dims, jacobian=j)
+    im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
+    wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
+
+    im_obj=gm.make_image(dims, jacobian=j)
+    im_obj[:,:] += noise*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
+    wt_obj=zeros(im_obj.shape) + 1./noise**2
+
+    #
+    # fitting
+    #
+
+
+    # psf using EM
+    im_psf_sky,sky=em.prep_image(im_psf)
+    psf_obs = Observation(im_psf_sky, jacobian=j)
+    mc_psf=em.GMixEM(psf_obs)
+
+    emo_guess=gm_psf.copy()
+    emo_guess._data['p'] = 1.0
+    emo_guess._data['row'] += 0.1*srandu()
+    emo_guess._data['col'] += 0.1*srandu()
+    emo_guess._data['irr'] += 0.5*srandu()
+    emo_guess._data['irc'] += 0.1*srandu()
+    emo_guess._data['icc'] += 0.5*srandu()
+
+    mc_psf.run_em(emo_guess, sky)
+    res_psf=mc_psf.get_result()
+    print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
+
+    psf_fit=mc_psf.get_gmix()
+
+    psf_obs.set_gmix(psf_fit)
+
+    #prior=joint_prior.make_uniform_simple_sep([0.0,0.0],
+    #                                          [0.1,0.1],
+    #                                          [-10.0,3500.],
+    #                                          [-0.97,1.0e9])
+    prior=joint_prior.make_uniform_simple_eta_sep([0.0,0.0],
+                                                  [0.1,0.1],
+                                                  [-10.0,3500.],
+                                                  [-0.97,1.0e9])
+    #prior=None
+
+    obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
+
+
+    nm_fitter=MaxSimple(obs, model, prior=prior)
+    nm_guess=pars_obj.copy()
+    while True:
+        nm_fitter.run_max(nm_guess, maxiter=4000, maxfev=4000)
+        nm_res=nm_fitter.get_result()
+
+        if nm_res['flags']==0:
+            break
+        
+        nm_guess[0] = pars_obj[0] + 0.01*srandu()
+        nm_guess[1] = pars_obj[1] + 0.01*srandu()
+        nm_guess[2] = pars_obj[2] + 0.01*srandu()
+        nm_guess[3] = pars_obj[3] + 0.01*srandu()
+        nm_guess[4] = pars_obj[4] + 0.01*srandu()
+        nm_guess[5] = pars_obj[5] + 0.01*srandu()
+
+    nm_pars=nm_res['pars']
+
+
+    guess=zeros( (nwalkers, npars) )
+    guess[:,0] = nm_pars[0] + 0.01*srandu(nwalkers)
+    guess[:,1] = nm_pars[1] + 0.01*srandu(nwalkers)
+
+    #guess[:,2] = nm_pars[2]*(1.0 + 0.1*randu(nwalkers))
+    #guess[:,3] = nm_pars[3]*(1.0 + 0.1*randu(nwalkers))
+    guess[:,2] = 0.1*srandu(nwalkers)
+    guess[:,3] = 0.1*srandu(nwalkers)
+    guess[:,4] = nm_pars[4]*(1.0 + 0.1*srandu(nwalkers))
+    guess[:,5] = nm_pars[5]*(1.0 + 0.1*srandu(nwalkers))
+
+    t0=time.time()
+    #mcmc_fitter=MCMCSimple(obs, model, nwalkers=nwalkers, prior=prior)
+    mcmc_fitter=MCMCSimpleEta(obs, model, nwalkers=nwalkers, prior=prior)
+
+    import lensing
+    #tpars=pars_obj.copy()
+    tpars=nm_pars.copy()
+    eta1,eta2 = lensing.util.g1g2_to_eta1eta2(tpars[2],tpars[3])
+    tpars[2]=eta1
+    tpars[3]=eta2
+    mcmc_fitter._setup_sampler_and_data(guess)
+
+    #print("true")
+    print_pars(tpars,          front='max pars:    ')
+    lnp = mcmc_fitter.calc_lnprob(tpars)
+    print("lnp:",lnp)
+
+    for i in xrange(10):
+        tpars[2] = tpars[2]*1.1
+        tpars[3] = tpars[3]*1.1
+        print_pars(tpars,      front='other pars:  ')
+        lnp = mcmc_fitter.calc_lnprob(tpars)
+        print("lnp:",lnp)
+    return
+
+
+
+
+
+    pos=mcmc_fitter.run_mcmc(guess, burnin)
+    pos=mcmc_fitter.run_mcmc(pos, nstep, thin=2)
+    mcmc_fitter.calc_result()
+    tm=time.time()-t0
+
+
+
+
+
+
+
+
+    trials=mcmc_fitter.get_trials()
+
+    sampler=nsim.sim.GCovSampler(nm_res['g'], nm_res['g_cov'],
+                                 min_err=0.001,
+                                 max_err=5.0)
+    samples = sampler.sample(trials.shape[0])
+
+    print("T minmax:",trials[:,4].min(), trials[:,4].max())
+    print("F minmax:",trials[:,5].min(), trials[:,5].max())
+
+    res_obj=mcmc_fitter.get_result()
+
+    print_pars(pars_obj,            front='true pars: ')
+    print_pars(nm_res['pars'],      front='pars max:  ')
+    print_pars(nm_res['pars_err'],  front='perr max:  ')
+    print_pars(res_obj['pars'],     front='pars mcmc: ')
+    print_pars(res_obj['pars_err'], front='perr mcmc: ')
+    print('T: %.4g +/- %.4g' % (res_obj['pars'][4], res_obj['pars_err'][4]))
+    print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'])
+
+    if show:
+        import biggles
+        import lensing
+        #g1=trials[:,2]
+        #g2=trials[:,3]
+        eta1=trials[:,2]
+        eta2=trials[:,3]
+        g1,g2 = lensing.util.eta1eta2_to_g1g2(eta1,eta2)
+        g1s=samples[:,0]
+        g2s=samples[:,1]
+
+        ming1=min( g1.min(), g1s.min() )
+        maxg1=max( g1.max(), g1s.max() )
+        ming2=min( g2.min(), g2s.min() )
+        maxg2=max( g2.max(), g2s.max() )
+
+        g1plt=biggles.plot_hist(g1, nbin=nbin, min=ming1, max=maxg1,
+                                color='blue',
+                                xlabel='g1',
+                                visible=False)
+        biggles.plot_hist(g1s, nbin=nbin, min=ming1, max=maxg1,
+                          color='red',
+                          plt=g1plt,
+                          visible=False)
+
+        g2plt=biggles.plot_hist(g2, nbin=nbin, min=ming2, max=maxg2,
+                                color='blue',
+                                xlabel='g2',
+                                visible=False)
+        biggles.plot_hist(g2s, nbin=nbin, min=ming2, max=maxg2,
+                          color='red',
+                          plt=g2plt,
+                          visible=False)
+
+        g1plt.show()
+        g2plt.show()
+
+    '''
+    if show:
+        import images
+        imfit_psf=mc_psf.make_image(counts=im_psf.sum())
+        images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
+
+        mcmc_fitter.make_plots(do_residual=True,show=True,prompt=False,
+                               width=width, height=height)
+    '''
+    return tm
 

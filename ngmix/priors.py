@@ -2241,6 +2241,48 @@ class GPriorMErf(GPriorBase):
         return model
 
 
+class FlatEtaPrior(object):
+    def __init__(self):
+        self.max_eta_sq = 9.0**2 + 9.0**2
+
+    def get_prob_scalar2d(self, eta1, eta2):
+        """
+        Get the 2d log prob
+        """
+        eta_sq = eta1**2 + eta2**2
+        if eta_sq > self.max_eta_sq:
+            raise GMixRangeError("eta^2 too big: %s" % eta_sq)
+
+        return 1.0
+
+    def get_lnprob_scalar2d(self, eta1, eta2):
+        """
+        Get the 2d log prob
+        """
+        eta_sq = eta1**2 + eta2**2
+        if eta_sq > self.max_eta_sq:
+            raise GMixRangeError("eta^2 too big: %s" % eta_sq)
+
+        return 0.0
+
+    '''
+    def get_prob_array2d(self, eta1, eta2):
+        """
+        Get the 2d prior for the array inputs
+        """
+
+        eta1arr=array(eta1, dtype='f8', ndmin=1, copy=False)
+        return numpy.ones(eta1arr.size, dtype='f8')
+
+    def get_lnprob_array2d(self, eta1, eta2):
+        """
+        Get the 2d prior for the array inputs
+        """
+
+        eta1arr=array(eta1, dtype='f8', ndmin=1, copy=False)
+        return numpy.zeros(eta1arr.size, dtype='f8')
+    '''
+
 
 class Normal(_gmix.Normal):
     """
