@@ -3773,7 +3773,7 @@ class GCovSampler(object):
         if numpy.all(numpy.isfinite(cov)):
             eigvals=numpy.linalg.eigvals(cov)
             if numpy.any(eigvals <= 0):
-                raise TryAgainError("bad cov")
+                raise LinAlgError("bad cov")
             
         print_pars(sqrt(diag(cov)), front="    using err:")
 
