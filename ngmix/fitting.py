@@ -6738,6 +6738,7 @@ def test_covsample_log(model,
 def test_isample(model,
                  nsample,
                  ifactor,
+                 df=2.1,
                  seed=None,
                  g1_obj=0.1,
                  g2_obj=0.05,
@@ -6748,6 +6749,8 @@ def test_isample(model,
                  T_psf=4.0,
                  noise=0.001,
                  nbin=50,
+                 prior_during=True,
+                 max_fitter_type='nm',
                  show=False):
     """
     Test fitting the specified model.
@@ -6761,7 +6764,11 @@ def test_isample(model,
 
     numpy.random.seed(seed)
 
-    g_prior = priors.GPriorBA(0.3)
+    if prior_during:
+        g_prior = priors.GPriorBA(0.3)
+    else:
+        g_prior = priors.ZDisk2D(1.0)
+
     #
     # simulation
     #
@@ -6832,20 +6839,24 @@ def test_isample(model,
 
     obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
 
-    #max_fitter=MaxSimple(obs, model, prior=prior, use_logpars=True)
-    max_fitter=LMSimple(obs, model, prior=prior, use_logpars=True,
-                        lm_pars={'maxfev':4000,
-                                 'ftol':1.0e-6,
-                                 'xtol':1.0e-6,
-                                 'epsfcn':1.0e-6})
+    if max_fitter_type=='nm':
+        max_fitter=MaxSimple(obs, model, prior=prior, use_logpars=True)
+    else:
+        max_fitter=LMSimple(obs, model, prior=prior, use_logpars=True,
+                            lm_pars={'maxfev':4000,
+                                     'ftol':1.0e-6,
+                                     'xtol':1.0e-6,
+                                     'epsfcn':1.0e-6})
     max_guess=pars_obj.copy()
     max_guess[2] = 0.1*srandu()
     max_guess[3] = 0.1*srandu()
     max_guess[4:4+2] = log( max_guess[4:4+2] )
     while True:
         tm0=time.time()
-        #max_fitter.run_max(max_guess, xtol=1.0e-5, ftol=1.0e-5, maxiter=4000, maxfev=4000)
-        max_fitter.run_lm(max_guess)
+        if max_fitter_type=='nm':
+            max_fitter.run_max(max_guess, xtol=1.0e-5, ftol=1.0e-5, maxiter=4000, maxfev=4000)
+        else:
+            max_fitter.run_lm(max_guess)
         max_res=max_fitter.get_result()
         max_tm=time.time()-tm0
 
@@ -6887,7 +6898,6 @@ def test_isample(model,
     print()
 
     # student T sampler
-    df=2.1
     Tsampler=GCovSamplerT(max_res['pars'], icov, df)
     Tsampler.make_samples(nsample)
     Tsampler.set_iweights(max_fitter.calc_lnprob)

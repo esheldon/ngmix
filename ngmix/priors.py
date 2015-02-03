@@ -977,7 +977,7 @@ class GPriorBase(object):
         plt.aspect_ratio=1.0
 
         smax=shear_true.max()
-        ym=1.1*numpy.abs(fracdiff).max()
+        ym=1.1*( numpy.abs(fracdiff).max() + fracdiff_err.max() )
 
         plt.yrange=[-ym, ym]
 
