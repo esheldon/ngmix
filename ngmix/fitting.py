@@ -3561,6 +3561,9 @@ class MCMCSimpleJointLogPars(MCMCSimple):
 _default_min_err=array([1.e-4,1.e-4,1.e-3,1.e-3,1.0e-4,1.0e-4])
 _default_max_err=array([1.0,1.0,5.0,5.0,1.0,1.0])
 class GCovSampler(object):
+    """
+    sampler using multivariate gaussian
+    """
     def __init__(self, pars, cov,
                  min_err=_default_min_err,
                  max_err=_default_max_err):
@@ -3793,7 +3796,33 @@ class GCovSampler(object):
         self._min_err=min_err
         self._max_err=max_err
 
+class GCovSamplerT(GCovSampler):
+    """
+    sampler using multivariate T
 
+    requires 
+    """
+    def __init__(self, pars, cov, df,
+                 min_err=_default_min_err,
+                 max_err=_default_max_err):
+
+
+        super(GCovSamplerT,self).__init__(pars, cov,
+                                          min_err=min_err,
+                                          max_err=max_err)
+        self._df=df
+
+        self._set_pdf()
+
+    def _sample_raw(self, n):
+        """
+        sample without truncation
+        """
+        return self._pdf.rvs(n)
+
+    def _set_pdf(self):
+        from statsmodels.sandbox.distributions.mv_normal import MVT
+        self._pdf=MVT(self._pars, self._cov, self._df)
 
 
 def get_edge_aperture(dims, cen):
@@ -6839,17 +6868,42 @@ def test_isample(model,
     print("isamp nsample:",nsample)
     tm0=time.time()
     icov = max_res['pars_cov']*ifactor**2
+
+    # gaussian sampler
     sampler=GCovSampler(max_res['pars'], icov)
     sampler.make_samples(nsample)
     sampler.set_iweights(max_fitter.calc_lnprob)
+    sampler.calc_result()
 
     samples=sampler.get_samples()
     iweights = sampler.get_iweights()
+    res=sampler.get_result()
 
     print("isamp time:",time.time()-tm0)
     neff=iweights.sum()
     print("eff num:",neff,"frac:",neff/nsample)
+    print_pars(res['pars'], front='pars: ')
+    print_pars(res['pars_err'], front='perr: ')
     print()
+
+    # student T sampler
+    df=2.1
+    Tsampler=GCovSamplerT(max_res['pars'], icov, df)
+    Tsampler.make_samples(nsample)
+    Tsampler.set_iweights(max_fitter.calc_lnprob)
+    Tsampler.calc_result()
+
+    Tsamples=Tsampler.get_samples()
+    Tiweights = Tsampler.get_iweights()
+    Tres=Tsampler.get_result()
+
+    print("T isamp time:",time.time()-tm0)
+    neff=Tiweights.sum()
+    print("T eff num:",neff,"frac:",neff/nsample)
+    print_pars(Tres['pars'], front='pars: ')
+    print_pars(Tres['pars_err'], front='perr: ')
+    print()
+
 
 
     if show:
@@ -6861,21 +6915,36 @@ def test_isample(model,
 
         g1=samples[:,2]
         g2=samples[:,3]
+        Tg1=Tsamples[:,2]
+        Tg2=Tsamples[:,3]
+        ming1=min(g1.min(), Tg1.min())
+        maxg1=max(g1.max(), Tg1.max())
 
-        g1plt=biggles.plot_hist(g1, nbin=nbin,
+        ming2=min(g2.min(), Tg2.min())
+        maxg2=max(g2.max(), Tg2.max())
+
+        g1plt=biggles.plot_hist(g1,
+                                nbin=nbin,
                                 weights=iweights,
+                                min=ming1,
+                                max=maxg1,
                                 color='blue',
                                 xlabel='g1',
                                 visible=False,
                                 norm=1)
         biggles.plot_hist(g1,
                           nbin=nbin,
+                          min=ming1,
+                          max=maxg1,
                           color='red',
                           plt=g1plt,
                           visible=False,
                           norm=1)
 
-        g2plt=biggles.plot_hist(g2, nbin=nbin,
+        g2plt=biggles.plot_hist(g2,
+                                nbin=nbin,
+                                min=ming2,
+                                max=maxg2,
                                 weights=iweights,
                                 color='blue',
                                 xlabel='g2',
@@ -6883,11 +6952,37 @@ def test_isample(model,
                                 norm=1)
         biggles.plot_hist(g2,
                           nbin=nbin,
+                          min=ming2,
+                          max=maxg2,
                           color='red',
                           plt=g2plt,
                           visible=False,
                           norm=1)
 
+
+        # from T sampler
+
+        biggles.plot_hist(Tg1,
+                          nbin=nbin,
+                          min=ming1,
+                          max=maxg1,
+                          weights=Tiweights,
+                          color='magenta',
+                          width=2,
+                          plt=g1plt,
+                          visible=False,
+                          norm=1)
+
+        biggles.plot_hist(Tg2,
+                          nbin=nbin,
+                          min=ming2,
+                          max=maxg2,
+                          weights=Tiweights,
+                          color='magenta',
+                          width=2,
+                          plt=g2plt,
+                          visible=False,
+                          norm=1)
 
 
         g1plt.show()
