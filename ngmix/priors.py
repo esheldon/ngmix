@@ -131,7 +131,38 @@ class GPriorBase(object):
 
         return (ff - fb)*h2
 
- 
+    def dlnbyg1_array(self, g1, g2, h=1.e-6):
+        """
+        Derivative with respect to g1 at the input g1,g2 location
+        Used for lensfit.
+
+        Uses central difference and a small enough step size
+        to use just two points
+
+        """
+        h2=1./(2.*h)
+
+        ff = self.get_lnprob_array2d(g1+h, g2)
+        fb = self.get_lnprob_array2d(g1-h, g2)
+
+        return (ff - fb)*h2
+
+    def dlnbyg2_array(self, g1, g2, h=1.e-6):
+        """
+        Derivative with respect to g2 at the input g1,g2 location
+
+        Uses central difference and a small enough step size
+        to use just two points
+
+        """
+        h2=1./(2.*h)
+
+        ff = self.get_lnprob_array2d(g1, g2+h)
+        fb = self.get_lnprob_array2d(g1, g2-h)
+
+        return (ff - fb)*h2
+
+
     def get_pqr_num(self, g1in, g2in, s1=0.0, s2=0.0, h=1.e-6):
         """
         Evaluate 

@@ -76,9 +76,6 @@ class LensfitSensitivity(object):
         self._remove_prior=remove_prior
         self._h=h
 
-        if self._remove_prior and self._weights is not None:
-            raise RuntimeError("need to support removing prior and weights")
-
         self._calc_g_sens()
 
 
@@ -102,6 +99,106 @@ class LensfitSensitivity(object):
         return self._nuse
 
     def _calc_g_sens(self):
+        if self._remove_prior:
+            self._calc_g_sens_remove_prior()
+        else:
+            self._calc_g_sens_no_remove_prior()
+
+    def _calc_g_sens_remove_prior(self):
+        """
+        Calculate the sensitivity
+        """
+
+        g_sens = zeros(2)
+
+        g1=self._g[:,0]
+        g2=self._g[:,1]
+
+        weights=self._weights
+        if weights is None:
+            weights=numpy.ones(g1.size)
+
+        # derivative of log prior
+        dpri_by_g1 = self._g_prior.dlnbyg1_array(g1,g2,h=self._h)
+        dpri_by_g2 = self._g_prior.dlnbyg2_array(g1,g2,h=self._h)
+
+        wsum = weights.sum()
+
+        g1mean = (g1*weights).sum()/wsum
+        g2mean = (g2*weights).sum()/wsum
+
+        g1diff = g1mean-g1
+        g2diff = g2mean-g2
+
+        R1 = g1diff*dpri_by_g1
+        R2 = g2diff*dpri_by_g2
+
+        R1sum = (R1*weights).sum()
+        R2sum = (R2*weights).sum()
+
+        g_sens[0] = 1 - R1sum/wsum
+        g_sens[1] = 1 - R2sum/wsum
+
+        self._nuse=g1.size
+
+        self._g_mean=array([g1mean, g2mean])
+        self._g_sens=g_sens
+
+    def _calc_g_sens_no_remove_prior(self):
+        """
+        Calculate the sensitivity
+        """
+
+        g_sens = zeros(2)
+
+        g1=self._g[:,0]
+        g2=self._g[:,1]
+
+        dpri_by_g1 = self._g_prior.dbyg1_array(g1,g2,h=self._h)
+        dpri_by_g2 = self._g_prior.dbyg2_array(g1,g2,h=self._h)
+
+        prior=self._g_prior.get_prob_array2d(g1,g2)
+
+        extra_weights=self._weights
+
+        if extra_weights is not None:
+            doweights=True
+            weights = prior*extra_weights
+            wsum = weights.sum()
+        else:
+            doweights=False
+            weights = prior
+            wsum = prior.sum()
+
+        g1mean = (g1*weights).sum()/wsum
+        g2mean = (g2*weights).sum()/wsum
+
+        g1diff = g1mean-g1
+        g2diff = g2mean-g2
+
+        R1 = g1diff*dpri_by_g1
+        R2 = g2diff*dpri_by_g2
+
+        if doweights:
+            # wsum is (w*prior).sum()
+            R1sum = (R1*extra_weights).sum()
+            R2sum = (R2*extra_weights).sum()
+        else:
+            # wsum is prior.sum()
+            R1sum = R1.sum()
+            R2sum = R2.sum()
+
+        g_sens[0] = 1 - R1sum/wsum
+        g_sens[1] = 1 - R2sum/wsum
+
+        self._nuse=g1.size
+
+        self._g_mean=array([g1mean, g2mean])
+        self._g_sens=g_sens
+
+
+
+    def _calc_g_sens_old(self):
         """
         Calculate the sensitivity
         """
@@ -172,6 +269,7 @@ class LensfitSensitivity(object):
 
         self._g_mean=array([g1mean, g2mean])
         self._g_sens=g_sens
+
 
 def lensfit_jackknife(g, gsens,
                       chunksize=1,
