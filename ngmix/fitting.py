@@ -3593,13 +3593,13 @@ class GCovSampler(object):
         """
         return self._result
 
-    def calc_result(self):
+    def calc_result(self, weights=None):
         """
         Calculate the mcmc stats and the "best fit" stats
         """
         from numpy import diag
 
-        pars,pars_cov,neff = self.get_stats()
+        pars,pars_cov,neff = self.get_stats(weights=weights)
         pars_err=sqrt(diag(pars_cov))
 
         fracuse = neff/self._trials.shape[0]
@@ -3617,7 +3617,7 @@ class GCovSampler(object):
 
         self._result=res
  
-    def get_stats(self):
+    def get_stats(self, weights=None):
         """
         get expectation values and covariance for
         g from the trials
@@ -3626,12 +3626,15 @@ class GCovSampler(object):
         trials=self.get_trials()
         iweights = self.get_iweights()
 
-        if iweights is None:
-            neff = trials.shape[0]*1.0
-        else:
-            neff = iweights.sum()
+        # should we modify this for extra input weights?
+        neff = iweights.sum()
 
-        pars, pars_cov = stats.calc_mcmc_stats(trials, weights=iweights)
+        if weights is not None:
+            weights = weights * iweights
+        else:
+            weights = iweights
+
+        pars, pars_cov = stats.calc_mcmc_stats(trials, weights=weights)
 
         return pars, pars_cov, neff
  
