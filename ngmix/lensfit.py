@@ -109,6 +109,7 @@ class LensfitSensitivity(object):
         Calculate the sensitivity
         """
 
+        g_mean = zeros(2)
         g_sens = zeros(2)
 
         g1=self._g[:,0]
@@ -136,12 +137,14 @@ class LensfitSensitivity(object):
         R1sum = (R1*weights).sum()
         R2sum = (R2*weights).sum()
 
+        g_mean[0] = g1mean
+        g_mean[1] = g2mean
         g_sens[0] = 1 - R1sum/wsum
         g_sens[1] = 1 - R2sum/wsum
 
         self._nuse=g1.size
 
-        self._g_mean=array([g1mean, g2mean])
+        self._g_mean=g_mean
         self._g_sens=g_sens
 
     def _calc_g_sens_no_remove_prior(self):

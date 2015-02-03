@@ -3666,11 +3666,7 @@ class GCovSampler(object):
         set self._iweights for self._trials given the
         lnprob_func.  You need to run make_trials first
         """
-
-        if hasattr(self,'_iweights'):
-            return self._iweights
-        else:
-            return None
+        return self._iweights
 
     def set_iweights(self, lnprob_func):
         """
@@ -6859,6 +6855,9 @@ def test_isample(model,
     if show:
         import biggles
         import lensing
+        import mcmc
+
+        #mcmc.plot_results(samples)
 
         g1=samples[:,2]
         g2=samples[:,3]
