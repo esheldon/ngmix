@@ -3627,12 +3627,16 @@ class GCovSampler(object):
         iweights = self.get_iweights()
 
         # should we modify this for extra input weights?
-        neff = iweights.sum()
+        # maybe not: we want to know how well we sample
+        # what was input
+        #neff = iweights.sum()
 
         if weights is not None:
             weights = weights * iweights
+            neff = weights.sum()/weights.max()
         else:
             weights = iweights
+            neff = weights.sum()
 
         pars, pars_cov = stats.calc_mcmc_stats(trials, weights=weights)
 
