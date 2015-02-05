@@ -32,7 +32,7 @@ import numpy
 from numpy import array, zeros, diag, exp, sqrt, where, log, log10, isfinite
 from numpy import linalg
 from numpy.random import random as randu
-from numpy.linalg.linalg import LinAlgError
+from numpy.linalg import LinAlgError
 import time
 from pprint import pprint
 
@@ -1377,27 +1377,6 @@ class MCMCBase(FitterBase):
         trials  = sampler.flatchain
         lnprobs = sampler.lnprobability.reshape(self.nwalkers*nstep/thin)
 
-        '''
-        # bigger than lowval
-        mlowval=LOWVAL + 100
-        for i in xrange(trials.shape[1]):
-            w,=where(numpy.abs(trials[:,i]) < 1.e15)
-            wl,=where(lnprobs > mlowval)
-
-            if wl.size==0:
-                break
-
-            if wl.size != lnprobs.size:
-                print("        trimming",lnprobs.size-wl.size,"low lnprob")
-                trials=trials[w,:]
-                lnprobs=lnprobs[w]
-
-            if w.size != lnprobs.size:
-                print("        trimming",lnprobs.size-w.size,"huge vals")
-                #trials=trials[w,:]
-                #lnprobs=lnprobs[w]
-        '''
-
         self._trials=trials
         self._lnprobs=lnprobs
 
@@ -1995,7 +1974,7 @@ class MHTemp(MH):
         if not hasattr(self,'_weights'):
             self._max_loglike = self._loglike.max()
             logdiff = self._loglike-self._max_loglike
-            self._weights = numpy.exp(logdiff*(1.0 - self.Tinv))
+            self._weights = exp(logdiff*(1.0 - self.Tinv))
         return self._weights
 
     def _step(self):
@@ -3958,6 +3937,7 @@ def test_model(model,
                nwalkers=80,
                burnin=800,
                nstep=800,
+               thin=2,
                g_prior=None,
                do_triangle=False,
                bins=25,
@@ -4059,7 +4039,7 @@ def test_model(model,
 
     t0=time.time()
     pos=mc_obj.run_mcmc(guess, burnin)
-    pos=mc_obj.run_mcmc(pos, nstep, thin=2)
+    pos=mc_obj.run_mcmc(pos, nstep, thin=thin)
     mc_obj.calc_result()
     tm=time.time()-t0
 
@@ -4102,8 +4082,8 @@ def test_model(model,
                                  smooth=10)
         figure.show()
         figure.savefig('test.png')
-    return tm
 
+    return tm
 
 def test_model_margsky_many(Tfracs=None, T_psf=4.0, show=False, ntrial=10, skyfac=0.0, noise=0.001):
     """
