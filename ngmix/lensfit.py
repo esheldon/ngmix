@@ -5,7 +5,7 @@ function calc_lensfit_shear
 
 from __future__ import print_function
 import numpy
-from numpy import where, zeros, array
+from numpy import where, zeros, ones, array, isfinite, newaxis
 from .gexceptions import GMixRangeError, GMixFatalError
 
 _default_h=1.0e-6
@@ -117,11 +117,24 @@ class LensfitSensitivity(object):
 
         weights=self._weights
         if weights is None:
-            weights=numpy.ones(g1.size)
+            weights=ones(g1.size)
 
         # derivative of log prior
         dpri_by_g1 = self._g_prior.dlnbyg1_array(g1,g2,h=self._h)
         dpri_by_g2 = self._g_prior.dlnbyg2_array(g1,g2,h=self._h)
+
+        w,=where( isfinite(dpri_by_g1) & isfinite(dpri_by_g2) )
+
+        if w.size == 0:
+            raise GMixRangeError("no prior values > 0")
+        elif w.size != g1.size:
+            print("    found %d/%d finite" % (w.size, g1.size))
+
+        weights = weights[w]
+        g1 = g1[w]
+        g2 = g2[w]
+        dpri_by_g1 = dpri_by_g1[w]
+        dpri_by_g2 = dpri_by_g2[w]
 
         wsum = weights.sum()
 
@@ -142,7 +155,7 @@ class LensfitSensitivity(object):
         g_sens[0] = 1 - R1sum/wsum
         g_sens[1] = 1 - R2sum/wsum
 
-        self._nuse=g1.size
+        self._nuse=w.size
 
         self._g_mean=g_mean
         self._g_sens=g_sens
@@ -167,11 +180,11 @@ class LensfitSensitivity(object):
         if extra_weights is not None:
             doweights=True
             weights = prior*extra_weights
-            wsum = weights.sum()
         else:
             doweights=False
             weights = prior
-            wsum = prior.sum()
+
+        wsum = weights.sum()
 
         g1mean = (g1*weights).sum()/wsum
         g2mean = (g2*weights).sum()/wsum
@@ -278,6 +291,7 @@ def lensfit_jackknife(g, gsens,
                       chunksize=1,
                       get_sums=False,
                       get_shears=False,
+                      weights=None,
                       progress=False,
                       show=False,
                       eps=None,
@@ -289,6 +303,9 @@ def lensfit_jackknife(g, gsens,
 
     chunksize is the number of *pairs* to remove for each chunk
     """
+
+    if weights is None:
+        weights=ones(g.shape[0])
 
     if progress:
         import progressbar
@@ -302,8 +319,11 @@ def lensfit_jackknife(g, gsens,
     # some may not get used
     nchunks = npair/chunksize
 
-    g_sum = g.sum(axis=0)
-    gsens_sum = gsens.sum(axis=0)
+    wsum = weights.sum()
+    wa=weights[:,newaxis]
+
+    g_sum = (g*wa).sum(axis=0)
+    gsens_sum = (gsens*wa).sum(axis=0)
 
     shear = g_sum/gsens_sum
 
@@ -317,15 +337,19 @@ def lensfit_jackknife(g, gsens,
             frac=float(i+1)/nchunks
             pg.update(frac=frac)
 
-        j_g_sum     = g_sum     - g[beg:end, :].sum(axis=0)
-        j_gsens_sum = gsens_sum - gsens[beg:end,:].sum(axis=0)
+        this_wts = (weights[beg:end])[:,newaxis]
+        this_gsum = (g[beg:end,:]*this_wts).sum(axis=0)
+        this_gsens_sum = (gsens[beg:end,:]*this_wts).sum(axis=0)
+
+        j_g_sum     = g_sum     - this_gsum
+        j_gsens_sum = gsens_sum - this_gsens_sum
+        #j_g_sum     = g_sum     - g[beg:end, :].sum(axis=0)
+        #j_gsens_sum = gsens_sum - gsens[beg:end,:].sum(axis=0)
 
         shears[i, :] = j_g_sum/j_gsens_sum
 
     shear_cov = numpy.zeros( (2,2) )
     fac = (nchunks-1)/float(nchunks)
-
-    shear = shears.mean(axis=0)
 
     shear_cov[0,0] = fac*( ((shear[0]-shears[:,0])**2).sum() )
     shear_cov[0,1] = fac*( ((shear[0]-shears[:,0]) * (shear[1]-shears[:,1])).sum() )
