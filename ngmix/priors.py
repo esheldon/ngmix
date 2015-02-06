@@ -836,6 +836,7 @@ class GPriorBase(object):
                                     h=1.e-6,
                                     ring=False,
                                     prior=None,
+                                    isample=False,
                                     show=False,
                                     eps=None):
         """
@@ -912,13 +913,19 @@ class GPriorBase(object):
 
             g1s, g2s = shear_reduced(g1, g2, shear_true[ishear,0], shear_true[ishear,1])
 
+            # simulated bias from BA14
+            g1m = g1s*(1.0-0.1) + 0.03
+            g2m = g2s*(1.0-0.1)
+
             # add "noise" to the likelihood
             for i in xrange(nshape):
                 if (i % 1000) == 0:
                     stderr.write('.')
 
-                glike=TruncatedSimpleGauss2D(g1s[i],g2s[i],sigma,sigma,1.0)
+                glike=TruncatedSimpleGauss2D(g1m[i], g2m[i], sigma, sigma,1.0)
+
                 rg1,rg2=glike.sample(nsample)
+                iweights=None
 
                 if False:
                     nbin=30
@@ -930,7 +937,7 @@ class GPriorBase(object):
 
                 gsamples[:,0] = rg1
                 gsamples[:,1] = rg2
-                lsobj = lensfit.LensfitSensitivity(gsamples, prior, h=h)
+                lsobj = lensfit.LensfitSensitivity(gsamples, prior, weights=iweights, h=h)
                 g_sens[i,:] = lsobj.get_g_sens()
                 g_vals[i,:] = lsobj.get_g_mean()
 
@@ -2955,7 +2962,7 @@ class TruncatedSimpleGauss2D(object):
 
         return lnp
 
-    def get_lnprob(self,p1, p2):
+    def get_lnprob_scalar(self,p1, p2):
         """
         log probability
         """
@@ -2970,7 +2977,25 @@ class TruncatedSimpleGauss2D(object):
 
         return lnp
 
-    def get_prob(self,p1, p2):
+    def get_lnprob_array(self,p1, p2):
+        """
+        log probability
+        """
+
+        lnp=zeros(p1.size) - numpy.inf
+
+        psq = p1**2 + p2**2
+        w,=where(psq < self.maxval_sq)
+        if w.size > 0:
+
+            d1 = self.cen1-p1[w]
+            d2 = self.cen2-p2[w]
+            lnp[w] = -0.5*d1*d1*self.s2inv1 - 0.5*d2*d2*self.s2inv2
+
+        return lnp
+
+
+    def get_prob_scalar(self,p1, p2):
         """
         linear probability
         """
