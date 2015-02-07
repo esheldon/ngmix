@@ -3707,6 +3707,48 @@ class GCovSampler(object):
 
         return vals
 
+    def make_plots(self,
+                   weights=None,
+                   title=None,
+                   separate=False,
+                   width=1200,
+                   height=1200,
+                   show=False,
+                   prompt=False,
+                   **keys):
+        import mcmc
+        import biggles
+
+        biggles.configure('screen','width', width)
+        biggles.configure('screen','height', height)
+
+        if separate:
+            # returns a tuple burn_plt, hist_plt
+            plotfunc =mcmc.plot_results_separate
+        else:
+            plotfunc =mcmc.plot_results
+
+        trials=self.get_trials()
+        pdict={}
+        pdict['trials']=plotfunc(trials,
+                                 title=title,
+                                 show=show,
+                                 **keys)
+
+
+        if weights is not None:
+            pdict['wtrials']=plotfunc(trials,
+                                      weights=weights,
+                                      title='%s weighted' % title,
+                                      show=show)
+
+        if show and prompt:
+            key=raw_input('hit a key: ')
+            if key=='q':
+                stop
+
+        return pdict
+
     def _sample_raw(self, n):
         """
         sample from the cov, no truncation

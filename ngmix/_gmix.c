@@ -1834,6 +1834,7 @@ PyObject * PyGMix_convert_simple_double_logpars_band(PyObject* self, PyObject* a
     pars[3] = logpars[3];
     pars[4] = exp( logpars[4] );
     pars[5] = exp( logpars[5+band] );
+    //pars[5] = logpars[5+band];
 
     Py_RETURN_NONE;
 }
