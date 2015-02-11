@@ -2639,6 +2639,47 @@ class TruncatedGaussian(object):
         diff=x-self.mean
         return -0.5*diff*diff*self.ivar
 
+    def get_lnprob_array(self, x):
+        """
+        just raise error if out of rang
+        """
+        lnp = zeros(x.size)
+        lnp -= numpy.inf
+        w,=where( (x > self.minval) & (x < self.maxval) )
+        if w.size > 0:
+            diff=x[w]-self.mean
+            lnp[w] = -0.5*diff*diff*self.ivar
+
+        return lnp
+
+    def sample(self, nrand=1):
+        from numpy.random import normal
+        if nrand is None:
+            is_scalar=True
+            nrand=1
+        else:
+            is_scalar=False
+
+        vals=numpy.zeros(nrand)
+
+        ngood=0
+        nleft=nrand
+        while ngood < nrand:
+            
+            tvals = normal(loc=self.mean, scale=self.sigma, size=nleft)
+
+            w,=numpy.where( (tvals > self.minval) & (tvals < self.maxval) )
+            if w.size > 0:
+                vals[ngood:ngood+w.size] = tvals[w]
+                ngood += w.size
+                nleft -= w.size
+ 
+        if is_scalar:
+            vals=vals[0]
+
+        return vals
+
+
 class TruncatedGaussianPolar(object):
     """
     Truncated gaussian on a circle
@@ -2782,6 +2823,7 @@ class StudentPositive(Student):
 class Student2D(object):
     def __init__(self, mean1, mean2, sigma1, sigma2):
         """
+        circular student
         sigma is not std(x)
         """
         self.reset(mean1, mean2, sigma1, sigma2)
