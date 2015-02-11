@@ -502,6 +502,115 @@ class FitterBase(object):
             plist.append(band_list)
         return plist
 
+    def calc_cov(self, h, m):
+        """
+        Run get_cov() to calculate the covariance matrix at the best-fit point.
+        If all goes well, add 'pars_cov', 'pars_err', and 'g_cov' to the result
+        array
+
+        Note in get_cov, if the Hessian is singular, a diagonal cov matrix is
+        attempted to be inverted. If that finally fails LinAlgError is raised.
+        In that case we catch it and set a flag EIG_NOTFINITE and the cov is
+        not added to the result dict
+
+        Also if there are negative diagonal elements of the cov matrix, the 
+        EIG_NOTFINITE flag is set and the cov is not added to the result dict
+        """
+
+        res=self.get_result()
+
+        bad=True
+
+        try:
+            cov = self.get_cov(res['pars'], h=h, m=m)
+
+            cdiag = diag(cov)
+
+            w,=where(cdiag <= 0)
+            if w.size == 0:
+
+                err = sqrt(cdiag)
+                w,=where(isfinite(err))
+                if w.size != err.size:
+                    print("diagonals not finite:",err)
+                else:
+                    # everything looks OK
+                    bad=False
+            else:
+                print("diagonals negative:",cdiag)
+
+        except LinAlgError:
+            print("caught LinAlgError")
+
+        if bad:
+            res['flags'] |= EIG_NOTFINITE
+        else:
+            res['pars_cov'] = cov
+            res['pars_err']= err
+            res['g_cov'] = cov[2:2+2, 2:2+2]
+
+    def get_cov(self, pars, h, m):
+        """
+        calculate the covariance matrix at the specified point
+
+        This method understands the natural bounds on ellipticity.
+        If the ellipticity is larger than 1-m*h then it is scaled
+        back, perserving the angle.
+
+        If the Hessian is singular, an attempt is made to invert
+        a diagonal version. If that fails, LinAlgError is raised.
+
+        parameters
+        ----------
+        pars: array
+            Array of parameters at which to evaluate the cov matrix
+        h: step size, optional
+            Step size for finite differences, default 1.0e-3
+        m: scalar
+            The max allowed ellipticity is 1-m*h.
+            Note the derivatives require evaluations at +/- h,
+            so m should be greater than 1.
+
+        Raises
+        ------
+        LinAlgError:
+            If the hessian is singular a diagonal version is tried
+            and if that fails finally a LinAlgError is raised.
+        """
+        import covmatrix
+
+        # get a copy as an array
+        pars=numpy.array(pars)
+
+        g1=pars[2]
+        g2=pars[3]
+
+        g=sqrt(g1**2 + g2**2)
+
+        maxg=1.0-m*h
+
+        if g > maxg:
+            fac = maxg/g
+            g1 *= fac
+            g2 *= fac
+            pars[2] = g1
+            pars[3] = g2
+
+        # we could call covmatrix.get_cov directly but we want to fall back
+        # to a diagonal hessian if it is singular
+
+        hess=covmatrix.calc_hess(self.calc_lnprob, pars, h)
+
+        try:
+            cov = -linalg.inv(hess)
+        except LinAlgError:
+            # pull out a diagonal version of the hessian
+            # this might still fail
+            hdiag=diag(diag(hess))
+            cov = -linalg.inv(hess)
+        return cov
+
+
 
 class TemplateFluxFitter(FitterBase):
     """
@@ -834,114 +943,6 @@ class MaxSimple(FitterBase):
             m=5.0
             self.calc_cov(h, m)
 
-    def calc_cov(self, h, m):
-        """
-        Run get_cov() to calculate the covariance matrix at the best-fit point.
-        If all goes well, add 'pars_cov', 'pars_err', and 'g_cov' to the result
-        array
-
-        Note in get_cov, if the Hessian is singular, a diagonal cov matrix is
-        attempted to be inverted. If that finally fails LinAlgError is raised.
-        In that case we catch it and set a flag EIG_NOTFINITE and the cov is
-        not added to the result dict
-
-        Also if there are negative diagonal elements of the cov matrix, the 
-        EIG_NOTFINITE flag is set and the cov is not added to the result dict
-        """
-
-        res=self.get_result()
-
-        bad=True
-
-        try:
-            cov = self.get_cov(res['pars'], h=h, m=m)
-
-            cdiag = diag(cov)
-
-            w,=where(cdiag <= 0)
-            if w.size == 0:
-
-                err = sqrt(cdiag)
-                w,=where(isfinite(err))
-                if w.size != err.size:
-                    print("diagonals not finite:",err)
-                else:
-                    # everything looks OK
-                    bad=False
-            else:
-                print("diagonals negative:",cdiag)
-
-        except LinAlgError:
-            print("caught LinAlgError")
-
-        if bad:
-            res['flags'] |= EIG_NOTFINITE
-        else:
-            res['pars_cov'] = cov
-            res['pars_err']= err
-            res['g_cov'] = cov[2:2+2, 2:2+2]
-
-    def get_cov(self, pars, h, m):
-        """
-        calculate the covariance matrix at the specified point
-
-        This method understands the natural bounds on ellipticity.
-        If the ellipticity is larger than 1-m*h then it is scaled
-        back, perserving the angle.
-
-        If the Hessian is singular, an attempt is made to invert
-        a diagonal version. If that fails, LinAlgError is raised.
-
-        parameters
-        ----------
-        pars: array
-            Array of parameters at which to evaluate the cov matrix
-        h: step size, optional
-            Step size for finite differences, default 1.0e-3
-        m: scalar
-            The max allowed ellipticity is 1-m*h.
-            Note the derivatives require evaluations at +/- h,
-            so m should be greater than 1.
-
-        Raises
-        ------
-        LinAlgError:
-            If the hessian is singular a diagonal version is tried
-            and if that fails finally a LinAlgError is raised.
-        """
-        import covmatrix
-
-        # get a copy as an array
-        pars=numpy.array(pars)
-
-        g1=pars[2]
-        g2=pars[3]
-
-        g=sqrt(g1**2 + g2**2)
-
-        maxg=1.0-m*h
-
-        if g > maxg:
-            fac = maxg/g
-            g1 *= fac
-            g2 *= fac
-            pars[2] = g1
-            pars[3] = g2
-
-        # we could call covmatrix.get_cov directly but we want to fall back
-        # to a diagonal hessian if it is singular
-
-        hess=covmatrix.calc_hess(self.calc_lnprob, pars, h)
-
-        try:
-            cov = -linalg.inv(hess)
-        except LinAlgError:
-            # pull out a diagonal version of the hessian
-            # this might still fail
-            hdiag=diag(diag(hess))
-            cov = -linalg.inv(hess)
-        return cov
-
 class MaxCoellip(MaxSimple):
     """
     A class for direct maximization of the likelihood.
@@ -1020,6 +1021,7 @@ class LMSimple(FitterBase):
             result.update(stat_dict)
 
         self._result=result
+    run_max=run_lm
 
     def _setup_data(self, guess):
         """
