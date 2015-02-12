@@ -1289,3 +1289,14 @@ class PriorSimpleSep(object):
             samples=samples[0,:]
         return samples
 
+    def __repr__(self):
+        reps=[]
+        reps += [str(self.cen_prior),
+                 str(self.g_prior),
+                 str(self.T_prior)]
+
+        for p in self.F_priors:
+            reps.append( str(p) )
+
+        rep='\n'.join(reps)
+        return rep
