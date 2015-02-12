@@ -3565,7 +3565,9 @@ class GCovSampler(object):
         """
         run sample() and set internal trials attribute
         """
-        self._trials = self.sample(n)
+        samples = self.sample(n)
+        self._trials = samples
+
     make_trials=make_samples
 
     def get_result(self):
@@ -3583,7 +3585,9 @@ class GCovSampler(object):
         pars,pars_cov,neff = self.get_stats(weights=weights)
         pars_err=sqrt(diag(pars_cov))
 
-        fracuse = neff/self._trials.shape[0]
+        trials=self.get_trials()
+        nsample=trials.shape[0]
+        efficiency = neff/nsample
 
         res={'flags':0,
              'pars':pars,
@@ -3591,10 +3595,9 @@ class GCovSampler(object):
              'pars_err':pars_err,
              'g':pars[2:2+2],
              'g_cov':pars_cov[2:2+2, 2:2+2],
+             'nsample':nsample,
              'neff':neff,
-             'fracuse':fracuse,
-             'tau':0.0,
-             'arate':1.0}
+             'efficiency':efficiency}
 
         self._result=res
  
