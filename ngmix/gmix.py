@@ -498,7 +498,7 @@ class GMix(object):
     def __repr__(self):
         rep=[]
         #fmt="p: %-10.5g row: %-10.5g col: %-10.5g irr: %-10.5g irc: %-10.5g icc: %-10.5g"
-        fmt="p: %-12.8g row: %-12.8g col: %-12.8g irr: %-12.8g irc: %-12.8g icc: %-12.8g"
+        fmt="p: %.4g row: %.4g col: %.4g irr: %.4g irc: %.4g icc: %.4g"
         for i in xrange(self._ngauss):
             t=self._data[i]
             s=fmt % (t['p'],t['row'],t['col'],t['irr'],t['irc'],t['icc'])
