@@ -1022,7 +1022,8 @@ class LMSimple(FitterBase):
 
         self._result=result
     run_max=run_lm
-
+    go=run_lm
+    
     def _setup_data(self, guess):
         """
         try very hard to initialize the mixtures
