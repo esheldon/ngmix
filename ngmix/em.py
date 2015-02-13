@@ -156,7 +156,7 @@ class ApproxEMSimple(object):
         """
         return self._result
 
-    def run_em(self, miniter=20, maxiter=20, tol=1.e-4, guess=None, verbose=False):
+    def run_em(self, miniter=10, maxiter=10, tol=1.e-4, guess=None, verbose=False):
         """
         Run the em algorithm from the input starting guesses
 
@@ -189,7 +189,7 @@ class ApproxEMSimple(object):
         g1,g2 = emshear.e1e2_to_g1g2(pars[2],pars[3])
         pars[2] = g1
         pars[3] = g2
-        self._result={'pars':pars}
+        self._result={'pars':pars,'lnprob':self._fit.lnL(my_pars)}
 
     # alias
     go=run_em
