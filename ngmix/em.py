@@ -134,6 +134,66 @@ class GMixEM(object):
     # alias
     go=run_em
 
+class ApproxEMSimple(object):
+    """
+    Fit a set of observations with psfs/jacobians with 
+    an approximate EM algorithm
+    
+    DOES NOT CONVERGE TO MAX LIKE POINT
+
+    parameters
+    ----------
+    mb_obs_list: MulitBandObsList
+    
+    """
+    def __init__(self, mb_obs_list, model):
+        self._obs = mb_obs_list
+        self._model = model
+        
+    def get_result(self):
+        """
+        Get some stats about the processing
+        """
+        return self._result
+
+    def run_em(self, miniter=20, maxiter=20, tol=1.e-4, guess=None, verbose=False):
+        """
+        Run the em algorithm from the input starting guesses
+
+        parameters
+        ----------
+        guess: array-like, optional
+            guess parameters 
+        miniter: number, optional
+            minimum number of iterations, default 20
+        maxiter: number, optional
+            The maximum number of iterations, default 100
+        tol: number, optional
+            The tolerance in the parameters for ocnvergence
+            default 1.e-4
+        """
+
+        import emshear
+        my_guess = None
+        if guess is not None:            
+            e1,e2 = emshear.g1g2_to_e1e2(guess[2],guess[3])
+            my_guess = guess.copy()
+            my_guess[2] = e1
+            my_guess[3] = e2
+
+        self._fit = emshear.EMFitSimple(self._obs,self._model,guess=my_guess)        
+        self._fit.go(maxiter,minitr=miniter,xtol=tol,verbose=verbose)
+
+        my_pars = self._fit.get_pars()
+        pars = my_pars.copy()
+        g1,g2 = emshear.e1e2_to_g1g2(pars[2],pars[3])
+        pars[2] = g1
+        pars[3] = g2
+        self._result={'pars':pars}
+
+    # alias
+    go=run_em
+    
 _sums_dtype=[('gi','f8'),
              # scratch on a given pixel
              ('trowsum','f8'),
