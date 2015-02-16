@@ -59,7 +59,7 @@ class GPriorBase(object):
         g1arr=array(g1arr, dtype='f8', copy=False)
         g2arr=array(g2arr, dtype='f8', copy=False)
 
-        output=numpy.zeros(g1arr.size)
+        output=numpy.zeros(g1arr.size) + LOWVAL
         self.fill_lnprob_array2d(g1arr, g2arr, output)
         return output
 
@@ -914,8 +914,10 @@ class GPriorBase(object):
             g1s, g2s = shear_reduced(g1, g2, shear_true[ishear,0], shear_true[ishear,1])
 
             # simulated bias from BA14
-            g1m = g1s*(1.0-0.1) + 0.03
-            g2m = g2s*(1.0-0.1)
+            #g1m = g1s*(1.0-0.1) + 0.03
+            #g2m = g2s*(1.0-0.1)
+            g1m = g1s
+            g2m = g2s
 
             # add "noise" to the likelihood
             for i in xrange(nshape):
@@ -1693,7 +1695,7 @@ class GPriorBA(GPriorBase):
 
 
 #
-# these don't have the 2*pi*g in them
+# does not have the 2*pi*g in them
 def _gprior2d_exp_scalar(A, a, g0sq, gmax, g, gsq):
 
     if g > gmax:
@@ -1706,6 +1708,9 @@ def _gprior2d_exp_scalar(A, a, g0sq, gmax, g, gsq):
 
     return prior
 
+def _gprior1d_exp_scalar(A, a, g0sq, gmax, g, gsq):
+    return 2*numpy.pi*g*_gprior2d_exp_scalar(A, a, g0sq, gmax, g, gsq)
+
 def _gprior2d_exp_array(A, a, g0sq, gmax, g, gsq, output):
 
     w,=where(g < gmax)
@@ -1716,6 +1721,18 @@ def _gprior2d_exp_array(A, a, g0sq, gmax, g, gsq, output):
     denom = (1+g)*sqrt(gsq[w] + g0sq)
 
     output[w]=numer/denom
+
+def _gprior1d_exp_scalar(A, a, g0sq, gmax, g, gsq, output):
+    w,=where(g < gmax)
+    if w.size == 0:
+        return
+
+    numer = A*(1-exp( (g[w]-gmax)/a ))
+    denom = (1+g)*sqrt(gsq[w] + g0sq)
+
+    output[w]=numer/denom
+    output[w] *= (numpy.pi*g[w])
+
 
 
 class FlatPriorBase(object):
@@ -2037,7 +2054,6 @@ class GPriorM(GPriorBase):
         self.hhalf = 0.5*self.h
         self.hinv  = 1./self.h
 
-        self.lnprob_mode = self.get_lnprob_scalar2d(0.0, 0.0)
 
     def get_prob_scalar2d(self, g1, g2):
         """
@@ -2048,7 +2064,7 @@ class GPriorM(GPriorBase):
         g = numpy.sqrt(gsq)
         return _gprior2d_exp_scalar(self.A, self.a, self.g0sq, self.gmax, g, gsq)
 
-    def get_lnprob_scalar2d(self, g1, g2):
+    def get_lnprob_scalar2d(self, g1, g2, submode=True):
         """
         Get the 2d prob for the input g value
         """
@@ -2061,7 +2077,7 @@ class GPriorM(GPriorBase):
             raise GMixRangeError("g too big: %s" % g)
 
         lnp=numpy.log(p)
-        lnp -= self.lnprob_mode
+
         return lnp
 
     def fill_prob_array2d(self, g1arr, g2arr, output):
@@ -2089,6 +2105,7 @@ class GPriorM(GPriorBase):
         """
         Fill the output with the 1d prob for the input g value
         """
+        gsq=garr**2
         _gprior2d_exp_array(self.A, self.a, self.g0sq, self.gmax, garr, gsq, output)
 
         output *= 2*numpy.pi*garr
