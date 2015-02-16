@@ -34,11 +34,20 @@ class Observation(object):
 
         self.meta={}
 
+        # If jacobian is None, set UnitJacobian
         self.set_jacobian(jacobian)
+
+        # if weight is None, set unity weights
         self.set_weight(weight)
-        self.set_gmix(gmix)
-        self.set_aperture(aperture)
-        self.set_psf(psf)
+
+        if gmix is not None:
+            self.set_gmix(gmix)
+
+        if aperture is not None:
+            self.set_aperture(aperture)
+
+        if psf is not None:
+            self.set_psf(psf)
 
     def set_weight(self, weight):
         """
@@ -73,13 +82,16 @@ class Observation(object):
         assert isinstance(jacobian,Jacobian),"jacobian must be of type Jacobian"
         self.jacobian=jacobian
 
+    def get_jacobian(self):
+        return self.jacobian.copy()
+
     def set_psf(self,psf):
         """
         Set a psf Observation
         """
-        if psf is not None:
-            mess="psf must be of Observation, got %s" % type(psf)
-            assert isinstance(psf,Observation),mess
+
+        mess="psf must be of Observation, got %s" % type(psf)
+        assert isinstance(psf,Observation),mess
         self.psf=psf
 
     def get_psf(self):
@@ -119,10 +131,9 @@ class Observation(object):
         """
         Set a psf gmix.
         """
-        if gmix is not None:
-            mess="gmix must be of type GMix, got %s" % type(gmix)
-            assert isinstance(gmix,GMix),mess
-        self.gmix=gmix
+        mess="gmix must be of type GMix, got %s" % type(gmix)
+        assert isinstance(gmix,GMix),mess
+        self.gmix=gmix.copy()
 
     def get_gmix(self):
         """
@@ -142,22 +153,25 @@ class Observation(object):
         """
         Set an aperture.
         """
+        if self.has_aperture():
+            del self.aperture
+
         if aperture is not None:
             self.aperture=float(aperture)
-        else:
-            self.aperture=None
 
     def get_aperture(self):
         """
         get a copy of the aperture
         """
+        if not self.has_aperture():
+            raise RuntimeError("this obs has no aperture set")
         return copy.copy(self.aperture)
 
     def has_aperture(self):
         """
         returns True if the aperture is not None
         """
-        return self.aperture is not None
+        return hasattr(self,'aperture')
 
     def update_meta_data(self, meta_dict):
         """
