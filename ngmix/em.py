@@ -108,8 +108,8 @@ class GMixEM(object):
         """
 
 
-        self._gm        = gmix_guess.copy()
-        self._ngauss    = len(self._gm)
+        gmtmp = gmix_guess.copy()
+        self._ngauss    = len(gmtmp)
         self._sums      = numpy.zeros(self._ngauss, dtype=_sums_dtype)
         self._sky_guess = sky_guess
         self._maxiter   = maxiter
@@ -117,7 +117,7 @@ class GMixEM(object):
 
         # will raise GMixRangeError, but not GMixMaxIterEM, which
         # we handle below
-        numiter, fdiff = _gmix.em_run(self._gm._data,
+        numiter, fdiff = _gmix.em_run(gmtmp._data,
                                       self._obs.image,
                                       self._obs.jacobian._data,
                                       self._sums,
@@ -125,6 +125,11 @@ class GMixEM(object):
                                       self._counts,
                                       self._tol,
                                       self._maxiter)
+
+        # we have mutated the _data elements, we want to make
+        # sure the pars are propagated.  Make a new full gm
+        pars=gmtmp.get_full_pars()
+        self._gm=GMix(pars=pars)
 
         self._result={'numiter':numiter,
                       'fdiff':fdiff}
