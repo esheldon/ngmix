@@ -258,7 +258,7 @@ class FitterBase(object):
     def calc_lnprob(self, pars, get_s2nsums=False, get_priors=False):
         """
         This is all we use for mcmc approaches, but also used generally for the
-        "_get_fit_stats" method.  For the max likelihood fitter we also have a
+        "get_fit_stats" method.  For the max likelihood fitter we also have a
         _get_ydiff method
         """
 
@@ -309,7 +309,7 @@ class FitterBase(object):
             else:
                 return ln_prob
 
-    def _get_fit_stats(self, pars):
+    def get_fit_stats(self, pars):
         """
         Get some fit statistics for the input pars.
 
@@ -348,12 +348,12 @@ class FitterBase(object):
 
         initialize the list of lists of gaussian mixtures
         """
-        psf=self.obs[0][0].psf
-        if psf is None:
-            self.dopsf=False
-        else:
-            self.dopsf=True
 
+        if self.obs[0][0].has_psf():
+            self.dopsf=True
+        else:
+            self.dopsf=False
+            
         gmix_all0 = MultiBandGMixList()
         gmix_all  = MultiBandGMixList()
 
@@ -366,7 +366,7 @@ class FitterBase(object):
 
             for obs in obs_list:
                 if self.dopsf:
-                    psf_gmix=obs.psf.gmix
+                    psf_gmix=obs.get_psf_gmix()
 
                     gm0=gmix.make_gmix_model(band_pars, self.model)
                     gm=gm0.convolve(psf_gmix)
@@ -403,7 +403,7 @@ class FitterBase(object):
 
             for i,obs in enumerate(obs_list):
 
-                psf_gmix=obs.psf.gmix
+                psf_gmix=obs.get_psf_gmix()
 
                 gm0=gmix_list0[i]
                 gm=gmix_list[i]
@@ -890,7 +890,7 @@ class MaxSimple(FitterBase):
                 result['g'] = pars[2:2+2]
             
                 # based on last entry
-                fit_stats = self._get_fit_stats(pars)
+                fit_stats = self.get_fit_stats(pars)
                 result.update(fit_stats)
 
     def run_max_nm(self, guess, **keys):
@@ -936,7 +936,7 @@ class MaxSimple(FitterBase):
             result['g'] = pars[2:2+2]
         
             # based on last entry
-            fit_stats = self._get_fit_stats(pars)
+            fit_stats = self.get_fit_stats(pars)
             result.update(fit_stats)
 
             h=1.0e-3
@@ -1017,7 +1017,7 @@ class LMSimple(FitterBase):
         if result['flags']==0:
             result['g'] = result['pars'][2:2+2].copy()
             result['g_cov'] = result['pars_cov'][2:2+2, 2:2+2].copy()
-            stat_dict=self._get_fit_stats(result['pars'])
+            stat_dict=self.get_fit_stats(result['pars'])
             result.update(stat_dict)
 
         self._result=result
@@ -1445,7 +1445,7 @@ class MCMCBase(FitterBase):
              'arate':self._arate}
 
         # note get_fits_stats expects pars in log space
-        fit_stats = self._get_fit_stats(pars)
+        fit_stats = self.get_fit_stats(pars)
         res.update(fit_stats)
 
         self._result=res
@@ -3565,8 +3565,7 @@ class GCovSampler(object):
         """
         run sample() and set internal trials attribute
         """
-        samples = self.sample(n)
-        self._trials = samples
+        self._trials = self.sample(n)
 
     make_trials=make_samples
 
@@ -6094,8 +6093,8 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
             g1=0.1,
             g2=0.05,
             sigma_fac=5.0,
+            jfac=1.0,
             prior_type='flat',
-            psf_model='em2',
             verbose=True,
             show=False,
             dims=None,
@@ -6120,6 +6119,7 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
     import images
     from .em import GMixMaxIterEM
 
+    jfac2=jfac*jfac
     numpy.random.seed(seed)
 
     fmt='%12.6f'
@@ -6128,18 +6128,20 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
     # simulation
     #
 
+    sigma = sigma*jfac
+
     # PSF pars
     counts_psf=100.0
     noise_psf=0.01
     g1_psf=0.00
     g2_psf=0.05
-    T_psf=4.0
+    T_psf=4.0*jfac2
 
     T=2.*sigma**2
-    sigma=sqrt( (T + T_psf)/2. )
+    sigmatot=sqrt( (T + T_psf)/2. )
 
     if dims is None:
-        dims=[2.*sigma_fac*sigma]*2
+        dims=[2.*sigma_fac*sigmatot/jfac]*2
 
     cen_orig=array( [(dims[0]-1)/2.]*2 )
 
@@ -6148,10 +6150,10 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
     else:
         cen = cen_orig.copy()
 
-    j=UnitJacobian(cen[0],cen[1])
+    j=Jacobian(cen[0],cen[1], jfac, 0.0, 0.0, jfac)
 
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
-    gm_psf=gmix.GMixModel(pars_psf, "turb")
+    gm_psf=gmix.GMixModel(pars_psf, "gauss")
 
     pars_obj = array([0.0, 0.0, g1, g2, T, counts])
     npars=pars_obj.size
@@ -6159,7 +6161,7 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
 
     gm=gm_obj0.convolve(gm_psf)
 
-    jpsf=UnitJacobian(cen_orig[0], cen_orig[1])
+    jpsf=Jacobian(cen_orig[0], cen_orig[1], jfac, 0.0, 0.0, jfac)
     im_psf=gm_psf.make_image(dims, jacobian=jpsf, nsub=16)
     im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
     wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
@@ -6179,50 +6181,14 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
     mc_psf=em.GMixEM(psf_obs)
 
     while True:
-        if psf_model=='em1':
-            emo_guess=gm_psf.copy()
-            emo_guess._data['p'] = 1.0
-            emo_guess._data['row'] += 0.1*srandu()
-            emo_guess._data['col'] += 0.1*srandu()
-            emo_guess._data['irr'] += 0.5*srandu()
-            emo_guess._data['irc'] += 0.1*srandu()
-            emo_guess._data['icc'] += 0.5*srandu()
-        elif psf_model=='em2':
-            gpars=zeros(2*6)
+        emo_guess=gm_psf.copy()
+        emo_guess._data['p'] = 1.0
+        emo_guess._data['row'] += 0.1*srandu()
+        emo_guess._data['col'] += 0.1*srandu()
+        emo_guess._data['irr'] += 0.5*srandu()
+        emo_guess._data['irc'] += 0.1*srandu()
+        emo_guess._data['icc'] += 0.5*srandu()
 
-            Tguess=array([0.6,0.3])*gm_psf.get_T()
-            pguess=array([0.5,0.2])
-            for i in xrange(2):
-                gpars[i*6 + 0] = pguess[i]*(1.0+0.05*srandu())
-                gpars[i*6 + 1] = 0.05*srandu()
-                gpars[i*6 + 2] = 0.05*srandu()
-                gpars[i*6 + 3] = 0.5*Tguess[i]*(1.0+0.05*srandu())
-                gpars[i*6 + 4] = 0.01*srandu()
-                gpars[i*6 + 5] = 0.5*Tguess[i]*(1.0+0.05*srandu())
-
-            emo_guess=GMix(pars=gpars)
-            #print("psf guess:")
-            #print(emo_guess)
-            #print('dets:',emo_guess._data['det'])
-
-        elif psf_model=='em3':
-            gpars=zeros(3*6)
-
-            #Tguess=array([0.6,0.3,0.1])*gm_psf.get_T()
-            Tguess=array([1/3.]*3)*gm_psf.get_T()
-            pguess=array([0.5,0.4,0.1])
-            for i in xrange(3):
-                gpars[i*6 + 0] = pguess[i]*(1.0+0.05*srandu())
-                gpars[i*6 + 1] = 0.05*srandu()
-                gpars[i*6 + 2] = 0.05*srandu()
-                gpars[i*6 + 3] = 0.5*Tguess[i]*(1.0+0.05*srandu())
-                gpars[i*6 + 4] = 0.01*srandu()
-                gpars[i*6 + 5] = 0.5*Tguess[i]*(1.0+0.05*srandu())
-
-            emo_guess=GMix(pars=gpars)
-            #print("psf guess:")
-            #print(emo_guess)
-            #print('dets:',emo_guess._data['det'])
 
         try:
             mc_psf.run_em(emo_guess, sky, maxiter=2000)
@@ -6236,8 +6202,8 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
         print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
 
     psf_fit=mc_psf.get_gmix()
-    #print("fit psf:")
-    #print(psf_fit)
+    
+    print("fit psf T:",psf_fit.get_T())
 
     psf_obs.set_gmix(psf_fit)
 
