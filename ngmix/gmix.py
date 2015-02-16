@@ -396,8 +396,8 @@ class GMix(object):
                                                               nsub)
 
         else:
-            aperture=obs.get_aperture()
-            if aperture is not None:
+            if obs.has_aperture():
+                aperture=obs.get_aperture()
                 #print("using aper:",aperture)
                 loglike,s2n_numer,s2n_denom=_gmix.get_loglike_aper(self._data,
                                                                    obs.image,
