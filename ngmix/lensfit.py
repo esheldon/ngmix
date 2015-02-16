@@ -130,11 +130,11 @@ class LensfitSensitivity(object):
         elif w.size != g1.size:
             print("    found %d/%d finite" % (w.size, g1.size))
 
-        weights = weights[w]
-        g1 = g1[w]
-        g2 = g2[w]
-        dpri_by_g1 = dpri_by_g1[w]
-        dpri_by_g2 = dpri_by_g2[w]
+            weights = weights[w]
+            g1 = g1[w]
+            g2 = g2[w]
+            dpri_by_g1 = dpri_by_g1[w]
+            dpri_by_g2 = dpri_by_g2[w]
 
         wsum = weights.sum()
 
