@@ -1257,7 +1257,7 @@ class PriorSimpleSep(object):
 
         return lnp
 
-    def sample(self, n=None):
+    def sample(self, n=None, **unused_keys):
         """
         Get random samples
         """
