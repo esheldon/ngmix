@@ -246,6 +246,14 @@ class GMix(object):
     # alias
     set_psum=set_flux
 
+
+    def set_norms(self):
+        """
+        Needed to actually evaluate the gaussian.  This is done internally
+        by the c code so if all goes well you don't need to call this
+        """
+        _gmix.set_norms(self._data)
+
     def fill(self, pars):
         """
         fill the gaussian mixture from a 'full' parameter array.
@@ -344,8 +352,6 @@ class GMix(object):
         start: int, optional
             Where to start in the array, default 0
         """
-
-        #_gmix.set_norms(self._data)
 
         nuse=fdiff.size-start
 
