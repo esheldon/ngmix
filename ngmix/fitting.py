@@ -995,8 +995,8 @@ class LMSimple(FitterBase):
         # xtol (tol in solution), etc
         self.lm_pars=keys['lm_pars']
 
-        # center1 + center2 + shape1 + shape2 + T + fluxes
-        self.n_prior_pars=1 + 1 + 1 + 1 + 1 + self.nband
+        # center1 + center2 + shape + T + fluxes
+        self.n_prior_pars=1 + 1 + 1 + 1 + self.nband
 
         self.fdiff_size=self.totpix + self.n_prior_pars
 
