@@ -345,6 +345,8 @@ class GMix(object):
             Where to start in the array, default 0
         """
 
+        #_gmix.set_norms(self._data)
+
         nuse=fdiff.size-start
 
         image=obs.image
@@ -389,6 +391,7 @@ class GMix(object):
         """
 
         if nsub > 1:
+            #print("doing nsub")
             loglike,s2n_numer,s2n_denom=_gmix.get_loglike_sub(self._data,
                                                               obs.image,
                                                               obs.weight,
@@ -462,6 +465,7 @@ class GMix(object):
             Defines a grid for sub-pixel integration 
         """
 
+        #print("using margsky")
         image=obs.image
 
         dt=model_image.dtype.descr[0][1]
