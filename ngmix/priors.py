@@ -1308,6 +1308,58 @@ class GPriorBase(object):
         W = Wsum * (1.0/ntot)
         return W
 
+    def dofit(self, xdata, ydata, guess=None, show=False):
+        """
+        fit the prior to data
+
+        you might need to implement _get_guess
+        """
+        from .fitting import run_leastsq
+        from .fitting import print_pars
+
+        w,=where(ydata > 0)
+        self.xdata = xdata[w]
+        self.ydata = ydata[w]
+        self.ierr = 1.0/sqrt(self.ydata)
+
+        dof=self.xdata.size-3
+
+        if guess is None:
+            guess=self._get_guess(self.ydata.sum())
+
+        res = run_leastsq(self._calc_fdiff, guess, dof, 0, maxfev=4000)
+
+        self.fit_pars=res['pars']
+        self.fit_pars_cov=res['pars_cov']
+        self.fit_perr = res['pars_err']
+
+        print("flags:",res['flags'],"nfev:",res['nfev'])
+        print_pars(res['pars'], front="pars: ")
+        print_pars(res['pars_err'], front="perr: ")
+
+        if show:
+            self._compare_fit(res['pars'])
+
+    def _calc_fdiff(self, pars):
+        """
+        for the fitter
+        """
+        
+        self.set_pars(pars)
+        p = self.get_prob_array1d(self.xdata)
+        fdiff = (p-self.ydata)*self.ierr
+        return fdiff
+
+    def _compare_fit(self, pars):
+        import biggles
+        self.set_pars(pars)
+
+        p = self.get_prob_array1d(self.xdata)
+
+        plt=biggles.plot(self.xdata, self.ydata,visible=False)
+        plt.add(biggles.Curve(self.xdata, p, color='red'))
+        plt.show()
+
 
 class GPriorBA(GPriorBase):
     """
@@ -1990,104 +2042,6 @@ class GPriorGreat3Exp(GPriorBase):
 
         return prob
 
-    def dofit_lm(self, xdata, ydata, guess=None, show=False):
-        from .fitting import run_leastsq
-        from .fitting import print_pars
-
-        w,=where(ydata > 0)
-        self.xdata = xdata[w]
-        self.ydata = ydata[w]
-        self.ierr = 1.0/sqrt(self.ydata)
-
-        dof=self.xdata.size-3
-
-        if guess is None:
-            guess=self._get_guess(self.ydata.sum())
-
-        res = run_leastsq(self._calc_fdiff, guess, dof, 0, maxfev=4000)
-
-        self.fit_pars=res['pars']
-        self.fit_pars_cov=res['pars_cov']
-        self.fit_perr = res['pars_err']
-
-        print("flags:",res['flags'],"nfev:",res['nfev'])
-        print_pars(res['pars'], front="pars: ")
-        print_pars(res['pars_err'], front="perr: ")
-
-        if show:
-            self._compare_fit(res['pars'])
-
-
-    def dofit_emcee(self, xdata, ydata, guess=None, nwalkers=80,burnin=800,nstep=800):
-        import emcee
-        from . import stats
-        from .fitting import print_pars
-
-        self.xdata = xdata
-        self.ydata = ydata
-
-        npars=3
-        sampler = emcee.EnsembleSampler(nwalkers, 
-                                        self.npars, 
-                                        self._eval_lnprob,
-                                        a=2.0)
-
-        if guess is None:
-            guess=self._get_guess(self.ydata.sum(), n=nwalkers)
-
-        print("burn")
-        pos, prob, state = sampler.run_mcmc(guess, burnin)
-        print("steps")
-        pos, prob, state = sampler.run_mcmc(pos, nstep)
-
-        self.trials  = sampler.flatchain
-
-        pars,pars_cov = stats.calc_mcmc_stats(self.trials)
-        perr=sqrt(diag(pars_cov))
-
-        self.fit_pars=pars
-        self.fit_pars_cov=pars_cov
-        self.fit_perr = perr
-
-        print_pars(pars, front="pars: ")
-        print_pars(perr, front="perr: ")
-
-
-    def _eval_lnprob(self, pars):
-        """
-        for the fitter
-        """
-        self.set_pars(pars)
-        p = self.get_prob_array1d(self.xdata)
-
-        lnp = -0.5* ( (self.ydata-p)**2 ).sum()
-
-        return lnp
-
-    def _calc_fdiff(self, pars):
-        """
-        for the fitter
-        """
-        fdiff = self.xdata*0 + LOWVAL
-        #if (pars[1] < 0 or pars[1] > 1.0e6
-        #        or pars[2] < 0 or pars[2] > 100):
-        #    return fdiff
-        
-        self.set_pars(pars)
-        p = self.get_prob_array1d(self.xdata)
-        fdiff[:] = (p-self.ydata)*self.ierr
-        return fdiff
-
-    def _compare_fit(self, pars):
-        import biggles
-        self.set_pars(pars)
-
-        p = self.get_prob_array1d(self.xdata)
-
-        plt=biggles.plot(self.xdata, self.ydata,visible=False)
-        plt.add(biggles.Curve(self.xdata, p, color='red'))
-        plt.show()
-
     def _get_guess(self, num, n=None):
         Aguess=1.3*num*(self.xdata[1]-self.xdata[0])
         cen=[Aguess, 1.64042, 0.0554674]
@@ -2102,6 +2056,94 @@ class GPriorGreat3Exp(GPriorBase):
             guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n))
 
             return guess
+
+class GPriorGreatDES(GPriorGreat3Exp):
+    """
+    """
+    def __init__(self, pars=None, gmax=1.0):
+
+        self.gmax=float(gmax)
+
+        self.npars=4
+        if pars is not None:
+            self.set_pars(pars)
+
+    def set_pars(self, pars):
+        pars=array(pars)
+
+        assert (pars.size==self.npars),"npars must be 3"
+
+        self.pars=pars
+
+        self.A = pars[0]
+        self.a = pars[1]
+        self.g0 = pars[2]
+        self.g0_sq = self.g0**2
+
+        self.index=pars[3]
+        #self.index2=pars[4]
+
+    def _get_prob2d(self, g):
+        """
+        no error checking
+
+        no 2*pi*g
+        """
+        gsq = g**2
+
+
+        omgsq=1.0-gsq
+
+
+        A=self.A
+        a=self.a
+        g0_sq=self.g0_sq
+        gmax=self.gmax
+
+        #omgsq_p = omgsq**self.index2
+        omgsq_p = omgsq**2
+
+        #arg=((g-gmax)/a)**2
+        #numer = A*(1-exp(  -arg**self.index ))**self.index2 * omgsq_p
+
+        #arg=(g-gmax)/a
+        #numer = A*(1-exp(arg))**self.index * omgsq_p
+
+        arg=(g-gmax)/a
+        numer = A*(1-exp(arg)) * omgsq_p
+
+        denom = (0.05+g)**self.index * sqrt(gsq + g0_sq)
+        #denom = (g0_sq+g)**self.index * sqrt(gsq + g0_sq)
+
+        prob=numer/denom
+
+        return prob
+
+    def _get_guess(self, num, n=None):
+        Aguess=1.3*num*(self.xdata[1]-self.xdata[0])
+        #cen=[Aguess, 1.64042, 0.0554674, 2.0]
+        #cen=[Aguess, 1.64042, 0.0554674, 0.5]
+        #cen=[Aguess, 1.64042, 0.0554674, 0.5, 1.0]
+        #cen=[Aguess, 1.64042, 0.0554674, 1.0]
+        cen=[Aguess, 1.64042, 0.0554674, 1.0]
+
+        if n is None:
+            n=1
+            is_scalar=True
+        else:
+            is_scalar=False
+
+        guess=zeros( (n, self.npars) )
+
+        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n))
+        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n))
+        guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n))
+        guess[:,3] = cen[3]*(1.0 + 0.2*srandu(n))
+        #guess[:,4] = cen[4]*(1.0 + 0.2*srandu(n))
+
+        if is_scalar:
+            guess=guess[0,:]
+        return guess
 
 
 def make_gprior_great3_exp():
