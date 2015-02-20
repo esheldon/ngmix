@@ -1360,10 +1360,13 @@ class GPriorBase(object):
         import biggles
         self.set_pars(pars)
 
-        p = self.get_prob_array1d(self.xdata)
 
         plt=biggles.plot(self.xdata, self.ydata,visible=False)
-        plt.add(biggles.Curve(self.xdata, p, color='red'))
+
+        xvals = numpy.linspace(0.0, 1.0, 1000)
+        p = self.get_prob_array1d(xvals)
+
+        plt.add(biggles.Curve(xvals, p, color='red'))
         plt.show()
 
 
@@ -2133,7 +2136,7 @@ class GPriorGreatDES(GPriorGreat3Exp):
 
         arg=(g-gmax)/a
         #arg=(g-1.0)/a
-        numer = A*(1-exp(arg)) * omgsq_p * (0.001+g)**self.index
+        numer = A*(1-exp(arg)) * omgsq_p * (0.01+g)**self.index
         #numer = A* omgsq_p * (0.01+g)**self.index
 
         #denom = g**self.index * (gsq + g0_sq)#**self.index2
@@ -2251,6 +2254,16 @@ class GPriorGreatDES2(GPriorGreat3Exp):
 
         print("guess:",guess)
         return guess
+
+def make_gprior_great_des():
+    """
+    from fitting exp to noisefree great des
+
+    Probably need to refine this
+    """
+    pars=[1.0, 4303.78, 0.0666206, 0.607922]
+    print("great des pars")
+    return GPriorGreatDES(pars)
 
 
 def make_gprior_great3_exp():
