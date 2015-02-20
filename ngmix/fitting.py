@@ -4889,16 +4889,19 @@ def profile_sersic(model, **keys):
 
 
 def test_sersic(model,
+                fit_model,
+                do_mcmc=False,
                 n=None, # only needed if model is 'sersic'
                 hlr=2.0,
                 counts=100.0,
-                noise=0.00001,
-                nwalkers=80,
-                g1=0.1, g2=0.1,
+                noise=1.0e-4,
+                nwalkers=20,
+                g1=0.1,
+                g2=0.1,
                 burnin=400,
                 nstep=800,
                 ntry=1,
-                doplots=False):
+                show=False):
     """
     fit an n gauss coellip model to a different model
 
@@ -4906,12 +4909,15 @@ def test_sersic(model,
     ----------
     model:
         the true model
+    fitmodel:
+        the model to fit
     n: optional
         if true model is sersic, send n
     """
     import images
     from . import em
     from . import gmix
+    from ngmix.joint_prior import PriorSimpleSep
 
     if model != 'sersic':
         if model=='exp':
@@ -4928,11 +4934,14 @@ def test_sersic(model,
     sigma_psf=sqrt(2)
 
     im, wt, im_psf=make_sersic_images(model, hlr, counts, n, noise, g1, g2)
-    cen=(im.shape[0]-1)/2.
-    psf_cen=(im_psf.shape[0]-1)/2.
 
+    cen=(im.shape[0]-1)/2.
     jacob=UnitJacobian(cen,cen)
+
+    psf_cen=(im_psf.shape[0]-1)/2.
     psf_jacob=UnitJacobian(psf_cen,psf_cen)
+
+    obs=Observation(im, weight=wt, jacobian=jacob)
 
     #
     # fitting
@@ -4940,7 +4949,9 @@ def test_sersic(model,
 
     # psf using EM
     im_psf_sky,sky=em.prep_image(im_psf)
-    mc_psf=em.GMixEM(im_psf_sky, jacobian=psf_jacob)
+
+    psf_obs=Observation(im_psf, jacobian=psf_jacob)
+    mc_psf=em.GMixEM(psf_obs)
 
     psf_pars_guess=[1.0,
                     0.01*srandu(),
@@ -4958,60 +4969,125 @@ def test_sersic(model,
     print("psf gmix:")
     print(psf_fit)
 
-    # terrible
+    psf_obs.set_gmix(psf_fit)
+    obs.set_psf(psf_obs)
+
+    # fitting with max and emcee
+
+    # terrible guess
     T_guess=2*hlr**2
 
-    cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
-
+    cen_prior=priors.CenPrior(0.0, 0.0, 1.0, 1.0)
+    g_prior=priors.ZDisk2D(1.0)
     counts_prior=priors.FlatPrior(0.01*counts, 100*counts)
     T_prior=priors.FlatPrior(0.01*T_guess, 100*T_guess)
 
-    nmin = gmix.MIN_SERSIC_N
-    nmax = gmix.MAX_SERSIC_N
+    prior=PriorSimpleSep(cen_prior,
+                         g_prior,
+                         T_prior,
+                         counts_prior)
+ 
 
-    n_prior=priors.FlatPrior(nmin, nmax)
-    #n_prior=priors.TruncatedGaussian(n, 0.001, nmin, nmax)
+    print("max fit")
+    while True:
+        max_guess=test_guess_simple(T_guess, counts)
+        max_fitter=LMSimple(obs, fit_model, lm_pars={'maxfev':4000})
+        max_fitter.run_max(max_guess)
+        res=max_fitter.get_result()
+        if res['flags'] == 0:
+            break
 
-    for i in xrange(ntry):
-        print("try: %s/%s" % (i+1,ntry))
-        if i==0:
-            full_guess=test_guess_sersic(nwalkers, T_guess, counts)
-        else:
-            best_pars=mc_obj.best_pars
-            print_pars(best_pars,front="best pars: ")
-            full_guess=test_guess_sersic_from_pars(nwalkers,best_pars)
+    print("    nfev: %d s2n: %.1f chi2per: %.3f" % (res['nfev'],res['s2n_w'],res['chi2per']))
+    print_pars(res['pars'],    front="    max pars:  ")
+    print_pars(res['pars_err'],front="    max perr:  ")
+    full_guess=test_guess_simple_full(res['pars'], n=nwalkers, scaling='linear')
 
-        mc_obj=MCMCSersic(im, wt, jacob,
-                          psf=psf_fit,
+    if do_mcmc:
+        mc_obj=MCMCSimple(obs, fit_model,
                           nwalkers=nwalkers,
-                          counts_prior=counts_prior,
-                          cen_prior=cen_prior,
-                          n_prior=n_prior,
-                          T_prior=T_prior,
-                          full_guess=full_guess)
+                          prior=prior)
+
         pars=mc_obj.run_mcmc(full_guess, burnin)
         pars=mc_obj.run_mcmc(pars, nstep)
 
-    mc_obj.calc_result()
+        mc_obj.calc_result()
 
-    res=mc_obj.get_result()
-    gm=mc_obj.get_gmix()
-    gmc=gm.convolve(psf_fit)
+        res=mc_obj.get_result()
+        gm=mc_obj.get_gmix()
+        gmc=gm.convolve(psf_fit)
 
-    if doplots:
-        mc_obj.make_plots(show=True, prompt=False,
-                          width=1100,height=750,
-                          separate=True)
-        model_im=gmc.make_image(im.shape, jacobian=jacob)
-        images.compare_images(im, model_im) 
+        if show:
+            mc_obj.make_plots(show=True, prompt=False,
+                              width=1900,height=1200,
+                              separate=False)
+            model_im=gmc.make_image(im.shape, jacobian=jacob)
+            images.compare_images(im, model_im) 
 
-    res=mc_obj.get_result()
+        res=mc_obj.get_result()
 
-    print('arate:',res['arate'])
-    print_pars(res['pars'],     front='pars:')
-    print_pars(res['pars_err'], front='perr:')
+        print('arate:',res['arate'])
+        print_pars(res['pars'],     front='    mcmc pars:')
+        print_pars(res['pars_err'], front='    mcmc perr:')
 
-    return res['pars']
+def test_guess_simple(T, counts, n=None):
+    from numpy.random import random as randu
+    from . import gmix
+
+    if n is None:
+        n=1
+        is_scalar=True
+    else:
+        is_scalar=False
+    guess=zeros( (n, 6) )
+    guess[:,0] = 0.1*srandu(n)
+    guess[:,1] = 0.1*srandu(n)
+    guess[:,2] = 0.1*srandu(n)
+    guess[:,3] = 0.1*srandu(n)
+
+    guess[:,4] = T*(1.0 + 0.2*srandu(n))
+    guess[:,5] = counts*(1.0 + 0.2*srandu(n))
+
+    if is_scalar:
+        guess=guess[0,:]
+    return guess
+
+def test_guess_simple_full(pars, n=None, scaling='linear'):
+    from numpy.random import random as randu
+    from . import gmix
+
+    if n is None:
+        n=1
+        is_scalar=True
+    else:
+        is_scalar=False
+
+    guess=zeros( (n, 6) )
+    guess[:,0] = pars[0] + 0.01*srandu(n)
+    guess[:,1] = pars[1] + 0.01*srandu(n)
+
+    ngood=0
+    nleft=n
+    while nleft > 0:
+        g1 = pars[2] + 0.1*srandu(nleft)
+        g2 = pars[3] + 0.1*srandu(nleft)
+        g=sqrt(g1**2 + g2**2)
+        w,=where(g < 1.0)
+        if w.size > 0:
+            guess[ngood:ngood+w.size,2] = g1[w]
+            guess[ngood:ngood+w.size,3] = g2[w]
+            nleft -= w.size
+            ngood += w.size
+
+    if scaling=='linear':
+        guess[:,4] = pars[4]*(1.0 + 0.2*srandu(n))
+        guess[:,5] = pars[5]*(1.0 + 0.2*srandu(n))
+    else:
+        guess[:,4] = pars[4] + 0.1*srandu(n)
+        guess[:,5] = pars[5] + 0.1*srandu(n)
+
+    if is_scalar:
+        guess=guess[0,:]
+    return guess
 
 
 def test_guess_sersic(nwalkers, T, counts):
