@@ -366,7 +366,7 @@ class FitterBase(object):
 
             for obs in obs_list:
                 if self.dopsf:
-                    psf_gmix=obs.get_psf_gmix()
+                    psf_gmix=obs.psf.gmix
 
                     gm0=gmix.make_gmix_model(band_pars, self.model)
                     gm=gm0.convolve(psf_gmix)
@@ -403,7 +403,7 @@ class FitterBase(object):
 
             for i,obs in enumerate(obs_list):
 
-                psf_gmix=obs.get_psf_gmix()
+                psf_gmix=obs.psf.gmix
 
                 gm0=gmix_list0[i]
                 gm=gmix_list[i]
