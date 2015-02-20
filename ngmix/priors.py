@@ -686,8 +686,10 @@ class GPriorBase(object):
                 print(mess % (s1,s2,g1g2[0],g1g2[1],g1g2_te[0],g1g2_te[1]))
             else:
                 mess='true: %.6f meas: %.6f +/- %.6f expand true: %.6f +/- %.6f'
-                err=numpy.sqrt(C[0,0])
+                #err=numpy.sqrt(C[0,0])
                 err_te=numpy.sqrt(C_te[0,0])
+                
+                err=g1s.std()/sqrt(g1s.size)
 
                 shear1_meas_err[ishear] = err
                 shear1_meas_err_te[ishear] = err_te
@@ -924,7 +926,7 @@ class GPriorBase(object):
                 if (i % 1000) == 0:
                     stderr.write('.')
 
-                glike=TruncatedSimpleGauss2D(g1m[i], g2m[i], sigma, sigma,1.0)
+                glike=TruncatedSimpleGauss2D(g1m[i], g2m[i], sigma, sigma,self.gmax)
 
                 rg1,rg2=glike.sample(nsample)
                 iweights=None
@@ -1336,6 +1338,10 @@ class GPriorBase(object):
         print("flags:",res['flags'],"nfev:",res['nfev'])
         print_pars(res['pars'], front="pars: ")
         print_pars(res['pars_err'], front="perr: ")
+
+        c=['%g' % p for p in res['pars']]
+        c='[' + ', '.join(c)+']'
+        print(c)
 
         if show:
             self._compare_fit(res['pars'])
@@ -1964,7 +1970,7 @@ class GPriorGreat3Exp(GPriorBase):
         """
 
         g = sqrt(g1**2 + g2**2)
-        if g >= 1.0:
+        if g >= self.gmax:
             return 0.0
 
         return self._get_prob2d(g)
@@ -1978,7 +1984,7 @@ class GPriorGreat3Exp(GPriorBase):
         p=zeros(n)
 
         g = sqrt(g1**2 + g2**2)
-        w,=numpy.where(g < 1.0)
+        w,=numpy.where(g < self.gmax)
         if w.size > 0:
             p[w] = self._get_prob2d(g[w])
 
@@ -1989,7 +1995,7 @@ class GPriorGreat3Exp(GPriorBase):
         Has the 2*pi*g in it
         """
 
-        if g >= 1.0:
+        if g >= self.gmax:
             return 0.0
 
         return 2*numpy.pi*g*self._get_prob2d(g)
@@ -2002,9 +2008,9 @@ class GPriorGreat3Exp(GPriorBase):
         n=g.size
         p=zeros(n)
 
-        w,=numpy.where(g < 1.0)
+        w,=numpy.where(g < self.gmax)
         if w.size > 0:
-            p[w] = 2*numpy.pi*g*self._get_prob2d(g[w])
+            p[w] = 2*numpy.pi*g[w]*self._get_prob2d(g[w])
 
         return p
 
@@ -2015,10 +2021,27 @@ class GPriorGreat3Exp(GPriorBase):
 
         p=self.get_prob_scalar2d(g1,g2)
         if p <= 0.0:
-            raise GMixRangeError("g too big: %s" % g)
+            raise GMixRangeError("g too big")
 
         lnp=numpy.log(p)
         return lnp
+
+    def get_lnprob_array2d(self, g1arr, g2arr):
+        """
+        Get the 2d prior for the array inputs
+        """
+
+        g1arr=array(g1arr, dtype='f8', copy=False)
+        g2arr=array(g2arr, dtype='f8', copy=False)
+
+        output=numpy.zeros(g1arr.size) + LOWVAL
+
+        g=sqrt(g1arr**2 + g2arr**2)
+        w,=numpy.where(g < self.gmax)
+        if w.size > 0:
+            output[w] = self._get_prob2d(g[w])
+
+        return output
 
     def _get_prob2d(self, g):
         """
@@ -2092,13 +2115,12 @@ class GPriorGreatDES(GPriorGreat3Exp):
         gsq = g**2
 
 
-        omgsq=1.0-gsq
-
-
         A=self.A
         a=self.a
         g0_sq=self.g0_sq
         gmax=self.gmax
+
+        omgsq=gmax**2 - gsq
 
         #omgsq_p = omgsq**self.index2
         omgsq_p = omgsq**2
@@ -2110,10 +2132,14 @@ class GPriorGreatDES(GPriorGreat3Exp):
         #numer = A*(1-exp(arg))**self.index * omgsq_p
 
         arg=(g-gmax)/a
-        numer = A*(1-exp(arg)) * omgsq_p
+        #arg=(g-1.0)/a
+        numer = A*(1-exp(arg)) * omgsq_p * (0.001+g)**self.index
+        #numer = A* omgsq_p * (0.01+g)**self.index
 
-        denom = (0.05+g)**self.index * sqrt(gsq + g0_sq)
+        #denom = g**self.index * (gsq + g0_sq)#**self.index2
+        #denom = (0.001+g)**self.index * (gsq + g0_sq)#**self.index2
         #denom = (g0_sq+g)**self.index * sqrt(gsq + g0_sq)
+        denom = (gsq + g0_sq)
 
         prob=numer/denom
 
@@ -2125,7 +2151,10 @@ class GPriorGreatDES(GPriorGreat3Exp):
         #cen=[Aguess, 1.64042, 0.0554674, 0.5]
         #cen=[Aguess, 1.64042, 0.0554674, 0.5, 1.0]
         #cen=[Aguess, 1.64042, 0.0554674, 1.0]
-        cen=[Aguess, 1.64042, 0.0554674, 1.0]
+        #cen=[Aguess, 1.64042, 0.0554674, 1.0]
+        #cen=[Aguess, 1.64042, 0.0554674, -0.1, 0.5]
+        cen=[Aguess, 1.64042, 0.0554674, 0.5]
+        #cen=[Aguess, 0.0554674, 0.5]
 
         if n is None:
             n=1
@@ -2143,6 +2172,84 @@ class GPriorGreatDES(GPriorGreat3Exp):
 
         if is_scalar:
             guess=guess[0,:]
+        return guess
+
+class GPriorGreatDES2(GPriorGreat3Exp):
+    """
+    """
+    def __init__(self, pars=None, gmax=1.0):
+
+        self.gmax=float(gmax)
+
+        self.npars=2
+        if pars is not None:
+            self.set_pars(pars)
+
+    def set_pars(self, pars):
+        pars=array(pars)
+
+        assert (pars.size==self.npars)
+
+        self.pars=pars
+
+        self.A = pars[0]
+        self.sig2inv = 1.0/pars[1]**2
+        #self.g0 = pars[2]
+        #self.g0_sq = self.g0**2
+
+        #self.index=pars[3]
+
+    def _get_prob2d(self, g):
+        """
+        no error checking
+
+        no 2*pi*g
+        """
+
+        gsq = g**2
+
+        A=self.A
+        sig2inv=self.sig2inv
+
+        #g0_sq=self.g0_sq
+        #index=self.index
+        gmax=self.gmax
+
+        omgsq=gmax**2 - gsq
+        #omgsq=1.0-gsq
+
+        omgsq *= omgsq
+
+        expval = exp(-0.5*gsq*sig2inv)
+
+        #denom = (0.001+g)**index * (gsq + g0_sq)#**self.index2
+        #p = omgsq*expval/denom
+        p = A*omgsq*expval
+
+        return p
+
+    def _get_guess(self, num, n=None):
+        Aguess=num*(self.xdata[1]-self.xdata[0])
+        cen=[Aguess, 0.2]
+
+        if n is None:
+            n=1
+            is_scalar=True
+        else:
+            is_scalar=False
+
+        guess=zeros( (n, self.npars) )
+
+        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n))
+        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n))
+        #guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n))
+        #guess[:,3] = cen[3]*(1.0 + 0.2*srandu(n))
+        #guess[:,4] = cen[4]*(1.0 + 0.2*srandu(n))
+
+        if is_scalar:
+            guess=guess[0,:]
+
+        print("guess:",guess)
         return guess
 
 
