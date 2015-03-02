@@ -3542,11 +3542,11 @@ class MCMCSimpleJointLogPars(MCMCSimple):
 
 _default_min_err=array([1.e-4,1.e-4,1.e-3,1.e-3,1.0e-4,1.0e-4])
 _default_max_err=array([1.0,1.0,5.0,5.0,1.0,1.0])
-class GCovSampler(object):
+class ISampler(object):
     """
-    sampler using multivariate gaussian
+    sampler using multivariate T distribution
     """
-    def __init__(self, pars, cov,
+    def __init__(self, pars, cov, df,
                  min_err=_default_min_err,
                  max_err=_default_max_err):
         """
@@ -3561,6 +3561,10 @@ class GCovSampler(object):
         self._set_minmax_err(min_err, max_err)
 
         self._clip_cov()
+
+        self._df=df
+        self._set_pdf()
+
 
     def make_samples(self, n=None):
         """
@@ -3756,19 +3760,30 @@ class GCovSampler(object):
 
     def _sample_raw(self, n):
         """
-        sample from the cov, no truncation
+        sample without truncation
         """
-        from numpy.random import multivariate_normal
+        return self._pdf.rvs(n)
 
-        vals=multivariate_normal(self._pars, self._cov, n)
-        return vals
+    #def _sample_raw(self, n):
+    #    """
+    #    sample from the cov, no truncation
+    #    """
+    #    from numpy.random import multivariate_normal
+
+    #    vals=multivariate_normal(self._pars, self._cov, n)
+    #    return vals
 
     def _set_pdf(self):
-        """
-        don't do automatically, since depends on scipy
-        """
-        from scipy.stats import multivariate_normal 
-        self._pdf = multivariate_normal(mean=self._pars, cov=self._cov)
+        from statsmodels.sandbox.distributions.mv_normal import MVT
+        self._pdf=MVT(self._pars, self._cov, self._df)
+
+
+    #def _set_pdf(self):
+    #    """
+    #    don't do automatically, since depends on scipy
+    #    """
+    #    from scipy.stats import multivariate_normal 
+    #    self._pdf = multivariate_normal(mean=self._pars, cov=self._cov)
 
     def _clip_cov(self):
         """
@@ -3829,7 +3844,12 @@ class GCovSampler(object):
         self._min_err=min_err
         self._max_err=max_err
 
-class GCovSamplerT(GCovSampler):
+# alias
+GCovSamplerT=ISampler
+
+
+'''
+class GCovSamplerTOld(GCovSampler):
     """
     sampler using multivariate T
 
@@ -3856,7 +3876,7 @@ class GCovSamplerT(GCovSampler):
     def _set_pdf(self):
         from statsmodels.sandbox.distributions.mv_normal import MVT
         self._pdf=MVT(self._pars, self._cov, self._df)
-
+'''
 
 def get_edge_aperture(dims, cen):
     """
