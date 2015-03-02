@@ -8,7 +8,7 @@ from .gmix import GMixModel
 from .gmix import GMixCoellip
 
 from . import jacobian
-from .jacobian import Jacobian, UnitJacobian
+from .jacobian import Jacobian, UnitJacobian, DiagonalJacobian
 from . import fastmath
 
 from . import priors
@@ -35,3 +35,5 @@ from . import lensfit
 from . import pqr
 
 from . import stats
+
+from . import guessers
