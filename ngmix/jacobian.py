@@ -86,6 +86,12 @@ class Jacobian(object):
                       self._data['dvdrow'][0],
                       self._data['dvdcol'][0])
 
+class DiagonalJacobian(Jacobian):
+    def __init__(self, cen1, cen2, scale=1.0):
+        super(DiagonalJacobian,self).__init__(cen1, cen2, scale, 0., 0., scale)
+
 class UnitJacobian(Jacobian):
     def __init__(self, cen1, cen2):
         super(UnitJacobian,self).__init__(cen1, cen2, 1., 0., 0., 1.)
+
+
