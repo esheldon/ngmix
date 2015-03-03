@@ -17,6 +17,9 @@ from .jacobian import Jacobian
 
 from .observation import Observation
 
+EM_RANGE_ERROR = 2**0
+EM_MAXITER = 2**1
+
 def prep_image(im0):
     """
     Prep an image to fit with EM.  Make sure there are no pixels < 0
@@ -107,6 +110,8 @@ class GMixEM(object):
             default 1.e-6
         """
 
+        if hasattr(self,'_gm'):
+            del self._gm
 
         gmtmp = gmix_guess.copy()
         self._ngauss    = len(gmtmp)
@@ -117,25 +122,35 @@ class GMixEM(object):
 
         # will raise GMixRangeError, but not GMixMaxIterEM, which
         # we handle below
-        numiter, fdiff = _gmix.em_run(gmtmp._data,
-                                      self._obs.image,
-                                      self._obs.jacobian._data,
-                                      self._sums,
-                                      self._sky_guess,
-                                      self._counts,
-                                      self._tol,
-                                      self._maxiter)
+        flags=0
+        try:
+            numiter, fdiff = _gmix.em_run(gmtmp._data,
+                                          self._obs.image,
+                                          self._obs.jacobian._data,
+                                          self._sums,
+                                          self._sky_guess,
+                                          self._counts,
+                                          self._tol,
+                                          self._maxiter)
 
-        # we have mutated the _data elements, we want to make
-        # sure the pars are propagated.  Make a new full gm
-        pars=gmtmp.get_full_pars()
-        self._gm=GMix(pars=pars)
+            # we have mutated the _data elements, we want to make
+            # sure the pars are propagated.  Make a new full gm
+            pars=gmtmp.get_full_pars()
+            self._gm=GMix(pars=pars)
 
-        self._result={'numiter':numiter,
-                      'fdiff':fdiff}
+            if numiter >= maxiter:
+                flags = EM_MAXITER
 
-        if numiter >= maxiter:
-            raise GMixMaxIterEM("reached max iter: %s" % maxiter)
+            result={'flags':flags,
+                    'numiter':numiter,
+                    'fdiff':fdiff}
+
+        except GMixRangeError:
+            # the iteration reached an invalid gaussian
+            result={'flags':EM_RANGE_ERROR}
+
+        self._result = result
+
     # alias
     go=run_em
 
