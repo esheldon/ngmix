@@ -78,6 +78,7 @@ em.go(guess, sky, tol=1.e-5)
 
 psf_gmix_fit=em.get_gmix()
 
+# set the gmix; needed for galaxy fitting later
 psf_obs.set_gmix(psf_gmix_fit)
 
 # fit the galaxy.
@@ -92,7 +93,8 @@ obs = Observation(image, weight=weight, jacobian=gal_jacob, psf=psf_obs)
 
 # Use MCMCSimple to fit using a "simple" model, either "exp" or "dev"
 # currently. You can also send a prior= keyword that takes parameters
-# and returns the log(probability)
+# and returns the log(probability).  Send use_logpars to work in
+# log(T) and log(flux) space
 
 model="exp"
 nwalkers=80
@@ -155,3 +157,5 @@ dependencies
 * numpy
 * scipy: optional needed for generating random samples from shape PDFs.
 * emcee: optional for doing MCMC fitting: http://dan.iel.fm/emcee/current/ Affine invariant MCMC sampler.
+* statsmodels: optional for importance sampling (multivariate student
+    T distribution)
