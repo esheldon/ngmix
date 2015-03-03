@@ -3749,7 +3749,8 @@ class ISampler(object):
             pdict['wtrials']=plotfunc(trials,
                                       weights=weights,
                                       title='%s weighted' % title,
-                                      show=show)
+                                      show=show,
+                                      **keys)
 
         if show and prompt:
             key=raw_input('hit a key: ')
