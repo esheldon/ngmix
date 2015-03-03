@@ -28,7 +28,7 @@ def calc_sensitivity(g, g_prior, remove_prior=False, h=_default_h):
     g_sens=ls.get_g_sens()
     return g_sens
 
-def calc_shear(g, g_sens):
+def calc_shear(g, g_sens, weights=None):
     """
     Calculate shear from g and g sensitivity arrays
 
@@ -38,12 +38,15 @@ def calc_shear(g, g_sens):
         g1 and g2 as a [N,2] array
     g_sens: array
         sensitivity as a [N,2] array
+    weights: array, optional
+        Weights to apply as [N] array
     """
-    w=where(g_sens > 0.0)
-    if w[0].size != g.shape[0]:
-        raise GMixFatalError("some g_sens were <= 0.0")
 
-    shear = g.mean(axis=0)/g_sens.mean(axis=0)
+    if weights is None:
+        shear = g.mean(axis=0)/g_sens.mean(axis=0)
+    else:
+        wa=weights[:,newaxis]
+        shear = (g*wa).sum()/(g_sens*wa).sum()
 
     return shear
 
@@ -287,7 +290,90 @@ class LensfitSensitivity(object):
         self._g_sens=g_sens
 
 
-def lensfit_jackknife(g, gsens,
+def lensfit_jackknife(g, gsens, do_ring=False, **keys):
+    """
+    get the shear lensfit style
+
+    for keywords, see help for _lensfit_jackknife
+    """
+    if do_ring:
+        return _lensfit_jackknife_ring(g, gsens,**keys)
+    else:
+        return _lensfit_jackknife(g, gsens,**keys)
+
+def _lensfit_jackknife(g, gsens,
+                       chunksize=1,
+                       get_sums=False,
+                       get_shears=False,
+                       weights=None,
+                       progress=False,
+                       show=False,
+                       eps=None,
+                       png=None):
+    """
+    Get the shear covariance matrix using jackknife resampling.
+    """
+
+    if weights is None:
+        weights=ones(g.shape[0])
+
+    if progress:
+        import progressbar
+        pg=progressbar.ProgressBar(width=70)
+
+    ntot = g.shape[0]
+
+    # some may not get used
+    nchunks = ntot/chunksize
+
+    wsum = weights.sum()
+    wa=weights[:,newaxis]
+
+    g_sum = (g*wa).sum(axis=0)
+    gsens_sum = (gsens*wa).sum(axis=0)
+
+    shear = g_sum/gsens_sum
+
+    shears = numpy.zeros( (nchunks, 2) )
+    for i in xrange(nchunks):
+
+        beg = i*chunksize
+        end = (i+1)*chunksize
+        
+        if progress:
+            frac=float(i+1)/nchunks
+            pg.update(frac=frac)
+
+        this_wts = (weights[beg:end])[:,newaxis]
+        this_gsum = (g[beg:end,:]*this_wts).sum(axis=0)
+        this_gsens_sum = (gsens[beg:end,:]*this_wts).sum(axis=0)
+
+        j_g_sum     = g_sum     - this_gsum
+        j_gsens_sum = gsens_sum - this_gsens_sum
+
+        shears[i, :] = j_g_sum/j_gsens_sum
+
+    shear_cov = numpy.zeros( (2,2) )
+    fac = (nchunks-1)/float(nchunks)
+
+    shear_cov[0,0] = fac*( ((shear[0]-shears[:,0])**2).sum() )
+    shear_cov[0,1] = fac*( ((shear[0]-shears[:,0]) * (shear[1]-shears[:,1])).sum() )
+    shear_cov[1,0] = shear_cov[0,1]
+    shear_cov[1,1] = fac*( ((shear[1]-shears[:,1])**2).sum() )
+
+    if show or eps or png:
+        from .pqr import _plot_shears
+        _plot_shears(shears, show=show, eps=eps, png=png)
+
+    if get_sums:
+        return shear, shear_cov, g_sum, gsens_sum
+    elif get_shears:
+        return shear, shear_cov, shears
+    else:
+        return shear, shear_cov
+
+
+def _lensfit_jackknife_ring(g, gsens,
                       chunksize=1,
                       get_sums=False,
                       get_shears=False,
