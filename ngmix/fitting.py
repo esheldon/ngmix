@@ -196,33 +196,8 @@ class FitterBase(object):
         """
         self.npars=gmix.get_model_npars(self.model) + self.nband-1
 
-    def get_dof(self):
-        """
-        Effective def based on effective number of pixels
-        """
-        #npix=self.get_effective_npix()
-        npix=self.get_npix()
-        dof = npix-self.npars
-        if dof <= 0:
-            dof = 1.e-6
-        return dof
 
-    def get_npix(self):
-        """
-        just get the total number of pixels in all images
-        """
-        if not hasattr(self, '_npix'):
-            npix=0
-            for obs_list in self.obs:
-                for obs in obs_list:
-                    npix += obs.image.size
-
-            self._npix=npix
-
-        return self._npix
-
-
-    def get_effective_npix(self):
+    def get_effective_npix_old(self):
         """
         Because of the weight map, each pixel gets a different weight in the
         chi^2.  This changes the effective degrees of freedom.  The extreme
@@ -255,7 +230,7 @@ class FitterBase(object):
         return self.eff_npix
 
 
-    def calc_lnprob(self, pars, get_s2nsums=False, get_priors=False):
+    def calc_lnprob(self, pars, more=False, get_priors=False):
         """
         This is all we use for mcmc approaches, but also used generally for the
         "get_fit_stats" method.  For the max likelihood fitter we also have a
@@ -263,13 +238,19 @@ class FitterBase(object):
         """
 
         nsub=self.nsub
-        s2n_numer=0.0
-        s2n_denom=0.0
+
+
+
         try:
 
             # these are the log pars (if working in log space)
             ln_priors = self._get_priors(pars)
-            ln_prob = 0.0
+
+            lnprob = 0.0
+            s2n_numer=0.0
+            s2n_denom=0.0
+            npix = 0
+
 
             self._fill_gmix_all(pars)
             for band in xrange(self.nband):
@@ -280,34 +261,37 @@ class FitterBase(object):
                 for obs,gm in zip(obs_list, gmix_list):
                     
                     if self.nu > 2.0:
-                        res = gm.get_loglike_robust(obs, self.nu, nsub=nsub, get_s2nsums=True)
+                        res = gm.get_loglike_robust(obs, self.nu, nsub=nsub, more=True)
                     elif self.margsky:
                         res = gm.get_loglike_margsky(obs, obs.model_image, 
-                                                     nsub=nsub, get_s2nsums=True)
+                                                     nsub=nsub, more=True)
                     else:
-                        res = gm.get_loglike(obs,
-                                             nsub=nsub,
-                                             get_s2nsums=True)
+                        res = gm.get_loglike(obs, nsub=nsub, more=True)
 
-                    ln_prob += res[0]
-                    s2n_numer += res[1]
-                    s2n_denom += res[2]
+                    lnprob    += res['loglike']
+                    s2n_numer += res['s2n_numer']
+                    s2n_denom += res['s2n_denom']
+                    npix      += res['npix']
 
-            ln_prob += ln_priors
+            # total over all bands
+            lnprob += ln_priors
 
         except GMixRangeError:
-            ln_prob = LOWVAL
+            lnprob = LOWVAL
             s2n_numer=0.0
             s2n_denom=BIGVAL
+            npix = 0
 
-
-        if get_s2nsums:
-            return ln_prob, s2n_numer, s2n_denom
+        if more:
+            return {'lnprob':lnprob,
+                    's2n_numer':s2n_numer,
+                    's2n_denom':s2n_denom,
+                    'npix':npix}
         else:
             if get_priors:
-                return ln_prob, ln_priors
+                return lnprob, ln_priors
             else:
-                return ln_prob
+                return lnprob
 
     def get_fit_stats(self, pars):
         """
@@ -317,30 +301,22 @@ class FitterBase(object):
         """
         npars=self.npars
 
-        lnprob,s2n_numer,s2n_denom=self.calc_lnprob(pars, get_s2nsums=True)
+        res=self.calc_lnprob(pars, more=True)
 
-        if s2n_denom > 0:
-            s2n=s2n_numer/sqrt(s2n_denom)
+        if res['s2n_denom'] > 0:
+            s2n=res['s2n_numer']/sqrt(res['s2n_denom'])
         else:
             s2n=0.0
 
-        dof=self.get_dof()
-        #eff_npix=self.get_effective_npix()
-        eff_npix=self.get_npix()
-
-        chi2=lnprob/(-0.5)
+        chi2    = res['lnprob']/(-0.5)
+        dof     = res['npix'] - self.npars
         chi2per = chi2/dof
 
-        aic = -2*lnprob + 2*npars
-        bic = -2*lnprob + npars*numpy.log(eff_npix)
+        res['chi2per'] = chi2per
+        res['dof']     = dof
+        res['s2n_w']   = s2n
 
-        return {'s2n_w':s2n,
-                'lnprob':lnprob,
-                'chi2per':chi2per,
-                'dof':dof,
-                'aic':aic,
-                'bic':bic}
-
+        return res
 
     def _init_gmix_all(self, pars):
         """
@@ -704,6 +680,18 @@ class TemplateFluxFitter(FitterBase):
                       'flux':flux,
                       'flux_err':flux_err}
 
+    def get_dof(self):
+        """
+        Effective def based on effective number of pixels
+        """
+        npix=self.get_effective_npix()
+        dof = npix-self.npars
+        if dof <= 0:
+            dof = 1.e-6
+        return dof
+
+
+
     def _set_obs(self, obs_in):
         """
         Input should be an Observation, ObsList
@@ -746,37 +734,20 @@ class TemplateFluxFitter(FitterBase):
 
         self.totpix=totpix
 
- 
     def get_effective_npix(self):
         """
-        Because of the weight map, each pixel gets a different weight in the
-        chi^2.  This changes the effective degrees of freedom.  The extreme
-        case is when the weight is zero; these pixels are essentially not used.
-
-        We replace the number of pixels with
-
-            eff_npix = sum(weights)maxweight
+        We don't use all pixels, only those with weight > 0
         """
-        raise RuntimeError("this is bogus")
         if not hasattr(self, 'eff_npix'):
-            wtmax = 0.0
-            wtsum = 0.0
 
+            npix=0
             for obs in self.obs:
                 wt=obs.weight
-                this_wtmax = wt.max()
 
-                if this_wtmax > wtmax:
-                    wtmax = this_wtmax
+                w=where(wt > 0)
+                npix += w[0].size
 
-                wtsum += wt.sum()
-
-            eff_npix=wtsum/wtmax
-
-            if eff_npix <= 0:
-                eff_npix=1.e-6
-
-            self.eff_npix=eff_npix
+            self.eff_npix=npix
 
         return self.eff_npix
 
@@ -1011,9 +982,9 @@ class LMSimple(FitterBase):
         guess=array(guess,dtype='f8',copy=False)
         self._setup_data(guess)
 
-        dof=self.get_dof()
-        result = run_leastsq(self._calc_fdiff, guess, dof, self.n_prior_pars, **self.lm_pars)
+        result = run_leastsq(self._calc_fdiff, guess, self.n_prior_pars, **self.lm_pars)
 
+        result['model'] = self.model_name
         if result['flags']==0:
             result['g'] = result['pars'][2:2+2].copy()
             result['g_cov'] = result['pars_cov'][2:2+2, 2:2+2].copy()
@@ -1060,7 +1031,7 @@ class LMSimple(FitterBase):
         return pars
 
 
-    def _calc_fdiff(self, pars, get_s2nsums=False):
+    def _calc_fdiff(self, pars, more=False):
         """
 
         vector with (model-data)/error.
@@ -1073,6 +1044,7 @@ class LMSimple(FitterBase):
 
         s2n_numer=0.0
         s2n_denom=0.0
+        npix = 0
 
         try:
 
@@ -1090,8 +1062,9 @@ class LMSimple(FitterBase):
 
                     res = gm.fill_fdiff(obs, fdiff, start=start, nsub=self.nsub)
 
-                    s2n_numer += res[0]
-                    s2n_denom += res[1]
+                    s2n_numer += res['s2n_numer']
+                    s2n_denom += res['s2n_denom']
+                    npix += res['npix']
 
                     start += obs.image.size
 
@@ -1100,8 +1073,11 @@ class LMSimple(FitterBase):
             s2n_numer=0.0
             s2n_denom=BIGVAL
 
-        if get_s2nsums:
-            return fdiff, s2n_numer, s2n_denom
+        if more:
+            return {'fdiff':fdiff,
+                    's2n_numer':s2n_numer,
+                    's2n_denom':s2n_denom,
+                    'npix':npix}
         else:
             return fdiff
 
@@ -1148,7 +1124,7 @@ class LMSersic(LMSimple):
 
 
 NOTFINITE_BIT=11
-def run_leastsq(func, guess, dof, n_prior_pars, **keys):
+def run_leastsq(func, guess, n_prior_pars, **keys):
     """
     run leastsq from scipy.optimize.  Deal with certain
     types of errors
@@ -1162,8 +1138,6 @@ def run_leastsq(func, guess, dof, n_prior_pars, **keys):
         the function to minimize
     guess:
         guess at pars
-    dof:
-        number of degrees of freedom, for error calculation
     n_prior_pars:
         number of slots in fdiff for priors
 
@@ -1210,6 +1184,9 @@ def run_leastsq(func, guess, dof, n_prior_pars, **keys):
             fdiff=func(pars)
 
             # npars: to remove priors
+
+            dof = fdiff.size - n_prior_pars - npars
+
             s_sq = (fdiff[n_prior_pars:]**2).sum()/dof
             pcov = pcov0 * s_sq 
 
