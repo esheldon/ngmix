@@ -929,6 +929,8 @@ static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
     double model_val=0, diff=0;
     double s2n_numer=0.0, s2n_denom=0.0, loglike = 0.0;
 
+    long npix = 0;
+
     PyObject* retval=NULL;
 
     if (!PyArg_ParseTuple(args, (char*)"OOOO", 
@@ -965,6 +967,8 @@ static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
                 loglike += diff*diff*ivar;
                 s2n_numer += data*model_val*ivar;
                 s2n_denom += model_val*model_val*ivar;
+
+                npix += 1;
             }
 
             u += jacob->dudcol;
@@ -975,10 +979,8 @@ static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
 
     loglike *= (-0.5);
 
-    retval=PyTuple_New(3);
-    PyTuple_SetItem(retval,0,PyFloat_FromDouble(loglike));
-    PyTuple_SetItem(retval,1,PyFloat_FromDouble(s2n_numer));
-    PyTuple_SetItem(retval,2,PyFloat_FromDouble(s2n_denom));
+    // fill in the retval
+    PYGMIX_PACK_RESULT4();
     return retval;
 }
 
@@ -1006,6 +1008,8 @@ static PyObject * PyGMix_get_loglike_aper(PyObject* self, PyObject* args) {
     double data=0, ivar=0, u=0, v=0;
     double model_val=0, diff=0;
     double s2n_numer=0.0, s2n_denom=0.0, loglike = 0.0;
+
+    long npix=0;
 
     PyObject* retval=NULL;
 
@@ -1048,6 +1052,8 @@ static PyObject * PyGMix_get_loglike_aper(PyObject* self, PyObject* args) {
                     loglike += diff*diff*ivar;
                     s2n_numer += data*model_val*ivar;
                     s2n_denom += model_val*model_val*ivar;
+
+                    npix += 1;
                 }
 
             }
@@ -1059,10 +1065,8 @@ static PyObject * PyGMix_get_loglike_aper(PyObject* self, PyObject* args) {
 
     loglike *= (-0.5);
 
-    retval=PyTuple_New(3);
-    PyTuple_SetItem(retval,0,PyFloat_FromDouble(loglike));
-    PyTuple_SetItem(retval,1,PyFloat_FromDouble(s2n_numer));
-    PyTuple_SetItem(retval,2,PyFloat_FromDouble(s2n_denom));
+    // fill in the retval
+    PYGMIX_PACK_RESULT4();
     return retval;
 }
 
@@ -1085,6 +1089,8 @@ static PyObject * PyGMix_get_loglike_images_margsky(PyObject* self, PyObject* ar
     double data=0, ivar=0, data_mod=0, model_mod=0;
     double model_val=0, diff=0;
     double s2n_numer=0.0, s2n_denom=0.0, loglike = 0.0;
+
+    long npix=0;
 
     PyObject* retval=NULL;
 
@@ -1111,16 +1117,16 @@ static PyObject * PyGMix_get_loglike_images_margsky(PyObject* self, PyObject* ar
                 loglike += diff*diff*ivar;
                 s2n_numer += data_mod*model_mod*ivar;
                 s2n_denom += model_mod*model_mod*ivar;
+
+                npix += 1;
             }
         }
     }
 
     loglike *= (-0.5);
 
-    retval=PyTuple_New(3);
-    PyTuple_SetItem(retval,0,PyFloat_FromDouble(loglike));
-    PyTuple_SetItem(retval,1,PyFloat_FromDouble(s2n_numer));
-    PyTuple_SetItem(retval,2,PyFloat_FromDouble(s2n_denom));
+    // fill in the retval
+    PYGMIX_PACK_RESULT4();
     return retval;
 }
 
@@ -1141,6 +1147,8 @@ static PyObject * PyGMix_get_loglike_sub(PyObject* self, PyObject* args) {
     double model_val=0, diff=0;
     double trow=0, lowcol=0, s2n_numer=0.0, s2n_denom=0.0, loglike = 0.0;
     int nsub=0;
+
+    long npix=0;
 
     PyObject* retval=NULL;
 
@@ -1173,6 +1181,8 @@ static PyObject * PyGMix_get_loglike_sub(PyObject* self, PyObject* args) {
 
             ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
             if ( ivar > 0.0) {
+
+                npix += 1;
 
                 trow = row-offset;
                 lowcol = col-offset;
@@ -1210,10 +1220,8 @@ static PyObject * PyGMix_get_loglike_sub(PyObject* self, PyObject* args) {
 
     loglike *= (-0.5);
 
-    retval=PyTuple_New(3);
-    PyTuple_SetItem(retval,0,PyFloat_FromDouble(loglike));
-    PyTuple_SetItem(retval,1,PyFloat_FromDouble(s2n_numer));
-    PyTuple_SetItem(retval,2,PyFloat_FromDouble(s2n_denom));
+    // fill in the retval
+    PYGMIX_PACK_RESULT4();
     return retval;
 }
 
@@ -1240,6 +1248,8 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
     double data=0, ivar=0, u=0, v=0;
     double model_val=0, diff=0;
     double s2n_numer=0.0, s2n_denom=0.0, loglike=0.0, nupow=0, logfactor=0;
+
+    long npix=0;
 
     PyObject* retval=NULL;
 
@@ -1281,6 +1291,8 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
                 loglike += logfactor + nupow*log(1.0+diff*diff*ivar/nu);
                 s2n_numer += data*model_val*ivar;
                 s2n_denom += model_val*model_val*ivar;
+
+                npix += 1;
             }
 
             u += jacob->dudcol;
@@ -1289,10 +1301,9 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
         }
     }
 
-    retval=PyTuple_New(3);
-    PyTuple_SetItem(retval,0,PyFloat_FromDouble(loglike));
-    PyTuple_SetItem(retval,1,PyFloat_FromDouble(s2n_numer));
-    PyTuple_SetItem(retval,2,PyFloat_FromDouble(s2n_denom));
+    // fill in the retval
+    PYGMIX_PACK_RESULT4();
+
     return retval;
 }
 
@@ -1310,6 +1321,8 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
     PyObject* fdiff_obj=NULL;
     npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
     int start=0;
+
+    long npix=0;
 
     struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
     struct PyGMix_Jacobian *jacob=NULL;
@@ -1358,6 +1371,8 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
                 (*fdiff_ptr) = (model_val-data)*ierr;
                 s2n_numer += data*model_val*ivar;
                 s2n_denom += model_val*model_val*ivar;
+
+                npix += 1;
             } else {
                 (*fdiff_ptr) = 0.0;
             }
@@ -1370,9 +1385,8 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
         }
     }
 
-    retval=PyTuple_New(2);
-    PyTuple_SetItem(retval,0,PyFloat_FromDouble(s2n_numer));
-    PyTuple_SetItem(retval,1,PyFloat_FromDouble(s2n_denom));
+    // fill in the retval
+    PYGMIX_PACK_RESULT3();
     return retval;
 }
 
@@ -1391,6 +1405,8 @@ static PyObject * PyGMix_fill_fdiff_sub(PyObject* self, PyObject* args) {
     PyObject* fdiff_obj=NULL;
     npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
     int start=0, nsub=0;
+
+    long npix=0;
 
     struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
     struct PyGMix_Jacobian *jacob=NULL;
@@ -1439,6 +1455,8 @@ static PyObject * PyGMix_fill_fdiff_sub(PyObject* self, PyObject* args) {
             ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
             if ( ivar > 0.0) {
 
+                npix += 1;
+
                 trow = row-offset;
                 lowcol = col-offset;
 
@@ -1477,9 +1495,8 @@ static PyObject * PyGMix_fill_fdiff_sub(PyObject* self, PyObject* args) {
         }
     }
 
-    retval=PyTuple_New(2);
-    PyTuple_SetItem(retval,0,PyFloat_FromDouble(s2n_numer));
-    PyTuple_SetItem(retval,1,PyFloat_FromDouble(s2n_denom));
+    // fill in the retval
+    PYGMIX_PACK_RESULT3();
     return retval;
 }
 
