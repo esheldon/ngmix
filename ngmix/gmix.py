@@ -362,25 +362,27 @@ class GMix(object):
         assert nsub >= 1,"nsub must be >= 1"
 
         if nsub > 1:
-            s2n_numer,s2n_denom=_gmix.fill_fdiff_sub(self._data,
-                                                     image,
-                                                     obs.weight,
-                                                     obs.jacobian._data,
-                                                     fdiff,
-                                                     start,
-                                                     nsub)
+            s2n_numer,s2n_denom,npix=_gmix.fill_fdiff_sub(self._data,
+                                                          image,
+                                                          obs.weight,
+                                                          obs.jacobian._data,
+                                                          fdiff,
+                                                          start,
+                                                          nsub)
         else:
-            s2n_numer,s2n_denom=_gmix.fill_fdiff(self._data,
-                                                 image,
-                                                 obs.weight,
-                                                 obs.jacobian._data,
-                                                 fdiff,
-                                                 start)
+            s2n_numer,s2n_denom,npix=_gmix.fill_fdiff(self._data,
+                                                      image,
+                                                      obs.weight,
+                                                      obs.jacobian._data,
+                                                      fdiff,
+                                                      start)
 
-        return s2n_numer,s2n_denom
+        return {'s2n_numer':s2n_numer,
+                's2n_denom':s2n_denom,
+                'npix':npix}
 
 
-    def get_loglike(self, obs, nsub=1, get_s2nsums=False):
+    def get_loglike(self, obs, nsub=1, more=False):
         """
         Calculate the log likelihood given the input Observation
 
@@ -392,41 +394,44 @@ class GMix(object):
             The Observation must have a weight map set
         nsub: int, optional
             Integrate the model over each pixel using a nsubxnsub grid
-        get_s2nsums:
-            if True, returns s2n_numer and s2n_denom sums
+        more:
+            if True, return a dict with more informatioin
         """
 
         if nsub > 1:
             #print("doing nsub")
-            loglike,s2n_numer,s2n_denom=_gmix.get_loglike_sub(self._data,
-                                                              obs.image,
-                                                              obs.weight,
-                                                              obs.jacobian._data,
-                                                              nsub)
+            loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike_sub(self._data,
+                                                                   obs.image,
+                                                                   obs.weight,
+                                                                   obs.jacobian._data,
+                                                                   nsub)
 
         else:
             if obs.has_aperture():
                 aperture=obs.get_aperture()
                 #print("using aper:",aperture)
-                loglike,s2n_numer,s2n_denom=_gmix.get_loglike_aper(self._data,
-                                                                   obs.image,
-                                                                   obs.weight,
-                                                                   obs.jacobian._data,
-                                                                   aperture)
+                loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike_aper(self._data,
+                                                                        obs.image,
+                                                                        obs.weight,
+                                                                        obs.jacobian._data,
+                                                                        aperture)
 
 
             else:
-                loglike,s2n_numer,s2n_denom=_gmix.get_loglike(self._data,
-                                                              obs.image,
-                                                              obs.weight,
-                                                              obs.jacobian._data)
+                loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike(self._data,
+                                                                   obs.image,
+                                                                   obs.weight,
+                                                                   obs.jacobian._data)
 
-        if get_s2nsums:
-            return loglike,s2n_numer,s2n_denom
+        if more:
+            return {'loglike':loglike,
+                    's2n_numer':s2n_numer,
+                    's2n_denom':s2n_denom,
+                    'npix':npix}
         else:
             return loglike
 
-    def get_loglike_robust(self, obs, nu, nsub=1, get_s2nsums=False):
+    def get_loglike_robust(self, obs, nu, nsub=1, more=False):
         """
         Calculate the log likelihood given the input Observation
         using robust likelihood
@@ -441,18 +446,21 @@ class GMix(object):
         #print("using robust")
         assert nsub==1,"nsub must be 1 for robust"
 
-        loglike,s2n_numer,s2n_denom=_gmix.get_loglike_robust(self._data,
-                                                             obs.image,
-                                                             obs.weight,
-                                                             obs.jacobian._data,
-                                                             nu)
+        loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike_robust(self._data,
+                                                                  obs.image,
+                                                                  obs.weight,
+                                                                  obs.jacobian._data,
+                                                                  nu)
 
-        if get_s2nsums:
-            return loglike,s2n_numer,s2n_denom
+        if more:
+            return {'loglike':loglike,
+                    's2n_numer':s2n_numer,
+                    's2n_denom':s2n_denom,
+                    'npix':npix}
         else:
             return loglike
 
-    def get_loglike_margsky(self, obs, model_image, nsub=1, get_s2nsums=False):
+    def get_loglike_margsky(self, obs, model_image, nsub=1, more=False):
         """
         Calculate the log likelihood given the input Observation, subtracting
         the mean of the image and model.  The model is first rendered into the
@@ -484,14 +492,17 @@ class GMix(object):
 
         model_mean=_gmix.get_image_mean(model_image, obs.weight)
 
-        loglike,s2n_numer,s2n_denom=_gmix.get_loglike_images_margsky(image,
-                                                                     obs.image_mean,
-                                                                     obs.weight,
-                                                                     model_image,
-                                                                     model_mean)
+        loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike_images_margsky(image,
+                                                                          obs.image_mean,
+                                                                          obs.weight,
+                                                                          model_image,
+                                                                          model_mean)
 
-        if get_s2nsums:
-            return loglike,s2n_numer,s2n_denom
+        if more:
+            return {'loglike':loglike,
+                    's2n_numer':s2n_numer,
+                    's2n_denom':s2n_denom,
+                    'npix':npix}
         else:
             return loglike
 
