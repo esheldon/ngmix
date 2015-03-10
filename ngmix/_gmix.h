@@ -11,6 +11,8 @@ enum PyGMix_Models {
     PyGMIX_GMIX_BDF=6,
     PyGMIX_GMIX_COELLIP=7,
     PyGMIX_GMIX_SERSIC=8,
+    PYGMIX_GMIX_FRACDEV=9,
+    PYGMIX_GMIX_SWINDLE=10,
     PyGMIX_GMIX_COELLIP4=100
 };
 
@@ -34,6 +36,13 @@ struct __attribute__((__packed__)) PyGMix_Gauss2D {
 
     double norm;
     double pnorm;
+};
+
+struct __attribute__((__packed__)) PyGMix_Composite {
+    double fracdev;
+    double de_Trat; // ratio Tdev/Texp
+    double Tfactor;
+    struct PyGMix_Gauss2D gmix[16];
 };
 
 //struct PyGMix_Jacobian {
