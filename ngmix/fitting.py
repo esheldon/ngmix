@@ -764,6 +764,196 @@ class TemplateFluxFitter(FitterBase):
 
         return self._npix
 
+class FracdevFitter(FitterBase):
+    def __init__(self, obs, exp_pars, dev_pars, **keys):
+        """
+        obs must have psf (with gmix) set
+        """
+        self.margsky=False
+        self.use_logpars=keys.get('use_logpars',False)
+        self._set_obs(obs)
+        self._set_images(exp_pars, dev_pars)
+
+        self.model_name='fracdev'
+
+        self._set_totpix()
+
+        if 'aperture' in keys:
+            self.set_aperture(keys['aperture'])
+
+        lm_pars=keys.get('lm_pars',None)
+        if lm_pars is None:
+            lm_pars={'maxfev':4000}
+                     #'ftol': 1.0e-5,
+                     #'xtol': 1.0e-5}
+
+        self.lm_pars=lm_pars
+        self.npars=1
+
+        self.fdiff_size=self.totpix
+
+    def go(self, fracdev_guess):
+        """
+        Run leastsq and set the result
+        """
+
+        fracdev_guess=array(fracdev_guess,dtype='f8',ndmin=1,copy=False)
+        if fracdev_guess.size != 1:
+            raise ValueError("fracdev is a scalar or len 1 array")
+
+        n_prior_pars=0
+        result = run_leastsq(self._calc_fdiff,
+                             fracdev_guess,
+                             n_prior_pars,
+                             **self.lm_pars)
+
+        result['model'] = self.model_name
+        if result['flags']==0:
+            result['fracdev'] = result['pars'][0].copy()
+            result['fracdev_err'] = sqrt(result['pars_cov'][0,0])
+
+        self._result=result
+ 
+    def _calc_fdiff(self, pars, **keys):
+        """
+
+        vector with (model-data)/error.
+
+        The npars elements contain -ln(prior)
+        """
+
+        fracdev = pars[0]
+
+        # we cannot keep sending existing array into leastsq, don't know why
+        fdiff=zeros(self.fdiff_size)
+
+        if fracdev < 0.0 or fracdev > 1.0:
+            fdiff[:] = LOWVAL
+            return fdiff
+
+        start=0
+
+        for band in xrange(self.nband):
+
+            obs_list=self.obs[band]
+
+            images   = self._images[band]
+            sweights = self._sweights[band]
+            eimages  = self._eimages[band]
+            dimages  = self._dimages[band]
+
+            for epoch,obs in enumerate(obs_list):
+
+                image   = images[epoch]
+                sweight = sweights[epoch]
+
+                npix = image.size
+
+                tfdiff    = eimages[epoch].copy()
+                dev_image = dimages[epoch].copy()
+
+                tfdiff *= (1.0-fracdev)
+
+                dev_image *= fracdev
+
+                tfdiff += dev_image
+
+                tfdiff -= image
+                tfdiff *= sweight
+
+                fdiff[start:start+npix] = tfdiff
+
+                start += npix
+
+
+        return fdiff
+
+
+
+    def _set_images(self, exp_pars, dev_pars):
+        exp_pars=array(exp_pars,dtype='f8',ndmin=1,copy=True)
+        dev_pars=array(dev_pars,dtype='f8',ndmin=1,copy=True)
+
+        if self.use_logpars:
+            exp_pars[4:] = exp(exp_pars[4:])
+            dev_pars[4:] = exp(dev_pars[4:])
+
+        nb=self.nband
+
+        enb=exp_pars.size-5
+        dnb=dev_pars.size-5
+        mess="expected %d bands, got %d"
+        if enb != nb:
+            raise ValueError(mess % (nb,enb))
+        if dnb != nb:
+            raise ValueError(mess % (nb,dnb))
+
+
+        tepars = zeros(6)
+        tdpars = zeros(6)
+
+        tepars[0:5] = exp_pars[0:5]
+        tdpars[0:5] = dev_pars[0:5]
+
+
+        all_images=[]
+        all_sweights=[]
+        all_eimages=[]
+        all_dimages=[]
+
+        for band in xrange(nb):
+            # these will get reset later based on fracdev
+            tepars[5] = exp_pars[5+band]
+            tdpars[5] = dev_pars[5+band]
+
+            band_obs = self.obs[band]
+            nepoch = len(band_obs)
+
+            images=[]
+            sweights=[]
+            eimages=[]
+            dimages=[]
+
+            for iepoch in xrange(nepoch):
+                epoch_obs = band_obs[iepoch]
+
+                image=epoch_obs.image.copy()
+
+                psf_gmix=epoch_obs.psf.gmix
+
+                cweight = epoch_obs.weight.clip(min=0.0)
+                sweight = sqrt(cweight)
+
+                tegm = gmix.GMixModel(tepars,'exp')
+                tdgm = gmix.GMixModel(tepars,'dev')
+
+                egm = tegm.convolve( psf_gmix )
+                dgm = tdgm.convolve( psf_gmix )
+
+                eimage = egm.make_image(image.shape,
+                                        jacobian=epoch_obs.jacobian)
+                dimage = dgm.make_image(image.shape,
+                                        jacobian=epoch_obs.jacobian)
+
+
+                images.append(image.ravel())
+                sweights.append(sweight.ravel())
+                eimages.append(eimage.ravel())
+                dimages.append(dimage.ravel())
+
+            all_images.append(images)
+            all_sweights.append(sweights)
+            all_eimages.append(eimages)
+            all_dimages.append(dimages)
+
+        self._images   = all_images
+        self._sweights = all_sweights
+        self._eimages  = all_eimages
+        self._dimages  = all_dimages
+
+
+
+
 
 class MaxSimple(FitterBase):
     """
@@ -964,7 +1154,14 @@ class LMSimple(FitterBase):
         # this is a dict
         # can contain maxfev (maxiter), ftol (tol in sum of squares)
         # xtol (tol in solution), etc
-        self.lm_pars=keys['lm_pars']
+
+        lm_pars=keys.get('lm_pars',None)
+        if lm_pars is None:
+            lm_pars={'maxfev':4000,
+                     'ftol': 1.0e-5,
+                     'xtol': 1.0e-5}
+        self.lm_pars=lm_pars
+
 
         # center1 + center2 + shape + T + fluxes
         self.n_prior_pars=1 + 1 + 1 + 1 + self.nband
@@ -7073,3 +7270,91 @@ def test_isample(model,
         g1plt.show()
         g2plt.show()
 
+def test_fracdev(fracdev=0.3, noise=0.1, noise_psf=0.001, show=False):
+    import images
+
+    Flux = 100.0
+    Texp=16.0
+    Tdev=16.0
+
+    g1=0.1
+    g2=0.03
+
+    Tpsf=4.0
+
+    #Ttot = (1-fracdev)*Texp + fracdev*Tdev + Tpsf
+    Ttot = Texp + Tdev + Tpsf
+
+    sigma=sqrt(Ttot/2)
+
+    dim=2*5*int(sigma)
+    cen=[(dim-1)/2.]*2
+    dims=[dim]*2
+
+    jacobian=UnitJacobian(cen[0],cen[0])
+    epars=array([0.0, 0.0, g1, g2, Texp, (1-fracdev)*Flux] )
+    dpars=array([0.0, 0.0, g1, g2, Tdev,     fracdev*Flux])
+    gme0 = gmix.GMixModel(epars,'exp')
+    gmd0 = gmix.GMixModel(dpars,'dev')
+
+    ppars=array( [0.0,0.0,0.0,0.0,Tpsf,1.0] )
+    gmpsf = gmix.GMixModel(ppars,'gauss')
+
+    gme=gme0.convolve(gmpsf)
+    gmd=gmd0.convolve(gmpsf)
+
+    impsf = gmpsf.make_image(dims, jacobian=jacobian)
+    ime   = gme.make_image(dims, jacobian=jacobian)
+    imd   = gmd.make_image(dims, jacobian=jacobian)
+
+    impsf += numpy.random.normal(scale=noise_psf, size=impsf.shape)
+    wtpsf = numpy.zeros(impsf.shape) + 1.0/noise_psf**2
+
+    im0 = ime + imd
+
+    im = im0 + numpy.random.normal(scale=noise, size=im0.shape)
+    wt = numpy.zeros(im.shape) + 1.0/noise**2
+
+
+    psf_obs = Observation(impsf, weight=wtpsf, jacobian=jacobian)
+    obs = Observation(im, weight=wt, jacobian=jacobian)
+
+    # fit psf
+    pfitter=LMSimple(psf_obs, 'gauss')
+    pfitter.go(ppars)
+
+    psf_obs.set_gmix( pfitter.get_gmix() )
+
+    # fit galaxy to exp and dev
+    obs.set_psf(psf_obs)
+
+    efitter=LMSimple(obs, 'exp')
+    efitter.go(epars)
+
+    dfitter=LMSimple(obs, 'dev')
+    dfitter.go(dpars)
+
+    # fit for fracdev
+    efitpars = efitter.get_result()['pars']
+    dfitpars = dfitter.get_result()['pars']
+    print_pars(efitpars,front="    efitpars: ")
+    print_pars(dfitpars,front="    dfitpars: ")
+
+    ffitter = FracdevFitter(obs, efitpars, dfitpars)
+    ffitter.go(0.5 + 0.1*srandu())
+
+    res=ffitter.get_result()
+    pprint(res)
+
+    if res['flags'] != 0:
+        print("failed with flags:",res['flags'])
+    else:
+        print("fracdev true:",fracdev)
+        print("fracdev fit:  %.3g +/- %.3g" % (res['fracdev'],res['fracdev_err']))
+
+        fdfit = res['fracdev']
+        Fluxfit = efitpars[5]*(1.0-fdfit)+ dfitpars[5]*fdfit
+        print("flux fit:",Fluxfit)
+
+    if show:
+        images.compare_images(im0,im)
