@@ -533,7 +533,9 @@ class FitterBase(object):
         else:
             res['pars_cov'] = cov
             res['pars_err']= err
-            res['g_cov'] = cov[2:2+2, 2:2+2]
+
+            if len(err) >= 6:
+                res['g_cov'] = cov[2:2+2, 2:2+2]
 
     def get_cov(self, pars, h, m):
         """
@@ -779,6 +781,8 @@ class FracdevFitter(FitterBase):
         """
         obs must have psf (with gmix) set
         """
+        self.method=keys.get('method','lm')
+
         self.margsky=False
         self.use_logpars=keys.get('use_logpars',False)
         self._set_obs(obs)
@@ -791,29 +795,38 @@ class FracdevFitter(FitterBase):
         if 'aperture' in keys:
             self.set_aperture(keys['aperture'])
 
-        lm_pars=keys.get('lm_pars',None)
-        if lm_pars is None:
-            lm_pars={'maxfev':4000}
+        pars=keys.get('pars',None)
+        if pars is None:
+            pars={'maxfev':4000}
 
-        self.lm_pars=lm_pars
+        self.pars=pars
         self.npars=1
 
         self.fdiff_size=self.totpix
 
     def go(self, fracdev_guess):
         """
-        Run leastsq and set the result
+        run max like fit
         """
-
         fracdev_guess=array(fracdev_guess,dtype='f8',ndmin=1,copy=False)
         if fracdev_guess.size != 1:
             raise ValueError("fracdev is a scalar or len 1 array")
+
+        if self.method=='lm':
+            return self._go_lm(fracdev_guess)
+        else:
+            return self._go_nm(fracdev_guess)
+
+    def _go_lm(self, fracdev_guess):
+        """
+        Run leastsq and set the result
+        """
 
         n_prior_pars=0
         result = run_leastsq(self._calc_fdiff,
                              fracdev_guess,
                              n_prior_pars,
-                             **self.lm_pars)
+                             **self.pars)
 
         result['model'] = self.model_name
         if result['flags']==0:
@@ -822,6 +835,80 @@ class FracdevFitter(FitterBase):
 
         self._result=result
  
+    def _go_nm(self, fracdev_guess):
+        """
+        Run leastsq and set the result
+        """
+        from .simplex import minimize_neldermead_rel as minimize_neldermead
+
+        result = minimize_neldermead(self._calc_neg_lnprob,
+                                     fracdev_guess,
+                                     **self.pars)
+
+        self._result = result
+
+        result['model'] = self.model_name
+        if result['success']:
+            result['flags'] = 0
+        else:
+            result['flags'] = 1
+
+        if 'x' in result:
+            pars=result['x']
+            result['pars'] = pars
+
+            h=1.0e-3
+            m=5.0
+            self.calc_cov(h, m)
+
+            result['fracdev'] = result['pars'][0].copy()
+
+            if 'pars_err' in result:
+                result['fracdev_err'] = result['pars_err'][0]
+
+    def get_cov(self, pars, h, m):
+        """
+        calculate the covariance matrix at the specified point
+
+        This method understands the natural bounds on ellipticity.
+        If the ellipticity is larger than 1-m*h then it is scaled
+        back, perserving the angle.
+
+        If the Hessian is singular, an attempt is made to invert
+        a diagonal version. If that fails, LinAlgError is raised.
+
+        parameters
+        ----------
+        pars: array
+            Array of parameters at which to evaluate the cov matrix
+        h: step size, optional
+            Step size for finite differences, default 1.0e-3
+        m: scalar
+            The max allowed ellipticity is 1-m*h.
+            Note the derivatives require evaluations at +/- h,
+            so m should be greater than 1.
+
+        Raises
+        ------
+        LinAlgError:
+            If the hessian is singular a diagonal version is tried
+            and if that fails finally a LinAlgError is raised.
+        """
+        import covmatrix
+
+        hess=covmatrix.calc_hess(self.calc_lnprob, pars, h)
+
+        try:
+            cov = -linalg.inv(hess)
+        except LinAlgError:
+            # pull out a diagonal version of the hessian
+            # this might still fail
+            hdiag=diag(diag(hess))
+            cov = -linalg.inv(hess)
+        return cov
+
+
+
     def _calc_fdiff(self, pars, **keys):
         """
 
@@ -876,6 +963,56 @@ class FracdevFitter(FitterBase):
 
         return fdiff
 
+    def _calc_neg_lnprob(self, pars):
+        return -self.calc_lnprob(pars)
+
+    def calc_lnprob(self, pars):
+        """
+        return log(prob)
+        """
+
+        fracdev = pars[0]
+
+        if fracdev < 0.0 or fracdev > 1.0:
+            return LOWVAL
+
+
+        lnprob = 0.0
+        for band in xrange(self.nband):
+
+            obs_list=self.obs[band]
+
+            images   = self._images[band]
+            weights  = self._weights[band]
+            eimages  = self._eimages[band]
+            dimages  = self._dimages[band]
+
+            for epoch,obs in enumerate(obs_list):
+
+                image   = images[epoch]
+                weight = weights[epoch]
+
+                npix = image.size
+
+                tfdiff    = eimages[epoch].copy()
+                dev_image = dimages[epoch].copy()
+
+                tfdiff *= (1.0-fracdev)
+
+                dev_image *= fracdev
+
+                tfdiff += dev_image
+
+                tfdiff -= image
+                tfdiff *= tfdiff
+                tfdiff *= weight
+
+                lnprob += tfdiff.sum()
+
+        lnprob *= (-0.5)
+
+        return lnprob
+
 
 
     def _set_images(self, exp_pars, dev_pars):
@@ -905,6 +1042,7 @@ class FracdevFitter(FitterBase):
 
 
         all_images=[]
+        all_weights=[]
         all_sweights=[]
         all_eimages=[]
         all_dimages=[]
@@ -918,6 +1056,7 @@ class FracdevFitter(FitterBase):
             nepoch = len(band_obs)
 
             images=[]
+            weights=[]
             sweights=[]
             eimages=[]
             dimages=[]
@@ -933,7 +1072,7 @@ class FracdevFitter(FitterBase):
                 sweight = sqrt(cweight)
 
                 tegm = gmix.GMixModel(tepars,'exp')
-                tdgm = gmix.GMixModel(tepars,'dev')
+                tdgm = gmix.GMixModel(tdpars,'dev')
 
                 egm = tegm.convolve( psf_gmix )
                 dgm = tdgm.convolve( psf_gmix )
@@ -945,16 +1084,19 @@ class FracdevFitter(FitterBase):
 
 
                 images.append(image.ravel())
+                weights.append(cweight.ravel())
                 sweights.append(sweight.ravel())
                 eimages.append(eimage.ravel())
                 dimages.append(dimage.ravel())
 
             all_images.append(images)
+            all_weights.append(weights)
             all_sweights.append(sweights)
             all_eimages.append(eimages)
             all_dimages.append(dimages)
 
         self._images   = all_images
+        self._weights = all_weights
         self._sweights = all_sweights
         self._eimages  = all_eimages
         self._dimages  = all_dimages
@@ -7317,12 +7459,17 @@ def test_isample(model,
 def test_fracdev(fracdev=0.3,
                  noise=0.1,
                  noise_psf=0.001,
+                 use_logpars=False,
+                 fracdev_method='lm',
+                 seed=None,
                  show=False):
-    import images
+    from . import joint_prior, priors
+
+    numpy.random.seed(seed)
 
     Flux = 100.0
-    Texp=16.0
-    Tdev=16.0
+    Texp = 16.0
+    Tdev = 16.0
 
     g1=0.1
     g2=0.03
@@ -7376,54 +7523,127 @@ def test_fracdev(fracdev=0.3,
     # fit galaxy to exp and dev
     obs.set_psf(psf_obs)
 
-    efitter=LMSimple(obs, 'exp')
-    efitter.go(epars)
+    guess = epars.copy()
+    guess[4] = Tw
+    guess[5] = Flux
 
-    dfitter=LMSimple(obs, 'dev')
-    dfitter.go(dpars)
+
+    g_prior = priors.ZDisk2D(0.985)
+    cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
+    #T_prior=priors.FlatPrior(-1.0, 1.0e6)
+    #F_prior=priors.FlatPrior(-1.0, 1.0e6)
+
+    if use_logpars:
+        T_prior=priors.TwoSidedErf(-11.,1., 13.8,1.)
+        F_prior=priors.TwoSidedErf(-11.,1., 13.8,1.)
+        guess[4] = log(guess[4])
+        guess[5] = log(guess[5])
+    else:
+        T_prior=priors.TwoSidedErf(0.0,0.1, 1.0e6,1.0e5)
+        F_prior=priors.TwoSidedErf(0.0,0.1, 1.0e6,1.0e5)
+
+    prior=joint_prior.PriorSimpleSep(cen_prior,
+                                     g_prior,
+                                     T_prior,
+                                     F_prior)
+
+
+    efitter=LMSimple(obs, 'exp',prior=prior,use_logpars=use_logpars)
+    efitter.go(guess)
+
+    dfitter=LMSimple(obs, 'dev',prior=prior,use_logpars=use_logpars)
+    dfitter.go(guess)
 
     # fit for fracdev
     eres=efitter.get_result()
     dres=dfitter.get_result()
+
+
+    if eres['flags'] != 0:
+        raise RuntimeError("exp failed with flags %s" % eres['flags'])
+    if dres['flags'] != 0:
+        raise RuntimeError("dev failed with flags %s" % dres['flags'])
+
     efitpars = eres['pars']
     dfitpars = dres['pars']
-    print_pars(efitpars,front="    efitpars: ")
-    print_pars(dfitpars,front="    dfitpars: ")
+    pefitpars = efitpars.copy()
+    pdfitpars = dfitpars.copy()
+    if use_logpars:
+        pefitpars[4:] = exp(pefitpars[4:])
+        pdfitpars[4:] = exp(pdfitpars[4:])
+    print_pars(pefitpars,front="    efitpars: ")
+    print_pars(pdfitpars,front="    dfitpars: ")
     print("chi2per exp:",eres['chi2per'],'dev:',dres['chi2per'])
+    print("nfev exp:",eres['nfev'],'dev:',dres['nfev'])
 
-    ffitter = FracdevFitter(obs, efitpars, dfitpars)
+    ffitter = FracdevFitter(obs, efitpars, dfitpars,
+                            use_logpars=use_logpars,
+                            method=fracdev_method)
     ffitter.go(0.5 + 0.1*srandu())
 
     res=ffitter.get_result()
-    pprint(res)
+    #pprint(res)
 
     if res['flags'] != 0:
         raise RuntimeError("failed with flags: %s" %res['flags'])
 
+    print("fracdev nfev:",res['nfev'])
     print("fracdev true:",fracdev)
     print("fracdev fit:  %.3g +/- %.3g" % (res['fracdev'],res['fracdev_err']))
 
     fdfit = res['fracdev']
-    Fluxfit = efitpars[5]*(1.0-fdfit)+ dfitpars[5]*fdfit
+    Fluxfit = pefitpars[5]*(1.0-fdfit)+ pdfitpars[5]*fdfit
     print("flux fit:",Fluxfit)
 
-    TdByTe=dfitpars[4]/efitpars[4]
-    cfitter=LMComposite(obs, fdfit, TdByTe)
-    guess=[0.0,0.0,0.0,0.0,Tw,100.0]
+    fduse = fdfit
+    #fduse = fracdev
+    TdByTe=pdfitpars[4]/pefitpars[4]
+    cfitter=LMComposite(obs, fduse, TdByTe,prior=prior,
+                        use_logpars=use_logpars)
     cfitter.go(guess)
     
     cres=cfitter.get_result()
 
+    if cres['flags'] != 0:
+        raise RuntimeError("failed with flags %s" % cres['flags'])
+
     print("s/n:",cres['s2n_w'],"nfev:",cres['nfev'],'chi2per:',cres['chi2per'])
-    print_pars(cres['pars'],front='    cpars: ')
-    print_pars(cres['pars_err'],front='    cperr: ')
+
+    ppars = cres['pars'].copy()
+    pperr = cres['pars_err'].copy()
+    if use_logpars:
+        ppars[4:] = exp(ppars[4:])
+        pperr[4:] = ppars[4:]*pperr[4:]
+
+    print_pars(ppars,front='    cpars: ')
+    print_pars(pperr,front='    cperr: ')
 
     if show:
+        import images
+
+        egm0=efitter.get_gmix()
+        psf_gmix = pfitter.get_gmix()
+        egm=egm0.convolve(psf_gmix)
+
+        dgm0=dfitter.get_gmix()
+        psf_gmix = pfitter.get_gmix()
+        dgm=dgm0.convolve(psf_gmix)
+
+ 
         cgm0=cfitter.get_gmix()
         psf_gmix = pfitter.get_gmix()
         cgm=cgm0.convolve(psf_gmix)
 
-        mim=cgm.make_image(dims, jacobian=jacobian)
-        images.compare_images(im, mim,
+        eim=egm.make_image(dims, jacobian=jacobian)
+        dim=dgm.make_image(dims, jacobian=jacobian)
+        cim=cgm.make_image(dims, jacobian=jacobian)
+
+        images.compare_images(im, eim,
                               label1='image',
-                              label2='model')
+                              label2='exp')
+        images.compare_images(im, dim,
+                              label1='image',
+                              label2='dev')
+        images.compare_images(im, cim,
+                              label1='image',
+                              label2='composite')
