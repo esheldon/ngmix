@@ -40,7 +40,7 @@ struct __attribute__((__packed__)) PyGMix_Gauss2D {
 
 struct __attribute__((__packed__)) PyGMix_Composite {
     double fracdev;
-    double de_Trat; // ratio Tdev/Texp
+    double TdByTe; // ratio Tdev/Texp
     double Tfactor;
     struct PyGMix_Gauss2D gmix[16];
 };

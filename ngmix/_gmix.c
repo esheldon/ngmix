@@ -490,7 +490,7 @@ static int gmix_fill_composite(struct PyGMix_Composite*self,
             f=PyGMix_fvals_exp[i];
         } else {
             p=PyGMix_pvals_dev[i-6] * self->fracdev;
-            f=PyGMix_fvals_dev[i-6] * self->de_Trat;
+            f=PyGMix_fvals_dev[i-6] * self->TdByTe;
         }
 
         T_i_2 = 0.5*T*f;
@@ -567,13 +567,13 @@ _gmix_fill_coellip_bail:
 static PyObject * PyGMix_get_composite_Tfactor(PyObject* self, PyObject* args) {
     double
         fracdev=0,
-        de_Trat=0,
+        TdByTe=0,
         ifracdev=0,
         Tfactor=0,
         p=0,f=0;
     long i=0;
 
-    if (!PyArg_ParseTuple(args, (char*)"dd", &fracdev, &de_Trat)) {
+    if (!PyArg_ParseTuple(args, (char*)"dd", &fracdev, &TdByTe)) {
         return NULL;
     }
 
@@ -587,7 +587,7 @@ static PyObject * PyGMix_get_composite_Tfactor(PyObject* self, PyObject* args) {
 
     for (i=0; i<10; i++) {
         p=PyGMix_pvals_dev[i] * fracdev;
-        f=PyGMix_fvals_dev[i] * de_Trat;
+        f=PyGMix_fvals_dev[i] * TdByTe;
 
         Tfactor += p*f;
     }
