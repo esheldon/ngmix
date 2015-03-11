@@ -318,6 +318,10 @@ class FitterBase(object):
 
         return res
 
+    def _make_model(self, band_pars):
+        gm0=gmix.make_gmix_model(band_pars, self.model)
+        return gm0
+
     def _init_gmix_all(self, pars):
         """
         input pars are in linear space
@@ -341,13 +345,11 @@ class FitterBase(object):
             band_pars=self._get_band_pars(pars, band)
 
             for obs in obs_list:
+                gm0 = self._make_model(band_pars)
                 if self.dopsf:
                     psf_gmix=obs.psf.gmix
-
-                    gm0=gmix.make_gmix_model(band_pars, self.model)
                     gm=gm0.convolve(psf_gmix)
                 else:
-                    gm0=gmix.make_gmix_model(band_pars, self.model)
                     gm=gm0.copy()
 
                 gmix_list0.append(gm0)
@@ -358,6 +360,12 @@ class FitterBase(object):
 
         self._gmix_all0 = gmix_all0
         self._gmix_all  = gmix_all
+
+    def _fill_gmix(self, gm, band_pars):
+        _gmix.gmix_fill(gm._data, band_pars, gm._model)
+
+    def _convolve_gmix(self, gm, gm0, psf_gmix):
+        _gmix.convolve_fill(gm._data, gm0._data, psf_gmix._data)
 
     def _fill_gmix_all(self, pars):
         """
@@ -385,8 +393,10 @@ class FitterBase(object):
                 gm=gmix_list[i]
 
                 #gm0.fill(band_pars)
-                _gmix.gmix_fill(gm0._data, band_pars, gm0._model)
-                _gmix.convolve_fill(gm._data, gm0._data, psf_gmix._data)
+                self._fill_gmix(gm0, band_pars)
+                #_gmix.gmix_fill(gm0._data, band_pars, gm0._model)
+                self._convolve_gmix(gm, gm0, psf_gmix)
+                #_gmix.convolve_fill(gm._data, gm0._data, psf_gmix._data)
 
     def _fill_gmix_all_nopsf(self, pars):
         """
@@ -784,8 +794,6 @@ class FracdevFitter(FitterBase):
         lm_pars=keys.get('lm_pars',None)
         if lm_pars is None:
             lm_pars={'maxfev':4000}
-                     #'ftol': 1.0e-5,
-                     #'xtol': 1.0e-5}
 
         self.lm_pars=lm_pars
         self.npars=1
@@ -1142,6 +1150,9 @@ class MaxCoellip(MaxSimple):
       
 
 
+_default_lm_pars={'maxfev':4000,
+                  'ftol': 1.0e-5,
+                  'xtol': 1.0e-5}
 
 class LMSimple(FitterBase):
     """
@@ -1157,9 +1168,7 @@ class LMSimple(FitterBase):
 
         lm_pars=keys.get('lm_pars',None)
         if lm_pars is None:
-            lm_pars={'maxfev':4000,
-                     'ftol': 1.0e-5,
-                     'xtol': 1.0e-5}
+            lm_pars=_default_lm_pars
         self.lm_pars=lm_pars
 
 
@@ -1296,6 +1305,41 @@ class LMSimple(FitterBase):
             nprior=self.prior.fill_fdiff(pars, fdiff)
 
         return nprior
+
+
+class LMComposite(LMSimple):
+    """
+    exp+dev model with pre-determined fracdev and ratio Tdev/Texp
+    """
+    def __init__(self, obs, fracdev, TdByTe, **keys):
+        super(LMComposite,self).__init__(obs, 'composite', **keys)
+
+        self.fracdev=fracdev
+        self.TdByTe=TdByTe
+
+    def get_gmix(self, band=0):
+        """
+        Get a gaussian mixture at the "best" parameter set, which
+        definition depends on the sub-class
+        """
+        res=self.get_result()
+        pars=self._get_band_pars(res['pars'], band)
+        return gmix.GMixComposite(self.fracdev,
+                                  self.TdByTe,
+                                  pars)
+
+
+    def _make_model(self, band_pars):
+        gm0=gmix.GMixComposite(self.fracdev, self.TdByTe, band_pars)
+        return gm0
+
+    def _fill_gmix(self, gm, band_pars):
+        _gmix.gmix_fill_composite(gm._data, band_pars)
+
+    def _convolve_gmix(self, gm, gm0, psf_gmix):
+        _gmix.convolve_fill(gm._data,
+                            gm0._data['gmix'][0],
+                            psf_gmix._data)
 
 
 class LMSersic(LMSimple):
@@ -7270,7 +7314,10 @@ def test_isample(model,
         g1plt.show()
         g2plt.show()
 
-def test_fracdev(fracdev=0.3, noise=0.1, noise_psf=0.001, show=False):
+def test_fracdev(fracdev=0.3,
+                 noise=0.1,
+                 noise_psf=0.001,
+                 show=False):
     import images
 
     Flux = 100.0
@@ -7282,7 +7329,8 @@ def test_fracdev(fracdev=0.3, noise=0.1, noise_psf=0.001, show=False):
 
     Tpsf=4.0
 
-    #Ttot = (1-fracdev)*Texp + fracdev*Tdev + Tpsf
+    Tw = (1-fracdev)*Texp + fracdev*Tdev
+    print("g1:",g1,"g2:",g2,"Tw:",Tw)
     Ttot = Texp + Tdev + Tpsf
 
     sigma=sqrt(Ttot/2)
@@ -7335,10 +7383,13 @@ def test_fracdev(fracdev=0.3, noise=0.1, noise_psf=0.001, show=False):
     dfitter.go(dpars)
 
     # fit for fracdev
-    efitpars = efitter.get_result()['pars']
-    dfitpars = dfitter.get_result()['pars']
+    eres=efitter.get_result()
+    dres=dfitter.get_result()
+    efitpars = eres['pars']
+    dfitpars = dres['pars']
     print_pars(efitpars,front="    efitpars: ")
     print_pars(dfitpars,front="    dfitpars: ")
+    print("chi2per exp:",eres['chi2per'],'dev:',dres['chi2per'])
 
     ffitter = FracdevFitter(obs, efitpars, dfitpars)
     ffitter.go(0.5 + 0.1*srandu())
@@ -7347,14 +7398,32 @@ def test_fracdev(fracdev=0.3, noise=0.1, noise_psf=0.001, show=False):
     pprint(res)
 
     if res['flags'] != 0:
-        print("failed with flags:",res['flags'])
-    else:
-        print("fracdev true:",fracdev)
-        print("fracdev fit:  %.3g +/- %.3g" % (res['fracdev'],res['fracdev_err']))
+        raise RuntimeError("failed with flags: %s" %res['flags'])
 
-        fdfit = res['fracdev']
-        Fluxfit = efitpars[5]*(1.0-fdfit)+ dfitpars[5]*fdfit
-        print("flux fit:",Fluxfit)
+    print("fracdev true:",fracdev)
+    print("fracdev fit:  %.3g +/- %.3g" % (res['fracdev'],res['fracdev_err']))
+
+    fdfit = res['fracdev']
+    Fluxfit = efitpars[5]*(1.0-fdfit)+ dfitpars[5]*fdfit
+    print("flux fit:",Fluxfit)
+
+    TdByTe=dfitpars[4]/efitpars[4]
+    cfitter=LMComposite(obs, fdfit, TdByTe)
+    guess=[0.0,0.0,0.0,0.0,Tw,100.0]
+    cfitter.go(guess)
+    
+    cres=cfitter.get_result()
+
+    print("s/n:",cres['s2n_w'],"nfev:",cres['nfev'],'chi2per:',cres['chi2per'])
+    print_pars(cres['pars'],front='    cpars: ')
+    print_pars(cres['pars_err'],front='    cperr: ')
 
     if show:
-        images.compare_images(im0,im)
+        cgm0=cfitter.get_gmix()
+        psf_gmix = pfitter.get_gmix()
+        cgm=cgm0.convolve(psf_gmix)
+
+        mim=cgm.make_image(dims, jacobian=jacobian)
+        images.compare_images(im, mim,
+                              label1='image',
+                              label2='model')
