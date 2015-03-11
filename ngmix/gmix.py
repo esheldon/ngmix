@@ -695,11 +695,11 @@ class GMixComposite(GMix):
     model: string or gmix type
         e.g. 'exp' or GMIX_EXP
     """
-    def __init__(self, fracdev, de_Trat):
+    def __init__(self, fracdev, TdByTe, pars):
 
         self._fracdev = fracdev
-        self._de_Trat = de_Trat
-        self._Tfactor = _gmix.get_composite_Tfactor(fracdev, de_Trat)
+        self._TdByTe = TdByTe
+        self._Tfactor = _gmix.get_composite_Tfactor(fracdev, TdByTe)
 
         self._model      = _gmix_model_dict['fracdev']
         self._model_name = _gmix_string_dict[self._model]
@@ -708,6 +708,8 @@ class GMixComposite(GMix):
         self._npars  = _gmix_npars_dict[self._model]
 
         self.reset()
+
+        self.fill(pars)
 
 
     def copy(self):
@@ -723,7 +725,7 @@ class GMixComposite(GMix):
         """
         self._data = zeros(self._ngauss, dtype=_composite_dtype)
         self._data['fracdev'][0] = self._fracdev
-        self._data['de_Trat'][0] = self._de_Trat
+        self._data['TdByTe'][0] = self._TdByTe
         self._data['Tfactor'][0] = self._Tfactor
 
 
@@ -1212,7 +1214,7 @@ GMIX_BDF=6
 GMIX_COELLIP=7
 GMIX_SERSIC=8
 GMIX_FRACDEV=9
-GMIX_SWINDLE=10
+GMIX_COMPOSITE=10
 
 _gmix_model_dict={'full':       GMIX_FULL,
                   GMIX_FULL:    GMIX_FULL,
@@ -1232,8 +1234,8 @@ _gmix_model_dict={'full':       GMIX_FULL,
                   GMIX_FRACDEV: GMIX_FRACDEV,
                   'fracdev': GMIX_FRACDEV,
 
-                  GMIX_SWINDLE: GMIX_SWINDLE,
-                  'swindle': GMIX_SWINDLE,
+                  GMIX_COMPOSITE: GMIX_COMPOSITE,
+                  'composite': GMIX_COMPOSITE,
 
                   'coellip':    GMIX_COELLIP,
                   GMIX_COELLIP: GMIX_COELLIP,
@@ -1259,8 +1261,8 @@ _gmix_string_dict={GMIX_FULL:'full',
                    GMIX_FRACDEV:'fracdev',
                    'fracdev':'fracdev',
 
-                   GMIX_SWINDLE:'swindle',
-                   'swindle':'swindle',
+                   GMIX_COMPOSITE:'composite',
+                   'composite':'composite',
 
                    GMIX_COELLIP:'coellip',
                    'coellip':GMIX_COELLIP,
@@ -1275,7 +1277,7 @@ _gmix_npars_dict={GMIX_GAUSS:6,
                   GMIX_DEV:6,
 
                   GMIX_FRACDEV:1,
-                  GMIX_SWINDLE:6,
+                  GMIX_COMPOSITE:6,
 
                   GMIX_BDC:8,
                   GMIX_BDF:7,
@@ -1287,7 +1289,7 @@ _gmix_ngauss_dict={GMIX_GAUSS:1,
                    GMIX_DEV:10,
 
                    GMIX_FRACDEV:16,
-                   GMIX_SWINDLE:16,
+                   GMIX_COMPOSITE:16,
 
                    GMIX_BDC:16,
                    GMIX_BDF:16,
@@ -1308,7 +1310,7 @@ _gauss2d_dtype=[('p','f8'),
                 ('pnorm','f8')]
 
 _composite_dtype=[('fracdev','f8'),
-                  ('de_Trat','f8'), # ratio Tdev/Texp
+                  ('TdByTe','f8'), # ratio Tdev/Texp
                   ('Tfactor','f8'),
                   ('gmix',_gauss2d_dtype,16)]
 
@@ -1318,6 +1320,7 @@ def get_model_num(model):
     which could be string or number
     """
     return _gmix_model_dict[model]
+
 def get_model_name(model):
     """
     Get the string identifier for the input model,
