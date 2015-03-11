@@ -7462,6 +7462,7 @@ def test_fracdev(fracdev=0.3,
                  use_logpars=False,
                  fracdev_method='lm',
                  seed=None,
+                 verbose=True,
                  show=False):
     from . import joint_prior, priors
 
@@ -7477,7 +7478,8 @@ def test_fracdev(fracdev=0.3,
     Tpsf=4.0
 
     Tw = (1-fracdev)*Texp + fracdev*Tdev
-    print("g1:",g1,"g2:",g2,"Tw:",Tw)
+    if verbose:
+        print("g1:",g1,"g2:",g2,"Tw:",Tw)
     Ttot = Texp + Tdev + Tpsf
 
     sigma=sqrt(Ttot/2)
@@ -7571,10 +7573,12 @@ def test_fracdev(fracdev=0.3,
     if use_logpars:
         pefitpars[4:] = exp(pefitpars[4:])
         pdfitpars[4:] = exp(pdfitpars[4:])
-    print_pars(pefitpars,front="    efitpars: ")
-    print_pars(pdfitpars,front="    dfitpars: ")
-    print("chi2per exp:",eres['chi2per'],'dev:',dres['chi2per'])
-    print("nfev exp:",eres['nfev'],'dev:',dres['nfev'])
+    
+    if verbose:
+        print_pars(pefitpars,front="    efitpars: ")
+        print_pars(pdfitpars,front="    dfitpars: ")
+        print("chi2per exp:",eres['chi2per'],'dev:',dres['chi2per'])
+        print("nfev exp:",eres['nfev'],'dev:',dres['nfev'])
 
     ffitter = FracdevFitter(obs, efitpars, dfitpars,
                             use_logpars=use_logpars,
@@ -7582,18 +7586,19 @@ def test_fracdev(fracdev=0.3,
     ffitter.go(0.5 + 0.1*srandu())
 
     res=ffitter.get_result()
-    #pprint(res)
 
     if res['flags'] != 0:
         raise RuntimeError("failed with flags: %s" %res['flags'])
 
-    print("fracdev nfev:",res['nfev'])
-    print("fracdev true:",fracdev)
-    print("fracdev fit:  %.3g +/- %.3g" % (res['fracdev'],res['fracdev_err']))
 
     fdfit = res['fracdev']
     Fluxfit = pefitpars[5]*(1.0-fdfit)+ pdfitpars[5]*fdfit
-    print("flux fit:",Fluxfit)
+
+    if verbose:
+        print("fracdev nfev:",res['nfev'])
+        print("fracdev true:",fracdev)
+        print("fracdev fit:  %.3g +/- %.3g" % (res['fracdev'],res['fracdev_err']))
+        print("flux fit:",Fluxfit)
 
     fduse = fdfit
     #fduse = fracdev
@@ -7607,7 +7612,6 @@ def test_fracdev(fracdev=0.3,
     if cres['flags'] != 0:
         raise RuntimeError("failed with flags %s" % cres['flags'])
 
-    print("s/n:",cres['s2n_w'],"nfev:",cres['nfev'],'chi2per:',cres['chi2per'])
 
     ppars = cres['pars'].copy()
     pperr = cres['pars_err'].copy()
@@ -7615,8 +7619,10 @@ def test_fracdev(fracdev=0.3,
         ppars[4:] = exp(ppars[4:])
         pperr[4:] = ppars[4:]*pperr[4:]
 
-    print_pars(ppars,front='    cpars: ')
-    print_pars(pperr,front='    cperr: ')
+    if verbose:
+        print("s/n:",cres['s2n_w'],"nfev:",cres['nfev'],'chi2per:',cres['chi2per'])
+        print_pars(ppars,front='    cpars: ')
+        print_pars(pperr,front='    cperr: ')
 
     if show:
         import images
@@ -7647,3 +7653,5 @@ def test_fracdev(fracdev=0.3,
         images.compare_images(im, cim,
                               label1='image',
                               label2='composite')
+
+    return cres['pars']
