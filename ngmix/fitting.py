@@ -7583,9 +7583,11 @@ def test_fracdev(fracdev=0.3,
     ffitter = FracdevFitter(obs, efitpars, dfitpars,
                             use_logpars=use_logpars,
                             method=fracdev_method)
-    ffitter.go(0.5 + 0.1*srandu())
-
-    res=ffitter.get_result()
+    for i in xrange(10):
+        ffitter.go(0.5 + 0.1*srandu())
+        res=ffitter.get_result()
+        if res['flags']==0:
+            break
 
     if res['flags'] != 0:
         raise RuntimeError("failed with flags: %s" %res['flags'])
