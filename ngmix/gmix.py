@@ -150,16 +150,25 @@ class GMix(object):
     def get_T(self):
         """
         get weighted average T sum(p*T)/sum(p)
-
-        Warning: only really works if the centers are the same
         """
-        gm=self._get_gmix_data()
-        psum=gm['p'].sum()
 
-        irrsum=(gm['irr']*gm['p']).sum()
-        iccsum=(gm['icc']*gm['p']).sum()
-        T = (irrsum + iccsum)/psum
+        gm=self._get_gmix_data()
+
+        row,col=self.get_cen()
+
+        rowdiff=gm['row']-row
+        coldiff=gm['col']-col
+
+        p=gm['p']
+        ipsum=1.0/p.sum()
+
+        irr= ((gm['irr'] + rowdiff**2)      * p).sum()*ipsum
+        icc= ((gm['icc'] + coldiff**2)      * p).sum()*ipsum
+
+        T = irr + icc
+
         return T
+
 
     def get_sigma(self):
         """
@@ -170,18 +179,23 @@ class GMix(object):
 
     def get_e1e2T(self):
         """
-        Get e1,e2 and T for the total gmix.
-
-        Warning: only really works if the centers are the same
+        Get e1,e2 and T for the total gaussian mixture.
         """
 
         gm=self._get_gmix_data()
 
-        ipsum=1.0/gm['p'].sum()
+        row,col=self.get_cen()
 
-        irr=(gm['irr']*gm['p']).sum()*ipsum
-        irc=(gm['irc']*gm['p']).sum()*ipsum
-        icc=(gm['icc']*gm['p']).sum()*ipsum
+        rowdiff=gm['row']-row
+        coldiff=gm['col']-col
+
+        p=gm['p']
+        ipsum=1.0/p.sum()
+
+        irr= ((gm['irr'] + rowdiff**2)      * p).sum()*ipsum
+        irc= ((gm['irc'] + rowdiff*coldiff) * p).sum()*ipsum
+        icc= ((gm['icc'] + coldiff**2)      * p).sum()*ipsum
+
         T = irr + icc
 
         e1=(icc-irr)/T
@@ -190,9 +204,7 @@ class GMix(object):
 
     def get_g1g2T(self):
         """
-        Get g1,g2 and T for the total gmix.
-
-        Warning: only really works if the centers are the same
+        Get g1,g2 and T for the total gaussian mixture.
         """
         e1,e2,T=self.get_e1e2T()
         g1,g2=e1e2_to_g1g2(e1,e2)
@@ -205,18 +217,7 @@ class GMix(object):
         Warning: only really works if the centers are the same
         """
 
-        gm=self._get_gmix_data()
-
-        ipsum=1.0/gm['p'].sum()
-
-        irr=(gm['irr']*gm['p']).sum()*ipsum
-        irc=(gm['irc']*gm['p']).sum()*ipsum
-        icc=(gm['icc']*gm['p']).sum()*ipsum
-        T = irr + icc
-
-        e1=(icc-irr)/T
-        e2=2.0*irc/T
-
+        e1,e2,T=self.get_e1e2T()
         sigma=sqrt(T/2)
         return e1,e2,sigma
 
