@@ -1329,7 +1329,7 @@ class GPriorBase(object):
         if guess is None:
             guess=self._get_guess(self.ydata.sum())
 
-        res = run_leastsq(self._calc_fdiff, guess, dof, 0, maxfev=4000)
+        res = run_leastsq(self._calc_fdiff, guess, 0, maxfev=4000)
 
         self.fit_pars=res['pars']
         self.fit_pars_cov=res['pars_cov']
@@ -1377,7 +1377,7 @@ class GPriorBA(GPriorBase):
     automatically has max lnprob 0 and max prob 1
     """
 
-    def __init__(self, sigma, A=1.0):
+    def __init__(self, sigma=0.3, A=1.0):
         """
         pars are scalar gsigma from B&A 
         """
