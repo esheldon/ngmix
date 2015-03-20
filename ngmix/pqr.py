@@ -616,6 +616,8 @@ def make_Usum_old(P,Q,R,S):
 def make_Wsum(P, Q, S, force_zeros=False):
     """
     Get Wsum and W inverse from unsheared sim data
+
+    force_zeros doesn't seem to help
     """
 
     U1,U3 = make_Uarrays(P, Q, S)
