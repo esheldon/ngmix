@@ -776,7 +776,7 @@ class TemplateFluxFitter(FitterBase):
 
         return self._npix
 
-class FracdevFitter(FitterBase):
+class FracdevFitterOld(FitterBase):
     def __init__(self, obs, exp_pars, dev_pars, **keys):
         """
         obs must have psf (with gmix) set
@@ -1102,6 +1102,165 @@ class FracdevFitter(FitterBase):
         self._dimages  = all_dimages
 
 
+class FracdevFitter(FitterBase):
+    def __init__(self, obs, exp_pars, dev_pars, **keys):
+        """
+        obs must have psf (with gmix) set
+        """
+
+        self.npars=1
+        self.use_logpars=keys.get('use_logpars',False)
+
+        self.margsky=False
+        self._set_obs(obs)
+
+        self.model_name='fracdev'
+
+        self._set_totpix()
+
+        self._set_arrays(exp_pars, dev_pars)
+
+        self._do_lstsq()
+
+    def _do_lstsq(self):
+        """
+        (data - expmod) = (devmod-expmod) * fracdev
+
+        or
+
+        Y = X * fracdev
+        """
+        
+        X = self.X[:,numpy.newaxis]
+        Y = self.Y
+
+        self._result={'model': 'fracdev', 'flags':0}
+
+        result=self._result
+
+        try:
+            pars, resid, _, _ = numpy.linalg.lstsq(X, Y)
+            pars = pars.clip(min=0.0, max=1.0)
+
+            result['pars'] = pars
+            result['fracdev'] = pars[0]
+
+            self.calc_cov()
+
+            result['fracdev_err'] = result['pars_err'][0]
+
+        except LinAlgError:
+            result['flags'] |= EIG_NOTFINITE
+
+
+    def calc_cov(self):
+        """
+        calculate the error
+        """
+        import covmatrix
+
+        res=self.get_result()
+
+        h=1.0e-3
+        hess=covmatrix.calc_hess(self.calc_lnprob, res['pars'], h)
+        try:
+            cov = -linalg.inv(hess)
+        except LinAlgError:
+            # pull out a diagonal version of the hessian
+            # this might still fail
+            hdiag=diag(diag(hess))
+            cov = -linalg.inv(hess)
+
+        pars_err=sqrt(cov[0,0])
+        res['pars_cov'] = cov
+        res['pars_err'] = sqrt(diag(cov))
+
+    def calc_lnprob(self, pars):
+        fracdev = pars[0]
+
+        lnp_array = (self.Y - fracdev*self.X)
+        lnp_array *= lnp_array
+
+        lnp = lnp_array.sum()
+        lnp *= (-0.5)
+
+        return lnp
+
+    def _set_arrays(self, exp_pars, dev_pars):
+        """
+        (data - expmod) = (devmod-expmod) * fracdev
+
+        or
+
+        Y = X * fracdev
+        """
+        X = zeros(self.totpix)
+        Y = zeros(self.totpix)
+
+        exp_pars=array(exp_pars,dtype='f8',ndmin=1,copy=True)
+        dev_pars=array(dev_pars,dtype='f8',ndmin=1,copy=True)
+
+        if self.use_logpars:
+            exp_pars[4:] = exp(exp_pars[4:])
+            dev_pars[4:] = exp(dev_pars[4:])
+
+        nb=self.nband
+
+        enb=exp_pars.size-5
+        dnb=dev_pars.size-5
+        mess="expected %d bands, got %d"
+        if enb != nb:
+            raise ValueError(mess % (nb,enb))
+        if dnb != nb:
+            raise ValueError(mess % (nb,dnb))
+
+
+        tepars = zeros(6)
+        tdpars = zeros(6)
+
+        tepars[0:5] = exp_pars[0:5]
+        tdpars[0:5] = dev_pars[0:5]
+
+        start=0
+        for band in xrange(nb):
+            # these will get reset later based on fracdev
+            tepars[5] = exp_pars[5+band]
+            tdpars[5] = dev_pars[5+band]
+
+            band_obs = self.obs[band]
+            nepoch = len(band_obs)
+
+            for iepoch in xrange(nepoch):
+                epoch_obs = band_obs[iepoch]
+
+                image=epoch_obs.image.copy()
+
+                psf_gmix=epoch_obs.psf.gmix
+
+                cweight = epoch_obs.weight.clip(min=0.0)
+                sweight = sqrt(cweight)
+
+                tegm = gmix.GMixModel(tepars,'exp')
+                tdgm = gmix.GMixModel(tdpars,'dev')
+
+                egm = tegm.convolve( psf_gmix )
+                dgm = tdgm.convolve( psf_gmix )
+
+                eimage = egm.make_image(image.shape,
+                                        jacobian=epoch_obs.jacobian)
+                dimage = dgm.make_image(image.shape,
+                                        jacobian=epoch_obs.jacobian)
+
+
+                end = start + image.size
+                X[start:end] = ( (dimage-eimage)*sweight ).ravel()
+                Y[start:end] = ( (image-eimage)*sweight  ).ravel()
+
+                start += image.size
+
+
+        self.X = X
+        self.Y = Y
 
 
 
@@ -1454,7 +1613,7 @@ class LMComposite(LMSimple):
     exp+dev model with pre-determined fracdev and ratio Tdev/Texp
     """
     def __init__(self, obs, fracdev, TdByTe, **keys):
-        super(LMComposite,self).__init__(obs, 'composite', **keys)
+        super(LMComposite,self).__init__(obs, 'cm', **keys)
 
         self.fracdev=fracdev
         self.TdByTe=TdByTe
@@ -1466,17 +1625,17 @@ class LMComposite(LMSimple):
         """
         res=self.get_result()
         pars=self._get_band_pars(res['pars'], band)
-        return gmix.GMixComposite(self.fracdev,
+        return gmix.GMixCM(self.fracdev,
                                   self.TdByTe,
                                   pars)
 
 
     def _make_model(self, band_pars):
-        gm0=gmix.GMixComposite(self.fracdev, self.TdByTe, band_pars)
+        gm0=gmix.GMixCM(self.fracdev, self.TdByTe, band_pars)
         return gm0
 
     def _fill_gmix(self, gm, band_pars):
-        _gmix.gmix_fill_composite(gm._data, band_pars)
+        _gmix.gmix_fill_cm(gm._data, band_pars)
 
     def _convolve_gmix(self, gm, gm0, psf_gmix):
         _gmix.convolve_fill(gm._data,
@@ -7580,27 +7739,38 @@ def test_fracdev(fracdev=0.3,
         print("chi2per exp:",eres['chi2per'],'dev:',dres['chi2per'])
         print("nfev exp:",eres['nfev'],'dev:',dres['nfev'])
 
-    ffitter = FracdevFitter(obs, efitpars, dfitpars,
+    '''
+    tm0=time.time()
+    ffitter_old = FracdevFitterOld(obs, efitpars, dfitpars,
                             use_logpars=use_logpars,
                             method=fracdev_method)
-    for i in xrange(10):
-        ffitter.go(0.5 + 0.1*srandu())
-        res=ffitter.get_result()
-        if res['flags']==0:
-            break
 
-    if res['flags'] != 0:
-        raise RuntimeError("failed with flags: %s" %res['flags'])
+    ffitter_old.go(0.5 + 0.1*srandu())
+    resold=ffitter_old.get_result()
+    tm=time.time()-tm0
 
+    if resold['flags'] != 0:
+        raise RuntimeError("failed with flags: %s" %resold['flags'])
+    '''
+    tm0=time.time()
+    ffitter_new = FracdevFitterNew(obs, efitpars, dfitpars,
+                                   use_logpars=use_logpars)
+    res=ffitter_new.get_result()
+    tmnew=time.time()-tm0
 
     fdfit = res['fracdev']
-    Fluxfit = pefitpars[5]*(1.0-fdfit)+ pdfitpars[5]*fdfit
+    Fluxfit= pefitpars[5]*(1.0-fdfit)+ pdfitpars[5]*fdfit
 
     if verbose:
-        print("fracdev nfev:",res['nfev'])
+        print()
+        #print("fracdev nfev:",resold['nfev'])
         print("fracdev true:",fracdev)
+        #print("fracdev old:  %.3g +/- %.3g" % (resold['fracdev'],resold['fracdev_err']))
         print("fracdev fit:  %.3g +/- %.3g" % (res['fracdev'],res['fracdev_err']))
+
         print("flux fit:",Fluxfit)
+
+        #print("time: %.3g tmnew: %.3g" % (tm,tmnew))
 
     fduse = fdfit
     #fduse = fracdev
@@ -7622,6 +7792,7 @@ def test_fracdev(fracdev=0.3,
         pperr[4:] = ppars[4:]*pperr[4:]
 
     if verbose:
+        print()
         print("s/n:",cres['s2n_w'],"nfev:",cres['nfev'],'chi2per:',cres['chi2per'])
         print_pars(ppars,front='    cpars: ')
         print_pars(pperr,front='    cperr: ')
@@ -7654,6 +7825,6 @@ def test_fracdev(fracdev=0.3,
                               label2='dev')
         images.compare_images(im, cim,
                               label1='image',
-                              label2='composite')
+                              label2='cm')
 
     return cres['pars']
