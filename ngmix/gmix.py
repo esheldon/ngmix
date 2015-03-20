@@ -682,9 +682,9 @@ class GMixModel(GMix):
         _gmix.gmix_fill(gm, pars, self._model)
 
 
-class GMixComposite(GMix):
+class GMixCM(GMix):
     """
-    Combine exp and dev using just fracdev
+    Composite Model exp and dev using just fracdev
 
     Inherits from the more general GMix class, and all its methods.
 
@@ -700,7 +700,7 @@ class GMixComposite(GMix):
 
         self._fracdev = fracdev
         self._TdByTe = TdByTe
-        self._Tfactor = _gmix.get_composite_Tfactor(fracdev, TdByTe)
+        self._Tfactor = _gmix.get_cm_Tfactor(fracdev, TdByTe)
 
         self._model      = _gmix_model_dict['fracdev']
         self._model_name = _gmix_string_dict[self._model]
@@ -717,14 +717,14 @@ class GMixComposite(GMix):
         """
         Get a new GMix with the same parameters
         """
-        gmix = GMixComposite(self._exp_pars, self._dev_pars, self._fracdev)
+        gmix = GMixCM(self._exp_pars, self._dev_pars, self._fracdev)
         return gmix
 
     def reset(self):
         """
         Replace the data array with a zeroed one.
         """
-        self._data = zeros(self._ngauss, dtype=_composite_dtype)
+        self._data = zeros(self._ngauss, dtype=_cm_dtype)
         self._data['fracdev'][0] = self._fracdev
         self._data['TdByTe'][0] = self._TdByTe
         self._data['Tfactor'][0] = self._Tfactor
@@ -748,7 +748,7 @@ class GMixComposite(GMix):
         self._pars = pars
 
         data=self.get_data()
-        _gmix.gmix_fill_composite(data, pars)
+        _gmix.gmix_fill_cm(data, pars)
 
     def _get_gmix_data(self):
         """
@@ -1215,7 +1215,9 @@ GMIX_BDF=6
 GMIX_COELLIP=7
 GMIX_SERSIC=8
 GMIX_FRACDEV=9
-GMIX_COMPOSITE=10
+
+# Composite Model
+GMIX_CM=10
 
 _gmix_model_dict={'full':       GMIX_FULL,
                   GMIX_FULL:    GMIX_FULL,
@@ -1235,8 +1237,8 @@ _gmix_model_dict={'full':       GMIX_FULL,
                   GMIX_FRACDEV: GMIX_FRACDEV,
                   'fracdev': GMIX_FRACDEV,
 
-                  GMIX_COMPOSITE: GMIX_COMPOSITE,
-                  'composite': GMIX_COMPOSITE,
+                  GMIX_CM: GMIX_CM,
+                  'cm': GMIX_CM,
 
                   'coellip':    GMIX_COELLIP,
                   GMIX_COELLIP: GMIX_COELLIP,
@@ -1262,8 +1264,8 @@ _gmix_string_dict={GMIX_FULL:'full',
                    GMIX_FRACDEV:'fracdev',
                    'fracdev':'fracdev',
 
-                   GMIX_COMPOSITE:'composite',
-                   'composite':'composite',
+                   GMIX_CM:'cm',
+                   'cm':'cm',
 
                    GMIX_COELLIP:'coellip',
                    'coellip':GMIX_COELLIP,
@@ -1278,7 +1280,7 @@ _gmix_npars_dict={GMIX_GAUSS:6,
                   GMIX_DEV:6,
 
                   GMIX_FRACDEV:1,
-                  GMIX_COMPOSITE:6,
+                  GMIX_CM:6,
 
                   GMIX_BDC:8,
                   GMIX_BDF:7,
@@ -1290,7 +1292,8 @@ _gmix_ngauss_dict={GMIX_GAUSS:1,
                    GMIX_DEV:10,
 
                    GMIX_FRACDEV:16,
-                   GMIX_COMPOSITE:16,
+
+                   GMIX_CM:16,
 
                    GMIX_BDC:16,
                    GMIX_BDF:16,
@@ -1310,7 +1313,7 @@ _gauss2d_dtype=[('p','f8'),
                 ('norm','f8'),
                 ('pnorm','f8')]
 
-_composite_dtype=[('fracdev','f8'),
+_cm_dtype=[('fracdev','f8'),
                   ('TdByTe','f8'), # ratio Tdev/Texp
                   ('Tfactor','f8'),
                   ('gmix',_gauss2d_dtype,16)]
