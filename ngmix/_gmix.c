@@ -446,7 +446,7 @@ _gmix_fill_simple_bail:
 }
 
 
-static int gmix_fill_composite(struct PyGMix_Composite*self,
+static int gmix_fill_cm(struct PyGMixCM*self,
                                const double* pars,
                                npy_intp n_pars)
 {
@@ -564,7 +564,7 @@ _gmix_fill_coellip_bail:
 }
 
 
-static PyObject * PyGMix_get_composite_Tfactor(PyObject* self, PyObject* args) {
+static PyObject * PyGMix_get_cm_Tfactor(PyObject* self, PyObject* args) {
     double
         fracdev=0,
         TdByTe=0,
@@ -699,14 +699,14 @@ static PyObject * PyGMix_gmix_fill(PyObject* self, PyObject* args) {
 }
 
 /* no type checking here */
-static PyObject * PyGMix_gmix_fill_composite(PyObject* self, PyObject* args) {
+static PyObject * PyGMix_gmix_fill_cm(PyObject* self, PyObject* args) {
     PyObject* composite_obj=NULL;
     PyObject* pars_obj=NULL;
     const double* pars=NULL;
     npy_intp n_pars=0;
     int res=0;
 
-    struct PyGMix_Composite* comp=NULL;
+    struct PyGMixCM* comp=NULL;
 
     if (!PyArg_ParseTuple(args, (char*)"OO",
                           &composite_obj, 
@@ -715,12 +715,12 @@ static PyObject * PyGMix_gmix_fill_composite(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    comp=(struct PyGMix_Composite* ) PyArray_DATA(composite_obj);
+    comp=(struct PyGMixCM* ) PyArray_DATA(composite_obj);
 
     pars=(double *) PyArray_DATA(pars_obj);
     n_pars = PyArray_SIZE(pars_obj);
 
-    res=gmix_fill_composite(comp, pars, n_pars);
+    res=gmix_fill_cm(comp, pars, n_pars);
     if (!res) {
         // raise an exception
         return NULL;
@@ -2239,14 +2239,14 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"render_jacob",(PyCFunction)PyGMix_render_jacob, METH_VARARGS,  "render with jacobian\n"},
 
     {"gmix_fill",(PyCFunction)PyGMix_gmix_fill, METH_VARARGS,  "Fill the input gmix with the input pars\n"},
-    {"gmix_fill_composite",(PyCFunction)PyGMix_gmix_fill_composite, METH_VARARGS,  "Fill the input gmix with the input pars\n"},
+    {"gmix_fill_cm",(PyCFunction)PyGMix_gmix_fill_cm, METH_VARARGS,  "Fill the input gmix with the input pars\n"},
 
     {"convolve_fill",(PyCFunction)PyGMix_convolve_fill, METH_VARARGS,  "convolve gaussian with psf and store in output\n"},
     {"set_norms",(PyCFunction)PyGMix_gmix_set_norms, METH_VARARGS,  "set the normalizations used during evaluation of the gaussians\n"},
 
     {"em_run",(PyCFunction)PyGMix_em_run, METH_VARARGS,  "run the em algorithm\n"},
 
-    {"get_composite_Tfactor",        (PyCFunction)PyGMix_get_composite_Tfactor,         METH_VARARGS,  "get T factor for composite model\n"},
+    {"get_cm_Tfactor",        (PyCFunction)PyGMix_get_cm_Tfactor,         METH_VARARGS,  "get T factor for composite model\n"},
 
     {"convert_simple_double_logpars",        (PyCFunction)PyGMix_convert_simple_double_logpars,         METH_VARARGS,  "convert log10 to linear.\n"},
     {"convert_simple_double_logpars_band",        (PyCFunction)PyGMix_convert_simple_double_logpars_band,         METH_VARARGS,  "convert log10 to linear with band specified.\n"},
