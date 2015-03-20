@@ -38,7 +38,7 @@ struct __attribute__((__packed__)) PyGMix_Gauss2D {
     double pnorm;
 };
 
-struct __attribute__((__packed__)) PyGMix_Composite {
+struct __attribute__((__packed__)) PyGMixCM {
     double fracdev;
     double TdByTe; // ratio Tdev/Texp
     double Tfactor;
