@@ -247,16 +247,6 @@ class GPriorBase(object):
             S
         From Slosar
 
-        P is this prior times the jacobian at shear==0
-
-        Q is the gradient of P*J evaluated at shear==0
-
-            [ d(P*J)/ds1, d(P*J)/ds2]_{s=0}
-
-        R is grad of grad of P*J at shear==0
-            [ d(P*J)/dg1ds1  d(P*J)/dg1ds2 ]
-            [ d(P*J)/dg1ds2  d(P*J)/dg2ds2 ]_{s=0}
-
         Derivatives are calculated using finite differencing
         """
 
@@ -1028,7 +1018,7 @@ class GPriorBase(object):
                                  Winv,
                                  chunksize,
                                  nchunks,
-                                 h=1.e-5,
+                                 h=1.e-5,   # 1.e-6 doesn't work
                                  ring=True,
                                  show=False,
                                  eps=None,
@@ -1036,18 +1026,8 @@ class GPriorBase(object):
                                  dtype='f8'):
         """
         Test how well we recover the shear with no noise.
-        
-        6x6 matrix with forced zeros
-            'f8' W from 200 million seeing 1.0e-3 errors at shear 0.2
-            and a bit rough looking
-        6x6 matrix without forced zeros
-            'f8' W from 200 million similar to forced zeros
-        tried zeroing on the inverse instead, about the same
 
-        6x6 matrix without forced zeros
-            'f16' W from 2 billion.  Looks the best.
-                3e-4 at sh=0.15 8e-4 at sh=0.2
-            'f8' W from 2 billion.  Creating W matrix now
+        First use test_pqrs_make_W and invert to get Winv
         """
         from .shape import Shape, shear_reduced
         from . import pqr
@@ -1168,12 +1148,12 @@ class GPriorBase(object):
                             Winv,
                             chunksize,
                             nchunks,
-                            h=1.e-5,
+                            h=1.e-5,   # 1.e-6 doesn't work
                             ring=True,
                             print_step=1000,
                             dtype='f8'):
         """
-        Test how well we recover the shear with no noise.
+        This is called by test_pqrs_shear_recovery
 
         parameters
         ----------
@@ -1253,7 +1233,8 @@ class GPriorBase(object):
     def test_make_pqrs_W(self,
                          chunksize, # pairs
                          nchunks,   # pairs
-                         h=1.e-5,
+                         h=1.e-5,   # 1.e-6 doesn't work
+                         force_zeros=False,
                          dtype='f8',
                          ring=True):
         """
@@ -1295,7 +1276,7 @@ class GPriorBase(object):
             Pns,Qns,Rns,Sns=self.get_pqrs_num(g1, g2, h=h)
 
             #Wsum_tmp = pqr.make_Wsum(Pns,Qns,Rns,Sns)
-            Wsum_tmp = pqr.make_Wsum(Pns,Qns,Sns)
+            Wsum_tmp = pqr.make_Wsum(Pns,Qns,Sns, force_zeros=force_zeros)
             if i==0:
                 Wsum = Wsum_tmp.copy()
             else:
