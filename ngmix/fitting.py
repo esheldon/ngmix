@@ -1140,7 +1140,6 @@ class FracdevFitter(FitterBase):
 
         try:
             pars, resid, _, _ = numpy.linalg.lstsq(X, Y)
-            pars = pars.clip(min=0.0, max=1.0)
 
             result['pars'] = pars
             result['fracdev'] = pars[0]
@@ -7753,7 +7752,7 @@ def test_fracdev(fracdev=0.3,
         raise RuntimeError("failed with flags: %s" %resold['flags'])
     '''
     tm0=time.time()
-    ffitter_new = FracdevFitterNew(obs, efitpars, dfitpars,
+    ffitter_new = FracdevFitter(obs, efitpars, dfitpars,
                                    use_logpars=use_logpars)
     res=ffitter_new.get_result()
     tmnew=time.time()-tm0
