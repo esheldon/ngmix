@@ -2321,7 +2321,8 @@ class GMixND(object):
 
         twopi = 2.0*pi
 
-        if self.ndim==1:
+        #if self.ndim==1:
+        if False:
             norms = 1.0/sqrt(twopi*self.covars)
             icovars = 1.0/self.covars
         else:
