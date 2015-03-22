@@ -776,12 +776,16 @@ class TemplateFluxFitter(FitterBase):
 
         return self._npix
 
-class FracdevFitterOld(FitterBase):
+class FracdevFitterMax(FitterBase):
     def __init__(self, obs, exp_pars, dev_pars, **keys):
         """
         obs must have psf (with gmix) set
         """
-        self.method=keys.get('method','lm')
+        self.prior=keys.get('prior',None)
+        method=keys.get('method','nm')
+        if self.prior is not None:
+            assert method=='nm','if prior sent method must be nm'
+        self.method=method
 
         self.margsky=False
         self.use_logpars=keys.get('use_logpars',False)
@@ -922,7 +926,7 @@ class FracdevFitterOld(FitterBase):
         # we cannot keep sending existing array into leastsq, don't know why
         fdiff=zeros(self.fdiff_size)
 
-        if fracdev < 0.0 or fracdev > 1.0:
+        if fracdev <= -1 or fracdev >= 2.0:
             fdiff[:] = LOWVAL
             return fdiff
 
@@ -973,11 +977,11 @@ class FracdevFitterOld(FitterBase):
 
         fracdev = pars[0]
 
-        if fracdev < 0.0 or fracdev > 1.0:
+        if fracdev <= -1 or fracdev >= 2.0:
             return LOWVAL
 
-
         lnprob = 0.0
+
         for band in xrange(self.nband):
 
             obs_list=self.obs[band]
@@ -1009,7 +1013,12 @@ class FracdevFitterOld(FitterBase):
 
                 lnprob += tfdiff.sum()
 
+
         lnprob *= (-0.5)
+
+        if self.prior is not None:
+            #print("using prior")
+            lnprob += self.prior.get_lnprob_scalar(pars)
 
         return lnprob
 
@@ -7740,7 +7749,7 @@ def test_fracdev(fracdev=0.3,
 
     '''
     tm0=time.time()
-    ffitter_old = FracdevFitterOld(obs, efitpars, dfitpars,
+    ffitter_old = FracdevFitterMax(obs, efitpars, dfitpars,
                             use_logpars=use_logpars,
                             method=fracdev_method)
 
