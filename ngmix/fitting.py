@@ -1143,7 +1143,7 @@ class FracdevFitter(FitterBase):
         X = self.X[:,numpy.newaxis]
         Y = self.Y
 
-        self._result={'model': 'fracdev', 'flags':0}
+        self._result={'model': 'fracdev', 'flags':0,'nfev':1}
 
         result=self._result
 
