@@ -976,9 +976,15 @@ class FracdevFitterMax(FitterBase):
         """
 
         fracdev = pars[0]
+        ifracdev = 1.0-pars[0]
 
         if fracdev <= -1 or fracdev >= 2.0:
             return LOWVAL
+
+        p_ndim = self.prior.ndim
+        if p_ndim != 1 and p_ndim > 3:
+            raise RuntimeError("currently only joint "
+                               "fracdev prior for ndim==3")
 
         lnprob = 0.0
 
@@ -998,12 +1004,13 @@ class FracdevFitterMax(FitterBase):
 
                 npix = image.size
 
-                tfdiff    = eimages[epoch].copy()
+                exp_image = eimages[epoch].copy()
                 dev_image = dimages[epoch].copy()
 
-                tfdiff *= (1.0-fracdev)
-
+                exp_image *= ifracdev
                 dev_image *= fracdev
+
+                tfdiff = exp_image
 
                 tfdiff += dev_image
 
@@ -1017,8 +1024,31 @@ class FracdevFitterMax(FitterBase):
         lnprob *= (-0.5)
 
         if self.prior is not None:
-            #print("using prior")
-            lnprob += self.prior.get_lnprob_scalar(pars)
+            if self.prior.ndim==1:
+                #print("using prior")
+                lnprob += self.prior.get_lnprob_scalar(pars)
+            else:
+                #print("using joint prior")
+                # it is a joint prior on TF and fracdev
+                Fe = ifracdev* self.lin_exp_F[0]
+                Fd = fracdev * self.lin_dev_F[0]
+                F = Fe + Fd
+                T = (Fe*self.lin_exp_T + Fd*self.lin_dev_T)/F
+
+                bad=False
+                if self.use_logpars:
+                    if T <= 0 or F <= 0:
+                        bad=True
+                    else:
+                        allpars=numpy.array( [log(T), log(F), fracdev] )
+                else:
+                    allpars=numpy.array( [T, F, fracdev] )
+
+                if bad:
+                    lnprob = -numpy.inf
+                else:
+                    lnp = self.prior.get_lnprob_scalar(allpars)
+                    lnprob += lnp
 
         return lnprob
 
@@ -1031,6 +1061,12 @@ class FracdevFitterMax(FitterBase):
         if self.use_logpars:
             exp_pars[4:] = exp(exp_pars[4:])
             dev_pars[4:] = exp(dev_pars[4:])
+        self.lin_exp_T = exp_pars[4]
+        self.lin_dev_T = dev_pars[4]
+        self.lin_exp_F = exp_pars[5:].copy()
+        self.lin_dev_F = dev_pars[5:].copy()
+
+        self.TdByTe = dev_pars[4]/exp_pars[4]
 
         nb=self.nband
 
@@ -1144,6 +1180,7 @@ class FracdevFitter(FitterBase):
         Y = self.Y
 
         self._result={'model': 'fracdev', 'flags':0,'nfev':1}
+
 
         result=self._result
 
