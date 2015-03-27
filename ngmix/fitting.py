@@ -785,6 +785,10 @@ class FracdevFitterMax(FitterBase):
         method=keys.get('method','nm')
         if self.prior is not None:
             assert method=='nm','if prior sent method must be nm'
+            if len(exp_pars) > 6:
+                raise RuntimeError("currently only joint "
+                                   "fracdev prior single band")
+
         self.method=method
 
         self.margsky=False
@@ -981,10 +985,6 @@ class FracdevFitterMax(FitterBase):
         if fracdev <= -1 or fracdev >= 2.0:
             return LOWVAL
 
-        p_ndim = self.prior.ndim
-        if p_ndim != 1 and p_ndim > 3:
-            raise RuntimeError("currently only joint "
-                               "fracdev prior for ndim==3")
 
         lnprob = 0.0
 
@@ -1027,6 +1027,28 @@ class FracdevFitterMax(FitterBase):
             if self.prior.ndim==1:
                 #print("using prior")
                 lnprob += self.prior.get_lnprob_scalar(pars)
+            elif self.prior.ndim==2:
+                #print("using joint F prior")
+                # it is a joint prior on F and fracdev
+                Fe = ifracdev* self.lin_exp_F[0]
+                Fd = fracdev * self.lin_dev_F[0]
+                F = Fe + Fd
+
+                bad=False
+                if self.use_logpars:
+                    if F <= 0:
+                        bad=True
+                    else:
+                        allpars=numpy.array( [log(F), fracdev] )
+                else:
+                    allpars=numpy.array( [F, fracdev] )
+
+                if bad:
+                    lnprob = -numpy.inf
+                else:
+                    lnp = self.prior.get_lnprob_scalar(allpars)
+                    lnprob += lnp
+
             else:
                 #print("using joint prior")
                 # it is a joint prior on TF and fracdev
