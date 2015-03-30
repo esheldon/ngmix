@@ -4578,6 +4578,56 @@ def test_mcmc_psf(model="gauss",
 
     mc.make_plots(do_residual=True,show=True,prompt=False)
 
+def _make_test_observations(model,
+                            g1_obj=0.1,
+                            g2_obj=0.05,
+                            T_obj=16.0,
+                            counts_obj=100.0,
+                            noise_obj=0.001,
+                            g1_psf=0.0,
+                            g2_psf=0.0,
+                            T_psf=4.0,
+                            counts_psf=100.0,
+                            noise_psf=0.001):
+
+    from . import em
+
+    sigma=sqrt( (T_obj + T_psf)/2. )
+    dims=[2.*5.*sigma]*2
+    cen=[dims[0]/2., dims[1]/2.]
+    j=UnitJacobian(cen[0],cen[1])
+
+    pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
+    gm_psf=gmix.GMixModel(pars_psf, "gauss")
+
+    pars_obj = array([0.0, 0.0, g1_obj, g2_obj, T_obj, counts_obj])
+    npars=pars_obj.size
+    gm_obj0=gmix.GMixModel(pars_obj, model)
+
+    gm=gm_obj0.convolve(gm_psf)
+
+    im_psf=gm_psf.make_image(dims, jacobian=j)
+    npsf=noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
+    im_psf[:,:] += npsf
+    wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
+
+    im_obj=gm.make_image(dims, jacobian=j)
+    n=noise_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
+    im_obj[:,:] += n
+    wt_obj=zeros(im_obj.shape) + 1./noise_obj**2
+
+    #
+    # fitting
+    #
+
+
+    # psf using EM
+    psf_obs = Observation(im_psf, jacobian=j)
+
+    obs=Observation(im_obj, weight=wt_obj, jacobian=j)
+
+    return psf_obs, obs
+
 def test_model(model,
                g1_obj=0.1,
                g2_obj=0.05,
@@ -5240,6 +5290,7 @@ def test_many_model_coellip(ntrial,
     print("time per:",tm/ntrial)
 
 def test_model_coellip(model, ngauss,
+                       T=4.0,
                        counts=100.0, noise=0.00001,
                        nwalkers=320,
                        g1=0.1, g2=0.1,
@@ -5264,85 +5315,45 @@ def test_model_coellip(model, ngauss,
     # simulation
     #
 
-    # PSF pars
-    counts_psf=100.0
-    noise_psf=0.001
-    g1_psf=0.00
-    g2_psf=0.00
-    T_psf=4.0
+    psf_obs, obs = _make_test_observations(model,
+                                           T_obj=T,
+                                           counts_obj=counts,
+                                           noise_obj=noise,
+                                           g1_obj=g1,
+                                           g2_obj=g2)
 
-    # object pars
-    counts_obj=counts
-    g1_obj=g1
-    g2_obj=g2
-    if model=='exp':
-        T_obj=16.0
-    elif model=='dev':
-        T_obj=64.0
-
-    sigma=sqrt(T_obj/2.0)
-    dim=int(round(5*sigma*2))
-    dims=[dim]*2
-    cen=[dims[0]/2., dims[1]/2.]
-    print("dim: %g" % dims[0])
-
-    jacob=UnitJacobian(cen[0],cen[1])
-
-    pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
-    gm_psf=gmix.make_gmix_model(pars_psf, "gauss")
-
-    pars_obj = [0.0, 0.0, g1_obj, g2_obj, T_obj, counts]
-    gm_obj0=gmix.make_gmix_model(pars_obj, model)
-
-    gm=gm_obj0.convolve(gm_psf)
-
-    im_psf=gm_psf.make_image(dims, jacobian=jacob)
-    im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
-    wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
-
-    im_obj=gm.make_image(dims, jacobian=jacob)
-    im_obj[:,:] += noise*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
-    wt_obj=zeros(im_obj.shape) + 1./noise**2
 
     #
     # fitting
     #
 
     # psf using EM
-    im_psf_sky,sky=em.prep_image(im_psf)
-    mc_psf=em.GMixEM(im_psf_sky, jacobian=jacob)
-    emo_guess=gm_psf.copy()
-    emo_guess._data['p'] = 1.0
-    emo_guess._data['row'] += 0.1*srandu()
-    emo_guess._data['col'] += 0.1*srandu()
-    emo_guess._data['irr'] += 0.5*srandu()
-    emo_guess._data['irc'] += 0.1*srandu()
-    emo_guess._data['icc'] += 0.5*srandu()
-    mc_psf.go(emo_guess, sky, maxiter=5000)
+    im_psf_sky,sky=em.prep_image(psf_obs.image)
+    obs_sky = Observation(im_psf_sky, jacobian=psf_obs.jacobian)
+    pguess_pars=[1.0,0.1*srandu(),0.1*srandu(),
+                 4.0 + 0.1*srandu(),
+                 0.01*srandu(),
+                 4.0 + 0.1*randu()]
+    pguess=GMix(pars=pguess_pars)
+
+    mc_psf=em.GMixEM(obs_sky)
+    mc_psf.go(pguess, sky, maxiter=5000)
     res_psf=mc_psf.get_result()
     print('psf numiter:',res_psf['numiter'],'fdiff:',res_psf['fdiff'])
 
     psf_fit=mc_psf.get_gmix()
-    imfit_psf=mc_psf.make_image(counts=im_psf.sum())
-    #images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
+    psf_obs.set_gmix(psf_fit)
+
+    obs.set_psf(psf_obs)
 
     g1_guess=0.0
     g2_guess=0.0
-    full_guess=test_guess_coellip(nwalkers, ngauss,
-                                  g1_guess, g2_guess, T_obj, counts_obj)
+    full_guess=test_guess_coellip(ngauss,
+                                  g1_guess, g2_guess,
+                                  T, counts)
 
-    cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
-    priors_are_log=False
-    if priors_are_log:
-        counts_prior=priors.FlatPrior(log10(0.5*counts_obj),
-                                      log10(2.0*counts_obj) )
-        T_prior=priors.FlatPrior(log10(0.5*T_obj),
-                                 log10(2.0*T_obj) )
-    else:
-        counts_prior=priors.FlatPrior(0.5*counts_obj, 2.0*counts_obj)
-        T_prior=priors.FlatPrior(0.5*T_obj, 2.0*T_obj )
 
-    mc_obj=MCMCCoellip(im_obj, wt_obj, jacob,
+    mc_obj=MaxCoellip(im_obj, wt_obj, jacob,
                        psf=psf_fit,
                        nwalkers=nwalkers,
                        burnin=burnin,
@@ -5391,26 +5402,33 @@ def test_model_coellip(model, ngauss,
 
     return pars_obj, res_obj['pars']
 
-def test_guess_coellip(nwalkers, ngauss,
-                       g1_obj, g2_obj, T_obj, counts_obj):
+def test_guess_coellip(ngauss,
+                       g1_obj, g2_obj, T_obj, counts_obj,
+                       num=1):
+
+    if num==1:
+        is_scalar=True
+    else:
+        is_scalar=False
+
     npars=gmix.get_coellip_npars(ngauss)
-    full_guess=zeros( (nwalkers, npars) )
-    full_guess[:,0] = 0.1*srandu(nwalkers)
-    full_guess[:,1] = 0.1*srandu(nwalkers)
-    full_guess[:,2] = g1_obj + 0.1*srandu(nwalkers)
-    full_guess[:,3] = g2_obj + 0.1*srandu(nwalkers)
+    full_guess=zeros( (num, npars) )
+    full_guess[:,0] = 0.1*srandu(num)
+    full_guess[:,1] = 0.1*srandu(num)
+    full_guess[:,2] = g1_obj + 0.1*srandu(num)
+    full_guess[:,3] = g2_obj + 0.1*srandu(num)
 
     if ngauss==3:
         for i in xrange(ngauss):
             if i==0:
-                full_guess[:,4+i] = 0.1*T_obj*(1.0 + 0.01*srandu(nwalkers))
-                full_guess[:,4+ngauss+i] = 0.1*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+                full_guess[:,4+i] = 0.1*T_obj*(1.0 + 0.01*srandu(num))
+                full_guess[:,4+ngauss+i] = 0.1*counts_obj*(1.0 + 0.01*srandu(num))
             elif i==1:
-                full_guess[:,4+i] = 1.0*T_obj*(1.0 + 0.01*srandu(nwalkers))
-                full_guess[:,4+ngauss+i] = 0.5*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+                full_guess[:,4+i] = 1.0*T_obj*(1.0 + 0.01*srandu(num))
+                full_guess[:,4+ngauss+i] = 0.5*counts_obj*(1.0 + 0.01*srandu(num))
             elif i==2:
-                full_guess[:,4+i] = 2.0*T_obj*(1.0 + 0.01*srandu(nwalkers))
-                full_guess[:,4+ngauss+i] = 0.4*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+                full_guess[:,4+i] = 2.0*T_obj*(1.0 + 0.01*srandu(num))
+                full_guess[:,4+ngauss+i] = 0.4*counts_obj*(1.0 + 0.01*srandu(num))
     elif ngauss==4:
         # implement this
         # 0.710759     3.66662     22.9798     173.704
@@ -5422,27 +5440,29 @@ def test_guess_coellip(nwalkers, ngauss,
         #             0.19880675,  0.18535747, 0.31701891,  0.29881687])
 
         for i in xrange(ngauss):
-            full_guess[:,4+i] = T_obj*pars0[i]*(1.0 + 0.01*srandu(nwalkers))
-            full_guess[:,4+ngauss+i] = counts_obj*pars0[ngauss+i]*(1.0 + 0.01*srandu(nwalkers))
+            full_guess[:,4+i] = T_obj*pars0[i]*(1.0 + 0.01*srandu(num))
+            full_guess[:,4+ngauss+i] = counts_obj*pars0[ngauss+i]*(1.0 + 0.01*srandu(num))
 
             """
             if i==0:
-                full_guess[:,4+i] = 0.01*T_obj*(1.0 + 0.01*srandu(nwalkers))
-                full_guess[:,4+ngauss+i] = 0.1*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+                full_guess[:,4+i] = 0.01*T_obj*(1.0 + 0.01*srandu(num))
+                full_guess[:,4+ngauss+i] = 0.1*counts_obj*(1.0 + 0.01*srandu(num))
             elif i==1:
-                full_guess[:,4+i] = 0.1*T_obj*(1.0 + 0.01*srandu(nwalkers))
-                full_guess[:,4+ngauss+i] = 0.2*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+                full_guess[:,4+i] = 0.1*T_obj*(1.0 + 0.01*srandu(num))
+                full_guess[:,4+ngauss+i] = 0.2*counts_obj*(1.0 + 0.01*srandu(num))
             elif i==2:
-                full_guess[:,4+i] = 1.0*T_obj*(1.0 + 0.01*srandu(nwalkers))
-                full_guess[:,4+ngauss+i] = 0.5*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+                full_guess[:,4+i] = 1.0*T_obj*(1.0 + 0.01*srandu(num))
+                full_guess[:,4+ngauss+i] = 0.5*counts_obj*(1.0 + 0.01*srandu(num))
             elif i==3:
-                full_guess[:,4+i] = 2.0*T_obj*(1.0 + 0.01*srandu(nwalkers))
-                full_guess[:,4+ngauss+i] = 0.2*counts_obj*(1.0 + 0.01*srandu(nwalkers))
+                full_guess[:,4+i] = 2.0*T_obj*(1.0 + 0.01*srandu(num))
+                full_guess[:,4+ngauss+i] = 0.2*counts_obj*(1.0 + 0.01*srandu(num))
             """
     else:
         raise ValueError("try other ngauss")
 
-    #full_guess[:, 4:] = log10( full_guess[:,4:] )
+    if is_scalar:
+        full_guess=full_guess[0,:]
+
     return full_guess
 
 
