@@ -2173,6 +2173,46 @@ class GMixND(object):
 
         return p
 
+    def sample(self, n=None):
+        """
+        sample from the gaussian mixture
+        """
+        if not hasattr(self, '_gmm'):
+            self._make_gmm()
+
+        if n is None:
+            is_scalar=True
+            n=1
+        else:
+            is_scalar=False
+
+        samples=self._gmm.sample(n)
+
+        if is_scalar:
+            samples = samples[0,:]
+        return samples
+
+
+
+    def _make_gmm(self):
+        """
+        Make a GMM object for sampling
+        """
+        from sklearn.mixture import GMM
+
+        # these numbers are not used because we set the means, etc by hand
+        ngauss=self.weights.size
+        gmm=GMM(n_components=self.ngauss,
+                n_iter=10000,
+                min_covar=1.0e-12,
+                covariance_type='full')
+        gmm.means_ = self.means.copy()
+        gmm.covars_ = self.covars.copy()
+        gmm.weights_ = self.weights.copy()
+
+        self._gmm=gmm 
+
+
 
     '''
     def get_prob_scalar_old(self, pars):

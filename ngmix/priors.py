@@ -2656,6 +2656,93 @@ class GPriorMErf(GPriorBase):
             guess=guess[0,:]
         return guess
 
+class GPriorMErf2(GPriorMErf):
+    def __init__(self, pars=None):
+        """
+        [A, g0, gmax, gsigma]
+        """
+        self.npars=4
+        if pars is not None:
+            self.set_pars(pars)
+
+    def set_pars(self, pars):
+        self.A    = pars[0]
+        self.g0   = pars[1]
+        self.g0sq = self.g0**2
+        self.gmax_func = pars[2]
+        self.gsigma = pars[3]
+
+        self.gmax = 1.0
+        self.a=4500.0
+
+    def _get_prob_nocheck_scalar(self, g):
+        """
+        workhorse function, must be scalar. Error checking
+        is done in the argument parsing to erf
+
+        this does not include the 2*pi*g
+        """
+        from ._gmix import erf
+
+        # a fixed now
+        numer1 = self.A*(1-exp( (g-1.0)/self.a ))
+
+        arg=(self.gmax_func-g)/self.gsigma
+        gerf=0.5*(1.0+erf(arg))
+        numer =  numer1 * gerf
+
+        denom = (1+g)*sqrt(g**2 + self.g0sq)
+
+        model=numer/denom
+
+        return model
+
+    def _get_prob_nocheck_array(self, g):
+        """
+        workhorse function.  No error checking, must be an array
+
+        this does not include the 2*pi*g
+        """
+        from ._gmix import erf_array
+
+        # a fixed now
+        numer1 = self.A*(1-exp( (g-1.0)/self.a ))
+
+        gerf0=zeros(g.size)
+        arg = (self.gmax_func-g)/self.gsigma
+        erf_array(arg, gerf0)
+
+        gerf=0.5*(1.0+gerf0)
+
+        numer =  numer1 * gerf
+
+        denom = (1+g)*sqrt(g**2 + self.g0sq)
+
+        model=numer/denom
+
+        return model
+
+    def _get_guess(self, num, n=None):
+        Aguess=1.3*num*(self.xdata[1]-self.xdata[0])
+        cen=[Aguess, 0.0793992, 0.706151, 0.124546]
+
+        if n is None:
+            n=1
+            is_scalar=True
+        else:
+            is_scalar=False
+
+        guess=zeros( (n, self.npars) )
+
+        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n))
+        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n))
+        guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n))
+        guess[:,3] = cen[3]*(1.0 + 0.2*srandu(n))
+
+        if is_scalar:
+            guess=guess[0,:]
+        return guess
+
 
 
 class FlatEtaPrior(object):
