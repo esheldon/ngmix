@@ -2097,9 +2097,25 @@ class GMixND(object):
     Gaussian mixture in arbitrary dimensions.  A bit awkward
     in dim=1 e.g. becuase assumes means are [ndim,npars]
     """
-    def __init__(self, weights, means, covars):
-        # copy both to avoid it getting changed under us and to
+    def __init__(self, weights=None, means=None, covars=None):
+
+        if (weights is not None
+                and means is not None
+                and covars is not None):
+            self.set_mixture(weights, means, covars)
+        elif (weights is not None
+                or means is not None
+                or covars is not None):
+            raise RuntimeError("send all or none of weights, means, covars")
+
+    def set_mixture(self, weights, means, covars):
+        """
+        set the mixture elements
+        """
+
+        # copy all to avoid it getting changed under us and to
         # make sure native byte order
+
         self.weights = numpy.array(weights, dtype='f8', copy=True)
         self.means=numpy.array(means, dtype='f8', copy=True)
         self.covars=numpy.array(covars, dtype='f8', copy=True)
@@ -2116,7 +2132,29 @@ class GMixND(object):
 
         self.tmp_lnprob = zeros(self.ngauss)
 
+    def fit(self, data, ngauss, n_iter=5000, min_covar=1.0e-6):
+        """
+        data is shape
+            [npoints, ndim]
+        """
+        from sklearn.mixture import GMM
 
+        print("ngauss:   ",ngauss)
+        print("n_iter:   ",n_iter)
+        print("min_covar:",min_covar)
+
+        gmm=GMM(n_components=ngauss,
+                n_iter=n_iter,
+                min_covar=min_covar,
+                covariance_type='full')
+
+        gmm.fit(data)
+
+        if not gmm.converged_:
+            print("DID NOT CONVERGE")
+
+        self._gmm=gmm
+        self.set_mixture(gmm.weights_, gmm.means_, gmm.covars_)
 
     def get_lnprob_scalar(self, pars_in):
         """
