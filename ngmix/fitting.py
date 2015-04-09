@@ -4757,7 +4757,7 @@ def test_model(model,
     print_pars(res_obj['pars'],     front='pars_obj: ')
     print_pars(res_obj['pars_err'], front='perr_obj: ')
     print('T: %.4g +/- %.4g' % (res_obj['pars'][4], res_obj['pars_err'][4]))
-    print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'])
+    print("s2n:",res_obj['s2n_w'],"arate:",res_obj['arate'],"tau:",res_obj['tau'],"chi2per:",res_obj['chi2per'])
 
     #gmfit0=mc_obj.get_gmix()
     #gmfit=gmfit0.convolve(psf_fit)
