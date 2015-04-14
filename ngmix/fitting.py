@@ -6132,6 +6132,19 @@ def _get_test_psf_flux_pars(ngauss, cen, jfac, counts_sky):
     gm=gmix.GMix(pars=pars)
     return gm
 
+def test_template_flux_errors(ngauss, ntrial, **keys):
+    fluxes=numpy.zeros(ntrial)
+    errors=numpy.zeros(ntrial)
+
+    for i in xrange(ntrial):
+        res=test_template_flux(ngauss, **keys)
+        fluxes[i] = res['flux']
+        errors[i] = res['flux_err']
+
+    print("mean error:",errors.mean())
+    print("scatter:   ",fluxes.std())
+
+
 def test_template_flux(ngauss,
                        send_center_as_keyword=True, # let the template fitting code reset the centers
                        do_psf=True,
@@ -6239,6 +6252,8 @@ def test_template_flux(ngauss,
 
     print("flux(sky):",counts_sky)
     print("meas: %g +/- %g" % (res['flux'], res['flux_err']))
+
+    return res
 
 def _make_sheared_pars(pars, shear_g1, shear_g2):
     from .shape import Shape
