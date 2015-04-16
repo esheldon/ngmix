@@ -7469,7 +7469,7 @@ def test_isample(model,
                  noise=0.001,
                  nbin=50,
                  prior_during=True,
-                 max_fitter_type='nm',
+                 max_fitter_type='lm',
                  show=False):
     """
     Test fitting the specified model.
@@ -7479,6 +7479,7 @@ def test_isample(model,
     from . import joint_prior
     import time
     import nsim
+    from math import ceil
     from numpy.random import randn
 
     numpy.random.seed(seed)
@@ -7497,7 +7498,7 @@ def test_isample(model,
     noise_psf=0.001
 
     sigma=sqrt( (T + T_psf)/2. )
-    dims=[2.*5.*sigma]*2
+    dims=[int(ceil(2.*5.*sigma))]*2
     cen=[dims[0]/2., dims[1]/2.]
     j=UnitJacobian(cen[0],cen[1])
 
@@ -7589,6 +7590,8 @@ def test_isample(model,
         max_guess[4] = pars_obj[4] + 0.01*srandu()
         max_guess[5] = pars_obj[5] + 0.01*srandu()
 
+    max_res['lm_pars_err'] = max_res['pars_err'].copy()
+    max_fitter.calc_cov(1.0e-3, 5.0)
     print("nfev:",max_res['nfev'],"s2n:",max_res['s2n_w'],"time:",max_tm)
     print_pars(max_res['pars'],      front='pars max:  ')
     print_pars(max_res['pars_err'],  front='perr max:  ')
@@ -7599,41 +7602,25 @@ def test_isample(model,
     tm0=time.time()
     icov = max_res['pars_cov']*ifactor**2
 
-    # gaussian sampler
-    sampler=GCovSampler(max_res['pars'], icov)
-    sampler.make_samples(nsample)
-    sampler.set_iweights(max_fitter.calc_lnprob)
-    sampler.calc_result()
 
-    samples=sampler.get_samples()
-    iweights = sampler.get_iweights()
-    res=sampler.get_result()
+    # student T sampler
+    isampler=ISampler(max_res['pars'], icov, df)
+    isampler.make_samples(nsample)
+    isampler.set_iweights(max_fitter.calc_lnprob)
+    isampler.calc_result()
 
-    print("isamp time:",time.time()-tm0)
+    isamples=isampler.get_samples()
+    iweights = isampler.get_iweights()
+    res=isampler.get_result()
+
+    print("T isamp time:",time.time()-tm0)
     neff=iweights.sum()
-    print("eff num:",neff,"frac:",neff/nsample)
+    print("T eff num:",neff,"frac:",neff/nsample)
     print_pars(res['pars'], front='pars: ')
     print_pars(res['pars_err'], front='perr: ')
     print()
 
-    # student T sampler
-    Tsampler=GCovSamplerT(max_res['pars'], icov, df)
-    Tsampler.make_samples(nsample)
-    Tsampler.set_iweights(max_fitter.calc_lnprob)
-    Tsampler.calc_result()
-
-    Tsamples=Tsampler.get_samples()
-    Tiweights = Tsampler.get_iweights()
-    Tres=Tsampler.get_result()
-
-    print("T isamp time:",time.time()-tm0)
-    neff=Tiweights.sum()
-    print("T eff num:",neff,"frac:",neff/nsample)
-    print_pars(Tres['pars'], front='pars: ')
-    print_pars(Tres['pars_err'], front='perr: ')
-    print()
-
-
+    
 
     if show:
         import biggles
@@ -7644,8 +7631,8 @@ def test_isample(model,
 
         g1=samples[:,2]
         g2=samples[:,3]
-        Tg1=Tsamples[:,2]
-        Tg2=Tsamples[:,3]
+        Tg1=isamples[:,2]
+        Tg2=isamples[:,3]
         ming1=min(g1.min(), Tg1.min())
         maxg1=max(g1.max(), Tg1.max())
 
@@ -7695,7 +7682,7 @@ def test_isample(model,
                           nbin=nbin,
                           min=ming1,
                           max=maxg1,
-                          weights=Tiweights,
+                          weights=iweights,
                           color='magenta',
                           width=2,
                           plt=g1plt,
@@ -7706,7 +7693,7 @@ def test_isample(model,
                           nbin=nbin,
                           min=ming2,
                           max=maxg2,
-                          weights=Tiweights,
+                          weights=iweights,
                           color='magenta',
                           width=2,
                           plt=g2plt,
@@ -7716,6 +7703,8 @@ def test_isample(model,
 
         g1plt.show()
         g2plt.show()
+
+    return max_res, res
 
 def test_fracdev(fracdev=0.3,
                  noise=0.1,
