@@ -345,11 +345,13 @@ class GMix(object):
         -------
         New round gmix
         """
+        from . import shape
 
         gm = self.copy()
 
         g1,g2,Ttot=gm.get_g1g2T()
 
+        factor = shape.get_round_factor(g1,g2)
         gsq = g1**2 + g2**2
         factor = (1-gsq) / (1+gsq)
 
