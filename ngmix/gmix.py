@@ -330,6 +330,44 @@ class GMix(object):
         self._fill_image(image, nsub=nsub, jacobian=jacobian)
         return image
 
+    def make_round(self):
+        """
+        make a round version of the mixture
+
+        The transformation is performed as if a shear were applied,
+        so 
+
+            Tround = T * (1-g^2) / (1+g^2)
+
+        The center of all gaussians is set to the common mean
+
+        returns
+        -------
+        New round gmix
+        """
+
+        gm = self.copy()
+
+        g1,g2,Ttot=gm.get_g1g2T()
+
+        gsq = g1**2 + g2**2
+        factor = (1-gsq) / (1+gsq)
+
+        gdata=gm.get_data()
+
+        ngauss=len(gm)
+        for i in xrange(ngauss):
+            Ti = gdata['irr'][i] + gdata['icc'][i]
+            gdata['irc'][i] = 0.0
+            gdata['irr'][i] = 0.5*Ti*factor
+            gdata['icc'][i] = 0.5*Ti*factor
+
+        row,col=gm.get_cen()
+        gm.set_cen(row, col)
+
+        return gm
+
+
     def _fill_image(self, image, nsub=1, jacobian=None):
         """
         Internal routine.  Render the mixture into a new image.  No error
@@ -398,6 +436,48 @@ class GMix(object):
         return {'s2n_numer':s2n_numer,
                 's2n_denom':s2n_denom,
                 'npix':npix}
+
+
+    def get_model_s2n_sum(self, obs):
+        """
+        Get the s/n sum for the model, using only the weight
+        map
+
+            s2n_sum = sum(model_i^2 * ivar_i)
+
+        The s/n would be sqrt(s2n_sum).  This sum can be
+        added up over multiple images
+
+        parameters
+        ----------
+        obs: Observation
+            The Observation to compare with. See ngmix.observation.Observation
+            The Observation must have a weight map set
+        """
+
+        gm=self._get_gmix_data()
+        s2n_sum =_gmix.get_model_s2n_sum(gm,
+                                         obs.weight,
+                                         obs.jacobian._data)
+        return s2n_sum
+
+    def get_model_s2n(self, obs):
+        """
+        Get the s/n for the model, using only the weight
+        map
+
+            s2n_sum = sum(model_i^2 * ivar_i)
+            s2n = sqrt(s2n_sum)
+
+        parameters
+        ----------
+        obs: Observation
+            The Observation to compare with. See ngmix.observation.Observation
+            The Observation must have a weight map set
+        """
+        
+        s2n_sum = self.get_model_s2n_sum(obs)
+        return sqrt(s2n_sum)
 
 
     def get_loglike(self, obs, nsub=1, more=False):
