@@ -1045,6 +1045,69 @@ static PyObject * PyGMix_get_image_mean(PyObject* self, PyObject* args) {
 }
 
 
+/*
+   Calculate the sum needed for the model s/n
+
+   This is s2n_sum = sum(model_i^2 * ivar_i)
+
+   The s/n will be sqrt(s2n_sum)
+*/
+static PyObject * PyGMix_get_model_s2n_sum(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    PyObject* weight_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    double ivar=0, u=0, v=0;
+    double model_val=0;
+    double s2n_sum=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOO", 
+                          &gmix_obj, &weight_obj, &jacob_obj)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        return NULL;
+    }
+
+    n_row=PyArray_DIM(weight_obj, 0);
+    n_col=PyArray_DIM(weight_obj, 1);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    for (row=0; row < n_row; row++) {
+        u=PYGMIX_JACOB_GETU(jacob, row, 0);
+        v=PYGMIX_JACOB_GETV(jacob, row, 0);
+
+        for (col=0; col < n_col; col++) {
+
+            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
+            if ( ivar > 0.0) {
+                model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
+
+                s2n_sum += model_val*model_val*ivar;
+            }
+
+            u += jacob->dudcol;
+            v += jacob->dvdcol;
+
+        }
+    }
+
+    return Py_BuildValue("d", s2n_sum);
+}
+
+
+
+
 
 /*
    Calculate the loglike between the gmix and the input image
@@ -2225,6 +2288,9 @@ static PyObject* PyGMix_erf_array(PyObject* self, PyObject* args)
 static PyMethodDef pygauss2d_funcs[] = {
 
     {"get_image_mean", (PyCFunction)PyGMix_get_image_mean,  METH_VARARGS,  "calculate mean with weight\n"},
+
+    {"get_model_s2n_sum", (PyCFunction)PyGMix_get_model_s2n_sum,  METH_VARARGS,  "calculate the s/n of the model\n"},
+
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
     {"get_loglike_images_margsky", (PyCFunction)PyGMix_get_loglike_images_margsky,  METH_VARARGS,  "calculate likelihood between images, subtracting mean\n"},
     {"get_loglike_aper", (PyCFunction)PyGMix_get_loglike_aper,  METH_VARARGS,  "calculate likelihood within the specified circular aperture\n"},
