@@ -7224,7 +7224,6 @@ def test_covsample_log(model,
     from . import em
     from . import joint_prior
     import time
-    import nsim
     from numpy.random import randn
 
     numpy.random.seed(seed)
@@ -7478,7 +7477,6 @@ def test_isample(model,
     from . import em
     from . import joint_prior
     import time
-    import nsim
     from math import ceil
     from numpy.random import randn
 
