@@ -1,23 +1,9 @@
 """
 
 - todo
-    - make sure the psf flux fitting in my other codes are now sending the
-    center in sky coordinates
-    - make sure the codes are not re-setting the jacobian!
-    - split out pqr calculations
-    * split out lensfit calculations
-    - support only a single prior sent
-        - take care of g prior not during by sending weights= to
-        the calc_result
-        - seperate lensfit/pqr then need to deal with remove prior for
-        g prior during
-    - support only full guess
-        - everywhere that these can be sent, including T= keywords etc.
-        - lots of _get_priors need to be adapted
-
+    - move tests to a new file
+    - remove old unused fitters
 """
-# there are a few additional imports not in this header for example we only
-# import emcee if needed
 from __future__ import print_function
 
 try:
@@ -48,7 +34,7 @@ from .priors import srandu, LOWVAL, BIGVAL
 
 from .gexceptions import GMixRangeError, GMixFatalError
 
-from .observation import Observation,ObsList,MultiBandObsList
+from .observation import Observation,ObsList,MultiBandObsList,get_mb_obs
 
 from . import stats
 
@@ -152,24 +138,11 @@ class FitterBase(object):
         Input should be an Observation, ObsList, or MultiBandObsList
         """
 
+        self.obs = get_mb_obs(obs_in)
 
-        if isinstance(obs_in,Observation):
-            obs_list=ObsList()
-            obs_list.append(obs_in)
 
-            obs=MultiBandObsList()
-            obs.append(obs_list)
-        elif isinstance(obs_in,ObsList):
-            obs=MultiBandObsList()
-            obs.append(obs_in)
-        elif isinstance(obs_in,MultiBandObsList):
-            obs=obs_in
-        else:
-            raise ValueError("obs should be Observation, ObsList, or MultiBandObsList")
+        self.nband=len(self.obs)
 
-        self.nband=len(obs)
-
-        self.obs=obs
         if self.margsky:
             for band_obs in self.obs:
                 for tobs in band_obs:
@@ -4499,18 +4472,6 @@ def print_pars(pars, stream=stdout, fmt='%8.3g',front=None):
         stream.write(fmt % tuple(pars))
         stream.write('\n')
 
-
-def _get_as_list(arg, argname, allow_none=False):
-    if arg is None:
-        if allow_none:
-            return None
-        else:
-            raise ValueError("None not allowed for %s" % argname)
-
-    if isinstance(arg,list):
-        return arg
-    else:
-        return [arg]
 
 
 def test_mcmc_psf(model="gauss",
