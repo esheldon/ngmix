@@ -32,13 +32,19 @@ class Bootstrapper(object):
         ----------
         obs: observation(s)
             Either an Observation, ObsList, or MultiBandObsList The
-            Observations must have a psf set.  If the psf observations already
-            have gmix objects set, there is no need to run fit_psfs()
+            Observations must have a psf set.
+            
+            If the psf observations already have gmix objects set, there is no
+            need to run fit_psfs()
 
         """
 
-        self.mb_obs_list_orig = get_mb_obs(obs)
         self.use_logpars=use_logpars
+        self.mb_obs_list_orig = get_mb_obs(obs)
+
+        # this will get replaced if fit_psfs is run
+        self.mb_obs_list=self.mb_obs_list_orig
+
 
         self.model_fits={}
 
@@ -412,6 +418,8 @@ class Bootstrapper(object):
         """
         use psf as a template, measure flux (linear)
         """
+        raise RuntimeError("adapt to multiple bands")
+
         if not hasattr(self,'psf_fitter'):
             raise RuntimeError("you need to fit with the psf first")
 
@@ -1037,3 +1045,19 @@ class CompositeMaxRunner(MaxRunner):
         self.fitter=fitter
 
 
+def test_boot(model,**keys):
+    from .test import make_test_observations
+
+    psf_obs, obs = make_test_observations(model, **keys)
+
+    obs.set_psf(psf_obs)
+
+    boot=Bootstrapper(obs)
+
+    psf_model=keys.get('psf_model','gauss')
+    Tguess=4.0
+    boot.fit_psfs(psf_model, Tguess)
+
+    pars={'method':'lm',
+          'lm_pars':{'maxfev':4000}}
+    boot.fit_max(model, pars)

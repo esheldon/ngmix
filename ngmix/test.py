@@ -72,7 +72,7 @@ def test_mcmc_psf(model="gauss",
 
     mc.make_plots(do_residual=True,show=True,prompt=False)
 
-def _make_test_observations(model,
+def make_test_observations(model,
                             g1_obj=0.1,
                             g2_obj=0.05,
                             T_obj=16.0,
@@ -810,7 +810,7 @@ def test_model_coellip(model, ngauss,
     # simulation
     #
 
-    psf_obs, obs = _make_test_observations(model,
+    psf_obs, obs = make_test_observations(model,
                                            T_obj=T,
                                            counts_obj=counts,
                                            noise_obj=noise,
