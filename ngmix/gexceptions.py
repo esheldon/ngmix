@@ -11,3 +11,22 @@ class GMixMaxIterEM(Exception):
     def __str__(self):
         return repr(self.value)
 
+class BootPSFFailure(Exception):
+    """
+    failure to bootstrap PSF
+    """
+    def __init__(self, value):
+         self.value = value
+    def __str__(self):
+        return repr(self.value)
+
+class BootGalFailure(Exception):
+    """
+    failure to bootstrap galaxy
+    """
+    def __init__(self, value):
+         self.value = value
+    def __str__(self):
+        return repr(self.value)
+
+
