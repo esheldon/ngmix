@@ -27,7 +27,7 @@ from . import _gmix
 from .jacobian import Jacobian, UnitJacobian
 
 from . import priors
-from .priors import srandu, LOWVAL, BIGVAL
+from .priors import LOWVAL, BIGVAL
 
 from .gexceptions import GMixRangeError, GMixFatalError
 
