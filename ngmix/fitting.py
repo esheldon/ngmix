@@ -433,7 +433,7 @@ class FitterBase(object):
             return self.prior.get_lnprob_scalar(pars)
 
     def plot_residuals(self, title=None, show=False,
-                       width=1920, height=1200):
+                       width=1920, height=1200,**keys):
         import images
         import biggles
 
@@ -477,7 +477,10 @@ class FitterBase(object):
                 showim = im*wt
                 showmod = model*wt
 
-                sub_tab=images.compare_images(showim, showmod,show=False)
+                sub_tab=images.compare_images(showim, showmod,show=False,
+                                              label1='galaxy',
+                                              label2='model',
+                                              **keys)
                 sub_tab.title=this_title
 
                 band_list.append(sub_tab)
@@ -1942,7 +1945,8 @@ class MCMCBase(FitterBase):
         if do_residual:
             pdict['resid']=self.plot_residuals(title=title,show=show,
                                                width=width,
-                                               height=height)
+                                               height=height,
+                                               **keys)
 
         if do_triangle:
             try:
@@ -4491,10 +4495,16 @@ def test_model(model,
         imfit_psf=mc_psf.make_image(counts=im_psf.sum())
         images.compare_images(im_psf, imfit_psf, label1='psf',label2='fit')
 
-        mc_obj.make_plots(do_residual=True,show=True,prompt=False)
+        # colors for reverse
+        imd=mc_obj.make_plots(do_residual=True,show=True,prompt=False,
+                              color1='black',
+                              color2='cyan',
+                              colordiff='red')
         #imfit_obj=gmfit.make_image(im_obj.shape, jacobian=j)
         #images.compare_images(im_obj, imfit_obj, label1=model,label2='fit')
         #mcmc.plot_results(mc_obj.get_trials())
+    else:
+        imd=None
 
     if do_triangle:
         import triangle
@@ -4510,8 +4520,10 @@ def test_model(model,
                                  smooth=10)
         figure.show()
         figure.savefig('test.png')
+        imd['triangle']=figure
 
-    return tm
+
+    return imd
 
 def test_model_margsky_many(Tfracs=None, T_psf=4.0, show=False, ntrial=10, skyfac=0.0, noise=0.001):
     """
