@@ -247,16 +247,6 @@ class GPriorBase(object):
             S
         From Slosar
 
-        P is this prior times the jacobian at shear==0
-
-        Q is the gradient of P*J evaluated at shear==0
-
-            [ d(P*J)/ds1, d(P*J)/ds2]_{s=0}
-
-        R is grad of grad of P*J at shear==0
-            [ d(P*J)/dg1ds1  d(P*J)/dg1ds2 ]
-            [ d(P*J)/dg1ds2  d(P*J)/dg2ds2 ]_{s=0}
-
         Derivatives are calculated using finite differencing
         """
 
@@ -1028,7 +1018,7 @@ class GPriorBase(object):
                                  Winv,
                                  chunksize,
                                  nchunks,
-                                 h=1.e-5,
+                                 h=1.e-5,   # 1.e-6 doesn't work
                                  ring=True,
                                  show=False,
                                  eps=None,
@@ -1036,18 +1026,8 @@ class GPriorBase(object):
                                  dtype='f8'):
         """
         Test how well we recover the shear with no noise.
-        
-        6x6 matrix with forced zeros
-            'f8' W from 200 million seeing 1.0e-3 errors at shear 0.2
-            and a bit rough looking
-        6x6 matrix without forced zeros
-            'f8' W from 200 million similar to forced zeros
-        tried zeroing on the inverse instead, about the same
 
-        6x6 matrix without forced zeros
-            'f16' W from 2 billion.  Looks the best.
-                3e-4 at sh=0.15 8e-4 at sh=0.2
-            'f8' W from 2 billion.  Creating W matrix now
+        First use test_pqrs_make_W and invert to get Winv
         """
         from .shape import Shape, shear_reduced
         from . import pqr
@@ -1168,12 +1148,12 @@ class GPriorBase(object):
                             Winv,
                             chunksize,
                             nchunks,
-                            h=1.e-5,
+                            h=1.e-5,   # 1.e-6 doesn't work
                             ring=True,
                             print_step=1000,
                             dtype='f8'):
         """
-        Test how well we recover the shear with no noise.
+        This is called by test_pqrs_shear_recovery
 
         parameters
         ----------
@@ -1253,7 +1233,8 @@ class GPriorBase(object):
     def test_make_pqrs_W(self,
                          chunksize, # pairs
                          nchunks,   # pairs
-                         h=1.e-5,
+                         h=1.e-5,   # 1.e-6 doesn't work
+                         force_zeros=False,
                          dtype='f8',
                          ring=True):
         """
@@ -1295,7 +1276,7 @@ class GPriorBase(object):
             Pns,Qns,Rns,Sns=self.get_pqrs_num(g1, g2, h=h)
 
             #Wsum_tmp = pqr.make_Wsum(Pns,Qns,Rns,Sns)
-            Wsum_tmp = pqr.make_Wsum(Pns,Qns,Sns)
+            Wsum_tmp = pqr.make_Wsum(Pns,Qns,Sns, force_zeros=force_zeros)
             if i==0:
                 Wsum = Wsum_tmp.copy()
             else:
@@ -1329,7 +1310,7 @@ class GPriorBase(object):
         if guess is None:
             guess=self._get_guess(self.ydata.sum())
 
-        res = run_leastsq(self._calc_fdiff, guess, dof, 0, maxfev=4000)
+        res = run_leastsq(self._calc_fdiff, guess, 0, maxfev=4000)
 
         self.fit_pars=res['pars']
         self.fit_pars_cov=res['pars_cov']
@@ -1377,7 +1358,7 @@ class GPriorBA(GPriorBase):
     automatically has max lnprob 0 and max prob 1
     """
 
-    def __init__(self, sigma, A=1.0):
+    def __init__(self, sigma=0.3, A=1.0):
         """
         pars are scalar gsigma from B&A 
         """
@@ -2670,6 +2651,93 @@ class GPriorMErf(GPriorBase):
         guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n))
         guess[:,3] = cen[3]*(1.0 + 0.2*srandu(n))
         guess[:,4] = cen[4]*(1.0 + 0.2*srandu(n))
+
+        if is_scalar:
+            guess=guess[0,:]
+        return guess
+
+class GPriorMErf2(GPriorMErf):
+    def __init__(self, pars=None):
+        """
+        [A, g0, gmax, gsigma]
+        """
+        self.npars=4
+        if pars is not None:
+            self.set_pars(pars)
+
+    def set_pars(self, pars):
+        self.A    = pars[0]
+        self.g0   = pars[1]
+        self.g0sq = self.g0**2
+        self.gmax_func = pars[2]
+        self.gsigma = pars[3]
+
+        self.gmax = 1.0
+        self.a=4500.0
+
+    def _get_prob_nocheck_scalar(self, g):
+        """
+        workhorse function, must be scalar. Error checking
+        is done in the argument parsing to erf
+
+        this does not include the 2*pi*g
+        """
+        from ._gmix import erf
+
+        # a fixed now
+        numer1 = self.A*(1-exp( (g-1.0)/self.a ))
+
+        arg=(self.gmax_func-g)/self.gsigma
+        gerf=0.5*(1.0+erf(arg))
+        numer =  numer1 * gerf
+
+        denom = (1+g)*sqrt(g**2 + self.g0sq)
+
+        model=numer/denom
+
+        return model
+
+    def _get_prob_nocheck_array(self, g):
+        """
+        workhorse function.  No error checking, must be an array
+
+        this does not include the 2*pi*g
+        """
+        from ._gmix import erf_array
+
+        # a fixed now
+        numer1 = self.A*(1-exp( (g-1.0)/self.a ))
+
+        gerf0=zeros(g.size)
+        arg = (self.gmax_func-g)/self.gsigma
+        erf_array(arg, gerf0)
+
+        gerf=0.5*(1.0+gerf0)
+
+        numer =  numer1 * gerf
+
+        denom = (1+g)*sqrt(g**2 + self.g0sq)
+
+        model=numer/denom
+
+        return model
+
+    def _get_guess(self, num, n=None):
+        Aguess=1.3*num*(self.xdata[1]-self.xdata[0])
+        cen=[Aguess, 0.0793992, 0.706151, 0.124546]
+
+        if n is None:
+            n=1
+            is_scalar=True
+        else:
+            is_scalar=False
+
+        guess=zeros( (n, self.npars) )
+
+        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n))
+        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n))
+        guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n))
+        guess[:,3] = cen[3]*(1.0 + 0.2*srandu(n))
 
         if is_scalar:
             guess=guess[0,:]

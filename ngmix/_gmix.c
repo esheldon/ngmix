@@ -446,7 +446,7 @@ _gmix_fill_simple_bail:
 }
 
 
-static int gmix_fill_composite(struct PyGMix_Composite*self,
+static int gmix_fill_cm(struct PyGMixCM*self,
                                const double* pars,
                                npy_intp n_pars)
 {
@@ -564,7 +564,7 @@ _gmix_fill_coellip_bail:
 }
 
 
-static PyObject * PyGMix_get_composite_Tfactor(PyObject* self, PyObject* args) {
+static PyObject * PyGMix_get_cm_Tfactor(PyObject* self, PyObject* args) {
     double
         fracdev=0,
         TdByTe=0,
@@ -699,14 +699,14 @@ static PyObject * PyGMix_gmix_fill(PyObject* self, PyObject* args) {
 }
 
 /* no type checking here */
-static PyObject * PyGMix_gmix_fill_composite(PyObject* self, PyObject* args) {
+static PyObject * PyGMix_gmix_fill_cm(PyObject* self, PyObject* args) {
     PyObject* composite_obj=NULL;
     PyObject* pars_obj=NULL;
     const double* pars=NULL;
     npy_intp n_pars=0;
     int res=0;
 
-    struct PyGMix_Composite* comp=NULL;
+    struct PyGMixCM* comp=NULL;
 
     if (!PyArg_ParseTuple(args, (char*)"OO",
                           &composite_obj, 
@@ -715,12 +715,12 @@ static PyObject * PyGMix_gmix_fill_composite(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    comp=(struct PyGMix_Composite* ) PyArray_DATA(composite_obj);
+    comp=(struct PyGMixCM* ) PyArray_DATA(composite_obj);
 
     pars=(double *) PyArray_DATA(pars_obj);
     n_pars = PyArray_SIZE(pars_obj);
 
-    res=gmix_fill_composite(comp, pars, n_pars);
+    res=gmix_fill_cm(comp, pars, n_pars);
     if (!res) {
         // raise an exception
         return NULL;
@@ -1043,6 +1043,69 @@ static PyObject * PyGMix_get_image_mean(PyObject* self, PyObject* args) {
 
     return Py_BuildValue("d", wmean);
 }
+
+
+/*
+   Calculate the sum needed for the model s/n
+
+   This is s2n_sum = sum(model_i^2 * ivar_i)
+
+   The s/n will be sqrt(s2n_sum)
+*/
+static PyObject * PyGMix_get_model_s2n_sum(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    PyObject* weight_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    double ivar=0, u=0, v=0;
+    double model_val=0;
+    double s2n_sum=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOO", 
+                          &gmix_obj, &weight_obj, &jacob_obj)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        return NULL;
+    }
+
+    n_row=PyArray_DIM(weight_obj, 0);
+    n_col=PyArray_DIM(weight_obj, 1);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    for (row=0; row < n_row; row++) {
+        u=PYGMIX_JACOB_GETU(jacob, row, 0);
+        v=PYGMIX_JACOB_GETV(jacob, row, 0);
+
+        for (col=0; col < n_col; col++) {
+
+            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
+            if ( ivar > 0.0) {
+                model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
+
+                s2n_sum += model_val*model_val*ivar;
+            }
+
+            u += jacob->dudcol;
+            v += jacob->dvdcol;
+
+        }
+    }
+
+    return Py_BuildValue("d", s2n_sum);
+}
+
+
 
 
 
@@ -2225,6 +2288,9 @@ static PyObject* PyGMix_erf_array(PyObject* self, PyObject* args)
 static PyMethodDef pygauss2d_funcs[] = {
 
     {"get_image_mean", (PyCFunction)PyGMix_get_image_mean,  METH_VARARGS,  "calculate mean with weight\n"},
+
+    {"get_model_s2n_sum", (PyCFunction)PyGMix_get_model_s2n_sum,  METH_VARARGS,  "calculate the s/n of the model\n"},
+
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
     {"get_loglike_images_margsky", (PyCFunction)PyGMix_get_loglike_images_margsky,  METH_VARARGS,  "calculate likelihood between images, subtracting mean\n"},
     {"get_loglike_aper", (PyCFunction)PyGMix_get_loglike_aper,  METH_VARARGS,  "calculate likelihood within the specified circular aperture\n"},
@@ -2239,14 +2305,14 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"render_jacob",(PyCFunction)PyGMix_render_jacob, METH_VARARGS,  "render with jacobian\n"},
 
     {"gmix_fill",(PyCFunction)PyGMix_gmix_fill, METH_VARARGS,  "Fill the input gmix with the input pars\n"},
-    {"gmix_fill_composite",(PyCFunction)PyGMix_gmix_fill_composite, METH_VARARGS,  "Fill the input gmix with the input pars\n"},
+    {"gmix_fill_cm",(PyCFunction)PyGMix_gmix_fill_cm, METH_VARARGS,  "Fill the input gmix with the input pars\n"},
 
     {"convolve_fill",(PyCFunction)PyGMix_convolve_fill, METH_VARARGS,  "convolve gaussian with psf and store in output\n"},
     {"set_norms",(PyCFunction)PyGMix_gmix_set_norms, METH_VARARGS,  "set the normalizations used during evaluation of the gaussians\n"},
 
     {"em_run",(PyCFunction)PyGMix_em_run, METH_VARARGS,  "run the em algorithm\n"},
 
-    {"get_composite_Tfactor",        (PyCFunction)PyGMix_get_composite_Tfactor,         METH_VARARGS,  "get T factor for composite model\n"},
+    {"get_cm_Tfactor",        (PyCFunction)PyGMix_get_cm_Tfactor,         METH_VARARGS,  "get T factor for composite model\n"},
 
     {"convert_simple_double_logpars",        (PyCFunction)PyGMix_convert_simple_double_logpars,         METH_VARARGS,  "convert log10 to linear.\n"},
     {"convert_simple_double_logpars_band",        (PyCFunction)PyGMix_convert_simple_double_logpars_band,         METH_VARARGS,  "convert log10 to linear with band specified.\n"},

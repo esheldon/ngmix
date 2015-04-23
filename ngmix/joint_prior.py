@@ -171,6 +171,7 @@ class JointPriorTF(GMixND):
         wgood,=where(logic)
         return wgood
 
+    '''
     def _make_gmm(self):
         """
         Make a GMM object for sampling
@@ -188,7 +189,7 @@ class JointPriorTF(GMixND):
         gmm.weights_ = self.weights.copy()
 
         self.gmm=gmm 
-
+    '''
 
 class JointPriorSimpleHybrid(GMixND):
     """
@@ -372,6 +373,7 @@ class JointPriorSimpleHybrid(GMixND):
                        & (F < F_bounds[1]) )
         return wgood
 
+    '''
     def _make_gmm(self):
         """
         Make a GMM object for sampling
@@ -389,6 +391,7 @@ class JointPriorSimpleHybrid(GMixND):
         gmm.weights_ = self.weights.copy()
 
         self.gmm=gmm 
+    '''
 
 class JointPriorSersicHybrid(JointPriorSimpleHybrid):
     """
@@ -778,6 +781,7 @@ class JointPriorSimpleLinPars(GMixND):
 
         return P*J
 
+    '''
     def _make_gmm(self):
         """
         Make a GMM object for sampling
@@ -795,6 +799,7 @@ class JointPriorSimpleLinPars(GMixND):
         gmm.weights_ = self.weights.copy()
 
         self.gmm=gmm 
+    '''
 
     def check_bounds_scalar(self, pars, throw=True):
         """

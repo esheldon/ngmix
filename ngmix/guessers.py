@@ -137,7 +137,7 @@ class TFluxAndPriorGuesser(GuesserBase):
         if self.scaling=='linear':
             guess[:,4] = self.T*(1.0 + 0.1*srandu(n))
         else:
-            guess[:,4] = self.T + 0.1*srandu(n)
+            guess[:,4] = self.log_T + 0.1*srandu(n)
 
         for band in xrange(nband):
             if self.scaling=='linear':

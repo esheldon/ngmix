@@ -239,4 +239,27 @@ class MultiBandObsList(list):
         assert isinstance(obs_list,ObsList),"obs_list should be of type ObsList"
         super(MultiBandObsList,self).__setitem__(index, obs_list)
 
+def get_mb_obs(obs_in):
+    """
+    convert the input to a MultiBandObsList
+
+    Input should be an Observation, ObsList, or MultiBandObsList
+    """
+
+    if isinstance(obs_in,Observation):
+        obs_list=ObsList()
+        obs_list.append(obs_in)
+
+        obs=MultiBandObsList()
+        obs.append(obs_list)
+    elif isinstance(obs_in,ObsList):
+        obs=MultiBandObsList()
+        obs.append(obs_in)
+    elif isinstance(obs_in,MultiBandObsList):
+        obs=obs_in
+    else:
+        raise ValueError("obs should be Observation, ObsList, or MultiBandObsList")
+
+    return obs
+
 

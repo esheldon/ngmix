@@ -150,16 +150,25 @@ class GMix(object):
     def get_T(self):
         """
         get weighted average T sum(p*T)/sum(p)
-
-        Warning: only really works if the centers are the same
         """
-        gm=self._get_gmix_data()
-        psum=gm['p'].sum()
 
-        irrsum=(gm['irr']*gm['p']).sum()
-        iccsum=(gm['icc']*gm['p']).sum()
-        T = (irrsum + iccsum)/psum
+        gm=self._get_gmix_data()
+
+        row,col=self.get_cen()
+
+        rowdiff=gm['row']-row
+        coldiff=gm['col']-col
+
+        p=gm['p']
+        ipsum=1.0/p.sum()
+
+        irr= ((gm['irr'] + rowdiff**2)      * p).sum()*ipsum
+        icc= ((gm['icc'] + coldiff**2)      * p).sum()*ipsum
+
+        T = irr + icc
+
         return T
+
 
     def get_sigma(self):
         """
@@ -170,18 +179,23 @@ class GMix(object):
 
     def get_e1e2T(self):
         """
-        Get e1,e2 and T for the total gmix.
-
-        Warning: only really works if the centers are the same
+        Get e1,e2 and T for the total gaussian mixture.
         """
 
         gm=self._get_gmix_data()
 
-        ipsum=1.0/gm['p'].sum()
+        row,col=self.get_cen()
 
-        irr=(gm['irr']*gm['p']).sum()*ipsum
-        irc=(gm['irc']*gm['p']).sum()*ipsum
-        icc=(gm['icc']*gm['p']).sum()*ipsum
+        rowdiff=gm['row']-row
+        coldiff=gm['col']-col
+
+        p=gm['p']
+        ipsum=1.0/p.sum()
+
+        irr= ((gm['irr'] + rowdiff**2)      * p).sum()*ipsum
+        irc= ((gm['irc'] + rowdiff*coldiff) * p).sum()*ipsum
+        icc= ((gm['icc'] + coldiff**2)      * p).sum()*ipsum
+
         T = irr + icc
 
         e1=(icc-irr)/T
@@ -190,9 +204,7 @@ class GMix(object):
 
     def get_g1g2T(self):
         """
-        Get g1,g2 and T for the total gmix.
-
-        Warning: only really works if the centers are the same
+        Get g1,g2 and T for the total gaussian mixture.
         """
         e1,e2,T=self.get_e1e2T()
         g1,g2=e1e2_to_g1g2(e1,e2)
@@ -205,18 +217,7 @@ class GMix(object):
         Warning: only really works if the centers are the same
         """
 
-        gm=self._get_gmix_data()
-
-        ipsum=1.0/gm['p'].sum()
-
-        irr=(gm['irr']*gm['p']).sum()*ipsum
-        irc=(gm['irc']*gm['p']).sum()*ipsum
-        icc=(gm['icc']*gm['p']).sum()*ipsum
-        T = irr + icc
-
-        e1=(icc-irr)/T
-        e2=2.0*irc/T
-
+        e1,e2,T=self.get_e1e2T()
         sigma=sqrt(T/2)
         return e1,e2,sigma
 
@@ -329,6 +330,44 @@ class GMix(object):
         self._fill_image(image, nsub=nsub, jacobian=jacobian)
         return image
 
+    def make_round(self):
+        """
+        make a round version of the mixture
+
+        The transformation is performed as if a shear were applied,
+        so 
+
+            Tround = T * (1-g^2) / (1+g^2)
+
+        The center of all gaussians is set to the common mean
+
+        returns
+        -------
+        New round gmix
+        """
+        from . import shape
+
+        gm = self.copy()
+
+        g1,g2,T=gm.get_g1g2T()
+
+        factor = shape.get_round_factor(g1,g2)
+
+        gdata=gm.get_data()
+
+        ngauss=len(gm)
+        for i in xrange(ngauss):
+            Ti = gdata['irr'][i] + gdata['icc'][i]
+            gdata['irc'][i] = 0.0
+            gdata['irr'][i] = 0.5*Ti*factor
+            gdata['icc'][i] = 0.5*Ti*factor
+
+        row,col=gm.get_cen()
+        gm.set_cen(row, col)
+
+        return gm
+
+
     def _fill_image(self, image, nsub=1, jacobian=None):
         """
         Internal routine.  Render the mixture into a new image.  No error
@@ -397,6 +436,48 @@ class GMix(object):
         return {'s2n_numer':s2n_numer,
                 's2n_denom':s2n_denom,
                 'npix':npix}
+
+
+    def get_model_s2n_sum(self, obs):
+        """
+        Get the s/n sum for the model, using only the weight
+        map
+
+            s2n_sum = sum(model_i^2 * ivar_i)
+
+        The s/n would be sqrt(s2n_sum).  This sum can be
+        added up over multiple images
+
+        parameters
+        ----------
+        obs: Observation
+            The Observation to compare with. See ngmix.observation.Observation
+            The Observation must have a weight map set
+        """
+
+        gm=self._get_gmix_data()
+        s2n_sum =_gmix.get_model_s2n_sum(gm,
+                                         obs.weight,
+                                         obs.jacobian._data)
+        return s2n_sum
+
+    def get_model_s2n(self, obs):
+        """
+        Get the s/n for the model, using only the weight
+        map
+
+            s2n_sum = sum(model_i^2 * ivar_i)
+            s2n = sqrt(s2n_sum)
+
+        parameters
+        ----------
+        obs: Observation
+            The Observation to compare with. See ngmix.observation.Observation
+            The Observation must have a weight map set
+        """
+        
+        s2n_sum = self.get_model_s2n_sum(obs)
+        return sqrt(s2n_sum)
 
 
     def get_loglike(self, obs, nsub=1, more=False):
@@ -681,9 +762,9 @@ class GMixModel(GMix):
         _gmix.gmix_fill(gm, pars, self._model)
 
 
-class GMixComposite(GMix):
+class GMixCM(GMix):
     """
-    Combine exp and dev using just fracdev
+    Composite Model exp and dev using just fracdev
 
     Inherits from the more general GMix class, and all its methods.
 
@@ -699,7 +780,7 @@ class GMixComposite(GMix):
 
         self._fracdev = fracdev
         self._TdByTe = TdByTe
-        self._Tfactor = _gmix.get_composite_Tfactor(fracdev, TdByTe)
+        self._Tfactor = _gmix.get_cm_Tfactor(fracdev, TdByTe)
 
         self._model      = _gmix_model_dict['fracdev']
         self._model_name = _gmix_string_dict[self._model]
@@ -716,14 +797,14 @@ class GMixComposite(GMix):
         """
         Get a new GMix with the same parameters
         """
-        gmix = GMixComposite(self._exp_pars, self._dev_pars, self._fracdev)
+        gmix = GMixCM(self._exp_pars, self._dev_pars, self._fracdev)
         return gmix
 
     def reset(self):
         """
         Replace the data array with a zeroed one.
         """
-        self._data = zeros(self._ngauss, dtype=_composite_dtype)
+        self._data = zeros(self._ngauss, dtype=_cm_dtype)
         self._data['fracdev'][0] = self._fracdev
         self._data['TdByTe'][0] = self._TdByTe
         self._data['Tfactor'][0] = self._Tfactor
@@ -747,7 +828,7 @@ class GMixComposite(GMix):
         self._pars = pars
 
         data=self.get_data()
-        _gmix.gmix_fill_composite(data, pars)
+        _gmix.gmix_fill_cm(data, pars)
 
     def _get_gmix_data(self):
         """
@@ -1214,7 +1295,9 @@ GMIX_BDF=6
 GMIX_COELLIP=7
 GMIX_SERSIC=8
 GMIX_FRACDEV=9
-GMIX_COMPOSITE=10
+
+# Composite Model
+GMIX_CM=10
 
 _gmix_model_dict={'full':       GMIX_FULL,
                   GMIX_FULL:    GMIX_FULL,
@@ -1234,8 +1317,8 @@ _gmix_model_dict={'full':       GMIX_FULL,
                   GMIX_FRACDEV: GMIX_FRACDEV,
                   'fracdev': GMIX_FRACDEV,
 
-                  GMIX_COMPOSITE: GMIX_COMPOSITE,
-                  'composite': GMIX_COMPOSITE,
+                  GMIX_CM: GMIX_CM,
+                  'cm': GMIX_CM,
 
                   'coellip':    GMIX_COELLIP,
                   GMIX_COELLIP: GMIX_COELLIP,
@@ -1261,8 +1344,8 @@ _gmix_string_dict={GMIX_FULL:'full',
                    GMIX_FRACDEV:'fracdev',
                    'fracdev':'fracdev',
 
-                   GMIX_COMPOSITE:'composite',
-                   'composite':'composite',
+                   GMIX_CM:'cm',
+                   'cm':'cm',
 
                    GMIX_COELLIP:'coellip',
                    'coellip':GMIX_COELLIP,
@@ -1277,7 +1360,7 @@ _gmix_npars_dict={GMIX_GAUSS:6,
                   GMIX_DEV:6,
 
                   GMIX_FRACDEV:1,
-                  GMIX_COMPOSITE:6,
+                  GMIX_CM:6,
 
                   GMIX_BDC:8,
                   GMIX_BDF:7,
@@ -1289,7 +1372,8 @@ _gmix_ngauss_dict={GMIX_GAUSS:1,
                    GMIX_DEV:10,
 
                    GMIX_FRACDEV:16,
-                   GMIX_COMPOSITE:16,
+
+                   GMIX_CM:16,
 
                    GMIX_BDC:16,
                    GMIX_BDF:16,
@@ -1309,7 +1393,7 @@ _gauss2d_dtype=[('p','f8'),
                 ('norm','f8'),
                 ('pnorm','f8')]
 
-_composite_dtype=[('fracdev','f8'),
+_cm_dtype=[('fracdev','f8'),
                   ('TdByTe','f8'), # ratio Tdev/Texp
                   ('Tfactor','f8'),
                   ('gmix',_gauss2d_dtype,16)]
@@ -2093,9 +2177,25 @@ class GMixND(object):
     Gaussian mixture in arbitrary dimensions.  A bit awkward
     in dim=1 e.g. becuase assumes means are [ndim,npars]
     """
-    def __init__(self, weights, means, covars):
-        # copy both to avoid it getting changed under us and to
+    def __init__(self, weights=None, means=None, covars=None):
+
+        if (weights is not None
+                and means is not None
+                and covars is not None):
+            self.set_mixture(weights, means, covars)
+        elif (weights is not None
+                or means is not None
+                or covars is not None):
+            raise RuntimeError("send all or none of weights, means, covars")
+
+    def set_mixture(self, weights, means, covars):
+        """
+        set the mixture elements
+        """
+
+        # copy all to avoid it getting changed under us and to
         # make sure native byte order
+
         self.weights = numpy.array(weights, dtype='f8', copy=True)
         self.means=numpy.array(means, dtype='f8', copy=True)
         self.covars=numpy.array(covars, dtype='f8', copy=True)
@@ -2112,7 +2212,29 @@ class GMixND(object):
 
         self.tmp_lnprob = zeros(self.ngauss)
 
+    def fit(self, data, ngauss, n_iter=5000, min_covar=1.0e-6):
+        """
+        data is shape
+            [npoints, ndim]
+        """
+        from sklearn.mixture import GMM
 
+        print("ngauss:   ",ngauss)
+        print("n_iter:   ",n_iter)
+        print("min_covar:",min_covar)
+
+        gmm=GMM(n_components=ngauss,
+                n_iter=n_iter,
+                min_covar=min_covar,
+                covariance_type='full')
+
+        gmm.fit(data)
+
+        if not gmm.converged_:
+            print("DID NOT CONVERGE")
+
+        self._gmm=gmm
+        self.set_mixture(gmm.weights_, gmm.means_, gmm.covars_)
 
     def get_lnprob_scalar(self, pars_in):
         """
@@ -2168,6 +2290,46 @@ class GMixND(object):
             p[i] = self.get_prob_scalar(pars[i,:])
 
         return p
+
+    def sample(self, n=None):
+        """
+        sample from the gaussian mixture
+        """
+        if not hasattr(self, '_gmm'):
+            self._make_gmm()
+
+        if n is None:
+            is_scalar=True
+            n=1
+        else:
+            is_scalar=False
+
+        samples=self._gmm.sample(n)
+
+        if is_scalar:
+            samples = samples[0,:]
+        return samples
+
+
+
+    def _make_gmm(self):
+        """
+        Make a GMM object for sampling
+        """
+        from sklearn.mixture import GMM
+
+        # these numbers are not used because we set the means, etc by hand
+        ngauss=self.weights.size
+        gmm=GMM(n_components=self.ngauss,
+                n_iter=10000,
+                min_covar=1.0e-12,
+                covariance_type='full')
+        gmm.means_ = self.means.copy()
+        gmm.covars_ = self.covars.copy()
+        gmm.weights_ = self.weights.copy()
+
+        self._gmm=gmm 
+
 
 
     '''
@@ -2317,7 +2479,8 @@ class GMixND(object):
 
         twopi = 2.0*pi
 
-        if self.ndim==1:
+        #if self.ndim==1:
+        if False:
             norms = 1.0/sqrt(twopi*self.covars)
             icovars = 1.0/self.covars
         else:

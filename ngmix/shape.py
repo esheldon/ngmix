@@ -295,4 +295,11 @@ def dgs_by_dgo_jacob(g1, g2, s1, s2):
     jacob = num/denom
     return jacob
 
+def get_round_factor(g1, g2):
+    """
+    factor to convert T to round T under shear
+    """
+    gsq  = g1**2 + g2**2
+    f = (1-gsq) / (1+gsq)
+    return f
 

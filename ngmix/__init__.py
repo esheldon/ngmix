@@ -26,6 +26,9 @@ from . import fitting
 from .fitting import print_pars
 from . import simplex
 
+from . import bootstrap
+from .bootstrap import Bootstrapper, CompositeBootstrapper
+
 from . import em
 
 from . import observation
@@ -37,3 +40,5 @@ from . import pqr
 from . import stats
 
 from . import guessers
+
+from . import test
