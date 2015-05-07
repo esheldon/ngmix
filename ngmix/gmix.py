@@ -456,6 +456,7 @@ class GMix(object):
         """
 
         gm=self._get_gmix_data()
+        
         s2n_sum =_gmix.get_model_s2n_sum(gm,
                                          obs.weight,
                                          obs.jacobian._data)
@@ -477,7 +478,78 @@ class GMix(object):
         """
         
         s2n_sum = self.get_model_s2n_sum(obs)
-        return sqrt(s2n_sum)
+        s2n = sqrt(s2n_sum)
+        return s2n
+
+
+    def get_model_s2n_Tvar_sums(self, obs):
+        """
+
+        Get the s/n sum and weighted Terr related sums for the model, using
+        only the weight map
+
+            s2n_sum   = sum(model_i^2 * ivar_i)
+            Ts2n_sum1 = sum(model_i^2 * ivar_i * r^4 )
+            Ts2n_sum2 = sum(model_i^2 * ivar_i * r^2 )
+
+        The s/n would be sqrt(s2n_sum).  The weighted err can be created
+        with 
+            # weighted means
+            r4_mean = Ts2n_sum1/s2n_sum
+            r2_mean = Ts2n_sum2/s2n_sum
+
+            # note s2n_sum = s2n^2
+            Tvar = (1/s2n_sum) * ( r4_mean + r2_mean**2 )
+
+        parameters
+        ----------
+        obs: Observation
+            The Observation to compare with. See ngmix.observation.Observation
+            The Observation must have a weight map set
+        """
+
+        gm=self._get_gmix_data()
+        
+        # res is s2n_sum, Ts2n_sum1, Ts2n_sum2
+        res =_gmix.get_model_s2n_Tvar_sums(gm,
+                                           obs.weight,
+                                           obs.jacobian._data)
+        return res
+
+    def get_model_s2n_Tvar(self, obs):
+        """
+
+        Get the s/n for the model, and weighted error on T using only the
+        weight map
+
+        parameters
+        ----------
+        obs: Observation
+            The Observation to compare with. See ngmix.observation.Observation
+            The Observation must have a weight map set
+
+        returns
+        -------
+        s2n, r2_mean, Tvar
+
+        """
+        
+        s2n_sum, Ts2n_sum1, Ts2n_sum2 = self.get_model_s2n_Tvar_sums(obs)
+        s2n = sqrt(s2n_sum)
+
+        # weighted means
+        r4_mean = Ts2n_sum1/s2n_sum
+        r2_mean = Ts2n_sum2/s2n_sum
+
+        # note s2n_sum = s2n^2
+        Tvar = (1/s2n_sum) * ( r4_mean + r2_mean**2 )
+
+        #Tvar = Ts2n_sum1/s2n_sum**2 + Ts2n_sum2**2 / s2n_sum**3
+
+        return s2n, r2_mean, Tvar
+
+
+
 
 
     def get_loglike(self, obs, nsub=1, more=False):

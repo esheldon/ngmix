@@ -1105,6 +1105,78 @@ static PyObject * PyGMix_get_model_s2n_sum(PyObject* self, PyObject* args) {
     return Py_BuildValue("d", s2n_sum);
 }
 
+/*
+
+var(T) =
+Sum (w_p^2 r_p^4 / var_p) / (Sum (w_p^2 / var_p))^2 + (Sum (w_p^2 r_p^2 / var_p))^2 / (Sum (w_p^2 / var_p))^3
+
+*/
+
+static PyObject * PyGMix_get_model_s2n_Tvar_sums(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    PyObject* weight_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    double ivar=0, u=0, v=0;
+    double model_val=0;
+    double s2n_sum=0, Ts2n_sum1=0, Ts2n_sum2=0, r2=0, r4=0, m2=0;
+    double rowcen=0, colcen=0, psum=0, rowmod=0, colmod=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOO", 
+                          &gmix_obj, &weight_obj, &jacob_obj)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        return NULL;
+    }
+
+    gmix_get_cen(gmix, n_gauss, &rowcen, &colcen, &psum);
+
+    n_row=PyArray_DIM(weight_obj, 0);
+    n_col=PyArray_DIM(weight_obj, 1);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    for (row=0; row < n_row; row++) {
+        u=PYGMIX_JACOB_GETU(jacob, row, 0);
+        v=PYGMIX_JACOB_GETV(jacob, row, 0);
+
+        for (col=0; col < n_col; col++) {
+
+            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
+            if ( ivar > 0.0) {
+                model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
+                m2 = model_val*model_val;
+
+                s2n_sum += m2*ivar;
+
+                rowmod=u-rowcen;
+                colmod=v-colcen;
+
+                r2 = rowmod*rowmod + colmod*colmod;
+                r4 = r2*r2;
+                Ts2n_sum1 += m2 * r4 * ivar;
+                Ts2n_sum2 += m2 * r2 * ivar;
+            }
+
+            u += jacob->dudcol;
+            v += jacob->dvdcol;
+
+        }
+    }
+
+    return Py_BuildValue("ddd", s2n_sum, Ts2n_sum1, Ts2n_sum2);
+}
+
 
 
 
@@ -2290,6 +2362,7 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"get_image_mean", (PyCFunction)PyGMix_get_image_mean,  METH_VARARGS,  "calculate mean with weight\n"},
 
     {"get_model_s2n_sum", (PyCFunction)PyGMix_get_model_s2n_sum,  METH_VARARGS,  "calculate the s/n of the model\n"},
+    {"get_model_s2n_Tvar_sums", (PyCFunction)PyGMix_get_model_s2n_Tvar_sums,  METH_VARARGS,  "calculate the s/n of the model\n"},
 
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
     {"get_loglike_images_margsky", (PyCFunction)PyGMix_get_loglike_images_margsky,  METH_VARARGS,  "calculate likelihood between images, subtracting mean\n"},
