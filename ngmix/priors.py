@@ -401,7 +401,7 @@ class GPriorBase(object):
 
 
 
-    def sample1d(self, nrand):
+    def sample1d(self, nrand, maxguess=0.1):
         """
         Get random |g| from the 1d distribution
 
@@ -414,7 +414,7 @@ class GPriorBase(object):
         """
 
         if not hasattr(self,'maxval1d'):
-            self.set_maxval1d()
+            self.set_maxval1d(maxguess=maxguess)
 
         maxval1d = self.maxval1d * 1.1
 
@@ -445,7 +445,7 @@ class GPriorBase(object):
         return g
 
 
-    def sample2d(self, nrand):
+    def sample2d(self, nrand, maxguess=0.1):
         """
         Get random g1,g2 values by first drawing
         from the 1-d distribution
@@ -456,7 +456,7 @@ class GPriorBase(object):
             Number to generate
         """
 
-        grand=self.sample1d(nrand)
+        grand=self.sample1d(nrand,maxguess=maxguess)
         theta = randu(nrand)*2*numpy.pi
         twotheta = 2*theta
         g1rand = grand*numpy.cos(twotheta)
@@ -517,7 +517,8 @@ class GPriorBase(object):
         self.maxval1d = -fval
         self.maxval1d_loc = minvalx
 
-    def set_maxval1d(self):
+
+    def set_maxval1d(self, maxguess=0.1):
         """
         Use a simple minimizer to find the max value of the 1d 
         distribution
@@ -525,7 +526,7 @@ class GPriorBase(object):
         from .simplex import minimize_neldermead
 
         res=minimize_neldermead(self.get_prob_scalar1d_neg,
-                                0.1,
+                                maxguess,
                                 maxiter=4000,
                                 maxfev=4000)
 
@@ -535,6 +536,9 @@ class GPriorBase(object):
         self.maxval1d = -res['fun']
         self.maxval1d_loc = res['x']
 
+        #print("maxguess:",maxguess)
+        #print("maxloc:",self.maxval1d_loc)
+        #print(res)
 
 
     def get_prob_scalar1d_neg(self, g, *args):
@@ -1368,6 +1372,13 @@ class GPriorBA(GPriorBase):
         self.h=1.e-6
         self.hhalf=0.5*self.h
         self.hinv = 1./self.h
+
+    def sample1d(self, nrand, maxguess=None):
+
+        if maxguess is None:
+            maxguess= self.sigma + 0.0001*srandu(),
+
+        return super(GPriorBA,self).sample1d(nrand, maxguess=maxguess)
 
     def set_pars(self, pars):
         """
