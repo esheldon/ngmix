@@ -482,7 +482,7 @@ class GMix(object):
         return s2n
 
 
-    def get_model_s2n_Tvar_sums(self, obs, altweight=None, oneweight=False):
+    def get_model_s2n_Tvar_sums(self, obs, altweight=None):
         """
 
         Get the s/n sum and weighted var(T) related sums for the model, using
@@ -525,18 +525,13 @@ class GMix(object):
         else:
         
             # res is s2n_sum, Ts2n_sum1, Ts2n_sum2
-            if oneweight:
-                res =_gmix.get_model_s2n_Tvar_sums_onew(gm,
-                                                        obs.weight,
-                                                        obs.jacobian._data)
-            else:
-                res =_gmix.get_model_s2n_Tvar_sums(gm,
-                                                   obs.weight,
-                                                   obs.jacobian._data)
+            res =_gmix.get_model_s2n_Tvar_sums(gm,
+                                               obs.weight,
+                                               obs.jacobian._data)
 
         return res
 
-    def get_model_s2n_Tvar(self, obs, altweight=None, oneweight=False):
+    def get_model_s2n_Tvar(self, obs, altweight=None):
         """
 
         Get the s/n for the model, and weighted error on T using only the
@@ -555,7 +550,7 @@ class GMix(object):
         """
         
         s2n_sum, Ts2n_sum1, Ts2n_sum2 = \
-            self.get_model_s2n_Tvar_sums(obs, altweight=altweight, oneweight=oneweight)
+            self.get_model_s2n_Tvar_sums(obs, altweight=altweight)
         s2n = sqrt(s2n_sum)
 
         # weighted means
