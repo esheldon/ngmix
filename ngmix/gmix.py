@@ -488,18 +488,9 @@ class GMix(object):
         Get the s/n sum and weighted var(T) related sums for the model, using
         only the weight map
 
-            s2n_sum   = sum(model_i^2 * ivar_i)
-            Ts2n_sum1 = sum(model_i^2 * ivar_i * r^4 )
-            Ts2n_sum2 = sum(model_i^2 * ivar_i * r^2 )
-
-        The s/n would be sqrt(s2n_sum).  The weighted err can be created
-        with 
-            # weighted means
-            r4_mean = Ts2n_sum1/s2n_sum
-            r2_mean = Ts2n_sum2/s2n_sum
-
-            # note s2n_sum = s2n^2
-            Tvar = (1/s2n_sum) * ( r4_mean + r2_mean**2 )
+            s2n_sum = sum(model_i^2 * ivar_i)
+            r2sum = sum(model_i^2 * ivar_i * r^2 )
+            r4sum = sum(model_i^2 * ivar_i * r^4 )
 
         parameters
         ----------
@@ -512,7 +503,6 @@ class GMix(object):
 
         if altweight is not None:
             if isinstance(altweight, GMix):
-                # res is s2n_sum, Ts2n_sum1, Ts2n_sum2
                 print("using altweight")
                 wdata=altweight._get_gmix_data()
                 res =_gmix.get_model_s2n_Tvar_sums_altweight(gm,
@@ -524,7 +514,6 @@ class GMix(object):
 
         else:
         
-            # res is s2n_sum, Ts2n_sum1, Ts2n_sum2
             res =_gmix.get_model_s2n_Tvar_sums(gm,
                                                obs.weight,
                                                obs.jacobian._data)
@@ -549,23 +538,24 @@ class GMix(object):
 
         """
         
-        s2n_sum, Ts2n_sum1, Ts2n_sum2 = \
+        s2n_sum, r2sum, r4sum = \
             self.get_model_s2n_Tvar_sums(obs, altweight=altweight)
         s2n = sqrt(s2n_sum)
 
         # weighted means
-        r4_mean = Ts2n_sum1/s2n_sum
-        r2_mean = Ts2n_sum2/s2n_sum
+        r2_mean = r2sum/s2n_sum
+        r4_mean = r4sum/s2n_sum
 
-        # note s2n_sum = s2n^2
-        Tvar = (1/s2n_sum) * ( r4_mean + r2_mean**2 )
+        # assume gaussian: T = 2<r^2>
+        # var(T) = T^4 / nu^2 ( <r^4> )
 
-        #Tvar = Ts2n_sum1/s2n_sum**2 + Ts2n_sum2**2 / s2n_sum**3
+        T = 2*r2_mean
+        Tvar = T**4/( s2n**2 * r4_mean)
 
-        return s2n, r2_mean, Tvar
+        #T=self.get_T()
+        #Tvar = T**4 / ( s2n**2 * ( T**2 - 2*T*r2_mean + r4_mean ) )
 
-
-
+        return s2n, r2_mean, r4_mean, Tvar
 
 
     def get_loglike(self, obs, nsub=1, more=False):

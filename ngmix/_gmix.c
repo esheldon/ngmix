@@ -1136,7 +1136,7 @@ static PyObject * PyGMix_get_model_s2n_Tvar_sums(PyObject* self, PyObject* args)
 
     double ivar=0, u=0, v=0;
     double model_val=0;
-    double s2n_sum=0, Ts2n_sum1=0, Ts2n_sum2=0, r2=0, r4=0, m2=0;
+    double s2n_sum=0, r4sum=0, r2sum=0, r2=0, r4=0, m2=0;
     double rowcen=0, colcen=0, psum=0, rowmod=0, colmod=0;
 
     if (!PyArg_ParseTuple(args, (char*)"OOO", 
@@ -1176,8 +1176,8 @@ static PyObject * PyGMix_get_model_s2n_Tvar_sums(PyObject* self, PyObject* args)
 
                 r2 = rowmod*rowmod + colmod*colmod;
                 r4 = r2*r2;
-                Ts2n_sum1 += m2 * r4 * ivar;
-                Ts2n_sum2 += m2 * r2 * ivar;
+                r4sum += m2 * r4 * ivar;
+                r2sum += m2 * r2 * ivar;
             }
 
             u += jacob->dudcol;
@@ -1186,7 +1186,7 @@ static PyObject * PyGMix_get_model_s2n_Tvar_sums(PyObject* self, PyObject* args)
         }
     }
 
-    return Py_BuildValue("ddd", s2n_sum, Ts2n_sum1, Ts2n_sum2);
+    return Py_BuildValue("ddd", s2n_sum, r2sum, r4sum);
 }
 
 /*
@@ -1206,7 +1206,7 @@ static PyObject * PyGMix_get_model_s2n_Tvar_sums_altweight(PyObject* self, PyObj
 
     double ivar=0, u=0, v=0;
     double model_val=0, wval=0;
-    double s2n_sum=0, Ts2n_sum1=0, Ts2n_sum2=0, r2=0, r4=0, m2=0;
+    double s2n_sum=0, r4sum=0, r2sum=0, r2=0, r4=0, m2=0;
     double rowcen=0, colcen=0, psum=0, rowmod=0, colmod=0;
 
     if (!PyArg_ParseTuple(args, (char*)"OOOO", 
@@ -1254,8 +1254,8 @@ static PyObject * PyGMix_get_model_s2n_Tvar_sums_altweight(PyObject* self, PyObj
 
                 r2 = rowmod*rowmod + colmod*colmod;
                 r4 = r2*r2;
-                Ts2n_sum1 += m2 * r4 * ivar;
-                Ts2n_sum2 += m2 * r2 * ivar;
+                r4sum += m2 * r4 * ivar;
+                r2sum += m2 * r2 * ivar;
             }
 
             u += jacob->dudcol;
@@ -1264,7 +1264,7 @@ static PyObject * PyGMix_get_model_s2n_Tvar_sums_altweight(PyObject* self, PyObj
         }
     }
 
-    return Py_BuildValue("ddd", s2n_sum, Ts2n_sum1, Ts2n_sum2);
+    return Py_BuildValue("ddd", s2n_sum, r2sum, r4sum);
 }
 
 
