@@ -22,6 +22,10 @@ from .shape import get_round_factor
 from .guessers import TFluxGuesser, TFluxAndPriorGuesser
 from .gexceptions import GMixRangeError, BootPSFFailure, BootGalFailure
 
+BOOT_S2N_LOW = 2**0
+BOOT_R2_LOW = 2**1
+BOOT_R4_LOW = 2**2
+
 class Bootstrapper(object):
     def __init__(self, obs, use_logpars=False):
         """
@@ -72,6 +76,87 @@ class Bootstrapper(object):
         need retries
         """
 
+        max_fitter=self.get_max_fitter()
+        res=max_fitter.get_result()
+
+        pars, pars_lin = self._get_round_pars(res['pars'])
+
+        gm0_round = self._get_gmix_round(res, pars_lin)
+
+        s2n, Ts2n, flags = self._get_s2n_Ts2n_r(gm0_round)
+
+        res['round_pars'] = pars
+        res['round_flags'] = flags
+        res['s2n_r'] = s2n
+        res['T_s2n_r'] = Ts2n
+
+    def _get_s2n_Ts2n_r(self, gm0_round):
+        """
+        get the round s2n and Ts2n
+        """
+
+        Tround = gm0_round.get_T()
+
+        flags=0
+
+        s2n_sum=0.0
+        r4sum=0.0
+        r2sum=0.0
+
+        for obslist in self.mb_obs_list:
+            for obs in obslist:
+                psf_gm=obs.psf.gmix
+
+                # only makes sens for symmetric psf
+                psf_gm_round = psf_gm.make_round()
+
+                gm = gm0_round.convolve(psf_gm_round)
+
+                # these use only the weight maps. Use the same weight map
+                # for gal and psf
+                t_s2n_sum, t_r2sum, t_r4sum = \
+                    gm.get_model_s2n_Tvar_sums(obs)
+
+                s2n_sum += t_s2n_sum
+                r2sum += t_r2sum
+                r4sum += t_r4sum
+
+        if s2n_sum <= 0.0:
+            print("    failure: s2n_sum <= 0.0 :",s2n_sum)
+            flags |= BOOT_S2N_LOW
+            s2n=-9999.0
+            Ts2n=-9999.0
+        else:
+            s2n=sqrt(s2n_sum)
+
+            # weighted means
+            r2_mean = r2sum/s2n_sum
+            r4_mean = r4sum/s2n_sum
+
+            if r2_mean <= 0.0:
+                print("    failure: round r2 <= 0.0 :",r2_mean)
+                flags |= BOOT_R2_LOW
+                Ts2n=-9999.0
+            elif r4_mean <= 0.0:
+                print("    failure: round r2 == 0.0 :",r2_mean)
+                flags |= BOOT_R4_LOW
+                Ts2n=-9999.0
+            else:
+
+                # this one partially accounts for T-F covariance
+                r2sq = r2_mean**2
+                Ts2n = Tround * s2n * sqrt(r4_mean-r2sq) / (4. * r2sq)
+
+        return s2n, Ts2n, flags
+
+    def set_round_s2n_old(self, prior=None, ntry=4):
+        """
+        set the s/n and (s/n)_T for the round model
+
+        the s/n measure is stable, the size will require a prior and may
+        need retries
+        """
+
         raise RuntimeError("adapt to multiple observations")
 
         obs=self.gal_obs
@@ -94,7 +179,7 @@ class Bootstrapper(object):
         # now the covariance matrix, which can be more unstable
         cov=self._sim_cov_round(obs,
                                 gm_round, gmpsf_round,
-                                pars, res['model'],
+                                res, pars,
                                 prior=prior,
                                 ntry=ntry)
 
@@ -115,7 +200,7 @@ class Bootstrapper(object):
     def _sim_cov_round(self,
                        obs,
                        gm_round, gmpsf_round,
-                       pars_round, model,
+                       res, pars_round,
                        prior=None,
                        ntry=4):
         """
@@ -145,11 +230,14 @@ class Bootstrapper(object):
                                  jacobian=obs.get_jacobian(),
                                  psf=psf_obs)
             
-            fitter=fitting.LMSimple(newobs, model,
-                                    prior=prior,
-                                    use_logpars=self.use_logpars)
+            fitter=self._get_round_fitter(newobs, res, prior=prior)
 
-            fitter._setup_data(pars_round)
+            # we can't recover from this error
+            try:
+                fitter._setup_data(pars_round)
+            except GMixRangeError:
+                break
+
             try:
                 tcov=fitter.get_cov(pars_round, 1.0e-3, 5.0)
                 if tcov[4,4] > 0:
@@ -159,6 +247,12 @@ class Bootstrapper(object):
                 pass
 
         return cov
+
+    def _get_round_fitter(self, obs, res, prior=None):
+        fitter=ngmix.fitting.LMSimple(obs, res['model'],
+                                      prior=prior,
+                                      use_logpars=self.use_logpars)
+        return fitter
 
 
     def _get_round_pars(self, pars_in):
@@ -172,18 +266,19 @@ class Bootstrapper(object):
         g1,g2,T = pars_lin[2],pars_lin[3],pars_lin[4]
 
         f = get_round_factor(g1, g2)
-        T = T*f
+        Tround = T*f
 
         pars[2]=0.0
         pars[3]=0.0
         pars_lin[2]=0.0
         pars_lin[3]=0.0
-        pars_lin[4]=T
+
+        pars_lin[4]=Tround
 
         if self.use_logpars:
-            pars[4] = log(T)
+            pars[4] = log(pars_lin[4])
         else:
-            pars[4] = T
+            pars[4] = pars_lin[4]
 
         return pars, pars_lin
 
@@ -616,10 +711,19 @@ class CompositeBootstrapper(Bootstrapper):
 
 
     def _get_gmix_round(self, res, pars):
-        gm_round = GMixCM(res['fracdev'],
-                          res['TdByTe'],
-                          res['model'])
+        gm_round = ngmix.gmix.GMixCM(res['fracdev'],
+                                     res['TdByTe'],
+                                     pars)
         return gm_round
+
+    def _get_round_fitter(self, obs, res, prior=None):
+        fitter=ngmix.fitting.LMComposite(obs,
+                                         res['fracdev'],
+                                         res['TdByTe'],
+                                         prior=prior,
+                                         use_logpars=self.use_logpars)
+
+        return fitter
 
 
     def isample(self, ipars, prior=None):
