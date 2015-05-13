@@ -3,7 +3,6 @@ TODO
 
     - make a tester for it
     - test it in nsim
-    - adapt set_round_s2n, find_cen to multiple observations
     - make it possible to specify the guess type (not just psf)
 
 """
@@ -40,7 +39,6 @@ class Bootstrapper(object):
             
             If the psf observations already have gmix objects set, there is no
             need to run fit_psfs()
-
         """
 
         self.use_logpars=use_logpars
@@ -68,12 +66,9 @@ class Bootstrapper(object):
             raise RuntimeError("you need to run fit_max successfully first")
         return self.max_fitter
 
-    def set_round_s2n(self, prior=None, ntry=4):
+    def set_round_s2n(self, ntry=4):
         """
         set the s/n and (s/n)_T for the round model
-
-        the s/n measure is stable, the size will require a prior and may
-        need retries
         """
 
         max_fitter=self.get_max_fitter()
@@ -249,9 +244,9 @@ class Bootstrapper(object):
         return cov
 
     def _get_round_fitter(self, obs, res, prior=None):
-        fitter=ngmix.fitting.LMSimple(obs, res['model'],
-                                      prior=prior,
-                                      use_logpars=self.use_logpars)
+        fitter=fitting.LMSimple(obs, res['model'],
+                                prior=prior,
+                                use_logpars=self.use_logpars)
         return fitter
 
 
@@ -342,6 +337,7 @@ class Bootstrapper(object):
         new_mb_obslist=MultiBandObsList()
         for band,obslist in enumerate(self.mb_obs_list_orig):
             new_obslist=ObsList()
+
             for i,obs in enumerate(obslist):
                 if not obs.has_psf():
                     raise RuntimeError("observation does not have a psf set")
@@ -456,8 +452,6 @@ class Bootstrapper(object):
         bootstrap off the maxlike run
         """
 
-        self._try_replace_cov(ipars['cov_pars'])
-
         max_fitter=self.max_fitter
         use_fitter=max_fitter
 
@@ -483,6 +477,8 @@ class Bootstrapper(object):
         tres['psf_flux_err']=self.psf_flux_err
 
         if 's2n_r' in maxres:
+            tres['flags_r'] = maxres['s2n_r']
+            tres['round_pars'] = maxres['s2n_r']
             tres['s2n_r'] = maxres['s2n_r']
             tres['T_s2n_r'] = maxres['T_s2n_r']
 
@@ -513,12 +509,13 @@ class Bootstrapper(object):
         """
         use psf as a template, measure flux (linear)
         """
-        raise RuntimeError("adapt to multiple bands")
+        print("PSF_FLUX: adapt to multiple bands")
 
         if not hasattr(self,'psf_fitter'):
             raise RuntimeError("you need to fit with the psf first")
 
-        fitter=fitting.TemplateFluxFitter(self.mb_obs_list, do_psf=True)
+        obs_list = self.mb_obs_list[0]
+        fitter=fitting.TemplateFluxFitter(obs_list, do_psf=True)
         fitter.go()
 
         res=fitter.get_result()
@@ -537,7 +534,7 @@ class Bootstrapper(object):
         generate a guess, drawing from priors on the other parameters
         """
 
-        psf_T = self.psf_obs.gmix.get_T()
+        psf_T = self.mb_obs_list[0][0].psf.gmix.get_T()
 
         psf_flux=self.psf_flux
 
@@ -559,7 +556,7 @@ class Bootstrapper(object):
 
 
 
-    def _try_replace_cov(self, cov_pars):
+    def try_replace_cov(self, cov_pars):
         """
         the lm cov often mis-estimates the error on the ellipticity parameters,
         try to replace it
@@ -581,13 +578,12 @@ class Bootstrapper(object):
 
 
 class CompositeBootstrapper(Bootstrapper):
-    def __init__(self, psf_obs, gal_obs,
+    def __init__(self, obs,
                  use_logpars=False,
                  fracdev_prior=None,
                  fracdev_grid=None):
 
-        super(CompositeBootstrapper,self).__init__(psf_obs,
-                                                   gal_obs,
+        super(CompositeBootstrapper,self).__init__(obs,
                                                    use_logpars=use_logpars)
 
         self.fracdev_prior=fracdev_prior
@@ -711,17 +707,17 @@ class CompositeBootstrapper(Bootstrapper):
 
 
     def _get_gmix_round(self, res, pars):
-        gm_round = ngmix.gmix.GMixCM(res['fracdev'],
-                                     res['TdByTe'],
-                                     pars)
+        gm_round = GMixCM(res['fracdev'],
+                          res['TdByTe'],
+                          pars)
         return gm_round
 
     def _get_round_fitter(self, obs, res, prior=None):
-        fitter=ngmix.fitting.LMComposite(obs,
-                                         res['fracdev'],
-                                         res['TdByTe'],
-                                         prior=prior,
-                                         use_logpars=self.use_logpars)
+        fitter=fitting.LMComposite(obs,
+                                   res['fracdev'],
+                                   res['TdByTe'],
+                                   prior=prior,
+                                   use_logpars=self.use_logpars)
 
         return fitter
 
@@ -832,11 +828,11 @@ class CompositeBootstrapper(Bootstrapper):
 
 
 class BestBootstrapper(Bootstrapper):
-    def __init__(self, psf_obs, gal_obs,
-                 use_logpars=False, fracdev_prior=None):
-        super(BestBootstrapper,self).__init__(psf_obs,
-                                                   gal_obs,
-                                                   use_logpars=use_logpars)
+    def __init__(self, obs,
+                 use_logpars=False,
+                 fracdev_prior=None):
+        super(BestBootstrapper,self).__init__(obs,
+                                              use_logpars=use_logpars)
 
     def fit_max(self, exp_prior, dev_prior, exp_rate, pars, ntry=1):
         """
