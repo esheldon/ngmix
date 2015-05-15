@@ -26,7 +26,7 @@ BOOT_R2_LOW = 2**1
 BOOT_R4_LOW = 2**2
 
 class Bootstrapper(object):
-    def __init__(self, obs, use_logpars=False):
+    def __init__(self, obs, use_round_size=False,use_logpars=False):
         """
         The data can be mutated: If a PSF fit is performed, the gmix will be
         set for the input PSF observation
@@ -42,6 +42,7 @@ class Bootstrapper(object):
         """
 
         self.use_logpars=use_logpars
+        self.use_round_size=use_round_size
         self.mb_obs_list_orig = get_mb_obs(obs)
 
         # this will get replaced if fit_psfs is run
@@ -385,10 +386,9 @@ class Bootstrapper(object):
             raise BootPSFFailure("failed to fit psfs")
 
     def _fit_one_psf_em(self, psf_obs, psf_model, Tguess, ntry):
-        from .nfit import get_em_ngauss
 
         ngauss=get_em_ngauss(psf_model)
-        em_pars={'tol': 5.0e-6, 'maxiter': 50000}
+        em_pars={'tol': 1.0e-6, 'maxiter': 50000}
 
         runner=EMRunner(psf_obs, Tguess, ngauss, em_pars)
         runner.go(ntry=ntry)
@@ -432,6 +432,7 @@ class Bootstrapper(object):
 
         runner=MaxRunner(self.mb_obs_list, gal_model, pars, guesser,
                          prior=prior,
+                         use_round_size=self.use_round_size,
                          use_logpars=self.use_logpars)
 
         runner.go(ntry=ntry)
@@ -981,7 +982,6 @@ class EMRunner(object):
         return GMix(pars=pars)
 
     def _get_em_guess_2gauss(self):
-        from .nfit import _em2_pguess, _em2_fguess
 
         sigma2 = self.sigma_guess**2
 
@@ -1003,7 +1003,6 @@ class EMRunner(object):
         return GMix(pars=pars)
 
     def _get_em_guess_3gauss(self):
-        from .nfit import _em3_pguess, _em3_fguess
 
         sigma2 = self.sigma_guess**2
 
@@ -1039,9 +1038,10 @@ class MaxRunner(object):
     """
     wrapper to generate guesses and run the fitter a few times
     """
-    def __init__(self, obs, model, pars, guesser, prior=None, use_logpars=False):
+    def __init__(self, obs, model, pars, guesser, prior=None, use_round_size=False, use_logpars=False):
         self.obs=obs
 
+        self.use_round_size=use_round_size
         self.pars=pars
         self.method=pars['method']
         if self.method == 'lm':
@@ -1088,6 +1088,7 @@ class MaxRunner(object):
             fitter=LMSimple(self.obs,
                             self.model,
                             lm_pars=self.send_pars,
+                            use_round_size=self.use_round_size,
                             use_logpars=self.use_logpars,
                             prior=self.prior)
 
@@ -1143,6 +1144,16 @@ class CompositeMaxRunner(MaxRunner):
                 break
 
         self.fitter=fitter
+
+def get_em_ngauss(name):
+    ngauss=int( name[2:] )
+    return ngauss
+
+_em2_fguess =array([0.5793612389470884,1.621860687127999])
+_em2_pguess =array([0.596510042804182,0.4034898268889178])
+
+_em3_pguess = array([0.596510042804182,0.4034898268889178,1.303069003078001e-07])
+_em3_fguess = array([0.5793612389470884,1.621860687127999,7.019347162356363],dtype='f8')
 
 
 def test_boot(model,**keys):
