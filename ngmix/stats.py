@@ -23,13 +23,16 @@ def calc_mcmc_stats(data, sigma_clip=False, weights=None, **kw):
     """
 
     send_data=data
+    send_weights=weights
     if sigma_clip:
         keep, ok = get_sigma_clipped_indices(data, weights=weights, **kw)
         if ok:
             send_data=data[keep]
+            if weights is not None:
+                send_weights=weights[keep]
 
     if weights is not None:
-        return _calc_weighted_stats(send_data, weights)
+        return _calc_weighted_stats(send_data, send_weights)
     else:
         return _calc_stats(send_data)
 
