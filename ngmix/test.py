@@ -2283,25 +2283,30 @@ def test_nm_many(n=1000, **kw):
             'nfev':nfevs,
             'ntry':ntrys}
 
-def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
-            g1=0.1,
-            g2=0.05,
-            sigma_fac=5.0,
-            jfac=1.0,
-            prior_type='flat',
-            verbose=True,
-            show=False,
-            dims=None,
-            cen_offset=None,
-            aperture=None,
-            do_aperture=False, # auto-calculate aperture
-            maxfev=4000,
-            ftol=1.e-4,
-            xtol=1.e-4,
-            seed=None,
-            guess_quality='bad', # use 'good' to make a good guess
-            do_emcee=False,
-            nwalkers=80, burnin=800, nstep=800):
+def test_max(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
+             method='nm',
+             g1=0.1,
+             g2=0.05,
+             sigma_fac=5.0,
+             g1_psf=0.0,
+             g2_psf=0.05,
+             jfac=1.0,
+             prior_type='flat',
+             g_prior_type='flat',
+             verbose=True,
+             show=False,
+             dims=None,
+             cen_offset=None,
+             aperture=None,
+             do_aperture=False, # auto-calculate aperture
+             maxfev=4000,
+             ftol=1.e-4,
+             xtol=1.e-4,
+             seed=None,
+             guess_quality='bad', # use 'good' to make a good guess
+             do_emcee=False,
+             use_round_size=False,
+             nwalkers=80, burnin=800, nstep=800):
     """
     Fit with nelder-mead, calculating cov matrix with our code
 
@@ -2327,8 +2332,6 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
     # PSF pars
     counts_psf=100.0
     noise_psf=0.01
-    g1_psf=0.00
-    g2_psf=0.05
     T_psf=4.0*jfac2
 
     T=2.*sigma**2
@@ -2406,11 +2409,16 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
     else:
         pmaker=joint_prior.make_cosmos_simple_sep
 
+
     cen_width=0.5
     prior=pmaker([0.0,0.0], # cen
                  [cen_width]*2, #cen width
                  [-0.97,3500.], # T
                  [-0.97,1.0e9]) # counts
+
+    if g_prior_type=='round':
+        prior.g_prior=priors.GPriorBA(0.001)
+
     #prior=None
     obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
 
@@ -2425,8 +2433,14 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
     if verbose:
         print("fitting with nelder-mead")
 
-    nm_fitter=MaxSimple(obs, model, maxiter=4000, maxfev=4000, 
-                        prior=prior, aperture=aperture)
+    if method=='nm':
+        max_fitter=MaxSimple(obs, model,
+                            prior=prior, aperture=aperture)
+    else:
+        max_fitter=LMSimple(obs, model, lm_pars={'maxfev':4000},
+                            use_round_size=use_round_size,
+                            prior=prior, aperture=aperture)
+
     guess=zeros( npars )
     ntry=0
     while True:
@@ -2445,27 +2459,31 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
             guess[5] = counts*(1.0 + 0.01*srandu())
 
         t0=time.time()
-        nm_fitter.run_max(guess,
+        if method=='nm':
+            max_fitter.go(guess,
                           maxfev=4000,
                           maxiter=4000,
                           xtol=xtol,
                           ftol=ftol)
-        nm_res=nm_fitter.get_result()
+        else:
+            max_fitter.go(guess)
+
+        max_res=max_fitter.get_result()
         if verbose:
             print("time for nm:", time.time()-t0)
 
         # we could also just check EIG_NOTFINITE but then there would
         # be no errors
-        if (nm_res['flags'] & 3) != 0:
+        if (max_res['flags'] & 3) != 0:
             print("    did not converge, trying again with a new guess")
-            print_pars(nm_res['pars'],              front='    pars were:', fmt=fmt)
-        elif (nm_res['flags'] & EIG_NOTFINITE) != 0:
+            print_pars(max_res['pars'],              front='    pars were:', fmt=fmt)
+        elif (max_res['flags'] & EIG_NOTFINITE) != 0:
             print("    bad cov, trying again with a new guess")
-            print_pars(nm_res['pars'],              front='    pars were:', fmt=fmt)
+            print_pars(max_res['pars'],              front='    pars were:', fmt=fmt)
         else:
             break
 
-    nm_res['ntry'] = ntry
+    max_res['ntry'] = ntry
 
     #
     # emcee fitting
@@ -2495,21 +2513,25 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
         emcee_res=emcee_fitter.get_result()
 
     if verbose:
-        for key in nm_res:
+        max_pars=max_res['pars']
+        max_perr=max_res['pars_err']
+
+        for key in max_res:
             if key not in ['pars','pars_err','pars_cov','g','g_cov','x']:
-                print("    %s: %s" % (key, nm_res[key]))
+                print("    %s: %s" % (key, max_res[key]))
 
         print_pars(pars_obj,              front='true pars: ', fmt=fmt)
 
         if do_emcee:
             print_pars(emcee_res['pars'],     front='emcee pars:', fmt=fmt)
-        print_pars(nm_res['pars'],        front='nm pars:   ', fmt=fmt)
+        print_pars(max_res['pars'],        front='max pars:  ', fmt=fmt)
 
         if do_emcee:
             print_pars(emcee_res['pars_err'], front='emcee err: ', fmt=fmt)
-        print_pars(nm_res['pars_err'],    front='nm err:    ', fmt=fmt)
+        print_pars(max_res['pars_err'],    front='max err:   ', fmt=fmt)
 
-        print("\ns2n:",nm_res['s2n_w'])
+        Ts2n=max_pars[4]/max_perr[4]
+        print("\ns2n:",max_res['s2n_w'],"Ts2n:",Ts2n)
 
         if do_emcee:
             print("s2n:",emcee_res['s2n_w'],"arate:",emcee_res['arate'],"tau:",emcee_res['tau'])
@@ -2518,16 +2540,16 @@ def test_nm(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
                 emcee_fitter.make_plots(do_residual=True,show=True,prompt=False)
 
         #print("\nnm cov:")
-        #images.imprint(nm_res['pars_cov'], fmt='%12.6g')
+        #images.imprint(max_res['pars_cov'], fmt='%12.6g')
 
         if show:
             import images
-            gm0=nm_fitter.get_gmix()
+            gm0=max_fitter.get_gmix()
             gm=gm0.convolve(psf_fit)
             model_im=gm.make_image(dims,jacobian=j)
             images.compare_images(im_obj, model_im, label1='image',label2='model')
 
-    return nm_res
+    return max_res
 
 def test_model_logpars(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
                        nwalkers=80, burnin=800, nstep=800,
