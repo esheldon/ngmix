@@ -2305,7 +2305,6 @@ def test_max(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
              seed=None,
              guess_quality='bad', # use 'good' to make a good guess
              do_emcee=False,
-             use_round_size=False,
              nwalkers=80, burnin=800, nstep=800):
     """
     Fit with nelder-mead, calculating cov matrix with our code
@@ -2438,7 +2437,6 @@ def test_max(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
                             prior=prior, aperture=aperture)
     else:
         max_fitter=LMSimple(obs, model, lm_pars={'maxfev':4000},
-                            use_round_size=use_round_size,
                             prior=prior, aperture=aperture)
 
     guess=zeros( npars )

@@ -80,7 +80,6 @@ class FitterBase(object):
 
         self.margsky = keys.get('margsky', False)
         self.use_logpars=keys.get('use_logpars',False)
-        self.use_round_size = keys.get('use_round_size',True)
 
         # psf fitters might not have this set to 1
         self.nsub=keys.get('nsub',1)
@@ -1577,11 +1576,6 @@ class LMSimple(FitterBase):
             pars[0:5] = pars_in[0:5]
             pars[5] = pars_in[5+band]
 
-        if self.use_round_size:
-            from .shape import get_round_factor
-            # factor converts T to round T, we want to convert to sheared
-            f=get_round_factor(pars[2], pars[3])
-            pars[4] /= f
 
         return pars
 
