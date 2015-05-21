@@ -1305,3 +1305,147 @@ class PriorSimpleSep(object):
 
         rep='\n'.join(reps)
         return rep
+
+class PriorSimpleSepRound(PriorSimpleSep):
+    """
+    Separate priors on each parameter, no shape
+
+    parameters
+    ----------
+    cen_prior:
+        The center prior
+    T_prior:
+        Prior on T
+    F_prior:
+        Prior on Flux.  Can be a list for a multi-band prior.
+    """
+
+    def __init__(self,
+                 cen_prior,
+                 T_prior,
+                 F_prior):
+
+        self.cen_prior=cen_prior
+        self.T_prior=T_prior
+
+        if isinstance(F_prior,list):
+            self.nband=len(F_prior)
+        else:
+            self.nband=1
+            F_prior=[F_prior]
+
+        self.F_priors=F_prior
+
+    def get_widths(self, n=10000):
+        """
+        estimate the width in each dimension
+        """
+        if not hasattr(self, '_sigma_estimates'):
+            import esutil as eu
+            samples=self.sample(n)
+            sigmas = samples.std(axis=0)
+
+            self._sigma_estimates=sigmas
+
+        return self._sigma_estimates
+
+
+    def get_lnprob_scalar(self, pars, **keys):
+        """
+        log probability for scalar input (meaning one point)
+        """
+
+        lnp = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
+        lnp += self.T_prior.get_lnprob_scalar(pars[2], **keys)
+
+        for i, F_prior in enumerate(self.F_priors):
+            lnp += F_prior.get_lnprob_scalar(pars[3+i], **keys)
+
+        return lnp
+
+
+    def fill_fdiff(self, pars, fdiff, **keys):
+        """
+        set sqrt(-2ln(p)) ~ (model-data)/err
+        """
+        index=0
+
+        #fdiff[index] = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
+
+        lnp1,lnp2=self.cen_prior.get_lnprob_scalar_sep(pars[0],pars[1])
+
+        fdiff[index] = lnp1
+        index += 1
+        fdiff[index] = lnp2
+        index += 1
+
+
+        fdiff[index] =  self.T_prior.get_lnprob_scalar(pars[2], **keys)
+        index += 1
+
+        for i in xrange(self.nband):
+            F_prior=self.F_priors[i]
+            fdiff[index] = F_prior.get_lnprob_scalar(pars[3+i], **keys)
+            index += 1
+
+        chi2 = -2*fdiff[0:index]
+        chi2.clip(min=0.0, max=None, out=chi2)
+        fdiff[0:index] = sqrt(chi2)
+
+        return index
+
+    def get_lnprob_array(self, pars, **keys):
+        """
+        log probability for array input [N,ndims]
+        """
+
+        lnp = self.cen_prior.get_lnprob_array(pars[:,0], pars[:,1])
+        lnp += self.T_prior.get_lnprob_array(pars[:,2])
+
+        for i in xrange(self.nband):
+            F_prior=self.F_priors[i]
+            lnp += F_prior.get_lnprob_array(pars[:,3+i])
+
+        return lnp
+
+    def sample(self, n=None, **unused_keys):
+        """
+        Get random samples
+        """
+
+        if n is None:
+            is_scalar=True
+            n=1
+        else:
+            is_scalar=False
+
+        samples=zeros( (n,3+self.nband) )
+
+        cen1,cen2 = self.cen_prior.sample(n)
+        g1,g2=self.g_prior.sample2d(n)
+        T=self.T_prior.sample(n)
+
+        samples[:,0] = cen1
+        samples[:,1] = cen2
+        samples[:,2] = T
+
+        for i in xrange(self.nband):
+            F_prior=self.F_priors[i]
+            F=F_prior.sample(n)
+            samples[:,3+i] = F
+
+        if is_scalar:
+            samples=samples[0,:]
+        return samples
+
+    def __repr__(self):
+        reps=[]
+        reps += [str(self.cen_prior),
+                 str(self.T_prior)]
+
+        for p in self.F_priors:
+            reps.append( str(p) )
+
+        rep='\n'.join(reps)
+        return rep
+

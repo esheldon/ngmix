@@ -1649,6 +1649,62 @@ class LMSimple(FitterBase):
 
         return nprior
 
+class LMSimpleRound(LMSimple):
+    def __init__(self, obs, model, **keys):
+        super(LMSimpleRound,self).__init__(obs, model, **keys)
+
+        self.npars = self.npars-2
+        self.n_prior_pars=self.n_prior_pars - 1
+        self.fdiff_size=self.totpix + self.n_prior_pars
+
+        self._band_pars0=zeros(self.npars+2)
+
+
+    def run_lm(self, guess):
+        """
+        Run leastsq and set the result
+        """
+
+        guess=array(guess,dtype='f8',copy=False)
+        self._setup_data(guess)
+
+        result = run_leastsq(self._calc_fdiff, guess, self.n_prior_pars, **self.lm_pars)
+
+        result['model'] = self.model_name
+        if result['flags']==0:
+            stat_dict=self.get_fit_stats(result['pars'])
+            result.update(stat_dict)
+
+        self._result=result
+
+    def _get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+        """
+
+
+        if self.use_logpars:
+            # all band
+            pars0 = self._band_pars0
+
+            # single band
+            pars  = self._band_pars
+
+            pars0[0:2] = pars_in[0:2]
+            # 2:2+2 remain zero for roundness
+            pars0[4:] = pars_in[2:]
+
+            _gmix.convert_simple_double_logpars_band(pars0, pars, band)
+            return pars
+        else:
+            pars  = self._band_pars
+            pars[0:2] = pars_in[0:2]
+            # 2:2+2 remain zero for roundness
+            pars[4] = pars_in[2]
+            pars[5] = pars_in[3+band]
+            return pars
+
+
 
 class LMComposite(LMSimple):
     """
