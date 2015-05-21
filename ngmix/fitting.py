@@ -1372,7 +1372,7 @@ class MaxSimple(FitterBase):
         maxfev:
             Default is npars*200
         """
-        if self.method=='Nelder-Mead':
+        if self.method in ['nm','Nelder-Mead']:
             self.run_max_nm(guess, **keys)
         else:
             import scipy.optimize
@@ -1403,6 +1403,7 @@ class MaxSimple(FitterBase):
                 # based on last entry
                 fit_stats = self.get_fit_stats(pars)
                 result.update(fit_stats)
+    go=run_max
 
     def run_max_nm(self, guess, **keys):
         """
