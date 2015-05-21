@@ -74,10 +74,12 @@ class Bootstrapper(object):
 
         if fitter_type=='isample':
             fitter = self.get_isampler()
-        else fitter_type=='max':
+        elif fitter_type=='max':
             fitter = self.get_max_fitter()
+        else:
+            raise ValueError("fitter_type should be isample or max")
 
-        res=max_fitter.get_result()
+        res=fitter.get_result()
 
         pars, pars_lin = self._get_round_pars(res['pars'])
 
