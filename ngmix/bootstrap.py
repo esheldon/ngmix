@@ -67,12 +67,16 @@ class Bootstrapper(object):
             raise RuntimeError("you need to run fit_max successfully first")
         return self.max_fitter
 
-    def set_round_s2n(self, ntry=4):
+    def set_round_s2n(self, ntry=4, fitter_type='isample'):
         """
         set the s/n and (s/n)_T for the round model
         """
 
-        max_fitter=self.get_max_fitter()
+        if fitter_type=='isample':
+            fitter = self.get_isampler()
+        else fitter_type=='max':
+            fitter = self.get_max_fitter()
+
         res=max_fitter.get_result()
 
         pars, pars_lin = self._get_round_pars(res['pars'])
