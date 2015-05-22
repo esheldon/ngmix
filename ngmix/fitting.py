@@ -461,7 +461,7 @@ class FitterBase(object):
             plist.append(band_list)
         return plist
 
-    def calc_cov(self, h, m):
+    def calc_cov(self, h, m, diag_on_fail=True):
         """
         Run get_cov() to calculate the covariance matrix at the best-fit point.
         If all goes well, add 'pars_cov', 'pars_err', and 'g_cov' to the result
@@ -481,7 +481,7 @@ class FitterBase(object):
         bad=True
 
         try:
-            cov = self.get_cov(res['pars'], h=h, m=m)
+            cov = self.get_cov(res['pars'], h=h, m=m, diag_on_fail=diag_on_fail)
 
             cdiag = diag(cov)
 
@@ -491,12 +491,12 @@ class FitterBase(object):
                 err = sqrt(cdiag)
                 w,=where(isfinite(err))
                 if w.size != err.size:
-                    print("diagonals not finite:",err)
+                    print_pars(err, front="diagonals not finite:")
                 else:
                     # everything looks OK
                     bad=False
             else:
-                print("diagonals negative:",cdiag)
+                print_pars(cdiag,front='    diagonals negative:')
 
         except LinAlgError:
             print("caught LinAlgError")
@@ -510,7 +510,7 @@ class FitterBase(object):
             if len(err) >= 6:
                 res['g_cov'] = cov[2:2+2, 2:2+2]
 
-    def get_cov(self, pars, h, m):
+    def get_cov(self, pars, h, m, diag_on_fail=True):
         """
         calculate the covariance matrix at the specified point
 
@@ -567,8 +567,10 @@ class FitterBase(object):
         except LinAlgError:
             # pull out a diagonal version of the hessian
             # this might still fail
-            hdiag=diag(diag(hess))
-            cov = -linalg.inv(hess)
+
+            if diag_on_fail:
+                hdiag=diag(diag(hess))
+                cov = -linalg.inv(hess)
         return cov
 
 
