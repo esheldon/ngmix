@@ -180,4 +180,53 @@ class TFluxAndPriorGuesser(GuesserBase):
                 else:
                     break
 
+class RoundParsGuesser(GuesserBase):
+    """
+    pars do not include e1,2e
+    """
+    def __init__(self, pars, scaling='linear', prior=None, widths=None):
+        self.pars=pars
+        self.scaling=scaling
+        self.prior=prior
+
+        self.np = pars.size
+
+        if widths is None:
+            self.widths = pars*0 + 0.1
+            self.widths[0:0+2] = 0.02
+        else:
+            self.widths = widths
+
+    def __call__(self, n=None, **keys):
+        """
+        center, shape are just distributed around zero
+        """
+
+        if n is None:
+            is_scalar=True
+            n=1
+        else:
+            is_scalar=False
+
+        pars=self.pars
+        widths=self.widths
+
+        guess=numpy.zeros( (n, self.np) )
+        guess[:,0] = pars[0] + widths[0]*srandu(n)
+        guess[:,1] = pars[1] + widths[1]*srandu(n)
+
+        for i in xrange(2,self.np):
+            if self.scaling=='linear':
+                guess[:,i] = pars[i]*(1.0 + widths[i]*srandu(n))
+            else:
+                guess[:,i] = pars[i] + widths[i]*srandu(n)
+
+        if self.prior is not None:
+            self._fix_guess(guess, self.prior)
+
+        if is_scalar:
+            guess=guess[0,:]
+
+        return guess
+
 
