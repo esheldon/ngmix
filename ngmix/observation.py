@@ -261,5 +261,3 @@ def get_mb_obs(obs_in):
         raise ValueError("obs should be Observation, ObsList, or MultiBandObsList")
 
     return obs
-
-
