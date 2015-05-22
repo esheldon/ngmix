@@ -1721,7 +1721,7 @@ class LMSimpleRound(LMSimple):
             return pars
         '''
 
-def _get_simple_band_pars_round_logpars(pars_in, pars_full, band_pars, band)
+def _get_simple_band_pars_round_logpars(pars_in, pars_full, band_pars, band):
     # all band
     pars_full[0:2] = pars_in[0:2]
     # 2:2+2 remain zero for roundness
@@ -1729,7 +1729,7 @@ def _get_simple_band_pars_round_logpars(pars_in, pars_full, band_pars, band)
 
     _gmix.convert_simple_double_logpars_band(pars_full, band_pars, band)
 
-def _get_simple_band_pars_round_linpars(pars_in, band_pars, band)
+def _get_simple_band_pars_round_linpars(pars_in, band_pars, band):
     band_pars[0:2] = pars_in[0:2]
     # 2:2+2 remain zero for roundness
     band_pars[4] = pars_in[2]
