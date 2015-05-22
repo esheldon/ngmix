@@ -1663,7 +1663,8 @@ class LMSimpleRound(LMSimple):
         self.fdiff_size=self.totpix + self.n_prior_pars
 
         if self.use_logpars:
-            self._band_pars_full=zeros(self.npars+2)
+            # allbands
+            self._pars_allbands=zeros(self.npars+2)
 
 
     def run_lm(self, guess):
@@ -1689,47 +1690,33 @@ class LMSimpleRound(LMSimple):
         """
 
 
+        pars=self._band_pars
         if self.use_logpars:
             _get_simple_band_pars_round_logpars(pars_in,
-                                                self._band_pars_full,
-                                                self._band_pars,
+                                                self._pars_allbands,
+                                                pars,
                                                 band)
         else:
             _get_simple_band_pars_round_linpars(pars_in,
-                                                self._band_pars,
+                                                pars,
                                                 band)
+        return pars
 
-        '''
-            # all band
-            pars0 = self._band_pars0
-
-            # single band
-            pars  = self._band_pars
-
-            pars0[0:2] = pars_in[0:2]
-            # 2:2+2 remain zero for roundness
-            pars0[4:] = pars_in[2:]
-
-            _gmix.convert_simple_double_logpars_band(pars0, pars, band)
-            return pars
-        else:
-            pars  = self._band_pars
-            pars[0:2] = pars_in[0:2]
-            # 2:2+2 remain zero for roundness
-            pars[4] = pars_in[2]
-            pars[5] = pars_in[3+band]
-            return pars
-        '''
-
-def _get_simple_band_pars_round_logpars(pars_in, pars_full, band_pars, band):
+def _get_simple_band_pars_round_logpars(pars_in, pars_allband, band_pars, band):
+    """
+    pars in are [cen1,cen2,log(T),log(F)]
+    """
     # all band
-    pars_full[0:2] = pars_in[0:2]
+    pars_allband[0:2] = pars_in[0:2]
     # 2:2+2 remain zero for roundness
-    pars_full[4:] = pars_in[2:]
+    pars_allband[4:] = pars_in[2:]
 
-    _gmix.convert_simple_double_logpars_band(pars_full, band_pars, band)
+    _gmix.convert_simple_double_logpars_band(pars_allband, band_pars, band)
 
 def _get_simple_band_pars_round_linpars(pars_in, band_pars, band):
+    """
+    pars in are [cen1,cen2,T,F]
+    """
     band_pars[0:2] = pars_in[0:2]
     # 2:2+2 remain zero for roundness
     band_pars[4] = pars_in[2]
@@ -1783,7 +1770,7 @@ class LMCompositeRound(LMComposite):
         self.fdiff_size=self.totpix + self.n_prior_pars
 
         if self.use_logpars:
-            self._band_pars_full=zeros(self.npars+2)
+            self._pars_allbands=zeros(self.npars+2)
 
 
     def run_lm(self, guess):
@@ -1808,17 +1795,18 @@ class LMCompositeRound(LMComposite):
         Get linear pars for the specified band
         """
 
-
+        pars=self._band_pars
         if self.use_logpars:
             _get_simple_band_pars_round_logpars(pars_in,
-                                                self._band_pars_full,
-                                                self._band_pars,
+                                                self._pars_allbands,
+                                                pars,
                                                 band)
         else:
             _get_simple_band_pars_round_linpars(pars_in,
-                                                self._band_pars,
+                                                pars,
                                                 band)
 
+        return pars
 
 
 class LMSersic(LMSimple):
