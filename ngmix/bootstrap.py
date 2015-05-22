@@ -69,6 +69,14 @@ class Bootstrapper(object):
             raise RuntimeError("you need to run fit_max successfully first")
         return self.max_fitter
 
+    def get_round_result(self):
+        """
+        get result of set_round_s2n()
+        """
+        if not hasattr(self, 'round_res'):
+            raise RuntimeError("you need to run set_round_s2n")
+        return self.round_res
+
     def set_round_s2n(self, max_pars=None,
                       ntry=4, fitter_type='isample', method='sim', round_prior=None):
         """
@@ -97,10 +105,10 @@ class Bootstrapper(object):
             gm0_round = self._get_gmix_round(res, pars_lin)
             s2n, Ts2n, flags = self._get_s2n_Ts2n_r_alg(gm0_round)
 
-        res['round_pars'] = pars
-        res['round_flags'] = flags
-        res['s2n_r'] = s2n
-        res['T_s2n_r'] = Ts2n
+        self.round_res={'pars':pars,
+                        'flags':flags,
+                        's2n_r':s2n,
+                        'T_s2n_r':Ts2n}
 
     def _get_s2n_Ts2n_r_sim(self, fitter, pars_round, ntry, max_pars,
                             round_prior=None):
@@ -112,8 +120,8 @@ class Bootstrapper(object):
         # first set the gmix on all observations
         print("    setting gmix in each obs")
         for band,obslist in enumerate(self.mb_obs_list):
-            band_pars=fitter.get_band_pars(pars_round, band)
-            gm_round_band = self._get_gmix_round(fitter, pars, band)
+            # pars_round could be in log and include all bands
+            gm_round_band = self._get_gmix_round(fitter, pars_round, band)
             for obs in obslist:
                 obs.gmix = gm_round_band.copy()
 
