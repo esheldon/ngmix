@@ -353,7 +353,7 @@ class GMix(object):
 
         factor = shape.get_round_factor(g1,g2)
 
-        gdata=gm.get_data()
+        gdata=gm._get_gmix_data()
 
         ngauss=len(gm)
         for i in xrange(ngauss):
@@ -875,7 +875,10 @@ class GMixCM(GMix):
         """
         Get a new GMix with the same parameters
         """
-        gmix = GMixCM(self._exp_pars, self._dev_pars, self._fracdev)
+        #gmix = GMixCM(self._exp_pars, self._dev_pars, self._fracdev)
+        gmix = GMixCM(self._fracdev,
+                      self._TdByTe,
+                      self._pars)
         return gmix
 
     def reset(self):
