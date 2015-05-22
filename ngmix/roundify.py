@@ -1,6 +1,7 @@
 import numpy
 from .observation import Observation,ObsList,MultiBandObsList
 
+
 def get_round_mb_obs_list(mb_obs_list_in, sim_image=True):
     """
     Get roundified version of the MultiBandObsList
@@ -90,3 +91,14 @@ def get_round_obs(obs_in, sim_image=True):
                     gmix=gm_round,
                     psf=psf_obs)
     return obs
+
+def get_simple_sub_pars(pars_in):
+    """
+    for pars laid out like [cen1,cen2,g1,g2,...]
+    get the subset [cen1,cen2,...]
+    """
+
+    pars_sub=numpy.zeros(pars_in.size-2)
+    pars_sub[0:0+2] = pars_in[0:0+2]
+    pars_sub[2:] = pars_in[4:]
+    return pars_sub
