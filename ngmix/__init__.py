@@ -41,4 +41,6 @@ from . import stats
 
 from . import guessers
 
+from . import round
+
 from . import test

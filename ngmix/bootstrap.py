@@ -24,9 +24,10 @@ from .gexceptions import GMixRangeError, BootPSFFailure, BootGalFailure
 BOOT_S2N_LOW = 2**0
 BOOT_R2_LOW = 2**1
 BOOT_R4_LOW = 2**2
+BOOT_TS2N_ROUND_FAIL = 2**3
 
 class Bootstrapper(object):
-    def __init__(self, obs, use_round_size=False,use_logpars=False):
+    def __init__(self, obs, use_logpars=False):
         """
         The data can be mutated: If a PSF fit is performed, the gmix will be
         set for the input PSF observation
@@ -42,7 +43,6 @@ class Bootstrapper(object):
         """
 
         self.use_logpars=use_logpars
-        self.use_round_size=use_round_size
         self.mb_obs_list_orig = get_mb_obs(obs)
 
         # this will get replaced if fit_psfs is run
@@ -67,9 +67,12 @@ class Bootstrapper(object):
             raise RuntimeError("you need to run fit_max successfully first")
         return self.max_fitter
 
-    def set_round_s2n(self, ntry=4, fitter_type='isample'):
+    def set_round_s2n(self, max_pars=None,
+                      ntry=4, fitter_type='isample', method='sim', round_prior=None):
         """
         set the s/n and (s/n)_T for the round model
+
+        round_prior used for sim fit
         """
 
         if fitter_type=='isample':
@@ -83,19 +86,103 @@ class Bootstrapper(object):
 
         pars, pars_lin = self._get_round_pars(res['pars'])
 
-        gm0_round = self._get_gmix_round(res, pars_lin)
-
-        s2n, Ts2n, flags = self._get_s2n_Ts2n_r(gm0_round)
+        if method=='sim':
+            s2n, Ts2n, flags = self._get_s2n_Ts2n_r_sim(fitter,
+                                                        pars, pars_lin, ntry,
+                                                        max_pars,
+                                                        round_prior=round_prior)
+        else:
+            gm0_round = self._get_gmix_round(res, pars_lin)
+            s2n, Ts2n, flags = self._get_s2n_Ts2n_r_alg(gm0_round)
 
         res['round_pars'] = pars
         res['round_flags'] = flags
         res['s2n_r'] = s2n
         res['T_s2n_r'] = Ts2n
 
-    def _get_s2n_Ts2n_r(self, gm0_round):
+    def _get_s2n_Ts2n_r_sim(self, fitter, pars_round, pars_round_lin, ntry, max_pars,
+                            round_prior=None):
+        from . import round
+
+        s2n=-9999.0
+        Ts2n=-9999.0
+        flags=0
+
+        # first set the gmix on all observations
+        print("    setting gmix in each obs")
+        for band,obslist in enumerate(self.mb_obs_list):
+            band_pars=fitter.get_band_pars(pars_round, band)
+            gm_round_band = self._get_gmix_round(fitter, pars, band)
+            for obs in obslist:
+                obs.gmix = gm_round_band.copy()
+
+        # now get roundified observations
+        print("    getting round obs")
+        mb_obs_list = round.get_round_mb_obs_list(self.mb_obs_list,
+                                                  sim_image=True)
+
+        print("    getting s2n")
+        s2n_sum=0.0
+        for obslist in mb_obs_list:
+            for obs in obslist:
+                gm = obs.gmix.convolve( obs.psf.gmix )
+
+                s2n_sum += gm.get_model_s2n_sum(obs)
+        if s2n_sum <= 0.0:
+            print("    failure: s2n_sum <= 0.0 :",s2n_sum)
+            flags |= BOOT_S2N_LOW
+        else:
+            s2n=sqrt(s2n_sum)
+
+        # and finally, do the fit 
+        round_fitter=self._fit_sim_round(fitter,
+                                         pars_round,
+                                         mb_obs_list,
+                                         ntry,
+                                         max_pars,
+                                         round_prior=round_prior)
+        res=round_fitter.get_result()
+        if res['flags'] != 0:
+            print("        round fit fail")
+            flags |= BOOT_TS2N_ROUND_FAIL 
+        else:
+            import covmatrix
+            tcov=covmatrix.calc_cov(round_fitter.calc_lnprob, res['pars'], 1.0e-3)
+
+            if tcov[2,2] > 0.0:
+                cov=tcov
+            else:
+                print("    replace cov failed, using LM cov")
+                cov=res['pars_cov']
+
+            if self.use_logpars:
+                Ts2n = sqrt(1.0/cov[2,2])
+            else:
+                Ts2n = res['pars'][2]/sqrt(cov[2,2])
+        return s2n, Ts2n, flags
+
+    def _fit_sim_round(self, fitter, pars_round, mb_obs_list,
+                       ntry, max_pars, round_prior=round_prior):
+
+        res=fitter.get_result()
+        guesser=self._get_round_guesser(pars_round, round_prior=round_prior)
+        runner=MaxRunnerRound(mb_obs_list,
+                              res['model'],
+                              max_pars,
+                              guesser,
+                              prior=round_prior,
+                              use_logpars=self.use_logpars)
+
+        runner.go(ntry=ntry)
+
+        fitter=runner.fitter
+        return fitter
+ 
+    def _get_s2n_Ts2n_r_alg(self, gm0_round):
         """
         get the round s2n and Ts2n
         """
+        raise RuntimeError("this isn't multi-band")
 
         Tround = gm0_round.get_T()
 
@@ -195,7 +282,13 @@ class Bootstrapper(object):
                 Ts2n_round = pars_lin[4]/sqrt(cov[4,4])
             res['T_s2n_r'] = Ts2n_round
 
-    def _get_gmix_round(self, res, pars):
+    def _get_gmix_round(self, fitter, pars, band):
+        res=fitter.get_result()
+        band_pars = fitter.get_band_pars(pars,band)
+        gm_round = GMixModel(pars, res['model'])
+        return gm_round
+
+    def _get_gmix_round_old(self, res, pars):
         gm_round = GMixModel(pars, res['model'])
         return gm_round
 
@@ -206,6 +299,7 @@ class Bootstrapper(object):
                        prior=None,
                        ntry=4):
         """
+        deprecated
         gm_round is convolved
         """
         from numpy.linalg import LinAlgError
@@ -438,7 +532,6 @@ class Bootstrapper(object):
 
         runner=MaxRunner(self.mb_obs_list, gal_model, pars, guesser,
                          prior=prior,
-                         use_round_size=self.use_round_size,
                          use_logpars=self.use_logpars)
 
         runner.go(ntry=ntry)
@@ -484,8 +577,8 @@ class Bootstrapper(object):
         tres['psf_flux_err']=self.psf_flux_err
 
         if 's2n_r' in maxres:
-            tres['flags_r'] = maxres['s2n_r']
-            tres['round_pars'] = maxres['s2n_r']
+            tres['flags_r'] = maxres['flags_r']
+            tres['round_pars'] = maxres['round_pars']
             tres['s2n_r'] = maxres['s2n_r']
             tres['T_s2n_r'] = maxres['T_s2n_r']
 
@@ -563,7 +656,7 @@ class Bootstrapper(object):
 
 
 
-    def try_replace_cov(self, cov_pars):
+    def try_replace_cov(self, cov_pars, fitter=None):
         """
         the lm cov often mis-estimates the error on the ellipticity parameters,
         try to replace it
@@ -571,7 +664,8 @@ class Bootstrapper(object):
         if not hasattr(self,'max_fitter'):
             raise RuntimeError("you need to fit with the max like first")
 
-        fitter=self.max_fitter
+        if fitter is None:
+            fitter=self.max_fitter
 
         # reference to res
         res=fitter.get_result()
@@ -713,11 +807,20 @@ class CompositeBootstrapper(Bootstrapper):
         return fracdev_clipped
 
 
-    def _get_gmix_round(self, res, pars):
+    def _get_gmix_round(self, fitter, pars, band):
+        res=fitter.get_result()
+        band_pars = fitter.get_band_pars(pars,band)
+        gm_round = GMixCM(res['fracdev'],
+                          res['TdByTe'],
+                          band_pars)
+        return gm_round
+
+    def _get_gmix_round_old(self, res, pars):
         gm_round = GMixCM(res['fracdev'],
                           res['TdByTe'],
                           pars)
         return gm_round
+
 
     def _get_round_fitter(self, obs, res, prior=None):
         fitter=fitting.LMComposite(obs,
@@ -1044,10 +1147,9 @@ class MaxRunner(object):
     """
     wrapper to generate guesses and run the fitter a few times
     """
-    def __init__(self, obs, model, pars, guesser, prior=None, use_round_size=False, use_logpars=False):
+    def __init__(self, obs, model, pars, guesser, prior=None, use_logpars=False):
         self.obs=obs
 
-        self.use_round_size=use_round_size
         self.pars=pars
         self.method=pars['method']
         if self.method == 'lm':
@@ -1087,14 +1189,14 @@ class MaxRunner(object):
             self.fitter=fitter_best
 
     def _go_lm(self, ntry=1):
-        from .fitting import LMSimple
+        
+        fitclass=self._get_lm_fitter_class()
 
         for i in xrange(ntry):
             guess=self.guesser()
-            fitter=LMSimple(self.obs,
+            fitter=fitclass(self.obs,
                             self.model,
                             lm_pars=self.send_pars,
-                            use_round_size=self.use_round_size,
                             use_logpars=self.use_logpars,
                             prior=self.prior)
 
@@ -1105,6 +1207,18 @@ class MaxRunner(object):
                 break
 
         self.fitter=fitter
+
+    def _get_lm_fitter_class(self):
+        from .fitting import LMSimple
+        return LMSimple
+
+class MaxRunnerRound(MaxRunner):
+    """
+    make sure prior (and guesser) are also for round
+    """
+    def _get_lm_fitter_class(self):
+        from .fitting import LMSimpleRound
+        return LMSimpleRound
 
 class CompositeMaxRunner(MaxRunner):
     """
@@ -1134,6 +1248,8 @@ class CompositeMaxRunner(MaxRunner):
     def _go_lm(self, ntry=1):
         from .fitting import LMComposite
 
+        fitclass=self._get_lm_fitter_class()
+
         for i in xrange(ntry):
             guess=self.guesser()
             fitter=LMComposite(self.obs,
@@ -1150,6 +1266,18 @@ class CompositeMaxRunner(MaxRunner):
                 break
 
         self.fitter=fitter
+
+    def _get_lm_fitter_class(self):
+        from .fitting import LMComposite
+        return LMComposite
+
+class CompositeMaxRunnerRound(CompositeMaxRunner):
+    """
+    make sure prior (and guesser) are also for round
+    """
+    def _get_lm_fitter_class(self):
+        from .fitting import LMCompositeRound
+        return LMCompositeRound
 
 def get_em_ngauss(name):
     ngauss=int( name[2:] )

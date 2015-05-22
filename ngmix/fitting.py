@@ -120,7 +120,7 @@ class FitterBase(object):
         definition depends on the sub-class
         """
         res=self.get_result()
-        pars=self._get_band_pars(res['pars'], band)
+        pars=self.get_band_pars(res['pars'], band)
         return gmix.make_gmix_model(pars, self.model)
 
     def set_aperture(self, aper):
@@ -312,7 +312,7 @@ class FitterBase(object):
             gmix_list=GMixList()
 
             # pars for this band, in linear space
-            band_pars=self._get_band_pars(pars, band)
+            band_pars=self.get_band_pars(pars, band)
 
             for obs in obs_list:
                 gm0 = self._make_model(band_pars)
@@ -353,7 +353,7 @@ class FitterBase(object):
             gmix_list=self._gmix_all[band]
 
             # pars for this band, in linear space
-            band_pars=self._get_band_pars(pars, band)
+            band_pars=self.get_band_pars(pars, band)
 
             for i,obs in enumerate(obs_list):
 
@@ -378,7 +378,7 @@ class FitterBase(object):
             gmix_list=self._gmix_all[band]
 
             # pars for this band, in linear space
-            band_pars=self._get_band_pars(pars, band)
+            band_pars=self.get_band_pars(pars, band)
 
             for i,obs in enumerate(obs_list):
 
@@ -1338,7 +1338,7 @@ class MaxSimple(FitterBase):
         except ZeroDivisionError:
             raise GMixRangeError("got zero division")
 
-    def _get_band_pars(self, pars_in, band):
+    def get_band_pars(self, pars_in, band):
         """
         Get linear pars for the specified band
         """
@@ -1479,7 +1479,7 @@ class MaxCoellip(MaxSimple):
         """
         self.npars=4 + 2*self._ngauss
 
-    def _get_band_pars(self, pars_in, band):
+    def get_band_pars(self, pars_in, band):
         """
         Get linear pars for the specified band
         """
@@ -1565,7 +1565,7 @@ class LMSimple(FitterBase):
         except ZeroDivisionError:
             raise GMixRangeError("got zero division")
 
-    def _get_band_pars(self, pars_in, band):
+    def get_band_pars(self, pars_in, band):
         """
         Get linear pars for the specified band
         """
@@ -1652,14 +1652,18 @@ class LMSimple(FitterBase):
         return nprior
 
 class LMSimpleRound(LMSimple):
-    def __init__(self, obs, model, **keys):
-        super(LMSimpleRound,self).__init__(obs, model, **keys)
+    """
+    This version fits [cen1,cen2,T,F]
+    """
+    def __init__(self, *args, **keys):
+        super(LMSimpleRound,self).__init__(*args, **keys)
 
         self.npars = self.npars-2
         self.n_prior_pars=self.n_prior_pars - 1
         self.fdiff_size=self.totpix + self.n_prior_pars
 
-        self._band_pars0=zeros(self.npars+2)
+        if self.use_logpars:
+            self._band_pars_full=zeros(self.npars+2)
 
 
     def run_lm(self, guess):
@@ -1679,13 +1683,23 @@ class LMSimpleRound(LMSimple):
 
         self._result=result
 
-    def _get_band_pars(self, pars_in, band):
+    def get_band_pars(self, pars_in, band):
         """
         Get linear pars for the specified band
         """
 
 
         if self.use_logpars:
+            _get_simple_band_pars_round_logpars(pars_in,
+                                                self._band_pars_full,
+                                                self._band_pars,
+                                                band)
+        else:
+            _get_simple_band_pars_round_linpars(pars_in,
+                                                self._band_pars,
+                                                band)
+
+        '''
             # all band
             pars0 = self._band_pars0
 
@@ -1705,7 +1719,21 @@ class LMSimpleRound(LMSimple):
             pars[4] = pars_in[2]
             pars[5] = pars_in[3+band]
             return pars
+        '''
 
+def _get_simple_band_pars_round_logpars(pars_in, pars_full, band_pars, band)
+    # all band
+    pars_full[0:2] = pars_in[0:2]
+    # 2:2+2 remain zero for roundness
+    pars_full[4:] = pars_in[2:]
+
+    _gmix.convert_simple_double_logpars_band(pars_full, band_pars, band)
+
+def _get_simple_band_pars_round_linpars(pars_in, band_pars, band)
+    band_pars[0:2] = pars_in[0:2]
+    # 2:2+2 remain zero for roundness
+    band_pars[4] = pars_in[2]
+    band_pars[5] = pars_in[3+band]
 
 
 class LMComposite(LMSimple):
@@ -1724,7 +1752,7 @@ class LMComposite(LMSimple):
         definition depends on the sub-class
         """
         res=self.get_result()
-        pars=self._get_band_pars(res['pars'], band)
+        pars=self.get_band_pars(res['pars'], band)
         return gmix.GMixCM(self.fracdev,
                                   self.TdByTe,
                                   pars)
@@ -1742,6 +1770,56 @@ class LMComposite(LMSimple):
                             gm0._data['gmix'][0],
                             psf_gmix._data)
 
+# most of this is the same as LMSimple
+class LMCompositeRound(LMComposite):
+    """
+    This version fits [cen1,cen2,T,F]
+    """
+    def __init__(self, *args, **keys):
+        super(LMCompositeRound,self).__init__(*args, **keys)
+
+        self.npars = self.npars-2
+        self.n_prior_pars=self.n_prior_pars - 1
+        self.fdiff_size=self.totpix + self.n_prior_pars
+
+        if self.use_logpars:
+            self._band_pars_full=zeros(self.npars+2)
+
+
+    def run_lm(self, guess):
+        """
+        Run leastsq and set the result
+        """
+
+        guess=array(guess,dtype='f8',copy=False)
+        self._setup_data(guess)
+
+        result = run_leastsq(self._calc_fdiff, guess, self.n_prior_pars, **self.lm_pars)
+
+        result['model'] = self.model_name
+        if result['flags']==0:
+            stat_dict=self.get_fit_stats(result['pars'])
+            result.update(stat_dict)
+
+        self._result=result
+
+    def get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+        """
+
+
+        if self.use_logpars:
+            _get_simple_band_pars_round_logpars(pars_in,
+                                                self._band_pars_full,
+                                                self._band_pars,
+                                                band)
+        else:
+            _get_simple_band_pars_round_linpars(pars_in,
+                                                self._band_pars,
+                                                band)
+
+
 
 class LMSersic(LMSimple):
     def __init__(self, image, weight, jacobian, guess, **keys):
@@ -1758,7 +1836,7 @@ class LMSersic(LMSimple):
         n_prior_pars=7
         self.fdiff_size=self.totpix + n_prior_pars
 
-    def _get_band_pars(self, pars, band):
+    def get_band_pars(self, pars, band):
         raise RuntimeError("adapt to new style")
         if band > 0:
             raise ValueError("support more than one band")
@@ -2260,7 +2338,7 @@ class MCMCSimple(MCMCBase):
         self._result['g'] = self._result['pars'][g1i:g1i+2].copy()
         self._result['g_cov'] = self._result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
 
-    def _get_band_pars(self, pars_in, band):
+    def get_band_pars(self, pars_in, band):
         """
         Get linear pars for the specified band
         """
@@ -2291,7 +2369,7 @@ class MCMCSimpleEta(MCMCSimple):
     search eta space
     """
 
-    def _get_band_pars(self, pars_in, band):
+    def get_band_pars(self, pars_in, band):
         """
         Get linear pars for the specified band
         """
@@ -2975,7 +3053,7 @@ class MCMCSersic(MCMCSimple):
         """
         pass
 
-    def _get_band_pars(self, pars, band):
+    def get_band_pars(self, pars, band):
         if band > 0:
             raise ValueError("support multi-band for sersic")
         return pars.copy()
@@ -3016,7 +3094,7 @@ class MCMCSersicJointHybrid(MCMCSersic):
 
         return lnp
 
-    def _get_band_pars(self, pars, band):
+    def get_band_pars(self, pars, band):
         """
         Extract pars for the specified band and convert to linear
         """
@@ -3207,7 +3285,7 @@ class MCMCSersicDefault(MCMCSimple):
         """
         self.npars=self.full_guess.shape[1]
 
-    def _get_band_pars(self, pars, band):
+    def get_band_pars(self, pars, band):
         if band > 0:
             raise ValueError("support multi-band for sersic")
         return pars.copy()
@@ -3333,7 +3411,7 @@ class MCMCCoellip(MCMCSimple):
         return lnp
 
 
-    def _get_band_pars(self, pars, band):
+    def get_band_pars(self, pars, band):
         if band > 0:
             raise ValueError("support multi-band for coellip")
         return pars.copy()
@@ -3371,7 +3449,7 @@ class MCMCSimpleFixed(MCMCSimple):
  
         return lnp
 
-    def _get_band_pars(self, pars, band):
+    def get_band_pars(self, pars, band):
         raise RuntimeError("adapt to new style")
         bpars= self.fixed_pars[ [0,1,2,3,4,5+band] ]
         bpars[2:2+2] = pars
@@ -3441,7 +3519,7 @@ class MCMCBDC(MCMCSimple):
 
         return lnp
 
-    def _get_band_pars(self, pars, band):
+    def get_band_pars(self, pars, band):
         """
         pars are 
             [c1,c2,g1,g2,Tb,Td, Fb1,Fb2,Fb3, ..., Fd1,Fd2,Fd3 ...]
@@ -3529,7 +3607,7 @@ class MCMCBDF(MCMCSimple):
 
         return lnp
 
-    def _get_band_pars(self, pars, band):
+    def get_band_pars(self, pars, band):
         """
         pars are 
             [c1,c2,g1,g2,T, Fb1,Fb2,Fb3, ..., Fd1,Fd2,Fd3 ...]
@@ -3739,7 +3817,7 @@ class MCMCSimpleJointHybrid(MCMCSimple):
 
         self.prior_during=keys.get('prior_during',False)
 
-    def _get_band_pars(self, pars, band):
+    def get_band_pars(self, pars, band):
         """
         Extract pars for the specified band and convert to linear
         """
@@ -3876,7 +3954,7 @@ class MCMCBDFJointHybrid(MCMCSimpleJointHybrid):
         raise RuntimeError("adapt to new system")
         super(MCMCBDFJointHybrid,self).__init__(image, weight, jacobian, "bdf", **keys)
 
-    def _get_band_pars(self, pars, band):
+    def get_band_pars(self, pars, band):
         """
         Extract pars for the specified band and convert to linear
         """
@@ -4054,7 +4132,7 @@ class MCMCSimpleJointLogPars(MCMCSimple):
 
         self.prior_during=keys['prior_during']
 
-    def _get_band_pars(self, pars, band):
+    def get_band_pars(self, pars, band):
         """
         Extract pars for the specified band and convert to linear
         """
