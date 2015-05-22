@@ -21,6 +21,8 @@ from .shape import get_round_factor
 from .guessers import TFluxGuesser, TFluxAndPriorGuesser
 from .gexceptions import GMixRangeError, BootPSFFailure, BootGalFailure
 
+from . import roundify
+
 BOOT_S2N_LOW = 2**0
 BOOT_R2_LOW = 2**1
 BOOT_R4_LOW = 2**2
@@ -88,7 +90,7 @@ class Bootstrapper(object):
 
         if method=='sim':
             s2n, Ts2n, flags = self._get_s2n_Ts2n_r_sim(fitter,
-                                                        pars, pars_lin, ntry,
+                                                        pars, ntry,
                                                         max_pars,
                                                         round_prior=round_prior)
         else:
@@ -100,9 +102,8 @@ class Bootstrapper(object):
         res['s2n_r'] = s2n
         res['T_s2n_r'] = Ts2n
 
-    def _get_s2n_Ts2n_r_sim(self, fitter, pars_round, pars_round_lin, ntry, max_pars,
+    def _get_s2n_Ts2n_r_sim(self, fitter, pars_round, ntry, max_pars,
                             round_prior=None):
-        from . import round
 
         s2n=-9999.0
         Ts2n=-9999.0
@@ -118,8 +119,8 @@ class Bootstrapper(object):
 
         # now get roundified observations
         print("    getting round obs")
-        mb_obs_list = round.get_round_mb_obs_list(self.mb_obs_list,
-                                                  sim_image=True)
+        mb_obs_list = roundify.get_round_mb_obs_list(self.mb_obs_list,
+                                                     sim_image=True)
 
         print("    getting s2n")
         s2n_sum=0.0
@@ -162,21 +163,19 @@ class Bootstrapper(object):
         return s2n, Ts2n, flags
 
     def _fit_sim_round(self, fitter, pars_round, mb_obs_list,
-                       ntry, max_pars, round_prior=round_prior):
+                       ntry, max_pars, round_prior=None):
 
         res=fitter.get_result()
-        guesser=self._get_round_guesser(pars_round, round_prior=round_prior)
-        runner=MaxRunnerRound(mb_obs_list,
+        runner=MaxRunnerRound(pars_round,
+                              mb_obs_list,
                               res['model'],
                               max_pars,
-                              guesser,
                               prior=round_prior,
                               use_logpars=self.use_logpars)
 
         runner.go(ntry=ntry)
 
-        fitter=runner.fitter
-        return fitter
+        return runner.fitter
  
     def _get_s2n_Ts2n_r_alg(self, gm0_round):
         """
@@ -285,14 +284,14 @@ class Bootstrapper(object):
     def _get_gmix_round(self, fitter, pars, band):
         res=fitter.get_result()
         band_pars = fitter.get_band_pars(pars,band)
-        gm_round = GMixModel(pars, res['model'])
+        gm_round = GMixModel(band_pars, res['model'])
         return gm_round
 
     def _get_gmix_round_old(self, res, pars):
         gm_round = GMixModel(pars, res['model'])
         return gm_round
 
-    def _sim_cov_round(self,
+    def _sim_cov_round_old(self,
                        obs,
                        gm_round, gmpsf_round,
                        res, pars_round,
@@ -326,7 +325,7 @@ class Bootstrapper(object):
                                  jacobian=obs.get_jacobian(),
                                  psf=psf_obs)
             
-            fitter=self._get_round_fitter(newobs, res, prior=prior)
+            fitter=self._get_round_fitter_old(newobs, res, prior=prior)
 
             # we can't recover from this error
             try:
@@ -344,7 +343,7 @@ class Bootstrapper(object):
 
         return cov
 
-    def _get_round_fitter(self, obs, res, prior=None):
+    def _get_round_fitter_old(self, obs, res, prior=None):
         fitter=fitting.LMSimple(obs, res['model'],
                                 prior=prior,
                                 use_logpars=self.use_logpars)
@@ -822,7 +821,7 @@ class CompositeBootstrapper(Bootstrapper):
         return gm_round
 
 
-    def _get_round_fitter(self, obs, res, prior=None):
+    def _get_round_fitter_old(self, obs, res, prior=None):
         fitter=fitting.LMComposite(obs,
                                    res['fracdev'],
                                    res['TdByTe'],
@@ -831,6 +830,22 @@ class CompositeBootstrapper(Bootstrapper):
 
         return fitter
 
+    def _fit_sim_round(self, fitter, pars_round, mb_obs_list,
+                       ntry, max_pars, round_prior=None):
+
+        res=fitter.get_result()
+        runner=CompositeMaxRunnerRound(pars_round,
+                                       mb_obs_list,
+                                       max_pars,
+                                       res['fracdev'],
+                                       res['TdByTe'],
+                                       prior=round_prior,
+                                       use_logpars=self.use_logpars)
+
+        runner.go(ntry=ntry)
+
+        return runner.fitter
+ 
 
     def isample(self, ipars, prior=None):
         super(CompositeBootstrapper,self).isample(ipars,prior=prior)
@@ -1147,15 +1162,15 @@ class MaxRunner(object):
     """
     wrapper to generate guesses and run the fitter a few times
     """
-    def __init__(self, obs, model, pars, guesser, prior=None, use_logpars=False):
+    def __init__(self, obs, model, max_pars, guesser, prior=None, use_logpars=False):
         self.obs=obs
 
-        self.pars=pars
-        self.method=pars['method']
+        self.max_pars=max_pars
+        self.method=max_pars['method']
         if self.method == 'lm':
-            self.send_pars=pars['lm_pars']
+            self.send_pars=max_pars['lm_pars']
         else:
-            self.send_pars=pars
+            self.send_pars=max_pars
 
         mess="model should be exp or dev,got '%s'" % model
         assert model in ['exp','dev'],mess
@@ -1164,7 +1179,7 @@ class MaxRunner(object):
         self.prior=prior
         self.use_logpars=use_logpars
 
-        self.bestof = pars.get('bestof',1)
+        self.bestof = max_pars.get('bestof',1)
 
         self.guesser=guesser
 
@@ -1212,10 +1227,37 @@ class MaxRunner(object):
         from .fitting import LMSimple
         return LMSimple
 
-class MaxRunnerRound(MaxRunner):
+class RoundRunnerBase(object):
+    def _get_round_guesser(self, **kw):
+        from .guessers import RoundParsGuesser
+
+        use_logpars=kw.get('use_logpars',False)
+        if use_logpars:
+            scaling='log'
+        else:
+            scaling='linear'
+
+        prior=kw.get('prior',None)
+        guesser=RoundParsGuesser(self.pars_sub,
+                                 prior=prior,
+                                 scaling=scaling)
+        return guesser
+
+class MaxRunnerRound(MaxRunner,RoundRunnerBase):
     """
+    pars_full should be roundified
+
     make sure prior (and guesser) are also for round
     """
+    def __init__(self, pars_full, obs, model, max_pars, *args, **kw):
+
+        self.pars_full=pars_full
+        self.pars_sub=roundify.get_simple_sub_pars(pars_full)
+        guesser=self._get_round_guesser(**kw)
+
+        super(MaxRunnerRound,self).__init__(obs, model, max_pars, guesser,
+                                            **kw)
+
     def _get_lm_fitter_class(self):
         from .fitting import LMSimpleRound
         return LMSimpleRound
@@ -1224,24 +1266,24 @@ class CompositeMaxRunner(MaxRunner):
     """
     wrapper to generate guesses and run the psf fitter a few times
     """
-    def __init__(self, obs, pars, guesser, fracdev, TdByTe,
+    def __init__(self, obs, max_pars, guesser, fracdev, TdByTe,
                  prior=None, use_logpars=False):
         self.obs=obs
 
-        self.pars=pars
+        self.max_pars=max_pars
         self.fracdev=fracdev
         self.TdByTe=TdByTe
 
-        self.method=pars['method']
+        self.method=max_pars['method']
         if self.method == 'lm':
-            self.send_pars=pars['lm_pars']
+            self.send_pars=max_pars['lm_pars']
         else:
-            self.send_pars=pars
+            self.send_pars=max_pars
 
         self.prior=prior
         self.use_logpars=use_logpars
 
-        self.bestof = pars.get('bestof',1)
+        self.bestof = max_pars.get('bestof',1)
 
         self.guesser=guesser
 
@@ -1271,10 +1313,24 @@ class CompositeMaxRunner(MaxRunner):
         from .fitting import LMComposite
         return LMComposite
 
-class CompositeMaxRunnerRound(CompositeMaxRunner):
+class CompositeMaxRunnerRound(CompositeMaxRunner,RoundRunnerBase):
     """
     make sure prior (and guesser) are also for round
     """
+    def __init__(self, pars_full, obs, max_pars, fracdev, TdByTe, **kw):
+
+        self.pars_full=pars_full
+        self.pars_sub=roundify.get_simple_sub_pars(pars_full)
+        guesser=self._get_round_guesser(**kw)
+
+        super(CompositeMaxRunnerRound,self).__init__(obs,
+                                                     max_pars,
+                                                     guesser,
+                                                     fracdev,
+                                                     TdByTe,
+                                                     **kw)
+
+
     def _get_lm_fitter_class(self):
         from .fitting import LMCompositeRound
         return LMCompositeRound
