@@ -4,6 +4,7 @@ from numpy import log
 from .fitting import print_pars
 from .gexceptions import GMixRangeError
 from .priors import srandu, LOWVAL
+from .shape import Shape
 
 class GuesserBase(object):
     def _fix_guess(self, guess, prior, ntry=4):
@@ -180,9 +181,67 @@ class TFluxAndPriorGuesser(GuesserBase):
                 else:
                     break
 
+class ParsGuesser(GuesserBase):
+    """
+    pars include g1,g2
+    """
+    def __init__(self, pars, scaling='linear', prior=None, widths=None):
+        self.pars=pars
+        self.scaling=scaling
+        self.prior=prior
+
+        self.np = pars.size
+
+        if widths is None:
+            self.widths = pars*0 + 0.1
+            self.widths[0:0+2] = 0.02
+        else:
+            self.widths = widths
+
+    def __call__(self, n=None, **keys):
+        """
+        center, shape are just distributed around zero
+        """
+
+        if n is None:
+            is_scalar=True
+            n=1
+        else:
+            is_scalar=False
+
+        pars=self.pars
+        widths=self.widths
+
+        guess=numpy.zeros( (n, self.np) )
+        guess[:,0] = pars[0] + widths[0]*srandu(n)
+        guess[:,1] = pars[1] + widths[1]*srandu(n)
+
+        # prevent from getting too large
+        guess_shape=get_shape_guess(pars[2],pars[3],
+                                    n,
+                                    widths[2:2+2],
+                                    max=0.8)
+        guess[:,2]=guess_shape[:,0]
+        guess[:,3]=guess_shape[:,1]
+
+        for i in xrange(2,self.np):
+            if self.scaling=='linear':
+                guess[:,i] = pars[i]*(1.0 + widths[i]*srandu(n))
+            else:
+                guess[:,i] = pars[i] + widths[i]*srandu(n)
+
+        if self.prior is not None:
+            self._fix_guess(guess, self.prior)
+
+        if is_scalar:
+            guess=guess[0,:]
+
+        return guess
+
+
 class RoundParsGuesser(GuesserBase):
     """
-    pars do not include e1,2e
+    pars do not include g1,g2
     """
     def __init__(self, pars, scaling='linear', prior=None, widths=None):
         self.pars=pars
@@ -228,5 +287,37 @@ class RoundParsGuesser(GuesserBase):
             guess=guess[0,:]
 
         return guess
+
+def get_shape_guess(g1, g2, n, width, max=0.99):
+    """
+    Get guess, making sure in range
+    """
+
+    g=numpy.sqrt(g1**2 + g2**2)
+    if g > max:
+        fac = max/g
+
+        g1 = g1 * fac
+        g2 = g2 * fac
+
+    guess=numpy.zeros( (n, 2) )
+    shape=Shape(g1, g2)
+
+    for i in xrange(n):
+
+        while True:
+            try:
+                g1_offset = width[0]*srandu()
+                g2_offset = width[1]*srandu()
+                shape_new=shape.copy()
+                shape_new.shear(g1_offset, g2_offset)
+                break
+            except GMixRangeError:
+                pass
+
+        guess[i,0] = shape_new.g1
+        guess[i,1] = shape_new.g2
+
+    return guess
 
 
