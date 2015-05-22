@@ -70,24 +70,24 @@ def get_round_obs(obs_in, sim_image=True):
         w=numpy.where(weight > 0)
 
         if w[0].size > 0:
-            noise_image[w] *= 1/sqrt(weight[w])
+            noise_image[w] *= 1/numpy.sqrt(weight[w])
 
         imuse = gm_round.make_image(weight.shape,
                                     jacobian=obs_in.jacobian)
         imuse += noise_image
 
-        psf_imuse = psf_round.make_image(obs_in.psf.shape,
+        psf_imuse = psf_round.make_image(obs_in.psf.image.shape,
                                          jacobian=obs_in.psf.jacobian)
     else:
         imuse=obs_in.image.copy()
         psf_imuse=obs_in.psf.image.copy()
 
     psf_obs = Observation(psf_imuse,
-                          jacobian=obs.psf.jacobian,
+                          jacobian=obs_in.psf.jacobian,
                           gmix=psf_round)
     obs=Observation(imuse,
                     weight=weight,
-                    jacobian=obs.jacobian,
+                    jacobian=obs_in.jacobian,
                     gmix=gm_round,
                     psf=psf_obs)
     return obs
