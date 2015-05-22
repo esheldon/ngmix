@@ -11,6 +11,7 @@ from __future__ import print_function
 import numpy
 from numpy import where, array, sqrt, exp, log, linspace, zeros
 from numpy import isfinite, median
+from numpy.linalg import LinAlgError
 
 from . import fitting
 from .gmix import GMix, GMixModel, GMixCM
@@ -18,7 +19,7 @@ from .em import GMixEM, prep_image
 from .observation import Observation, ObsList, MultiBandObsList, get_mb_obs
 from .priors import srandu
 from .shape import get_round_factor
-from .guessers import TFluxGuesser, TFluxAndPriorGuesser
+from .guessers import TFluxGuesser, TFluxAndPriorGuesser, ParsGuesser, RoundParsGuesser
 from .gexceptions import GMixRangeError, BootPSFFailure, BootGalFailure
 
 from . import roundify
@@ -78,7 +79,7 @@ class Bootstrapper(object):
         return self.round_res
 
     def set_round_s2n(self, max_pars=None,
-                      ntry=4, fitter_type='isample', method='sim', round_prior=None):
+                      ntry=4, fitter_type='max', method='sim', round_prior=None):
         """
         set the s/n and (s/n)_T for the round model
 
@@ -118,10 +119,11 @@ class Bootstrapper(object):
         flags=0
 
         # first set the gmix on all observations
+        max_fitter=self.get_max_fitter()
         print("    setting gmix in each obs")
         for band,obslist in enumerate(self.mb_obs_list):
             # pars_round could be in log and include all bands
-            gm_round_band = self._get_gmix_round(fitter, pars_round, band)
+            gm_round_band = self._get_gmix_round(max_fitter, pars_round, band)
             for obs in obslist:
                 obs.gmix = gm_round_band.copy()
 
@@ -156,9 +158,12 @@ class Bootstrapper(object):
             flags |= BOOT_TS2N_ROUND_FAIL 
         else:
             import covmatrix
-            tcov=covmatrix.calc_cov(round_fitter.calc_lnprob, res['pars'], 1.0e-3)
+            try:
+                tcov=covmatrix.calc_cov(round_fitter.calc_lnprob, res['pars'], 1.0e-3)
+            except LinAlgError:
+                tcov=None
 
-            if tcov[2,2] > 0.0:
+            if tcov is not None and tcov[2,2] > 0.0:
                 cov=tcov
             else:
                 print("    replace cov failed, using LM cov")
@@ -309,7 +314,6 @@ class Bootstrapper(object):
         deprecated
         gm_round is convolved
         """
-        from numpy.linalg import LinAlgError
         
         im0=gm_round.make_image(obs.image.shape,
                                 jacobian=obs.jacobian)
@@ -511,7 +515,7 @@ class Bootstrapper(object):
         return runner
 
 
-    def fit_max(self, gal_model, pars, prior=None, extra_priors=None, ntry=1):
+    def fit_max(self, gal_model, pars, guess=None, prior=None, extra_priors=None, ntry=1):
         """
         fit the galaxy.  You must run fit_psf() successfully first
 
@@ -520,6 +524,7 @@ class Bootstrapper(object):
 
         self.max_fitter = self._fit_one_model_max(gal_model,
                                                   pars,
+                                                  guess=guess,
                                                   prior=prior,
                                                   ntry=ntry)
         res=self.max_fitter.get_result()
@@ -527,7 +532,7 @@ class Bootstrapper(object):
         res['psf_flux_err'] = self.psf_flux_err
 
 
-    def _fit_one_model_max(self, gal_model, pars, prior=None, ntry=1):
+    def _fit_one_model_max(self, gal_model, pars, guess=None, prior=None, ntry=1):
         """
         fit the galaxy.  You must run fit_psf() successfully first
         """
@@ -535,7 +540,7 @@ class Bootstrapper(object):
         if not hasattr(self,'psf_flux'):
             self.fit_gal_psf_flux()
 
-        guesser=self._get_max_guesser(prior=prior)
+        guesser=self._get_max_guesser(guess=guess, prior=prior)
 
         runner=MaxRunner(self.mb_obs_list, gal_model, pars, guesser,
                          prior=prior,
@@ -583,12 +588,6 @@ class Bootstrapper(object):
         tres['psf_flux']=self.psf_flux
         tres['psf_flux_err']=self.psf_flux_err
 
-        if 's2n_r' in maxres:
-            tres['flags_r'] = maxres['flags_r']
-            tres['round_pars'] = maxres['round_pars']
-            tres['s2n_r'] = maxres['s2n_r']
-            tres['T_s2n_r'] = maxres['T_s2n_r']
-
         self.isampler=sampler
 
     def _make_sampler(self, fitter, ipars):
@@ -635,30 +634,35 @@ class Bootstrapper(object):
         self.psf_flux_fitter=fitter
 
 
-    def _get_max_guesser(self, prior=None):
+    def _get_max_guesser(self, guess=None, prior=None):
         """
         get a guesser that uses the psf T and galaxy psf flux to
         generate a guess, drawing from priors on the other parameters
         """
-
-        psf_T = self.mb_obs_list[0][0].psf.gmix.get_T()
-
-        psf_flux=self.psf_flux
 
         if self.use_logpars:
             scaling='log'
         else:
             scaling='linear'
 
-        if prior is None:
-            guesser=TFluxGuesser(psf_T,
-                                 self.psf_flux,
-                                 scaling=scaling)
+        if guess is not None:
+            print("    using ParsGuesser")
+            guesser=ParsGuesser(guess, scaling=scaling)
         else:
-            guesser=TFluxAndPriorGuesser(psf_T,
-                                         self.psf_flux,
-                                         prior,
-                                         scaling=scaling)
+            psf_T = self.mb_obs_list[0][0].psf.gmix.get_T()
+
+            psf_flux=self.psf_flux
+
+
+            if prior is None:
+                guesser=TFluxGuesser(psf_T,
+                                     self.psf_flux,
+                                     scaling=scaling)
+            else:
+                guesser=TFluxAndPriorGuesser(psf_T,
+                                             self.psf_flux,
+                                             prior,
+                                             scaling=scaling)
         return guesser
 
 
@@ -705,6 +709,7 @@ class CompositeBootstrapper(Bootstrapper):
     def fit_max(self,
                 model,
                 pars,
+                guess=None,
                 prior=None,
                 extra_priors=None,
                 ntry=1):
@@ -743,7 +748,7 @@ class CompositeBootstrapper(Bootstrapper):
 
         TdByTe = self._get_TdByTe(exp_fitter, dev_fitter)
 
-        guesser=self._get_max_guesser(prior=prior)
+        guesser=self._get_max_guesser(guess=guess, prior=prior)
 
         print("    fitting composite")
         for i in [1,2]:
@@ -1237,7 +1242,6 @@ class MaxRunner(object):
 
 class RoundRunnerBase(object):
     def _get_round_guesser(self, **kw):
-        from .guessers import RoundParsGuesser
 
         use_logpars=kw.get('use_logpars',False)
         if use_logpars:
