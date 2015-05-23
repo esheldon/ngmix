@@ -163,33 +163,38 @@ class Bootstrapper(object):
             psf_T=psf_T_sum/wsum
 
             # and finally, do the fit 
-            round_fitter=self._fit_sim_round(fitter,
-                                             pars_round,
-                                             mb_obs_list,
-                                             ntry,
-                                             max_pars,
-                                             round_prior=round_prior)
-            res=round_fitter.get_result()
-            if res['flags'] != 0:
-                print("        round fit fail")
+            try:
+                round_fitter=self._fit_sim_round(fitter,
+                                                 pars_round,
+                                                 mb_obs_list,
+                                                 ntry,
+                                                 max_pars,
+                                                 round_prior=round_prior)
+                res=round_fitter.get_result()
+                if res['flags'] != 0:
+                    print("        round fit fail")
+                    flags |= BOOT_TS2N_ROUND_FAIL 
+                else:
+                    import covmatrix
+                    try:
+                        tcov=covmatrix.calc_cov(round_fitter.calc_lnprob, res['pars'], 1.0e-3)
+                    except LinAlgError:
+                        tcov=None
+
+                    if tcov is not None and tcov[2,2] > 0.0:
+                        cov=tcov
+                    else:
+                        print("    replace cov failed, using LM cov")
+                        cov=res['pars_cov']
+
+                    if self.use_logpars:
+                        Ts2n = sqrt(1.0/cov[2,2])
+                    else:
+                        Ts2n = res['pars'][2]/sqrt(cov[2,2])
+            except GMixRangeError as err:
+                print(str(err))
                 flags |= BOOT_TS2N_ROUND_FAIL 
-            else:
-                import covmatrix
-                try:
-                    tcov=covmatrix.calc_cov(round_fitter.calc_lnprob, res['pars'], 1.0e-3)
-                except LinAlgError:
-                    tcov=None
 
-                if tcov is not None and tcov[2,2] > 0.0:
-                    cov=tcov
-                else:
-                    print("    replace cov failed, using LM cov")
-                    cov=res['pars_cov']
-
-                if self.use_logpars:
-                    Ts2n = sqrt(1.0/cov[2,2])
-                else:
-                    Ts2n = res['pars'][2]/sqrt(cov[2,2])
         return s2n, Ts2n, psf_T, flags
 
     def _fit_sim_round(self, fitter, pars_round, mb_obs_list,
