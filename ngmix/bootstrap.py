@@ -78,7 +78,7 @@ class Bootstrapper(object):
             raise RuntimeError("you need to run set_round_s2n")
         return self.round_res
 
-    def set_round_s2n(self, max_pars=None,
+    def set_round_s2n(self, max_pars,
                       ntry=4, fitter_type='max', method='sim', round_prior=None):
         """
         set the s/n and (s/n)_T for the round model
@@ -98,10 +98,10 @@ class Bootstrapper(object):
         pars, pars_lin = self._get_round_pars(res['pars'])
 
         if method=='sim':
-            s2n, Ts2n, flags = self._get_s2n_Ts2n_r_sim(fitter,
-                                                        pars, ntry,
-                                                        max_pars,
-                                                        round_prior=round_prior)
+            s2n, Ts2n, psf_T, flags = self._get_s2n_Ts2n_r_sim(fitter,
+                                                               pars, ntry,
+                                                               max_pars,
+                                                               round_prior=round_prior)
         else:
             gm0_round = self._get_gmix_round(res, pars_lin)
             s2n, Ts2n, flags = self._get_s2n_Ts2n_r_alg(gm0_round)
@@ -109,13 +109,15 @@ class Bootstrapper(object):
         self.round_res={'pars':pars,
                         'flags':flags,
                         's2n_r':s2n,
-                        'T_s2n_r':Ts2n}
+                        'T_s2n_r':Ts2n,
+                        'psf_T_r':psf_T}
 
     def _get_s2n_Ts2n_r_sim(self, fitter, pars_round, ntry, max_pars,
                             round_prior=None):
 
         s2n=-9999.0
         Ts2n=-9999.0
+        psf_T=-9999.0
         flags=0
 
         # first set the gmix on all observations
@@ -134,12 +136,20 @@ class Bootstrapper(object):
 
         print("    getting s2n")
         s2n_sum=0.0
+        psf_T_sum=0.0
+        wsum=0.0
         try:
             for obslist in mb_obs_list:
                 for obs in obslist:
                     gm = obs.gmix.convolve( obs.psf.gmix )
 
                     s2n_sum += gm.get_model_s2n_sum(obs)
+
+                    wt=obs.weight.sum()
+                    psf_T=obs.psf.gmix.get_T()
+                    psf_T_sum += wt*psf_T
+                    wsum += wt
+
         except GMixRangeError:
             print("    failure convolving round gmixes")
             s2n_sum=-9999.0
@@ -149,6 +159,8 @@ class Bootstrapper(object):
             flags |= BOOT_S2N_LOW
         else:
             s2n=sqrt(s2n_sum)
+
+            psf_T=psf_T_sum/wsum
 
             # and finally, do the fit 
             round_fitter=self._fit_sim_round(fitter,
@@ -178,7 +190,7 @@ class Bootstrapper(object):
                     Ts2n = sqrt(1.0/cov[2,2])
                 else:
                     Ts2n = res['pars'][2]/sqrt(cov[2,2])
-        return s2n, Ts2n, flags
+        return s2n, Ts2n, psf_T, flags
 
     def _fit_sim_round(self, fitter, pars_round, mb_obs_list,
                        ntry, max_pars, round_prior=None):
