@@ -134,45 +134,50 @@ class Bootstrapper(object):
 
         print("    getting s2n")
         s2n_sum=0.0
-        for obslist in mb_obs_list:
-            for obs in obslist:
-                gm = obs.gmix.convolve( obs.psf.gmix )
+        try:
+            for obslist in mb_obs_list:
+                for obs in obslist:
+                    gm = obs.gmix.convolve( obs.psf.gmix )
 
-                s2n_sum += gm.get_model_s2n_sum(obs)
+                    s2n_sum += gm.get_model_s2n_sum(obs)
+        except GMixRangeError:
+            print("    failure convolving round gmixes")
+            s2n_sum=-9999.0
+
         if s2n_sum <= 0.0:
             print("    failure: s2n_sum <= 0.0 :",s2n_sum)
             flags |= BOOT_S2N_LOW
         else:
             s2n=sqrt(s2n_sum)
 
-        # and finally, do the fit 
-        round_fitter=self._fit_sim_round(fitter,
-                                         pars_round,
-                                         mb_obs_list,
-                                         ntry,
-                                         max_pars,
-                                         round_prior=round_prior)
-        res=round_fitter.get_result()
-        if res['flags'] != 0:
-            print("        round fit fail")
-            flags |= BOOT_TS2N_ROUND_FAIL 
-        else:
-            import covmatrix
-            try:
-                tcov=covmatrix.calc_cov(round_fitter.calc_lnprob, res['pars'], 1.0e-3)
-            except LinAlgError:
-                tcov=None
-
-            if tcov is not None and tcov[2,2] > 0.0:
-                cov=tcov
+            # and finally, do the fit 
+            round_fitter=self._fit_sim_round(fitter,
+                                             pars_round,
+                                             mb_obs_list,
+                                             ntry,
+                                             max_pars,
+                                             round_prior=round_prior)
+            res=round_fitter.get_result()
+            if res['flags'] != 0:
+                print("        round fit fail")
+                flags |= BOOT_TS2N_ROUND_FAIL 
             else:
-                print("    replace cov failed, using LM cov")
-                cov=res['pars_cov']
+                import covmatrix
+                try:
+                    tcov=covmatrix.calc_cov(round_fitter.calc_lnprob, res['pars'], 1.0e-3)
+                except LinAlgError:
+                    tcov=None
 
-            if self.use_logpars:
-                Ts2n = sqrt(1.0/cov[2,2])
-            else:
-                Ts2n = res['pars'][2]/sqrt(cov[2,2])
+                if tcov is not None and tcov[2,2] > 0.0:
+                    cov=tcov
+                else:
+                    print("    replace cov failed, using LM cov")
+                    cov=res['pars_cov']
+
+                if self.use_logpars:
+                    Ts2n = sqrt(1.0/cov[2,2])
+                else:
+                    Ts2n = res['pars'][2]/sqrt(cov[2,2])
         return s2n, Ts2n, flags
 
     def _fit_sim_round(self, fitter, pars_round, mb_obs_list,
@@ -1306,12 +1311,12 @@ class CompositeMaxRunner(MaxRunner):
 
         for i in xrange(ntry):
             guess=self.guesser()
-            fitter=LMComposite(self.obs,
-                               self.fracdev,
-                               self.TdByTe,
-                               lm_pars=self.send_pars,
-                               use_logpars=self.use_logpars,
-                               prior=self.prior)
+            fitter=fitclass(self.obs,
+                            self.fracdev,
+                            self.TdByTe,
+                            lm_pars=self.send_pars,
+                            use_logpars=self.use_logpars,
+                            prior=self.prior)
 
             fitter.go(guess)
 

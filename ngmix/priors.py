@@ -2808,6 +2808,7 @@ class Normal(_gmix.Normal):
     def __init__(self, cen, sigma):
         self.cen=cen
         self.sigma=sigma
+        self.ndim=1
         super(Normal,self).__init__(cen, sigma)
 
     def sample(self, *args):

@@ -571,6 +571,8 @@ class FitterBase(object):
             if diag_on_fail:
                 hdiag=diag(diag(hess))
                 cov = -linalg.inv(hess)
+            else:
+                raise
         return cov
 
 
@@ -849,7 +851,7 @@ class FracdevFitterMax(FitterBase):
             if 'pars_err' in result:
                 result['fracdev_err'] = result['pars_err'][0]
 
-    def get_cov(self, pars, h, m):
+    def get_cov(self, pars, h, m, diag_on_fail=True):
         """
         calculate the covariance matrix at the specified point
 
@@ -886,8 +888,11 @@ class FracdevFitterMax(FitterBase):
         except LinAlgError:
             # pull out a diagonal version of the hessian
             # this might still fail
-            hdiag=diag(diag(hess))
-            cov = -linalg.inv(hess)
+            if diag_on_fail:
+                hdiag=diag(diag(hess))
+                cov = -linalg.inv(hess)
+            else:
+                raise
         return cov
 
 
