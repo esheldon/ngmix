@@ -70,6 +70,15 @@ class Bootstrapper(object):
             raise RuntimeError("you need to run fit_max successfully first")
         return self.max_fitter
 
+    def get_psf_flux_result(self):
+        """
+        get the result fromrunning fit_gal_psf_flux
+        """
+        if not hasattr(self,'psf_flux_res'):
+            self.fit_gal_psf_flux()
+
+        return self.psf_flux_res
+
     def get_round_result(self):
         """
         get result of set_round_s2n()
@@ -468,6 +477,8 @@ class Bootstrapper(object):
         ntry: integer
             Number of retries if the psf fit fails
         """
+
+        ntot=0
         new_mb_obslist=MultiBandObsList()
         for band,obslist in enumerate(self.mb_obs_list_orig):
             new_obslist=ObsList()
@@ -479,6 +490,8 @@ class Bootstrapper(object):
                 psf_obs = obs.get_psf()
                 try:
                     self._fit_one_psf(psf_obs, psf_model, Tguess, ntry)
+                    new_obslist.append(obs)
+                    ntot += 1
                 except BootPSFFailure:
                     if not skip_failed:
                         raise
@@ -488,10 +501,12 @@ class Bootstrapper(object):
                         print(mess)
                         continue 
                 
-                new_obslist.append(obs)
 
             new_mb_obslist.append(new_obslist)
         
+        if ntot == 0:
+            raise BootPSFFailure("no psf fits succeeded")
+
         self.mb_obs_list=new_mb_obslist
 
     def _fit_one_psf(self, psf_obs, psf_model, Tguess, ntry):
@@ -550,8 +565,6 @@ class Bootstrapper(object):
                                                   prior=prior,
                                                   ntry=ntry)
         res=self.max_fitter.get_result()
-        res['psf_flux'] = self.psf_flux
-        res['psf_flux_err'] = self.psf_flux_err
 
 
     def _fit_one_model_max(self, gal_model, pars, guess=None, prior=None, ntry=1):
@@ -559,7 +572,7 @@ class Bootstrapper(object):
         fit the galaxy.  You must run fit_psf() successfully first
         """
 
-        if not hasattr(self,'psf_flux'):
+        if not hasattr(self,'psf_flux_res'):
             self.fit_gal_psf_flux()
 
         guesser=self._get_max_guesser(guess=guess, prior=prior)
@@ -607,8 +620,6 @@ class Bootstrapper(object):
 
         maxres=max_fitter.get_result()
         tres['model'] = maxres['model']
-        tres['psf_flux']=self.psf_flux
-        tres['psf_flux_err']=self.psf_flux_err
 
         self.isampler=sampler
 
@@ -637,24 +648,32 @@ class Bootstrapper(object):
         """
         use psf as a template, measure flux (linear)
         """
-        print("PSF_FLUX: adapt to multiple bands")
 
-        if not hasattr(self,'psf_fitter'):
-            raise RuntimeError("you need to fit with the psf first")
 
-        obs_list = self.mb_obs_list[0]
-        fitter=fitting.TemplateFluxFitter(obs_list, do_psf=True)
-        fitter.go()
+        mbo = self.mb_obs_list
+        nband = len(mbo)
 
-        res=fitter.get_result()
+        if not mbo[0][0].psf.has_gmix():
+            raise RuntimeError("you need to fit the psfs first")
 
-        self.psf_flux = res['flux']
-        self.psf_flux_err = res['flux_err']
+        psf_flux = zeros(nband)
+        psf_flux_err = zeros(nband)
 
-        print("    psf flux: %.3f +/- %.3f" % (res['flux'],res['flux_err']))
+        for i in xrange(nband):
+            obs_list = mbo[i]
 
-        self.psf_flux_fitter=fitter
+            fitter=fitting.TemplateFluxFitter(obs_list, do_psf=True)
+            fitter.go()
 
+            res=fitter.get_result()
+
+            psf_flux[i] = res['flux']
+            psf_flux_err[i] = res['flux_err']
+
+            print("    psf flux %d: %.3f +/- %.3f" % (i,res['flux'],res['flux_err']))
+
+        self.psf_flux_res={'psf_flux':psf_flux,
+                           'psf_flux_err':psf_flux_err}
 
     def _get_max_guesser(self, guess=None, prior=None):
         """
@@ -673,16 +692,16 @@ class Bootstrapper(object):
         else:
             psf_T = self.mb_obs_list[0][0].psf.gmix.get_T()
 
-            psf_flux=self.psf_flux
+            pres=self.get_psf_flux_result()
 
 
             if prior is None:
                 guesser=TFluxGuesser(psf_T,
-                                     self.psf_flux,
+                                     pres['psf_flux'],
                                      scaling=scaling)
             else:
                 guesser=TFluxAndPriorGuesser(psf_T,
-                                             self.psf_flux,
+                                             pres['psf_flux'],
                                              prior,
                                              scaling=scaling)
         return guesser
@@ -747,7 +766,7 @@ class CompositeBootstrapper(Bootstrapper):
             exp_prior=extra_priors['exp']
             dev_prior=extra_priors['dev']
 
-        if not hasattr(self,'psf_flux'):
+        if not hasattr(self,'psf_flux_res'):
             self.fit_gal_psf_flux()
 
         print("    fitting exp")
@@ -808,8 +827,6 @@ class CompositeBootstrapper(Bootstrapper):
         res['fracdev'] = fracdev_clipped
         res['fracdev_noclip'] = fracdev
         res['fracdev_err'] = fres['fracdev_err']
-        res['psf_flux'] = self.psf_flux
-        res['psf_flux_err'] = self.psf_flux_err
 
     def _maybe_clip(self, efitter, dfitter, pars, fracdev):
         """
@@ -891,8 +908,6 @@ class CompositeBootstrapper(Bootstrapper):
         ires['fracdev']=maxres['fracdev']
         ires['fracdev_noclip']=maxres['fracdev_noclip']
         ires['fracdev_err']=maxres['fracdev_err']
-        ires['psf_flux']=maxres['psf_flux']
-        ires['psf_flux_err']=maxres['psf_flux_err']
 
     def _fit_fracdev(self, exp_fitter, dev_fitter, use_grid=False):
         from .fitting import FracdevFitter, FracdevFitterMax
@@ -999,7 +1014,7 @@ class BestBootstrapper(Bootstrapper):
         fit the galaxy.  You must run fit_psf() successfully first
         """
 
-        if not hasattr(self,'psf_flux'):
+        if not hasattr(self,'psf_flux_res'):
             self.fit_gal_psf_flux()
 
         print("    fitting exp")
