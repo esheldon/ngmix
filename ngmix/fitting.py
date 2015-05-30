@@ -762,9 +762,10 @@ class FracdevFitterMax(FitterBase):
         method=keys.get('method','nm')
         if self.prior is not None:
             assert method=='nm','if prior sent method must be nm'
-            if len(exp_pars) > 6:
-                raise RuntimeError("currently only joint "
-                                   "fracdev prior single band")
+            if self.prior.ndim > 1:
+                if len(exp_pars) > 6:
+                    raise RuntimeError("currently only joint "
+                                       "fracdev prior single band")
 
         self.method=method
 

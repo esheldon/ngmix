@@ -656,7 +656,8 @@ class Bootstrapper(object):
         if not mbo[0][0].psf.has_gmix():
             raise RuntimeError("you need to fit the psfs first")
 
-        psf_flux = zeros(nband)
+        flags=[]
+        psf_flux = zeros(nband) - 9999.0
         psf_flux_err = zeros(nband)
 
         for i in xrange(nband):
@@ -666,13 +667,20 @@ class Bootstrapper(object):
             fitter.go()
 
             res=fitter.get_result()
+            tflags = res['flags']
+            flags.append( tflags )
 
-            psf_flux[i] = res['flux']
-            psf_flux_err[i] = res['flux_err']
+            if tflags == 0:
 
-            print("    psf flux %d: %.3f +/- %.3f" % (i,res['flux'],res['flux_err']))
+                psf_flux[i] = res['flux']
+                psf_flux_err[i] = res['flux_err']
 
-        self.psf_flux_res={'psf_flux':psf_flux,
+                #print("    psf flux %d: %.3f +/- %.3f" % (i,res['flux'],res['flux_err']))
+            else:
+                print("failed to fit psf flux for band",i)
+
+        self.psf_flux_res={'flags':flags,
+                           'psf_flux':psf_flux,
                            'psf_flux_err':psf_flux_err}
 
     def _get_max_guesser(self, guess=None, prior=None):
@@ -687,7 +695,7 @@ class Bootstrapper(object):
             scaling='linear'
 
         if guess is not None:
-            print("    using ParsGuesser")
+            #print("    using ParsGuesser")
             guesser=ParsGuesser(guess, scaling=scaling)
         else:
             psf_T = self.mb_obs_list[0][0].psf.gmix.get_T()
@@ -722,11 +730,10 @@ class Bootstrapper(object):
         # reference to res
         res=fitter.get_result()
 
-        print("        replacing cov")
         fitter.calc_cov(cov_pars['h'],cov_pars['m'])
 
         if res['flags'] != 0:
-            print("        replacement failed")
+            print("        cov replacement failed")
             res['flags']=0
 
 

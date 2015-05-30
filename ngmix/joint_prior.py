@@ -106,7 +106,7 @@ class JointPriorTF(GMixND):
         ngood=0
         while nleft > 0:
 
-            tsamples=self.gmm.sample(nleft)
+            tsamples=self._gmm.sample(nleft)
             w=self.check_bounds_array(tsamples)
 
             if w.size > 0:
@@ -171,25 +171,6 @@ class JointPriorTF(GMixND):
         wgood,=where(logic)
         return wgood
 
-    '''
-    def _make_gmm(self):
-        """
-        Make a GMM object for sampling
-        """
-        from sklearn.mixture import GMM
-
-        # these numbers are not used because we set the means, etc by hand
-        ngauss=self.weights.size
-        gmm=GMM(n_components=self.ngauss,
-                n_iter=10000,
-                min_covar=1.0e-12,
-                covariance_type='full')
-        gmm.means_ = self.means.copy()
-        gmm.covars_ = self.covars.copy()
-        gmm.weights_ = self.weights.copy()
-
-        self.gmm=gmm 
-    '''
 
 class JointPriorSimpleHybrid(GMixND):
     """
@@ -373,25 +354,6 @@ class JointPriorSimpleHybrid(GMixND):
                        & (F < F_bounds[1]) )
         return wgood
 
-    '''
-    def _make_gmm(self):
-        """
-        Make a GMM object for sampling
-        """
-        from sklearn.mixture import GMM
-
-        # these numbers are not used because we set the means, etc by hand
-        ngauss=self.weights.size
-        gmm=GMM(n_components=self.ngauss,
-                n_iter=10000,
-                min_covar=1.0e-12,
-                covariance_type='full')
-        gmm.means_ = self.means.copy()
-        gmm.covars_ = self.covars.copy()
-        gmm.weights_ = self.weights.copy()
-
-        self.gmm=gmm 
-    '''
 
 class JointPriorSersicHybrid(JointPriorSimpleHybrid):
     """
@@ -648,7 +610,7 @@ class JointPriorSimpleLinPars(GMixND):
         ngood=0
         while nleft > 0:
 
-            tsamples=self.gmm.sample(nleft)
+            tsamples=self._gmm.sample(nleft)
             w=self.check_bounds_array(tsamples)
 
             if w.size > 0:
@@ -781,25 +743,6 @@ class JointPriorSimpleLinPars(GMixND):
 
         return P*J
 
-    '''
-    def _make_gmm(self):
-        """
-        Make a GMM object for sampling
-        """
-        from sklearn.mixture import GMM
-
-        # these numbers are not used because we set the means, etc by hand
-        ngauss=self.weights.size
-        gmm=GMM(n_components=self.ngauss,
-                n_iter=10000,
-                min_covar=1.0e-12,
-                covariance_type='full')
-        gmm.means_ = self.means.copy()
-        gmm.covars_ = self.covars.copy()
-        gmm.weights_ = self.weights.copy()
-
-        self.gmm=gmm 
-    '''
 
     def check_bounds_scalar(self, pars, throw=True):
         """
