@@ -779,10 +779,17 @@ class CompositeBootstrapper(Bootstrapper):
         print("    fitting exp")
         exp_fitter=self._fit_one_model_max('exp',pars,
                                            prior=exp_prior,ntry=ntry)
+        fitting.print_pars(exp_fitter.get_result()['pars'], front='        gal_pars:')
+        fitting.print_pars(exp_fitter.get_result()['pars_err'], front='        gal_perr:')
+        print('        lnprob: %e' % exp_fitter.get_result()['lnprob'])
+        
         print("    fitting dev")
         dev_fitter=self._fit_one_model_max('dev',pars,
                                            prior=dev_prior,ntry=ntry)
-
+        fitting.print_pars(dev_fitter.get_result()['pars'], front='        gal_pars:')
+        fitting.print_pars(dev_fitter.get_result()['pars_err'], front='        gal_perr:')
+        print('        lnprob: %e' % dev_fitter.get_result()['lnprob'])
+        
         print("    fitting fracdev")
         use_grid=pars.get('use_fracdev_grid',False)
         fres=self._fit_fracdev(exp_fitter, dev_fitter, use_grid=use_grid)
@@ -825,7 +832,10 @@ class CompositeBootstrapper(Bootstrapper):
         self.max_fitter=runner.fitter
 
         res=self.max_fitter.get_result()
-
+        fitting.print_pars(res['pars'], front='        gal_pars:')
+        fitting.print_pars(res['pars_err'], front='        gal_perr:')
+        print('        lnprob: %e' % res['lnprob'])
+        
         if res['flags'] != 0:
             raise BootGalFailure("failed to fit galaxy with maxlike")
 
@@ -1240,6 +1250,9 @@ class MaxRunner(object):
 
         self.guesser=guesser
 
+        self.max_pars['reset_guess'] = max_pars.get('reset_guess',False)
+        self.max_pars['reset_guess_factor'] = max_pars.get('reset_guess_factor',2.0)
+
     def go(self, ntry=1):
         if self.method=='lm':
             method=self._go_lm
@@ -1256,6 +1269,18 @@ class MaxRunner(object):
                 if res['lnprob'] > lnprob_max:
                     lnprob_max = res['lnprob']
                     fitter_best=self.fitter
+
+                    if self.max_pars['reset_guess']:
+                        res = fitter_best.get_result()
+                        fitting.print_pars(res['pars'], front='        reset guess:')
+                        print('        lnprob: %e' % res['lnprob'])
+                        if self.use_logpars:
+                            scl = 'log'
+                        else:
+                            scl = 'linear'
+                        self.guesser = ParsGuesser(res['pars'],
+                                                   scaling=scl,
+                                                   widths=self.max_pars['reset_guess_factor']*res['pars_err'])
         
         if fitter_best is not None:
             self.fitter=fitter_best
