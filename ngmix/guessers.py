@@ -224,7 +224,7 @@ class ParsGuesser(GuesserBase):
         guess[:,2]=guess_shape[:,0]
         guess[:,3]=guess_shape[:,1]
 
-        for i in xrange(2,self.np):
+        for i in xrange(4,self.np):
             if self.scaling=='linear':
                 guess[:,i] = pars[i]*(1.0 + widths[i]*srandu(n))
             else:
