@@ -70,6 +70,11 @@ class Bootstrapper(object):
             raise RuntimeError("you need to run fit_max successfully first")
         return self.max_fitter
 
+    def get_emcee_sampler(self):
+        if not hasattr(self,'emcee_sampler'):
+            raise RuntimeError("you need to run fit_emcee successfully first")
+        return self.emcee_sampler
+    
     def get_psf_flux_result(self):
         """
         get the result fromrunning fit_gal_psf_flux
@@ -594,13 +599,16 @@ class Bootstrapper(object):
 
 
 
-    def isample(self, ipars, prior=None):
+    def isample(self, ipars, prior=None, start_fitter=None):
         """
         bootstrap off the maxlike run
         """
-
+        
         max_fitter=self.max_fitter
-        use_fitter=max_fitter
+        if start_fitter is None:
+            use_fitter=max_fitter
+        else:
+            use_fitter=start_fitter
 
         niter=len(ipars['nsample'])
         for i,nsample in enumerate(ipars['nsample']):
@@ -615,7 +623,9 @@ class Bootstrapper(object):
 
             tres=sampler.get_result()
 
-            print("    eff iter %d: %.2f" % (i,tres['efficiency']))
+            print("        mean weight iter %d: %f" % (i,numpy.mean(sampler.get_iweights())))
+            print("        eff iter %d: %.2f" % (i,tres['efficiency']))
+            
             use_fitter = sampler
 
         maxres=max_fitter.get_result()
@@ -643,6 +653,59 @@ class Bootstrapper(object):
         return sampler
 
 
+    def fit_emcee(self, model, epars, prior=None, **keys):
+        """
+        bootstrap off the maxlike run
+        """
+
+        print('    emcee sampling')
+        
+        if self.use_logpars:
+            scaling='log'
+        else:
+            scaling='linear'
+            
+        guesser = ParsGuesser(self.max_fitter.get_result()['pars'], scaling=scaling)
+        sampler = self._make_emcee_sampler(model, epars, prior=prior, **keys)
+
+        guess = guesser(n=epars['nwalkers'], prior=prior)
+        fitting.print_pars(tuple(numpy.mean(guess,axis=0)),
+                           front="        emcee guess: ")
+        fitting.print_pars(tuple(numpy.std(guess,axis=0)),
+                           front="        emcee std:   ")
+        
+        
+        pos=sampler.run_mcmc(guess,epars['burnin'])
+        pos=sampler.run_mcmc(pos,epars['nstep'],thin=epars.get('thin',1))
+        
+        p = sampler.get_best_pars()
+        fitting.print_pars(tuple(p),front="        emcee final: ")
+        
+        sampler.calc_result()
+        tres=sampler.get_result()
+        maxres=self.max_fitter.get_result()
+        tres['model'] = maxres['model']
+
+        fitting.print_pars(tuple(numpy.sqrt(numpy.diag(tres['pars_cov']))),
+                           front="        emcee std:   ")
+        print('        arate: %0.2f' % tres['arate'])
+        
+        self.emcee_sampler = sampler
+    
+    def _make_emcee_sampler(self, model, epars, prior=None, **keys):
+        from .fitting import MCMCSimple
+
+        sampler=MCMCSimple(self.mb_obs_list,
+                           model,
+                           nu=keys.get('nu',None),
+                           margsky=keys.get('margsky',False),
+                           prior=prior,
+                           nwalkers=epars['nwalkers'],
+                           mca_a=epars.get('a',2.0),
+                           random_state=getattr(self,'random_state',None),
+                           use_logpars=self.use_logpars)
+        
+        return sampler
 
     def fit_gal_psf_flux(self):
         """
@@ -916,8 +979,8 @@ class CompositeBootstrapper(Bootstrapper):
         return runner.fitter
  
 
-    def isample(self, ipars, prior=None):
-        super(CompositeBootstrapper,self).isample(ipars,prior=prior)
+    def isample(self, ipars, prior=None, start_fitter=None):
+        super(CompositeBootstrapper,self).isample(ipars,prior=prior,start_fitter=start_fitter)
         maxres=self.max_fitter.get_result()
         ires=self.isampler.get_result()
 
@@ -926,6 +989,34 @@ class CompositeBootstrapper(Bootstrapper):
         ires['fracdev_noclip']=maxres['fracdev_noclip']
         ires['fracdev_err']=maxres['fracdev_err']
 
+    def fit_emcee(self, model, epars, prior=None, **keys):
+        super(CompositeBootstrapper,self).fit_emcee('cm', epars, prior=prior, **keys)
+        maxres=self.max_fitter.get_result()
+        eres=self.emcee_sampler.get_result()
+        
+        eres['TdByTe']=maxres['TdByTe']
+        eres['fracdev']=maxres['fracdev']
+        eres['fracdev_noclip']=maxres['fracdev_noclip']
+        eres['fracdev_err']=maxres['fracdev_err']
+        
+    def _make_emcee_sampler(self, model, epars, prior=None, **keys):
+        from .fitting import MCMCComposite
+        
+        res=self.max_fitter.get_result()
+         
+        sampler=MCMCComposite(self.mb_obs_list,
+                              res['fracdev'],
+                              res['TdByTe'],
+                              nu=keys.get('nu',None),
+                              margsky=keys.get('margsky',False),
+                              prior=prior,
+                              nwalkers=epars['nwalkers'],
+                              mca_a=epars.get('a',2.0),
+                              random_state=getattr(self,'random_state',None),
+                              use_logpars=self.use_logpars)
+        
+        return sampler
+        
     def _fit_fracdev(self, exp_fitter, dev_fitter, use_grid=False):
         from .fitting import FracdevFitter, FracdevFitterMax
 

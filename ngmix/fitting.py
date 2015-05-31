@@ -2358,6 +2358,40 @@ class MCMCSimple(MCMCBase):
 
         return names
 
+class MCMCComposite(MCMCSimple):
+    """
+    exp+dev model with pre-determined fracdev and ratio Tdev/Texp
+    """
+    def __init__(self, obs, fracdev, TdByTe, **keys):
+        super(MCMCComposite,self).__init__(obs, 'cm', **keys)
+
+        self.fracdev=fracdev
+        self.TdByTe=TdByTe
+        
+    def get_gmix(self, band=0):
+        """
+        Get a gaussian mixture at the "best" parameter set, which
+        definition depends on the sub-class
+        """
+
+        res=self.get_result()
+        pars=self.get_band_pars(res['pars'], band)
+        return gmix.GMixCM(self.fracdev,
+                           self.TdByTe,
+                           pars)
+        
+    def _make_model(self, band_pars):
+        gm0=gmix.GMixCM(self.fracdev, self.TdByTe, band_pars)
+        return gm0
+
+    def _fill_gmix(self, gm, band_pars):
+        _gmix.gmix_fill_cm(gm._data, band_pars)
+        
+    def _convolve_gmix(self, gm, gm0, psf_gmix):
+        _gmix.convolve_fill(gm._data,
+                            gm0._data['gmix'][0],
+                            psf_gmix._data)
+    
 class MCMCSimpleEta(MCMCSimple):
     """
     search eta space
@@ -4516,7 +4550,7 @@ class ISampler(object):
             if numpy.any(eigvals <= 0):
                 raise LinAlgError("bad cov")
             
-        print_pars(sqrt(diag(cov)), front="    using err:")
+        print_pars(sqrt(diag(cov)), front="        using err:")
 
         self._cov = cov
 
