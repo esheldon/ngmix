@@ -1392,19 +1392,20 @@ class MaxRunner(object):
             from scipy.optimize import basinhopping
             def bfunc(p):
 
-                if np.abs(p[1]) >= 1.0 or np.abs(p[2]) >= 1.0 or p[1]**2 + p[2]**2 >= 1.0:
-                    return np.inf
+                if numpy.abs(p[1]) >= 1.0 or numpy.abs(p[2]) >= 1.0 or p[1]**2 + p[2]**2 >= 1.0:
+                    return numpy.inf
                 else:
                     return -1.0*fitter.calc_lnprob(p)
 
             class bstep(object):
-                def __init(self,width=[0.01,0.01,0.1,0.1,0.5,0.1,0.1,0.1]):
+                def __init__(self,width=[0.01,0.01,0.1,0.1,0.5,0.1,0.1,0.1]):
                     self.width = width
                     self.stepsize = 1.0
 
                 def __call__(self,p):
-                    return p + (np.random.uniform(size=len(p))-0.5)*2.0*self.width*self.stepsize
+                    return p + (numpy.random.uniform(size=len(p))-0.5)*2.0*self.width*self.stepsize
 
+            fitter._setup_data(guess)
             res = basinhopping(bfunc, guess, niter=10, T=1.0, stepsize=1.0, minimizer_kwargs={'method':'Powell'}, take_step=bstep())
             fitting.print_pars(res['x'],front='        basin hop:')
             print('        basin val: %e' % (-1.0*res['fun']))
