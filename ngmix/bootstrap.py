@@ -692,7 +692,7 @@ class Bootstrapper(object):
                              ipars['df'],
                              min_err=ipars['min_err'],
                              max_err=ipars['max_err'],
-                             ifactor=ipars['ifactor'],
+                             ifactor=ipars.get('ifactor',1.0),
                              asinh_pars=ipars.get('asinh_pars',[]))
         except LinAlgError:
             print("        bad cov")
