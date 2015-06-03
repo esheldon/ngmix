@@ -1836,9 +1836,8 @@ class LMSersic(LMSimple):
             raise ValueError("support more than one band")
         return pars.copy()
 
-
 NOTFINITE_BIT=11
-def run_leastsq(func, guess, n_prior_pars, **keys):
+def run_leastsq_scipy(func, guess, n_prior_pars, **keys):
     """
     run leastsq from scipy.optimize.  Deal with certain
     types of errors
@@ -1975,6 +1974,137 @@ def _test_cov(pcov):
         flags |= EIG_NOTFINITE 
 
     return flags
+
+def run_leastsq_kmpfit(func, guess, n_prior_pars, **keys):
+    """
+    run leastsq from kmpfit
+    
+    parameters
+    ----------
+    func:
+        the function to minimize
+    guess:
+        guess at pars
+    n_prior_pars:
+        number of slots in fdiff for priors
+
+    some useful keywords
+    maxfev:
+        maximum number of function evaluations. e.g. 1000
+    epsfcn:
+        Step for jacobian estimation (derivatives). 1.0e-6
+    ftol:
+        Relative error desired in sum of squares, 1.0e06
+    xtol:
+        Relative error desired in solution. 1.0e-6
+    """
+    from kapteyn import kmpfit
+
+    print("    doing kmpfit")
+    
+    npars=guess.size
+
+    def kmpfit_wrap(p, d):
+        return func(p)
+    
+    res={}
+    res['fitobj'] = None
+    
+    try:
+        keys['data'] = ()
+        keys['residuals'] = kmpfit_wrap
+        #keys['params0'] = guess
+        #print(keys)
+        
+        fitobj = kmpfit.Fitter(**keys)
+        fitobj.fit(params0=guess)
+        
+        flags = 0
+        if fitobj.status <= 0:
+            flags = 2**(0)
+            pars,pcov,perr=_get_def_stuff(npars)
+            print('    ',fitobj.message)
+        else:
+            pcov = fitobj.covar
+            
+            cflags = _test_cov(pcov)
+            if cflags != 0:
+                flags += cflags
+                errmsg = "bad covariance matrix"
+                print('    ',errmsg)
+                junk1,junk2,perr=_get_def_stuff(npars)
+            else:
+                # only if we reach here did everything go well
+                perr=sqrt( numpy.diag(pcov) )
+
+        res['flags']=flags
+        res['nfev'] = fitobj.nfev
+        res['status'] = fitobj.status
+        res['ier'] = res['status']
+        res['errmsg'] = fitobj.message
+
+        res['pars'] = fitobj.params
+        res['pars_err']=fitobj.xerror
+        res['pars_cov']=pcov
+        res['fitobj'] = fitobj
+
+        res['chi2_min'] = fitobj.chi2_min
+        res['niter'] = fitobj.niter
+        
+    except ValueError as e:
+        serr=str(e)
+        if 'NaNs' in serr or 'infs' in serr:
+            pars,pcov,perr=_get_def_stuff(npars)
+
+            res['pars']=pars
+            res['pars_cov']=pcov
+            res['nfev']=-1
+            res['flags']=LM_FUNC_NOTFINITE
+            res['errmsg']="not finite"
+            print('    not finite')
+        else:
+            raise e
+
+    except ZeroDivisionError:
+        pars,pcov,perr=_get_def_stuff(npars)
+
+        res['pars']=pars
+        res['pars_cov']=pcov
+        res['nfev']=-1
+
+        res['flags']=LM_DIV_ZERO
+        res['errmsg']="zero division"
+        print('    zero division')
+
+    # some final fixes
+    res['dof'] = fitobj.dof - n_prior_pars
+        
+    return res
+
+def run_leastsq(func, guess, n_prior_pars, **keys):
+    vers = keys.get('lmvers','scipy')
+    lmkeys = keys.copy()
+    del lmkeys['lmvers']
+    if vers in ['scipy','kmpfit']:
+        lmkeys.setdefault('epsfcn',1e-8)
+        lmkeys.setdefault('ftol',1e-6)
+        lmkeys.setdefault('xtol',1e-6)
+    print("    ",lmkeys)
+    
+    if vers == 'scipy':
+        res = run_leastsq_scipy(func, guess, n_prior_pars, **lmkeys)
+    elif vers == 'kmpfit':
+        res = run_leastsq_kmpfit(func, guess, n_prior_pars, **lmkeys)
+    else:
+        print('    lmvers %s not supported!')
+        assert False
+    return res
+
+try:
+    from kapteyn import kmpfit
+    del kmpfit
+except:
+    run_leastsq_kmpfit = run_leastsq_scipy
 
 class MCMCBase(FitterBase):
     """
@@ -2358,6 +2488,40 @@ class MCMCSimple(MCMCBase):
 
         return names
 
+class MCMCComposite(MCMCSimple):
+    """
+    exp+dev model with pre-determined fracdev and ratio Tdev/Texp
+    """
+    def __init__(self, obs, fracdev, TdByTe, **keys):
+        super(MCMCComposite,self).__init__(obs, 'cm', **keys)
+
+        self.fracdev=fracdev
+        self.TdByTe=TdByTe
+        
+    def get_gmix(self, band=0):
+        """
+        Get a gaussian mixture at the "best" parameter set, which
+        definition depends on the sub-class
+        """
+
+        res=self.get_result()
+        pars=self.get_band_pars(res['pars'], band)
+        return gmix.GMixCM(self.fracdev,
+                           self.TdByTe,
+                           pars)
+        
+    def _make_model(self, band_pars):
+        gm0=gmix.GMixCM(self.fracdev, self.TdByTe, band_pars)
+        return gm0
+
+    def _fill_gmix(self, gm, band_pars):
+        _gmix.gmix_fill_cm(gm._data, band_pars)
+        
+    def _convolve_gmix(self, gm, gm0, psf_gmix):
+        _gmix.convolve_fill(gm._data,
+                            gm0._data['gmix'][0],
+                            psf_gmix._data)
+    
 class MCMCSimpleEta(MCMCSimple):
     """
     search eta space
@@ -4516,7 +4680,7 @@ class ISampler(object):
             if numpy.any(eigvals <= 0):
                 raise LinAlgError("bad cov")
             
-        print_pars(sqrt(diag(cov)), front="    using err:")
+        print_pars(sqrt(diag(cov)), front="        using err:")
 
         self._cov = cov
 
