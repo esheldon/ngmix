@@ -28,6 +28,8 @@ BOOT_S2N_LOW = 2**0
 BOOT_R2_LOW = 2**1
 BOOT_R4_LOW = 2**2
 BOOT_TS2N_ROUND_FAIL = 2**3
+BOOT_ROUND_CONVOLVE_FAIL = 2**4
+BOOT_WEIGHTS_LOW= 2**5
 
 class Bootstrapper(object):
     def __init__(self, obs, use_logpars=False):
@@ -88,12 +90,17 @@ class Bootstrapper(object):
         return self.round_res
 
     def set_round_s2n(self, max_pars,
-                      ntry=4, fitter_type='max', method='sim', round_prior=None):
+                      ntry=4,
+                      fitter_type='max',
+                      method='simple',
+                      round_prior=None):
         """
         set the s/n and (s/n)_T for the round model
 
         round_prior used for sim fit
         """
+
+        assert method=="simple","method for round s/n must be simple"
 
         if fitter_type=='isample':
             fitter = self.get_isampler()
@@ -106,21 +113,70 @@ class Bootstrapper(object):
 
         pars, pars_lin = self._get_round_pars(res['pars'])
 
+        '''
         if method=='sim':
             s2n, Ts2n, psf_T, flags = self._get_s2n_Ts2n_r_sim(fitter,
                                                                pars, ntry,
                                                                max_pars,
                                                                round_prior=round_prior)
-        else:
-            gm0_round = self._get_gmix_round(res, pars_lin)
+        elif method=='alg':
             s2n, Ts2n, flags = self._get_s2n_Ts2n_r_alg(gm0_round)
+        '''
+
+        s2n, psf_T, flags = self._get_s2n_round(pars)
 
         self.round_res={'pars':pars,
                         'flags':flags,
                         's2n_r':s2n,
-                        'T_s2n_r':Ts2n,
                         'psf_T_r':psf_T}
 
+    def _get_s2n_round(self, pars_round):
+        s2n=-9999.0
+        psf_T=-9999.0
+        flags=0
+
+        s2n_sum = 0.0
+        psf_T_sum=0.0
+        wsum=0.0
+
+        max_fitter=self.get_max_fitter()
+
+        try:
+            for band,obslist in enumerate(self.mb_obs_list):
+
+                # pars_round could be in log and include all bands
+                # this is unconvolved by a psf
+                gm_round_band0 = self._get_gmix_round(max_fitter, pars_round, band)
+
+                for obs in obslist:
+                    psf_round = obs.psf.gmix.make_round()
+                    gmix = gm_round_band0.convolve(psf_round)
+
+                    # only the weight map is used
+                    s2n_sum += gmix.get_model_s2n_sum(obs)
+
+                    wt=obs.weight.sum()
+                    psf_T=psf_round.get_T()
+                    psf_T_sum += wt*psf_T
+                    wsum += wt
+            
+            if s2n_sum <= 0.0:
+                print("    failure: s2n_sum <= 0.0 :",s2n_sum)
+                flags |= BOOT_S2N_LOW
+            elif wsum <= 0.0:
+                print("    failure: wsum <= 0.0 :",wsum)
+                flags |= BOOT_WEIGHTS_LOW
+            else:
+                s2n=sqrt(s2n_sum)
+                psf_T=psf_T_sum/wsum
+
+        except GMixRangeError:
+            print("    failure convolving round gmixes")
+            flags |= BOOT_ROUND_CONVOLVE_FAIL 
+
+
+        return s2n, psf_T, flags
+ 
     def _get_s2n_Ts2n_r_sim(self, fitter, pars_round, ntry, max_pars,
                             round_prior=None):
 
@@ -152,7 +208,7 @@ class Bootstrapper(object):
                 for obs in obslist:
                     gm = obs.gmix.convolve( obs.psf.gmix )
 
-                    s2n_sum += gm.get_model_s2n_sum(obs)
+                    s2n_sum += obs.gmix.get_model_s2n_sum(obs)
 
                     wt=obs.weight.sum()
                     psf_T=obs.psf.gmix.get_T()
@@ -239,7 +295,7 @@ class Bootstrapper(object):
             for obs in obslist:
                 psf_gm=obs.psf.gmix
 
-                # only makes sens for symmetric psf
+                # only makes sense for symmetric psf
                 psf_gm_round = psf_gm.make_round()
 
                 gm = gm0_round.convolve(psf_gm_round)
