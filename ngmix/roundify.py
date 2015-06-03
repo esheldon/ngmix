@@ -94,8 +94,10 @@ def get_round_obs(obs_in, sim_image=True):
     obs=Observation(imuse,
                     weight=weight,
                     jacobian=obs_in.jacobian,
-                    gmix=gm_round,
+                    gmix=gm_round0,
                     psf=psf_obs)
+
+    obs.gmix_convolved = gm_round
     return obs
 
 def get_simple_sub_pars(pars_in):
