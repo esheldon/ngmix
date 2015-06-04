@@ -4241,7 +4241,7 @@ class ISampler(object):
     def __init__(self, pars, cov, df,
                  min_err=_default_min_err,
                  max_err=_default_max_err,
-                 ifactor=1.0,asinh_pars=[]):
+                 ifactor=1.0,asinh_pars=[],verbose=True):
         """
         min_err=0.001 for s/n=1000 T=4*Tpsf
         max_err=0.5 for small T s/n ~5
@@ -4253,6 +4253,7 @@ class ISampler(object):
         self._npars = self._pars_orig.size
         self._set_pars_and_cov()        
 
+        self.verbose=verbose
         self._set_minmax_err(min_err, max_err)
 
         self._clip_cov()
@@ -4549,8 +4550,9 @@ class ISampler(object):
             eigvals=numpy.linalg.eigvals(cov)
             if numpy.any(eigvals <= 0):
                 raise LinAlgError("bad cov")
-            
-        print_pars(sqrt(diag(cov)), front="    using err:")
+
+        if self.verbose:
+            print_pars(sqrt(diag(cov)), front="    using err:")
 
         self._cov = cov
 

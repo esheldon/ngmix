@@ -650,7 +650,7 @@ class Bootstrapper(object):
 
 
 
-    def isample(self, ipars, prior=None):
+    def isample(self, ipars, prior=None, verbose=True):
         """
         bootstrap off the maxlike run
         """
@@ -660,7 +660,7 @@ class Bootstrapper(object):
 
         niter=len(ipars['nsample'])
         for i,nsample in enumerate(ipars['nsample']):
-            sampler=self._make_sampler(use_fitter, ipars)
+            sampler=self._make_sampler(use_fitter, ipars, verbose=verbose)
             if sampler is None:
                 raise BootGalFailure("isampling failed")
 
@@ -671,7 +671,8 @@ class Bootstrapper(object):
 
             tres=sampler.get_result()
 
-            print("    eff iter %d: %.2f" % (i,tres['efficiency']))
+            if verbose:
+                print("    eff iter %d: %.2f" % (i,tres['efficiency']))
             use_fitter = sampler
 
         maxres=max_fitter.get_result()
@@ -679,7 +680,7 @@ class Bootstrapper(object):
 
         self.isampler=sampler
 
-    def _make_sampler(self, fitter, ipars):
+    def _make_sampler(self, fitter, ipars, verbose=True):
         from .fitting import ISampler
         from numpy.linalg import LinAlgError
 
@@ -693,7 +694,8 @@ class Bootstrapper(object):
                              min_err=ipars['min_err'],
                              max_err=ipars['max_err'],
                              ifactor=ipars.get('ifactor',1.0),
-                             asinh_pars=ipars.get('asinh_pars',[]))
+                             asinh_pars=ipars.get('asinh_pars',[]),
+                             verbose=verbose)
         except LinAlgError:
             print("        bad cov")
             sampler=None
