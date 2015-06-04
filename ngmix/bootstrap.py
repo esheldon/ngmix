@@ -650,7 +650,7 @@ class Bootstrapper(object):
 
 
 
-    def isample(self, ipars, prior=None):
+    def isample(self, ipars, prior=None, verbose=True):
         """
         bootstrap off the maxlike run
         """
@@ -660,7 +660,7 @@ class Bootstrapper(object):
 
         niter=len(ipars['nsample'])
         for i,nsample in enumerate(ipars['nsample']):
-            sampler=self._make_sampler(use_fitter, ipars)
+            sampler=self._make_sampler(use_fitter, ipars, verbose=verbose)
             if sampler is None:
                 raise BootGalFailure("isampling failed")
 
@@ -671,7 +671,8 @@ class Bootstrapper(object):
 
             tres=sampler.get_result()
 
-            print("    eff iter %d: %.2f" % (i,tres['efficiency']))
+            if verbose:
+                print("    eff iter %d: %.2f" % (i,tres['efficiency']))
             use_fitter = sampler
 
         maxres=max_fitter.get_result()
@@ -679,19 +680,22 @@ class Bootstrapper(object):
 
         self.isampler=sampler
 
-    def _make_sampler(self, fitter, ipars):
+    def _make_sampler(self, fitter, ipars, verbose=True):
         from .fitting import ISampler
         from numpy.linalg import LinAlgError
 
         res=fitter.get_result()
-        icov = res['pars_cov']*ipars['ifactor']**2
+        icov = res['pars_cov']
 
         try:
             sampler=ISampler(res['pars'],
                              icov,
                              ipars['df'],
                              min_err=ipars['min_err'],
-                             max_err=ipars['max_err'])
+                             max_err=ipars['max_err'],
+                             ifactor=ipars.get('ifactor',1.0),
+                             asinh_pars=ipars.get('asinh_pars',[]),
+                             verbose=verbose)
         except LinAlgError:
             print("        bad cov")
             sampler=None
@@ -835,10 +839,17 @@ class CompositeBootstrapper(Bootstrapper):
         print("    fitting exp")
         exp_fitter=self._fit_one_model_max('exp',pars,
                                            prior=exp_prior,ntry=ntry)
+        fitting.print_pars(exp_fitter.get_result()['pars'], front='        gal_pars:')
+        fitting.print_pars(exp_fitter.get_result()['pars_err'], front='        gal_perr:')
+        print('        lnprob: %e' % exp_fitter.get_result()['lnprob'])
+        
         print("    fitting dev")
         dev_fitter=self._fit_one_model_max('dev',pars,
                                            prior=dev_prior,ntry=ntry)
-
+        fitting.print_pars(dev_fitter.get_result()['pars'], front='        gal_pars:')
+        fitting.print_pars(dev_fitter.get_result()['pars_err'], front='        gal_perr:')
+        print('        lnprob: %e' % dev_fitter.get_result()['lnprob'])           
+            
         print("    fitting fracdev")
         use_grid=pars.get('use_fracdev_grid',False)
         fres=self._fit_fracdev(exp_fitter, dev_fitter, use_grid=use_grid)
@@ -855,7 +866,7 @@ class CompositeBootstrapper(Bootstrapper):
         guesser=self._get_max_guesser(guess=guess, prior=prior)
 
         print("    fitting composite")
-        for i in [1,2]:
+        for i in range(1,5):
             try:
                 runner=CompositeMaxRunner(self.mb_obs_list,
                                           pars,
@@ -881,7 +892,10 @@ class CompositeBootstrapper(Bootstrapper):
         self.max_fitter=runner.fitter
 
         res=self.max_fitter.get_result()
-
+        fitting.print_pars(res['pars'], front='        gal_pars:')
+        fitting.print_pars(res['pars_err'], front='        gal_perr:')
+        print('        lnprob: %e' % res['lnprob'])
+        
         if res['flags'] != 0:
             raise BootGalFailure("failed to fit galaxy with maxlike")
 

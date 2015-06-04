@@ -4240,16 +4240,20 @@ class ISampler(object):
     """
     def __init__(self, pars, cov, df,
                  min_err=_default_min_err,
-                 max_err=_default_max_err):
+                 max_err=_default_max_err,
+                 ifactor=1.0,asinh_pars=[],verbose=True):
         """
         min_err=0.001 for s/n=1000 T=4*Tpsf
         max_err=0.5 for small T s/n ~5
         """
-        self._pars=array(pars)
-        self._cov=array(cov)
+        self._pars_orig=array(pars)
+        self._cov_orig=array(cov)
+        self._ifac = ifactor
+        self._asinh_pars = asinh_pars
+        self._npars = self._pars_orig.size
+        self._set_pars_and_cov()        
 
-        self._npars = self._pars.size
-
+        self.verbose=verbose
         self._set_minmax_err(min_err, max_err)
 
         self._clip_cov()
@@ -4257,13 +4261,43 @@ class ISampler(object):
         self._df=df
         self._set_pdf()
 
+    def _set_pars_and_cov(self):
+        from math import asinh
+        
+        self._pars = self._pars_orig.copy()
+        self._cov = self._cov_orig.copy()
+        jac = numpy.ones(self._npars)
+        
+        for ind in self._asinh_pars:
+            self._pars[ind] = asinh(self._pars_orig[ind])
+            jac[ind] = 1.0/numpy.sqrt(1.0 + self._pars_orig[ind]*self._pars_orig[ind])                
+        
+        for i in xrange(self._npars):            
+            for j in xrange(self._npars):
+                self._cov[i,j] = jac[i]*jac[j]*self._cov_orig[i,j]
+
+        self._cov = self._cov*self._ifac*self._ifac
+
+    def _lndetjac(self,pars_orig):
+        npars = pars_orig.shape[0]
+        logdetjac = zeros(npars)
+        for ind in self._asinh_pars:
+            logdetjac += numpy.log(1.0/numpy.sqrt(1.0 + pars_orig[:,ind]*pars_orig[:,ind]))
+        return logdetjac
+
+    def pars_to_pars_orig(self,pars):
+        pars_orig = pars.copy()
+        for ind in self._asinh_pars:
+            pars_orig[:,ind] = numpy.sinh(pars[:,ind])
+        return pars_orig
 
     def make_samples(self, n=None):
         """
         run sample() and set internal trials attribute
         """
         self._trials = self.sample(n)
-
+        self._trials_orig = self.pars_to_pars_orig(self._trials)
+        
     make_trials=make_samples
 
     def get_result(self):
@@ -4326,7 +4360,7 @@ class ISampler(object):
         """
         return a ref to the trials
         """
-        return self._trials
+        return self._trials_orig
     get_samples=get_trials
 
     def get_prob(self, pars):
@@ -4349,7 +4383,7 @@ class ISampler(object):
         if not hasattr(self, '_pdf'):
             self._set_pdf()
 
-        return self._pdf.logpdf(pars)
+        return self._pdf.logpdf(pars) 
 
     def get_iweights(self):
         """
@@ -4364,15 +4398,16 @@ class ISampler(object):
         samples and lnprob function
         """
 
-        samples = self._trials
-        nsample = samples.shape[0]
-        proposed_lnprob = self.get_lnprob(samples)
+        proposed_lnprob = self.get_lnprob(self._trials)
+        lndetjac = self._lndetjac(self._trials_orig)
 
-        lnprob = zeros(nsample)
+        samples = self._trials_orig
+        nsample = samples.shape[0]
+        lnprob = zeros(nsample)        
         for i in xrange(nsample):
             lnprob[i] = lnprob_func(samples[i,:])
 
-        lnpdiff = lnprob - proposed_lnprob
+        lnpdiff = lnprob - proposed_lnprob - lndetjac
         lnpdiff -= lnpdiff.max()
         self._iweights = exp(lnpdiff)
 
@@ -4515,8 +4550,9 @@ class ISampler(object):
             eigvals=numpy.linalg.eigvals(cov)
             if numpy.any(eigvals <= 0):
                 raise LinAlgError("bad cov")
-            
-        print_pars(sqrt(diag(cov)), front="    using err:")
+
+        if self.verbose:
+            print_pars(sqrt(diag(cov)), front="    using err:")
 
         self._cov = cov
 
