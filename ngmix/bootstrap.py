@@ -897,12 +897,13 @@ class CompositeBootstrapper(Bootstrapper):
         self.max_fitter=runner.fitter
 
         res=self.max_fitter.get_result()
+        if res['flags'] != 0:
+            raise BootGalFailure("failed to fit galaxy with maxlike")
+
         fitting.print_pars(res['pars'], front='        gal_pars:')
         fitting.print_pars(res['pars_err'], front='        gal_perr:')
         print('        lnprob: %e' % res['lnprob'])
         
-        if res['flags'] != 0:
-            raise BootGalFailure("failed to fit galaxy with maxlike")
 
         res['TdByTe'] = TdByTe
         res['fracdev_nfev'] = fres['nfev']
