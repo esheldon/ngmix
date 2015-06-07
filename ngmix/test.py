@@ -2948,9 +2948,28 @@ def test_covsample_log(model,
 
     return tm
 
+def test_isample_many(num, *args, **kw):
+
+    eff=zeros(num)
+    nfev=zeros(num)
+    for i in xrange(num):
+        print("%d/%d" % (i+1,num))
+        mres,ires=test_isample(*args, **kw)
+
+        eff[i] = ires['efficiency']
+        nfev[i] = mres['nfev']
+
+    effmean=eff.mean()
+    effstd=eff.std()
+    print("eff: %g +/- %g" % (effmean, effstd))
+    print("nfev: %g +/- %g" % (nfev.mean(), nfev.std()))
+
+    return  effmean, effstd
+
 def test_isample(model,
                  nsample,
                  ifactor,
+                 use_asinh=False, # implies use_logpars=False
                  df=2.1,
                  seed=None,
                  g1_obj=0.1,
@@ -2962,12 +2981,10 @@ def test_isample(model,
                  T_psf=4.0,
                  noise=0.001,
                  nbin=50,
-                 prior_during=True,
                  max_fitter_type='lm',
                  show=False):
     """
     Test fitting the specified model.
-
     """
     from . import em
     from . import joint_prior
@@ -2977,11 +2994,14 @@ def test_isample(model,
 
     numpy.random.seed(seed)
 
-    if prior_during:
-        g_prior = priors.GPriorBA(0.3)
-    else:
-        g_prior = priors.ZDisk2D(1.0)
+    g_prior = priors.GPriorBA(0.3)
 
+    if use_asinh:
+        use_logpars=False
+        asinh_pars=[4,5]
+    else:
+        use_logpars=True
+        asinh_pars=[]
     #
     # simulation
     #
@@ -3039,11 +3059,12 @@ def test_isample(model,
     psf_obs.set_gmix(psf_fit)
 
     cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
-    #T_prior=priors.FlatPrior(-1.0, 4.0)
-    T_prior=priors.TwoSidedErf(-0.5, 0.1, 4.0, 0.1)
-    #F_prior=priors.FlatPrior(-0.97, 1.0e9)
-    #F_prior=priors.FlatPrior(-1.0, 9.0)
-    F_prior=priors.TwoSidedErf(-0.5, 0.1, 9.0, 0.1)
+    if use_logpars:
+        T_prior=priors.TwoSidedErf(-10.0, 0.1, 13., 0.1)
+        F_prior=priors.TwoSidedErf(-10.0, 0.1, 13., 0.1)
+    else:
+        T_prior=priors.TwoSidedErf(-1.0, 0.1, 1.0e6, 1.0e5)
+        F_prior=priors.TwoSidedErf(-1.0, 0.1, 1.0e6, 1.0e5)
 
     prior=joint_prior.PriorSimpleSep(cen_prior,
                                      g_prior,
@@ -3053,9 +3074,9 @@ def test_isample(model,
     obs=Observation(im_obj, weight=wt_obj, jacobian=j, psf=psf_obs)
 
     if max_fitter_type=='nm':
-        max_fitter=MaxSimple(obs, model, prior=prior, use_logpars=True)
+        max_fitter=MaxSimple(obs, model, prior=prior, use_logpars=use_logpars)
     else:
-        max_fitter=LMSimple(obs, model, prior=prior, use_logpars=True,
+        max_fitter=LMSimple(obs, model, prior=prior, use_logpars=use_logpars,
                             lm_pars={'maxfev':4000,
                                      'ftol':1.0e-6,
                                      'xtol':1.0e-6,
@@ -3063,7 +3084,12 @@ def test_isample(model,
     max_guess=pars_obj.copy()
     max_guess[2] = 0.1*srandu()
     max_guess[3] = 0.1*srandu()
-    max_guess[4:4+2] = log( max_guess[4:4+2] )
+
+    if use_logpars:
+        max_guess[4:4+2] = log( max_guess[4:4+2] )
+    else:
+        max_guess[4:4+2] = max_guess[4:4+2]
+
     while True:
         tm0=time.time()
         if max_fitter_type=='nm':
@@ -3080,8 +3106,12 @@ def test_isample(model,
         max_guess[1] = pars_obj[1] + 0.01*srandu()
         max_guess[2] = 0.1*srandu()
         max_guess[3] = 0.1*srandu()
-        max_guess[4] = pars_obj[4] + 0.01*srandu()
-        max_guess[5] = pars_obj[5] + 0.01*srandu()
+        if use_logpars:
+            max_guess[4] = log(pars_obj[4]) + 0.01*srandu()
+            max_guess[5] = log(pars_obj[5]) + 0.01*srandu()
+        else:
+            max_guess[4] = pars_obj[4]*(1.0 + 0.01*srandu())
+            max_guess[5] = pars_obj[5]*(1.0 + 0.01*srandu())
 
     max_res['lm_pars_err'] = max_res['pars_err'].copy()
     max_fitter.calc_cov(1.0e-3, 5.0)
@@ -3093,11 +3123,12 @@ def test_isample(model,
 
     print("isamp nsample:",nsample)
     tm0=time.time()
-    icov = max_res['pars_cov']*ifactor**2
+    #cov = max_res['pars_cov']*ifactor**2
+    cov = max_res['pars_cov']
 
 
     # student T sampler
-    isampler=ISampler(max_res['pars'], icov, df)
+    isampler=ISampler(max_res['pars'], cov, df, ifactor=ifactor, asinh_pars=asinh_pars)
     isampler.make_samples(nsample)
     isampler.set_iweights(max_fitter.calc_lnprob)
     isampler.calc_result()
