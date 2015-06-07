@@ -866,6 +866,7 @@ class CompositeBootstrapper(Bootstrapper):
         guesser=self._get_max_guesser(guess=guess, prior=prior)
 
         print("    fitting composite")
+        ok=False
         for i in range(1,5):
             try:
                 runner=CompositeMaxRunner(self.mb_obs_list,
@@ -876,6 +877,7 @@ class CompositeBootstrapper(Bootstrapper):
                                           prior=prior,
                                           use_logpars=self.use_logpars)
                 runner.go(ntry=ntry)
+                ok=True
                 break
             except GMixRangeError:
                 #if i==1:
@@ -888,6 +890,9 @@ class CompositeBootstrapper(Bootstrapper):
                 fracdev_clipped = fracdev_clipped.clip(min=0.0, max=1.0)
 
 
+        if not ok:
+            raise BootGalFailure("failed to fit galaxy with maxlike: GMixRange "
+                                 "indicating model problems")
 
         self.max_fitter=runner.fitter
 
