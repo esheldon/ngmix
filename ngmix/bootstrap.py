@@ -8,6 +8,7 @@ TODO
 """
 from __future__ import print_function
 
+from pprint import pprint
 import numpy
 from numpy import where, array, sqrt, exp, log, linspace, zeros
 from numpy import isfinite, median
@@ -900,6 +901,11 @@ class CompositeBootstrapper(Bootstrapper):
         if res['flags'] != 0:
             raise BootGalFailure("failed to fit galaxy with maxlike")
 
+        if res['flags']==0 and 'lnprob' not in res:
+            print("lnprob missing:")
+            pprint(res)
+            raise BootGalFailure("weird error with lnprob missing")
+
         fitting.print_pars(res['pars'], front='        gal_pars:')
         fitting.print_pars(res['pars_err'], front='        gal_perr:')
         print('        lnprob: %e' % res['lnprob'])
@@ -1312,8 +1318,6 @@ class MaxRunner(object):
         self.prior=prior
         self.use_logpars=use_logpars
 
-        self.bestof = max_pars.get('bestof',1)
-
         self.guesser=guesser
 
     def go(self, ntry=1):
@@ -1323,18 +1327,7 @@ class MaxRunner(object):
             raise ValueError("bad method '%s'" % self.method)
 
         lnprob_max=-numpy.inf
-        fitter_best=None
-        for i in xrange(self.bestof):
-            method(ntry=ntry)
-
-            res=self.fitter.get_result()
-            if res['flags']==0:
-                if res['lnprob'] > lnprob_max:
-                    lnprob_max = res['lnprob']
-                    fitter_best=self.fitter
-        
-        if fitter_best is not None:
-            self.fitter=fitter_best
+        method(ntry=ntry)
 
     def _go_lm(self, ntry=1):
         
@@ -1414,8 +1407,6 @@ class CompositeMaxRunner(MaxRunner):
 
         self.prior=prior
         self.use_logpars=use_logpars
-
-        self.bestof = max_pars.get('bestof',1)
 
         self.guesser=guesser
 
