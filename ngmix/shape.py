@@ -140,16 +140,28 @@ def e1e2_to_g1g2(e1, e2):
     """
 
     e = numpy.sqrt(e1*e1 + e2*e2)
-    if e >= 1.:
-        raise GMixRangeError("e out of bounds: %s" % e)
-    if e == 0.0:
-        return (0.0, 0.0)
-    
-    eta=numpy.arctanh(e)
-    g = numpy.tanh(0.5*eta)
-    if g >= 1.:
-        # round off?
-        g = 0.99999999
+    if isinstance(e1, numpy.ndarray):
+        w,=numpy.where(e >= 1.0)
+        if w.size != 0:
+            raise GMixRangeError("some e were out of bounds")
+
+        eta=numpy.arctanh(e)
+        g = numpy.tanh(0.5*eta)
+
+        numpy.clip(g, 0.0, 0.99999999, g)
+    else:
+        if e >= 1.:
+            raise GMixRangeError("e out of bounds: %s" % e)
+        if e == 0.0:
+            return (0.0, 0.0)
+        
+        eta=numpy.arctanh(e)
+        g = numpy.tanh(0.5*eta)
+
+        if g >= 1.:
+            # round off?
+            g = 0.99999999
+
 
     fac = g/e
 
