@@ -2898,7 +2898,7 @@ class LogNormal(object):
         chi2   = self.logivar*(logx-self.logmean)**2
 
         # subtract mode to make max 0.0
-        lnprob = -0.5*chi2 - logx - self.lnprob_mode
+        lnprob = -0.5*chi2 - logx
 
         return lnprob
 
