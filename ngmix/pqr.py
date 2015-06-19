@@ -37,8 +37,7 @@ def calc_pqr(g,
         Remove the prior value from the Q,R terms.  This is needed
         if the prior was used in likelihood exploration.
     weights: array
-        Weights for each point in n-d space.  Cannot 
-        use this with remove_prior=True
+        Weights for each point in n-d space
     """
 
     o=PQR(g,
@@ -109,8 +108,7 @@ class PQR(object):
             Remove the prior value from the Q,R terms.  This is needed
             if the prior was used in likelihood exploration.
         weights: array
-            Weights for each point in n-d space.  Cannot 
-            use this with remove_prior=True
+            Weights for each point in n-d space.
         """
 
         self._g=g
@@ -121,9 +119,6 @@ class PQR(object):
         assert self._shear_expand.size==2,"shear expand should have two elements"
 
         self._remove_prior=remove_prior
-
-        if self._remove_prior and self._weights is not None:
-            raise RuntimeError("need to support removing prior and weights")
 
     def get_pqr(self):
         """
@@ -182,6 +177,10 @@ class PQR(object):
             w,=numpy.where(prior_vals > 0.0)
 
             Pinv = 1.0/prior_vals[w]
+
+            if self._weights is not None:
+                Pinv *= self._weights[w]
+
             Pinv_sum=Pinv.sum()
 
             Pi = Pi[w]
