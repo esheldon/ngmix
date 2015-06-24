@@ -43,7 +43,7 @@ class Metacal(object):
     Rpsf_obs2p = mc.get_obs_psfshear(sh22)
 
     """
-    def __init__(self, obs lanczos_pars=None):
+    def __init__(self, obs, lanczos_pars=None):
 
         self.set_data(self, obs, lanczos_pars=lanczos_pars)
 
