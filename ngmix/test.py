@@ -3443,3 +3443,38 @@ def test_fracdev(fracdev=0.3,
                               label2='cm')
 
     return cres['pars']
+
+def test_metacal(model, **kw):
+    from .metacal import Metacal
+    from .shape import Shape
+    psf_obs, obs=make_test_observations(model, **kw)
+
+    obs.set_psf(psf_obs)
+
+    print("making Metacal object")
+    mc=Metacal(obs)
+
+    print("getting shears")
+    sh1m=Shape(-0.01,  0.00 )
+    sh1p=Shape( 0.01,  0.00 )
+    sh2m=Shape( 0.00, -0.01 )
+    sh2p=Shape( 0.00,  0.01 )
+
+    print("getting galshear obs")
+    R_obs1m = mc.get_obs_galshear(sh1m)
+    R_obs1p = mc.get_obs_galshear(sh1p)
+    R_obs2m = mc.get_obs_galshear(sh2m)
+    R_obs2p = mc.get_obs_galshear(sh2p)
+
+    # you can also get an unsheared, just convolved obs
+    print("getting unsheared galshear obs")
+    R_obs1m, R_obs1m_unsheared = mc.get_obs_galshear(sh1p, get_unsheared=True)
+
+    print("getting psfshear obs")
+    # observations used to calculate Rpsf
+    Rpsf_obs1m = mc.get_obs_psfshear(sh1m)
+    Rpsf_obs1p = mc.get_obs_psfshear(sh1p)
+    Rpsf_obs2m = mc.get_obs_psfshear(sh2m)
+    Rpsf_obs2p = mc.get_obs_psfshear(sh2p)
+
+
