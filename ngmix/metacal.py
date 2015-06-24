@@ -5,6 +5,9 @@ limitations
 
 See TODO in the code
 
+    - the returned images are identical to input.  Somehow the transformations
+    are no-ops when rendered into images
+
     - assumes psf and image are on same pixel scale
     - code copied from Eric Huff seems not quite general, unless I
     misunderstand how galsim is working.  The pixel_scale is used in a few
@@ -39,8 +42,13 @@ class Metacal(object):
     examples
     --------
 
+    psf_obs=Observation(psf_image)
+    obs=Observation(image, psf=psf_obs)
+
+    mc=Metacal(obs)
+
     # observations used to calculate R
-    mc=Metacal(im, psf_im)
+
     sh1m=ngmix.Shape(-0.01,  0.00 )
     sh1p=ngmix.Shape( 0.01,  0.00 )
     sh2m=ngmix.Shape( 0.00, -0.01 )
@@ -238,7 +246,7 @@ class Metacal(object):
                                          jacobian.dvdrow, 
                                          jacobian.dvdcol)
 
-        # TODO this does not seem general
+        # TODO how this gets used does not seem general, why not use full wcs
         self.pixel_scale=self.gs_wcs.maxLinearScale()
         self.pixel = galsim.Pixel(self.pixel_scale)
         self.pixel_inv = galsim.Deconvolve(self.pixel)
