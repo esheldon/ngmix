@@ -3444,9 +3444,11 @@ def test_fracdev(fracdev=0.3,
 
     return cres['pars']
 
-def test_metacal(model, **kw):
+def test_metacal(model, show=False, **kw):
     from .metacal import Metacal
     from .shape import Shape
+    import images
+
     psf_obs, obs=make_test_observations(model, **kw)
 
     obs.set_psf(psf_obs)
@@ -3455,20 +3457,25 @@ def test_metacal(model, **kw):
     mc=Metacal(obs)
 
     print("getting shears")
-    sh1m=Shape(-0.01,  0.00 )
-    sh1p=Shape( 0.01,  0.00 )
-    sh2m=Shape( 0.00, -0.01 )
-    sh2p=Shape( 0.00,  0.01 )
+    sval=0.08
+    sh1m=Shape(-sval,  0.00 )
+    sh1p=Shape( sval,  0.00 )
+    sh2m=Shape( 0.00, -sval )
+    sh2p=Shape( 0.00,  sval )
 
     print("getting galshear obs")
     R_obs1m = mc.get_obs_galshear(sh1m)
+    images.compare_images(obs.image, R_obs1m.image, label1='im',label2='sh 1m')
+    images.compare_images(obs.psf.image, R_obs1m.psf.image, label1='psf im',label2='sh 1m psf')
+    return
+
     R_obs1p = mc.get_obs_galshear(sh1p)
     R_obs2m = mc.get_obs_galshear(sh2m)
     R_obs2p = mc.get_obs_galshear(sh2p)
 
     # you can also get an unsheared, just convolved obs
     print("getting unsheared galshear obs")
-    R_obs1m, R_obs1m_unsheared = mc.get_obs_galshear(sh1p, get_unsheared=True)
+    Runsheared, psf_unsheared= mc.get_obs_galshear(sh1p, get_unsheared=True)
 
     print("getting psfshear obs")
     # observations used to calculate Rpsf
@@ -3477,4 +3484,7 @@ def test_metacal(model, **kw):
     Rpsf_obs2m = mc.get_obs_psfshear(sh2m)
     Rpsf_obs2p = mc.get_obs_psfshear(sh2p)
 
-
+    if show:
+        print(R_obs1m.image.flags)
+        #images.compare_images(obs.image, R_obs1m.image, label1='im',label2='sh 1m')
+        images.compare_images(obs.image, R_obs2p.image, label1='im',label2='sh 1m')
