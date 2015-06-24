@@ -43,4 +43,7 @@ from . import guessers
 
 from . import roundify
 
+from . import metacal
+
 from . import test
+
