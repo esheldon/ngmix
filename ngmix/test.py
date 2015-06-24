@@ -3457,7 +3457,7 @@ def test_metacal(model, show=False, **kw):
     mc=Metacal(obs)
 
     print("getting shears")
-    sval=0.08
+    sval=0.1
     sh1m=Shape(-sval,  0.00 )
     sh1p=Shape( sval,  0.00 )
     sh2m=Shape( 0.00, -sval )
@@ -3465,10 +3465,6 @@ def test_metacal(model, show=False, **kw):
 
     print("getting galshear obs")
     R_obs1m = mc.get_obs_galshear(sh1m)
-    images.compare_images(obs.image, R_obs1m.image, label1='im',label2='sh 1m')
-    images.compare_images(obs.psf.image, R_obs1m.psf.image, label1='psf im',label2='sh 1m psf')
-    return
-
     R_obs1p = mc.get_obs_galshear(sh1p)
     R_obs2m = mc.get_obs_galshear(sh2m)
     R_obs2p = mc.get_obs_galshear(sh2p)
@@ -3485,6 +3481,4 @@ def test_metacal(model, show=False, **kw):
     Rpsf_obs2p = mc.get_obs_psfshear(sh2p)
 
     if show:
-        print(R_obs1m.image.flags)
-        #images.compare_images(obs.image, R_obs1m.image, label1='im',label2='sh 1m')
-        images.compare_images(obs.image, R_obs2p.image, label1='im',label2='sh 1m')
+        images.compare_images(obs.image, R_obs1m.image, label1='im',label2='sh 1m')

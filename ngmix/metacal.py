@@ -12,6 +12,7 @@ See TODO in the code
     - code copied from Eric Huff seems not quite general, unless I
     misunderstand how galsim is working.  The pixel_scale is used in a few
     places rather than the proper wcs
+    - get conventions right
 
 """
 from __future__ import print_function
@@ -212,17 +213,20 @@ class Metacal(object):
 
         # these would share data with the original numpy arrays, make copies
         # to be sure they don't get modified
-        self.gs_image = galsim.Image(obs.image.copy(),wcs=self.gs_wcs)
-        self.gs_psf_image = galsim.Image(obs.psf.image.copy(),wcs=self.gs_wcs)
+        self.gs_image = galsim.Image(obs.image.copy(),
+                                     wcs=self.gs_wcs,
+                                     xmin=0,ymin=0)
+        self.gs_psf_image = galsim.Image(obs.psf.image.copy(),
+                                         wcs=self.gs_wcs,
+                                         xmin=0,ymin=0)
 
         # interpolated psf image
         self.gs_psf_int = galsim.InterpolatedImage(self.gs_psf_image,
                                                    x_interpolant = self.l5int)
-        # psf deconvolved from pixel
+        # interpolated psf deconvolved from pixel
         self.gs_psf_nopix = galsim.Convolve([self.gs_psf_int, self.pixel_inv])
 
-        # like the inverse of the psf.  this can be used to deconvolve the
-        # galaxy image
+        # this can be used to deconvolve the psf from the galaxy image
         self.gs_psf_int_inv = galsim.Deconvolve(self.gs_psf_int)
 
         # interpolated galaxy image
@@ -241,6 +245,7 @@ class Metacal(object):
 
         self.jacobian=jacobian
 
+        # TODO might be reversed row->y or x?
         self.gs_wcs = galsim.JacobianWCS(jacobian.dudrow,
                                          jacobian.dudcol,
                                          jacobian.dvdrow, 
@@ -280,7 +285,7 @@ class Metacal(object):
                            jacobian=obs.jacobian,
                            weight=obs.weight,
                            psf=psf_obs)
-        return obs
+        return newobs
 
 def _check_shape(shape):
     if not isinstance(shape, Shape):
