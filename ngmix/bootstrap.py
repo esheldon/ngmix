@@ -1312,7 +1312,7 @@ class MaxRunner(object):
             self.send_pars=max_pars
 
         mess="model should be exp or dev,got '%s'" % model
-        assert model in ['exp','dev'],mess
+        assert model in ['exp','dev','gauss'],mess
 
         self.model=model
         self.prior=prior
@@ -1347,6 +1347,7 @@ class MaxRunner(object):
             if res['flags']==0:
                 break
 
+        res['ntry'] = i+1
         self.fitter=fitter
 
     def _get_lm_fitter_class(self):

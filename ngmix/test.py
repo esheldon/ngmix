@@ -3457,9 +3457,9 @@ def test_metacal(model, show=False, **kw):
 
     max_pars={'method':'lm','lm_pars':{'maxfev':4000}}
     # galsim has a different convention from ngmix
-    #cen_offset=srandu(2)
+    cen_offset=srandu(2)
     #cen_offset=[-0.5]*2
-    cen_offset=[0.0]*2
+    #cen_offset=[0.0]*2
     T_obj=4.0
     #T_obj=100.0
     psf_obs, obs=make_test_observations(model,
@@ -3493,13 +3493,6 @@ def test_metacal(model, show=False, **kw):
     R_obs2m = mc.get_obs_galshear(sh2m)
     R_obs2p = mc.get_obs_galshear(sh2p)
 
-    for tobs in [R_obs1m,R_obs1p,R_obs2m,R_obs2p]:
-        b=Bootstrapper(tobs)
-        b.fit_psfs('gauss', 4.0)
-        b.fit_max('exp', max_pars)
-        tres=b.get_max_fitter().get_result()
-        print_pars(tres['pars'], front='    tres: ')
-    return
 
     # you can also get an unsheared, just convolved obs
     print("getting unsheared galshear obs")
@@ -3511,6 +3504,14 @@ def test_metacal(model, show=False, **kw):
     Rpsf_obs1p = mc.get_obs_psfshear(sh1p)
     Rpsf_obs2m = mc.get_obs_psfshear(sh2m)
     Rpsf_obs2p = mc.get_obs_psfshear(sh2p)
+
+    for tobs in [R_obs1m,R_obs1p,R_obs2m,R_obs2p,
+                 Rpsf_obs1m,Rpsf_obs1p,Rpsf_obs2m,Rpsf_obs2p]:
+        b=Bootstrapper(tobs)
+        b.fit_psfs('gauss', 4.0)
+        b.fit_max('exp', max_pars)
+        tres=b.get_max_fitter().get_result()
+        print_pars(tres['pars'], front='    tres: ')
 
     if show:
         width=1100
