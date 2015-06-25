@@ -73,23 +73,28 @@ def test_mcmc_psf(model="gauss",
     mc.make_plots(do_residual=True,show=True,prompt=False)
 
 def make_test_observations(model,
-                            g1_obj=0.1,
-                            g2_obj=0.05,
-                            T_obj=16.0,
-                            counts_obj=100.0,
-                            noise_obj=0.001,
-                            psf_model="gauss",
-                            g1_psf=0.0,
-                            g2_psf=0.0,
-                            T_psf=4.0,
-                            counts_psf=100.0,
-                            noise_psf=0.001):
+                           cen_offset=[0.0,0.0],
+                           g1_obj=0.1,
+                           g2_obj=0.05,
+                           T_obj=16.0,
+                           counts_obj=100.0,
+                           noise_obj=0.001,
+                           psf_model="gauss",
+                           g1_psf=0.0,
+                           g2_psf=0.0,
+                           T_psf=4.0,
+                           counts_psf=100.0,
+                           noise_psf=0.001):
 
     from . import em
 
     sigma=sqrt( (T_obj + T_psf)/2. )
     dims=[2.*5.*sigma]*2
     cen=[dims[0]/2., dims[1]/2.]
+
+    cen[0] += cen_offset[0]
+    cen[1] += cen_offset[1]
+
     j=UnitJacobian(cen[0],cen[1])
 
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
@@ -3448,16 +3453,35 @@ def test_metacal(model, show=False, **kw):
     from .metacal import Metacal
     from .shape import Shape
     import images
+    from .bootstrap import Bootstrapper
 
-    psf_obs, obs=make_test_observations(model, **kw)
+    max_pars={'method':'lm','lm_pars':{'maxfev':4000}}
+    # galsim has a different convention from ngmix
+    #cen_offset=srandu(2)
+    #cen_offset=[-0.5]*2
+    cen_offset=[0.0]*2
+    T_obj=4.0
+    #T_obj=100.0
+    psf_obs, obs=make_test_observations(model,
+                                        cen_offset=cen_offset,
+                                        g1_obj=0.0, g2_obj=0.0,
+                                        T_obj=T_obj, **kw)
+    print("dims:",obs.image.shape)
+    print("cen0:", array(obs.image.shape)/2.)
 
     obs.set_psf(psf_obs)
+
+    boot0=Bootstrapper(obs)
+    boot0.fit_psfs('gauss', 4.0)
+    boot0.fit_max('exp', max_pars)
+    res0=boot0.get_max_fitter().get_result()
+    print_pars(res0['pars'], front='    res0: ')
 
     print("making Metacal object")
     mc=Metacal(obs)
 
     print("getting shears")
-    sval=0.1
+    sval=0.01
     sh1m=Shape(-sval,  0.00 )
     sh1p=Shape( sval,  0.00 )
     sh2m=Shape( 0.00, -sval )
@@ -3468,6 +3492,14 @@ def test_metacal(model, show=False, **kw):
     R_obs1p = mc.get_obs_galshear(sh1p)
     R_obs2m = mc.get_obs_galshear(sh2m)
     R_obs2p = mc.get_obs_galshear(sh2p)
+
+    for tobs in [R_obs1m,R_obs1p,R_obs2m,R_obs2p]:
+        b=Bootstrapper(tobs)
+        b.fit_psfs('gauss', 4.0)
+        b.fit_max('exp', max_pars)
+        tres=b.get_max_fitter().get_result()
+        print_pars(tres['pars'], front='    tres: ')
+    return
 
     # you can also get an unsheared, just convolved obs
     print("getting unsheared galshear obs")
@@ -3481,4 +3513,10 @@ def test_metacal(model, show=False, **kw):
     Rpsf_obs2p = mc.get_obs_psfshear(sh2p)
 
     if show:
-        images.compare_images(obs.image, R_obs1m.image, label1='im',label2='sh 1m')
+        width=1100
+        height=900
+        #images.compare_images(obs.image, R_obs1m.image, label1='im',label2='sh 1m')
+        plt=images.compare_images(obs.image, R_obs1p.image, 
+                                  label1='im',label2='sh 1p',
+                                  width=width,height=height)
+        plt.write_img(width,height,'/astro/u/esheldon/tmp/sh1p-diff.png')

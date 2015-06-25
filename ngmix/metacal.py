@@ -213,12 +213,13 @@ class Metacal(object):
 
         # these would share data with the original numpy arrays, make copies
         # to be sure they don't get modified
+        mval=0
         self.gs_image = galsim.Image(obs.image.copy(),
                                      wcs=self.gs_wcs,
-                                     xmin=0,ymin=0)
+                                     xmin=mval,ymin=mval)
         self.gs_psf_image = galsim.Image(obs.psf.image.copy(),
                                          wcs=self.gs_wcs,
-                                         xmin=0,ymin=0)
+                                         xmin=mval,ymin=mval)
 
         # interpolated psf image
         self.gs_psf_int = galsim.InterpolatedImage(self.gs_psf_image,
