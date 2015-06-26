@@ -1203,6 +1203,8 @@ class EMRunner(object):
         self.obs   = Observation(im_with_sky, jacobian=obsin.jacobian)
         self.sky   = sky
 
+    def get_fitter(self):
+        return self.fitter
 
     def go(self, ntry=1):
 
@@ -1216,6 +1218,7 @@ class EMRunner(object):
             if res['flags']==0:
                 break
 
+        res['ntry'] = i+1
         self.fitter=fitter
 
     def get_guess(self):
