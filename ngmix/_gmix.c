@@ -904,7 +904,8 @@ static PyObject * PyGMix_render(PyObject* self, PyObject* args) {
                 tcol = col-offset;
                 for (colsub=0; colsub<nsub; colsub++) {
 
-                    tval += PYGMIX_GMIX_EVAL(gmix, n_gauss, trow, tcol);
+                    tval += PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, trow, tcol);
+                    //tval += PYGMIX_GMIX_EVAL(gmix, n_gauss, trow, tcol);
 
                     tcol += stepsize;
                 } // colsub
@@ -983,7 +984,8 @@ static PyObject * PyGMix_render_jacob(PyObject* self, PyObject* args) {
 
                 for (colsub=0; colsub<nsub; colsub++) {
 
-                    tval += PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
+                    tval += PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, u, v);
+                    //tval += PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
 
                     u += ustepsize;
                     v += vstepsize;
