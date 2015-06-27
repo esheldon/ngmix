@@ -182,7 +182,8 @@ class Metacal(object):
             # note using the same seed
             print("    doing whiten")
             imconv.noise.rng.reset(self.seed)
-            imconv.noise.whitenImage(newim)
+            newvar=imconv.noise.whitenImage(newim)
+            print("    new variance")
         return newim
 
     def get_sheared_image_nopsf(self, shear):
