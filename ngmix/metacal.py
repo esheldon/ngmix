@@ -69,9 +69,9 @@ class Metacal(object):
     Rpsf_obs2m = mc.get_obs_psfshear(sh2m)
     Rpsf_obs2p = mc.get_obs_psfshear(sh2p)
     """
-    def __init__(self, obs, lanczos_pars=None):
+    def __init__(self, obs, lanczos_pars=None ,whiten=False):
 
-        self._set_data(obs, lanczos_pars=lanczos_pars)
+        self._set_data(obs, lanczos_pars=lanczos_pars, whiten=whiten)
 
     def get_obs_galshear(self, shear, get_unsheared=False):
         """
@@ -178,6 +178,11 @@ class Metacal(object):
                          method='no_pixel',
                          scale=self.pixel_scale)
 
+        if self.whiten:
+            # note using the same seed
+            print("    doing whiten")
+            imconv.noise.rng.reset(self.seed)
+            imconv.noise.whitenImage(newim)
         return newim
 
     def get_sheared_image_nopsf(self, shear):
@@ -198,7 +203,7 @@ class Metacal(object):
         sheared_image = self.gs_image_int_nopsf.shear(g1=shear.g1, g2=shear.g2)
         return sheared_image
 
-    def _set_data(self, obs, lanczos_pars=None):
+    def _set_data(self, obs, lanczos_pars=None, whiten=False):
         """
         create galsim objects based on the input observation
         """
@@ -208,6 +213,7 @@ class Metacal(object):
             raise ValueError("observation must have a psf observation set")
 
         self.obs=obs
+        self.whiten=whiten
         self._set_wcs(obs.jacobian)
         self._set_lanczos(lanczos_pars=lanczos_pars)
 
@@ -233,8 +239,16 @@ class Metacal(object):
         # interpolated galaxy image
         self.gs_image_int = galsim.InterpolatedImage(self.gs_image,
                                                      x_interpolant=self.l5int)
+        if self.whiten:
+            # TODO constant noise won't work for real data
+            med_wt = numpy.median( self.obs.weight )
+            var = 1.0/med_wt
+            self.gs_image_int.noise = galsim.UncorrelatedNoise(var)
+            self.seed=numpy.random.randint(0, 2**30-1)
+
         # deconvolved galaxy image
-        self.gs_image_int_nopsf = galsim.Convolve(self.gs_image_int, self.gs_psf_int_inv)
+        self.gs_image_int_nopsf = galsim.Convolve(self.gs_image_int,
+                                                  self.gs_psf_int_inv)
 
 
     def _set_wcs(self, jacobian):
