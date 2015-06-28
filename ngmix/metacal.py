@@ -69,9 +69,16 @@ class Metacal(object):
     Rpsf_obs2m = mc.get_obs_psfshear(sh2m)
     Rpsf_obs2p = mc.get_obs_psfshear(sh2p)
     """
-    def __init__(self, obs, lanczos_pars=None ,whiten=False, same_seed=False):
+    def __init__(self,
+                 obs,
+                 lanczos_pars=None,
+                 whiten=False,
+                 same_seed=False):
 
-        self._set_data(obs, lanczos_pars=lanczos_pars, whiten=whiten, same_seed=same_seed)
+        self._set_data(obs,
+                       lanczos_pars=lanczos_pars,
+                       whiten=whiten,
+                       same_seed=same_seed)
 
     def get_obs_galshear(self, shear, get_unsheared=False):
         """
@@ -179,12 +186,9 @@ class Metacal(object):
                          scale=self.pixel_scale)
 
         if self.whiten:
-            print("    doing whiten")
             if self.same_seed:
-                print("    same seed")
                 imconv.noise.rng.reset(self.seed)
             newvar=imconv.noise.whitenImage(newim)
-            print("    new variance")
 
         return newim
 
@@ -206,7 +210,11 @@ class Metacal(object):
         sheared_image = self.gs_image_int_nopsf.shear(g1=shear.g1, g2=shear.g2)
         return sheared_image
 
-    def _set_data(self, obs, lanczos_pars=None, whiten=False, same_seed=False):
+    def _set_data(self,
+                  obs,
+                  lanczos_pars=None,
+                  whiten=False,
+                  same_seed=False):
         """
         create galsim objects based on the input observation
         """
@@ -301,9 +309,11 @@ class Metacal(object):
         obs=self.obs
 
         psf_obs = Observation(psf_im.array, jacobian=obs.jacobian)
+
+        weight=obs.weight
         newobs=Observation(im.array,
                            jacobian=obs.jacobian,
-                           weight=obs.weight,
+                           weight=weight,
                            psf=psf_obs)
         return newobs
 
