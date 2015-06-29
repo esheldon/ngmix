@@ -300,7 +300,8 @@ class Metacal(object):
         self.l5 = galsim.Lanczos(lanczos_pars['order'],
                                  lanczos_pars['conserve_dc'],
                                  lanczos_pars['tol'])
-        self.l5int = galsim.InterpolantXY(self.l5)
+        self.l5int = self.l5
+        #self.l5int = galsim.InterpolantXY(self.l5)
 
     def _make_obs(self, im, psf_im):
         """

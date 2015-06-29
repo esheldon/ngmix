@@ -84,7 +84,7 @@ class FitterBase(object):
         # psf fitters might not have this set to 1
         self.nsub=keys.get('nsub',1)
 
-        self._set_obs(obs)
+        self.set_obs(obs)
 
         self.prior = keys.get('prior',None)
 
@@ -130,7 +130,7 @@ class FitterBase(object):
         """
         self.obs.set_aperture(aper)
 
-    def _set_obs(self, obs_in):
+    def set_obs(self, obs_in):
         """
         Input should be an Observation, ObsList, or MultiBandObsList
         """
@@ -609,7 +609,7 @@ class TemplateFluxFitter(FitterBase):
         else:
             self.cen_was_sent=True
 
-        self._set_obs(obs)
+        self.set_obs(obs)
 
         self.model_name='template'
         self.npars=1
@@ -681,7 +681,7 @@ class TemplateFluxFitter(FitterBase):
 
 
 
-    def _set_obs(self, obs_in):
+    def set_obs(self, obs_in):
         """
         Input should be an Observation, ObsList
         """
@@ -771,7 +771,7 @@ class FracdevFitterMax(FitterBase):
 
         self.margsky=False
         self.use_logpars=keys.get('use_logpars',False)
-        self._set_obs(obs)
+        self.set_obs(obs)
         self._set_images(exp_pars, dev_pars)
 
         self.model_name='fracdev'
@@ -1160,7 +1160,7 @@ class FracdevFitter(FitterBase):
         self.use_logpars=keys.get('use_logpars',False)
 
         self.margsky=False
-        self._set_obs(obs)
+        self.set_obs(obs)
 
         self.model_name='fracdev'
 
