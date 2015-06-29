@@ -2054,6 +2054,7 @@ def test_lm_metacal(model,
     return out
 
 def test_lm_psf_simple_sub_many(num, model, g1=0.3, g2=0.0, **keys):
+    used=zeros(num,dtype='i2')
     g1vals=zeros(num)
     g2vals=zeros(num)
     s2nvals=zeros(num)
@@ -2062,11 +2063,20 @@ def test_lm_psf_simple_sub_many(num, model, g1=0.3, g2=0.0, **keys):
     for i in xrange(num):
         res=test_lm_psf_simple_sub(model, g1=g1, g2=g2, **keys)
 
-        pars=res['pars']
-        g1vals[i]=pars[2]
-        g2vals[i]=pars[3]
-        s2nvals[i]=res['s2n_w']
-    
+        if 's2n_w' in res:
+
+            pars=res['pars']
+            used[i]=1
+            g1vals[i]=pars[2]
+            g2vals[i]=pars[3]
+            s2nvals[i]=res['s2n_w']
+        
+    w,=where(used==1)
+
+    g1vals=g1vals[w]
+    g2vals=g2vals[w]
+    s2nvals=s2nvals[w]
+
     g1mean=g1vals.mean()
     g2mean=g2vals.mean()
     s2nmean=s2nvals.mean()
@@ -3551,3 +3561,80 @@ def test_metacal(model, show=False, **kw):
                                   label1='im',label2='sh 1p',
                                   width=width,height=height)
         plt.write_img(width,height,'/astro/u/esheldon/tmp/sh1p-diff.png')
+
+def test_em1_many(num, **keys):
+    from .gexceptions import GMixMaxIterEM
+    used=zeros(num,dtype='i2')
+    g1vals=zeros(num)
+    g2vals=zeros(num)
+
+    keys['verbose']=False
+    for i in xrange(num):
+        try:
+            gm=test_em1(**keys)
+            if gm is not None:
+                g1,g2,T=gm.get_g1g2T()
+
+                used[i]=1
+                g1vals[i]=g1
+                g2vals[i]=g2
+        except GMixMaxIterEM:
+            pass
+        
+    w,=where(used==1)
+
+    g1vals=g1vals[w]
+    g2vals=g2vals[w]
+
+    g1mean=g1vals.mean()
+    g2mean=g2vals.mean()
+
+    g1err=g1vals.std()/sqrt(num)
+    g2err=g2vals.std()/sqrt(num)
+
+    print("g1:  %g +/- %g" % (g1mean,g1err))
+    print("g2:  %g +/- %g" % (g2mean,g2err))
+
+
+def test_em1(g1=0.0,
+             g2=0.0,
+             T=4.0,
+             flux=100.0,
+             noise=2.0,
+             maxiter=1000,
+             tol=1.0e-6,
+             verbose=True):
+    """
+    noise=2.0 is about s/n=10
+    """
+    from numpy.random import randn
+    from . import em
+
+    sigma=sqrt(T/2.0)
+    dim=int(round(2*5*sigma))
+
+    dims=[dim]*2
+
+    cen=(dim-1.)/2.
+
+    pars=array([cen,cen,g1,g2,T,flux],dtype='f8')
+    gm=gmix.GMixModel(pars, "gauss")
+
+    im=gm.make_image(dims, nsub=1)
+
+    noise_im = noise*randn(dim*dim).reshape(im.shape)
+    im += noise_im
+
+    imsky,sky=em.prep_image(im)
+    obs=Observation(imsky)
+    mc=em.GMixEM(obs)
+
+    guess = gm.copy()
+    mc.go(guess, sky, maxiter=maxiter, tol=tol)
+    
+    res=mc.get_result()
+    if res['flags']==0:
+        return mc.get_gmix()
+    else:
+        return None
+
