@@ -2,6 +2,7 @@ from __future__ import print_function
 import numpy
 from numpy import array, zeros, diag, exp, sqrt, where, log, log10, isfinite
 from numpy.random import random as randu
+from pprint import pprint
 
 from .priors import srandu
 
@@ -2052,6 +2053,33 @@ def test_lm_metacal(model,
 
     return out
 
+def test_lm_psf_simple_sub_many(num, model, g1=0.3, g2=0.0, **keys):
+    g1vals=zeros(num)
+    g2vals=zeros(num)
+    s2nvals=zeros(num)
+
+    keys['verbose']=False
+    for i in xrange(num):
+        res=test_lm_psf_simple_sub(model, g1=g1, g2=g2, **keys)
+
+        pars=res['pars']
+        g1vals[i]=pars[2]
+        g2vals[i]=pars[3]
+        s2nvals[i]=res['s2n_w']
+    
+    g1mean=g1vals.mean()
+    g2mean=g2vals.mean()
+    s2nmean=s2nvals.mean()
+
+    g1err=g1vals.std()/sqrt(num)
+    g2err=g2vals.std()/sqrt(num)
+    s2nerr=s2nvals.std()/sqrt(num)
+
+    print("s2n: %g +/- %g" % (s2nmean,s2nerr))
+    print("g1:  %g +/- %g" % (g1mean,g1err))
+    print("g2:  %g +/- %g" % (g2mean,g2err))
+
+
 def test_lm_psf_simple_sub(model,
                            nsub_render=16,
                            nsub_fit=16,
@@ -2059,7 +2087,8 @@ def test_lm_psf_simple_sub(model,
                            g2=0.0,
                            T=4.0,
                            flux=100.0,
-                           noise=0.1):
+                           noise=0.1,
+                           verbose=True):
     """
     test levenberg marquardt fit of psf with possible sub-pixel
     integration
@@ -2107,17 +2136,18 @@ def test_lm_psf_simple_sub(model,
              'epsfcn': 1.0e-6}
 
     fitter=LMSimple(obs, model, nsub=nsub_fit, lm_pars=lm_pars)
-    print("running lm")
     fitter.run_lm(guess)
-    print("done running lm")
 
     res=fitter.get_result()
 
-    print("flags:",res['flags'])
-    print_pars(pars,            front='truth: ')
-    print_pars(res['pars'],     front='fit:   ')
-    print_pars(res['pars_err'], front='err:   ')
-    print_pars(guess,           front='guess: ')
+    if verbose:
+        print("flags:",res['flags'])
+        print_pars(pars,            front='truth: ')
+        print_pars(res['pars'],     front='fit:   ')
+        print_pars(res['pars_err'], front='err:   ')
+        print_pars(guess,           front='guess: ')
+
+    return res
 
 def test_nm_psf_coellip(g1=0.0,
                         g2=0.0,
