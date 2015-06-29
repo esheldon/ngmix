@@ -1711,7 +1711,7 @@ class LMSimpleRound(LMSimple):
 
 class LMSimpleFixT(LMSimple):
     """
-    This version fits [cen1,cen2,T,F]
+    This version fits [cen1,cen2,g1,g2,F]
     """
     def __init__(self, *args, **keys):
         super(LMSimpleFixT,self).__init__(*args, **keys)
@@ -1721,9 +1721,6 @@ class LMSimpleFixT(LMSimple):
         self.fdiff_size=self.totpix + self.n_prior_pars
 
         self.T = keys['T']
-
-        if self.use_logpars:
-            self.logT=log(T)
 
     def run_lm(self, guess):
         """
@@ -1758,6 +1755,53 @@ class LMSimpleFixT(LMSimple):
             pars[5]=pars_in[4]
 
         return pars
+
+class LMSimpleGOnly(LMSimple):
+    """
+    This version fits [cen1,cen2,g1,g2,F]
+    """
+    def __init__(self, *args, **keys):
+        super(LMSimpleGOnly,self).__init__(*args, **keys)
+
+        self.pars_in0 = array(keys['pars'], dtype='f8')
+
+        pars_in=self.pars_in0.copy()
+        if self.use_logpars:
+            pars_in[4:] = exp(self.pars_in0[4:])
+        self.pars_in=pars_in
+
+        self.npars = 2
+        self.n_prior_pars=1
+        self.fdiff_size=self.totpix + self.n_prior_pars
+
+    def run_lm(self, guess):
+        """
+        Run leastsq and set the result
+        """
+
+        guess=array(guess,dtype='f8',copy=False)
+        self._setup_data(guess)
+
+        result = run_leastsq(self._calc_fdiff, guess, self.n_prior_pars, **self.lm_pars)
+
+        result['model'] = self.model_name
+        if result['flags']==0:
+            stat_dict=self.get_fit_stats(result['pars'])
+            result.update(stat_dict)
+
+        self._result=result
+
+    def get_band_pars(self, pars_in, band):
+        """
+        pars in are
+        """
+
+
+        pars=self.pars_in
+        pars[2]=pars_in[0]
+        pars[3]=pars_in[1]
+        return pars
+
 
 def _get_simple_band_pars_round_logpars(pars_in, pars_allband, band_pars, band):
     """

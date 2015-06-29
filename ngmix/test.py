@@ -76,7 +76,6 @@ def test_mcmc_psf(model="gauss",
     mc.make_plots(do_residual=True,show=True,prompt=False)
 
 def make_test_observations(model,
-                           cen_offset=[0.0,0.0],
                            g1_obj=0.1,
                            g2_obj=0.05,
                            T_obj=16.0,
@@ -87,16 +86,14 @@ def make_test_observations(model,
                            g2_psf=0.0,
                            T_psf=4.0,
                            counts_psf=100.0,
-                           noise_psf=0.001):
+                           noise_psf=0.001,
+                           more=True):
 
     from . import em
 
     sigma=sqrt( (T_obj + T_psf)/2. )
     dims=[2.*5.*sigma]*2
     cen=[dims[0]/2., dims[1]/2.]
-
-    cen[0] += cen_offset[0]
-    cen[1] += cen_offset[1]
 
     j=UnitJacobian(cen[0],cen[1])
 
@@ -109,12 +106,12 @@ def make_test_observations(model,
 
     gm=gm_obj0.convolve(gm_psf)
 
-    im_psf=gm_psf.make_image(dims, jacobian=j)
+    im_psf=gm_psf.make_image(dims, jacobian=j, nsub=16)
     npsf=noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
     im_psf[:,:] += npsf
     wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
 
-    im_obj=gm.make_image(dims, jacobian=j)
+    im_obj=gm.make_image(dims, jacobian=j, nsub=16)
     n=noise_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
     im_obj[:,:] += n
     wt_obj=zeros(im_obj.shape) + 1./noise_obj**2
@@ -129,7 +126,12 @@ def make_test_observations(model,
 
     obs=Observation(im_obj, weight=wt_obj, jacobian=j)
 
-    return psf_obs, obs
+    if more:
+        return {'psf_obs':psf_obs,
+                'obs':obs,
+                'pars':pars_obj}
+    else:
+        return psf_obs, obs
 
 def test_model(model,
                g1_obj=0.1,
@@ -440,7 +442,6 @@ def test_model_margsky(model,
                        nwalkers=80, burnin=800, nstep=800,
                        fitter_type='mcmc',
                        skyfac=0.0,
-                       cen_offset=[0.0, 0.0],
                        margsky=True,
                        show=False):
     """
@@ -468,8 +469,6 @@ def test_model_margsky(model,
         dim+=1
     dims=[dim]*2
     cen=array([(dims[0]-1)/2.]*2)
-
-    cen += array(cen_offset)
 
     j=UnitJacobian(cen[0],cen[1])
 
@@ -3499,13 +3498,9 @@ def test_metacal(model, show=False, **kw):
 
     max_pars={'method':'lm','lm_pars':{'maxfev':4000}}
     # galsim has a different convention from ngmix
-    cen_offset=srandu(2)
-    #cen_offset=[-0.5]*2
-    #cen_offset=[0.0]*2
     T_obj=4.0
     #T_obj=100.0
     psf_obs, obs=make_test_observations(model,
-                                        cen_offset=cen_offset,
                                         g1_obj=0.0, g2_obj=0.0,
                                         T_obj=T_obj, **kw)
     print("dims:",obs.image.shape)
@@ -3640,7 +3635,7 @@ def test_em1(g1=0.0,
     else:
         return None
 
-def test_fixT(model, verbose=True, show=False, T_obj=16.0, **kw):
+def test_fixT(model, verbose=True, show=False, T_obj=16.0, do_control=False, **kw):
     from .metacal import Metacal
     from .shape import Shape
     import images
@@ -3654,7 +3649,7 @@ def test_fixT(model, verbose=True, show=False, T_obj=16.0, **kw):
 
     obs.set_psf(psf_obs)
 
-    boot=Bootstrapper(obs)
+    boot=Bootstrapper(obs,use_logpars=True)
     boot.fit_psfs('gauss', 4.0)
     boot.fit_max_fixT('exp', max_pars, T_obj)
     res=boot.get_max_fitter().get_result()
@@ -3664,22 +3659,39 @@ def test_fixT(model, verbose=True, show=False, T_obj=16.0, **kw):
         print_pars(res['pars'], front='    pars: ')
         print_pars(res['pars_err'], front='    perr: ')
 
-    return res
+    if do_control:
+        max_pars['method']='lm'
+        boot.fit_max('exp', max_pars)
+        resc=boot.get_max_fitter().get_result()
+        return res, resc
+    else:
+        return res
 
 def test_fixT_many(num, model, **keys):
     used=zeros(num,dtype='i2')
+    usedc=zeros(num,dtype='i2')
     g1vals=zeros(num)
     g2vals=zeros(num)
+    g1valsc=zeros(num)
+    g2valsc=zeros(num)
 
     keys['verbose']=False
     for i in xrange(num):
         try:
-            res=test_fixT(model, **keys)
+            res,resc=test_fixT(model, do_control=True, **keys)
+
             if res['flags']==0:
                 pars=res['pars']
                 used[i]=1
                 g1vals[i]=pars[2]
                 g2vals[i]=pars[3]
+
+            if resc['flags']==0:
+                pars=resc['pars']
+                usedc[i]=1
+                g1valsc[i]=pars[2]
+                g2valsc[i]=pars[3]
+
         except BootGalFailure:
             pass
             
@@ -3691,10 +3703,163 @@ def test_fixT_many(num, model, **keys):
     g1mean=g1vals.mean()
     g2mean=g2vals.mean()
 
-    g1err=g1vals.std()/sqrt(num)
-    g2err=g2vals.std()/sqrt(num)
+    g1err=g1vals.std()/sqrt(w.size)
+    g2err=g2vals.std()/sqrt(w.size)
 
-    print("g1:  %g +/- %g" % (g1mean,g1err))
-    print("g2:  %g +/- %g" % (g2mean,g2err))
+    tup=(g1mean,g1err,g1vals.min(),g1vals.max(),
+         w.size)
+    print("g1:  %g +/- %g min: %g max: %g num: %s" % tup)
+
+    w,=where(usedc==1)
+
+    g1valsc=g1valsc[w]
+    g2valsc=g2valsc[w]
+
+    g1meanc=g1valsc.mean()
+    g2meanc=g2valsc.mean()
+
+    g1errc=g1valsc.std()/sqrt(w.size)
+    g2errc=g2valsc.std()/sqrt(w.size)
+
+    tup=(g1meanc,g1errc,g1valsc.min(),g1valsc.max(),
+         w.size)
+    print("g1c:  %g +/- %g min: %g max: %g num: %s" % tup)
 
 
+class GPriorBAWrapper(priors.GPriorBA):
+    def get_lnprob_scalar(self, gvec):
+        return self.get_lnprob_scalar2d(gvec[0], gvec[1])
+
+    def sample(self, num=1):
+        assert num==1,"num==1 here"
+        g1,g2=self.sample2d(num)
+        return array([g1[0], g2[0]],dtype='f8')
+
+    def fill_fdiff(self, pars, fdiff, **keys):
+        index=0
+        fdiff[index] = self.get_lnprob_scalar(pars)
+        index += 1
+
+        chi2 = -2*fdiff[0:index]
+        chi2.clip(min=0.0, max=None, out=chi2)
+        fdiff[0:index] = sqrt(chi2)
+
+        return index
+
+
+
+def test_gonly(model, verbose=True, show=False, T_obj=16.0, do_control=False, **kw):
+    from .metacal import Metacal
+    from .shape import Shape
+    import images
+    from .bootstrap import Bootstrapper
+
+    use_logpars=True
+
+    g_prior_wrap = GPriorBAWrapper(0.3)
+
+    cen_prior=priors.CenPrior(0.0, 0.0, 0.1, 0.1)
+    g_prior = priors.GPriorBA(0.3)
+    T_prior=priors.FlatPrior(-10.0,15.0)
+    counts_prior=priors.FlatPrior(-10.0,15.0)
+
+ 
+    prior=joint_prior.PriorSimpleSep(cen_prior,
+                                     g_prior,
+                                     T_prior,
+                                     counts_prior)
+
+    max_pars={'method':'lm-gonly',
+              'lm_pars':{'maxfev':4000}}
+    mdict = make_test_observations(model,
+                                   T_obj=T_obj,
+                                   more=True,
+                                   **kw)
+
+    obs=mdict['obs']
+    pars=mdict['pars']
+    obs.set_psf(mdict['psf_obs'])
+
+    if use_logpars:
+        pars[4:] = log(pars[4:])
+
+    boot=Bootstrapper(obs,use_logpars=use_logpars)
+    boot.fit_psfs('gauss', 4.0)
+    boot.fit_max_gonly('exp', max_pars, pars, prior=g_prior_wrap)
+    res=boot.get_max_fitter().get_result()
+
+    if verbose:
+        print("s2n: %g nfev: %s" % (res['s2n_w'], res['nfev']))
+        print_pars(res['pars'], front='    pars: ')
+        print_pars(res['pars_err'], front='    perr: ')
+
+    if do_control:
+        max_pars['method']='lm'
+        boot.fit_max('exp', max_pars, prior=prior)
+        resc=boot.get_max_fitter().get_result()
+        return res, resc
+    else:
+        return res
+
+def test_gonly_many(num, model, **keys):
+    used=zeros(num,dtype='i2')
+    usedc=zeros(num,dtype='i2')
+    g1vals=zeros(num)
+    g2vals=zeros(num)
+    g1valsc=zeros(num)
+    g2valsc=zeros(num)
+
+    keys['verbose']=False
+    for i in xrange(num):
+        try:
+            res,resc=test_gonly(model, do_control=True, **keys)
+
+            if res['flags']==0:
+                pars=res['pars']
+                used[i]=1
+                g1vals[i]=pars[0]
+                g2vals[i]=pars[1]
+
+            if resc['flags']==0:
+                pars=resc['pars']
+                usedc[i]=1
+                g1valsc[i]=pars[2]
+                g2valsc[i]=pars[3]
+
+        except BootGalFailure:
+            pass
+            
+    w,=where(used==1)
+
+    g1vals=g1vals[w]
+    g2vals=g2vals[w]
+
+    g1mean=g1vals.mean()
+    g2mean=g2vals.mean()
+
+    g1err=g1vals.std()/sqrt(w.size)
+    g2err=g2vals.std()/sqrt(w.size)
+
+    tup=(g1mean,g1err,g1vals.min(),g1vals.max(),
+         w.size)
+    print("g1:  %g +/- %g min: %g max: %g num: %s" % tup)
+
+    w,=where(usedc==1)
+
+    g1valsc=g1valsc[w]
+    g2valsc=g2valsc[w]
+
+    g1meanc=g1valsc.mean()
+    g2meanc=g2valsc.mean()
+
+    g1errc=g1valsc.std()/sqrt(w.size)
+    g2errc=g2valsc.std()/sqrt(w.size)
+
+    tup=(g1meanc,g1errc,g1valsc.min(),g1valsc.max(),
+         w.size)
+    print("g1c:  %g +/- %g min: %g max: %g num: %s" % tup)
+
+    if True:
+        from biggles import plot_hist
+        plt=plot_hist(g1vals, nbin=50,visible=False)
+        plt.write_eps('g1vals.eps')

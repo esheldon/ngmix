@@ -653,6 +653,39 @@ class Bootstrapper(object):
 
         self.max_fitter = fitter
 
+    def fit_max_gonly(self, gal_model, max_pars, pars_in,
+                      guess=None, prior=None, extra_priors=None, ntry=1):
+        """
+        fit the galaxy.  You must run fit_psf() successfully first
+
+        extra_priors is ignored here but used in composite
+        """
+
+        if not hasattr(self,'psf_flux_res'):
+            self.fit_gal_psf_flux()
+
+        if prior is not None:
+            guesser=prior.sample
+        else:
+            guesser=self._get_max_guesser(guess=guess, prior=prior)
+
+        runner=MaxRunnerGOnly(self.mb_obs_list, gal_model, max_pars, guesser, pars_in,
+                              prior=prior,
+                              use_logpars=self.use_logpars)
+
+        runner.go(ntry=ntry)
+
+        fitter=runner.fitter
+
+        res=fitter.get_result()
+
+        if res['flags'] != 0:
+            raise BootGalFailure("failed to fit galaxy with maxlike")
+
+        self.max_fitter = fitter
+
+
+
     def _fit_one_model_max(self, gal_model, pars, guess=None, prior=None, ntry=1):
         """
         fit the galaxy.  You must run fit_psf() successfully first
@@ -1429,6 +1462,54 @@ class MaxRunnerFixT(MaxRunner):
 
         res['ntry'] = i+1
         self.fitter=fitter
+
+class MaxRunnerGOnly(MaxRunner):
+    def __init__(self, obs, model, max_pars, guesser, pars_in, prior=None, use_logpars=False):
+        self.obs=obs
+
+        self.max_pars=max_pars
+        self.method=max_pars['method']
+        assert self.method=='lm-gonly',"method must be lm-gonly"
+        self.send_pars=max_pars['lm_pars']
+
+        mess="model should be exp/dev/gauss, got '%s'" % model
+        assert model in ['exp','dev','gauss'],mess
+
+        self.model=model
+        self.prior=prior
+        self.use_logpars=use_logpars
+        self.pars_in=pars_in
+
+        self.guesser=guesser
+
+    def go(self, ntry=1):
+        from .fitting import LMSimpleGOnly
+        
+
+        for i in xrange(ntry):
+            fitter=LMSimpleGOnly(self.obs,
+                                 self.model,
+                                 pars=self.pars_in,
+                                 lm_pars=self.send_pars,
+                                 use_logpars=self.use_logpars,
+                                 prior=self.prior)
+
+            guess0=self.guesser()
+            if guess0.size==2:
+                guess=guess0
+            else:
+                guess=zeros(2)
+                guess[0]=guess0[2]
+                guess[1]=guess0[3]
+            fitter.go(guess)
+
+            res=fitter.get_result()
+            if res['flags']==0:
+                break
+
+        res['ntry'] = i+1
+        self.fitter=fitter
+
 
 class RoundRunnerBase(object):
     def _get_round_guesser(self, **kw):
