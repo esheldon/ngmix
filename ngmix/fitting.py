@@ -1793,9 +1793,8 @@ class LMSimpleGOnly(LMSimple):
 
     def get_band_pars(self, pars_in, band):
         """
-        pars in are
+        pars in are [g1,g2]
         """
-
 
         pars=self.pars_in
         pars[2]=pars_in[0]
