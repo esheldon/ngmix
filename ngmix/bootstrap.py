@@ -623,6 +623,35 @@ class Bootstrapper(object):
                                                   ntry=ntry)
         res=self.max_fitter.get_result()
 
+    def fit_max_fixT(self, gal_model, pars, T,
+                     guess=None, prior=None, extra_priors=None, ntry=1):
+        """
+        fit the galaxy.  You must run fit_psf() successfully first
+
+        extra_priors is ignored here but used in composite
+        """
+
+        if not hasattr(self,'psf_flux_res'):
+            self.fit_gal_psf_flux()
+
+        guesser=self._get_max_guesser(guess=guess, prior=prior)
+
+        runner=MaxRunnerFixT(self.mb_obs_list, gal_model, pars, guesser, T,
+                             prior=prior,
+                             use_logpars=self.use_logpars)
+
+        runner.go(ntry=ntry)
+
+        fitter=runner.fitter
+
+        res=fitter.get_result()
+
+        if res['flags'] != 0:
+            raise BootGalFailure("failed to fit galaxy with maxlike")
+
+
+
+        self.max_fitter = fitter
 
     def _fit_one_model_max(self, gal_model, pars, guess=None, prior=None, ntry=1):
         """
@@ -1356,6 +1385,50 @@ class MaxRunner(object):
     def _get_lm_fitter_class(self):
         from .fitting import LMSimple
         return LMSimple
+
+class MaxRunnerFixT(MaxRunner):
+    def __init__(self, obs, model, max_pars, guesser, T, prior=None, use_logpars=False):
+        self.obs=obs
+
+        self.max_pars=max_pars
+        self.method=max_pars['method']
+        assert self.method=='lm-fixT',"method must be lm-fixT"
+        self.send_pars=max_pars['lm_pars']
+
+        mess="model should be exp/dev/gauss, got '%s'" % model
+        assert model in ['exp','dev','gauss'],mess
+
+        self.model=model
+        self.prior=prior
+        self.use_logpars=use_logpars
+        self.T=T
+
+        self.guesser=guesser
+
+    def go(self, ntry=1):
+        from .fitting import LMSimpleFixT
+        
+
+        for i in xrange(ntry):
+            fitter=LMSimpleFixT(self.obs,
+                                self.model,
+                                T=self.T,
+                                lm_pars=self.send_pars,
+                                use_logpars=self.use_logpars,
+                                prior=self.prior)
+
+            guess0=self.guesser()
+            guess=zeros(guess0.size-1)
+            guess[0:4]=guess0[0:4]
+            guess[4:]=guess0[5:]
+            fitter.go(guess)
+
+            res=fitter.get_result()
+            if res['flags']==0:
+                break
+
+        res['ntry'] = i+1
+        self.fitter=fitter
 
 class RoundRunnerBase(object):
     def _get_round_guesser(self, **kw):

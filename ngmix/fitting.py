@@ -1708,6 +1708,57 @@ class LMSimpleRound(LMSimple):
                                                 band)
         return pars
 
+
+class LMSimpleFixT(LMSimple):
+    """
+    This version fits [cen1,cen2,T,F]
+    """
+    def __init__(self, *args, **keys):
+        super(LMSimpleFixT,self).__init__(*args, **keys)
+
+        self.npars = self.npars-1
+        self.n_prior_pars=self.n_prior_pars - 1
+        self.fdiff_size=self.totpix + self.n_prior_pars
+
+        self.T = keys['T']
+
+        if self.use_logpars:
+            self.logT=log(T)
+
+    def run_lm(self, guess):
+        """
+        Run leastsq and set the result
+        """
+
+        guess=array(guess,dtype='f8',copy=False)
+        self._setup_data(guess)
+
+        result = run_leastsq(self._calc_fdiff, guess, self.n_prior_pars, **self.lm_pars)
+
+        result['model'] = self.model_name
+        if result['flags']==0:
+            stat_dict=self.get_fit_stats(result['pars'])
+            result.update(stat_dict)
+
+        self._result=result
+
+    def get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+        """
+
+
+        pars=self._band_pars
+        pars[0:4] = pars_in[0:4]
+        pars[4]=self.T
+
+        if self.use_logpars:
+            pars[5]=exp( pars_in[4+band] )
+        else:
+            pars[5]=pars_in[4]
+
+        return pars
+
 def _get_simple_band_pars_round_logpars(pars_in, pars_allband, band_pars, band):
     """
     pars in are [cen1,cen2,log(T),log(F)]
@@ -1727,6 +1778,24 @@ def _get_simple_band_pars_round_linpars(pars_in, band_pars, band):
     # 2:2+2 remain zero for roundness
     band_pars[4] = pars_in[2]
     band_pars[5] = pars_in[3+band]
+
+def _get_simple_band_pars_fixT_linpars(T, pars_in, band_pars, band):
+    """
+    pars in are [cen1,cen2,T,F]
+    """
+    band_pars[0:4] = pars_in[0:4]
+    band_pars[4]=T
+    band_pars[5] = pars_in[3+band]
+
+def _get_simple_band_pars_fixT_logpars(T, pars_in, band_pars, band):
+    """
+    pars in are [cen1,cen2,T,F]
+    """
+    band_pars[0:4] = pars_in[0:4]
+    band_pars[4]=T
+    band_pars[5] = pars_in[3+band]
+
+    _gmix.convert_simple_double_logpars_band(pars_allband, band_pars, band)
 
 
 class LMComposite(LMSimple):

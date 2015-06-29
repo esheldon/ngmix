@@ -6,7 +6,9 @@ from pprint import pprint
 
 from .priors import srandu
 
+from . import joint_prior
 from .fitting import *
+from .gexceptions import *
 
 def test_mcmc_psf(model="gauss",
                   g1=0.0,
@@ -2408,7 +2410,7 @@ def test_max(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
     wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
 
     im_obj=gm.make_image(dims, jacobian=j, nsub=16)
-    im_obj[:,:] += noise*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
+    im_obj[:,:] += numpy.random.normal(scale=noise, size=im_obj.shape)
     wt_obj=zeros(im_obj.shape) + 1./noise**2
 
     #
@@ -2444,17 +2446,17 @@ def test_max(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
 
     psf_fit=mc_psf.get_gmix()
     
-    print("fit psf T:",psf_fit.get_T())
+    if verbose:
+        print("fit psf T:",psf_fit.get_T())
 
     psf_obs.set_gmix(psf_fit)
 
+    cen_width=0.5
     if prior_type=='flat':
         pmaker=joint_prior.make_uniform_simple_sep
     else:
         pmaker=joint_prior.make_cosmos_simple_sep
 
-
-    cen_width=0.5
     prior=pmaker([0.0,0.0], # cen
                  [cen_width]*2, #cen width
                  [-0.97,3500.], # T
@@ -2484,7 +2486,7 @@ def test_max(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
         max_fitter=LMSimple(obs, model, lm_pars={'maxfev':4000},
                             prior=prior, aperture=aperture)
 
-    guess=zeros( npars )
+    guess=zeros( max_fitter.npars )
     ntry=0
     while True:
         ntry += 1
@@ -3637,4 +3639,62 @@ def test_em1(g1=0.0,
         return mc.get_gmix()
     else:
         return None
+
+def test_fixT(model, verbose=True, show=False, T_obj=16.0, **kw):
+    from .metacal import Metacal
+    from .shape import Shape
+    import images
+    from .bootstrap import Bootstrapper
+
+    max_pars={'method':'lm-fixT',
+              'lm_pars':{'maxfev':4000}}
+    psf_obs, obs=make_test_observations(model,
+                                        T_obj=T_obj,
+                                        **kw)
+
+    obs.set_psf(psf_obs)
+
+    boot=Bootstrapper(obs)
+    boot.fit_psfs('gauss', 4.0)
+    boot.fit_max_fixT('exp', max_pars, T_obj)
+    res=boot.get_max_fitter().get_result()
+
+    if verbose:
+        print("s2n: %g nfev: %s" % (res['s2n_w'], res['nfev']))
+        print_pars(res['pars'], front='    pars: ')
+        print_pars(res['pars_err'], front='    perr: ')
+
+    return res
+
+def test_fixT_many(num, model, **keys):
+    used=zeros(num,dtype='i2')
+    g1vals=zeros(num)
+    g2vals=zeros(num)
+
+    keys['verbose']=False
+    for i in xrange(num):
+        try:
+            res=test_fixT(model, **keys)
+            if res['flags']==0:
+                pars=res['pars']
+                used[i]=1
+                g1vals[i]=pars[2]
+                g2vals[i]=pars[3]
+        except BootGalFailure:
+            pass
+            
+    w,=where(used==1)
+
+    g1vals=g1vals[w]
+    g2vals=g2vals[w]
+
+    g1mean=g1vals.mean()
+    g2mean=g2vals.mean()
+
+    g1err=g1vals.std()/sqrt(num)
+    g2err=g2vals.std()/sqrt(num)
+
+    print("g1:  %g +/- %g" % (g1mean,g1err))
+    print("g2:  %g +/- %g" % (g2mean,g2err))
+
 
