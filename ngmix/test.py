@@ -35,18 +35,18 @@ def test_mcmc_psf(model="gauss",
     dims=[dim]*2
     cen=[(dim-1)/2.]*2
 
-    j=Jacobian(cen[0], cen[1], jfac, 0.0, 0.0, jfac)
+    jacobian=Jacobian(cen[0], cen[1], jfac, 0.0, 0.0, jfac)
 
     pars = array( [0.0, 0.0, g1, g2, T, flux], dtype='f8' )
     gm=gmix.GMixModel(pars, model)
 
-    im=gm.make_image(dims, jacobian=j, nsub=nsub_render)
+    im=gm.make_image(dims, jacobian=jacobian, nsub=nsub_render)
 
     im[:,:] += noise*numpy.random.randn(im.size).reshape(im.shape)
 
     wt=zeros(im.shape) + 1./noise**2
 
-    obs=Observation(im, weight=wt, jacobian=j)
+    obs=Observation(im, weight=wt, jacobian=jacobian)
 
     print("making guess")
     guess=zeros( (nwalkers, pars.size) )
@@ -129,7 +129,10 @@ def make_test_observations(model,
     if more:
         return {'psf_obs':psf_obs,
                 'obs':obs,
-                'pars':pars_obj}
+                'pars':pars_obj,
+                'gm_obj0':gm_obj0,
+                'gm_obj':gm,
+                'gm_psf':gm_psf}
     else:
         return psf_obs, obs
 
@@ -3863,3 +3866,99 @@ def test_gonly_many(num, model, **keys):
         from biggles import plot_hist
         plt=plot_hist(g1vals, nbin=50,visible=False)
         plt.write_eps('g1vals.eps')
+
+def perturb_gmix(gm0):
+    ngauss=len(gm0)
+
+    pars=gm0.get_full_pars()
+    gm=gm0.copy()
+
+    beg=0
+    for i in xrange(ngauss):
+        pars[beg+0] = (1.0/ngauss)*(1.0 + 0.1*srandu())
+        pars[beg+1] += 0.1*srandu()
+        pars[beg+2] += 0.1*srandu()
+        pars[beg+3] *= (1.0 + 0.1*srandu())
+        pars[beg+4] += 0.1*srandu()
+        pars[beg+5] *= (1.0 + 0.1*srandu())
+
+        beg += 6
+
+    gm=gmix.GMix(pars=pars)
+    return gm
+
+def guess_em_ngauss(ngauss, T):
+    pars=numpy.zeros(ngauss*6)
+    T2=T/2.
+
+    beg=0
+    for i in xrange(ngauss):
+        pars[beg+0] = (1.0/ngauss)*(1.0 + 0.1*srandu())
+        pars[beg+1] = 0.1*srandu()
+        pars[beg+2] = 0.1*srandu()
+        pars[beg+3] = T2*(1.0 + 0.1*srandu())
+        pars[beg+4] = 0.1*T2*srandu()
+        pars[beg+5] = T2*(1.0 + 0.1*srandu())
+
+        beg += 6
+
+    gm=gmix.GMix(pars=pars)
+    return gm
+
+
+def test_em_model(model,
+                  ngauss=None, 
+                  maxiter=4000, tol=1.0e-6,
+                  ntry=10,
+                  verbose=True, show=False, T_obj=16.0, do_control=False, **kw):
+    from . import em
+
+    mdict = make_test_observations(model,
+                                   T_obj=T_obj,
+                                   more=True,
+                                   **kw)
+
+    print_pars(mdict['pars'], front='    pars: ')
+    obs=mdict['obs']
+
+    s2n=mdict['gm_obj'].get_model_s2n(obs)
+
+    if verbose:
+        print("s2n: %g" % s2n)
+
+    imsky,sky=em.prep_image(obs.image)
+
+    newobs = Observation(imsky, jacobian=obs.jacobian)
+
+    mc=em.GMixEM(newobs)
+
+    for i in xrange(ntry):
+        if ngauss is None:
+            guess = perturb_gmix(mdict['gm_obj'])
+        else:
+            guess=guess_em_ngauss(ngauss, T_obj)
+
+        if verbose:
+            print("-")
+            print(guess)
+
+        mc.go(guess, sky, maxiter=maxiter, tol=tol)
+    
+        res=mc.get_result()
+        if res['flags']==0:
+            break
+
+    if res['flags']==0:
+
+        gm=mc.get_gmix()
+        if show:
+            import images
+
+            model_im=gm.make_image(obs.image.shape, jacobian=obs.jacobian)
+            model_im *= obs.image.sum()/model_im.sum()
+            images.compare_images(obs.image, model_im)
+        return gm
+    else:
+        return None
+
+
