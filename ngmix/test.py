@@ -3562,55 +3562,149 @@ def test_metacal(model, show=False, **kw):
                                   width=width,height=height)
         plt.write_img(width,height,'/astro/u/esheldon/tmp/sh1p-diff.png')
 
-def test_em1_many(num, **keys):
+def test_fit_gauss1_many(num, T=4.0, method='em', eps=None,show=False, **keys):
+    import esutil as eu
     from .gexceptions import GMixMaxIterEM
     used=zeros(num,dtype='i2')
     g1vals=zeros(num)
     g2vals=zeros(num)
 
+    Irr=zeros(num)
+    Irc=zeros(num)
+    Icc=zeros(num)
+
     keys['verbose']=False
     for i in xrange(num):
         try:
-            gm=test_em1(**keys)
-            if gm is not None:
-                g1,g2,T=gm.get_g1g2T()
+            fitter=test_fit_gauss1(T=T, method=method, **keys)
+            if fitter is not None:
+                gm=fitter.get_gmix()
+                g1,g2,Ttmp=gm.get_g1g2T()
 
                 used[i]=1
                 g1vals[i]=g1
                 g2vals[i]=g2
+
+                d=gm.get_data()
+                Irr[i] = d['irr'][0]
+                Irc[i] = d['irc'][0]
+                Icc[i] = d['icc'][0]
+
         except GMixMaxIterEM:
             pass
         
     w,=where(used==1)
+    numuse=w.size
+    print("used:",numuse)
+
+    Tvals = Irr + Icc
+    Tmean = Tvals.mean()
 
     g1vals=g1vals[w]
     g2vals=g2vals[w]
+    g=sqrt(g1vals**2 + g2vals**2)
 
     g1mean=g1vals.mean()
     g2mean=g2vals.mean()
 
-    g1err=g1vals.std()/sqrt(num)
-    g2err=g2vals.std()/sqrt(num)
+    g1mean,g1std,g1err=eu.stat.sigma_clip(g1vals, get_err=True)
+    g2mean,g2std,g2err=eu.stat.sigma_clip(g2vals, get_err=True)
 
     print("g1:  %g +/- %g" % (g1mean,g1err))
     print("g2:  %g +/- %g" % (g2mean,g2err))
 
+    if show or eps:
+        import biggles
+        from biggles import plot_hist
+        tab=biggles.Table(2,2)
 
-def test_em1(g1=0.0,
-             g2=0.0,
-             T=4.0,
-             flux=100.0,
-             noise=2.0,
-             maxiter=1000,
-             tol=1.0e-6,
-             verbose=True):
+        nvals={}
+        types=[(Irr,'Irr'), (Irc,'Irc'), (Icc,'Icc'), (g,'|g|')]
+        for t in types:
+            data,label=t
+            if label=='|g|':
+                continue
+            m,s=eu.stat.sigma_clip(data)
+            if label=='Irc':
+                midval=(Tmean/2.)/numpy.abs(m)
+                p=priors.LogNormal(midval,s)
+                if m < 0:
+                    r=m + -(p.sample(numuse*10)-midval)
+                else:
+                    r=m + p.sample(numuse*10)-midval
+            else:
+                p=priors.LogNormal(m,s)
+                r=p.sample(numuse*10)
+
+            nvals[label] = r
+
+
+        nbin=50
+
+        grid=eu.plotting.Grid(4)
+        for i,tup in enumerate(types):
+            data,label=tup
+            
+            m,s=eu.stat.sigma_clip(data)
+            binsize=0.2*s
+            minval=m-4*s
+            maxval=m+4*s
+            plt=plot_hist(data,
+                          min=minval,max=maxval,
+                          visible=False,
+                          binsize=binsize,
+                          norm=1,
+                          xlabel=label)
+
+            ptext=biggles.PlotLabel(0.9,0.9,
+                                    'mn: %.3g +/- %.3g' % (m,s),
+                                    halign='right')
+            plt.add(ptext)
+            if label in ['Irr','Icc','Irc']:
+                r=nvals[label]
+
+                plot_hist(r,
+                          min=minval,max=maxval,
+                          visible=False,
+                          binsize=binsize,
+                          color='red',
+                          norm=1,
+                          plt=plt)
+            row,col=grid(i)
+            tab[row,col] = plt
+
+        if eps:
+            tab.write_eps(eps)
+
+        if show:
+            tab.show()
+
+def test_fit_gauss1(model='gauss',
+                    method='em',
+                    dopsf=False,
+                    g1=0.0,
+                    g2=0.0,
+                    T=4.0,
+                    flux=100.0,
+                    noise=2.0,
+                    maxiter=1000,
+                    tol=1.0e-6,
+                    verbose=True):
     """
     noise=2.0 is about s/n=10
     """
     from numpy.random import randn
     from . import em
 
-    sigma=sqrt(T/2.0)
+    if dopsf:
+        nsub=4
+        Tpsf=4.0
+        Ttot = T+Tpsf
+    else:
+        nsub=1
+        Ttot = T
+
+    sigma=sqrt(Ttot/2.0)
     dim=int(round(2*5*sigma))
 
     dims=[dim]*2
@@ -3618,23 +3712,53 @@ def test_em1(g1=0.0,
     cen=(dim-1.)/2.
 
     pars=array([cen,cen,g1,g2,T,flux],dtype='f8')
-    gm=gmix.GMixModel(pars, "gauss")
+    gm=gmix.GMixModel(pars, model)
+    if dopsf:
+        psf_pars=array([cen,cen,0.,0.,Tpsf,1.0],dtype='f8')
+        gmpsf=gmix.GMixModel(psf_pars, 'gauss')
+        gm=gm.convolve(gmpsf)
 
-    im=gm.make_image(dims, nsub=1)
+    im_nonoise=gm.make_image(dims, nsub=nsub)
 
-    noise_im = noise*randn(dim*dim).reshape(im.shape)
-    im += noise_im
+    noise_im = noise*randn(dim*dim).reshape(im_nonoise.shape)
+    im = im_nonoise + noise_im
+
+    weight=numpy.zeros(im.shape) + 1.0/noise**2
+    obsorig=Observation(im,weight=weight)
+    if verbose:
+        print("s2n:",gm.get_model_s2n(obsorig))
 
     imsky,sky=em.prep_image(im)
     obs=Observation(imsky)
     mc=em.GMixEM(obs)
 
-    guess = gm.copy()
+    if model=='gauss':
+        guess = gm.copy()
+    else:
+        guess=gmpsf.copy()
+
     mc.go(guess, sky, maxiter=maxiter, tol=tol)
-    
     res=mc.get_result()
+    if res['flags'] != 0:
+        return None
+
+    if method=='em':
+        fitter=mc
+    else:
+        lm_pars={'maxfev': 4000}
+
+        fitter=LMSimple(obsorig, 'gauss', lm_pars=lm_pars)
+
+        gm=mc.get_gmix()
+        g1,g2,T=gm.get_g1g2T()
+        cen1,cen2=gm.get_cen()
+        guess=array([cen1,cen2,g1,g2,T,im_nonoise.sum()])
+
+        fitter.go(guess)
+        res=fitter.get_result()
+
     if res['flags']==0:
-        return mc.get_gmix()
+        return fitter
     else:
         return None
 
