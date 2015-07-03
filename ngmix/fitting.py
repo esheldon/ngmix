@@ -1657,6 +1657,90 @@ class LMSimple(FitterBase):
 
         return nprior
 
+
+class LMGaussMom(LMSimple):
+    """
+    Fit gaussian in moment space, no psf
+    """
+    def __init__(self, obs, **keys):
+
+        super(LMGaussMom,self).__init__(obs, 'gauss', **keys)
+
+        self.model=gmix.GMIX_FULL
+        self.model_name='full'
+
+    def go(self, guess):
+        """
+        Run leastsq and set the result
+        """
+
+        guess=array(guess,dtype='f8',copy=False)
+        self._setup_data(guess)
+
+        result = run_leastsq(self._calc_fdiff, guess, self.n_prior_pars, **self.lm_pars)
+
+        result['model'] = self.model_name
+        if result['flags']==0:
+            stat_dict=self.get_fit_stats(result['pars'])
+            result.update(stat_dict)
+
+        self._result=result
+
+    def get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+        """
+
+        pars=self._band_pars
+        pars[0] = pars_in[band]
+        pars[1:] = pars_in[self.nband:]
+
+        return pars
+
+    def _init_gmix_all(self, pars):
+        """
+        input pars are in linear space
+
+        initialize the list of lists of gaussian mixtures
+        """
+            
+        gmix_all  = MultiBandGMixList()
+
+        for band,obs_list in enumerate(self.obs):
+            gmix_list0=GMixList()
+            gmix_list=GMixList()
+
+            # pars for this band, in linear space
+            band_pars=self.get_band_pars(pars, band)
+
+            for obs in obs_list:
+                gm = self._make_model(band_pars)
+                gmix_list.append(gm)
+
+            gmix_all.append(gmix_list)
+
+        self._gmix_all  = gmix_all
+
+    def _fill_gmix_all(self, pars):
+        """
+        Fill the list of lists of gmix objects for the given parameters
+        """
+
+        for band,obs_list in enumerate(self.obs):
+            gmix_list=self._gmix_all[band]
+
+            # pars for this band, in linear space
+            band_pars=self.get_band_pars(pars, band)
+
+            for i,obs in enumerate(obs_list):
+
+                gm=gmix_list[i]
+
+                try:
+                    _gmix.gmix_fill(gm._data, band_pars, gm._model)
+                except ZeroDivisionError:
+                    raise GMixRangeError("zero division")
+
 class LMSimpleRound(LMSimple):
     """
     This version fits [cen1,cen2,T,F]

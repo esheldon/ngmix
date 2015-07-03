@@ -3562,7 +3562,7 @@ def test_metacal(model, show=False, **kw):
                                   width=width,height=height)
         plt.write_img(width,height,'/astro/u/esheldon/tmp/sh1p-diff.png')
 
-def test_fit_gauss1_many(num, T=4.0, method='em', eps=None,show=False, **keys):
+def test_fit_gauss1_many(num, T=4.0, method='lm', use_errors=False, eps=None,show=False, **keys):
     import esutil as eu
     from .gexceptions import GMixMaxIterEM
     used=zeros(num,dtype='i2')
@@ -3573,32 +3573,50 @@ def test_fit_gauss1_many(num, T=4.0, method='em', eps=None,show=False, **keys):
     Irc=zeros(num)
     Icc=zeros(num)
 
+    Irr_err=zeros(num)
+    Irc_err=zeros(num)
+    Icc_err=zeros(num)
+
+
     keys['verbose']=False
     for i in xrange(num):
         try:
             fitter=test_fit_gauss1(T=T, method=method, **keys)
             if fitter is not None:
+                used[i]=1
                 gm=fitter.get_gmix()
                 g1,g2,Ttmp=gm.get_g1g2T()
 
-                used[i]=1
                 g1vals[i]=g1
                 g2vals[i]=g2
 
+                '''
                 d=gm.get_data()
                 Irr[i] = d['irr'][0]
                 Irc[i] = d['irc'][0]
                 Icc[i] = d['icc'][0]
+                '''
+                res=fitter.get_result()
+                pars=res['pars']
+                perr=res['pars_err']
+                Irr[i] = pars[3]
+                Irc[i] = pars[4]
+                Icc[i] = pars[5]
+                Irr_err[i] = perr[3]
+                Irc_err[i] = perr[4]
+                Icc_err[i] = perr[5]
 
         except GMixMaxIterEM:
             pass
-        
+
     w,=where(used==1)
     numuse=w.size
     print("used:",numuse)
 
     Tvals = Irr + Icc
-    Tmean = Tvals.mean()
+    Tmean,Tstd,Terr=eu.stat.sigma_clip(Tvals, get_err=True)
+    print("T:     %g" % T)
+    print("Tmeas: %g +/- %g +/- %g" % (Tmean,Tstd,Terr))
 
     g1vals=g1vals[w]
     g2vals=g2vals[w]
@@ -3613,37 +3631,44 @@ def test_fit_gauss1_many(num, T=4.0, method='em', eps=None,show=False, **keys):
     print("g1:  %g +/- %g" % (g1mean,g1err))
     print("g2:  %g +/- %g" % (g2mean,g2err))
 
+    nvals={}
+    types=[(Irr,Irr_err,'Irr'), 
+           (Irc,Irc_err,'Irc'), 
+           (Icc,Icc_err,'Icc'),
+           (g,None,'|g|')]
+
+    for t in types:
+        data,errs,label=t
+        if label=='|g|':
+            continue
+
+        m,s,err=eu.stat.sigma_clip(data,get_err=True)
+        print("%s: %g +/- %g +/- %g" % (label,m,s,err))
+        if use_errors:
+            s,ssig=eu.stat.sigma_clip(errs)
+
+        if label=='Irc':
+            midval=(Tmean/2.)/numpy.abs(m)
+            p=priors.LogNormal(midval,s)
+            if m < 0:
+                r=m + -(p.sample(numuse*10)-midval)
+            else:
+                r=m + p.sample(numuse*10)-midval
+        else:
+            p=priors.LogNormal(m,s)
+            r=p.sample(numuse*10)
+
+        nvals[label] = r
+
     if show or eps:
         import biggles
         from biggles import plot_hist
         tab=biggles.Table(2,2)
 
-        nvals={}
-        types=[(Irr,'Irr'), (Irc,'Irc'), (Icc,'Icc'), (g,'|g|')]
-        for t in types:
-            data,label=t
-            if label=='|g|':
-                continue
-            m,s=eu.stat.sigma_clip(data)
-            if label=='Irc':
-                midval=(Tmean/2.)/numpy.abs(m)
-                p=priors.LogNormal(midval,s)
-                if m < 0:
-                    r=m + -(p.sample(numuse*10)-midval)
-                else:
-                    r=m + p.sample(numuse*10)-midval
-            else:
-                p=priors.LogNormal(m,s)
-                r=p.sample(numuse*10)
-
-            nvals[label] = r
-
-
-        nbin=50
 
         grid=eu.plotting.Grid(4)
         for i,tup in enumerate(types):
-            data,label=tup
+            data,errs,label=tup
             
             m,s=eu.stat.sigma_clip(data)
             binsize=0.2*s
@@ -3696,6 +3721,9 @@ def test_fit_gauss1(model='gauss',
     from numpy.random import randn
     from . import em
 
+    if model != 'gauss':
+        dopsf=True
+
     if dopsf:
         nsub=4
         Tpsf=4.0
@@ -3725,37 +3753,40 @@ def test_fit_gauss1(model='gauss',
 
     weight=numpy.zeros(im.shape) + 1.0/noise**2
     obsorig=Observation(im,weight=weight)
-    if verbose:
-        print("s2n:",gm.get_model_s2n(obsorig))
-
-    imsky,sky=em.prep_image(im)
-    obs=Observation(imsky)
-    mc=em.GMixEM(obs)
-
-    if model=='gauss':
-        guess = gm.copy()
-    else:
-        guess=gmpsf.copy()
-
-    mc.go(guess, sky, maxiter=maxiter, tol=tol)
-    res=mc.get_result()
-    if res['flags'] != 0:
-        return None
 
     if method=='em':
-        fitter=mc
+        imsky,sky=em.prep_image(im)
+        obs=Observation(imsky)
+        fitter=em.GMixEM(obs)
+
+        if model=='gauss':
+            guess = gm.copy()
+        else:
+            guess=gmpsf.copy()
+
+        fitter.go(guess, sky, maxiter=maxiter, tol=tol)
+
     else:
         lm_pars={'maxfev': 4000}
 
-        fitter=LMSimple(obsorig, 'gauss', lm_pars=lm_pars)
-
-        gm=mc.get_gmix()
-        g1,g2,T=gm.get_g1g2T()
-        cen1,cen2=gm.get_cen()
-        guess=array([cen1,cen2,g1,g2,T,im_nonoise.sum()])
+        fitter=LMGaussMom(obsorig, lm_pars=lm_pars)
+        guess=array([flux*(1.0 + 0.1*srandu()),
+                     cen,cen,
+                     T/2.*(1.0+0.1*srandu()),
+                     0.1*srandu(),
+                     T/2.*(1.0+0.1*srandu())])
 
         fitter.go(guess)
-        res=fitter.get_result()
+
+    res=fitter.get_result()
+    if verbose:
+        print("s2n:",gm.get_model_s2n(obsorig))
+        if 'pars_cov' in res:
+            import images
+            import esutil as eu
+
+            corr=eu.stat.cov2cor( res['pars_cov'][3:3+3, 3:3+3])
+            images.imprint(corr)
 
     if res['flags']==0:
         return fitter
@@ -4084,5 +4115,179 @@ def test_em_model(model,
         return gm
     else:
         return None
+
+def test_moms(model='gauss',
+              dopsf=False,
+              g1=0.0,
+              g2=0.0,
+              T=4.0,
+              flux=100.0,
+              noise=2.0,
+              verbose=True):
+    """
+    noise=2.0 is about s/n=10
+    """
+    from numpy.random import randn
+    from . import em
+
+    if model != 'gauss':
+        dopsf=True
+
+    if dopsf:
+        nsub=4
+        Tpsf=4.0
+        Ttot = T+Tpsf
+    else:
+        nsub=1
+        Ttot = T
+
+    sigma=sqrt(Ttot/2.0)
+    dim=int(round(2*5*sigma))
+
+    dims=[dim]*2
+
+    cen=(dim-1.)/2.
+
+    pars=array([cen,cen,g1,g2,T,flux],dtype='f8')
+    gm=gmix.GMixModel(pars, model)
+    if dopsf:
+        psf_pars=array([cen,cen,0.,0.,Tpsf,1.0],dtype='f8')
+        gmpsf=gmix.GMixModel(psf_pars, 'gauss')
+        gm=gm.convolve(gmpsf)
+
+    im_nonoise=gm.make_image(dims, nsub=nsub)
+
+    noise_im = noise*randn(dim*dim).reshape(im_nonoise.shape)
+    im = im_nonoise + noise_im
+
+    weight=numpy.zeros(im.shape) + 1.0/noise**2
+    obs=Observation(im)
+
+    res=gm.get_weighted_mom_sums(obs)
+    res['skysig'] = noise
+    res['Ierr'] = noise*sqrt(res['VIsum'])
+    res['Terr'] = noise*sqrt(res['VTsum'])
+    res['M1err'] = noise*sqrt(res['VM1sum'])
+    res['M2err'] = noise*sqrt(res['VM2sum'])
+    res['s2n_w'] = res['Isum']/res['Ierr']
+    return res
+
+def test_moms_many(num, Tinput=4.0, method='lm', use_errors=False, eps=None,show=False, **keys):
+    import esutil as eu
+    from .gexceptions import GMixMaxIterEM
+    used=zeros(num,dtype='i2')
+
+    I=zeros(num)
+    T=zeros(num)
+    M1=zeros(num)
+    M2=zeros(num)
+
+    I_err=zeros(num)
+    T_err=zeros(num)
+    M1_err=zeros(num)
+    M2_err=zeros(num)
+
+    s2n=zeros(num)
+
+
+    keys['verbose']=False
+    for i in xrange(num):
+        try:
+            res=test_moms(T=Tinput, **keys)
+
+            I[i]  = res['Isum']
+            T[i]  = res['Tsum']
+            M1[i] = res['M1sum']
+            M2[i] = res['M2sum']
+
+            I_err[i]  = res['VIsum']
+            T_err[i]  = res['VTsum']
+            M1_err[i] = res['VM1sum']
+            M2_err[i] = res['VM2sum']
+
+            s2n[i] = res['s2n_w']
+
+        except GMixMaxIterEM:
+            pass
+
+    
+    m,s,err=eu.stat.sigma_clip(s2n,get_err=True)
+    print("s/n: %g +/- %g +/- %g" % (m,s,err))
+    nvals={}
+    types=[(I,I_err,'I'), 
+           (T,T_err,'T'), 
+           (M1,M1_err,'M1'),
+           (M2,M2_err,'M2')]
+
+    for t in types:
+        data,errs,label=t
+        if label=='|g|':
+            continue
+
+        m,s,err=eu.stat.sigma_clip(data,get_err=True)
+        print("%s: %g +/- %g +/- %g" % (label,m,s,err))
+        if use_errors:
+            s,ssig=eu.stat.sigma_clip(errs)
+
+        '''
+        if label=='Irc':
+            midval=(Tmean/2.)/numpy.abs(m)
+            p=priors.LogNormal(midval,s)
+            if m < 0:
+                r=m + -(p.sample(numuse*10)-midval)
+            else:
+                r=m + p.sample(numuse*10)-midval
+        else:
+            p=priors.LogNormal(m,s)
+            r=p.sample(numuse*10)
+
+        nvals[label] = r
+        '''
+
+    if show or eps:
+        import biggles
+        from biggles import plot_hist
+        tab=biggles.Table(2,2)
+
+
+        grid=eu.plotting.Grid(4)
+        for i,tup in enumerate(types):
+            data,errs,label=tup
+            
+            m,s=eu.stat.sigma_clip(data)
+            binsize=0.2*s
+            minval=m-4*s
+            maxval=m+4*s
+            plt=plot_hist(data,
+                          min=minval,max=maxval,
+                          visible=False,
+                          binsize=binsize,
+                          norm=1,
+                          xlabel=label)
+
+            ptext=biggles.PlotLabel(0.9,0.9,
+                                    'mn: %.3g +/- %.3g' % (m,s),
+                                    halign='right')
+            plt.add(ptext)
+            '''
+            if label in ['Irr','Icc','Irc']:
+                r=nvals[label]
+
+                plot_hist(r,
+                          min=minval,max=maxval,
+                          visible=False,
+                          binsize=binsize,
+                          color='red',
+                          norm=1,
+                          plt=plt)
+            '''
+            row,col=grid(i)
+            tab[row,col] = plt
+
+        if eps:
+            tab.write_eps(eps)
+
+        if show:
+            tab.show()
 
 

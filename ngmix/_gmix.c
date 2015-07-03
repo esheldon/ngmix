@@ -1271,6 +1271,139 @@ static PyObject * PyGMix_get_model_s2n_Tvar_sums_altweight(PyObject* self, PyObj
 
 
 
+/*
+   Get the weighted moments of the image, using the input gaussian
+   mixture as the weight function.  The moments are *not* normalized
+
+   These are moments, so there cannot be masked portions of the image.
+
+   In the following, W is the weight function, I is the image, and
+   w is the weight map
+
+   Returns
+       ucen  = sum(W*I*u)/sum(W*I)
+       vcen  = sum(W*I*v)/sum(W*I)
+       Isum  = sum(W*I)
+       Tsum  = sum(W * I * {u^2 + v^2} )
+       M1sum = sum(W * I * {u^2 - v^2} )
+       M2sum = sum(W * I * 2*u*v)
+
+  where u,v are relative to the jacobian center
+
+  Also returned are sums used to calculate variances in these quantities, but
+  note the covariance can be significant
+
+       VIsum  = sum(W^2)
+       VTsum  = sum(W^2 * {u^2 + v^2}^2 )
+       VM1sum = sum(W^2 * {u^2 - v^2}^2 )
+       VM2sum = sum(W^2 * {2*u*v}^2 )
+
+  These should be multiplied by the noise^2 to turn them into proper variances
+
+*/
+static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    PyObject* image_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    double u=0, v=0, umod=0, vmod=0;
+    double wdata=0, data=0, weight=0, w2=0;
+    double T=0,M1=0,M2=0;
+    double Isum=0, usum=0, vsum=0, Tsum=0, M1sum=0, M2sum=0;
+    double VIsum=0, VTsum=0, VM1sum=0, VM2sum=0;
+    //double Vusum=0, Vvsum=0;
+    double ucen=0, vcen=0;
+    if (!PyArg_ParseTuple(args, (char*)"OOO", 
+                          &image_obj, &gmix_obj, &jacob_obj)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        return NULL;
+    }
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+
+    for (row=0; row < n_row; row++) {
+        u=PYGMIX_JACOB_GETU(jacob, row, 0);
+        v=PYGMIX_JACOB_GETV(jacob, row, 0);
+
+        for (col=0; col < n_col; col++) {
+
+            data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
+            weight=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
+
+            wdata = weight*data;
+            w2 = weight*weight;
+
+            Isum += wdata;
+            usum += wdata*u;
+            vsum += wdata*v;
+
+            VIsum += w2;
+            //Vusum  += w2*u*u;
+            //Vvsum  += w2*v*v;
+
+            u += jacob->dudcol;
+            v += jacob->dvdcol;
+
+        }
+    }
+
+    ucen = usum/Isum;
+    vcen = vsum/Isum;
+
+    for (row=0; row < n_row; row++) {
+        u=PYGMIX_JACOB_GETU(jacob, row, 0);
+        v=PYGMIX_JACOB_GETV(jacob, row, 0);
+
+        for (col=0; col < n_col; col++) {
+
+            data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
+            weight=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
+
+            umod = u-ucen;
+            vmod = v-vcen;
+
+            T = umod*umod + vmod*vmod;
+            M1 = umod*umod - vmod*vmod;
+            M2 = 2*umod*vmod;
+
+            wdata = weight*data;
+            w2 = weight*weight;
+
+            Tsum  += wdata*T;
+            M1sum += wdata*M1;
+            M2sum += wdata*M2;
+
+            VTsum  += w2*T*T;
+            VM1sum += w2*M1*M1;
+            VM2sum += w2*M2*M2;
+
+            u += jacob->dudcol;
+            v += jacob->dvdcol;
+
+        }
+    }
+
+    return Py_BuildValue("dddddddddd", 
+                         ucen,vcen,
+                         Isum,Tsum,M1sum,M2sum,
+                         VIsum,VTsum,VM1sum,VM2sum);
+}
+
 
 /*
    Calculate the loglike between the gmix and the input image
@@ -2453,6 +2586,8 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"get_model_s2n_sum", (PyCFunction)PyGMix_get_model_s2n_sum,  METH_VARARGS,  "calculate the s/n of the model\n"},
     {"get_model_s2n_Tvar_sums", (PyCFunction)PyGMix_get_model_s2n_Tvar_sums,  METH_VARARGS,  "calculate the s/n of the model\n"},
     {"get_model_s2n_Tvar_sums_altweight", (PyCFunction)PyGMix_get_model_s2n_Tvar_sums_altweight,  METH_VARARGS,  "calculate the s/n of the model\n"},
+
+    {"get_weighted_mom_sums", (PyCFunction)PyGMix_get_weighted_mom_sums,  METH_VARARGS,  "calculate weighted mom sums\n"},
 
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
     {"get_loglike_images_margsky", (PyCFunction)PyGMix_get_loglike_images_margsky,  METH_VARARGS,  "calculate likelihood between images, subtracting mean\n"},

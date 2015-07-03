@@ -26,6 +26,8 @@ def make_gmix_model(pars, model):
         return GMixCoellip(pars)
     elif model==GMIX_SERSIC:
         return GMixSersic(pars)
+    elif model==GMIX_FULL:
+        return GMix(pars=pars)
     else:
         return GMixModel(pars, model)
 
@@ -557,6 +559,65 @@ class GMix(object):
 
         return s2n, r2_mean, r4_mean, Tvar
 
+
+    def get_weighted_mom_sums(self, obs):
+        """
+        Get the raw weighted moment sums of the image, using the input
+        gaussian mixture as the weight function.  The moments are *not*
+        normalized
+
+        parameters
+        ----------
+        obs: Observation
+            The Observation to compare with. See ngmix.observation.Observation
+            The Observation must have a weight map set
+
+            These are moments, so there cannot be masked portions of the image,
+            and the weight map of the observation is ignored.
+
+        returns
+        --------
+
+        In the following, W is the weight function, I is the image, and
+        w is the weight map
+
+           Returns
+               ucen  = sum(W*I*u)/sum(W*I)
+               vcen  = sum(W*I*v)/sum(W*I)
+               Isum  = sum(W*I)
+               Tsum  = sum(W * I * {u^2 + v^2} )
+               M1sum = sum(W * I * {u^2 - v^2} )
+               M2sum = sum(W * I * 2*u*v)
+
+        where u,v are relative to the jacobian center
+
+        Also returned are sums used to calculate variances in these quantities, but
+        note the covariance can be significant
+
+               VIsum  = sum(W^2)
+               VTsum  = sum(W^2 * {u^2 + v^2}^2 )
+               VM1sum = sum(W^2 * {u^2 - v^2}^2 )
+               VM2sum = sum(W^2 * {2*u*v}^2 )
+
+        These should be multiplied by the noise^2 to turn them into proper variances
+
+        """
+        gm=self._get_gmix_data()
+        res=_gmix.get_weighted_mom_sums(obs.image,
+                                        gm,
+                                        obs.jacobian._data)
+        return {'u':res[0],
+                'v':res[1],
+                'Isum':res[2],
+                'Tsum':res[3],
+                'M1sum':res[4],
+                'M2sum':res[5],
+
+                'VIsum':res[6],
+                'VTsum':res[7],
+                'VM1sum':res[8],
+                'VM2sum':res[9]}
+                
 
     def get_loglike(self, obs, nsub=1, more=False):
         """
