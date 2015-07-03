@@ -560,11 +560,14 @@ class GMix(object):
         return s2n, r2_mean, r4_mean, Tvar
 
 
-    def get_weighted_mom_sums(self, obs):
+    def get_weighted_mom_sums(self, obs, maxiter=100, centol=1.0e-4):
         """
         Get the raw weighted moment sums of the image, using the input
         gaussian mixture as the weight function.  The moments are *not*
         normalized
+
+        Just iterating for the centroid, with the first location taken as the
+        jacobian center, so you should have a good guess
 
         parameters
         ----------
@@ -574,6 +577,10 @@ class GMix(object):
 
             These are moments, so there cannot be masked portions of the image,
             and the weight map of the observation is ignored.
+        maxiter: int, optional
+            Maximum number of iterations to find the center
+        centol: float, optional
+            Tolerance to find the center in either direction
 
         returns
         --------
@@ -605,7 +612,8 @@ class GMix(object):
         gm=self._get_gmix_data()
         res=_gmix.get_weighted_mom_sums(obs.image,
                                         gm,
-                                        obs.jacobian._data)
+                                        obs.jacobian._data,
+                                        maxiter, centol)
         return {'u':res[0],
                 'v':res[1],
                 'Isum':res[2],
@@ -616,7 +624,10 @@ class GMix(object):
                 'VIsum':res[6],
                 'VTsum':res[7],
                 'VM1sum':res[8],
-                'VM2sum':res[9]}
+                'VM2sum':res[9],
+                'maxiter':maxiter,
+                'centol':centol,
+                'niter':res[10]}
                 
 
     def get_loglike(self, obs, nsub=1, more=False):

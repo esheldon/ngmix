@@ -4117,6 +4117,10 @@ def test_em_model(model,
         return None
 
 def test_moms(model='gauss',
+              wmodel='gauss',
+              wT=4.0,
+              wg1=0.0,
+              wg2=0.0,
               dopsf=False,
               g1=0.0,
               g2=0.0,
@@ -4125,6 +4129,8 @@ def test_moms(model='gauss',
               noise=2.0,
               verbose=True):
     """
+    wgmix is a gaussian mixture to use for the weight
+
     noise=2.0 is about s/n=10
     """
     from numpy.random import randn
@@ -4148,22 +4154,29 @@ def test_moms(model='gauss',
 
     cen=(dim-1.)/2.
 
-    pars=array([cen,cen,g1,g2,T,flux],dtype='f8')
+    jacobian=UnitJacobian(cen,cen)
+    pars=array([0.0,0.0,g1,g2,T,flux],dtype='f8')
+
     gm=gmix.GMixModel(pars, model)
     if dopsf:
-        psf_pars=array([cen,cen,0.,0.,Tpsf,1.0],dtype='f8')
+        psf_pars=array([0.0,0.0,0.,0.,Tpsf,1.0],dtype='f8')
         gmpsf=gmix.GMixModel(psf_pars, 'gauss')
         gm=gm.convolve(gmpsf)
 
-    im_nonoise=gm.make_image(dims, nsub=nsub)
+    im_nonoise=gm.make_image(dims, jacobian=jacobian, nsub=nsub)
 
     noise_im = noise*randn(dim*dim).reshape(im_nonoise.shape)
     im = im_nonoise + noise_im
 
     weight=numpy.zeros(im.shape) + 1.0/noise**2
-    obs=Observation(im)
+    obs=Observation(im, jacobian=jacobian)
 
-    res=gm.get_weighted_mom_sums(obs)
+    # now the weight model
+    wpars=array([0.0,0.0,wg1,wg2,wT,1.0],dtype='f8')
+    wgm = gmix.GMixModel(wpars,wmodel)
+
+    res=wgm.get_weighted_mom_sums(obs)
+
     res['skysig'] = noise
     res['Ierr'] = noise*sqrt(res['VIsum'])
     res['Terr'] = noise*sqrt(res['VTsum'])
@@ -4172,7 +4185,7 @@ def test_moms(model='gauss',
     res['s2n_w'] = res['Isum']/res['Ierr']
     return res
 
-def test_moms_many(num, Tinput=4.0, method='lm', use_errors=False, eps=None,show=False, **keys):
+def test_moms_many(num, method='lm', use_errors=False, eps=None,show=False, **keys):
     import esutil as eu
     from .gexceptions import GMixMaxIterEM
     used=zeros(num,dtype='i2')
@@ -4189,27 +4202,39 @@ def test_moms_many(num, Tinput=4.0, method='lm', use_errors=False, eps=None,show
 
     s2n=zeros(num)
 
-
     keys['verbose']=False
     for i in xrange(num):
         try:
-            res=test_moms(T=Tinput, **keys)
+            res=test_moms(**keys)
 
-            I[i]  = res['Isum']
-            T[i]  = res['Tsum']
-            M1[i] = res['M1sum']
-            M2[i] = res['M2sum']
+            if res['niter'] < res['maxiter']:
+                used[i] = 1
 
-            I_err[i]  = res['VIsum']
-            T_err[i]  = res['VTsum']
-            M1_err[i] = res['VM1sum']
-            M2_err[i] = res['VM2sum']
+                I[i]  = res['Isum']
+                T[i]  = res['Tsum']
+                M1[i] = res['M1sum']
+                M2[i] = res['M2sum']
 
-            s2n[i] = res['s2n_w']
+                I_err[i]  = res['VIsum']
+                T_err[i]  = res['VTsum']
+                M1_err[i] = res['VM1sum']
+                M2_err[i] = res['VM2sum']
+
+                s2n[i] = res['s2n_w']
 
         except GMixMaxIterEM:
             pass
 
+    w,=where(used)
+    I=I[w]
+    T=T[w]
+    M1=M1[w]
+    M2=M2[w]
+    I_err=I_err[w]
+    T_err=T_err[w]
+    M1_err=M1_err[w]
+    M2_err=M2_err[w]
+    s2n=s2n[w]
     
     m,s,err=eu.stat.sigma_clip(s2n,get_err=True)
     print("s/n: %g +/- %g +/- %g" % (m,s,err))
