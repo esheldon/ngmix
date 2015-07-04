@@ -1311,10 +1311,15 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
     PyObject* gmix_obj=NULL;
     PyObject* image_obj=NULL;
     PyObject* jacob_obj=NULL;
+    PyObject* cen_obj=NULL;
+    PyObject* pars_obj=NULL;
+    PyObject* perr_obj=NULL;
+
     npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
 
     struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
     struct PyGMix_Jacobian *jacob=NULL;
+    double *cen=NULL, *pars=NULL, *perr=NULL;
 
     double u=0, v=0, umod=0, vmod=0;
     double wdata=0, data=0, weight=0, w2=0;
@@ -1323,11 +1328,13 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
     double VIsum=0, VTsum=0, VM1sum=0, VM2sum=0;
     //double Vusum=0, Vvsum=0;
     double ucen=0, vcen=0, ucenold=0, vcenold=0;
-    double centol=0;
-    int maxiter=0, iter=0, niter=0;
+    double centol=0, max_shift=0;
+    int maxiter=0, niter=0, flags=0;
 
-    if (!PyArg_ParseTuple(args, (char*)"OOOid", 
-                          &image_obj, &gmix_obj, &jacob_obj, &maxiter, &centol)) {
+    if (!PyArg_ParseTuple(args, (char*)"OOOiddOOO", 
+                          &image_obj, &gmix_obj, &jacob_obj,
+                          &maxiter, &centol, &max_shift,
+                          &cen_obj, &pars_obj, &perr_obj)) {
         return NULL;
     }
 
@@ -1350,7 +1357,7 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
     vcenold=9999;
 
     // iterate for the centroid
-    for (iter=0; iter<maxiter; iter++) {
+    for (niter=0; niter<maxiter; niter++) {
 
         Isum=0;
         usum=0;
@@ -1366,7 +1373,7 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
                 umod = u-ucen;
                 vmod = v-vcen;
  
-                weight=PYGMIX_GMIX_EVAL(gmix, n_gauss, umod, vmod);
+                weight=PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, umod, vmod);
 
                 wdata = weight*data;
                 w2 = weight*weight;
@@ -1381,9 +1388,18 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
             }
         }
 
+        if (Isum <= 0.0) {
+            flags = 2;
+            break;
+        }
         ucen = usum/Isum;
         vcen = vsum/Isum;
-        //fprintf(stderr,"%.16g %.16g\n", ucen, vcen);
+        fprintf(stderr,"%.10g %.10g %.10g %.10g\n", usum, vsum, ucen, vcen);
+
+        if ((fabs(ucen) > max_shift) || (fabs(vcen) > max_shift)) {
+            flags = 4;
+            break;
+        }
 
         if ((fabs(ucen-ucenold) < centol) && (fabs(vcen-vcenold) < centol)) {
             break;
@@ -1391,7 +1407,16 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
         ucenold=ucen;
         vcenold=vcen;
     }
-    niter = iter;
+
+    if (niter==maxiter) {
+        flags = 1;
+    } else {
+        niter += 1;
+    }
+
+    if (flags != 0) {
+        goto _getmom_bail;
+    }
 
     Isum=0;
     for (row=0; row < n_row; row++) {
@@ -1405,9 +1430,8 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
             umod = u-ucen;
             vmod = v-vcen;
 
-            weight=PYGMIX_GMIX_EVAL(gmix, n_gauss, umod, vmod);
+            weight=PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, umod, vmod);
 
-            Isum += wdata;
 
             T = umod*umod + vmod*vmod;
             M1 = umod*umod - vmod*vmod;
@@ -1416,6 +1440,7 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
             wdata = weight*data;
             w2 = weight*weight;
 
+            Isum += wdata;
             VIsum += w2;
             Tsum  += wdata*T;
             M1sum += wdata*M1;
@@ -1431,11 +1456,25 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
         }
     }
 
-    return Py_BuildValue("ddddddddddi", 
-                         ucen,vcen,
-                         Isum,Tsum,M1sum,M2sum,
-                         VIsum,VTsum,VM1sum,VM2sum,
-                         niter);
+_getmom_bail:
+
+    cen=PyArray_DATA(cen_obj);
+    pars=PyArray_DATA(pars_obj);
+    perr=PyArray_DATA(perr_obj);
+
+    cen[0]=ucen;
+    cen[1]=vcen;
+    pars[0]=Isum;
+    pars[1]=Tsum;
+    pars[2]=M1sum;
+    pars[3]=M2sum;
+
+    perr[0]=VIsum;
+    perr[1]=VTsum;
+    perr[2]=VM1sum;
+    perr[3]=VM2sum;
+
+    return Py_BuildValue("ii",  niter, flags);
 }
 
 

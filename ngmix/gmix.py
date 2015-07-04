@@ -560,7 +560,7 @@ class GMix(object):
         return s2n, r2_mean, r4_mean, Tvar
 
 
-    def get_weighted_mom_sums(self, obs, maxiter=100, centol=1.0e-4):
+    def get_weighted_mom_sums(self, obs, maxiter=100, centol=1.0e-4, max_shift=5.0):
         """
         Get the raw weighted moment sums of the image, using the input
         gaussian mixture as the weight function.  The moments are *not*
@@ -581,6 +581,8 @@ class GMix(object):
             Maximum number of iterations to find the center
         centol: float, optional
             Tolerance to find the center in either direction
+        max_shift: float, optional
+            Max allowed shift in centroid
 
         returns
         --------
@@ -610,24 +612,23 @@ class GMix(object):
 
         """
         gm=self._get_gmix_data()
-        res=_gmix.get_weighted_mom_sums(obs.image,
-                                        gm,
-                                        obs.jacobian._data,
-                                        maxiter, centol)
-        return {'u':res[0],
-                'v':res[1],
-                'Isum':res[2],
-                'Tsum':res[3],
-                'M1sum':res[4],
-                'M2sum':res[5],
-
-                'VIsum':res[6],
-                'VTsum':res[7],
-                'VM1sum':res[8],
-                'VM2sum':res[9],
+        cen=zeros(2)
+        pars=zeros(4)
+        perr=zeros(4)
+        niter,flags=_gmix.get_weighted_mom_sums(obs.image,
+                                                gm,
+                                                obs.jacobian._data,
+                                                maxiter, centol,max_shift,
+                                                cen,pars,perr)
+        flagstr=_moms_flagmap[flags]
+        return {'cen':cen,
+                'pars':pars,
+                'pars_err':perr,
                 'maxiter':maxiter,
                 'centol':centol,
-                'niter':res[10]}
+                'niter':niter,
+                'flags':flags,
+                'flagstr':flagstr}
                 
 
     def get_loglike(self, obs, nsub=1, more=False):
@@ -2653,6 +2654,13 @@ class GMixND(object):
         self.pnorms = norms*self.weights
         self.log_pnorms = log(self.pnorms)
         self.icovars = icovars
+
+
+
+_moms_flagmap={0:'ok',
+               1:'maxit',
+               2:'low s2n',
+               4:'max shift'}
 
 '''
 

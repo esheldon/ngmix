@@ -4127,6 +4127,11 @@ def test_moms(model='gauss',
               T=4.0,
               flux=100.0,
               noise=2.0,
+              maxiter=100,
+              centol=1.0e-4,
+              max_shift=2.0,
+              show=False,
+              do_admom=False,
               verbose=True):
     """
     wgmix is a gaussian mixture to use for the weight
@@ -4171,19 +4176,32 @@ def test_moms(model='gauss',
     weight=numpy.zeros(im.shape) + 1.0/noise**2
     obs=Observation(im, jacobian=jacobian)
 
+    if show:
+        import images
+        images.multiview(im)
+
     # now the weight model
     wpars=array([0.0,0.0,wg1,wg2,wT,1.0],dtype='f8')
     wgm = gmix.GMixModel(wpars,wmodel)
 
-    res=wgm.get_weighted_mom_sums(obs)
+    res=wgm.get_weighted_mom_sums(obs,maxiter=maxiter,centol=centol,max_shift=max_shift)
+
+    if do_admom:
+        import admom
+        ares=admom.admom(im, cen, cen)
 
     res['skysig'] = noise
-    res['Ierr'] = noise*sqrt(res['VIsum'])
-    res['Terr'] = noise*sqrt(res['VTsum'])
-    res['M1err'] = noise*sqrt(res['VM1sum'])
-    res['M2err'] = noise*sqrt(res['VM2sum'])
-    res['s2n_w'] = res['Isum']/res['Ierr']
-    return res
+    res['pars_err'] *= noise
+    err=res['pars_err'][0]
+    if err > 0:
+        res['s2n_w'] = res['pars'][0]/err
+    else:
+        res['s2n_w']=-9999.0
+
+    if do_admom:
+        return res, ares
+    else:
+        return res
 
 def test_moms_many(num, method='lm', use_errors=False, eps=None,show=False, **keys):
     import esutil as eu
@@ -4207,18 +4225,20 @@ def test_moms_many(num, method='lm', use_errors=False, eps=None,show=False, **ke
         try:
             res=test_moms(**keys)
 
-            if res['niter'] < res['maxiter']:
+            if res['flags'] == 0:
                 used[i] = 1
 
-                I[i]  = res['Isum']
-                T[i]  = res['Tsum']
-                M1[i] = res['M1sum']
-                M2[i] = res['M2sum']
+                pars=res['pars']
+                perr=res['pars_err']
+                I[i]  = pars[0]
+                T[i]  = pars[1]
+                M1[i] = pars[2]
+                M2[i] = pars[3]
 
-                I_err[i]  = res['VIsum']
-                T_err[i]  = res['VTsum']
-                M1_err[i] = res['VM1sum']
-                M2_err[i] = res['VM2sum']
+                I_err[i]  = perr[0]
+                T_err[i]  = perr[1]
+                M1_err[i] = perr[2]
+                M2_err[i] = perr[3]
 
                 s2n[i] = res['s2n_w']
 
