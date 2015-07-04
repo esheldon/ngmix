@@ -4246,6 +4246,7 @@ def test_moms_many(num, method='lm', use_errors=False, eps=None,show=False, **ke
             pass
 
     w,=where(used)
+    print("used: %d/%d" % (w.size, num))
     I=I[w]
     T=T[w]
     M1=M1[w]
