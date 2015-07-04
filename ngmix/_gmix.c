@@ -1313,20 +1313,20 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
     PyObject* jacob_obj=NULL;
     PyObject* cen_obj=NULL;
     PyObject* pars_obj=NULL;
-    PyObject* perr_obj=NULL;
+    PyObject* pvar_obj=NULL;
 
     npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
 
     struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
     struct PyGMix_Jacobian *jacob=NULL;
-    double *cen=NULL, *pars=NULL, *perr=NULL;
+    double *cen=NULL, *pars=NULL, *pvar=NULL;
 
     double u=0, v=0, umod=0, vmod=0;
     double wdata=0, data=0, weight=0, w2=0;
     double T=0,M1=0,M2=0;
     double Isum=0, usum=0, vsum=0, Tsum=0, M1sum=0, M2sum=0;
     double VIsum=0, VTsum=0, VM1sum=0, VM2sum=0;
-    //double Vusum=0, Vvsum=0;
+    double Vusum=0, Vvsum=0;
     double ucen=0, vcen=0, ucenold=0, vcenold=0;
     double centol=0, max_shift=0;
     int maxiter=0, niter=0, flags=0;
@@ -1334,7 +1334,7 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
     if (!PyArg_ParseTuple(args, (char*)"OOOiddOOO", 
                           &image_obj, &gmix_obj, &jacob_obj,
                           &maxiter, &centol, &max_shift,
-                          &cen_obj, &pars_obj, &perr_obj)) {
+                          &cen_obj, &pars_obj, &pvar_obj)) {
         return NULL;
     }
 
@@ -1376,7 +1376,6 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
                 weight=PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, umod, vmod);
 
                 wdata = weight*data;
-                w2 = weight*weight;
 
                 Isum += wdata;
                 usum += wdata*umod;
@@ -1434,18 +1433,20 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
 
 
             T = umod*umod + vmod*vmod;
-            M1 = umod*umod - vmod*vmod;
+            M1 = vmod*vmod - umod*umod;
             M2 = 2*umod*vmod;
 
             wdata = weight*data;
             w2 = weight*weight;
 
-            Isum += wdata;
-            VIsum += w2;
+            Isum  += wdata;
             Tsum  += wdata*T;
             M1sum += wdata*M1;
             M2sum += wdata*M2;
 
+            VIsum += w2;
+            Vusum  += w2*umod*umod;
+            Vvsum  += w2*vmod*vmod;
             VTsum  += w2*T*T;
             VM1sum += w2*M1*M1;
             VM2sum += w2*M2*M2;
@@ -1460,19 +1461,24 @@ _getmom_bail:
 
     cen=PyArray_DATA(cen_obj);
     pars=PyArray_DATA(pars_obj);
-    perr=PyArray_DATA(perr_obj);
+    pvar=PyArray_DATA(pvar_obj);
 
     cen[0]=ucen;
     cen[1]=vcen;
-    pars[0]=Isum;
-    pars[1]=Tsum;
+
+    pars[0]=usum;
+    pars[1]=vsum;
     pars[2]=M1sum;
     pars[3]=M2sum;
+    pars[4]=Tsum;
+    pars[5]=Isum;
 
-    perr[0]=VIsum;
-    perr[1]=VTsum;
-    perr[2]=VM1sum;
-    perr[3]=VM2sum;
+    pvar[0]=Vusum;
+    pvar[1]=Vvsum;
+    pvar[2]=VM1sum;
+    pvar[3]=VM2sum;
+    pvar[4]=VTsum;
+    pvar[5]=VIsum;
 
     return Py_BuildValue("ii",  niter, flags);
 }

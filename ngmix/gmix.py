@@ -8,7 +8,7 @@ except:
     # We have Python 3
 
 import numpy
-from numpy import array, zeros, exp, log10, log, dot, sqrt
+from numpy import array, zeros, exp, log10, log, dot, sqrt, diag
 from . import fastmath
 from .jacobian import Jacobian
 from .shape import g1g2_to_e1e2, e1e2_to_g1g2
@@ -560,7 +560,12 @@ class GMix(object):
         return s2n, r2_mean, r4_mean, Tvar
 
 
-    def get_weighted_mom_sums(self, obs, maxiter=100, centol=1.0e-4, max_shift=5.0):
+    def get_weighted_mom_sums(self,
+                              obs,
+                              maxiter=100,
+                              centol=1.0e-4,
+                              max_shift=5.0,
+                              **kw):
         """
         Get the raw weighted moment sums of the image, using the input
         gaussian mixture as the weight function.  The moments are *not*
@@ -613,16 +618,18 @@ class GMix(object):
         """
         gm=self._get_gmix_data()
         cen=zeros(2)
-        pars=zeros(4)
-        pvar=zeros(4)
+        pars=zeros(6)
+        pvar=zeros(6)
         niter,flags=_gmix.get_weighted_mom_sums(obs.image,
                                                 gm,
                                                 obs.jacobian._data,
                                                 maxiter, centol,max_shift,
                                                 cen,pars,pvar)
         flagstr=_moms_flagmap[flags]
+        cov=diag(pvar)
         return {'cen':cen,
                 'pars':pars,
+                'pars_cov':cov,
                 'pars_var':pvar,
                 'maxiter':maxiter,
                 'centol':centol,

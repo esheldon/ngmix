@@ -4211,9 +4211,9 @@ def test_moms(model='gauss',
     res['pars_var'] *= noise
     res['pars_err'] = sqrt(res['pars_var'])
 
-    err=res['pars_err'][0]
+    err=res['pars_err'][5]
     if err > 0:
-        res['s2n_w'] = res['pars'][0]/err
+        res['s2n_w'] = res['pars'][5]/err
     else:
         res['s2n_w']=-9999.0
 
@@ -4255,15 +4255,15 @@ def test_moms_many(num, method='lm', use_errors=False, eps=None,show=False, **ke
 
                 pars=res['pars']
                 perr=res['pars_err']
-                I[i]  = pars[0]
-                T[i]  = pars[1]
                 M1[i] = pars[2]
                 M2[i] = pars[3]
+                T[i]  = pars[4]
+                I[i]  = pars[5]
 
-                I_err[i]  = perr[0]
-                T_err[i]  = perr[1]
                 M1_err[i] = perr[2]
                 M2_err[i] = perr[3]
+                T_err[i]  = perr[4]
+                I_err[i]  = perr[5]
 
                 s2n[i] = res['s2n_w']
 
