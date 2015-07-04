@@ -1394,7 +1394,7 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
         }
         ucen = usum/Isum;
         vcen = vsum/Isum;
-        fprintf(stderr,"%.10g %.10g %.10g %.10g\n", usum, vsum, ucen, vcen);
+        //fprintf(stderr,"%.10g %.10g %.10g %.10g\n", usum, vsum, ucen, vcen);
 
         if ((fabs(ucen) > max_shift) || (fabs(vcen) > max_shift)) {
             flags = 4;
