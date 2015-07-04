@@ -4132,6 +4132,7 @@ def test_moms(model='gauss',
               max_shift=2.0,
               show=False,
               do_admom=False,
+              do_em=False,
               verbose=True):
     """
     wgmix is a gaussian mixture to use for the weight
@@ -4190,18 +4191,42 @@ def test_moms(model='gauss',
         import admom
         ares=admom.admom(im, cen, cen)
 
+    if do_em:
+        imsky,sky=em.prep_image(im)
+
+        newobs = Observation(imsky, jacobian=obs.jacobian)
+
+        mc=em.GMixEM(newobs)
+
+        guess_pars=[0.,0.,0.,0.,4.0,1.0]
+        guess=gmix.GMixModel(guess_pars, 'gauss')
+
+        mc.go(guess, sky, maxiter=maxiter, tol=1.0e-6)
+    
+        emres=mc.get_result()
+        if emres['flags']==0:
+            emres['cen'] = mc.get_gmix().get_cen()
+
     res['skysig'] = noise
-    res['pars_err'] *= noise
+    res['pars_var'] *= noise
+    res['pars_err'] = sqrt(res['pars_var'])
+
     err=res['pars_err'][0]
     if err > 0:
         res['s2n_w'] = res['pars'][0]/err
     else:
         res['s2n_w']=-9999.0
 
+    ores=[res]
     if do_admom:
-        return res, ares
-    else:
-        return res
+        ores.append(ares)
+    if do_em:
+        ores.append(emres)
+
+    if len(ores)==1:
+        ores=ores[0]
+
+    return ores
 
 def test_moms_many(num, method='lm', use_errors=False, eps=None,show=False, **keys):
     import esutil as eu

@@ -614,16 +614,16 @@ class GMix(object):
         gm=self._get_gmix_data()
         cen=zeros(2)
         pars=zeros(4)
-        perr=zeros(4)
+        pvar=zeros(4)
         niter,flags=_gmix.get_weighted_mom_sums(obs.image,
                                                 gm,
                                                 obs.jacobian._data,
                                                 maxiter, centol,max_shift,
-                                                cen,pars,perr)
+                                                cen,pars,pvar)
         flagstr=_moms_flagmap[flags]
         return {'cen':cen,
                 'pars':pars,
-                'pars_err':perr,
+                'pars_var':pvar,
                 'maxiter':maxiter,
                 'centol':centol,
                 'niter':niter,
