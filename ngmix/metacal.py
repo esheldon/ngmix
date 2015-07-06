@@ -103,6 +103,22 @@ class Metacal(object):
         else:
             return newobs
 
+    def get_obs_dilated_only(self, shear):
+        """
+        Unsheared image, just with psf dilated
+
+        parameters
+        ----------
+        shear: ngmix.Shape
+            The shear to apply
+        """
+
+        newpsf = self.get_target_psf(shear, 'gal_shear')
+        unsheared_image = self.get_target_image(newpsf, shear=None)
+        uobs = self._make_obs(unsheared_image, newpsf)
+
+        return uobs
+
     def get_obs_psfshear(self, shear):
         """
         This is the case where we shear the psf image, for calculating Rpsf
