@@ -302,6 +302,7 @@ def lensfit_jackknife(g, gsens, do_ring=False, **keys):
         return _lensfit_jackknife(g, gsens,**keys)
 
 def _lensfit_jackknife(g, gsens,
+                       gsens_alt=None,
                        chunksize=1,
                        get_sums=False,
                        get_shears=False,
@@ -334,6 +335,12 @@ def _lensfit_jackknife(g, gsens,
 
     shear = g_sum/gsens_sum
 
+    if gsens_alt is not None:
+        gsens_alt_sum = (gsens_alt*wa).sum(axis=0)
+        
+        gsens_alt_mean=gsens_alt_sum/wsum
+        shear = shear/gsens_alt_mean
+
     shears = numpy.zeros( (nchunks, 2) )
     for i in xrange(nchunks):
 
@@ -353,6 +360,12 @@ def _lensfit_jackknife(g, gsens,
 
         shears[i, :] = j_g_sum/j_gsens_sum
 
+        if gsens_alt is not None:
+            this_gsens_alt_sum = (gsens_alt[beg:end,:]*this_wts).sum(axis=0)
+            wdiff = wsum - weights[beg:end].sum()
+            j_gsens_alt_mean = (gsens_alt_sum - this_gsens_alt_sum)/wdiff
+            shears[i,:] *= 1.0/j_gsens_alt_mean
+
     shear_cov = numpy.zeros( (2,2) )
     fac = (nchunks-1)/float(nchunks)
 
@@ -366,7 +379,10 @@ def _lensfit_jackknife(g, gsens,
         _plot_shears(shears, show=show, eps=eps, png=png)
 
     if get_sums:
-        return shear, shear_cov, g_sum, gsens_sum
+        if gsens_alt is not None:
+            return shear, shear_cov, g_sum, gsens_sum, gsens_alt_sum
+        else:
+            return shear, shear_cov, g_sum, gsens_sum
     elif get_shears:
         return shear, shear_cov, shears
     else:
@@ -374,14 +390,15 @@ def _lensfit_jackknife(g, gsens,
 
 
 def _lensfit_jackknife_ring(g, gsens,
-                      chunksize=1,
-                      get_sums=False,
-                      get_shears=False,
-                      weights=None,
-                      progress=False,
-                      show=False,
-                      eps=None,
-                      png=None):
+                            gsens_alt=None,
+                            chunksize=1,
+                            get_sums=False,
+                            get_shears=False,
+                            weights=None,
+                            progress=False,
+                            show=False,
+                            eps=None,
+                            png=None):
     """
     Get the shear covariance matrix using jackknife resampling.
 
@@ -413,6 +430,12 @@ def _lensfit_jackknife_ring(g, gsens,
 
     shear = g_sum/gsens_sum
 
+    if gsens_alt is not None:
+        gsens_alt_sum = (gsens_alt*wa).sum(axis=0)
+        
+        gsens_alt_mean=gsens_alt_sum/wsum
+        shear = shear/gsens_alt_mean
+
     shears = numpy.zeros( (nchunks, 2) )
     for i in xrange(nchunks):
 
@@ -427,12 +450,18 @@ def _lensfit_jackknife_ring(g, gsens,
         this_gsum = (g[beg:end,:]*this_wts).sum(axis=0)
         this_gsens_sum = (gsens[beg:end,:]*this_wts).sum(axis=0)
 
+
         j_g_sum     = g_sum     - this_gsum
         j_gsens_sum = gsens_sum - this_gsens_sum
-        #j_g_sum     = g_sum     - g[beg:end, :].sum(axis=0)
-        #j_gsens_sum = gsens_sum - gsens[beg:end,:].sum(axis=0)
 
         shears[i, :] = j_g_sum/j_gsens_sum
+
+        if gsens_alt is not None:
+            this_gsens_alt_sum = (gsens_alt[beg:end,:]*this_wts).sum(axis=0)
+            wdiff = wsum - weights[beg:end].sum()
+            j_gsens_alt_mean = (gsens_alt_sum - this_gsens_alt_sum)/wdiff
+            shears[i,:] *= 1.0/j_gsens_alt_mean
+
 
     shear_cov = numpy.zeros( (2,2) )
     fac = (nchunks-1)/float(nchunks)
@@ -447,7 +476,10 @@ def _lensfit_jackknife_ring(g, gsens,
         _plot_shears(shears, show=show, eps=eps, png=png)
 
     if get_sums:
-        return shear, shear_cov, g_sum, gsens_sum
+        if gsens_alt is not None:
+            return shear, shear_cov, g_sum, gsens_sum, gsens_alt_sum
+        else:
+            return shear, shear_cov, g_sum, gsens_sum
     elif get_shears:
         return shear, shear_cov, shears
     else:
