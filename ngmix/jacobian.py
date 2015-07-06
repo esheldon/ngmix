@@ -1,6 +1,8 @@
 import numpy
 from numpy import zeros, sqrt
 
+import copy
+
 '''
 _jacobian=struct([('row0',float64),
                   ('col0',float64),
@@ -43,34 +45,35 @@ class Jacobian(object):
         """
         Get the center of the coordinate system
         """
-        return self.row0, self.col0
+        return copy.deepcopy(self.row0), copy.deepcopy(self.col0)
 
     def get_dudrow(self):
         """
         get the dudrow value
         """
-        return self._data['dudrow'][0]
+        return copy.deepcopy(self._data['dudrow'][0])
+
     dudrow=property(fget=get_dudrow)
 
     def get_dudcol(self):
         """
         get the dudcol value
         """
-        return self._data['dudcol'][0]
+        return copy.deepcopy(self._data['dudcol'][0])
     dudcol=property(fget=get_dudcol)
 
     def get_dvdrow(self):
         """
         get the dvdrow value
         """
-        return self._data['dvdrow'][0]
+        return copy.deepcopy(self._data['dvdrow'][0])
     dvdrow=property(fget=get_dvdrow)
 
     def get_dvdcol(self):
         """
         get the dvdcol value
         """
-        return self._data['dvdcol'][0]
+        return copy.deepcopy(self._data['dvdcol'][0])
     dvdcol=property(fget=get_dvdcol)
 
 
@@ -85,19 +88,19 @@ class Jacobian(object):
         """
         Get the determinant of the jacobian matrix
         """
-        return self._data['det'][0]
+        return copy.deepcopy(self._data['det'][0])
 
     def get_sdet(self):
         """
         Get the determinant of the jacobian matrix
         """
-        return self._data['sdet'][0]
+        return copy.deepcopy(self._data['sdet'][0])
 
     def get_scale(self):
         """
         Get the scale, defined as sqrt(det)
         """
-        return self._data['sdet'][0]
+        return copy.deepcopy(self._data['sdet'][0])
 
     def copy(self):
         return Jacobian(self._data['row0'][0],

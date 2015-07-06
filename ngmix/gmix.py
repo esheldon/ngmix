@@ -7,6 +7,7 @@ except:
     xrange = range
     # We have Python 3
 
+import copy
 import numpy
 from numpy import array, zeros, exp, log10, log, dot, sqrt, diag
 from . import fastmath
