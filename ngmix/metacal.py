@@ -5,9 +5,6 @@ limitations
 
 See TODO in the code
 
-    - the returned images are identical to input.  Somehow the transformations
-    are no-ops when rendered into images
-
     - assumes psf and image are on same pixel scale
     - code copied from Eric Huff seems not quite general, unless I
     misunderstand how galsim is working.  The pixel_scale is used in a few
