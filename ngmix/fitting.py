@@ -13,7 +13,8 @@ except:
 
 from sys import stdout
 import numpy
-from numpy import array, zeros, diag, exp, sqrt, where, log, log10, isfinite
+from numpy import array, zeros, ones, diag
+from numpy import exp, sqrt, where, log, log10, isfinite
 from numpy import linalg
 from numpy.linalg import LinAlgError
 import time
@@ -4430,6 +4431,179 @@ class MCMCSimpleJointLogPars(MCMCSimple):
 
 _default_min_err=array([1.e-4,1.e-4,1.e-3,1.e-3,1.0e-4,1.0e-4])
 _default_max_err=array([1.0,1.0,5.0,5.0,1.0,1.0])
+
+class PSampler(object):
+    def __init__(self, pars, perr, samples,
+                 max_use=None,
+                 nsigma=4.0,
+                 min_err=_default_min_err,
+                 max_err=_default_max_err,
+                 verbose=True):
+        self._pars=array(pars)
+        self._perr_orig=array(perr)
+        self._npars = self._pars.size
+
+        self._samples=samples
+        self._nsigma=nsigma
+
+        if max_use is None:
+            max_use=samples.shape[0]
+
+        self._max_use=max_use
+
+        self._set_err(min_err, max_err)
+        self.verbose=verbose
+
+    def get_result(self):
+        """
+        get the result dictionary
+        """
+        return self._result
+
+    def get_loglikes(self):
+        """
+        get the log likelihoods for used samples
+        """
+        return self._logl_vals
+
+    def get_likelihoods(self):
+        """
+        get the likelihoods for used samples
+        """
+        return self._lvals
+
+    def get_used_samples(self):
+        """
+        get the subset of the samples used
+        """
+        return self._used_samples
+    def get_used_indices(self):
+        """
+        get indices of used samples
+        """
+        return self._used_indices
+
+    def calc_loglikes(self, lnprob_func):
+        """
+        calculate the loglike for a subset of the points
+        """
+        res={'flags':0}
+        self._result=res
+
+        w=self._select_samples()
+
+        samples=self._samples
+        res['nuse'] = w.size
+        if w.size == 0:
+            res['flags']=1
+        else:
+            tmp=numpy.random.random(w.size)
+            s=tmp.argsort()
+
+            rind = w[s]
+            used_samples = samples[rind]
+
+            logl_vals = zeros(rind.size)
+            for i in xrange(rind.size):
+                tpars = used_samples[i,:]
+                logl_vals[i] = lnprob_func(tpars)
+
+            logl_max = logl_vals.max()
+            logl_vals -= logl_max
+
+            lvals = exp(logl_vals)
+
+            self._used_samples = used_samples
+            self._used_indices = rind
+
+            self._logl_vals=logl_vals
+            self._lvals=lvals
+
+            self._calc_result()
+
+    def _calc_result(self):
+        """
+        Calculate the mcmc stats and the "best fit" stats
+        """
+        from numpy import diag
+
+        result=self._result
+        if result['flags'] != 0:
+            return
+        
+        pars,pars_cov = self.get_stats()
+        pars_err=sqrt(diag(pars_cov))
+
+        neff = self._lvals.sum()
+        efficiency = neff/self._lvals.size
+
+        res={'pars':pars,
+             'pars_cov':pars_cov,
+             'pars_err':pars_err,
+             'g':pars[2:2+2],
+             'g_cov':pars_cov[2:2+2, 2:2+2],
+             'neff':neff,
+             'efficiency':efficiency}
+
+        result.update(res)
+ 
+    def get_stats(self):
+        """
+        get expectation values and covariance for
+        g from the trials
+        """
+        from ngmix import stats
+
+        samples = self.get_used_samples()
+        likes   = self.get_likelihoods()
+
+        pars, pars_cov = stats.calc_mcmc_stats(samples, weights=likes)
+
+        return pars, pars_cov
+ 
+    def _select_samples(self):
+        from esutil.numpy_util import between
+        samples=self._samples
+        np = samples.shape[0]
+
+        pars=self._pars
+        perr=self._perr
+        nsigma=self._nsigma
+
+        logic = ones(np, dtype=bool)
+        for i in xrange(self._npars):
+            minval = pars[i]-nsigma*perr[i]
+            maxval = pars[i]+nsigma*perr[i]
+            logic = logic & between(samples[:,i], minval, maxval)
+
+        w,=where(logic)
+
+        if w.size > self._max_use:
+            w=w[0:self._max_use]
+        return w
+
+    def _set_err(self, min_err, max_err):
+        if min_err is None:
+            min_err = self._pars_orig*0
+        else:
+            min_err=array(min_err,copy=False)
+
+        if max_err is None:
+            max_err = self._pars_orig*0 + numpy.inf
+        else:
+            max_err=array(max_err,copy=False)
+
+        assert min_err.size==self._pars.size,"min_err must be same size as pars"
+        assert max_err.size==self._pars.size,"max_err must be same size as pars"
+
+        operr=self._perr_orig
+        perr=self._perr_orig*0
+
+        for i in xrange(perr.size):
+            perr[i] = operr[i].clip(min=min_err[i],
+                                    max=max_err[i])
+        self._perr = perr
+
 class ISampler(object):
     """
     sampler using multivariate T distribution

@@ -65,6 +65,14 @@ class Bootstrapper(object):
             raise RuntimeError("you need to run isample() successfully first")
         return self.isampler
 
+    def get_psampler(self):
+        """
+        get the prior samples sampler
+        """
+        if not hasattr(self,'psampler'):
+            raise RuntimeError("you need to run psample() successfully first")
+        return self.psampler
+
     def get_max_fitter(self):
         """
         get the maxlike fitter for the galaxy
@@ -723,7 +731,7 @@ class Bootstrapper(object):
 
         niter=len(ipars['nsample'])
         for i,nsample in enumerate(ipars['nsample']):
-            sampler=self._make_sampler(use_fitter, ipars, verbose=verbose)
+            sampler=self._make_isampler(use_fitter, ipars, verbose=verbose)
             if sampler is None:
                 raise BootGalFailure("isampling failed")
 
@@ -743,7 +751,7 @@ class Bootstrapper(object):
 
         self.isampler=sampler
 
-    def _make_sampler(self, fitter, ipars, verbose=True):
+    def _make_isampler(self, fitter, ipars, verbose=True):
         from .fitting import ISampler
         from numpy.linalg import LinAlgError
 
@@ -764,6 +772,35 @@ class Bootstrapper(object):
             sampler=None
 
         return sampler
+
+    def psample(self, psample_pars, samples, verbose=True):
+        """
+        bootstrap off the maxlike run
+        """
+        from .fitting import PSampler, MaxSimple
+
+        max_fitter=self.get_max_fitter()
+        res=max_fitter.get_result()
+
+        model=res['model']
+        tfitter=MaxSimple(self.mb_obs_list,
+                          model,
+                          use_logpars=self.use_logpars)
+        tfitter._setup_data(res['pars'])
+ 
+        sampler=PSampler(res['pars'],
+                         res['pars_err'],
+                         samples,
+                         verbose=verbose,
+                         **psample_pars)
+
+        sampler.calc_loglikes(tfitter.calc_lnprob)
+
+        self.psampler=sampler
+
+        res=sampler.get_result()
+        if res['flags'] != 0:
+            raise BootGalFailure("psampling failed")
 
 
 
