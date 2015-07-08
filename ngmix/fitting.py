@@ -4497,14 +4497,10 @@ class PSampler(object):
         if w.size == 0:
             res['flags']=1
         else:
-            tmp=numpy.random.random(w.size)
-            s=tmp.argsort()
+            used_samples = samples[w]
 
-            rind = w[s]
-            used_samples = samples[rind]
-
-            logl_vals = zeros(rind.size)
-            for i in xrange(rind.size):
+            logl_vals = zeros(w.size)
+            for i in xrange(w.size):
                 tpars = used_samples[i,:]
                 logl_vals[i] = lnprob_func(tpars)
 
@@ -4514,7 +4510,7 @@ class PSampler(object):
             lvals = exp(logl_vals)
 
             self._used_samples = used_samples
-            self._used_indices = rind
+            self._used_indices = w
 
             self._logl_vals=logl_vals
             self._lvals=lvals
@@ -4580,6 +4576,12 @@ class PSampler(object):
 
         if w.size > self._max_use:
             w=w[0:self._max_use]
+
+            tmp=numpy.random.random(w.size)
+            s=tmp.argsort()
+
+            w = w[s]
+
         return w
 
     def _set_err(self, min_err, max_err):
