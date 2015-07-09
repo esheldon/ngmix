@@ -1698,6 +1698,7 @@ class LMGaussMom(LMSimple):
 
         return pars
 
+    '''
     def _init_gmix_all(self, pars):
         """
         input pars are in linear space
@@ -1741,6 +1742,7 @@ class LMGaussMom(LMSimple):
                     _gmix.gmix_fill(gm._data, band_pars, gm._model)
                 except ZeroDivisionError:
                     raise GMixRangeError("zero division")
+    '''
 
 class LMSimpleRound(LMSimple):
     """

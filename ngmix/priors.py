@@ -2974,6 +2974,55 @@ class LogNormal(object):
 
         return samples
 
+
+class MultivariateLogNormal(object):
+    def __init__(self, mean, cov):
+        self.mean=array(mean,ndim=1,dtype='f8',copy=True)
+        self.cov=array(cov,ndmin=1,dtype='f8',copy=True)
+
+        self._set_log_mean_cov()
+
+    def _set_log_mean_cov(self):
+        mean=self.mean
+        cov=self.cov
+
+        ndim=mean.size
+        if ndim != cov.shape[0] or ndim != cov.shape[1]:
+            raise ValueError("mean has size %d but "
+                             "cov has shape %s" % (ndim,str(cov.shape)))
+        w,=where(mean <= 0)
+        if w.size > 0:
+            raise ValueError("some means <= 0: %s" % str(mean))
+
+        mean_sq = mean**2
+
+        lmean = zeros(ndim)
+        lcov  = zeros( (ndim,ndim) )
+
+        # first fill in diagonal terms
+        for i in xrange(ndim):
+            ratio = cov[i,i]/mean_sq[i]
+            lcov[i,i] = log( 1.0 + ratio )
+            lmean[i] = log(mean[i]) - 0.5*lcov[i,i]
+
+        # now fill in off-diagonals
+        for i in xrange(ndim):
+            for j in xrange(i,ndim):
+                if i==j:
+                    continue
+
+                earg = lmean[i] + lmean[j] + 0.5*(lcov[i,i]+lcov[j,j])
+                denom = exp(earg)
+                tcovar = log( 1.0 + cov[i,j]/denom )
+                lcov[i,j] = tcovar
+                lcov[j,i] = tcovar
+
+        self.lmean = lmean
+        self.lcov  = lcov
+
+
+
+
 def lognorm_convert_old(mean, sigma):
     logmean  = log(mean) - 0.5*log( 1 + sigma**2/mean**2 )
     logvar   = log(1 + sigma**2/mean**2 )
