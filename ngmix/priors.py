@@ -2867,7 +2867,6 @@ class LogNormal(object):
 
         self.mode = numpy.exp(self.logmean - self.logvar)
 
-
     def get_lnprob_scalar(self, x):
         """
         This one has error checking
@@ -2976,17 +2975,97 @@ class LogNormal(object):
 
 
 class MultivariateLogNormal(object):
+    """
+    multi-variate log-normal distribution
+
+    parameters
+    ----------
+    mean: array-like
+        [Ndim] of means for each dim. of the distribution
+    cov: array-like
+        [Ndim,Ndim] covariance matrix
+    """
     def __init__(self, mean, cov):
-        self.mean=array(mean,ndim=1,dtype='f8',copy=True)
+        self.mean=array(mean,ndmin=1,dtype='f8',copy=True)
         self.cov=array(cov,ndmin=1,dtype='f8',copy=True)
 
         self._set_log_mean_cov()
 
+    def get_lnprob_scalar(self, x):
+        """
+        get the log(prob) for the input x
+
+        parameters
+        ----------
+        x: array
+            Array with length equal to number of dimensions
+        """
+        from numpy import dot
+
+        if x.size != self.ndim:
+            raise ValueError("x must have length %d, "
+                             "got %d" % (self.ndim,x.size))
+
+        w,=where(x <= 0.0)
+        if w.size > 0:
+            raise ValueError("some values <= zero")
+
+        logx = log(x)
+
+        xdiff = logx - self.lmean
+
+        chi2 = dot( xdiff, dot(self.lcov_inv, xdiff) )
+
+        # subtract mode to make max 0.0
+        lnprob = -0.5*chi2 - logx
+
+        return lnprob
+
+    def get_prob_scalar(self, x):
+        """
+        get the prob for the input x
+
+        parameters
+        ----------
+        x: array-like
+            Array with length equal to number of dimensions
+        """
+
+        lnprob = self.get_lnprob_scalar(x)
+        return exp(lnprob)
+
+    def sample(self, n=None):
+        """
+        sample from the distribution
+
+        parameters
+        ----------
+        n: int, optional
+            Number of points to generate from the distribution
+
+        returns
+        -------
+        random points:
+            If n is None or 1, a 1-d array is returned, else a [N, ndim]
+            array is returned
+        """
+        rl = self.log_dist.rvs(n)
+        numpy.exp(rl,rl)
+
+        return rl
+
     def _set_log_mean_cov(self):
+        """
+        Genrate the mean and covariance in log space, 
+        as well as the multivariate normal for the log space
+        """
+        import scipy.stats
         mean=self.mean
         cov=self.cov
 
         ndim=mean.size
+        self.ndim=ndim
+
         if ndim != cov.shape[0] or ndim != cov.shape[1]:
             raise ValueError("mean has size %d but "
                              "cov has shape %s" % (ndim,str(cov.shape)))
@@ -3001,9 +3080,9 @@ class MultivariateLogNormal(object):
 
         # first fill in diagonal terms
         for i in xrange(ndim):
-            ratio = cov[i,i]/mean_sq[i]
-            lcov[i,i] = log( 1.0 + ratio )
+            lcov[i,i] = log( 1.0 + cov[i,i]/mean_sq[i] )
             lmean[i] = log(mean[i]) - 0.5*lcov[i,i]
+            #print("lcov[%d,%d]: %g" % (i,i,lcov[i,i]))
 
         # now fill in off-diagonals
         for i in xrange(ndim):
@@ -3011,17 +3090,133 @@ class MultivariateLogNormal(object):
                 if i==j:
                     continue
 
+                # this reduces to mean^2 for the diagonal
                 earg = lmean[i] + lmean[j] + 0.5*(lcov[i,i]+lcov[j,j])
-                denom = exp(earg)
-                tcovar = log( 1.0 + cov[i,j]/denom )
+                m2 = exp(earg)
+
+                tcovar = log( 1.0 + cov[i,j]/m2 )
+                #print("tcovar:",tcovar)
                 lcov[i,j] = tcovar
                 lcov[j,i] = tcovar
 
         self.lmean = lmean
         self.lcov  = lcov
 
+        # will raise numpy.linalg.linalg.LinAlgError
+        self.lcov_inv = numpy.linalg.inv(lcov)
+
+        '''
+        import images
+        import esutil as eu
+        print("orig")
+        images.imprint(cov)
+        print("lcov")
+        images.imprint(lcov)
+        print("lcorr")
+        lcorr=eu.stat.cov2cor(lcov)
+        images.imprint(lcorr)
+        images.view(lcorr)
+        #stop
+        '''
+
+        self.log_dist = scipy.stats.multivariate_normal(mean=lmean, cov=lcov)
 
 
+class MVNMom(object):
+    def __init__(self, means, cov, psf_means):
+        self.means=means
+        self.cov=cov
+        self.psf_means=psf_means
+
+        self.ndim=means.size
+        self._set_offsets()
+
+    def sample(self, n=None):
+        if n is None:
+            is_scalar=True
+            n=1
+        else:
+            is_scalar=False
+
+        r=self.mvn.sample(n=n)
+
+        cen_offsets=self.cen_offsets
+        Irc=self.means[4]
+        psf_means=self.psf_means
+        Irc_midval=self.Irc_midval
+
+        r[:,1] -= cen_offsets[0]
+        r[:,2] -= cen_offsets[1]
+        r[:,3] -= psf_means[3]
+        r[:,5] -= psf_means[5]
+
+        if self.Irc_is_neg:
+            r[:,4] = Irc - (r[:,4]-Irc_midval)
+        else:
+            r[:,4] = Irc + (r[:,4]-Irc_midval)
+
+        if is_scalar:
+            r=r[0,:]
+
+        return r
+
+    def _set_offsets(self):
+        """
+        We determine offsets that should be added to the input
+        means to make them positive
+
+        also for Irc we may multiply by -1
+        """
+        from numpy import newaxis
+
+        means=self.means
+        psf_means=self.psf_means
+
+        ndim=means.size
+        nband = ndim-6+1
+        if nband > 1:
+            raise  RuntimeError("nband ==1 for now")
+
+        cen_offsets=zeros(2)
+        sigmas=sqrt(diag(self.cov))
+
+        cen=means[1:1+2]
+        cen_sigma=sigmas[1:1+2]
+
+        nsig=5
+        rng = nsig*cen_sigma
+
+        for i in xrange(2):
+            if cen[i] < 0:
+                cen_offsets[i] = -cen[i] + rng[i]
+            elif cen[i] - rng[i] < 0:
+                cen_offsets[i] = rng[i]-cen[i]
+
+        Ttot = means[3]+means[5] + psf_means[3]+psf_means[5]
+
+        Irc = means[4]
+        psf_Irc=psf_means[4]
+
+        Irc_midval = (Ttot/2.0)/numpy.abs(Irc+psf_Irc)
+
+        if Irc < 0:
+            self.Irc_is_neg = True
+        else:
+            self.Irc_is_neg = False
+
+        lmeans = means.copy()
+
+        lmeans[1] += cen_offsets[0]
+        lmeans[2] += cen_offsets[1]
+        lmeans[3] += psf_means[3]
+        lmeans[4]  = Irc_midval
+        lmeans[5] += psf_means[5]
+
+        self.cen_offsets=cen_offsets
+        self.Irc_midval=Irc_midval
+
+        print("lmeans:",lmeans)
+        self.mvn=MultivariateLogNormal(lmeans, self.cov)
 
 def lognorm_convert_old(mean, sigma):
     logmean  = log(mean) - 0.5*log( 1 + sigma**2/mean**2 )

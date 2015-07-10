@@ -10,6 +10,8 @@ from . import joint_prior
 from .fitting import *
 from .gexceptions import *
 
+from . import stats
+
 def test_mcmc_psf(model="gauss",
                   g1=0.0,
                   g2=0.0,
@@ -3564,15 +3566,14 @@ def test_metacal(model, show=False, **kw):
 
 def test_fit_gauss1_many(num,
                          T=4.0,
+                         method='lm',
                          dopsf=True,
                          fitpsf=True,
-                         use_errors=False,
                          eps=None,
                          show=False,
                          **keys):
     import esutil as eu
     from .gexceptions import GMixMaxIterEM
-
 
     dt=[('used','i2'),
         ('g1','f8'),
@@ -3596,18 +3597,12 @@ def test_fit_gauss1_many(num,
     keys['verbose']=False
     for i in xrange(num):
         try:
-            fitter=test_fit_gauss1(dopsf=dopsf, fitpsf=fitpsf, T=T, method='lm', **keys)
+            fitter=test_fit_gauss1(dopsf=dopsf, fitpsf=fitpsf, T=T, method=method, **keys)
             if fitter is not None:
                 gm=fitter.get_gmix()
                 try:
                     g1,g2,Ttmp=gm.get_g1g2T()
 
-                    '''
-                    d=gm.get_data()
-                    Irr[i] = d['irr'][0]
-                    Irc[i] = d['irc'][0]
-                    Icc[i] = d['icc'][0]
-                    '''
                     res=fitter.get_result()
                     pars=res['pars']
                     perr=res['pars_err']
@@ -3641,32 +3636,40 @@ def test_fit_gauss1_many(num,
 
     data=data[w]
 
+    allpars=zeros( (numuse,4) )
+    allpars[:,0]=data['Irr']
+    allpars[:,1]=data['Irc']
+    allpars[:,2]=data['Icc']
+    allpars[:,3]=data['I']
+
+    mpars,mcov=stats.calc_mcmc_stats(allpars)
+
     Tvals = data['Irr'] + data['Icc']
     Ttot = Tvals + data['psf_Irr'] + data['psf_Irc']
 
-    Tmean,Tstd,Terr=eu.stat.sigma_clip(Tvals, get_err=True)
-    Ttot_mean,Ttot_std,Ttot_err=eu.stat.sigma_clip(Ttot, get_err=True)
+    Tmean=Tvals.mean()
+    Ttot_mean = Ttot.mean()
 
-    print("T:     %g" % T)
-    print("Tmeas: %g +/- %g +/- %g" % (Tmean,Tstd,Terr))
-
-    g1mean,g1std,g1err=eu.stat.sigma_clip(data['g1'], get_err=True)
-    g2mean,g2std,g2err=eu.stat.sigma_clip(data['g2'], get_err=True)
-
-    print("g1:  %g +/- %g" % (g1mean,g1err))
-    print("g2:  %g +/- %g" % (g2mean,g2err))
-
-    nvals={}
     types=['Irr','Irc','Icc','I']
 
-    for field in types:
-        efield='%s_err' % field
+    lmeans=mpars.copy()
+    # add these offsets to generated randoms
+    offsets=0*mpars
+    factors=0*mpars+1
+
+    nrand=numuse*10
+
+    means=[]
+    covs=[]
+    for i,field in enumerate(types):
 
         tmp = data[field]
-        m,s,err=eu.stat.sigma_clip(tmp,get_err=True)
+
+        m=mpars[i]
+        s=sqrt(mcov[i,i])
+        err=s/sqrt(numuse)
+
         print("%s: %g +/- %g +/- %g" % (field,m,s,err))
-        if use_errors:
-            s,ssig=eu.stat.sigma_clip(data[efield])
 
         if dopsf and fitpsf and field != 'I':
             pfield = 'psf_%s' % field
@@ -3680,31 +3683,44 @@ def test_fit_gauss1_many(num,
             if do_pmean:
 
                 midval=(Ttot_mean/2.)/numpy.abs(m+pmean)
-                p=priors.LogNormal(midval,s)
-                if m < 0:
-                    r=m + -(p.sample(numuse*10)-midval)
-                else:
-                    r=m + p.sample(numuse*10)-midval
+                lmeans[i] = midval
 
+                if m < 0:
+                    # add m+midval
+                    offsets[i] = m+midval
+                    factors[i] = -1
+                else:
+                    # add m-midval
+                    offsets[i] = m-midval
             else:
                 midval=(Tmean/2.)/numpy.abs(m)
-                p=priors.LogNormal(midval,s)
+                lmeans[i] = midval
+
                 if m < 0:
-                    r=m + -(p.sample(numuse*10)-midval)
+                    # add m+midval
+                    #r=m + -(p.sample(nrand)-midval)
+                    offsets[i] = m+midval
                 else:
-                    r=m + p.sample(numuse*10)-midval
+                    # add m-midval
+                    #r=m + p.sample(nrand)-midval
+                    offsets[i] = m-midval
         else:
             if do_pmean:
                 pfield = 'psf_%s' % field
                 pmean = data[pfield].mean()
 
-                p=priors.LogNormal(m+pmean,s)
-                r=p.sample(numuse*10) - pmean
+                lmeans[i] = m+pmean
+                offsets[i] = -pmean
             else:
                 p=priors.LogNormal(m,s)
-                r=p.sample(numuse*10)
+                r=p.sample(nrand)
 
-        nvals[field] = r
+
+    mvn=priors.MultivariateLogNormal(lmeans, mcov, factors=factors, offsets=offsets)
+    print("sampling")
+    rmvn=mvn.sample(nrand)
+    print("done")
+    print("minmax:",rmvn.min(),rmvn.max())
 
     if show or eps:
         import biggles
@@ -3714,11 +3730,14 @@ def test_fit_gauss1_many(num,
 
         grid=eu.plotting.Grid(4)
         for i,field in enumerate(types):
-            efield='%s_err' % field
             
             tmp=data[field]
-            m,s=eu.stat.sigma_clip(tmp)
-            binsize=0.2*s
+
+            m=mpars[i]
+            s=sqrt(mcov[i,i])
+            err=s/sqrt(numuse)
+
+            binsize=0.1*s
             minval=m-4*s
             maxval=m+4*s
             plt=plot_hist(tmp,
@@ -3733,9 +3752,7 @@ def test_fit_gauss1_many(num,
                                     halign='right')
             plt.add(ptext)
 
-            r=nvals[field]
-
-            plot_hist(r,
+            plot_hist(rmvn[:,i],
                       min=minval,max=maxval,
                       visible=False,
                       binsize=binsize,
@@ -3772,6 +3789,7 @@ def test_fit_gauss1(model='gauss',
     """
     from numpy.random import randn
     from . import em
+    from biggles import plot_hist
 
     if model != 'gauss':
         dopsf=True
@@ -3825,15 +3843,20 @@ def test_fit_gauss1(model='gauss',
         lm_pars={'maxfev': 4000}
 
         if dopsf and fitpsf:
-
-            '''
-            pfitter=LMSimple(psfobs, lm_pars=lm_pars)
-            guess=[cen,
-                   cen,
-                   0.0,
-                   0.0,
-                   Tpsf*(1.0 + 0.01*srandu()),
-                   psf_flux*(1.0 + 0.01*srandu()),
+            from .em import fit_em
+            guess=gmpsf.copy()
+            pfitter=fit_em(psfobs, guess, maxiter=maxiter, tol=tol)
+            
+            """
+            pfitter=LMSimple(psfobs, "gauss", lm_pars=lm_pars)
+            guess=psf_pars.copy()
+            guess[0] += 0.01*srandu()
+            guess[1] += 0.01*srandu()
+            guess[2] += 0.01*srandu()
+            guess[3] += 0.01*srandu()
+            guess[4] *= (1.0 + 0.01*srandu())
+            guess[5] *= (1.0 + 0.01*srandu())
+            """
             '''
             pfitter=LMGaussMom(psfobs, lm_pars=lm_pars)
             guess=array([psf_flux*(1.0 + 0.1*srandu()),
@@ -3842,22 +3865,80 @@ def test_fit_gauss1(model='gauss',
                          0.1*srandu(),
                          Tpsf/2.*(1.0+0.1*srandu())])
             pfitter.go(guess)
+            '''
             pres=pfitter.get_result()
             if pres['flags'] != 0:
+                print("psf failure")
                 return None
-            psfobs.set_gmix(pfitter.get_gmix())
+            psf_gmix_meas=pfitter.get_gmix()
+            psfobs.set_gmix(psf_gmix_meas)
             obsorig.set_psf(psfobs)
 
-        fitter=LMGaussMom(obsorig, lm_pars=lm_pars)
-        guess=array([flux*(1.0 + 0.1*srandu()),
-                     cen,cen,
-                     T/2.*(1.0+0.1*srandu()),
-                     0.1*srandu(),
-                     T/2.*(1.0+0.1*srandu())])
+        if method=='lm':
+            fitter=LMGaussMom(obsorig, lm_pars=lm_pars)
+            guess=array([flux*(1.0 + 0.1*srandu()),
+                         cen,cen,
+                         T/2.*(1.0+0.1*srandu()),
+                         0.1*srandu(),
+                         T/2.*(1.0+0.1*srandu())])
+            fitter.go(guess)
+            res=fitter.get_result()
+        else:
+            nwalkers,burnin,nstep=80,800,200
+            fitter=MCMCGaussMom(obsorig, nwalkers=nwalkers,burnin=burnin,nstep=nstep)
+            guess=zeros( (nwalkers,6))
+            guess[:,0] = flux*(1.0 + 0.1*srandu(nwalkers))
+            guess[:,1] = cen + 0.01*srandu(nwalkers)
+            guess[:,2] = cen + 0.01*srandu(nwalkers)
+            guess[:,3] = T/2.*(1.0+0.1*srandu(nwalkers))
+            guess[:,4] = 0.1*srandu(nwalkers)
+            guess[:,5] = T/2.*(1.0+0.1*srandu(nwalkers))
 
-        fitter.go(guess)
+            pos=fitter.go(guess,burnin)
+            pos=fitter.go(pos,nstep)
+            fitter.calc_result()
+            res=fitter.get_result()
 
-        res=fitter.get_result()
+            pdict=fitter.make_plots()
+            tab=pdict['trials']
+            tab.show()
+
+            #import images
+            from biggles import plot_hist, Table
+            import esutil as eu
+            #images.imprint(eu.stat.cov2cor(res['pars_cov']))
+            #images.view(eu.stat.cov2cor(res['pars_cov']))
+            psf_pars=psf_gmix_meas.get_full_pars()
+            mvl=priors.MVNMom(res['pars'],
+                              res['pars_cov'],
+                              psf_pars)
+            rvals=mvl.sample(nstep*nwalkers)
+
+
+            nbin=50
+            grid=eu.plotting.Grid(6)
+            ntab=Table(grid.nrow,grid.ncol)
+            ntab.aspect_ratio=float(grid.nrow)/grid.ncol
+            trials=fitter.get_trials()
+            labels=['I','cen1','cen2','Irr','Irc','Icc']
+            for i in xrange(6):
+                row,col=grid(i)
+                m=trials[:,i].mean()
+                s=trials[:,i].std()
+                minval=m-3*s
+                maxval=m+3*s
+
+                plt=plot_hist(trials[:,i], min=minval, max=maxval, nbin=nbin,
+                              xlabel=labels[i],
+                              visible=False)
+                plot_hist(rvals[:,i], min=minval, max=maxval, nbin=nbin,
+                          color='red', plt=plt,
+                          visible=False)
+                ntab[row,col]=plt
+
+            ntab.show()
+
+
         if dopsf and fitpsf:
             res['psf_gmix'] = pfitter.get_gmix()
 
@@ -4391,12 +4472,12 @@ def test_moms_many(num, method='lm', use_errors=False, eps=None,show=False, **ke
             midval=(Tmean/2.)/numpy.abs(m)
             p=priors.LogNormal(midval,s)
             if m < 0:
-                r=m + -(p.sample(numuse*10)-midval)
+                r=m + -(p.sample(nrand)-midval)
             else:
-                r=m + p.sample(numuse*10)-midval
+                r=m + p.sample(nrand)-midval
         else:
             p=priors.LogNormal(m,s)
-            r=p.sample(numuse*10)
+            r=p.sample(nrand)
 
         nvals[label] = r
         '''

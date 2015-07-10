@@ -20,6 +20,17 @@ from .observation import Observation
 EM_RANGE_ERROR = 2**0
 EM_MAXITER = 2**1
 
+def fit_em(obs, guess, **keys):
+    """
+    fit the observation with EM
+    """
+    im,sky = prep_image(obs.image)
+    newobs = Observation(im, jacobian=obs.jacobian)
+    fitter=GMixEM(newobs)
+    fitter.go(guess, sky, **keys)
+
+    return fitter
+
 def prep_image(im0):
     """
     Prep an image to fit with EM.  Make sure there are no pixels < 0
