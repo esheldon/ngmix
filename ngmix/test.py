@@ -3780,6 +3780,7 @@ def test_fit_gauss1(model='gauss',
                     noise=2.0,
                     maxiter=1000,
                     tol=1.0e-6,
+                    seed=None,
                     verbose=True):
     """
     fit a gauss to the indicated model, with or without psf effects
@@ -3791,6 +3792,10 @@ def test_fit_gauss1(model='gauss',
     from . import em
     from biggles import plot_hist
 
+    print("setting seed:",seed)
+    numpy.random.seed(seed)
+    rstate=numpy.random.RandomState(seed)
+
     if model != 'gauss':
         dopsf=True
 
@@ -3798,6 +3803,9 @@ def test_fit_gauss1(model='gauss',
         nsub=4
         Tpsf=4.0
         Ttot = T+Tpsf
+
+        psf_g1=0.0
+        psf_g2=0.4
     else:
         nsub=1
         Ttot = T
@@ -3813,7 +3821,7 @@ def test_fit_gauss1(model='gauss',
     gm=gmix.GMixModel(pars, model)
     if dopsf:
         psf_flux=1.0
-        psf_pars=array([cen,cen,0.,0.,Tpsf,psf_flux],dtype='f8')
+        psf_pars=array([cen,cen,psf_g1,psf_g2,Tpsf,psf_flux],dtype='f8')
         gmpsf=gmix.GMixModel(psf_pars, 'gauss')
         gm=gm.convolve(gmpsf)
         psf_im=gmpsf.make_image(dims, nsub=nsub)
@@ -3884,8 +3892,9 @@ def test_fit_gauss1(model='gauss',
             fitter.go(guess)
             res=fitter.get_result()
         else:
-            nwalkers,burnin,nstep=100,1600,400
-            fitter=MCMCGaussMom(obsorig, nwalkers=nwalkers,burnin=burnin,nstep=nstep)
+            nwalkers,burnin,nstep=80,800,400
+            fitter=MCMCGaussMom(obsorig, nwalkers=nwalkers,burnin=burnin,nstep=nstep,
+                                random_state=rstate)
             guess=zeros( (nwalkers,6))
             guess[:,0] = flux*(1.0 + 0.1*srandu(nwalkers))
             guess[:,1] = cen + 0.01*srandu(nwalkers)
@@ -3901,7 +3910,7 @@ def test_fit_gauss1(model='gauss',
 
             pdict=fitter.make_plots()
             tab=pdict['trials']
-            tab.show()
+            #tab.show()
 
             #import images
             from biggles import plot_hist, Table
@@ -3925,8 +3934,8 @@ def test_fit_gauss1(model='gauss',
                 row,col=grid(i)
                 m=trials[:,i].mean()
                 s=trials[:,i].std()
-                minval=m-3.5*s
-                maxval=m+3.5*s
+                minval=m-3.0*s
+                maxval=m+4.0*s
 
                 plt=plot_hist(trials[:,i], min=minval, max=maxval, nbin=nbin,
                               xlabel=labels[i],

@@ -3210,7 +3210,11 @@ class MVNMom(object):
         Irc = mean[4]
         psf_Irc=psf_mean[1]
 
-        Irc_midval = (Ttot/2.0)/numpy.abs(Irc+psf_Irc)
+        #Irc_midval = (Ttot/2.0)/numpy.abs(Irc+psf_Irc)
+        #Irc_midval = (Ttot)/numpy.abs(Irc)
+        Irc_midval = Ttot - numpy.abs(Irc+psf_Irc)
+
+        #Irc_midval = Ttot/2.0
 
         if Irc < 0:
             self.Irc_is_neg = True
