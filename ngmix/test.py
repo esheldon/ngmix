@@ -3884,7 +3884,7 @@ def test_fit_gauss1(model='gauss',
             fitter.go(guess)
             res=fitter.get_result()
         else:
-            nwalkers,burnin,nstep=80,800,200
+            nwalkers,burnin,nstep=100,1600,400
             fitter=MCMCGaussMom(obsorig, nwalkers=nwalkers,burnin=burnin,nstep=nstep)
             guess=zeros( (nwalkers,6))
             guess[:,0] = flux*(1.0 + 0.1*srandu(nwalkers))
@@ -3911,7 +3911,7 @@ def test_fit_gauss1(model='gauss',
             psf_pars=psf_gmix_meas.get_full_pars()
             mvl=priors.MVNMom(res['pars'],
                               res['pars_cov'],
-                              psf_pars)
+                              psf_pars[3:])
             rvals=mvl.sample(nstep*nwalkers)
 
 
@@ -3925,8 +3925,8 @@ def test_fit_gauss1(model='gauss',
                 row,col=grid(i)
                 m=trials[:,i].mean()
                 s=trials[:,i].std()
-                minval=m-3*s
-                maxval=m+3*s
+                minval=m-3.5*s
+                maxval=m+3.5*s
 
                 plt=plot_hist(trials[:,i], min=minval, max=maxval, nbin=nbin,
                               xlabel=labels[i],

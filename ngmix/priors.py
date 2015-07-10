@@ -3123,12 +3123,25 @@ class MultivariateLogNormal(object):
 
 
 class MVNMom(object):
-    def __init__(self, means, cov, psf_means):
-        self.means=means
-        self.cov=cov
-        self.psf_means=psf_means
+    """
+    Wrapper for MultivariateLogNormal that properly scales and offsets
+    the parameters
 
-        self.ndim=means.size
+    parameters
+    -----------
+    mean: array
+        [flux, row, col, Irr, Irc, Icc]
+    cov: array
+        covariance matrix
+    psf_means: array
+        [Irr,Irc,Icc]
+    """
+    def __init__(self, mean, cov, psf_mean):
+        self.mean=array(mean,ndmin=1,dtype='f8',copy=True)
+        self.cov=array(cov,ndmin=1,dtype='f8',copy=True)
+        self.psf_mean=array(psf_mean,ndmin=1,dtype='f8',copy=True)
+
+        self.ndim=mean.size
         self._set_offsets()
 
     def sample(self, n=None):
@@ -3141,14 +3154,14 @@ class MVNMom(object):
         r=self.mvn.sample(n=n)
 
         cen_offsets=self.cen_offsets
-        Irc=self.means[4]
-        psf_means=self.psf_means
+        Irc=self.mean[4]
+        psf_mean=self.psf_mean
         Irc_midval=self.Irc_midval
 
         r[:,1] -= cen_offsets[0]
         r[:,2] -= cen_offsets[1]
-        r[:,3] -= psf_means[3]
-        r[:,5] -= psf_means[5]
+        r[:,3] -= psf_mean[0]
+        r[:,5] -= psf_mean[2]
 
         if self.Irc_is_neg:
             r[:,4] = Irc - (r[:,4]-Irc_midval)
@@ -3163,16 +3176,16 @@ class MVNMom(object):
     def _set_offsets(self):
         """
         We determine offsets that should be added to the input
-        means to make them positive
+        mean to make them positive
 
         also for Irc we may multiply by -1
         """
         from numpy import newaxis
 
-        means=self.means
-        psf_means=self.psf_means
+        mean=self.mean
+        psf_mean=self.psf_mean
 
-        ndim=means.size
+        ndim=mean.size
         nband = ndim-6+1
         if nband > 1:
             raise  RuntimeError("nband ==1 for now")
@@ -3180,7 +3193,7 @@ class MVNMom(object):
         cen_offsets=zeros(2)
         sigmas=sqrt(diag(self.cov))
 
-        cen=means[1:1+2]
+        cen=mean[1:1+2]
         cen_sigma=sigmas[1:1+2]
 
         nsig=5
@@ -3192,10 +3205,10 @@ class MVNMom(object):
             elif cen[i] - rng[i] < 0:
                 cen_offsets[i] = rng[i]-cen[i]
 
-        Ttot = means[3]+means[5] + psf_means[3]+psf_means[5]
+        Ttot = mean[3]+mean[5] + psf_mean[0]+psf_mean[2]
 
-        Irc = means[4]
-        psf_Irc=psf_means[4]
+        Irc = mean[4]
+        psf_Irc=psf_mean[1]
 
         Irc_midval = (Ttot/2.0)/numpy.abs(Irc+psf_Irc)
 
@@ -3204,19 +3217,18 @@ class MVNMom(object):
         else:
             self.Irc_is_neg = False
 
-        lmeans = means.copy()
+        lmean = mean.copy()
 
-        lmeans[1] += cen_offsets[0]
-        lmeans[2] += cen_offsets[1]
-        lmeans[3] += psf_means[3]
-        lmeans[4]  = Irc_midval
-        lmeans[5] += psf_means[5]
+        lmean[1] += cen_offsets[0]
+        lmean[2] += cen_offsets[1]
+        lmean[3] += psf_mean[0]
+        lmean[4]  = Irc_midval
+        lmean[5] += psf_mean[2]
 
         self.cen_offsets=cen_offsets
         self.Irc_midval=Irc_midval
 
-        print("lmeans:",lmeans)
-        self.mvn=MultivariateLogNormal(lmeans, self.cov)
+        self.mvn=MultivariateLogNormal(lmean, self.cov)
 
 def lognorm_convert_old(mean, sigma):
     logmean  = log(mean) - 0.5*log( 1 + sigma**2/mean**2 )
