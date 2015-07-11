@@ -704,9 +704,14 @@ class Bootstrapper(object):
 
         guesser=self._get_max_guesser(guess=guess, prior=prior)
 
-        runner=MaxRunner(self.mb_obs_list, gal_model, pars, guesser,
-                         prior=prior,
-                         use_logpars=self.use_logpars)
+        if gal_model=='full':
+            runner=MaxRunnerGaussMom(self.mb_obs_list, pars, guesser,
+                                     prior=prior,
+                                     use_logpars=self.use_logpars)
+        else:
+            runner=MaxRunner(self.mb_obs_list, gal_model, pars, guesser,
+                             prior=prior,
+                             use_logpars=self.use_logpars)
 
         runner.go(ntry=ntry)
 
@@ -1455,6 +1460,61 @@ class MaxRunner(object):
     def _get_lm_fitter_class(self):
         from .fitting import LMSimple
         return LMSimple
+
+
+class MaxRunnerGaussMom(object):
+    """
+    wrapper to generate guesses and run the fitter a few times
+    """
+    def __init__(self, obs, max_pars, guesser, prior=None, use_logpars=False):
+        self.obs=obs
+
+        self.max_pars=max_pars
+        self.method=max_pars['method']
+        if self.method == 'lm':
+            self.send_pars=max_pars['lm_pars']
+        else:
+            self.send_pars=max_pars
+
+        self.model="full"
+        self.prior=prior
+        self.use_logpars=use_logpars
+
+        self.guesser=guesser
+
+    def go(self, ntry=1):
+        if self.method=='lm':
+            method=self._go_lm
+        else:
+            raise ValueError("bad method '%s'" % self.method)
+
+        lnprob_max=-numpy.inf
+        method(ntry=ntry)
+
+    def _go_lm(self, ntry=1):
+        
+        fitclass=self._get_lm_fitter_class()
+
+        for i in xrange(ntry):
+            guess=self.guesser()
+            fitter=fitclass(self.obs,
+                            lm_pars=self.send_pars,
+                            use_logpars=self.use_logpars,
+                            prior=self.prior)
+
+            fitter.go(guess)
+
+            res=fitter.get_result()
+            if res['flags']==0:
+                break
+
+        res['ntry'] = i+1
+        self.fitter=fitter
+
+    def _get_lm_fitter_class(self):
+        from .fitting import LMGaussMom
+        return LMGaussMom
+
 
 class MaxRunnerFixT(MaxRunner):
     def __init__(self, obs, model, max_pars, guesser, T, prior=None, use_logpars=False):

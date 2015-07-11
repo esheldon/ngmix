@@ -4,6 +4,7 @@ from numpy import array, zeros, diag, exp, sqrt, where, log, log10, isfinite
 from numpy.random import random as randu
 from pprint import pprint
 
+from . import stats
 from .priors import srandu
 
 from . import joint_prior
@@ -3805,7 +3806,8 @@ def test_fit_gauss1(model='gauss',
         Ttot = T+Tpsf
 
         psf_g1=0.0
-        psf_g2=0.4
+        #psf_g2=0.4
+        psf_g2=0.0
     else:
         nsub=1
         Ttot = T
@@ -3882,7 +3884,7 @@ def test_fit_gauss1(model='gauss',
             psfobs.set_gmix(psf_gmix_meas)
             obsorig.set_psf(psfobs)
 
-        if method=='lm':
+        if method =='lm':
             fitter=LMGaussMom(obsorig, lm_pars=lm_pars)
             guess=array([flux*(1.0 + 0.1*srandu()),
                          cen,cen,
@@ -3891,11 +3893,16 @@ def test_fit_gauss1(model='gauss',
                          T/2.*(1.0+0.1*srandu())])
             fitter.go(guess)
             res=fitter.get_result()
-        else:
-            nwalkers,burnin,nstep=80,800,400
+
+        elif method=='mcmc':
+            from biggles import plot_hist, Table
+            import esutil as eu
+
+            nwalkers,burnin,nstep=200,400,400
             fitter=MCMCGaussMom(obsorig, nwalkers=nwalkers,burnin=burnin,nstep=nstep,
                                 random_state=rstate)
             guess=zeros( (nwalkers,6))
+
             guess[:,0] = flux*(1.0 + 0.1*srandu(nwalkers))
             guess[:,1] = cen + 0.01*srandu(nwalkers)
             guess[:,2] = cen + 0.01*srandu(nwalkers)
@@ -3906,21 +3913,29 @@ def test_fit_gauss1(model='gauss',
             pos=fitter.go(guess,burnin)
             pos=fitter.go(pos,nstep)
             fitter.calc_result()
+
             res=fitter.get_result()
+            trials=fitter.get_trials()
 
             pdict=fitter.make_plots()
             tab=pdict['trials']
             #tab.show()
 
-            #import images
-            from biggles import plot_hist, Table
-            import esutil as eu
-            #images.imprint(eu.stat.cov2cor(res['pars_cov']))
+            import images
             #images.view(eu.stat.cov2cor(res['pars_cov']))
             psf_pars=psf_gmix_meas.get_full_pars()
-            mvl=priors.MVNMom(res['pars'],
-                              res['pars_cov'],
+
+            m,c=stats.calc_mcmc_stats(trials, sigma_clip=True, nsig=3.5)
+            print()
+            print_pars(m,front="means:")
+            images.imprint(eu.stat.cov2cor(c))
+            print()
+            #mvl=priors.MVNMom(res['pars'],
+            #                  res['pars_cov'],
+            #                  psf_pars[3:])
+            mvl=priors.MVNMom(m,c,
                               psf_pars[3:])
+
             rvals=mvl.sample(nstep*nwalkers)
 
 
@@ -3928,12 +3943,90 @@ def test_fit_gauss1(model='gauss',
             grid=eu.plotting.Grid(6)
             ntab=Table(grid.nrow,grid.ncol)
             ntab.aspect_ratio=float(grid.nrow)/grid.ncol
-            trials=fitter.get_trials()
             labels=['I','cen1','cen2','Irr','Irc','Icc']
             for i in xrange(6):
                 row,col=grid(i)
-                m=trials[:,i].mean()
-                s=trials[:,i].std()
+                m,s=eu.stat.sigma_clip(trials[:,i],nsig=3.5)
+                minval=m-3.0*s
+                maxval=m+4.0*s
+
+                plt=plot_hist(trials[:,i], min=minval, max=maxval, nbin=nbin,
+                              xlabel=labels[i],
+                              visible=False)
+                plot_hist(rvals[:,i], min=minval, max=maxval, nbin=nbin,
+                          color='red', plt=plt,
+                          visible=False)
+                ntab[row,col]=plt
+
+            ntab.show()
+
+        elif method=='isample':
+            from biggles import plot_hist, Table
+            import esutil as eu
+            from .bootstrap import Bootstrapper
+
+            boot=Bootstrapper(obsorig)
+
+            max_pars={'method':'lm', 'lm_pars':{'maxfev':4000}}
+            ipars={'nsample':[2000],
+                   'ifactor':1.0,
+                   'df':2.1,
+                   'min_err': [1.0e-4,1.0e-4,1.0e-3,1.0e-3,1.0e-4,1.0e-4],
+                   'max_err': [10.0,2.0,2.0,5.0,5.0,5.0],
+                  }
+            cov_pars= {'m': 5, 'h': 1.0e-3}
+
+
+            guess=array([flux*(1.0 + 0.1*srandu()),
+                         cen,cen,
+                         T/2.*(1.0+0.1*srandu()),
+                         0.1*srandu(),
+                         T/2.*(1.0+0.1*srandu())])
+ 
+            boot.fit_max('full', max_pars, guess=guess)
+            boot.try_replace_cov(cov_pars)
+            mres=boot.get_max_fitter().get_result()
+
+            print_pars(guess,front='guess:')
+            print_pars(mres['pars'],front='mpars:')
+            print_pars(mres['pars_err'],front='merr: ')
+            boot.isample(ipars)
+
+            fitter=boot.get_isampler()
+
+            res=fitter.get_result()
+            trials=fitter.get_samples()
+
+            pdict=fitter.make_plots()
+            tab=pdict['trials']
+            #tab.show()
+
+            import images
+            #images.view(eu.stat.cov2cor(res['pars_cov']))
+            psf_pars=psf_gmix_meas.get_full_pars()
+
+            m,c=stats.calc_mcmc_stats(trials, sigma_clip=True, nsig=3.5)
+            print()
+            print_pars(m,front="means:")
+            images.imprint(eu.stat.cov2cor(c))
+            print()
+            #mvl=priors.MVNMom(res['pars'],
+            #                  res['pars_cov'],
+            #                  psf_pars[3:])
+            mvl=priors.MVNMom(m,c,
+                              psf_pars[3:])
+
+            rvals=mvl.sample(nstep*nwalkers)
+
+
+            nbin=50
+            grid=eu.plotting.Grid(6)
+            ntab=Table(grid.nrow,grid.ncol)
+            ntab.aspect_ratio=float(grid.nrow)/grid.ncol
+            labels=['I','cen1','cen2','Irr','Irc','Icc']
+            for i in xrange(6):
+                row,col=grid(i)
+                m,s=eu.stat.sigma_clip(trials[:,i],nsig=3.5)
                 minval=m-3.0*s
                 maxval=m+4.0*s
 
