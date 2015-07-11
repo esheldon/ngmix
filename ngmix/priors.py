@@ -3205,24 +3205,14 @@ class MVNMom(object):
             elif cen[i] - rng[i] < 0:
                 cen_offsets[i] = rng[i]-cen[i]
 
-        Ttot = mean[3]+mean[5] + psf_mean[0]+psf_mean[2]
+        T = mean[3] + mean[5]
+        psf_T = psf_mean[0]+psf_mean[2]
 
         Irc = mean[4]
 
-        psf_T = psf_mean[0]+psf_mean[2]
         psf_Irc=psf_mean[1]
 
-        #Irc_midval = (Ttot/2.0)/numpy.abs(Irc+psf_Irc)
-        #Irc_midval = (Ttot)/numpy.abs(Irc)
-        #Irc_midval = (Ttot/2.)/numpy.abs(Irc)
-        #Irc_midval=100.0
-
-        Irc_midval = Ttot - 2.0*numpy.abs(Irc+psf_Irc)
-        #Irc_midval = Ttot/2. - numpy.abs(Irc)
-        #Irc_midval = psf_T - numpy.abs(Irc+psf_Irc)
-        #Irc_midval = psf_T - numpy.abs(Irc)
-        #Irc_midval = psf_T/2. - numpy.abs(Irc+psf_Irc)
-
+        Irc_midval = T + psf_T - 2.0*numpy.abs(Irc+psf_Irc)
 
         if Irc < 0:
             self.Irc_is_neg = True

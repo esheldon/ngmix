@@ -3797,6 +3797,8 @@ def test_fit_gauss1(model='gauss',
     numpy.random.seed(seed)
     rstate=numpy.random.RandomState(seed)
 
+    cov_pars= {'m': 5, 'h': 1.0e-3}
+
     if model != 'gauss':
         dopsf=True
 
@@ -3884,7 +3886,7 @@ def test_fit_gauss1(model='gauss',
             psfobs.set_gmix(psf_gmix_meas)
             obsorig.set_psf(psfobs)
 
-        if method =='lm':
+        if method in ['lm','mcmc']:
             fitter=LMGaussMom(obsorig, lm_pars=lm_pars)
             guess=array([flux*(1.0 + 0.1*srandu()),
                          cen,cen,
@@ -3892,73 +3894,96 @@ def test_fit_gauss1(model='gauss',
                          0.1*srandu(),
                          T/2.*(1.0+0.1*srandu())])
             fitter.go(guess)
-            res=fitter.get_result()
-
-        elif method=='mcmc':
-            from biggles import plot_hist, Table
-            import esutil as eu
-
-            nwalkers,burnin,nstep=200,400,400
-            fitter=MCMCGaussMom(obsorig, nwalkers=nwalkers,burnin=burnin,nstep=nstep,
-                                random_state=rstate)
-            guess=zeros( (nwalkers,6))
-
-            guess[:,0] = flux*(1.0 + 0.1*srandu(nwalkers))
-            guess[:,1] = cen + 0.01*srandu(nwalkers)
-            guess[:,2] = cen + 0.01*srandu(nwalkers)
-            guess[:,3] = T/2.*(1.0+0.1*srandu(nwalkers))
-            guess[:,4] = 0.1*srandu(nwalkers)
-            guess[:,5] = T/2.*(1.0+0.1*srandu(nwalkers))
-
-            pos=fitter.go(guess,burnin)
-            pos=fitter.go(pos,nstep)
-            fitter.calc_result()
+            fitter.calc_cov(cov_pars['h'],cov_pars['m'])
 
             res=fitter.get_result()
-            trials=fitter.get_trials()
 
-            pdict=fitter.make_plots()
-            tab=pdict['trials']
-            #tab.show()
+            if method=='mcmc':
+                from biggles import plot_hist, Table
+                import esutil as eu
 
-            import images
-            #images.view(eu.stat.cov2cor(res['pars_cov']))
-            psf_pars=psf_gmix_meas.get_full_pars()
+                maxres=res
+                maxpars=maxres['pars']
+                maxcov=maxres['pars_cov']
 
-            m,c=stats.calc_mcmc_stats(trials, sigma_clip=True, nsig=3.5)
-            print()
-            print_pars(m,front="means:")
-            images.imprint(eu.stat.cov2cor(c))
-            print()
-            #mvl=priors.MVNMom(res['pars'],
-            #                  res['pars_cov'],
-            #                  psf_pars[3:])
-            mvl=priors.MVNMom(m,c,
-                              psf_pars[3:])
+                '''
+                #self.mode = numpy.exp(self.logmean - self.logvar)
+                # doesn't work for Irc because it is at the wrong place
+                mvl_tmp = priors.MVNMom(maxpars, maxcov, psf_pars[3:])
+                logvar=diag(mvl_tmp.lcov)
+                logmean=mvl_tmp.lmean
+                logmean = log(maxpars) + logvar
+                maxpars_fix = exp(logmean + 0.5*log(1.0 + diag(maxcov)/maxpars**2 ) )
 
-            rvals=mvl.sample(nstep*nwalkers)
+                mvl_max = priors.MVNMom(maxpars_fix, maxcov, psf_pars[3:])
+
+                mrvals=mvl_max.sample(nstep*nwalkers)
+                '''
 
 
-            nbin=50
-            grid=eu.plotting.Grid(6)
-            ntab=Table(grid.nrow,grid.ncol)
-            ntab.aspect_ratio=float(grid.nrow)/grid.ncol
-            labels=['I','cen1','cen2','Irr','Irc','Icc']
-            for i in xrange(6):
-                row,col=grid(i)
-                m,s=eu.stat.sigma_clip(trials[:,i],nsig=3.5)
-                minval=m-3.0*s
-                maxval=m+4.0*s
+                nwalkers,burnin,nstep=200,400,400
+                fitter=MCMCGaussMom(obsorig, nwalkers=nwalkers,burnin=burnin,nstep=nstep,
+                                    random_state=rstate)
+                guess=zeros( (nwalkers,6))
 
-                plt=plot_hist(trials[:,i], min=minval, max=maxval, nbin=nbin,
-                              xlabel=labels[i],
+                guess[:,0] = flux*(1.0 + 0.1*srandu(nwalkers))
+                guess[:,1] = cen + 0.01*srandu(nwalkers)
+                guess[:,2] = cen + 0.01*srandu(nwalkers)
+                guess[:,3] = T/2.*(1.0+0.1*srandu(nwalkers))
+                guess[:,4] = 0.1*srandu(nwalkers)
+                guess[:,5] = T/2.*(1.0+0.1*srandu(nwalkers))
+
+                pos=fitter.go(guess,burnin)
+                pos=fitter.go(pos,nstep)
+                fitter.calc_result()
+
+                res=fitter.get_result()
+                trials=fitter.get_trials()
+
+                pdict=fitter.make_plots()
+                tab=pdict['trials']
+                #tab.show()
+
+                import images
+                #images.view(eu.stat.cov2cor(res['pars_cov']))
+                psf_pars=psf_gmix_meas.get_full_pars()
+
+                m,c=stats.calc_mcmc_stats(trials, sigma_clip=True, nsig=3.5)
+                print()
+                print_pars(m,front="means:")
+                images.imprint(eu.stat.cov2cor(c))
+                print()
+                mvl=priors.MVNMom(m,c,
+                                  psf_pars[3:])
+
+
+                rvals=mvl.sample(nstep*nwalkers)
+
+
+                nbin=50
+                grid=eu.plotting.Grid(6)
+                ntab=Table(grid.nrow,grid.ncol)
+                ntab.aspect_ratio=float(grid.nrow)/grid.ncol
+                labels=['I','cen1','cen2','Irr','Irc','Icc']
+                for i in xrange(6):
+                    row,col=grid(i)
+                    m,s=eu.stat.sigma_clip(trials[:,i],nsig=3.5)
+                    minval=m-3.0*s
+                    maxval=m+4.0*s
+
+                    plt=plot_hist(trials[:,i], min=minval, max=maxval, nbin=nbin,
+                                  xlabel=labels[i],
+                                  visible=False)
+                    plot_hist(rvals[:,i], min=minval, max=maxval, nbin=nbin,
+                              color='red', plt=plt,
                               visible=False)
-                plot_hist(rvals[:,i], min=minval, max=maxval, nbin=nbin,
-                          color='red', plt=plt,
-                          visible=False)
-                ntab[row,col]=plt
+                    #plot_hist(mrvals[:,i], min=minval, max=maxval, nbin=nbin,
+                    #          color='blue', plt=plt,
+                    #          visible=False)
 
-            ntab.show()
+                    ntab[row,col]=plt
+
+                ntab.show()
 
         elif method=='isample':
             from biggles import plot_hist, Table
@@ -3974,7 +3999,6 @@ def test_fit_gauss1(model='gauss',
                    'min_err': [1.0e-4,1.0e-4,1.0e-3,1.0e-3,1.0e-4,1.0e-4],
                    'max_err': [10.0,2.0,2.0,5.0,5.0,5.0],
                   }
-            cov_pars= {'m': 5, 'h': 1.0e-3}
 
 
             guess=array([flux*(1.0 + 0.1*srandu()),
