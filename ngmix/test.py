@@ -3888,6 +3888,18 @@ def test_fit_gauss1(model='gauss',
 
         if method in ['lm','mcmc']:
             fitter=LMGaussMom(obsorig, lm_pars=lm_pars)
+
+            M1guess=(T/2.0)*0.1*srandu()
+            M2guess=(T/2.0)*0.1*srandu()
+
+            guess[:,0] = cen + 0.01*srandu()
+            guess[:,1] = cen + 0.01*srandu()
+            guess[:,2] = M1guess
+            guess[:,3] = M2guess
+            guess[:,4] = T*(1.0+0.1*srandu())
+            guess[:,5] = flux*(1.0 + 0.1*srandu())
+
+
             guess=array([flux*(1.0 + 0.1*srandu()),
                          cen,cen,
                          T/2.*(1.0+0.1*srandu()),
@@ -3922,16 +3934,22 @@ def test_fit_gauss1(model='gauss',
 
 
                 nwalkers,burnin,nstep=200,400,400
-                fitter=MCMCGaussMom(obsorig, nwalkers=nwalkers,burnin=burnin,nstep=nstep,
+                fitter=MCMCGaussMom(obsorig,
+                                    nwalkers=nwalkers,
+                                    burnin=burnin,
+                                    nstep=nstep,
                                     random_state=rstate)
                 guess=zeros( (nwalkers,6))
 
-                guess[:,0] = flux*(1.0 + 0.1*srandu(nwalkers))
+                M1guess=(T/2.0)*0.1*srandu(nwalkers)
+                M2guess=(T/2.0)*0.1*srandu(nwalkers)
+
+                guess[:,0] = cen + 0.01*srandu(nwalkers)
                 guess[:,1] = cen + 0.01*srandu(nwalkers)
-                guess[:,2] = cen + 0.01*srandu(nwalkers)
-                guess[:,3] = T/2.*(1.0+0.1*srandu(nwalkers))
-                guess[:,4] = 0.1*srandu(nwalkers)
-                guess[:,5] = T/2.*(1.0+0.1*srandu(nwalkers))
+                guess[:,2] = M1guess
+                guess[:,3] = M2guess
+                guess[:,4] = T*(1.0+0.1*srandu(nwalkers))
+                guess[:,5] = flux*(1.0 + 0.1*srandu(nwalkers))
 
                 pos=fitter.go(guess,burnin)
                 pos=fitter.go(pos,nstep)
@@ -3942,7 +3960,7 @@ def test_fit_gauss1(model='gauss',
 
                 pdict=fitter.make_plots()
                 tab=pdict['trials']
-                #tab.show()
+                tab.show(width=800,height=800)
 
                 import images
                 #images.view(eu.stat.cov2cor(res['pars_cov']))

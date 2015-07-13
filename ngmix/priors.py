@@ -3130,7 +3130,7 @@ class MVNMom(object):
     parameters
     -----------
     mean: array
-        [flux, row, col, Irr, Irc, Icc]
+        [row, col, M1, M2, T, I]
     cov: array
         covariance matrix
     psf_means: array
@@ -3207,12 +3207,13 @@ class MVNMom(object):
 
         T = mean[3] + mean[5]
         psf_T = psf_mean[0]+psf_mean[2]
+        Ttot = T + psf_T
 
         Irc = mean[4]
 
         psf_Irc=psf_mean[1]
 
-        Irc_midval = T + psf_T - 2.0*numpy.abs(Irc+psf_Irc)
+        Irc_midval = Ttot - 2.0*numpy.abs(Irc+psf_Irc)
 
         if Irc < 0:
             self.Irc_is_neg = True
@@ -3226,6 +3227,16 @@ class MVNMom(object):
         lmean[3] += psf_mean[0]
         lmean[4]  = Irc_midval
         lmean[5] += psf_mean[2]
+
+        lmean[0] += cen_offsets[0]
+        lmean[1] += cen_offsets[1]
+        lmean[2] += M1_midval
+        lmean[3] += M2_midval
+        lmean[4] += psf_T
+        lmean[5] += psf_mean[2]
+
+ 
+
 
         self.cen_offsets=cen_offsets
         self.Irc_midval=Irc_midval

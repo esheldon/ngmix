@@ -1690,13 +1690,35 @@ class LMGaussMom(LMSimple):
     def get_band_pars(self, pars_in, band):
         """
         Get linear pars for the specified band
+
+        pars are [c1,c2,M1,M2,T,I1,I2...]
+
+        Where M1 = Icc-Irr
+              m2 = 2*Irc
         """
 
+        c1 = pars_in[0]
+        c2 = pars_in[1]
+        M1 = pars_in[2]
+        M2 = pars_in[3]
+        T  = pars_in[4]
+        I  = pars_in[5+band]
+
+        Irr = (T+M1)*0.5
+        Irc = M2/2
+        Icc = (T-M1)*0.5
+
         pars=self._band_pars
-        pars[0] = pars_in[band]
-        pars[1:] = pars_in[self.nband:]
+
+        pars[0] = I
+        pars[1] = c1
+        pars[2] = c2
+        pars[3] = Irr
+        pars[4] = Irc
+        pars[5] = Icc
 
         return pars
+
 
 
 class LMSimpleRound(LMSimple):
@@ -2533,11 +2555,32 @@ class MCMCGaussMom(MCMCSimple):
     def get_band_pars(self, pars_in, band):
         """
         Get linear pars for the specified band
+
+        pars are [c1,c2,M1,M2,T,I1,I2...]
+
+        Where M1 = Icc-Irr
+              m2 = 2*Irc
         """
 
+        c1 = pars_in[0]
+        c2 = pars_in[1]
+        M1 = pars_in[2]
+        M2 = pars_in[3]
+        T  = pars_in[4]
+        I  = pars_in[5+band]
+
+        Irr = (T+M1)*0.5
+        Irc = M2/2
+        Icc = (T-M1)*0.5
+
         pars=self._band_pars
-        pars[0] = pars_in[band]
-        pars[1:] = pars_in[self.nband:]
+
+        pars[0] = I
+        pars[1] = c1
+        pars[2] = c2
+        pars[3] = Irr
+        pars[4] = Irc
+        pars[5] = Icc
 
         return pars
 
