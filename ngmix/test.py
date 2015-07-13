@@ -3777,6 +3777,10 @@ def test_fit_gauss1(model='gauss',
                     g1=0.0,
                     g2=0.0,
                     T=4.0,
+
+                    psf_g1=0.0,
+                    psf_g2=0.0,
+                    psf_T=4.0,
                     flux=100.0,
                     noise=2.0,
                     maxiter=1000,
@@ -3804,12 +3808,8 @@ def test_fit_gauss1(model='gauss',
 
     if dopsf:
         nsub=4
-        Tpsf=4.0
-        Ttot = T+Tpsf
+        Ttot = T+psf_T
 
-        psf_g1=0.0
-        #psf_g2=0.4
-        psf_g2=0.0
     else:
         nsub=1
         Ttot = T
@@ -3821,35 +3821,33 @@ def test_fit_gauss1(model='gauss',
 
     cen=(dim-1.)/2.
 
-    pars=array([cen,cen,g1,g2,T,flux],dtype='f8')
+    jacobian=UnitJacobian(cen,cen)
+    pars=array([0.0,0.0,g1,g2,T,flux],dtype='f8')
     gm=gmix.GMixModel(pars, model)
     if dopsf:
         psf_flux=1.0
-        psf_pars=array([cen,cen,psf_g1,psf_g2,Tpsf,psf_flux],dtype='f8')
+        psf_pars=array([0.0,0.0,psf_g1,psf_g2,psf_T,psf_flux],dtype='f8')
         gmpsf=gmix.GMixModel(psf_pars, 'gauss')
         gm=gm.convolve(gmpsf)
-        psf_im=gmpsf.make_image(dims, nsub=nsub)
-        psfobs=Observation(psf_im)
 
-    im_nonoise=gm.make_image(dims, nsub=nsub)
+        psf_im=gmpsf.make_image(dims, nsub=nsub, jacobian=jacobian)
+        psfobs=Observation(psf_im, jacobian=jacobian)
+
+    im_nonoise=gm.make_image(dims, nsub=nsub, jacobian=jacobian)
 
     noise_im = noise*randn(dim*dim).reshape(im_nonoise.shape)
     im = im_nonoise + noise_im
 
     weight=numpy.zeros(im.shape) + 1.0/noise**2
-    obsorig=Observation(im,weight=weight)
+    obsorig=Observation(im,weight=weight,jacobian=jacobian)
 
     if method=='em':
-        imsky,sky=em.prep_image(im)
-        obs=Observation(imsky)
-        fitter=em.GMixEM(obs)
-
         if model=='gauss':
             guess = gm.copy()
         else:
             guess=gmpsf.copy()
 
-        fitter.go(guess, sky, maxiter=maxiter, tol=tol)
+        fitter=fit_em(obsorig, guess, maxiter=maxiter, tol=tol)
 
     else:
         lm_pars={'maxfev': 4000}
@@ -3859,25 +3857,6 @@ def test_fit_gauss1(model='gauss',
             guess=gmpsf.copy()
             pfitter=fit_em(psfobs, guess, maxiter=maxiter, tol=tol)
             
-            """
-            pfitter=LMSimple(psfobs, "gauss", lm_pars=lm_pars)
-            guess=psf_pars.copy()
-            guess[0] += 0.01*srandu()
-            guess[1] += 0.01*srandu()
-            guess[2] += 0.01*srandu()
-            guess[3] += 0.01*srandu()
-            guess[4] *= (1.0 + 0.01*srandu())
-            guess[5] *= (1.0 + 0.01*srandu())
-            """
-            '''
-            pfitter=LMGaussMom(psfobs, lm_pars=lm_pars)
-            guess=array([psf_flux*(1.0 + 0.1*srandu()),
-                         cen,cen,
-                         Tpsf/2.*(1.0+0.1*srandu()),
-                         0.1*srandu(),
-                         Tpsf/2.*(1.0+0.1*srandu())])
-            pfitter.go(guess)
-            '''
             pres=pfitter.get_result()
             if pres['flags'] != 0:
                 print("psf failure")
@@ -3892,23 +3871,20 @@ def test_fit_gauss1(model='gauss',
             M1guess=(T/2.0)*0.1*srandu()
             M2guess=(T/2.0)*0.1*srandu()
 
-            guess[:,0] = cen + 0.01*srandu()
-            guess[:,1] = cen + 0.01*srandu()
-            guess[:,2] = M1guess
-            guess[:,3] = M2guess
-            guess[:,4] = T*(1.0+0.1*srandu())
-            guess[:,5] = flux*(1.0 + 0.1*srandu())
+            guess=zeros(6)
+            guess[0] = 0.01*srandu()
+            guess[1] = 0.01*srandu()
+            guess[2] = M1guess
+            guess[3] = M2guess
+            guess[4] = T*(1.0+0.1*srandu())
+            guess[5] = flux*(1.0 + 0.1*srandu())
 
-
-            guess=array([flux*(1.0 + 0.1*srandu()),
-                         cen,cen,
-                         T/2.*(1.0+0.1*srandu()),
-                         0.1*srandu(),
-                         T/2.*(1.0+0.1*srandu())])
             fitter.go(guess)
-            fitter.calc_cov(cov_pars['h'],cov_pars['m'])
+            fitter.calc_cov(cov_pars['h'])
 
             res=fitter.get_result()
+            print_pars(res['pars'],front="mpars:")
+            print_pars(res['pars_err'],front="mperr:")
 
             if method=='mcmc':
                 from biggles import plot_hist, Table
@@ -3917,21 +3893,6 @@ def test_fit_gauss1(model='gauss',
                 maxres=res
                 maxpars=maxres['pars']
                 maxcov=maxres['pars_cov']
-
-                '''
-                #self.mode = numpy.exp(self.logmean - self.logvar)
-                # doesn't work for Irc because it is at the wrong place
-                mvl_tmp = priors.MVNMom(maxpars, maxcov, psf_pars[3:])
-                logvar=diag(mvl_tmp.lcov)
-                logmean=mvl_tmp.lmean
-                logmean = log(maxpars) + logvar
-                maxpars_fix = exp(logmean + 0.5*log(1.0 + diag(maxcov)/maxpars**2 ) )
-
-                mvl_max = priors.MVNMom(maxpars_fix, maxcov, psf_pars[3:])
-
-                mrvals=mvl_max.sample(nstep*nwalkers)
-                '''
-
 
                 nwalkers,burnin,nstep=200,400,400
                 fitter=MCMCGaussMom(obsorig,
@@ -3944,8 +3905,8 @@ def test_fit_gauss1(model='gauss',
                 M1guess=(T/2.0)*0.1*srandu(nwalkers)
                 M2guess=(T/2.0)*0.1*srandu(nwalkers)
 
-                guess[:,0] = cen + 0.01*srandu(nwalkers)
-                guess[:,1] = cen + 0.01*srandu(nwalkers)
+                guess[:,0] = 0.01*srandu(nwalkers)
+                guess[:,1] = 0.01*srandu(nwalkers)
                 guess[:,2] = M1guess
                 guess[:,3] = M2guess
                 guess[:,4] = T*(1.0+0.1*srandu(nwalkers))
@@ -3956,9 +3917,12 @@ def test_fit_gauss1(model='gauss',
                 fitter.calc_result()
 
                 res=fitter.get_result()
+                print_pars(res['pars'],front=" pars:")
+                print_pars(res['pars_err'],front=" perr:")
+
                 trials=fitter.get_trials()
 
-                pdict=fitter.make_plots()
+                pdict=fitter.make_plots(nsigma=4.5)
                 tab=pdict['trials']
                 tab.show(width=800,height=800)
 
@@ -3982,12 +3946,12 @@ def test_fit_gauss1(model='gauss',
                 grid=eu.plotting.Grid(6)
                 ntab=Table(grid.nrow,grid.ncol)
                 ntab.aspect_ratio=float(grid.nrow)/grid.ncol
-                labels=['I','cen1','cen2','Irr','Irc','Icc']
+                labels=['cen1','cen2','M1','M2','T','I']
                 for i in xrange(6):
                     row,col=grid(i)
                     m,s=eu.stat.sigma_clip(trials[:,i],nsig=3.5)
-                    minval=m-3.0*s
-                    maxval=m+4.0*s
+                    minval=m-3.5*s
+                    maxval=m+4.5*s
 
                     plt=plot_hist(trials[:,i], min=minval, max=maxval, nbin=nbin,
                                   xlabel=labels[i],
@@ -4020,7 +3984,7 @@ def test_fit_gauss1(model='gauss',
 
 
             guess=array([flux*(1.0 + 0.1*srandu()),
-                         cen,cen,
+                         0.0,0.0,
                          T/2.*(1.0+0.1*srandu()),
                          0.1*srandu(),
                          T/2.*(1.0+0.1*srandu())])
@@ -4047,7 +4011,7 @@ def test_fit_gauss1(model='gauss',
             #images.view(eu.stat.cov2cor(res['pars_cov']))
             psf_pars=psf_gmix_meas.get_full_pars()
 
-            m,c=stats.calc_mcmc_stats(trials, sigma_clip=True, nsig=3.5)
+            m,c=stats.calc_mcmc_stats(trials, sigma_clip=True, nsig=4.0)
             print()
             print_pars(m,front="means:")
             images.imprint(eu.stat.cov2cor(c))

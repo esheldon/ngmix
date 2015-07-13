@@ -3139,6 +3139,7 @@ class MVNMom(object):
     def __init__(self, mean, cov, psf_mean):
         self.mean=array(mean,ndmin=1,dtype='f8',copy=True)
         self.cov=array(cov,ndmin=1,dtype='f8',copy=True)
+        self.sigmas=sqrt(diag(self.cov))
         self.psf_mean=array(psf_mean,ndmin=1,dtype='f8',copy=True)
 
         self.ndim=mean.size
@@ -3154,19 +3155,25 @@ class MVNMom(object):
         r=self.mvn.sample(n=n)
 
         cen_offsets=self.cen_offsets
-        Irc=self.mean[4]
-        psf_mean=self.psf_mean
-        Irc_midval=self.Irc_midval
+        M1=self.mean[2]
+        M2=self.mean[3]
+        M1_midval=self.M1_midval
+        M2_midval=self.M2_midval
 
-        r[:,1] -= cen_offsets[0]
-        r[:,2] -= cen_offsets[1]
-        r[:,3] -= psf_mean[0]
-        r[:,5] -= psf_mean[2]
+        r[:,0] -= cen_offsets[0]
+        r[:,1] -= cen_offsets[1]
 
-        if self.Irc_is_neg:
-            r[:,4] = Irc - (r[:,4]-Irc_midval)
+        if self.M1_is_neg:
+            r[:,2] = M1 - (r[:,2]-M1_midval)
         else:
-            r[:,4] = Irc + (r[:,4]-Irc_midval)
+            r[:,2] = M1 + (r[:,2]-M1_midval)
+
+        if self.M2_is_neg:
+            r[:,3] = M2 - (r[:,3]-M2_midval)
+        else:
+            r[:,3] = M2 + (r[:,3]-M2_midval)
+
+        r[:,4] -= self.psf_T
 
         if is_scalar:
             r=r[0,:]
@@ -3190,14 +3197,56 @@ class MVNMom(object):
         if nband > 1:
             raise  RuntimeError("nband ==1 for now")
 
+        M1 = mean[2]
+        M2 = mean[3]
+        T  = mean[4]
+
+        # psf_mean is [Irr,Irc,Icc]
+        psf_T = psf_mean[0]+psf_mean[2]
+        psf_M1 = psf_mean[2]-psf_mean[0]
+        psf_M2 = 2*psf_mean[1]
+
+        Ttot = T + psf_T
+
+        M1_midval = Ttot - numpy.abs(M1+psf_M1)
+        M2_midval = Ttot - numpy.abs(M2+psf_M2)
+
+        if M1 < 0:
+            self.M1_is_neg = True
+        else:
+            self.M1_is_neg = False
+
+        if M2 < 0:
+            self.M2_is_neg = True
+        else:
+            self.M2_is_neg = False
+
+        cen_offsets=self._get_cen_offsets()
+
+        lmean = mean.copy()
+        lmean[0] += cen_offsets[0]
+        lmean[1] += cen_offsets[1]
+        lmean[2]  = M1_midval
+        lmean[3]  = M2_midval
+        lmean[4] += psf_T
+
+        self.psf_T=psf_T
+
+        self.cen_offsets=cen_offsets
+        self.M1_midval=M1_midval
+        self.M2_midval=M2_midval
+
+        self.mvn=MultivariateLogNormal(lmean, self.cov)
+
+    def _get_cen_offsets(self):
+        # offset so that the lognormal is close to gaussian
+
         cen_offsets=zeros(2)
-        sigmas=sqrt(diag(self.cov))
 
-        cen=mean[1:1+2]
-        cen_sigma=sigmas[1:1+2]
-
+        cen =self.mean[0:0+2]
+        cen_sigma=self.sigmas[0:0+2]
         nsig=5
-        rng = nsig*cen_sigma
+        rng = 5.0 + nsig*cen_sigma
 
         for i in xrange(2):
             if cen[i] < 0:
@@ -3205,43 +3254,7 @@ class MVNMom(object):
             elif cen[i] - rng[i] < 0:
                 cen_offsets[i] = rng[i]-cen[i]
 
-        T = mean[3] + mean[5]
-        psf_T = psf_mean[0]+psf_mean[2]
-        Ttot = T + psf_T
-
-        Irc = mean[4]
-
-        psf_Irc=psf_mean[1]
-
-        Irc_midval = Ttot - 2.0*numpy.abs(Irc+psf_Irc)
-
-        if Irc < 0:
-            self.Irc_is_neg = True
-        else:
-            self.Irc_is_neg = False
-
-        lmean = mean.copy()
-
-        lmean[1] += cen_offsets[0]
-        lmean[2] += cen_offsets[1]
-        lmean[3] += psf_mean[0]
-        lmean[4]  = Irc_midval
-        lmean[5] += psf_mean[2]
-
-        lmean[0] += cen_offsets[0]
-        lmean[1] += cen_offsets[1]
-        lmean[2] += M1_midval
-        lmean[3] += M2_midval
-        lmean[4] += psf_T
-        lmean[5] += psf_mean[2]
-
- 
-
-
-        self.cen_offsets=cen_offsets
-        self.Irc_midval=Irc_midval
-
-        self.mvn=MultivariateLogNormal(lmean, self.cov)
+        return cen_offsets
 
 def lognorm_convert_old(mean, sigma):
     logmean  = log(mean) - 0.5*log( 1 + sigma**2/mean**2 )

@@ -1719,6 +1719,96 @@ class LMGaussMom(LMSimple):
 
         return pars
 
+    def calc_cov(self, h, *args, **kw):
+        """
+        Run get_cov() to calculate the covariance matrix at the best-fit point.
+        If all goes well, add 'pars_cov', 'pars_err', and 'g_cov' to the result
+        array
+
+        Note in get_cov, if the Hessian is singular, a diagonal cov matrix is
+        attempted to be inverted. If that finally fails LinAlgError is raised.
+        In that case we catch it and set a flag EIG_NOTFINITE and the cov is
+        not added to the result dict
+
+        Also if there are negative diagonal elements of the cov matrix, the 
+        EIG_NOTFINITE flag is set and the cov is not added to the result dict
+        """
+
+        diag_on_fail=kw.get('diag_on_fail',True)
+
+        res=self.get_result()
+
+        bad=True
+
+        try:
+            cov = self.get_cov(res['pars'], h=h, diag_on_fail=diag_on_fail)
+
+            cdiag = diag(cov)
+
+            w,=where(cdiag <= 0)
+            if w.size == 0:
+
+                err = sqrt(cdiag)
+                w,=where(isfinite(err))
+                if w.size != err.size:
+                    print_pars(err, front="diagonals not finite:")
+                else:
+                    # everything looks OK
+                    bad=False
+            else:
+                print_pars(cdiag,front='    diagonals negative:')
+
+        except LinAlgError:
+            print("caught LinAlgError")
+
+        if bad:
+            res['flags'] |= EIG_NOTFINITE
+        else:
+            res['pars_cov'] = cov
+            res['pars_err']= err
+
+            if len(err) >= 6:
+                res['g_cov'] = cov[2:2+2, 2:2+2]
+
+    def get_cov(self, pars, h, diag_on_fail=True):
+        """
+        calculate the covariance matrix at the specified point
+
+        parameters
+        ----------
+        pars: array
+            Array of parameters at which to evaluate the cov matrix
+        h: step size, optional
+            Step size for finite differences, default 1.0e-3
+
+        Raises
+        ------
+        LinAlgError:
+            If the hessian is singular a diagonal version is tried
+            and if that fails finally a LinAlgError is raised.
+        """
+        import covmatrix
+
+        # get a copy as an array
+        pars=numpy.array(pars)
+
+        # we could call covmatrix.get_cov directly but we want to fall back
+        # to a diagonal hessian if it is singular
+
+        hess=covmatrix.calc_hess(self.calc_lnprob, pars, h)
+
+        try:
+            cov = -linalg.inv(hess)
+        except LinAlgError:
+            # pull out a diagonal version of the hessian
+            # this might still fail
+
+            if diag_on_fail:
+                hdiag=diag(diag(hess))
+                cov = -linalg.inv(hess)
+            else:
+                raise
+        return cov
 
 
 class LMSimpleRound(LMSimple):
@@ -2584,19 +2674,18 @@ class MCMCGaussMom(MCMCSimple):
 
         return pars
 
-    def get_par_names(self, dolog=False):
+    def get_par_names(self, **kw):
         """
         parameter names for each dimension
         """
-        names=[]
+
+        names=['cen1','cen2', 'M1','M2','T']
 
         if self.nband == 1:
             names += ['F']
         else:
             for band in xrange(self.nband):
                 names += ['F_%s' % band]
-
-        names+=['cen1','cen2', 'Irr','Irc','Icc']
 
         return names
 
