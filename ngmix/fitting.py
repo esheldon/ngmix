@@ -1704,9 +1704,9 @@ class LMGaussMom(LMSimple):
         T  = pars_in[4]
         I  = pars_in[5+band]
 
-        Irr = (T+M1)*0.5
+        Irr = (T-M1)*0.5
         Irc = M2/2
-        Icc = (T-M1)*0.5
+        Icc = (T+M1)*0.5
 
         pars=self._band_pars
 
@@ -2659,9 +2659,9 @@ class MCMCGaussMom(MCMCSimple):
         T  = pars_in[4]
         I  = pars_in[5+band]
 
-        Irr = (T+M1)*0.5
+        Irr = (T-M1)*0.5
         Irc = M2/2
-        Icc = (T-M1)*0.5
+        Icc = (T+M1)*0.5
 
         pars=self._band_pars
 

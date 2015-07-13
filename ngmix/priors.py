@@ -217,8 +217,8 @@ class GPriorBase(object):
         d2_2p = self.get_pj(g1, g2, s1, s2+twoh)
         d2_2m = self.get_pj(g1, g2, s1, s2-twoh)
 
-        S111 = (d1_2p - 2*Q1_p + 2*Q1_m - d1_2m)/(2*h**3)
-        S222 = (d2_2p - 2*Q2_p + 2*Q2_m - d2_2m)/(2*h**3)
+        #S111 = (d1_2p - 2*Q1_p + 2*Q1_m - d1_2m)/(2*h**3)
+        #S222 = (d2_2p - 2*Q2_p + 2*Q2_m - d2_2m)/(2*h**3)
 
         np=g1.size
         Q = numpy.zeros( (np,2) )

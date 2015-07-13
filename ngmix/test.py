@@ -3796,6 +3796,7 @@ def test_fit_gauss1(model='gauss',
     from numpy.random import randn
     from . import em
     from biggles import plot_hist
+    import scipy.stats
 
     print("setting seed:",seed)
     numpy.random.seed(seed)
@@ -3895,6 +3896,8 @@ def test_fit_gauss1(model='gauss',
                 maxcov=maxres['pars_cov']
 
                 nwalkers,burnin,nstep=200,400,400
+                nrand = nstep*nwalkers
+
                 fitter=MCMCGaussMom(obsorig,
                                     nwalkers=nwalkers,
                                     burnin=burnin,
@@ -3939,8 +3942,11 @@ def test_fit_gauss1(model='gauss',
                                   psf_pars[3:])
 
 
-                rvals=mvl.sample(nstep*nwalkers)
+                rvals=mvl.sample(nrand)
 
+                ndist = scipy.stats.multivariate_normal(mean=m,
+                                                        cov=c)
+                nrvals = ndist.rvs(nrand)
 
                 nbin=50
                 grid=eu.plotting.Grid(6)
@@ -3959,6 +3965,11 @@ def test_fit_gauss1(model='gauss',
                     plot_hist(rvals[:,i], min=minval, max=maxval, nbin=nbin,
                               color='red', plt=plt,
                               visible=False)
+                    plot_hist(nrvals[:,i], min=minval, max=maxval, nbin=nbin,
+                              color='blue', plt=plt,
+                              visible=False)
+
+
                     #plot_hist(mrvals[:,i], min=minval, max=maxval, nbin=nbin,
                     #          color='blue', plt=plt,
                     #          visible=False)
@@ -4153,13 +4164,13 @@ def test_fit_gauss1_momsum(model='exp',
 
     fitter=LMGaussMom(obsorig, lm_pars=lm_pars)
 
-    guess=array([flux*(1.0 + 0.1*srandu()),
-                 cen,cen,
-                 T/2.*(1.0+0.1*srandu()),
-                 0.1*srandu(),
-                 T/2.*(1.0+0.1*srandu())])
+    guess=array([cen,cen,
+                 T/2.*0.1*srandu(),
+                 T/2.*0.1*srandu(),
+                 T*(1.0+0.1*srandu()),
+                 flux*(1.0 + 0.1*srandu())])
     fitter.go(guess)
-    fitter.calc_cov(cov_pars['h'],cov_pars['m'])
+    fitter.calc_cov(cov_pars['h'])
 
     res=fitter.get_result()
 
@@ -4169,12 +4180,12 @@ def test_fit_gauss1_momsum(model='exp',
 
 
     # [c1,c2,M1sum,M2sum,Tsum,Isum]
-    c1sum=maxpars[1]
-    c2sum=maxpars[2]
-    Isum=maxpars[0]
-    M1 = maxpars[5]-maxpars[3]
-    M2 = 2*maxpars[4]
-    T  = maxpars[3]+maxpars[5]
+    c1sum=maxpars[0]
+    c2sum=maxpars[1]
+    M1 = maxpars[2]
+    M2 = maxpars[3]
+    T  = maxpars[4]
+    Isum=maxpars[5]
     guess_cen=[c1sum*Isum,
                c2sum*Isum,
                M1*Isum,
@@ -4204,16 +4215,16 @@ def test_fit_gauss1_momsum(model='exp',
     pdict=fitter.make_plots()
     tab=pdict['trials']
     tab.show(width=800,height=800)
-    return
 
     #images.view(eu.stat.cov2cor(res['pars_cov']))
     psf_pars=psf_gmix_meas.get_full_pars()
 
-    m,c=stats.calc_mcmc_stats(trials, sigma_clip=True, nsig=3.5)
-    print()
-    print_pars(m,front="means:")
-    images.imprint(eu.stat.cov2cor(c))
-    print()
+    m,c=stats.calc_mcmc_stats(trials, sigma_clip=True, nsig=4.0)
+
+    mvl=priors.MVNMom(m,c, psf_pars[3:]*Isum)
+    nrand=nstep*nwalkers
+    rvals=mvl.sample(nrand)
+
 
 
     nbin=50
