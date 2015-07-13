@@ -4086,6 +4086,210 @@ def test_fit_gauss1(model='gauss',
     else:
         return None
 
+
+
+def test_fit_gauss1_momsum(model='exp',
+                           g1=0.0,
+                           g2=0.0,
+                           T=4.0,
+                           psf_T=4.0,
+                           psf_g1=0.0,
+                           psf_g2=0.0,
+                           flux=100.0,
+                           noise=2.0,
+                           maxiter=1000,
+                           tol=1.0e-6,
+                           seed=None,
+                           verbose=True):
+    """
+    fit a gauss to the indicated model, with or without psf effects
+    and with or without deconvolving
+
+    noise=2.0 is about s/n=10
+    """
+    from numpy.random import randn
+    from . import em
+    from .em import fit_em
+
+    from biggles import plot_hist, Table
+    import esutil as eu
+    import images
+
+    print("setting seed:",seed)
+    numpy.random.seed(seed)
+    rstate=numpy.random.RandomState(seed)
+
+    cov_pars= {'m': 5, 'h': 1.0e-3}
+
+
+    nsub = 16
+    psf_T = 4.0
+    Ttot = T+ psf_T
+
+    sigma=sqrt(Ttot/2.0)
+    dim=int(round(2*5*sigma))
+
+    dims=[dim]*2
+
+    cen=(dim-1.)/2.
+
+    pars=array([cen,cen,g1,g2,T,flux],dtype='f8')
+
+    gm=gmix.GMixModel(pars, model)
+
+    psf_flux=1.0
+    psf_pars=array([cen,cen,psf_g1,psf_g2,psf_T,psf_flux],dtype='f8')
+    gmpsf=gmix.GMixModel(psf_pars, 'gauss')
+    psf_im=gmpsf.make_image(dims, nsub=nsub)
+
+    gm=gm.convolve(gmpsf)
+    psfobs=Observation(psf_im)
+
+    im_nonoise=gm.make_image(dims, nsub=nsub)
+
+    noise_im = noise*randn(dim*dim).reshape(im_nonoise.shape)
+    im = im_nonoise + noise_im
+
+    weight=numpy.zeros(im.shape) + 1.0/noise**2
+
+    obsorig=Observation(im,weight=weight)
+
+
+    guess=gmpsf.copy()
+    pfitter=fit_em(psfobs, guess, maxiter=maxiter, tol=tol)
+
+    lm_pars={'maxfev': 4000}
+
+    pres=pfitter.get_result()
+    if pres['flags'] != 0:
+        print("psf failure")
+        return None
+
+    psf_gmix_meas=pfitter.get_gmix()
+    psfobs.set_gmix(psf_gmix_meas)
+    obsorig.set_psf(psfobs)
+
+    fitter=LMGaussMom(obsorig, lm_pars=lm_pars)
+
+    guess=array([flux*(1.0 + 0.1*srandu()),
+                 cen,cen,
+                 T/2.*(1.0+0.1*srandu()),
+                 0.1*srandu(),
+                 T/2.*(1.0+0.1*srandu())])
+    fitter.go(guess)
+    fitter.calc_cov(cov_pars['h'],cov_pars['m'])
+
+    res=fitter.get_result()
+
+    maxres=res
+    maxpars=maxres['pars']
+    maxcov=maxres['pars_cov']
+
+
+    # [c1,c2,M1sum,M2sum,Tsum,Isum]
+    c1sum=maxpars[1]
+    c2sum=maxpars[2]
+    Isum=maxpars[0]
+    M1 = maxpars[5]-maxpars[3]
+    M2 = 2*maxpars[4]
+    T  = maxpars[3]+maxpars[5]
+    guess_cen=[c1sum*Isum,
+               c2sum*Isum,
+               M1*Isum,
+               M2*Isum,
+               T*Isum,
+               Isum]
+
+    nwalkers,burnin,nstep=200,400,400
+    fitter=MCMCGaussMomSum(obsorig, nwalkers=nwalkers,burnin=burnin,nstep=nstep,
+                           random_state=rstate)
+    guess=zeros( (nwalkers,6))
+
+    guess[:,0] = guess_cen[0] + 0.1*srandu(nwalkers)
+    guess[:,1] = guess_cen[1] + 0.1*srandu(nwalkers)
+    guess[:,2] = guess_cen[2] + 0.1*srandu(nwalkers)
+    guess[:,3] = guess_cen[3] + 0.1*srandu(nwalkers)
+    guess[:,4] = guess_cen[4] + 0.1*srandu(nwalkers)
+    guess[:,5] = guess_cen[5] + 0.1*srandu(nwalkers)
+
+    pos=fitter.go(guess,burnin)
+    pos=fitter.go(pos,nstep)
+    fitter.calc_result()
+
+    res=fitter.get_result()
+    trials=fitter.get_trials()
+
+    pdict=fitter.make_plots()
+    tab=pdict['trials']
+    tab.show(width=800,height=800)
+    return
+
+    #images.view(eu.stat.cov2cor(res['pars_cov']))
+    psf_pars=psf_gmix_meas.get_full_pars()
+
+    m,c=stats.calc_mcmc_stats(trials, sigma_clip=True, nsig=3.5)
+    print()
+    print_pars(m,front="means:")
+    images.imprint(eu.stat.cov2cor(c))
+    print()
+
+
+    nbin=50
+    grid=eu.plotting.Grid(6)
+    ntab=Table(grid.nrow,grid.ncol)
+    ntab.aspect_ratio=float(grid.nrow)/grid.ncol
+    labels=['I','cen1','cen2','Irr','Irc','Icc']
+    for i in xrange(6):
+        row,col=grid(i)
+        m,s=eu.stat.sigma_clip(trials[:,i],nsig=3.5)
+        minval=m-3.0*s
+        maxval=m+4.0*s
+
+        plt=plot_hist(trials[:,i], min=minval, max=maxval, nbin=nbin,
+                      xlabel=labels[i],
+                      visible=False)
+        plot_hist(rvals[:,i], min=minval, max=maxval, nbin=nbin,
+                  color='red', plt=plt,
+                  visible=False)
+        #plot_hist(mrvals[:,i], min=minval, max=maxval, nbin=nbin,
+        #          color='blue', plt=plt,
+        #          visible=False)
+
+        ntab[row,col]=plt
+
+    ntab.show()
+
+    res['psf_gmix'] = pfitter.get_gmix()
+
+    res=fitter.get_result()
+    if verbose:
+        print("s2n:",gm.get_model_s2n(obsorig))
+        if 'pars' in res:
+            print_pars(res['pars'],front='pars:')
+            print_pars(res['pars_err'],front='perr:')
+        if 'pars_cov' in res:
+            import images
+            import esutil as eu
+
+            corr=eu.stat.cov2cor( res['pars_cov'] )
+            images.imprint(corr)
+
+    if res['flags']==0:
+        return fitter
+    else:
+        return None
+
+
+
+
+
+
+
+
+
+
+
+
 def test_fixT(model, verbose=True, show=False, T_obj=16.0, do_control=False, **kw):
     from .metacal import Metacal
     from .shape import Shape

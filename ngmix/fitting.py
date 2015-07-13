@@ -2557,6 +2557,76 @@ class MCMCGaussMom(MCMCSimple):
 
         return names
 
+class MCMCGaussMomSum(MCMCSimple):
+    """
+    Fit gaussian in moment space, no psf
+    """
+    def __init__(self, obs, **keys):
+
+        super(MCMCGaussMomSum,self).__init__(obs, 'gauss', **keys)
+
+        self.model=gmix.GMIX_FULL
+        self.model_name='full'
+
+    def calc_result(self, **kw):
+        """
+        Some extra stats for simple models
+        """
+        super(MCMCSimple,self).calc_result(**kw)
+
+    def get_band_pars(self, pars_in, band):
+        """
+
+        pars are [c1,c2,M1sum,M2sum,Tsum,Isum,...]
+        """
+
+        #c1    = pars_in[0]
+        #c2    = pars_in[1]
+        c1sum    = pars_in[0]
+        c2sum    = pars_in[1]
+        M1sum = pars_in[2]
+        M2sum = pars_in[3]
+        Tsum  = pars_in[4]
+        Isum  = pars_in[5+band]
+
+        c1=c1sum/Isum
+        c2=c2sum/Isum
+        M1 = M1sum/Isum
+        M2 = M2sum/Isum
+        T  = Tsum/Isum
+
+        Irr = (T+M1)*0.5
+        Irc = M2/2
+        Icc = (T-M1)*0.5
+
+        pars=self._band_pars
+
+        pars[0] = Isum
+        pars[1] = c1
+        pars[2] = c2
+        pars[3] = Irr
+        pars[4] = Irc
+        pars[5] = Icc
+
+        return pars
+
+    def get_par_names(self, dolog=False):
+        """
+        parameter names for each dimension
+        """
+        names=[]
+
+        names=['cen1','cen2', 'M1sum','M2sum','Tsum']
+
+        if self.nband == 1:
+            names += ['Isum']
+        else:
+            for band in xrange(self.nband):
+                names += ['Isum_%s' % band]
+
+        return names
+
+
 
 class MCMCSimpleEta(MCMCSimple):
     """
