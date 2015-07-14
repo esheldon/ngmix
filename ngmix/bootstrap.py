@@ -32,6 +32,8 @@ BOOT_TS2N_ROUND_FAIL = 2**3
 BOOT_ROUND_CONVOLVE_FAIL = 2**4
 BOOT_WEIGHTS_LOW= 2**5
 
+
+
 class Bootstrapper(object):
     def __init__(self, obs, use_logpars=False):
         """
@@ -704,14 +706,9 @@ class Bootstrapper(object):
 
         guesser=self._get_max_guesser(guess=guess, prior=prior)
 
-        if gal_model=='full':
-            runner=MaxRunnerGaussMom(self.mb_obs_list, pars, guesser,
-                                     prior=prior,
-                                     use_logpars=self.use_logpars)
-        else:
-            runner=MaxRunner(self.mb_obs_list, gal_model, pars, guesser,
-                             prior=prior,
-                             use_logpars=self.use_logpars)
+        runner=MaxRunner(self.mb_obs_list, gal_model, pars, guesser,
+                         prior=prior,
+                         use_logpars=self.use_logpars)
 
         runner.go(ntry=ntry)
 
@@ -900,6 +897,69 @@ class Bootstrapper(object):
         if res['flags'] != 0:
             print("        cov replacement failed")
             res['flags']=0
+
+class BootstrapperGaussMom(Bootstrapper):
+    def fit_max(self, pars, guess=None, prior=None, extra_priors=None, ntry=1):
+        """
+        fit the galaxy.  You must run fit_psf() successfully first
+
+        extra_priors is ignored here but used in composite
+        """
+
+        self.max_fitter = self._fit_one_model_max(pars,
+                                                  guess=guess,
+                                                  prior=prior,
+                                                  ntry=ntry)
+        res=self.max_fitter.get_result()
+
+    def _fit_one_model_max(self, pars, guess=None, prior=None, ntry=1):
+        """
+        fit the galaxy.  You must run fit_psf() successfully first
+        """
+
+        if not hasattr(self,'psf_flux_res'):
+            self.fit_gal_psf_flux()
+
+        guesser=self._get_max_guesser(guess=guess, prior=prior)
+
+        runner=MaxRunnerGaussMom(self.mb_obs_list, pars, guesser,
+                                 prior=prior,
+                                 use_logpars=self.use_logpars)
+
+        runner.go(ntry=ntry)
+
+        fitter=runner.fitter
+
+        res=fitter.get_result()
+
+        if res['flags'] != 0:
+            raise BootGalFailure("failed to fit galaxy with maxlike")
+
+        return fitter
+
+    def _make_isampler(self, fitter, ipars, verbose=True):
+        from .fitting import ISamplerMom
+        from numpy.linalg import LinAlgError
+
+        res=fitter.get_result()
+        icov = res['pars_cov']
+
+        try:
+            sampler=ISamplerMom(res['pars'],
+                                icov,
+                                ipars['df'],
+                                min_err=ipars['min_err'],
+                                max_err=ipars['max_err'],
+                                ifactor=ipars.get('ifactor',1.0),
+                                asinh_pars=ipars.get('asinh_pars',[]),
+                                verbose=verbose)
+        except LinAlgError:
+            print("        bad cov")
+            sampler=None
+
+        return sampler
+
+
 
 
 class CompositeBootstrapper(Bootstrapper):
@@ -1418,7 +1478,7 @@ class MaxRunner(object):
         else:
             self.send_pars=max_pars
 
-        mess="model should be exp or dev,got '%s'" % model
+        mess="model should be exp,dev,gauss, got '%s'" % model
         assert model in ['exp','dev','gauss'],mess
 
         self.model=model
@@ -1476,7 +1536,6 @@ class MaxRunnerGaussMom(object):
         else:
             self.send_pars=max_pars
 
-        self.model="full"
         self.prior=prior
         self.use_logpars=use_logpars
 

@@ -3803,6 +3803,7 @@ def test_fit_gauss1(model='gauss',
     rstate=numpy.random.RandomState(seed)
 
     h=1.0e-3
+    cov_pars={'h':h, 'm':None}
 
     if model != 'gauss':
         dopsf=True
@@ -3946,10 +3947,14 @@ def test_fit_gauss1(model='gauss',
 
                 rvals=mvl.sample(nrand)
 
-                #ndist = scipy.stats.multivariate_normal(mean=m,
+                ndist = scipy.stats.multivariate_normal(mean=m,
+                                                        cov=c)
+                #ndist = scipy.stats.multivariate_normal(mean=maxpars,
+                #                                        cov=maxcov)
+                #bpars=fitter.get_best_pars()
+                #ndist = scipy.stats.multivariate_normal(mean=bpars,
                 #                                        cov=c)
-                ndist = scipy.stats.multivariate_normal(mean=maxpars,
-                                                        cov=maxcov)
+
                 nrvals = ndist.rvs(nrand)
 
                 nbin=50
@@ -3985,26 +3990,34 @@ def test_fit_gauss1(model='gauss',
         elif method=='isample':
             from biggles import plot_hist, Table
             import esutil as eu
-            from .bootstrap import Bootstrapper
+            from .bootstrap import BootstrapperGaussMom
 
-            boot=Bootstrapper(obsorig)
+            boot=BootstrapperGaussMom(obsorig)
+
 
             max_pars={'method':'lm', 'lm_pars':{'maxfev':4000}}
-            ipars={'nsample':[2000],
+            nsample=[500,2000]
+            ipars={'nsample':nsample,
                    'ifactor':1.0,
                    'df':2.1,
                    'min_err': [1.0e-4,1.0e-4,1.0e-3,1.0e-3,1.0e-4,1.0e-4],
-                   'max_err': [10.0,2.0,2.0,5.0,5.0,5.0],
+                   'max_err': [1.0,1.0,5.0,5.0,5.0,50.0],
                   }
+            nrand=200000
 
 
-            guess=array([flux*(1.0 + 0.1*srandu()),
-                         0.0,0.0,
-                         T/2.*(1.0+0.1*srandu()),
-                         0.1*srandu(),
-                         T/2.*(1.0+0.1*srandu())])
+            M1guess=(T/2.0)*0.1*srandu()
+            M2guess=(T/2.0)*0.1*srandu()
+
+            guess=zeros(6)
+            guess[0] = 0.01*srandu()
+            guess[1] = 0.01*srandu()
+            guess[2] = M1guess
+            guess[3] = M2guess
+            guess[4] = T*(1.0+0.1*srandu())
+            guess[5] = flux*(1.0 + 0.1*srandu())
  
-            boot.fit_max('full', max_pars, guess=guess)
+            boot.fit_max(max_pars, guess=guess)
             boot.try_replace_cov(cov_pars)
             mres=boot.get_max_fitter().get_result()
 
@@ -4014,6 +4027,7 @@ def test_fit_gauss1(model='gauss',
             boot.isample(ipars)
 
             fitter=boot.get_isampler()
+            iweights=fitter.get_iweights()
 
             res=fitter.get_result()
             trials=fitter.get_samples()
@@ -4026,37 +4040,48 @@ def test_fit_gauss1(model='gauss',
             #images.view(eu.stat.cov2cor(res['pars_cov']))
             psf_pars=psf_gmix_meas.get_full_pars()
 
-            m,c=stats.calc_mcmc_stats(trials, sigma_clip=True, nsig=4.0)
+            m,c=stats.calc_mcmc_stats(trials, weights=iweights)
             print()
             print_pars(m,front="means:")
             images.imprint(eu.stat.cov2cor(c))
             print()
-            #mvl=priors.MVNMom(res['pars'],
-            #                  res['pars_cov'],
-            #                  psf_pars[3:])
             mvl=priors.MVNMom(m,c,
                               psf_pars[3:])
 
-            rvals=mvl.sample(nstep*nwalkers)
+            rvals=mvl.sample(nrand)
 
+            ndist = scipy.stats.multivariate_normal(mean=m,
+                                                    cov=c)
+            nrvals=ndist.rvs(nrand)
 
             nbin=50
             grid=eu.plotting.Grid(6)
             ntab=Table(grid.nrow,grid.ncol)
             ntab.aspect_ratio=float(grid.nrow)/grid.ncol
-            labels=['I','cen1','cen2','Irr','Irc','Icc']
+            labels=['cen1','cen2','M1','M2','T','I']
             for i in xrange(6):
                 row,col=grid(i)
                 m,s=eu.stat.sigma_clip(trials[:,i],nsig=3.5)
                 minval=m-3.0*s
                 maxval=m+4.0*s
 
-                plt=plot_hist(trials[:,i], min=minval, max=maxval, nbin=nbin,
+                plt=plot_hist(trials[:,i],
+                              norm=1,
+                              weights=iweights,
+                              min=minval, max=maxval, nbin=nbin,
                               xlabel=labels[i],
                               visible=False)
-                plot_hist(rvals[:,i], min=minval, max=maxval, nbin=nbin,
+                plot_hist(rvals[:,i],
+                          norm=1,
+                          min=minval, max=maxval, nbin=nbin,
                           color='red', plt=plt,
                           visible=False)
+                plot_hist(nrvals[:,i], min=minval, max=maxval, nbin=nbin,
+                          norm=1,
+                          color='blue', plt=plt,
+                          visible=False)
+
+
                 ntab[row,col]=plt
 
             ntab.show()

@@ -1816,241 +1816,6 @@ class LMGaussMom(LMSimple):
                 raise
         return cov
 
-class MaxGaussMom(MaxSimple):
-    """
-    A class for direct maximization of the likelihood.
-    Useful for seeding model parameters.
-    """
-    def __init__(self, obs, method='Nelder-Mead', **keys):
-        super(MaxGaussMom,self).__init__(obs, 'gauss', **keys)
-
-        self.model=gmix.GMIX_FULL
-        self.model_name='full'
-
-    def get_band_pars(self, pars_in, band):
-        """
-        Get linear pars for the specified band
-
-        pars are [c1,c2,M1,M2,T,I1,I2...]
-
-        Where M1 = Icc-Irr
-              m2 = 2*Irc
-        """
-
-        c1 = pars_in[0]
-        c2 = pars_in[1]
-        M1 = pars_in[2]
-        M2 = pars_in[3]
-        T  = pars_in[4]
-        I  = pars_in[5+band]
-
-        Irr = (T-M1)*0.5
-        Irc = M2*0.5
-        Icc = (T+M1)*0.5
-
-        pars=self._band_pars
-
-        pars[0] = I
-        pars[1] = c1
-        pars[2] = c2
-        pars[3] = Irr
-        pars[4] = Irc
-        pars[5] = Icc
-
-        return pars
-
-
-    def neglnprob(self, pars):
-        return -1.0*self.calc_lnprob(pars)
-
-    def run_max(self, guess, **keys):
-        """
-        Run maximizer and set the result.
-
-        extra keywords for nm are 
-        --------------------------
-        xtol: float, optional
-            Tolerance in the vertices, relative to the vertex with
-            the lowest function value.  Default 1.0e-4
-        ftol: float, optional
-            Tolerance in the function value, relative to the
-            lowest function value for all vertices.  Default 1.0e-4
-        maxiter: int, optional
-            Default is npars*200
-        maxfev:
-            Default is npars*200
-        """
-        if self.method in ['nm','Nelder-Mead']:
-            self.run_max_nm(guess, **keys)
-        else:
-            import scipy.optimize
-
-            options={}
-            options.update(keys)
-
-            guess=numpy.array(guess,dtype='f8',copy=False)
-            self._setup_data(guess)
-            
-            result = scipy.optimize.minimize(self.neglnprob,
-                                             guess,
-                                             method=self.method,
-                                             options=options)
-            self._result = result
-
-            result['model'] = self.model_name
-            if result['success']:
-                result['flags'] = 0
-            else:
-                result['flags'] = result['status']
-
-            if 'x' in result:
-                pars=result['x']
-                result['pars'] = pars
-            
-                # based on last entry
-                fit_stats = self.get_fit_stats(pars)
-                result.update(fit_stats)
-    go=run_max
-
-    def run_max_nm(self, guess, **keys):
-        """
-        Run maximizer and set the result.
-
-        extra keywords are 
-        ------------------
-        xtol: float, optional
-            Tolerance in the vertices, relative to the vertex with
-            the lowest function value.  Default 1.0e-4
-        ftol: float, optional
-            Tolerance in the function value, relative to the
-            lowest function value for all vertices.  Default 1.0e-4
-        maxiter: int, optional
-            Default is npars*200
-        maxfev:
-            Default is npars*200
-        """
-        #from .simplex import minimize_neldermead
-        from .simplex import minimize_neldermead_rel as minimize_neldermead
-
-        options={}
-        options.update(keys)
-
-        guess=numpy.array(guess,dtype='f8',copy=False)
-        self._setup_data(guess)
-        
-        result = minimize_neldermead(self.neglnprob,
-                                     guess,
-                                     **keys)
-        self._result = result
-
-        result['model'] = self.model_name
-        if result['success']:
-            result['flags'] = 0
-        else:
-            result['flags'] = 1
-
-        if 'x' in result:
-            pars=result['x']
-            result['pars'] = pars
-        
-            # based on last entry
-            fit_stats = self.get_fit_stats(pars)
-            result.update(fit_stats)
-
-            h=1.0e-3
-            self.calc_cov(h)
-
-    def calc_cov(self, h, *args, **kw):
-        """
-        Run get_cov() to calculate the covariance matrix at the best-fit point.
-        If all goes well, add 'pars_cov', 'pars_err', and 'g_cov' to the result
-        array
-
-        Note in get_cov, if the Hessian is singular, a diagonal cov matrix is
-        attempted to be inverted. If that finally fails LinAlgError is raised.
-        In that case we catch it and set a flag EIG_NOTFINITE and the cov is
-        not added to the result dict
-
-        Also if there are negative diagonal elements of the cov matrix, the 
-        EIG_NOTFINITE flag is set and the cov is not added to the result dict
-        """
-
-        diag_on_fail=kw.get('diag_on_fail',True)
-
-        res=self.get_result()
-
-        bad=True
-
-        try:
-            cov = self.get_cov(res['pars'], h=h, diag_on_fail=diag_on_fail)
-
-            cdiag = diag(cov)
-
-            w,=where(cdiag <= 0)
-            if w.size == 0:
-
-                err = sqrt(cdiag)
-                w,=where(isfinite(err))
-                if w.size != err.size:
-                    print_pars(err, front="diagonals not finite:")
-                else:
-                    # everything looks OK
-                    bad=False
-            else:
-                print_pars(cdiag,front='    diagonals negative:')
-
-        except LinAlgError:
-            print("caught LinAlgError")
-
-        if bad:
-            res['flags'] |= EIG_NOTFINITE
-        else:
-            res['pars_cov'] = cov
-            res['pars_err']= err
-
-            if len(err) >= 6:
-                res['g_cov'] = cov[2:2+2, 2:2+2]
-
-    def get_cov(self, pars, h, diag_on_fail=True):
-        """
-        calculate the covariance matrix at the specified point
-
-        parameters
-        ----------
-        pars: array
-            Array of parameters at which to evaluate the cov matrix
-        h: step size, optional
-            Step size for finite differences, default 1.0e-3
-
-        Raises
-        ------
-        LinAlgError:
-            If the hessian is singular a diagonal version is tried
-            and if that fails finally a LinAlgError is raised.
-        """
-        import covmatrix
-
-        # get a copy as an array
-        pars=numpy.array(pars)
-
-        # we could call covmatrix.get_cov directly but we want to fall back
-        # to a diagonal hessian if it is singular
-
-        hess=covmatrix.calc_hess(self.calc_lnprob, pars, h)
-
-        try:
-            cov = -linalg.inv(hess)
-        except LinAlgError:
-            # pull out a diagonal version of the hessian
-            # this might still fail
-
-            if diag_on_fail:
-                hdiag=diag(diag(hess))
-                cov = -linalg.inv(hess)
-            else:
-                raise
-        return cov
-
 class LMSimpleRound(LMSimple):
     """
     This version fits [cen1,cen2,T,F]
@@ -5392,6 +5157,34 @@ class ISampler(object):
 
         self._min_err=min_err
         self._max_err=max_err
+
+
+class ISamplerMom(ISampler):
+    def calc_result(self, weights=None):
+        """
+        Calculate the mcmc stats and the "best fit" stats
+        """
+        super(ISamplerMom,self).calc_result(weights=None)
+        del self._result['g']
+        del self._result['g_cov']
+
+    def sample(self, nrand=None):
+        """
+        Get nrand random deviates from the distribution
+        """
+
+        if nrand is None:
+            is_scalar=True
+            nrand=1
+        else:
+            is_scalar=False
+
+        vals = self._pdf.rvs(nrand)
+ 
+        if is_scalar:
+            vals = vals[0,:]
+
+        return vals
 
 # alias
 GCovSamplerT=ISampler
