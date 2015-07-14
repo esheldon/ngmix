@@ -1581,13 +1581,15 @@ class PriorMomSep(object):
     """
 
     def __init__(self,
-                 cen_prior,
+                 cen1_prior,
+                 cen2_prior,
                  M1_prior,
                  M2_prior,
                  T_prior,
                  F_prior):
 
-        self.cen_prior=cen_prior
+        self.cen1_prior=cen1_prior
+        self.cen2_prior=cen1_prior
         self.M1_prior=M1_prior
         self.M2_prior=M2_prior
         self.T_prior=T_prior
@@ -1614,7 +1616,8 @@ class PriorMomSep(object):
         log probability for scalar input (meaning one point)
         """
 
-        lnp = self.cen_prior.get_lnprob_scalar2d(pars[0],pars[1])
+        lnp  = self.cen1_prior.get_lnprob_scalar(pars[0])
+        lnp += self.cen1_prior.get_lnprob_scalar(pars[1])
         lnp += self.M1_prior.get_lnprob_scalar(pars[2])
         lnp += self.M2_prior.get_lnprob_scalar(pars[3])
         lnp += self.T_prior.get_lnprob_scalar(pars[4])
@@ -1630,11 +1633,10 @@ class PriorMomSep(object):
         """
         index=0
 
-        lnp1,lnp2=self.cen_prior.get_lnprob_scalar2d(pars[0],pars[1])
 
-        fdiff[index] = lnp1
+        fdiff[index] = self.cen1_prior.get_lnprob_scalar(pars[0])
         index += 1
-        fdiff[index] = lnp2
+        fdiff[index] = self.cen2_prior.get_lnprob_scalar(pars[0])
         index += 1
 
         fdiff[index] = self.M1_prior.get_lnprob_scalar(pars[2])
@@ -1671,7 +1673,8 @@ class PriorMomSep(object):
         log probability for array input [N,ndims]
         """
 
-        lnp  = self.cen_prior.get_lnprob_array2d(pars[:,0], pars[:,1])
+        lnp  = self.cen1_prior.get_lnprob_array2d(pars[:,0])
+        lnp += self.cen2_prior.get_lnprob_array2d(pars[:,1])
         lnp += self.M1_prior.get_lnprob_array(pars[:,2])
         lnp += self.M2_prior.get_lnprob_array(pars[:,3])
         lnp += self.T_prior.get_lnprob_array(pars[:,4])
@@ -1684,7 +1687,8 @@ class PriorMomSep(object):
 
     def __repr__(self):
         reps=[]
-        reps += [str(self.cen_prior),
+        reps += [str(self.cen1_prior),
+                 str(self.cen2_prior),
                  str(self.M1_prior),
                  str(self.M2_prior),
                  str(self.T_prior)]

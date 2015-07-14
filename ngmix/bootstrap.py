@@ -975,7 +975,7 @@ class BootstrapperGaussMom(Bootstrapper):
 
             pres=self.get_psf_flux_result()
 
-            guess=[0.0, 0.0, 0.0, 0.0, psf_T, pres['psf_flux']]
+            guess=array( [0.0, 0.0, 0.0, 0.0, psf_T, pres['psf_flux']] )
 
         guesser=MomGuesser(guess, prior=prior)
         return guesser
