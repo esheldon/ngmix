@@ -3802,7 +3802,7 @@ def test_fit_gauss1(model='gauss',
     numpy.random.seed(seed)
     rstate=numpy.random.RandomState(seed)
 
-    cov_pars= {'m': 5, 'h': 1.0e-3}
+    h=1.0e-3
 
     if model != 'gauss':
         dopsf=True
@@ -3851,7 +3851,9 @@ def test_fit_gauss1(model='gauss',
         fitter=fit_em(obsorig, guess, maxiter=maxiter, tol=tol)
 
     else:
-        lm_pars={'maxfev': 4000}
+        lm_pars={'maxfev': 4000,
+                 'ftol':1.0e-7,
+                 'xtol':1.0e-7}
 
         if dopsf and fitpsf:
             from .em import fit_em
@@ -3881,7 +3883,7 @@ def test_fit_gauss1(model='gauss',
             guess[5] = flux*(1.0 + 0.1*srandu())
 
             fitter.go(guess)
-            fitter.calc_cov(cov_pars['h'])
+            fitter.calc_cov(h)
 
             res=fitter.get_result()
             print_pars(res['pars'],front="mpars:")
@@ -3927,7 +3929,7 @@ def test_fit_gauss1(model='gauss',
 
                 pdict=fitter.make_plots(nsigma=4.5)
                 tab=pdict['trials']
-                tab.show(width=800,height=800)
+                #tab.show(width=800,height=800)
 
                 import images
                 #images.view(eu.stat.cov2cor(res['pars_cov']))
@@ -3944,8 +3946,10 @@ def test_fit_gauss1(model='gauss',
 
                 rvals=mvl.sample(nrand)
 
-                ndist = scipy.stats.multivariate_normal(mean=m,
-                                                        cov=c)
+                #ndist = scipy.stats.multivariate_normal(mean=m,
+                #                                        cov=c)
+                ndist = scipy.stats.multivariate_normal(mean=maxpars,
+                                                        cov=maxcov)
                 nrvals = ndist.rvs(nrand)
 
                 nbin=50
