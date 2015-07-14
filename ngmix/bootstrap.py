@@ -899,6 +899,9 @@ class Bootstrapper(object):
             res['flags']=0
 
 class BootstrapperGaussMom(Bootstrapper):
+    def __init__(self, obs):
+        super(BootstrapperGaussMom,self).__init__(obs)
+
     def fit_max(self, pars, guess=None, prior=None, extra_priors=None, ntry=1):
         """
         fit the galaxy.  You must run fit_psf() successfully first
@@ -959,6 +962,23 @@ class BootstrapperGaussMom(Bootstrapper):
 
         return sampler
 
+
+    def _get_max_guesser(self, guess=None, prior=None):
+        """
+        get a guesser that uses the psf T and galaxy psf flux to
+        generate a guess, drawing from priors on the other parameters
+        """
+        from .guessers import MomGuesser
+
+        if guess is None:
+            psf_T = self.mb_obs_list[0][0].psf.gmix.get_T()
+
+            pres=self.get_psf_flux_result()
+
+            guess=[0.0, 0.0, 0.0, 0.0, psf_T, pres['psf_flux']]
+
+        guesser=MomGuesser(guess, prior=prior)
+        return guesser
 
 
 

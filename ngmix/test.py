@@ -3996,7 +3996,7 @@ def test_fit_gauss1(model='gauss',
 
 
             max_pars={'method':'lm', 'lm_pars':{'maxfev':4000}}
-            nsample=[500,2000]
+            nsample=[500,20000]
             ipars={'nsample':nsample,
                    'ifactor':1.0,
                    'df':2.1,
@@ -4061,9 +4061,10 @@ def test_fit_gauss1(model='gauss',
             labels=['cen1','cen2','M1','M2','T','I']
             for i in xrange(6):
                 row,col=grid(i)
-                m,s=eu.stat.sigma_clip(trials[:,i],nsig=3.5)
-                minval=m-3.0*s
-                maxval=m+4.0*s
+                m,s=eu.stat.sigma_clip(trials[:,i],weights=iweights,
+                                       nsig=3.5)
+                minval=m-3.25*s
+                maxval=m+3.25*s
 
                 plt=plot_hist(trials[:,i],
                               norm=1,

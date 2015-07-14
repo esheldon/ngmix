@@ -320,4 +320,46 @@ def get_shape_guess(g1, g2, n, width, max=0.99):
 
     return guess
 
+class MomGuesser(GuesserBase):
+    """
+    pars are [cen1,cen2,M1,M2,T,I]
+    """
+    def __init__(self, pars, prior=None, widths=None):
+        self.pars=pars
+        self.prior=prior
+
+        self.np = pars.size
+
+        if widths is None:
+            self.widths = pars*0 + 0.1
+        else:
+            self.widths = widths
+
+    def __call__(self, n=None, **keys):
+        """
+        center, shape are just distributed around zero
+        """
+
+        if n is None:
+            is_scalar=True
+            n=1
+        else:
+            is_scalar=False
+
+        pars=self.pars
+        widths=self.widths
+
+        guess=numpy.zeros( (n, self.np) )
+
+        for i in xrange(self.np):
+            guess[:,i] = pars[i] + widths[i]*srandu(n)
+
+        if self.prior is not None:
+            self._fix_guess(guess, self.prior)
+
+        if is_scalar:
+            guess=guess[0,:]
+
+        return guess
+
 

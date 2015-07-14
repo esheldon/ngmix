@@ -1562,4 +1562,137 @@ class PriorSimpleSepFixT(object):
         rep='\n'.join(reps)
         return rep
 
+class PriorMomSep(object):
+    """
+    Separate priors on each parameter
+
+    parameters
+    ----------
+    cen_prior:
+        The center prior
+    M1_prior:
+        The prior on M1
+    M2_prior:
+        Prior on M2
+    T_prior:
+        Prior on T.
+    F_prior
+        Prior on Flux.  Can be a list for a multi-band prior.
+    """
+
+    def __init__(self,
+                 cen_prior,
+                 M1_prior,
+                 M2_prior,
+                 T_prior,
+                 F_prior):
+
+        self.cen_prior=cen_prior
+        self.M1_prior=M1_prior
+        self.M2_prior=M2_prior
+        self.T_prior=T_prior
+
+        if isinstance(F_prior,list):
+            self.nband=len(F_prior)
+        else:
+            self.nband=1
+            F_prior=[F_prior]
+
+        self.F_priors=F_prior
+
+    def get_prob_scalar(self, pars, **keys):
+        """
+        probability for scalar input (meaning one point)
+        """
+
+        lnp = self.get_lnprob_scalar(pars, **keys)
+        p = exp(lnp)
+        return p
+
+    def get_lnprob_scalar(self, pars, **keys):
+        """
+        log probability for scalar input (meaning one point)
+        """
+
+        lnp = self.cen_prior.get_lnprob_scalar2d(pars[0],pars[1])
+        lnp += self.M1_prior.get_lnprob_scalar(pars[2])
+        lnp += self.M2_prior.get_lnprob_scalar(pars[3])
+        lnp += self.T_prior.get_lnprob_scalar(pars[4])
+
+        for i, F_prior in enumerate(self.F_priors):
+            lnp += F_prior.get_lnprob_scalar(pars[5+i])
+
+        return lnp
+
+    def fill_fdiff(self, pars, fdiff, **keys):
+        """
+        set sqrt(-2ln(p)) ~ (model-data)/err
+        """
+        index=0
+
+        lnp1,lnp2=self.cen_prior.get_lnprob_scalar2d(pars[0],pars[1])
+
+        fdiff[index] = lnp1
+        index += 1
+        fdiff[index] = lnp2
+        index += 1
+
+        fdiff[index] = self.M1_prior.get_lnprob_scalar(pars[2])
+        index += 1
+        fdiff[index] = self.M2_prior.get_lnprob_scalar(pars[3])
+        index += 1
+        fdiff[index] =  self.T_prior.get_lnprob_scalar(pars[4])
+        index += 1
+
+        for i in xrange(self.nband):
+            F_prior=self.F_priors[i]
+            fdiff[index] = F_prior.get_lnprob_scalar(pars[5+i], **keys)
+            index += 1
+
+        chi2 = -2*fdiff[0:index]
+        chi2.clip(min=0.0, max=None, out=chi2)
+        fdiff[0:index] = sqrt(chi2)
+
+        return index
+
+
+    def get_prob_array(self, pars, **keys):
+        """
+        probability for array input [N,ndims]
+        """
+
+        lnp = self.get_lnprob_array(pars, **keys)
+        p = exp(lnp)
+
+        return p
+
+    def get_lnprob_array(self, pars, **keys):
+        """
+        log probability for array input [N,ndims]
+        """
+
+        lnp  = self.cen_prior.get_lnprob_array2d(pars[:,0], pars[:,1])
+        lnp += self.M1_prior.get_lnprob_array(pars[:,2])
+        lnp += self.M2_prior.get_lnprob_array(pars[:,3])
+        lnp += self.T_prior.get_lnprob_array(pars[:,4])
+
+        for i in xrange(self.nband):
+            F_prior=self.F_priors[i]
+            lnp += F_prior.get_lnprob_array(pars[:,5+i])
+
+        return lnp
+
+    def __repr__(self):
+        reps=[]
+        reps += [str(self.cen_prior),
+                 str(self.M1_prior),
+                 str(self.M2_prior),
+                 str(self.T_prior)]
+
+        for p in self.F_priors:
+            reps.append( str(p) )
+
+        rep='\n'.join(reps)
+        return rep
+
 

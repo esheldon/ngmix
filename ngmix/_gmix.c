@@ -223,6 +223,9 @@ static inline int get_n_gauss(int model, int *status) {
         case PyGMIX_GMIX_SERSIC:
             n_gauss=10;
             break;
+        case PYGMIX_GMIX_GAUSSMOM:
+            n_gauss=1;
+            break;
         default:
             PyErr_Format(GMixFatalError, 
                          "cannot get n_gauss for model %d", model);
@@ -515,6 +518,58 @@ _bail:
     return status;
 }
 
+static int gmix_fill_gaussmom(struct PyGMix_Gauss2D *self,
+                              npy_intp n_gauss,
+                              const double* pars,
+                              npy_intp n_pars)
+{
+
+    int status=0;
+    double row=0,col=0, M1=0, M2=0, T=0, I=0;
+    double Irr=0,Irc=0, Icc=0;
+    npy_intp i=0;
+
+    if (n_pars != 6) {
+        PyErr_Format(GMixFatalError, 
+                     "gaussmom pars should be size 6, got %ld", n_pars);
+        goto _gmix_fill_gaussmom_bail;
+    }
+    if (n_gauss != 1) {
+        PyErr_Format(GMixFatalError, 
+                     "gaussmom is for one gaussian, got got %ld", n_gauss);
+        goto _gmix_fill_gaussmom_bail;
+    }
+
+    row=pars[0];
+    col=pars[1];
+    M1=pars[2];
+    M2=pars[3];
+    T=pars[4];
+    I=pars[5];
+
+    Irr = (T-M1)*0.5;
+    Irc = M2*0.5;
+    Icc = (T+M1)*0.5;
+
+    status=gauss2d_set(&self[i],
+                       I,
+                       row,
+                       col, 
+                       Irr,
+                       Irc,
+                       Icc);
+
+    // an exception will be set
+    if (!status) {
+        goto _gmix_fill_gaussmom_bail;
+    }
+
+    status=1;
+
+_gmix_fill_gaussmom_bail:
+    return status;
+}
+
 
 static int gmix_fill_coellip(struct PyGMix_Gauss2D *self,
                              npy_intp n_gauss,
@@ -649,6 +704,10 @@ static int gmix_fill(struct PyGMix_Gauss2D *self,
 
         case PyGMIX_GMIX_FULL:
             status=gmix_fill_full(self, n_gauss, pars, n_pars);
+            break;
+
+        case PYGMIX_GMIX_GAUSSMOM:
+            status=gmix_fill_gaussmom(self, n_gauss, pars, n_pars);
             break;
 
         default:

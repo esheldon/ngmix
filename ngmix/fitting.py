@@ -1668,10 +1668,11 @@ class LMGaussMom(LMSimple):
     """
     def __init__(self, obs, **keys):
 
-        super(LMGaussMom,self).__init__(obs, 'gauss', **keys)
+        super(LMGaussMom,self).__init__(obs, 'gaussmom', **keys)
 
-        self.model=gmix.GMIX_FULL
-        self.model_name='full'
+        #                 c1 c2  M1  M2   T   Ii
+        self.n_prior_pars=1 + 1 + 1 + 1 + 1 + self.nband
+        self.fdiff_size=self.totpix + self.n_prior_pars
 
     def go(self, guess):
         """
@@ -1703,25 +1704,10 @@ class LMGaussMom(LMSimple):
               m2 = 2*Irc
         """
 
-        c1 = pars_in[0]
-        c2 = pars_in[1]
-        M1 = pars_in[2]
-        M2 = pars_in[3]
-        T  = pars_in[4]
-        I  = pars_in[5+band]
-
-        Irr = (T-M1)*0.5
-        Irc = M2*0.5
-        Icc = (T+M1)*0.5
-
         pars=self._band_pars
 
-        pars[0] = I
-        pars[1] = c1
-        pars[2] = c2
-        pars[3] = Irr
-        pars[4] = Irc
-        pars[5] = Icc
+        pars[0:5] = pars_in[0:5]
+        pars[5] = pars_in[5+band]
 
         return pars
 
@@ -2639,10 +2625,7 @@ class MCMCGaussMom(MCMCSimple):
     """
     def __init__(self, obs, **keys):
 
-        super(MCMCGaussMom,self).__init__(obs, 'gauss', **keys)
-
-        self.model=gmix.GMIX_FULL
-        self.model_name='full'
+        super(MCMCGaussMom,self).__init__(obs, 'gaussmom', **keys)
 
     def calc_result(self, **kw):
         """
@@ -2660,25 +2643,10 @@ class MCMCGaussMom(MCMCSimple):
               m2 = 2*Irc
         """
 
-        c1 = pars_in[0]
-        c2 = pars_in[1]
-        M1 = pars_in[2]
-        M2 = pars_in[3]
-        T  = pars_in[4]
-        I  = pars_in[5+band]
-
-        Irr = (T-M1)*0.5
-        Irc = M2*0.5
-        Icc = (T+M1)*0.5
-
         pars=self._band_pars
 
-        pars[0] = I
-        pars[1] = c1
-        pars[2] = c2
-        pars[3] = Irr
-        pars[4] = Irc
-        pars[5] = Icc
+        pars[0:4] = pars_in[0:4]
+        pars[5] = pars_in[5+band]
 
         return pars
 

@@ -4276,6 +4276,9 @@ _g_cosmos_k = 3
 class ZDisk2D(_gmix.ZDisk2D):
     """
     uniform over a disk centered at zero [0,0] with radius r
+
+    Note get_lnprob_scalar1d and get_prob_scalar1d and 2d are already
+    part of base class
     """
     def __init__(self, radius):
         self.radius = radius
@@ -4319,50 +4322,6 @@ class ZDisk2D(_gmix.ZDisk2D):
         super(ZDisk2D,self).get_prob_array2d(x,y,out)
         return out
 
-    '''
-    def get_lnprob_array1d(self, r):
-        """
-        log probability 0.0 inside of disk, outside raises
-        an exception
-        """
-
-        w,=numpy.where(r >= self.radius)
-        if w.size > 0:
-            raise GMixRangeError("some positions were out of disk")
-
-        return zeros(x.size)
-
-    def get_prob_array1d(self, r):
-        """
-        probability, 1.0 inside disk, outside raises exception
-
-        does not raise an exception
-        """
-
-        p = ones(x.size)
-        w,=where(r >= self.radius)
-        if w.size > 0:
-            p[w]=0.0
-        return p
-
-    def get_lnprob_array2d(self, x, y):
-        """
-        log probability 0.0 inside of disk, outside raises
-        an exception
-        """
-
-        r = sqrt(x**2 + y**2)
-        return self.get_lnprob_array1d(r)
-
-    def get_prob_array2d(self, x, y):
-        """
-        probability, 1.0 inside disk, outside raises exception
-
-        does not raise an exception
-        """
-        r = sqrt(x**2 + y**2)
-        return self.get_prob_array1d(r)
-    '''
 
 class ZDisk2DErf(object):
     """
