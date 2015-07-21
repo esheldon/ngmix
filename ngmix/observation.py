@@ -27,12 +27,15 @@ class Observation(object):
                  jacobian=None,
                  gmix=None,
                  aperture=None,
-                 psf=None):
+                 psf=None,
+                 meta=None):
 
         self.image=numpy.asanyarray(image, dtype='f8')
         assert len(image.shape)==2,"image must be 2d"
 
         self.meta={}
+        if meta is not None:
+            self.meta.update(meta)
 
         # If jacobian is None, set UnitJacobian
         self.set_jacobian(jacobian)
