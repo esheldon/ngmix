@@ -34,8 +34,9 @@ class Observation(object):
         assert len(image.shape)==2,"image must be 2d"
 
         self.meta={}
+
         if meta is not None:
-            self.meta.update(meta)
+            self.update_meta_data(meta)
 
         # If jacobian is None, set UnitJacobian
         self.set_jacobian(jacobian)
@@ -176,11 +177,14 @@ class Observation(object):
         """
         return hasattr(self,'aperture')
 
-    def update_meta_data(self, meta_dict):
+    def update_meta_data(self, meta):
         """
         Add some metadata
         """
-        self.meta.update(meta_dict)
+
+        if not isinstance(meta,dict):
+            raise TypeError("meta data must be in dictionary form")
+        self.meta.update(meta)
 
 class ObsList(list):
     """
@@ -188,6 +192,14 @@ class ObsList(list):
 
     This class provides a bit of type safety and ease of type checking
     """
+
+    def __init__(self, meta=None):
+        super(ObsList,self).__init__()
+
+        self.meta={}
+        if meta is not None:
+            self.update_meta_data(meta)
+
     def append(self, obs):
         """
         Add a new observation
@@ -204,12 +216,22 @@ class ObsList(list):
         for obs in self:
             obs.set_aperture(aper)
 
+    def update_meta_data(self, meta):
+        """
+        Add some metadata
+        """
+
+        if not isinstance(meta,dict):
+            raise TypeError("meta data must be in dictionary form")
+        self.meta.update(meta)
+
     def __setitem__(self, index, obs):
         """
         over-riding this for type safety
         """
         assert isinstance(obs,Observation),"obs should be of type Observation"
         super(ObsList,self).__setitem__(index, obs)
+
 
 class MultiBandObsList(list):
     """
@@ -218,6 +240,13 @@ class MultiBandObsList(list):
 
     This class provides a bit of type safety and ease of type checking
     """
+
+    def __init__(self, meta=None):
+        super(MultiBandObsList,self).__init__()
+
+        self.meta={}
+        if meta is not None:
+            self.update_meta_data(meta)
 
     def append(self, obs_list):
         """
@@ -234,6 +263,15 @@ class MultiBandObsList(list):
         """
         for obslist in self:
             obslist.set_aperture(aper)
+
+    def update_meta_data(self, meta):
+        """
+        Add some metadata
+        """
+
+        if not isinstance(meta,dict):
+            raise TypeError("meta data must be in dictionary form")
+        self.meta.update(meta)
 
     def __setitem__(self, index, obs_list):
         """
