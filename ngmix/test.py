@@ -1,6 +1,7 @@
 from __future__ import print_function
 import numpy
-from numpy import array, zeros, diag, exp, sqrt, where, log, log10, isfinite
+from numpy import array, zeros, diag, exp
+from numpy import sqrt, where, log, log10, isfinite, newaxis
 from numpy.random import random as randu
 from pprint import pprint
 
@@ -3908,6 +3909,9 @@ def test_fit_gauss1(model='gauss',
                                     random_state=rstate)
                 guess=zeros( (nwalkers,6))
 
+                for i in xrange(6):
+                    guess[:,i] = maxpars[i] + 0.01*srandu(nwalkers)
+                '''
                 M1guess=(T/2.0)*0.1*srandu(nwalkers)
                 M2guess=(T/2.0)*0.1*srandu(nwalkers)
 
@@ -3917,6 +3921,7 @@ def test_fit_gauss1(model='gauss',
                 guess[:,3] = M2guess
                 guess[:,4] = T*(1.0+0.1*srandu(nwalkers))
                 guess[:,5] = flux*(1.0 + 0.1*srandu(nwalkers))
+                '''
 
                 pos=fitter.go(guess,burnin)
                 pos=fitter.go(pos,nstep)
@@ -3955,7 +3960,28 @@ def test_fit_gauss1(model='gauss',
                 #ndist = scipy.stats.multivariate_normal(mean=bpars,
                 #                                        cov=c)
 
-                nrvals = ndist.rvs(nrand)
+                #nrvals = ndist.rvs(nrand)
+                nrvals = zeros( (nrand,6))
+
+                psf_T  = psf_pars[3]+psf_pars[5]
+                psf_M1 = psf_pars[5]-psf_pars[3]
+                psf_M2 = 2*psf_pars[4]
+
+                nrvals=zeros( (nrand,6) )
+                ngood=0
+                nleft=nrand
+                while ngood < nrand:
+                    print("nleft:",nleft)
+                    tmp = ndist.rvs(nleft)
+                    if nleft==1:
+                        tmp = tmp[newaxis,:]
+                    w,=where(  ( numpy.abs(tmp[:,2]+psf_M1) < (tmp[:,4]+psf_T) )
+                             & ( numpy.abs(tmp[:,3]+psf_M2) < (tmp[:,4]+psf_T) ) )
+                    if w.size > 0:
+                        nrvals[ngood:ngood+w.size,:] = tmp[w,:]
+                        ngood += w.size
+                        nleft -= w.size
+
 
                 nbin=50
                 grid=eu.plotting.Grid(6)
@@ -4052,7 +4078,28 @@ def test_fit_gauss1(model='gauss',
 
             ndist = scipy.stats.multivariate_normal(mean=m,
                                                     cov=c)
-            nrvals=ndist.rvs(nrand)
+            # nrvals=ndist.rvs(nrand)
+            nrvals = zeros( (nrand,6))
+
+            psf_T  = psf_pars[3]+psf_pars[5]
+            psf_M1 = psf_pars[5]-psf_pars[3]
+            psf_M2 = 2*psf_pars[4]
+
+            nrvals=zeros( (nrand,6) )
+            ngood=0
+            nleft=nrand
+            while ngood < nrand:
+                print("nleft:",nleft)
+                tmp = ndist.rvs(nleft)
+                if nleft==1:
+                    tmp = tmp[newaxis,:]
+                w,=where(  ( numpy.abs(tmp[:,2]+psf_M1) < (tmp[:,4]+psf_T) )
+                         & ( numpy.abs(tmp[:,3]+psf_M2) < (tmp[:,4]+psf_T) ) )
+                if w.size > 0:
+                    nrvals[ngood:ngood+w.size,:] = tmp[w,:]
+                    ngood += w.size
+                    nleft -= w.size
+
 
             nbin=50
             grid=eu.plotting.Grid(6)
@@ -4255,17 +4302,19 @@ def test_fit_gauss1_momsum(model='exp',
     nrand=nstep*nwalkers
     rvals=mvl.sample(nrand)
 
-
+    ndist = scipy.stats.multivariate_normal(mean=m,
+                                            cov=c)
+    nrvals = ndist.rvs(nrand)
 
     nbin=50
     grid=eu.plotting.Grid(6)
     ntab=Table(grid.nrow,grid.ncol)
     ntab.aspect_ratio=float(grid.nrow)/grid.ncol
-    labels=['I','cen1','cen2','Irr','Irc','Icc']
+    labels=['cen1','cen2','M1','M2','T','I']
     for i in xrange(6):
         row,col=grid(i)
         m,s=eu.stat.sigma_clip(trials[:,i],nsig=3.5)
-        minval=m-3.0*s
+        minval=m-4.0*s
         maxval=m+4.0*s
 
         plt=plot_hist(trials[:,i], min=minval, max=maxval, nbin=nbin,
@@ -4274,13 +4323,16 @@ def test_fit_gauss1_momsum(model='exp',
         plot_hist(rvals[:,i], min=minval, max=maxval, nbin=nbin,
                   color='red', plt=plt,
                   visible=False)
-        #plot_hist(mrvals[:,i], min=minval, max=maxval, nbin=nbin,
-        #          color='blue', plt=plt,
-        #          visible=False)
+        plot_hist(nrvals[:,i], min=minval, max=maxval, nbin=nbin,
+                  color='blue', plt=plt,
+                  visible=False)
 
         ntab[row,col]=plt
 
     ntab.show()
+    pngfile='/data/esheldon/tmp/mom-like.png'
+    print(pngfile)
+    ntab.write_img(1200,800,pngfile)
 
     res['psf_gmix'] = pfitter.get_gmix()
 

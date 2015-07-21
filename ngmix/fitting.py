@@ -2703,9 +2703,9 @@ class MCMCGaussMomSum(MCMCSimple):
         M2 = M2sum/Isum
         T  = Tsum/Isum
 
-        Irr = (T+M1)*0.5
+        Irr = (T-M1)*0.5
         Irc = M2/2
-        Icc = (T-M1)*0.5
+        Icc = (T+M1)*0.5
 
         pars=self._band_pars
 
