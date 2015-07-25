@@ -18,6 +18,7 @@ from . import joint_prior
 
 from . import shape
 from .shape import Shape
+from . import moments
 
 from . import gexceptions
 from .gexceptions import GMixRangeError, GMixFatalError, GMixMaxIterEM

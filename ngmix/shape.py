@@ -93,6 +93,10 @@ def g1g2_to_e1e2(g1, g2):
     convert reduced shear g1,g2 to standard ellipticity
     parameters e1,e2
 
+    uses eta representation but could also use
+        e1 = 2*g1/(1 + g1**2 + g2**2)
+        e2 = 2*g2/(1 + g1**2 + g2**2)
+
     parameters
     ----------
     g1,g2: scalars
@@ -149,24 +153,36 @@ def e1e2_to_g1g2(e1, e2):
         g = numpy.tanh(0.5*eta)
 
         numpy.clip(g, 0.0, 0.99999999, g)
+
+        g1=numpy.zeros(g.size)
+        g2=numpy.zeros(g.size)
+        w,=numpy.where(e != 0.0)
+        if w.size > 0:
+            fac = g[w]/e[w]
+
+            g1[w] = fac*e1[w]
+            g2[w] = fac*e2[w]
+
     else:
         if e >= 1.:
             raise GMixRangeError("e out of bounds: %s" % e)
         if e == 0.0:
-            return (0.0, 0.0)
+            g1,g2=0.0,0.0
+
+        else:
         
-        eta=numpy.arctanh(e)
-        g = numpy.tanh(0.5*eta)
+            eta=numpy.arctanh(e)
+            g = numpy.tanh(0.5*eta)
 
-        if g >= 1.:
-            # round off?
-            g = 0.99999999
+            if g >= 1.:
+                # round off?
+                g = 0.99999999
 
 
-    fac = g/e
+            fac = g/e
 
-    g1 = fac*e1
-    g2 = fac*e2
+            g1 = fac*e1
+            g2 = fac*e2
 
     return g1,g2
 
