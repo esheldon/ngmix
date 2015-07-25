@@ -3318,7 +3318,7 @@ class MultivariateNormal(object):
                            prob)
         return prob
 
-    def get_lnprob(self, xinput, nsigma=100.0):
+    def get_lnprob(self, xinput):
         """
         get the log prob for the input x
 
@@ -3337,6 +3337,7 @@ class MultivariateNormal(object):
         lnprob=zeros(x.shape[0],dtype='f8')
 
         dolog=1
+        nsigma=1000.0 # not used
         _gmix.mvn_get_prob(self.mean,
                            self.icov,
                            self.log_norm,
