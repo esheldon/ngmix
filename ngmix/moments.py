@@ -310,3 +310,44 @@ def get_Tround(T, g1, g2):
     """
     gsq = g1**2 + g2**2
     return T*(1-gsq)/(1+gsq)
+
+def test_mom():
+
+    from ngmix import print_pars
+    from numpy import linspace, array
+
+    e1=array([-0.2, -0.2, 0.2, 0.2,  0.1,  0.0, 0.1, 0.0])
+    e2=array([ 0.1,  0.0, 0.1, 0.0, -0.2, -0.2, 0.2, 0.2])
+    T=array([16.0]*e1.size)
+
+    M1 = T*e1
+    M2 = T*e2
+
+    md=Deriv(M1, M2, T)
+
+    print_pars(M1, front="M1:         ")
+    print_pars(M2, front="M2:         ")
+    print_pars(T,  front="T:          ")
+    print_pars(e1, front="e1:         ")
+    print_pars(e2, front="e2:         ")
+
+    print()
+    print_pars(md.dTds1z(),      front="dTds1z:     ")
+    print_pars(md.dTds2z(),      front="dTds2z:     ")
+    print_pars(md.dM1ds1z(),     front="dM1ds1z:    ")
+    print_pars(md.dM1ds2z(),     front="dM1ds2z:    ")
+    print_pars(md.dM2ds1z(),     front="dM2ds1z:    ")
+    print_pars(md.dM2ds2z(),     front="dM2ds2z:    ")
+
+    print()
+    print_pars(md.d2Tds1ds1z(),  front="d2Tds1ds1z: ")
+    print_pars(md.d2Tds1ds2z(),  front="d2Tds1ds2z: ")
+    print_pars(md.d2Tds2ds2z(),  front="d2Tds2ds2z: ")
+    print()
+    print_pars(md.d2M1ds1ds1z(), front="d2M1ds1ds1z:")
+    print_pars(md.d2M1ds1ds2z(), front="d2M1ds1ds2z:")
+    print_pars(md.d2M1ds2ds2z(), front="d2M1ds2ds2z:")
+    print()
+    print_pars(md.d2M2ds1ds1z(), front="d2M2ds1ds1z:")
+    print_pars(md.d2M2ds1ds2z(), front="d2M2ds1ds2z:")
+    print_pars(md.d2M2ds2ds2z(), front="d2M2ds2ds2z:")
