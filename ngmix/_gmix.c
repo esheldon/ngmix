@@ -2669,6 +2669,99 @@ PyObject * PyGMix_gmixnd_get_prob_scalar(PyObject* self, PyObject* args) {
 }
 
 
+/*
+
+   use nsigma to limit the range evaluated,
+   saves time calling exp
+
+   if dolog is true, the points are always evaluated
+   and nsigma is ignored. Also norm is log(norm)
+
+
+   all error checking should be done in python
+*/
+static 
+PyObject * PyGMix_mvn_get_prob(PyObject* self, PyObject* args) {
+
+    PyObject* mean_obj=NULL;
+    PyObject* icovar_obj=NULL;
+    double nsigma=0, nsigma2=0, norm=0;
+    int dolog=0;
+    PyObject* allpars_obj=NULL;
+    PyObject* prob_obj=NULL;
+
+    // up to 10 dimensions
+    double xdiff[10];
+    double par=0, mean=0, icov=0, chi2=0, tchi2=0, arg=0;
+    double prob=0, *ptr=NULL;
+    npy_intp ndim=0, npoints=0, i=0, dim1=0, dim2=0;
+
+    // weight object is currently ignored
+    if (!PyArg_ParseTuple(args, (char*)"OOddOiO", 
+                          &mean_obj,
+                          &icovar_obj,
+                          &norm,
+                          &nsigma,
+                          &allpars_obj,
+                          &dolog,
+                          &prob_obj)) {
+        return NULL;
+    }
+
+    nsigma2=nsigma*nsigma;
+ 
+    ndim=PyArray_SIZE(mean_obj);
+    npoints = PyArray_DIM(allpars_obj,0);
+
+    for (i=0; i<npoints; i++) {
+        for (dim1=0; dim1<ndim; dim1++) {
+            mean = *(double *)PyArray_GETPTR1(mean_obj, dim1);
+            par  = *(double *)PyArray_GETPTR2(allpars_obj, i, dim1);
+
+            xdiff[dim1] = par-mean;
+        }
+
+        chi2=0;
+        for (dim1=0; dim1<ndim; dim1++) {
+            //for (dim2=dim1; dim2<ndim; dim2++) {
+            for (dim2=0; dim2<ndim; dim2++) {
+                icov=*(double *) PyArray_GETPTR2(icovar_obj, dim1, dim2);
+
+                tchi2 = xdiff[dim1]*xdiff[dim2]*icov;
+                chi2 += tchi2;
+
+                /*
+                if (dim1 != dim2) {
+                    // add in the symmetric value
+                    chi2 += tchi2;
+                }
+                */
+            }
+        }
+
+        arg = -0.5*chi2;
+
+        if (dolog) {
+            // norm is really log(norm)
+            // and this is really the log prob
+            prob = norm + arg;
+        } else {
+            if (chi2 < nsigma2) {
+                prob = norm*exp(arg);
+            } else {
+                prob = 0.0;
+            }
+        }
+
+        ptr = PyArray_GETPTR1(prob_obj,i);
+        *ptr = prob;
+
+    }
+
+    Py_RETURN_NONE;
+}
+
+
 
 
 static PyObject * PyGMix_test(PyObject* self, PyObject* args) {
@@ -2756,6 +2849,8 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"convert_simple_eta2g_band",        (PyCFunction)PyGMix_convert_simple_eta2g_band,         METH_VARARGS,  "convert eta to g, band specified.\n"},
 
     {"gmixnd_get_prob_scalar",        (PyCFunction)PyGMix_gmixnd_get_prob_scalar,         METH_VARARGS,  "get prob or log prob for scalar arg, nd gaussian"},
+
+    {"mvn_get_prob",        (PyCFunction)PyGMix_mvn_get_prob,         METH_VARARGS,  "get prob for the specified multivariate gaussian"},
 
     {"test",        (PyCFunction)PyGMix_test,         METH_VARARGS,  "test\n\nprint and return."},
     {"erf",         (PyCFunction)PyGMix_erf,         METH_VARARGS,  "erf with better precision."},

@@ -271,6 +271,39 @@ class Deriv(object):
 
         self.zero = numpy.abs(g1)*0
 
+class PQRMomTemplatesBase(object):
+    """
+    calculate pqr from the input moments and a
+    likelihood function using the templates as
+    the priors
+    """
+    def __init__(self, mom, mom_cov, templates, nsigma=5.0):
+        self.mom=mom
+        self.mom_cov=mom_cov
+        self.templates=templates
+        self.nsigma=nsigma
+
+        self._set_likelihood()
+
+        self._calc_pqr()
+
+class PQRMomTemplatesGauss(PQRMomTemplatesBase):
+    """
+    calculate pqr from the input moments and a
+    likelihood function using the templates as
+    the priors
+
+    Assumes multi-variate gaussian for the likelihoods
+    """
+
+    def _set_likelihood(self):
+        from scipy.stats import multivariate_normal
+        self.dist = multivariate_normal(mean=self.mom, cov=self.mom_cov)
+
+    def _calc_pqr(self):
+        pass
+
+ 
 def moms2e1e2(M1, M2, T):
     """
     convert M1, M2, T to e1,e2

@@ -19,7 +19,7 @@ import math
 
 import numpy
 from numpy import where, array, exp, log, log10, sqrt, cos, sin, zeros, ones, diag
-from numpy import pi
+from numpy import newaxis, pi
 from numpy.random import random as randu
 from numpy.random import randn
 
@@ -3272,6 +3272,150 @@ def lognorm_convert(mean, sigma, base=math.e):
     logsigma = sqrt(logvar)
 
     return logmean, logsigma
+
+
+
+class MultivariateNormal(object):
+    """
+    multi-variate normal distribution
+
+    parameters
+    ----------
+    mean: array-like
+        [Ndim] of means for each dim. of the distribution
+    cov: array-like
+        [Ndim,Ndim] covariance matrix
+    """
+    def __init__(self, mean, cov):
+
+        self._set_mean_cov(mean,cov)
+
+    def get_prob(self, xinput, nsigma=100.0):
+        """
+        get the prob for the input x
+
+        parameters
+        ----------
+        x: float or array-like
+            Array with length equal to number of dimensions
+
+        returns
+        -------
+        prob: array
+            The probability
+        """
+
+        x =  self._get_arg(xinput)
+        prob=zeros(x.shape[0],dtype='f8')
+
+        dolog=0
+        _gmix.mvn_get_prob(self.mean,
+                           self.icov,
+                           self.norm,
+                           nsigma,
+                           x,
+                           dolog,
+                           prob)
+        return prob
+
+    def get_lnprob(self, xinput, nsigma=100.0):
+        """
+        get the log prob for the input x
+
+        parameters
+        ----------
+        x: float or array-like
+            Array with length equal to number of dimensions
+
+        returns
+        -------
+        lnprob: array
+            The log probability
+        """
+
+        x =  self._get_arg(xinput)
+        lnprob=zeros(x.shape[0],dtype='f8')
+
+        dolog=1
+        _gmix.mvn_get_prob(self.mean,
+                           self.icov,
+                           self.log_norm,
+                           nsigma,
+                           x,
+                           dolog,
+                           lnprob)
+        return lnprob
+
+
+    def _get_arg(self, x):
+        x=array(x, ndmin=2, dtype='f8', copy=False)
+
+        sh=x.shape
+
+        ndim=self.ndim
+        if len(sh) != 2 or sh[1] != ndim:
+            mess="x should have shape [N,%d], got [%d,%d]"
+            mess=mess % (ndim,sh[0],sh[1])
+            raise ValueError(mess)
+
+        return x
+
+    def sample(self, n=None):
+        """
+        sample from the distribution
+
+        parameters
+        ----------
+        n: int, optional
+            Number of points to generate from the distribution
+
+        returns
+        -------
+        random points:
+            If n is None or 1, a 1-d array is returned, else a [N, ndim]
+            array is returned
+        """
+        if not hasattr(self,'dist'):
+            self._set_scipy_dist()
+
+        return self._dist.rvs(n)
+
+    def _set_scipy_dist(self):
+        """
+        for sampling
+        """
+        import scipy.stats
+        self._dist = scipy.stats.multivariate_normal(mean=self.mean,
+                                                     cov=self.cov)
+
+    def _set_mean_cov(self, mean, cov):
+        """
+        Genrate the mean and covariance in log space, 
+        as well as the multivariate normal for the log space
+        """
+        from numpy import pi
+
+        mean=array(mean,ndmin=1,dtype='f8',copy=True)
+        cov=array(cov,ndmin=2,dtype='f8',copy=True)
+
+        self.mean=mean
+        self.cov=cov
+
+        ndim=mean.size
+        self.ndim=ndim
+
+        if ndim != cov.shape[0] or ndim != cov.shape[1]:
+            raise ValueError("mean has size %d but "
+                             "cov has shape %s" % (ndim,str(cov.shape)))
+
+        # will raise numpy.linalg.linalg.LinAlgError
+        self.icov = numpy.linalg.inv(cov)
+
+        det = numpy.linalg.det(cov)
+        self.norm=1.0/sqrt( (2.0*pi)**self.ndim * det )
+        self.log_norm = log(self.norm)
+
+
 
 
 class BFracBase(object):
