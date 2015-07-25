@@ -112,22 +112,34 @@ class Deriv(object):
         2nd derivative of M1 with respect to shear1 and shear1 at zero shear
         """
         g1=self.g1
-        g2=self.g2
+
+        g1sq=self.g1sq
+        g2sq=self.g2sq
+        g1q=self.g1q
+        g2q=self.g2q
         omgsq_inv2 = self.omgsq_inv2
         Tround = self.Tround
  
-        val = (4*g1*(-1 + g1**4 - 4*g2**2 + 2*g1**2*g2**2 + g2**4)*Tround)/(-1 + g1**2 + g2**2)**2
+        #val = (4*g1*(-1 + g1**4 - 4*g2**2 + 2*g1**2*g2**2 + g2**4)*Tround)/(-1 + g1**2 + g2**2)**2
+        val = 4*g1*Tround*(-1 + g1q - 4*g2sq + 2*g1sq*g2sq + g2q)*omgsq_inv2
         return val
 
     def d2M1ds1ds2z(self):
         """
         2nd derivative of M1 with respect to shear1 and shear2 at zero shear
         """
-        g1=self.g1
         g2=self.g2
-        omgsq_inv2 = self.omgsq_inv2
+
+        g1sq=self.g1sq
+        g2sq=self.g2sq
+        g1q=self.g1q
+
         Tround = self.Tround
-        val=(4*g2*(g1**4 + g2**2 * (-1 + g2**2) + g1**2 * (3 + 2*g2**2))*Tround)/(-1 + g1**2 + g2**2)**2 
+
+        omgsq_inv2 = self.omgsq_inv2
+
+        #val=(4*g2*(g1**4 + g2**2 * (-1 + g2**2) + g1**2 * (3 + 2*g2**2))*Tround)/(-1 + g1**2 + g2**2)**2 
+        val=4*g2*Tround*(g1q + g2sq * (-1 + g2sq) + g1sq * (3 + 2*g2sq))*omgsq_inv2
         return val
 
     def d2M1ds2ds2z(self):
@@ -135,49 +147,16 @@ class Deriv(object):
         2nd derivative of M1 with respect to shear2 and shear2 at zero shear
         """
         g1=self.g1
-        g2=self.g2
+
+        g1sq=self.g1sq
+        g2sq=self.g2sq
+        g1q=self.g1q
+
         omgsq_inv2 = self.omgsq_inv2
         Tround = self.Tround
  
-        val=-((4*g1*(g1**4 + (-1 + g2**2)**2 + 2*g1**2 *(1 + g2**2))*Tround)/(-1 + g1**2 + g2**2)**2)
-        return val
-
-    def d2M2ds1ds1z(self):
-        """
-        2nd derivative of M2 with respect to shear1 and shear1 at zero shear
-        """
-        g1=self.g1
-        g2=self.g2
-        omgsq_inv2 = self.omgsq_inv2
-        Tround = self.Tround
- 
-        val= -((4*g2*(g1**4 + 2*g1**2 * (-1 + g2**2) + (1 + g2**2)**2) * Tround)/(-1 + g1**2 + g2**2)**2)
-        #val = (4*g1*(-1 + g1**4 - 4*g2**2 + 2*g1**2*g2**2 + g2**4)*Tround)/(-1 + g1**2 + g2**2)**2
-        return val
-
-    def d2M2ds1ds2z(self):
-        """
-        2nd derivative of M2 with respect to shear1 and shear2 at zero shear
-        """
-        g1=self.g1
-        g2=self.g2
-        omgsq_inv2 = self.omgsq_inv2
-        Tround = self.Tround
-        val=(4*g1*(g1**4 + g2**2 * (3 + g2**2) + g1**2 * (-1 + 2 * g2**2)) * Tround)/(-1 + g1**2 + g2**2)**2
-        #val=(4*g2*(g1**4 + g2**2 * (-1 + g2**2) + g1**2 * (3 + 2*g2**2))*Tround)/(-1 + g1**2 + g2**2)**2 
-        return val
-
-    def d2M2ds2ds2z(self):
-        """
-        2nd derivative of M2 with respect to shear2 and shear2 at zero shear
-        """
-        g1=self.g1
-        g2=self.g2
-        omgsq_inv2 = self.omgsq_inv2
-        Tround = self.Tround
- 
-        val=(4*g2*(-1 + g1**4 + g2**4 + 2*g1**2 * (-2 + g2**2)) * Tround)/(-1 + g1**2 + g2**2)**2
         #val=-((4*g1*(g1**4 + (-1 + g2**2)**2 + 2*g1**2 *(1 + g2**2))*Tround)/(-1 + g1**2 + g2**2)**2)
+        val=-4*g1*Tround*(g1q + (-1 + g2sq)**2 + 2*g1sq *(1 + g2sq))*omgsq_inv2
         return val
 
 
@@ -195,6 +174,59 @@ class Deriv(object):
 
         # -((2 (1 + g1^2 + g2^2) Tround)/(-1 + g1^2 + g2^2))
         return 2*self.T
+
+    def d2M2ds1ds1z(self):
+        """
+        2nd derivative of M2 with respect to shear1 and shear1 at zero shear
+        """
+        g2=self.g2
+
+        g1sq=self.g1sq
+        g2sq=self.g2sq
+        g1q=self.g1q
+        omgsq_inv2 = self.omgsq_inv2
+        Tround = self.Tround
+ 
+        #val= -((4*g2*(g1**4 + 2*g1**2 * (-1 + g2**2) + (1 + g2**2)**2) * Tround)/(-1 + g1**2 + g2**2)**2)
+        val= -4*Tround*g2*((g1q + 2*g1sq * (-1 + g2sq) + (1 + g2sq)**2) )*omgsq_inv2
+        return val
+
+    def d2M2ds1ds2z(self):
+        """
+        2nd derivative of M2 with respect to shear1 and shear2 at zero shear
+        """
+        g1=self.g1
+
+        g1sq=self.g1sq
+        g2sq=self.g2sq
+        g1q=self.g1q
+ 
+        omgsq_inv2 = self.omgsq_inv2
+        Tround = self.Tround
+
+        #val=(4*g1*(g1**4 + g2**2 * (3 + g2**2) + g1**2 * (-1 + 2 * g2**2)) * Tround)/(-1 + g1**2 + g2**2)**2
+        val=4*g1*Tround*(g1q + g2sq * (3 + g2sq) + g1sq * (-1 + 2 * g2sq))*omgsq_inv2
+        return val
+
+    def d2M2ds2ds2z(self):
+        """
+        2nd derivative of M2 with respect to shear2 and shear2 at zero shear
+        """
+        g2=self.g2
+
+        g1sq=self.g1sq
+        g2sq=self.g2sq
+        g1q=self.g1q
+        g2q=self.g2q
+ 
+
+        omgsq_inv2 = self.omgsq_inv2
+        Tround = self.Tround
+ 
+        #val=(4*g2*(-1 + g1**4 + g2**4 + 2*g1**2 * (-2 + g2**2)) * Tround)/(-1 + g1**2 + g2**2)**2
+        val=4*g2*Tround*(-1 + g1q + g2q + 2*g1sq * (-2 + g2sq))*omgsq_inv2
+        return val
+
 
 
     def set_moms(self, M1, M2, T):
