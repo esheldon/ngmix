@@ -4,6 +4,9 @@ from ._gmix import GMixRangeError
 from . import shape
 
 class Deriv(object):
+    """
+    class to calculate derivatives of moments with respect to shear
+    """
     def __init__(self, M1, M2, T):
         self.set_moms(M1, M2, T)
 
@@ -277,15 +280,86 @@ class PQRMomTemplatesBase(object):
     likelihood function using the templates as
     the priors
     """
-    def __init__(self, mom, mom_cov, templates, nsigma=5.0):
-        self.mom=mom
-        self.mom_cov=mom_cov
-        self.templates=templates
+    def __init__(self, templates, nsigma=5.0):
         self.nsigma=nsigma
+        self.templates_orig=templates
 
-        self._set_likelihood()
+        self._set_templates()
+        self._set_deriv()
 
-        self._calc_pqr()
+    def _set_templates(self):
+        """
+        set the templates, trimming to the good ones
+        """
+
+        templates = self.templates_orig
+
+        M1 = templates[:,2]
+        M2 = templates[:,3]
+        T  = templates[:,4]
+
+        w,=numpy.where(T > 0)
+
+        print("using %d/%d with T > 0" % (w.size,T.size))
+        if w.size == 0:
+            raise ValueError("none with T > 0")
+        
+        Tinv = 1.0/T[w]
+        e1 = M1[w]*Tinv
+        e2 = M2[w]*Tinv
+        e=numpy.sqrt(e1**2 + e2**2)
+        w2,=numpy.where(e < 1.0)
+        
+        print("using %d/%d with e < 1" % (w2.size,T.size))
+        if w2.size == 0:
+            raise ValueError("none with e < 1")
+
+        w=w[w2]
+
+        self.deriv = Deriv(M1[w], M2[w], T[w])
+        self.templates = templates[w,:]
+
+    def _set_deriv(self):
+        print("setting shear derivatives")
+        deriv = self.deriv
+        nt=self.templates.shape[0]
+
+        Qderiv = numpy.zeros( (nt, 3, 2) )
+        Rderiv = numpy.zeros( (nt, 3, 2, 2) )
+
+        # M1 first derivatives
+        Qderiv[:,0,0] = deriv.dM1ds1z()
+        Qderiv[:,0,1] = deriv.dM1ds2z()
+
+        # M2 first derivatives
+        Qderiv[:,1,0] = deriv.dM2ds1z()
+        Qderiv[:,1,1] = deriv.dM2ds2z()
+
+        # T  first derivatives
+        Qderiv[:,2,0] = deriv.dTds1z()
+        Qderiv[:,2,1] = deriv.dTds2z()
+
+        # M1 2nd deriv
+        Rderiv[:,0,0,0] = deriv.d2M1ds1ds1z()
+        Rderiv[:,0,0,1] = deriv.d2M1ds1ds2z()
+        Rderiv[:,0,1,0] = Rderiv[:,0,0,1]
+        Rderiv[:,0,1,1] = deriv.d2M1ds2ds2z()
+
+        # M2 2nd deriv
+        Rderiv[:,1,0,0] = deriv.d2M2ds1ds1z()
+        Rderiv[:,1,0,1] = deriv.d2M2ds1ds2z()
+        Rderiv[:,1,1,0] = Rderiv[:,1,0,1]
+        Rderiv[:,1,1,1] = deriv.d2M2ds2ds2z()
+
+        # T  2nd deriv
+        Rderiv[:,2,0,0] = deriv.d2Tds1ds1z()
+        Rderiv[:,2,0,1] = deriv.d2Tds1ds2z()
+        Rderiv[:,2,1,0] = Rderiv[:,2,0,1]
+        Rderiv[:,2,1,1] = deriv.d2Tds2ds2z()
+
+        self.Qderiv = Qderiv
+        self.Rderiv = Rderiv
+
 
 class PQRMomTemplatesGauss(PQRMomTemplatesBase):
     """
@@ -296,12 +370,95 @@ class PQRMomTemplatesGauss(PQRMomTemplatesBase):
     Assumes multi-variate gaussian for the likelihoods
     """
 
-    def _set_likelihood(self):
-        from scipy.stats import multivariate_normal
-        self.dist = multivariate_normal(mean=self.mom, cov=self.mom_cov)
+    def calc_pqr(self, mom, mom_cov):
+        """
+        calculate pqr sums assuming multivariate gaussian likelihood,
+        equation 36 B&A 2014
+        """
+        from ._gmix import mvn_calc_pqr_templates
 
-    def _calc_pqr(self):
-        pass
+        self._set_likelihood(mom,mom_cov)
+
+        P = numpy.zeros(1)
+        Q = numpy.zeros(2)
+        R = numpy.zeros((2,2))
+
+        dist=self.dist
+        mvn_calc_pqr_templates(dist.mean,
+                               dist.icov,
+                               dist.norm,
+                               self.nsigma,
+                               self.templates,
+                               self.Qderiv,
+                               self.Rderiv,
+                               P,Q,R)
+
+        P=P[0]
+
+        return P,Q,R
+
+    def calc_pqr_slow(self, mom, mom_cov):
+        """
+        calculate pqr sums assuming multivariate gaussian likelihood,
+        equation 36 B&A 2014
+        """
+        from numpy import dot
+
+        self._set_likelihood(mom,mom_cov)
+
+        dist=self.dist
+        likes = dist.get_prob(self.templates, nsigma=self.nsigma)
+
+        P = likes.sum()
+        Q = numpy.zeros(2)
+        R = numpy.zeros( (2,2) )
+
+        Qderiv=self.Qderiv
+        Rderiv=self.Rderiv
+
+        templates=self.templates
+        n=templates.shape[0]
+
+        mean=dist.mean[2:2+3]
+        icov=dist.icov[2:2+3, 2:2+3]
+
+        for i in xrange(n):
+
+            like = likes[i]
+            if like > 0:
+                datamu=templates[i,2:2+3]
+                Qd=Qderiv[i,:,:]
+
+                xdiff = mean-datamu
+
+                tmp1 = dot(icov, Qd[:,0])
+                tmp2 = dot(icov, Qd[:,1])
+
+                Qsum1 = dot(xdiff, tmp1)
+                Qsum2 = dot(xdiff, tmp2)
+
+                Q[0] += Qsum1*like
+                Q[1] += Qsum2*like
+
+        return P,Q,R
+
+
+    def _set_likelihood(self, mom, mom_cov):
+        """
+        set the likelihood based on the input moment means
+        and covariance
+        """
+        from .priors import MultivariateNormal
+
+        self.dist = MultivariateNormal(mom, mom_cov)
+
+        self.mom=mom
+        self.mom_cov=mom_cov
+
+        # M1,M2,T subset
+        self.mom_sub = mom[2:2+3]
+        self.mom_cov_sub=mom_cov[2:2+3, 2:2+3]
+
 
  
 def moms2e1e2(M1, M2, T):
@@ -388,3 +545,35 @@ def test_mom():
     print_pars(md.d2M2ds1ds1z(), front="d2M2ds1ds1z:")
     print_pars(md.d2M2ds1ds2z(), front="d2M2ds1ds2z:")
     print_pars(md.d2M2ds2ds2z(), front="d2M2ds2ds2z:")
+
+def test_pqr_moments(ntemplate=100):
+    from numpy import array, diag
+    from .priors import MultivariateNormal
+    import time
+    mean=array([0.0, 0.0, 2.0, 1.5, 16.0, 100.0])
+    cov = diag([0.1, 0.1, 0.5, 0.4, 2.0, 10.0])
+
+    mvn = MultivariateNormal(mean, cov)
+
+    templates = mvn.sample(ntemplate)
+
+    pqrt = PQRMomTemplatesGauss(templates)
+
+    tm0=time.time()
+    P,Q,R = pqrt.calc_pqr(mean, cov)
+    tm=time.time()-tm0
+
+    tm0=time.time()
+    Pc,Qc,Rc = pqrt.calc_pqr_slow(mean, cov)
+    tmc=time.time()-tm0
+
+    print(P)
+    print(Pc)
+    print(Q)
+    print(Qc)
+    print(R)
+    print(Rc)
+
+
+    print("time: ",tm)
+    print("timec:",tmc)

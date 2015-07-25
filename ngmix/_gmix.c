@@ -2669,6 +2669,43 @@ PyObject * PyGMix_gmixnd_get_prob_scalar(PyObject* self, PyObject* args) {
 }
 
 
+static void get_mom_xdiff(const PyObject* mean_obj,
+                          const PyObject* pars_obj,
+                          npy_intp i,
+                          double *xdiff,
+                          npy_intp ndim)
+{
+    npy_intp dim=0;
+    double mean=0, par=0;
+    for (dim=0; dim<ndim; dim++) {
+
+        mean = *(double *)PyArray_GETPTR1(mean_obj, dim);
+        par  = *(double *)PyArray_GETPTR2(pars_obj, i, dim);
+
+        xdiff[dim] = mean-par;
+
+    }
+}
+
+static double get_mom_chi2(const PyObject* icovar_obj,
+                           const double *xdiff,
+                           npy_intp ndim)
+{
+    npy_intp dim1=0, dim2=0;
+    double icov=0, chi2=0, tchi2=0;
+
+    for (dim1=0; dim1<ndim; dim1++) {
+        for (dim2=0; dim2<ndim; dim2++) {
+            icov=*(double *) PyArray_GETPTR2(icovar_obj, dim1, dim2);
+
+            tchi2 = xdiff[dim1]*xdiff[dim2]*icov;
+            chi2 += tchi2;
+        }
+    }
+
+    return chi2;
+}
+
 /*
 
    use nsigma to limit the range evaluated,
@@ -2681,7 +2718,7 @@ PyObject * PyGMix_gmixnd_get_prob_scalar(PyObject* self, PyObject* args) {
    all error checking should be done in python
 */
 static 
-PyObject * PyGMix_mvn_get_prob(PyObject* self, PyObject* args) {
+PyObject * PyGMix_mvn_calc_prob(PyObject* self, PyObject* args) {
 
     PyObject* mean_obj=NULL;
     PyObject* icovar_obj=NULL;
@@ -2692,9 +2729,9 @@ PyObject * PyGMix_mvn_get_prob(PyObject* self, PyObject* args) {
 
     // up to 10 dimensions
     double xdiff[10];
-    double par=0, mean=0, icov=0, chi2=0, tchi2=0, arg=0;
+    double chi2=0, arg=0;
     double prob=0, *ptr=NULL;
-    npy_intp ndim=0, npoints=0, i=0, dim1=0, dim2=0;
+    npy_intp ndim=0, npoints=0, i=0;
 
     // weight object is currently ignored
     if (!PyArg_ParseTuple(args, (char*)"OOddOiO", 
@@ -2714,30 +2751,9 @@ PyObject * PyGMix_mvn_get_prob(PyObject* self, PyObject* args) {
     npoints = PyArray_DIM(allpars_obj,0);
 
     for (i=0; i<npoints; i++) {
-        for (dim1=0; dim1<ndim; dim1++) {
-            mean = *(double *)PyArray_GETPTR1(mean_obj, dim1);
-            par  = *(double *)PyArray_GETPTR2(allpars_obj, i, dim1);
+        get_mom_xdiff(mean_obj, allpars_obj,i,xdiff,ndim);
 
-            xdiff[dim1] = par-mean;
-        }
-
-        chi2=0;
-        for (dim1=0; dim1<ndim; dim1++) {
-            //for (dim2=dim1; dim2<ndim; dim2++) {
-            for (dim2=0; dim2<ndim; dim2++) {
-                icov=*(double *) PyArray_GETPTR2(icovar_obj, dim1, dim2);
-
-                tchi2 = xdiff[dim1]*xdiff[dim2]*icov;
-                chi2 += tchi2;
-
-                /*
-                if (dim1 != dim2) {
-                    // add in the symmetric value
-                    chi2 += tchi2;
-                }
-                */
-            }
-        }
+        chi2=get_mom_chi2(icovar_obj,xdiff,ndim);
 
         arg = -0.5*chi2;
 
@@ -2761,6 +2777,131 @@ PyObject * PyGMix_mvn_get_prob(PyObject* self, PyObject* args) {
     Py_RETURN_NONE;
 }
 
+static void get_mom_Qsums(const PyObject* icovar,
+                          const PyObject* Qderiv,
+                          const double *xdiff,
+                          double prob,
+                          npy_intp i,
+                          double *Q1sum,
+                          double *Q2sum) {
+
+    double Q1temp3[3]={};
+    double Q2temp3[3]={};
+    npy_intp dim1=1,dim2=0,isub1=0,isub2=0;
+    static const npy_intp doffset=2;
+    double icov=0, deriv1=0, deriv2=0;
+
+    *Q1sum=0;
+    *Q2sum=0;
+
+    // Q1temp3 = Cinv dot derivatives
+    for (dim1=0; dim1<3; dim1++) {
+        isub1=dim1+doffset;
+
+        for (dim2=0; dim2<3; dim2++) {
+            isub2=dim2+doffset;
+
+            icov=*(double *) PyArray_GETPTR2(icovar, isub1, isub2);
+
+            deriv1 = *(double *)PyArray_GETPTR3(Qderiv, i, dim2, 0);
+            deriv2 = *(double *)PyArray_GETPTR3(Qderiv, i, dim2, 1);
+
+            Q1temp3[dim1] += deriv1*icov;
+            Q2temp3[dim1] += deriv2*icov;
+        } 
+    }
+    // xdiff dot Q1temp3
+    for (dim1=0; dim1<3; dim1++) {
+        isub1=dim1+doffset;
+        *Q1sum += xdiff[isub1]*Q1temp3[dim1];
+        *Q2sum += xdiff[isub1]*Q2temp3[dim1];
+    }
+
+    *Q1sum *= prob;
+    *Q2sum *= prob;
+
+}
+
+static 
+PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
+
+    PyObject* mean_obj=NULL;
+    PyObject* icovar_obj=NULL;
+    double nsigma=0, nsigma2=0, norm=0;
+    PyObject *Qderiv_obj=NULL, *Rderiv_obj=NULL;
+    PyObject *templates_obj=NULL;
+    PyObject *P_obj=NULL, *Q_obj=NULL, *R_obj=NULL;
+
+    double *Pptr=NULL,
+           *Q1ptr=NULL, *Q2ptr=NULL,
+           *R11ptr=NULL,*R12ptr=NULL,
+           *R21ptr=NULL,*R22ptr=NULL;
+
+    // up to 10 dimensions
+    double xdiff[10];
+    double chi2=0, prob=0;
+    npy_intp ndim=0, npoints=0, i=0;
+    double Q1sum=0, Q2sum=0;
+    double R11sum=0, R12sum=0, R22sum=0;
+
+    // weight object is currently ignored
+    if (!PyArg_ParseTuple(args, (char*)"OOddOOOOOO", 
+                          &mean_obj,
+                          &icovar_obj,
+                          &norm,
+                          &nsigma,
+                          &templates_obj,
+                          &Qderiv_obj,
+                          &Rderiv_obj,
+                          &P_obj,
+                          &Q_obj,
+                          &R_obj)) {
+        return NULL;
+    }
+
+    nsigma2=nsigma*nsigma;
+ 
+    ndim=PyArray_SIZE(mean_obj);
+    npoints = PyArray_DIM(templates_obj,0);
+
+    Pptr=PyArray_GETPTR1(P_obj,0);
+
+    Q1ptr=PyArray_GETPTR1(Q_obj,0);
+    Q2ptr=PyArray_GETPTR1(Q_obj,1);
+
+    R11ptr=PyArray_GETPTR2(R_obj,0,0);
+    R12ptr=PyArray_GETPTR2(R_obj,0,1);
+    R21ptr=PyArray_GETPTR2(R_obj,1,0);
+    R22ptr=PyArray_GETPTR2(R_obj,1,1);
+
+    for (i=0; i<npoints; i++) {
+
+        get_mom_xdiff(mean_obj,templates_obj,i,xdiff,ndim);
+
+        chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
+
+        if (chi2 < nsigma2) {
+            prob = norm*exp(-0.5*chi2);
+
+            *Pptr += prob;
+
+            get_mom_Qsums(icovar_obj,Qderiv_obj,xdiff,prob,i,&Q1sum,&Q2sum);
+            *Q1ptr += Q1sum;
+            *Q2ptr += Q2sum;
+
+            /*
+            get_mom_Rsums(icovar_obj,Qderiv_obj,Rderiv_obj,xdiff,prob,i,&R11sum,&R12sum,&R22sum);
+            *R11ptr += R11sum;
+            *R12ptr += R12sum;
+            *R22ptr += R22sum;
+            */
+        }
+    }
+
+    *R21ptr = *R12ptr;
+
+    Py_RETURN_NONE;
+}
 
 
 
@@ -2850,7 +2991,8 @@ static PyMethodDef pygauss2d_funcs[] = {
 
     {"gmixnd_get_prob_scalar",        (PyCFunction)PyGMix_gmixnd_get_prob_scalar,         METH_VARARGS,  "get prob or log prob for scalar arg, nd gaussian"},
 
-    {"mvn_get_prob",        (PyCFunction)PyGMix_mvn_get_prob,         METH_VARARGS,  "get prob for the specified multivariate gaussian"},
+    {"mvn_calc_prob",        (PyCFunction)PyGMix_mvn_calc_prob,         METH_VARARGS,  "get prob for the specified multivariate gaussian"},
+    {"mvn_calc_pqr_templates",        (PyCFunction)PyGMix_mvn_calc_pqr_templates,         METH_VARARGS,  "get pqr for specified likelihood and templates"},
 
     {"test",        (PyCFunction)PyGMix_test,         METH_VARARGS,  "test\n\nprint and return."},
     {"erf",         (PyCFunction)PyGMix_erf,         METH_VARARGS,  "erf with better precision."},

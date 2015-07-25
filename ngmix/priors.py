@@ -3309,13 +3309,13 @@ class MultivariateNormal(object):
         prob=zeros(x.shape[0],dtype='f8')
 
         dolog=0
-        _gmix.mvn_get_prob(self.mean,
-                           self.icov,
-                           self.norm,
-                           nsigma,
-                           x,
-                           dolog,
-                           prob)
+        _gmix.mvn_calc_prob(self.mean,
+                            self.icov,
+                            self.norm,
+                            nsigma,
+                            x,
+                            dolog,
+                            prob)
         return prob
 
     def get_lnprob(self, xinput):
@@ -3338,14 +3338,34 @@ class MultivariateNormal(object):
 
         dolog=1
         nsigma=1000.0 # not used
-        _gmix.mvn_get_prob(self.mean,
+        _gmix.mvn_calc_prob(self.mean,
+                            self.icov,
+                            self.log_norm,
+                            nsigma,
+                            x,
+                            dolog,
+                            lnprob)
+        return lnprob
+
+    def get_pqr(self, xinput, nsigma=100.0):
+        """
+        calculate the p,q,r sums over templates
+        """
+        x =  self._get_arg(xinput)
+
+        P=numpy.zeros(1)
+        Q=numpy.zeros(2)
+        R=numpy.zeros( (2,2) )
+
+        _gmix.mvn_calc_pqr(self.mean,
                            self.icov,
-                           self.log_norm,
+                           self.norm,
                            nsigma,
                            x,
-                           dolog,
-                           lnprob)
-        return lnprob
+                           P,Q,R)
+
+        P=P[0]
+        return P,Q,R
 
 
     def _get_arg(self, x):
