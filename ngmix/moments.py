@@ -17,11 +17,13 @@ class Deriv(object):
         """
 
         g1=self.g1
-        g2=self.g2
+        g2sq=self.g2sq
+        g1cub=self.g1cub
         Tround = self.Tround
+        omgsq_inv2 = self.omgsq_inv2
 
         #val=-((4*(g1**3 + g1*(-1 + g2**2))*Tround)/(-1 + g1**2 + g2**2)**2)
-        val=-4*Tround*(self.g1cub + g1*(-1 + self.g2sq))*self.omgsq_inv2
+        val=-4*Tround*(g1cub + g1*(-1 + g2sq))*omgsq_inv2
 
         return val
 
@@ -30,12 +32,14 @@ class Deriv(object):
         derivative of T with respect to shear2 at zero shear
         """
 
-        g1=self.g1
         g2=self.g2
+        g1sq=self.g1sq
+        g2cub=self.g2cub
         Tround = self.Tround
+        omgsq_inv2 = self.omgsq_inv2
 
         #val=-((4*((-1 + g1**2)*g2 + g2**3)*Tround)/(-1 + g1**2 + g2**2)**2)
-        val=-4*Tround*(self.g2cub + g2*(-1 + self.g1sq))*self.omgsq_inv2
+        val=-4*Tround*(g2cub + g2*(-1 + g1sq))*omgsq_inv2
 
         return val
 
