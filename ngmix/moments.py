@@ -432,29 +432,34 @@ class PQRMomTemplatesGauss(PQRMomTemplatesBase):
 
                 xdiff = mean-datamu
 
-                icov_Qd_dot1 = dot(icov, Qd[:,0])
-                icov_Qd_dot2 = dot(icov, Qd[:,1])
+                icov_dot_Qd_1 = dot(icov, Qd[:,0])
+                icov_dot_Qd_2 = dot(icov, Qd[:,1])
 
-                Qsum1 = dot(xdiff, icov_Qd_dot1)
-                Qsum2 = dot(xdiff, icov_Qd_dot2)
+                Qsum1 = dot(xdiff, icov_dot_Qd_1)
+                Qsum2 = dot(xdiff, icov_dot_Qd_2)
 
                 Q[0] += Qsum1*like
                 Q[1] += Qsum2*like
 
-                icov_Rd_dot11 = dot(icov, Rd[:,0,0])
-                icov_Rd_dot12 = dot(icov, Rd[:,0,1])
-                icov_Rd_dot21 = icov_Rd_dot12
-                icov_Rd_dot22 = dot(icov, Rd[:,1,1])
+                icov_dot_Rd_11 = dot(icov, Rd[:,0,0])
+                icov_dot_Rd_12 = dot(icov, Rd[:,0,1])
+                icov_Rd_dot21 = icov_dot_Rd_12
+                icov_dot_Rd_22 = dot(icov, Rd[:,1,1])
 
-                R11sum_1 = dot(xdiff, icov_Rd_dot11)
-                R12sum_1 = dot(xdiff, icov_Rd_dot12)
+                R11sum_1 = dot(xdiff, icov_dot_Rd_11)
+                R12sum_1 = dot(xdiff, icov_dot_Rd_12)
                 R21sum_1 = R12sum_1
-                R22sum_1 = dot(xdiff, icov_Rd_dot22)
+                R22sum_1 = dot(xdiff, icov_dot_Rd_22)
 
-                R11sum_2 = dot(Qd[:,0], icov_Qd_dot1)
-                R12sum_2 = dot(Qd[:,0], icov_Qd_dot2)
+                R11sum_2 = dot(Qd[:,0], icov_dot_Qd_1)
+                R12sum_2 = dot(Qd[:,0], icov_dot_Qd_2)
                 R21sum_2 = R12sum_2
-                R22sum_2 = dot(Qd[:,1], icov_Qd_dot2)
+                R22sum_2 = dot(Qd[:,1], icov_dot_Qd_2)
+                R11sum_2 = 0.0
+                R12sum_2 = 0.0
+                R21sum_2 = 0.0
+                R22sum_2 = 0.0
+
 
                 R[0,0] += (R11sum_1 + R11sum_2)*like
                 R[0,1] += (R12sum_1 + R12sum_2)*like
