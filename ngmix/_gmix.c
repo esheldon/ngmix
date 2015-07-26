@@ -2823,7 +2823,7 @@ static void get_mom_Qsums(const PyObject* icovar,
 }
 
 /*
-   currently only implements the d^2L/d^M terms
+   currently only implements the d^2L/d^2M terms
 */
 static void get_mom_Rsums(const PyObject* icovar,
                           const PyObject* Qderiv,

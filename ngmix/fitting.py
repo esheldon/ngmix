@@ -146,9 +146,8 @@ class FitterBase(object):
         gm = self.get_gmix(band)
 
         obs = self.obs[band][obsnum]
-        if obs.has_psf():
-            if obs.psf.has_gmix():
-                gm = gm.convolve(obs.psf.gmix)
+        if obs.has_psf_gmix():
+            gm = gm.convolve(obs.psf.gmix)
 
         return gm
 

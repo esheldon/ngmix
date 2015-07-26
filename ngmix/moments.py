@@ -451,14 +451,17 @@ class PQRMomTemplatesGauss(PQRMomTemplatesBase):
                 R21sum_1 = R12sum_1
                 R22sum_1 = dot(xdiff, icov_dot_Rd_22)
 
+                # this is the term one gets if the templates are
+                # integrated over all space (systematically translated)
+                # I'm not currently doing that!
                 R11sum_2 = dot(Qd[:,0], icov_dot_Qd_1)
                 R12sum_2 = dot(Qd[:,0], icov_dot_Qd_2)
                 R21sum_2 = R12sum_2
                 R22sum_2 = dot(Qd[:,1], icov_dot_Qd_2)
-                R11sum_2 = 0.0
-                R12sum_2 = 0.0
-                R21sum_2 = 0.0
-                R22sum_2 = 0.0
+                #R11sum_2 = 0.0
+                #R12sum_2 = 0.0
+                #R21sum_2 = 0.0
+                #R22sum_2 = 0.0
 
 
                 R[0,0] += (R11sum_1 + R11sum_2)*like
@@ -572,10 +575,13 @@ def test_mom():
     print_pars(md.d2M2ds1ds2z(), front="d2M2ds1ds2z:")
     print_pars(md.d2M2ds2ds2z(), front="d2M2ds2ds2z:")
 
-def test_pqr_moments(ntemplate=100):
+def test_pqr_moments(ntemplate=100, seed=None):
     from numpy import array, diag
     from .priors import MultivariateNormal
     import time
+
+    numpy.random.seed(seed)
+
     mean=array([0.0, 0.0, 2.0, 1.5, 16.0, 100.0])
     cov = diag([0.1, 0.1, 0.5, 0.4, 2.0, 10.0])
 
