@@ -279,10 +279,20 @@ class PQRMomTemplatesBase(object):
     calculate pqr from the input moments and a
     likelihood function using the templates as
     the priors
+
+    random centers will be randomly placed in 
+    a radius 
     """
-    def __init__(self, templates, nsigma=5.0):
+    def __init__(self,
+                 templates,
+                 cen_radius,
+                 nrand_cen,
+                 nsigma=5.0):
+
         self.nsigma=nsigma
         self.templates_orig=templates
+        self.cen_radius=cen_radius
+        self.nrand_cen=nrand_cen
 
         self._set_templates()
         self._set_deriv()
@@ -291,12 +301,13 @@ class PQRMomTemplatesBase(object):
         """
         set the templates, trimming to the good ones
         """
+        from .priors import ZDisk2D
+        templates_orig = self.templates_orig
 
-        templates = self.templates_orig
 
-        M1 = templates[:,2]
-        M2 = templates[:,3]
-        T  = templates[:,4]
+        M1 = templates_orig[:,2]
+        M2 = templates_orig[:,3]
+        T  = templates_orig[:,4]
 
         w,=numpy.where(T > 0)
 
@@ -316,8 +327,37 @@ class PQRMomTemplatesBase(object):
 
         w=w[w2]
 
-        self.deriv = Deriv(M1[w], M2[w], T[w])
-        self.templates = templates[w,:]
+        templates_keep = templates_orig[w,:]
+
+        nkeep,ndim = templates_keep.shape
+
+        nrand_cen=self.nrand_cen
+        ntot = nkeep*nrand_cen
+
+        print("replicating translated centers, radius",self.cen_radius)
+        print("total templates:",ntot)
+
+        templates = numpy.zeros( (ntot, ndim) )
+
+        cdist = ZDisk2D(self.cen_radius)
+        for irand in xrange(nrand_cen):
+            beg=irand*nkeep
+            end=(irand+1)*nkeep
+
+            # replicate the moments
+            templates[beg:end,:] = templates_keep[:,:]
+
+            # randomized centers
+            cen1,cen2 = cdist.sample2d(nkeep)
+            templates[beg:end,0] = cen1
+            templates[beg:end,1] = cen2
+
+        M1 = templates[:,2]
+        M2 = templates[:,3]
+        T  = templates[:,4]
+
+        self.deriv = Deriv(M1, M2, T)
+        self.templates = templates
 
     def _set_deriv(self):
         print("setting shear derivatives")
@@ -376,22 +416,23 @@ class PQRMomTemplatesGauss(PQRMomTemplatesBase):
         equation 36 B&A 2014
         """
         from ._gmix import mvn_calc_pqr_templates
+        from numpy import sqrt
 
         self._set_likelihood(mom,mom_cov)
+        dist=self.dist
 
         P = numpy.zeros(1)
         Q = numpy.zeros(2)
         R = numpy.zeros((2,2))
 
-        dist=self.dist
-        mvn_calc_pqr_templates(dist.mean,
-                               dist.icov,
-                               dist.norm,
-                               self.nsigma,
-                               self.templates,
-                               self.Qderiv,
-                               self.Rderiv,
-                               P,Q,R)
+        self.nuse=mvn_calc_pqr_templates(dist.mean,
+                                         dist.icov,
+                                         dist.norm,
+                                         self.nsigma,
+                                         self.templates,
+                                         self.Qderiv,
+                                         self.Rderiv,
+                                         P,Q,R)
 
         P=P[0]
 
@@ -422,10 +463,12 @@ class PQRMomTemplatesGauss(PQRMomTemplatesBase):
         mean=dist.mean[2:2+3]
         icov=dist.icov[2:2+3, 2:2+3]
 
+        nuse=0
         for i in xrange(n):
 
             like = likes[i]
             if like > 0:
+                nuse += 1
                 datamu=templates[i,2:2+3]
                 Qd=Qderiv[i,:,:]
                 Rd=Rderiv[i,:,:,:]
@@ -469,6 +512,7 @@ class PQRMomTemplatesGauss(PQRMomTemplatesBase):
                 R[1,0] += (R21sum_1 + R21sum_2)*like
                 R[1,1] += (R22sum_1 + R22sum_2)*like
 
+        self.nuse_slow=nuse
         return P,Q,R
 
 
@@ -575,7 +619,7 @@ def test_mom():
     print_pars(md.d2M2ds1ds2z(), front="d2M2ds1ds2z:")
     print_pars(md.d2M2ds2ds2z(), front="d2M2ds2ds2z:")
 
-def test_pqr_moments(ntemplate=100, seed=None):
+def test_pqr_moments(ntemplate=10000, seed=None, cen_radius=4.3, nrand_cen=10):
     from numpy import array, diag
     from .priors import MultivariateNormal
     import time
@@ -583,13 +627,17 @@ def test_pqr_moments(ntemplate=100, seed=None):
     numpy.random.seed(seed)
 
     mean=array([0.0, 0.0, 2.0, 1.5, 16.0, 100.0])
-    cov = diag([0.1, 0.1, 0.5, 0.4, 2.0, 10.0])
+    cov = diag([0.1**2, 0.1**2,
+                0.1**2, 0.1**2, 2.0**2,
+                1.0**2])
 
     mvn = MultivariateNormal(mean, cov)
 
     templates = mvn.sample(ntemplate)
 
-    pqrt = PQRMomTemplatesGauss(templates)
+    pqrt = PQRMomTemplatesGauss(templates,
+                                cen_radius,
+                                nrand_cen)
 
     tm0=time.time()
     P,Q,R = pqrt.calc_pqr(mean, cov)
@@ -599,13 +647,18 @@ def test_pqr_moments(ntemplate=100, seed=None):
     Pc,Qc,Rc = pqrt.calc_pqr_slow(mean, cov)
     tmc=time.time()-tm0
 
+    print("P,Pc")
     print(P)
     print(Pc)
+    print("Q,Qc")
     print(Q)
     print(Qc)
+    print("R,Rc")
     print(R)
     print(Rc)
 
 
+    print("nuse,nusec")
+    print(pqrt.nuse,pqrt.nuse_slow)
     print("time: ",tm)
     print("timec:",tmc)

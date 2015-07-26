@@ -2834,7 +2834,6 @@ static void get_mom_Rsums(const PyObject* icovar,
                           const double *xdiff,
                           const double *icov_dot_Qd_1,
                           const double *icov_dot_Qd_2,
-                          double chi2,
                           double prob,
                           npy_intp i,
                           double *R11sum,
@@ -2847,15 +2846,11 @@ static void get_mom_Rsums(const PyObject* icovar,
     npy_intp dim1=1,dim2=0,isub1=0,isub2=0;
     static const npy_intp doffset=2;
     double icov=0, deriv11=0, deriv12=0,deriv22;
-    double fac=0;
     
 
     *R11sum=0;
     *R12sum=0;
     *R22sum=0;
-
-    //fac= chi2-1;
-    fac=1;
 
     // R11temp3 = Cinv dot derivatives
     for (dim1=0; dim1<3; dim1++) {
@@ -2888,9 +2883,9 @@ static void get_mom_Rsums(const PyObject* icovar,
         deriv22 = *(double *)PyArray_GETPTR3(Qderiv, i, dim1, 1);
 
 
-        *R11sum += deriv11*icov_dot_Qd_1[dim1]*fac;
-        *R12sum += deriv11*icov_dot_Qd_2[dim1]*fac;
-        *R22sum += deriv22*icov_dot_Qd_2[dim1]*fac;
+        *R11sum += deriv11*icov_dot_Qd_1[dim1];
+        *R12sum += deriv11*icov_dot_Qd_2[dim1];
+        *R22sum += deriv22*icov_dot_Qd_2[dim1];
     }
 
     *R11sum *= prob;
@@ -2921,6 +2916,8 @@ PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
     double Q1sum=0, Q2sum=0;
     double R11sum=0, R12sum=0, R22sum=0;
     double icov_dot_Qd_1[3], icov_dot_Qd_2[3];
+
+    long nuse=0;
 
     // weight object is currently ignored
     if (!PyArg_ParseTuple(args, (char*)"OOddOOOOOO", 
@@ -2955,10 +2952,10 @@ PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
     for (i=0; i<npoints; i++) {
 
         get_mom_xdiff(mean_obj,templates_obj,i,xdiff,ndim);
-
         chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
 
         if (chi2 < nsigma2) {
+            nuse += 1;
             prob = norm*exp(-0.5*chi2);
 
             *Pptr += prob;
@@ -2974,7 +2971,6 @@ PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
                           Qderiv_obj,Rderiv_obj,
                           xdiff,
                           icov_dot_Qd_1,icov_dot_Qd_2,
-                          chi2,
                           prob,
                           i,
                           &R11sum,&R12sum,&R22sum);
@@ -2984,9 +2980,11 @@ PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
         }
     }
 
+
     *R21ptr = *R12ptr;
 
-    Py_RETURN_NONE;
+    //Py_RETURN_NONE;
+    return Py_BuildValue("l", nuse);
 }
 
 
