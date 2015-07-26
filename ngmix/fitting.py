@@ -117,12 +117,40 @@ class FitterBase(object):
 
     def get_gmix(self, band=0):
         """
-        Get a gaussian mixture at the "best" parameter set, which
+        Get a gaussian mixture at the fit parameter set, which
         definition depends on the sub-class
+
+        parameters
+        ----------
+        band: int, optional
+            Band index, default 0
         """
         res=self.get_result()
         pars=self.get_band_pars(res['pars'], band)
         return gmix.make_gmix_model(pars, self.model)
+
+    def get_convolved_gmix(self, band=0, obsnum=0):
+        """
+        get a gaussian mixture at the fit parameters, convolved by the psf if
+        fitting a pre-convolved model
+
+        parameters
+        ----------
+        band: int, optional
+            Band index, default 0
+        obsnum: int, optional
+            Number of observation for the given band,
+            default 0
+        """
+
+        gm = self.get_gmix(band)
+
+        obs = self.obs[band][obsnum]
+        if obs.has_psf():
+            if obs.psf.has_gmix():
+                gm = gm.convolve(obs.psf.gmix)
+
+        return gm
 
     def set_aperture(self, aper):
         """
