@@ -2782,17 +2782,20 @@ static void get_mom_Qsums(const PyObject* icovar,
                           const double *xdiff,
                           double prob,
                           npy_intp i,
+                          double *icov_dot_Qd_1, // [3]
+                          double *icov_dot_Qd_2, // [3]
                           double *Q1sum,
                           double *Q2sum) {
 
-    double Q1temp3[3]={};
-    double Q2temp3[3]={};
     npy_intp dim1=1,dim2=0,isub1=0,isub2=0;
     static const npy_intp doffset=2;
     double icov=0, deriv1=0, deriv2=0;
 
     *Q1sum=0;
     *Q2sum=0;
+
+    memset(icov_dot_Qd_1, 0, 3*sizeof(double));
+    memset(icov_dot_Qd_2, 0, 3*sizeof(double));
 
     // Q1temp3 = Cinv dot derivatives
     for (dim1=0; dim1<3; dim1++) {
@@ -2806,15 +2809,15 @@ static void get_mom_Qsums(const PyObject* icovar,
             deriv1 = *(double *)PyArray_GETPTR3(Qderiv, i, dim2, 0);
             deriv2 = *(double *)PyArray_GETPTR3(Qderiv, i, dim2, 1);
 
-            Q1temp3[dim1] += deriv1*icov;
-            Q2temp3[dim1] += deriv2*icov;
+            icov_dot_Qd_1[dim1] += deriv1*icov;
+            icov_dot_Qd_2[dim1] += deriv2*icov;
         } 
     }
     // xdiff dot Q1temp3
     for (dim1=0; dim1<3; dim1++) {
         isub1=dim1+doffset;
-        *Q1sum += xdiff[isub1]*Q1temp3[dim1];
-        *Q2sum += xdiff[isub1]*Q2temp3[dim1];
+        *Q1sum += xdiff[isub1]*icov_dot_Qd_1[dim1];
+        *Q2sum += xdiff[isub1]*icov_dot_Qd_2[dim1];
     }
 
     *Q1sum *= prob;
@@ -2829,6 +2832,9 @@ static void get_mom_Rsums(const PyObject* icovar,
                           const PyObject* Qderiv,
                           const PyObject* Rderiv,
                           const double *xdiff,
+                          const double *icov_dot_Qd_1,
+                          const double *icov_dot_Qd_2,
+                          double chi2,
                           double prob,
                           npy_intp i,
                           double *R11sum,
@@ -2841,10 +2847,15 @@ static void get_mom_Rsums(const PyObject* icovar,
     npy_intp dim1=1,dim2=0,isub1=0,isub2=0;
     static const npy_intp doffset=2;
     double icov=0, deriv11=0, deriv12=0,deriv22;
+    double fac=0;
+    
 
     *R11sum=0;
     *R12sum=0;
     *R22sum=0;
+
+    //fac= chi2-1;
+    fac=1;
 
     // R11temp3 = Cinv dot derivatives
     for (dim1=0; dim1<3; dim1++) {
@@ -2864,12 +2875,22 @@ static void get_mom_Rsums(const PyObject* icovar,
             R22temp3[dim1] += deriv22*icov;
         } 
     }
-    // xdiff dot R11temp3
     for (dim1=0; dim1<3; dim1++) {
         isub1=dim1+doffset;
+
+        // xdiff dot R11temp3
         *R11sum += xdiff[isub1]*R11temp3[dim1];
         *R12sum += xdiff[isub1]*R12temp3[dim1];
         *R22sum += xdiff[isub1]*R22temp3[dim1];
+
+        // Qderiv dot icov_dot_Qd
+        deriv11 = *(double *)PyArray_GETPTR3(Qderiv, i, dim1, 0);
+        deriv22 = *(double *)PyArray_GETPTR3(Qderiv, i, dim1, 1);
+
+
+        *R11sum += deriv11*icov_dot_Qd_1[dim1]*fac;
+        *R12sum += deriv11*icov_dot_Qd_2[dim1]*fac;
+        *R22sum += deriv22*icov_dot_Qd_2[dim1]*fac;
     }
 
     *R11sum *= prob;
@@ -2899,6 +2920,7 @@ PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
     npy_intp ndim=0, npoints=0, i=0;
     double Q1sum=0, Q2sum=0;
     double R11sum=0, R12sum=0, R22sum=0;
+    double icov_dot_Qd_1[3], icov_dot_Qd_2[3];
 
     // weight object is currently ignored
     if (!PyArg_ParseTuple(args, (char*)"OOddOOOOOO", 
@@ -2941,13 +2963,21 @@ PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
 
             *Pptr += prob;
 
-            get_mom_Qsums(icovar_obj,Qderiv_obj,xdiff,prob,i,&Q1sum,&Q2sum);
+            get_mom_Qsums(icovar_obj,Qderiv_obj,xdiff,prob,i,
+                          icov_dot_Qd_1,icov_dot_Qd_2,
+                          &Q1sum,&Q2sum);
+
             *Q1ptr += Q1sum;
             *Q2ptr += Q2sum;
 
             get_mom_Rsums(icovar_obj,
                           Qderiv_obj,Rderiv_obj,
-                          xdiff,prob,i,&R11sum,&R12sum,&R22sum);
+                          xdiff,
+                          icov_dot_Qd_1,icov_dot_Qd_2,
+                          chi2,
+                          prob,
+                          i,
+                          &R11sum,&R12sum,&R22sum);
             *R11ptr += R11sum;
             *R12ptr += R12sum;
             *R22ptr += R22sum;
