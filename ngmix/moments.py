@@ -327,34 +327,34 @@ class PQRMomTemplatesBase(object):
         Qderiv = numpy.zeros( (nt, 3, 2) )
         Rderiv = numpy.zeros( (nt, 3, 2, 2) )
 
-        # M1 first derivatives
+        # first derivatives shear1
         Qderiv[:,0,0] = deriv.dM1ds1z()
-        Qderiv[:,0,1] = deriv.dM1ds2z()
-
-        # M2 first derivatives
         Qderiv[:,1,0] = deriv.dM2ds1z()
-        Qderiv[:,1,1] = deriv.dM2ds2z()
-
-        # T  first derivatives
         Qderiv[:,2,0] = deriv.dTds1z()
+
+        # first derivatives shear2
+        Qderiv[:,0,1] = deriv.dM1ds2z()
+        Qderiv[:,1,1] = deriv.dM2ds2z()
         Qderiv[:,2,1] = deriv.dTds2z()
 
-        # M1 2nd deriv
+        # 2nd deriv 11
         Rderiv[:,0,0,0] = deriv.d2M1ds1ds1z()
-        Rderiv[:,0,0,1] = deriv.d2M1ds1ds2z()
-        Rderiv[:,0,1,0] = Rderiv[:,0,0,1]
-        Rderiv[:,0,1,1] = deriv.d2M1ds2ds2z()
-
-        # M2 2nd deriv
         Rderiv[:,1,0,0] = deriv.d2M2ds1ds1z()
-        Rderiv[:,1,0,1] = deriv.d2M2ds1ds2z()
-        Rderiv[:,1,1,0] = Rderiv[:,1,0,1]
-        Rderiv[:,1,1,1] = deriv.d2M2ds2ds2z()
-
-        # T  2nd deriv
         Rderiv[:,2,0,0] = deriv.d2Tds1ds1z()
+
+        # 2nd deriv 12
+        Rderiv[:,0,0,1] = deriv.d2M1ds1ds2z()
+        Rderiv[:,1,0,1] = deriv.d2M2ds1ds2z()
         Rderiv[:,2,0,1] = deriv.d2Tds1ds2z()
+
+        # 2nd deriv 21
+        Rderiv[:,0,1,0] = Rderiv[:,0,0,1]
+        Rderiv[:,1,1,0] = Rderiv[:,1,0,1]
         Rderiv[:,2,1,0] = Rderiv[:,2,0,1]
+
+        # 2nd deriv 22
+        Rderiv[:,0,1,1] = deriv.d2M1ds2ds2z()
+        Rderiv[:,1,1,1] = deriv.d2M2ds2ds2z()
         Rderiv[:,2,1,1] = deriv.d2Tds2ds2z()
 
         self.Qderiv = Qderiv
@@ -428,17 +428,38 @@ class PQRMomTemplatesGauss(PQRMomTemplatesBase):
             if like > 0:
                 datamu=templates[i,2:2+3]
                 Qd=Qderiv[i,:,:]
+                Rd=Rderiv[i,:,:,:]
 
                 xdiff = mean-datamu
 
-                tmp1 = dot(icov, Qd[:,0])
-                tmp2 = dot(icov, Qd[:,1])
+                icov_Qd_dot1 = dot(icov, Qd[:,0])
+                icov_Qd_dot2 = dot(icov, Qd[:,1])
 
-                Qsum1 = dot(xdiff, tmp1)
-                Qsum2 = dot(xdiff, tmp2)
+                Qsum1 = dot(xdiff, icov_Qd_dot1)
+                Qsum2 = dot(xdiff, icov_Qd_dot2)
 
                 Q[0] += Qsum1*like
                 Q[1] += Qsum2*like
+
+                icov_Rd_dot11 = dot(icov, Rd[:,0,0])
+                icov_Rd_dot12 = dot(icov, Rd[:,0,1])
+                icov_Rd_dot21 = icov_Rd_dot12
+                icov_Rd_dot22 = dot(icov, Rd[:,1,1])
+
+                R11sum_1 = dot(xdiff, icov_Rd_dot11)
+                R12sum_1 = dot(xdiff, icov_Rd_dot12)
+                R21sum_1 = R12sum_1
+                R22sum_1 = dot(xdiff, icov_Rd_dot22)
+
+                R11sum_2 = dot(Qd[:,0], icov_Qd_dot1)
+                R12sum_2 = dot(Qd[:,0], icov_Qd_dot2)
+                R21sum_2 = R12sum_2
+                R22sum_2 = dot(Qd[:,1], icov_Qd_dot2)
+
+                R[0,0] += (R11sum_1 + R11sum_2)*like
+                R[0,1] += (R12sum_1 + R12sum_2)*like
+                R[1,0] += (R21sum_1 + R21sum_2)*like
+                R[1,1] += (R22sum_1 + R22sum_2)*like
 
         return P,Q,R
 

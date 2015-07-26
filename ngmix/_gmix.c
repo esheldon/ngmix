@@ -2822,6 +2822,26 @@ static void get_mom_Qsums(const PyObject* icovar,
 
 }
 
+/*
+static void get_mom_Rsums(const PyObject* icovar,
+                          const PyObject* Qderiv,
+                          const PyObject* Rderiv,
+                          const double *xdiff,
+                          double prob,
+                          npy_intp i,
+                          double *Q1sum,
+                          double *Q2sum) {
+
+    double Q1temp3[3]={};
+    double Q2temp3[3]={};
+    npy_intp dim1=1,dim2=0,isub1=0,isub2=0;
+    static const npy_intp doffset=2;
+    double icov=0, deriv1=0, deriv2=0;
+
+    *Q1sum=0;
+    *Q2sum=0;
+*/
+
 static 
 PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
 
