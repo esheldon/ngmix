@@ -285,13 +285,13 @@ class PQRMomTemplatesBase(object):
     """
     def __init__(self,
                  templates,
-                 cen_radius,
+                 cen_dist, # pdf for cen prior
                  nrand_cen,
                  nsigma=5.0):
 
         self.nsigma=nsigma
         self.templates_orig=templates
-        self.cen_radius=cen_radius
+        self.cen_dist=cen_dist
         self.nrand_cen=nrand_cen
 
         self._set_templates()
@@ -334,12 +334,12 @@ class PQRMomTemplatesBase(object):
         nrand_cen=self.nrand_cen
         ntot = nkeep*nrand_cen
 
-        print("replicating translated centers, radius",self.cen_radius)
+        print("replicating translated centers")
         print("total templates:",ntot)
 
         templates = numpy.zeros( (ntot, ndim) )
 
-        cdist = ZDisk2D(self.cen_radius)
+        cen_dist = self.cen_dist
         for irand in xrange(nrand_cen):
             beg=irand*nkeep
             end=(irand+1)*nkeep
@@ -348,7 +348,7 @@ class PQRMomTemplatesBase(object):
             templates[beg:end,:] = templates_keep[:,:]
 
             # randomized centers
-            cen1,cen2 = cdist.sample2d(nkeep)
+            cen1,cen2 = cen_dist.sample2d(nkeep)
             templates[beg:end,0] = cen1
             templates[beg:end,1] = cen2
 
@@ -621,7 +621,7 @@ def test_mom():
 
 def test_pqr_moments(ntemplate=10000, seed=None, cen_radius=4.3, nrand_cen=10):
     from numpy import array, diag
-    from .priors import MultivariateNormal
+    from .priors import MultivariateNormal, ZDisk2D
     import time
 
     numpy.random.seed(seed)
@@ -635,8 +635,9 @@ def test_pqr_moments(ntemplate=10000, seed=None, cen_radius=4.3, nrand_cen=10):
 
     templates = mvn.sample(ntemplate)
 
+    cen_dist = ZDisk2D(cen_radius)
     pqrt = PQRMomTemplatesGauss(templates,
-                                cen_radius,
+                                cen_dist,
                                 nrand_cen)
 
     tm0=time.time()
