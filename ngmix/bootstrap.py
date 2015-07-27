@@ -590,7 +590,8 @@ class Bootstrapper(object):
 
         psf_fitter = runner.fitter
         res=psf_fitter.get_result()
-
+        psf_obs.update_meta_data({'fitter':psf_fitter})
+        
         if res['flags']==0:
             self.psf_fitter=psf_fitter
             gmix=self.psf_fitter.get_gmix()
