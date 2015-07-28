@@ -999,7 +999,7 @@ def test_mom():
     print_pars(md.d2M2ds1ds2z(), front="d2M2ds1ds2z:")
     print_pars(md.d2M2ds2ds2z(), front="d2M2ds2ds2z:")
 
-def test_pqr_moments(ntemplate=10000, seed=None, cen_radius=2.0, nrand_cen=10):
+def test_pqr_moments(ntemplate=10000, seed=None, cen_radius=2.0, nrand_cen=100, neff_max=1.0e9):
     """
 
     note testing with neff_max=infinity in comparing to slow, so that we don't
@@ -1025,7 +1025,7 @@ def test_pqr_moments(ntemplate=10000, seed=None, cen_radius=2.0, nrand_cen=10):
     pqrt = PQRMomTemplatesGauss(templates,
                                 cen_dist,
                                 nrand_cen,
-                                neff_max=1.0e9)
+                                neff_max=neff_max)
 
     tm0=time.time()
     pqrt.calc_pqr(mean, cov)

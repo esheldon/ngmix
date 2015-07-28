@@ -3002,6 +3002,9 @@ PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
 
     for (ii=0; ii<npoints; ii++) {
         
+        // randomizing seriously messes up the cache locality
+        // but if we are stopping early for neff cut it is probably ok
+        //
         // check a random template, since we might bail early
         // if our neff. check is met
         i=randint(npoints);
