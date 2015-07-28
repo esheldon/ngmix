@@ -3891,6 +3891,7 @@ class CenPrior(_gmix.Normal2D):
             rand2=self.cen2 + self.sigma2*numpy.random.randn(n)
 
         return rand1, rand2
+    sample2d=sample
 
 RoundGauss2D=CenPrior
 

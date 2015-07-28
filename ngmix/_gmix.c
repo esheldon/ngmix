@@ -2669,6 +2669,14 @@ PyObject * PyGMix_gmixnd_get_prob_scalar(PyObject* self, PyObject* args) {
 }
 
 
+/*
+
+   Difference between mean of the distribution
+   and parameters from the template set
+
+       mean - template_pars
+
+*/
 static void get_mom_xdiff(const PyObject* mean_obj,
                           const PyObject* pars_obj,
                           npy_intp i,
@@ -2687,6 +2695,11 @@ static void get_mom_xdiff(const PyObject* mean_obj,
     }
 }
 
+/*
+
+   (xmean - x) C^{-1} (xmean - x)
+
+*/
 static double get_mom_chi2(const PyObject* icovar_obj,
                            const double *xdiff,
                            npy_intp ndim)
@@ -2840,12 +2853,14 @@ static void get_mom_Rsums(const PyObject* icovar,
                           double *R12sum,
                           double *R22sum) {
 
-    double R11temp3[3]={};
-    double R12temp3[3]={};
-    double R22temp3[3]={};
+    double R11temp3[3]={0};
+    double R12temp3[3]={0};
+    double R22temp3[3]={0};
     npy_intp dim1=1,dim2=0,isub1=0,isub2=0;
     static const npy_intp doffset=2;
-    double icov=0, deriv11=0, deriv12=0,deriv22;
+    double icov=0,
+           deriv1=0, deriv2=0,
+           deriv11=0, deriv12=0,deriv22;
     
 
     *R11sum=0;
@@ -2865,9 +2880,9 @@ static void get_mom_Rsums(const PyObject* icovar,
             deriv12 = *(double *)PyArray_GETPTR4(Rderiv, i, dim2, 0, 1);
             deriv22 = *(double *)PyArray_GETPTR4(Rderiv, i, dim2, 1, 1);
 
-            R11temp3[dim1] += deriv11*icov;
-            R12temp3[dim1] += deriv12*icov;
-            R22temp3[dim1] += deriv22*icov;
+            R11temp3[dim1] += icov*deriv11;
+            R12temp3[dim1] += icov*deriv12;
+            R22temp3[dim1] += icov*deriv22;
         } 
     }
     for (dim1=0; dim1<3; dim1++) {
@@ -2879,13 +2894,13 @@ static void get_mom_Rsums(const PyObject* icovar,
         *R22sum += xdiff[isub1]*R22temp3[dim1];
 
         // Qderiv dot icov_dot_Qd
-        deriv11 = *(double *)PyArray_GETPTR3(Qderiv, i, dim1, 0);
-        deriv22 = *(double *)PyArray_GETPTR3(Qderiv, i, dim1, 1);
+        deriv1 = *(double *)PyArray_GETPTR3(Qderiv, i, dim1, 0);
+        deriv2 = *(double *)PyArray_GETPTR3(Qderiv, i, dim1, 1);
 
 
-        *R11sum += deriv11*icov_dot_Qd_1[dim1];
-        *R12sum += deriv11*icov_dot_Qd_2[dim1];
-        *R22sum += deriv22*icov_dot_Qd_2[dim1];
+        *R11sum += deriv1*icov_dot_Qd_1[dim1];
+        *R12sum += deriv1*icov_dot_Qd_2[dim1];
+        *R22sum += deriv2*icov_dot_Qd_2[dim1];
     }
 
     *R11sum *= prob;
@@ -2894,12 +2909,38 @@ static void get_mom_Rsums(const PyObject* icovar,
 
 }
 
+/* Returns an integer in the range [0, n).
+ *
+ * Uses rand(), and so is affected-by/affects the same seed.
+ */
+
+static int randint(int n) {
+  if ((n - 1) == RAND_MAX) {
+    return rand();
+  } else {
+    // Chop off all of the values that would cause skew...
+    long end = RAND_MAX / n; // truncate skew
+    assert (end > 0L);
+    end *= n;
+
+    // ... and ignore results from rand() that fall above that limit.
+    // (Worst case the loop condition should succeed 50% of the time,
+    // so we can expect to bail out of this loop pretty quickly.)
+    int r;
+    while ((r = rand()) >= end);
+
+    return r % n;
+  }
+}
+
 static 
 PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
 
     PyObject* mean_obj=NULL;
-    PyObject* icovar_obj=NULL;
+    PyObject *icovar_obj=NULL, *ierror_obj=NULL;
     double nsigma=0, nsigma2=0, norm=0;
+    int nmin=0, seed=0;
+    double neff_max=0;
     PyObject *Qderiv_obj=NULL, *Rderiv_obj=NULL;
     PyObject *templates_obj=NULL;
     PyObject *P_obj=NULL, *Q_obj=NULL, *R_obj=NULL;
@@ -2912,26 +2953,36 @@ PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
     // up to 10 dimensions
     double xdiff[10];
     double chi2=0, prob=0;
-    npy_intp ndim=0, npoints=0, i=0;
+    npy_intp ndim=0, npoints=0, i=0, ii=0;
     double Q1sum=0, Q2sum=0;
     double R11sum=0, R12sum=0, R22sum=0;
-    double icov_dot_Qd_1[3], icov_dot_Qd_2[3];
+    double icov_dot_Qd_1[3]={0};
+    double icov_dot_Qd_2[3]={0};
+    double Pmax=0, neff=0;
 
     long nuse=0;
 
     // weight object is currently ignored
-    if (!PyArg_ParseTuple(args, (char*)"OOddOOOOOO", 
+    if (!PyArg_ParseTuple(args, (char*)"OOOddidOOOiOOO", 
                           &mean_obj,
                           &icovar_obj,
+                          &ierror_obj,
                           &norm,
                           &nsigma,
+                          &nmin,  // always sample from at least this many
+                          &neff_max,  // stop if neff > this number
                           &templates_obj,
                           &Qderiv_obj,
                           &Rderiv_obj,
+                          &seed,
                           &P_obj,
                           &Q_obj,
                           &R_obj)) {
         return NULL;
+    }
+
+    if (seed > 0) {
+        srand(seed);
     }
 
     nsigma2=nsigma*nsigma;
@@ -2949,42 +3000,71 @@ PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
     R21ptr=PyArray_GETPTR2(R_obj,1,0);
     R22ptr=PyArray_GETPTR2(R_obj,1,1);
 
-    for (i=0; i<npoints; i++) {
-
+    for (ii=0; ii<npoints; ii++) {
+        
+        // check a random template, since we might bail early
+        // if our neff. check is met
+        i=randint(npoints);
+        //i=ii;
         get_mom_xdiff(mean_obj,templates_obj,i,xdiff,ndim);
+
         chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
 
         if (chi2 < nsigma2) {
             nuse += 1;
             prob = norm*exp(-0.5*chi2);
 
+            if (prob > Pmax) {
+                Pmax=prob;
+            }
+
             *Pptr += prob;
 
-            get_mom_Qsums(icovar_obj,Qderiv_obj,xdiff,prob,i,
-                          icov_dot_Qd_1,icov_dot_Qd_2,
+            get_mom_Qsums(icovar_obj,
+                          Qderiv_obj,
+                          xdiff,prob,
+                          i,
+                          icov_dot_Qd_1,
+                          icov_dot_Qd_2,
                           &Q1sum,&Q2sum);
 
             *Q1ptr += Q1sum;
             *Q2ptr += Q2sum;
 
             get_mom_Rsums(icovar_obj,
-                          Qderiv_obj,Rderiv_obj,
+                          Qderiv_obj,
+                          Rderiv_obj,
                           xdiff,
-                          icov_dot_Qd_1,icov_dot_Qd_2,
+                          icov_dot_Qd_1,
+                          icov_dot_Qd_2,
                           prob,
                           i,
                           &R11sum,&R12sum,&R22sum);
+
             *R11ptr += R11sum;
             *R12ptr += R12sum;
             *R22ptr += R22sum;
         }
+
+        neff = *Pptr/Pmax;
+        if ( (i > nmin) && (neff > neff_max) ) {
+            break;
+        }
     }
-
-
     *R21ptr = *R12ptr;
 
+    /*
+    *Q1ptr *= -1;
+    *Q2ptr *= -1;
+    *R11ptr *= -1;
+    *R12ptr *= -1;
+    *R21ptr *= -1;
+    *R22ptr *= -1;
+    */
+
+
     //Py_RETURN_NONE;
-    return Py_BuildValue("l", nuse);
+    return Py_BuildValue("ld", nuse, neff);
 }
 
 
