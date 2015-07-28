@@ -1012,10 +1012,13 @@ def test_pqr_moments(ntemplate=10000, seed=None, cen_radius=2.0, nrand_cen=10):
 
     numpy.random.seed(seed)
 
-    mean=array([0.0, 0.0, 2.0, 1.5, 16.0, 100.0])
-    cov = diag([0.1**2, 0.1**2,
-                0.5**2, 0.5**2, 4.0**2,
-                10.0**2])
+    mean=array([0.15, -0.052, -1.96, 2.86, 4.85, 92.0])
+    cov=array([[+6.790897e-03, +1.451707e-03,  +1.860157e-03,  -1.059367e-03,  -1.901166e-03,  -1.461303e-03],
+               [+1.451707e-03, +4.352388e-03,  +6.346465e-04,  +3.439475e-04,  +5.323073e-04,  +6.906006e-03],
+               [+1.860157e-03,  +6.346465e-04,  +1.867478e-01,  -2.282856e-02,  -6.030356e-02,  -5.251863e-02],
+               [-1.059367e-03,  +3.439475e-04,  -2.282856e-02,  +2.054771e-01,  +1.194138e-01,  +3.461798e-01],
+               [-1.901166e-03,  +5.323073e-04,  -6.030356e-02,  +1.194138e-01,  +2.243873e-01,  +1.039051e+00],
+               [-1.461303e-03,  +6.906006e-03,  -5.251863e-02,  +3.461798e-01,  +1.039051e+00,  +1.063436e+01]])
 
     mvn = MultivariateNormal(mean, cov)
 
@@ -1038,11 +1041,11 @@ def test_pqr_moments(ntemplate=10000, seed=None, cen_radius=2.0, nrand_cen=10):
     tmc=time.time()-tm0
 
     print("P,Pc")
-    print(pqr_res['P'])
-    print(slow_res['P'])
+    print('%.18g' % pqr_res['P'])
+    print('%.18g' % slow_res['P'])
     print("Q,Qc")
-    print(pqr_res['Q'])
-    print(slow_res['Q'])
+    print('%.18g %.18g' % tuple(pqr_res['Q']))
+    print('%.18g %.18g' % tuple(slow_res['Q']))
     print("R,Rc")
     print(pqr_res['R'])
     print(slow_res['R'])

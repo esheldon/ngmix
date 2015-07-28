@@ -2811,8 +2811,8 @@ static void get_mom_Qsums(const PyObject* icovar,
     *Q1sum=0;
     *Q2sum=0;
 
-    memset(icov_dot_Qd_1, 0, PYGMIX_MAXDIMS*sizeof(double));
-    memset(icov_dot_Qd_2, 0, PYGMIX_MAXDIMS*sizeof(double));
+    memset(icov_dot_Qd_1, 0, ndim*sizeof(double));
+    memset(icov_dot_Qd_2, 0, ndim*sizeof(double));
 
     // Q1temp3 = Cinv dot derivatives
     for (dim1=0; dim1<ndim; dim1++) {
