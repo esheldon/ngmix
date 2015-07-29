@@ -526,7 +526,7 @@ class Bootstrapper(object):
         else:
             print("        failed to find cen")
 
-    def fit_psfs(self, psf_model, Tguess, skip_failed=True, ntry=4):
+    def fit_psfs(self, psf_model, Tguess, Tguess_key=None, skip_failed=True, ntry=4, fit_pars={}):
         """
         Fit all psfs.  If the psf observations already have a gmix
         then this step is not necessary
@@ -556,7 +556,11 @@ class Bootstrapper(object):
 
                 psf_obs = obs.get_psf()
                 try:
-                    self._fit_one_psf(psf_obs, psf_model, Tguess, ntry)
+                    if Tguess_key is not None:
+                        Tguess_i = psf_obs.meta[Tguess_key]
+                    else:
+                        Tguess_i = Tguess
+                    self._fit_one_psf(psf_obs, psf_model, Tguess_i, ntry, fit_pars)
                     new_obslist.append(obs)
                     ntot += 1
                 except BootPSFFailure:
@@ -576,7 +580,7 @@ class Bootstrapper(object):
 
         self.mb_obs_list=new_mb_obslist
 
-    def _fit_one_psf(self, psf_obs, psf_model, Tguess, ntry):
+    def _fit_one_psf(self, psf_obs, psf_model, Tguess, ntry, fit_pars):
         """
         fit the psf using a PSFRunner or EMRunner
 
@@ -584,9 +588,9 @@ class Bootstrapper(object):
         """
 
         if 'em' in psf_model:
-            runner=self._fit_one_psf_em(psf_obs, psf_model, Tguess, ntry)
+            runner=self._fit_one_psf_em(psf_obs, psf_model, Tguess, ntry, fit_pars)
         else:
-            runner=self._fit_one_psf_max(psf_obs, psf_model, Tguess, ntry)
+            runner=self._fit_one_psf_max(psf_obs, psf_model, Tguess, ntry, fit_pars)
 
         psf_fitter = runner.fitter
         res=psf_fitter.get_result()
@@ -601,19 +605,20 @@ class Bootstrapper(object):
         else:
             raise BootPSFFailure("failed to fit psfs")
 
-    def _fit_one_psf_em(self, psf_obs, psf_model, Tguess, ntry):
+    def _fit_one_psf_em(self, psf_obs, psf_model, Tguess, ntry, fit_pars):
 
         ngauss=get_em_ngauss(psf_model)
         em_pars={'tol': 1.0e-6, 'maxiter': 50000}
-
+        em_pars.update(fit_pars)
+        
         runner=EMRunner(psf_obs, Tguess, ngauss, em_pars)
         runner.go(ntry=ntry)
 
         return runner
-
-
-    def _fit_one_psf_max(self, psf_obs, psf_model, Tguess, ntry):
+    
+    def _fit_one_psf_max(self, psf_obs, psf_model, Tguess, ntry, fit_pars):
         lm_pars={'maxfev': 4000}
+        lm_pars.update(fit_pars)
         runner=PSFRunner(psf_obs, psf_model, Tguess, lm_pars)
         runner.go(ntry=ntry)
 
