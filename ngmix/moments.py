@@ -771,6 +771,10 @@ class PQRMomTemplatesGauss(PQRMomTemplatesBase):
         """
         calculate pqr sums assuming multivariate gaussian likelihood,
         equation 36 B&A 2014
+
+        This wrong because I pulled out a subset of the icov and data
+        in that same range.  The terms with leading xdiff need contributions
+        from other parameters
         """
         from numpy import dot
 

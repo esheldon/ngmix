@@ -2819,19 +2819,16 @@ static void get_mom_Qsums(const PyObject* icovar,
 
         for (dim2=0; dim2<ndim; dim2++) {
 
-            if (dim2 < 2 || dim2 > 4) {
-                // derivatives are only zero for a subset of the dimensions
-                continue; 
+            if (dim2 >= 2 && dim2 <= 4) {
+                // derivatives non-zero for these dimensions
+                icov=*(double *) PyArray_GETPTR2(icovar, dim1, dim2);
+
+                deriv1 = *(double *)PyArray_GETPTR3(Qderiv, i, dim2-doffset, 0);
+                deriv2 = *(double *)PyArray_GETPTR3(Qderiv, i, dim2-doffset, 1);
+
+                icov_dot_Qd_1[dim1] += deriv1*icov;
+                icov_dot_Qd_2[dim1] += deriv2*icov;
             }
-
-            icov=*(double *) PyArray_GETPTR2(icovar, dim1, dim2);
-
-            deriv1 = *(double *)PyArray_GETPTR3(Qderiv, i, dim2-doffset, 0);
-            deriv2 = *(double *)PyArray_GETPTR3(Qderiv, i, dim2-doffset, 1);
-
-            icov_dot_Qd_1[dim1] += deriv1*icov;
-            icov_dot_Qd_2[dim1] += deriv2*icov;
-
         } 
     }
     // xdiff dot Q1temp3
@@ -2879,20 +2876,19 @@ static void get_mom_Rsums(const PyObject* icovar,
 
         for (dim2=0; dim2<3; dim2++) {
 
-            if (dim2 < 2 || dim2 > 4) {
-                // derivatives are only zero for a subset of the dimensions
-                continue; 
+            if (dim2 >= 2 && dim2 <= 4) {
+                // derivatives are only non-zero for a subset of the dimensions
+
+                icov=*(double *) PyArray_GETPTR2(icovar, dim1, dim2);
+
+                deriv11 = *(double *)PyArray_GETPTR4(Rderiv, i, dim2-doffset, 0, 0);
+                deriv12 = *(double *)PyArray_GETPTR4(Rderiv, i, dim2-doffset, 0, 1);
+                deriv22 = *(double *)PyArray_GETPTR4(Rderiv, i, dim2-doffset, 1, 1);
+
+                R11temp3[dim1] += icov*deriv11;
+                R12temp3[dim1] += icov*deriv12;
+                R22temp3[dim1] += icov*deriv22;
             }
-
-            icov=*(double *) PyArray_GETPTR2(icovar, dim1, dim2);
-
-            deriv11 = *(double *)PyArray_GETPTR4(Rderiv, i, dim2-doffset, 0, 0);
-            deriv12 = *(double *)PyArray_GETPTR4(Rderiv, i, dim2-doffset, 0, 1);
-            deriv22 = *(double *)PyArray_GETPTR4(Rderiv, i, dim2-doffset, 1, 1);
-
-            R11temp3[dim1] += icov*deriv11;
-            R12temp3[dim1] += icov*deriv12;
-            R22temp3[dim1] += icov*deriv22;
         } 
     }
     for (dim1=0; dim1<ndim; dim1++) {
@@ -2903,12 +2899,15 @@ static void get_mom_Rsums(const PyObject* icovar,
         *R22sum += xdiff[dim1]*R22temp3[dim1];
 
         // Qderiv dot icov_dot_Qd
-        deriv1 = *(double *)PyArray_GETPTR3(Qderiv, i, dim1-doffset, 0);
-        deriv2 = *(double *)PyArray_GETPTR3(Qderiv, i, dim1-doffset, 1);
+        if (dim1 >= 2 && dim1 <= 4) {
+            // derivatives non-zero for these dimensions
+            deriv1 = *(double *)PyArray_GETPTR3(Qderiv, i, dim1-doffset, 0);
+            deriv2 = *(double *)PyArray_GETPTR3(Qderiv, i, dim1-doffset, 1);
 
-        *R11sum += deriv1*icov_dot_Qd_1[dim1];
-        *R12sum += deriv1*icov_dot_Qd_2[dim1];
-        *R22sum += deriv2*icov_dot_Qd_2[dim1];
+            *R11sum += deriv1*icov_dot_Qd_1[dim1];
+            *R12sum += deriv1*icov_dot_Qd_2[dim1];
+            *R22sum += deriv2*icov_dot_Qd_2[dim1];
+        }
     }
 
     *R11sum *= prob;
@@ -2958,7 +2957,7 @@ PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
            *R11ptr=NULL,*R12ptr=NULL,
            *R21ptr=NULL,*R22ptr=NULL;
 
-    double xdiff[PYGMIX_MAXDIMS];
+    double xdiff[PYGMIX_MAXDIMS]={0};
     double icov_dot_Qd_1[PYGMIX_MAXDIMS]={0};
     double icov_dot_Qd_2[PYGMIX_MAXDIMS]={0};
 
@@ -3008,8 +3007,6 @@ PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
     R12ptr=PyArray_GETPTR2(R_obj,0,1);
     R21ptr=PyArray_GETPTR2(R_obj,1,0);
     R22ptr=PyArray_GETPTR2(R_obj,1,1);
-
-    fprintf(stdout,"PYGMIX_MAXDIMS: %d\n", PYGMIX_MAXDIMS);
 
     for (ii=0; ii<npoints; ii++) {
         
