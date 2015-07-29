@@ -19,6 +19,7 @@ static PyObject* GMixRangeError;
 static PyObject* GMixFatalError;
 
 #define PYGMIX_MAXDIMS 10
+#define PYGMIX_DOFFSET 2
 
 
 /*
@@ -2698,6 +2699,25 @@ static void get_mom_xdiff(const PyObject* mean_obj,
     }
 }
 
+// xdiff should already be filled out for the non-sheared pars
+// only the slots for M1,M2,T are updated
+static void get_mom_xdiff_sheared(const PyObject* mean_obj,
+                                  const PyObject* sheared_pars_obj,
+                                  npy_intp i,
+                                  double *xdiff)
+{
+    npy_intp dim=0;
+    double mean=0, par=0;
+    for (dim=PYGMIX_DOFFSET; dim<PYGMIX_DOFFSET+3; dim++) {
+
+        mean = *(double *)PyArray_GETPTR1(mean_obj, dim);
+        par  = *(double *)PyArray_GETPTR2(sheared_pars_obj, i, dim-PYGMIX_DOFFSET);
+
+        xdiff[dim] = mean-par;
+    }
+}
+
+
 /*
 
    (xmean - x) C^{-1} (xmean - x)
@@ -2805,7 +2825,6 @@ static void get_mom_Qsums(const PyObject* icovar,
                           double *Q2sum) {
 
     npy_intp dim1=1,dim2=0;
-    static const npy_intp doffset=2;
     double icov=0, deriv1=0, deriv2=0;
 
     *Q1sum=0;
@@ -2823,8 +2842,8 @@ static void get_mom_Qsums(const PyObject* icovar,
                 // derivatives non-zero for these dimensions
                 icov=*(double *) PyArray_GETPTR2(icovar, dim1, dim2);
 
-                deriv1 = *(double *)PyArray_GETPTR3(Qderiv, i, dim2-doffset, 0);
-                deriv2 = *(double *)PyArray_GETPTR3(Qderiv, i, dim2-doffset, 1);
+                deriv1 = *(double *)PyArray_GETPTR3(Qderiv, i, dim2-PYGMIX_DOFFSET, 0);
+                deriv2 = *(double *)PyArray_GETPTR3(Qderiv, i, dim2-PYGMIX_DOFFSET, 1);
 
                 icov_dot_Qd_1[dim1] += deriv1*icov;
                 icov_dot_Qd_2[dim1] += deriv2*icov;
@@ -2862,7 +2881,6 @@ static void get_mom_Rsums(const PyObject* icovar,
     double R12temp3[PYGMIX_MAXDIMS]={0};
     double R22temp3[PYGMIX_MAXDIMS]={0};
     npy_intp dim1=1,dim2=0;
-    static const npy_intp doffset=2;
     double icov=0,
            deriv1=0, deriv2=0,
            deriv11=0, deriv12=0,deriv22;
@@ -2881,9 +2899,9 @@ static void get_mom_Rsums(const PyObject* icovar,
 
                 icov=*(double *) PyArray_GETPTR2(icovar, dim1, dim2);
 
-                deriv11 = *(double *)PyArray_GETPTR4(Rderiv, i, dim2-doffset, 0, 0);
-                deriv12 = *(double *)PyArray_GETPTR4(Rderiv, i, dim2-doffset, 0, 1);
-                deriv22 = *(double *)PyArray_GETPTR4(Rderiv, i, dim2-doffset, 1, 1);
+                deriv11 = *(double *)PyArray_GETPTR4(Rderiv, i, dim2-PYGMIX_DOFFSET, 0, 0);
+                deriv12 = *(double *)PyArray_GETPTR4(Rderiv, i, dim2-PYGMIX_DOFFSET, 0, 1);
+                deriv22 = *(double *)PyArray_GETPTR4(Rderiv, i, dim2-PYGMIX_DOFFSET, 1, 1);
 
                 R11temp3[dim1] += icov*deriv11;
                 R12temp3[dim1] += icov*deriv12;
@@ -2901,8 +2919,8 @@ static void get_mom_Rsums(const PyObject* icovar,
         // Qderiv dot icov_dot_Qd
         if (dim1 >= 2 && dim1 <= 4) {
             // derivatives non-zero for these dimensions
-            deriv1 = *(double *)PyArray_GETPTR3(Qderiv, i, dim1-doffset, 0);
-            deriv2 = *(double *)PyArray_GETPTR3(Qderiv, i, dim1-doffset, 1);
+            deriv1 = *(double *)PyArray_GETPTR3(Qderiv, i, dim1-PYGMIX_DOFFSET, 0);
+            deriv2 = *(double *)PyArray_GETPTR3(Qderiv, i, dim1-PYGMIX_DOFFSET, 1);
 
             *R11sum += deriv1*icov_dot_Qd_1[dim1];
             *R12sum += deriv1*icov_dot_Qd_2[dim1];
@@ -3078,6 +3096,285 @@ PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
     return Py_BuildValue("ld", nuse, neff);
 }
 
+static int get_pvals(const PyObject* mean_obj,
+                     const PyObject* icovar_obj,
+                     const PyObject* templates_obj,
+                     const PyObject* sheared_p0,
+                     const PyObject* sheared_m0,
+                     const PyObject* sheared_0p,
+                     const PyObject* sheared_0m,
+                     const PyObject* sheared_pp,
+                     const PyObject* sheared_mm,
+                     double norm,
+                     double *xdiff,
+                     npy_intp ndim,
+                     npy_intp i,
+                     double nsigma2,
+                     double *prob,
+                     double *P,
+                     double *P_p0,
+                     double *P_m0,
+                     double *P_0p,
+                     double *P_0m,
+                     double *P_pp,
+                     double *P_mm)
+{
+
+    int used=0;
+    double chi2=0;
+    double tP, tP_p0, tP_m0, tP_0p, tP_0m, tP_pp, tP_mm;
+
+    get_mom_xdiff(mean_obj,templates_obj,i,xdiff,ndim);
+
+    chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
+
+    if (chi2 > nsigma2) {
+        goto _bail;
+    }
+
+    tP = norm*exp(-0.5*chi2);
+    *prob = tP;
+
+    // update the pars that respond to shear
+
+    get_mom_xdiff_sheared(mean_obj,sheared_p0,i,xdiff);
+    chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
+    if (chi2 > nsigma2) {
+        goto _bail;
+    }
+    tP_p0 = norm*exp(-0.5*chi2);
+
+    get_mom_xdiff_sheared(mean_obj,sheared_m0,i,xdiff);
+    chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
+    if (chi2 > nsigma2) {
+        goto _bail;
+    }
+    tP_m0 = norm*exp(-0.5*chi2);
+
+    get_mom_xdiff_sheared(mean_obj,sheared_0p,i,xdiff);
+    chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
+    if (chi2 > nsigma2) {
+        goto _bail;
+    }
+    tP_0p = norm*exp(-0.5*chi2);
+
+    get_mom_xdiff_sheared(mean_obj,sheared_0m,i,xdiff);
+    chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
+    if (chi2 > nsigma2) {
+        goto _bail;
+    }
+    tP_0m = norm*exp(-0.5*chi2);
+
+    get_mom_xdiff_sheared(mean_obj,sheared_pp,i,xdiff);
+    chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
+    if (chi2 > nsigma2) {
+        goto _bail;
+    }
+    tP_pp = norm*exp(-0.5*chi2);
+
+    get_mom_xdiff_sheared(mean_obj,sheared_mm,i,xdiff);
+    chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
+    if (chi2 > nsigma2) {
+        goto _bail;
+    }
+    tP_mm = norm*exp(-0.5*chi2);
+
+    *P += tP;
+    *P_p0 += tP_p0;
+    *P_m0 += tP_m0;
+    *P_0p += tP_0p;
+    *P_0m += tP_0m;
+    *P_pp += tP_pp;
+    *P_mm += tP_mm;
+
+    used = 1;
+
+_bail:
+    return used;
+ 
+}
+                 
+
+static 
+PyObject * PyGMix_mvn_calc_pqr_templates_full(PyObject* self, PyObject* args) {
+
+    PyObject* mean_obj=NULL;
+    PyObject *icovar_obj=NULL;
+    double nsigma=0, nsigma2=0, norm=0;
+    int nmin=0, seed=0;
+    double h=0, h2inv=0, hsqinv=0;
+    double neff_max=0;
+    PyObject *sheared_p0=NULL,
+             *sheared_m0=NULL,
+             *sheared_0m=NULL,
+             *sheared_0p=NULL,
+             *sheared_pp=NULL,
+             *sheared_mm=NULL;
+
+    PyObject *templates_obj=NULL;
+    PyObject *P_obj=NULL, *Q_obj=NULL, *R_obj=NULL;
+
+    double *Pptr=NULL,
+           *Q1ptr=NULL, *Q2ptr=NULL,
+           *R11ptr=NULL,*R12ptr=NULL,
+           *R21ptr=NULL,*R22ptr=NULL;
+
+    double xdiff[PYGMIX_MAXDIMS]={0};
+
+    //double chi2=0;
+    double prob=0;
+    double P=0,
+           P_p0=0, P_m0=0,
+           P_0p=0, P_0m=0,
+           P_pp=0, P_mm=0;
+    npy_intp ndim=0, npoints=0, i=0, ii=0;
+    double Pmax=0, neff=0;
+
+    int used=0;
+    long nuse=0;
+
+    // weight object is currently ignored
+    if (!PyArg_ParseTuple(args, (char*)"OOddidOOOOOOOdiOOO", 
+                          &mean_obj,
+                          &icovar_obj,
+                          &norm,
+                          &nsigma,
+                          &nmin,  // always sample from at least this many
+                          &neff_max,  // stop if neff > this number
+                          &templates_obj,
+                          &sheared_p0,
+                          &sheared_m0,
+                          &sheared_0p,
+                          &sheared_0m,
+                          &sheared_pp,
+                          &sheared_mm,
+                          &h,
+                          &seed,
+                          &P_obj,
+                          &Q_obj,
+                          &R_obj)) {
+        return NULL;
+    }
+
+    if (seed > 0) {
+        srand(seed);
+    }
+
+    nsigma2=nsigma*nsigma;
+    h2inv=1.0/(2.0*h);
+    hsqinv=1.0/(h*h);
+ 
+    ndim=PyArray_SIZE(mean_obj);
+    npoints = PyArray_DIM(templates_obj,0);
+
+    Pptr=PyArray_GETPTR1(P_obj,0);
+
+    Q1ptr=PyArray_GETPTR1(Q_obj,0);
+    Q2ptr=PyArray_GETPTR1(Q_obj,1);
+
+    R11ptr=PyArray_GETPTR2(R_obj,0,0);
+    R12ptr=PyArray_GETPTR2(R_obj,0,1);
+    R21ptr=PyArray_GETPTR2(R_obj,1,0);
+    R22ptr=PyArray_GETPTR2(R_obj,1,1);
+
+    for (ii=0; ii<npoints; ii++) {
+        // check a random template, since we might bail early
+        // if our neff. check is met
+        //i=randint(npoints);
+        i=ii;
+
+        // only updates if the position and all derivatives are 
+        // within nsigma
+        used=get_pvals(mean_obj,icovar_obj,templates_obj,
+                       sheared_p0,
+                       sheared_m0,
+                       sheared_0p,
+                       sheared_0m,
+                       sheared_pp,
+                       sheared_mm,
+
+                       norm,
+                       xdiff,
+                       ndim,
+                       i,
+                       nsigma2,
+                       &prob,
+                       &P,
+                       &P_p0, &P_m0,
+                       &P_0p, &P_0m,
+                       &P_pp, &P_mm);
+        if (used) {
+            nuse += 1;
+            if (prob > Pmax) {
+                Pmax=prob;
+            }
+        }
+
+        /*
+        get_mom_xdiff(mean_obj,templates_obj,i,xdiff,ndim);
+
+        chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
+
+        if (chi2 < nsigma2) {
+            nuse += 1;
+            prob = norm*exp(-0.5*chi2);
+
+            if (prob > Pmax) {
+                Pmax=prob;
+            }
+
+            P += prob;
+
+            // update the pars that respond to shear
+
+            get_mom_xdiff_sheared(mean_obj,sheared_p0,i,xdiff);
+            chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
+            P_p0 += norm*exp(-0.5*chi2);
+
+            get_mom_xdiff_sheared(mean_obj,sheared_m0,i,xdiff);
+            chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
+            P_m0 += norm*exp(-0.5*chi2);
+
+            get_mom_xdiff_sheared(mean_obj,sheared_0p,i,xdiff);
+            chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
+            P_0p += norm*exp(-0.5*chi2);
+
+            get_mom_xdiff_sheared(mean_obj,sheared_0m,i,xdiff);
+            chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
+            P_0m += norm*exp(-0.5*chi2);
+
+            get_mom_xdiff_sheared(mean_obj,sheared_pp,i,xdiff);
+            chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
+            P_pp += norm*exp(-0.5*chi2);
+
+            get_mom_xdiff_sheared(mean_obj,sheared_mm,i,xdiff);
+            chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
+            P_mm += norm*exp(-0.5*chi2);
+
+        }
+        */
+
+        // P is sum(prob)
+        neff = P/Pmax;
+        if ( (i > nmin) && (neff > neff_max) ) {
+            break;
+        }
+    }
+
+    *Pptr=P;
+
+    *Q1ptr = (P_p0 - P_m0)*h2inv;
+    *Q2ptr = (P_0p - P_0m)*h2inv;
+
+    *R11ptr = (P_p0 - 2*P + P_m0)*hsqinv;
+    *R12ptr = (P_pp - P_p0 - P_0p + 2*P - P_m0 - P_0m + P_mm)*hsqinv*0.5;
+    *R22ptr = (P_0p - 2*P + P_0m)*hsqinv;
+
+    *R21ptr = *R12ptr;
+
+    return Py_BuildValue("ld", nuse, neff);
+}
+
 
 
 static PyObject * PyGMix_test(PyObject* self, PyObject* args) {
@@ -3168,6 +3465,7 @@ static PyMethodDef pygauss2d_funcs[] = {
 
     {"mvn_calc_prob",        (PyCFunction)PyGMix_mvn_calc_prob,         METH_VARARGS,  "get prob for the specified multivariate gaussian"},
     {"mvn_calc_pqr_templates",        (PyCFunction)PyGMix_mvn_calc_pqr_templates,         METH_VARARGS,  "get pqr for specified likelihood and templates"},
+    {"mvn_calc_pqr_templates_full",        (PyCFunction)PyGMix_mvn_calc_pqr_templates_full,         METH_VARARGS,  "get pqr for specified likelihood and templates"},
 
     {"test",        (PyCFunction)PyGMix_test,         METH_VARARGS,  "test\n\nprint and return."},
     {"erf",         (PyCFunction)PyGMix_erf,         METH_VARARGS,  "erf with better precision."},

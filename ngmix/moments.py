@@ -268,7 +268,7 @@ class Deriv(object):
         self.T=T
 
         # T > 0 checked here
-        e1,e2 = moms2e1e2(M1, M2, T)
+        e1,e2 = moms_to_e1e2(M1, M2, T)
 
         # shape boundaries checked here
         g1,g2 = shape.e1e2_to_g1g2(e1,e2)
@@ -522,7 +522,7 @@ class OldDeriv(object):
         self.T=T
 
         # T > 0 checked here
-        e1,e2 = moms2e1e2(M1, M2, T)
+        e1,e2 = moms_to_e1e2(M1, M2, T)
 
         # shape boundaries checked here
         g1,g2 = shape.e1e2_to_g1g2(e1,e2)
@@ -565,7 +565,10 @@ class PQRMomTemplatesBase(object):
                  nrand_cen,
                  nsigma=5.0,
                  nmin=100,
-                 neff_max=100.0):
+                 neff_max=100.0,
+                 shear_expand=None,
+                 h=1.0e-6, # when numerical deriv. are used
+                ):
 
         self.seed=numpy.random.randint(0,1000000)
 
@@ -577,8 +580,14 @@ class PQRMomTemplatesBase(object):
         self.nmin=nmin
         self.neff_max=neff_max
 
+        self.shear_expand=shear_expand
+        self.h=h
+        self.h2inv  = 1./(2.*h)
+        self.hsqinv = 1./h**2
+
+
         self._set_templates()
-        self._set_deriv()
+        self._prep_pqr()
 
     def _set_templates(self):
         """
@@ -617,31 +626,39 @@ class PQRMomTemplatesBase(object):
         nrand_cen=self.nrand_cen
         ntot = nkeep*nrand_cen
 
-        print("replicating translated centers")
-        print("total templates:",ntot)
+        if nrand_cen <= 1:
+            print("using input templates as is")
+            # assuming they already have the random centers
+            templates = templates_keep
+        else:
+            print("replicating translated centers")
+            print("total templates:",ntot)
 
-        # note this will guarantee correct byte ordering for C code
-        templates = numpy.zeros( (ntot, ndim) )
+            # note this will guarantee correct byte ordering for C code
+            templates = numpy.zeros( (ntot, ndim) )
 
-        cen_dist = self.cen_dist
-        for irand in xrange(nrand_cen):
-            beg=irand*nkeep
-            end=(irand+1)*nkeep
+            cen_dist = self.cen_dist
+            for irand in xrange(nrand_cen):
+                beg=irand*nkeep
+                end=(irand+1)*nkeep
 
-            # replicate the moments
-            templates[beg:end,:] = templates_keep[:,:]
+                # replicate the moments
+                templates[beg:end,:] = templates_keep[:,:]
 
-            # randomized centers
-            cen1,cen2 = cen_dist.sample2d(nkeep)
-            templates[beg:end,0] = cen1
-            templates[beg:end,1] = cen2
+                # randomized centers
+                cen1,cen2 = cen_dist.sample2d(nkeep)
+                templates[beg:end,0] = cen1
+                templates[beg:end,1] = cen2
 
-        print("shuffling")
-        numpy.random.shuffle(templates)
+            print("shuffling")
+            numpy.random.shuffle(templates)
 
         self.templates = templates
 
-    def _set_deriv(self):
+    def _prep_pqr(self):
+
+        if self.shear_expand is not None:
+            raise ValueError("shear_expand not yet supported")
 
         templates = self.templates
         M1 = templates[:,2]
@@ -727,10 +744,10 @@ class PQRMomTemplatesGauss(PQRMomTemplatesBase):
 
         ierrors = 1.0/numpy.sqrt( numpy.diag(mom_cov) )
 
-        #nmin = self.nmin*self.nrand_cen
-        #neff_max = self.neff_max*self.nrand_cen
-        nmin = self.nmin
-        neff_max = self.neff_max
+        nmin = self.nmin*self.nrand_cen
+        neff_max = self.neff_max*self.nrand_cen
+        #nmin = self.nmin
+        #neff_max = self.neff_max
 
         nuse,neff=mvn_calc_pqr_templates(dist.mean,
                                          dist.icov,
@@ -747,8 +764,8 @@ class PQRMomTemplatesGauss(PQRMomTemplatesBase):
 
         # only seed the first call
         self.seed=-1
-        #neff /= self.nrand_cen
-        #nuse /= self.nrand_cen
+        neff /= self.nrand_cen
+        nuse /= self.nrand_cen
 
         P=P[0]
 
@@ -868,9 +885,151 @@ class PQRMomTemplatesGauss(PQRMomTemplatesBase):
         self.mom_sub = mom[2:2+3]
         self.mom_cov_sub=mom_cov[2:2+3, 2:2+3]
 
+class PQRMomTemplatesGaussFull(PQRMomTemplatesGauss):
+    """
+    calculate pqr from the input moments and a
+    likelihood function using the templates as
+    the priors
+
+    Do the numerical derivative on full P using
+    sheared templates rather than using the
+    individual derivatives
+
+    Assumes multi-variate gaussian for the likelihoods
+    """
+
+    def calc_pqr(self, mom, mom_cov):
+        """
+        calculate pqr sums assuming multivariate gaussian likelihood,
+        equation 36 B&A 2014
+
+        This wrong because I pulled out a subset of the icov and data
+        in that same range.  The terms with leading xdiff need contributions
+        from other parameters
+        """
+        from ._gmix import mvn_calc_pqr_templates_full
+
+        self._set_likelihood(mom,mom_cov)
+
+        dist=self.dist
+
+        P = numpy.zeros(1)
+        Q = numpy.zeros(2)
+        R = numpy.zeros( (2,2) )
+
+        nmin = self.nmin*self.nrand_cen
+        neff_max = self.neff_max*self.nrand_cen
+
+        nuse,neff=mvn_calc_pqr_templates_full(dist.mean,
+                                              dist.icov,
+                                              dist.norm,
+                                              self.nsigma,
+                                              nmin,
+                                              neff_max,
+                                              self.templates,
+                                              self.sheared_p0,
+                                              self.sheared_m0,
+                                              self.sheared_0p,
+                                              self.sheared_0m,
+                                              self.sheared_pp,
+                                              self.sheared_mm,
+                                              self.h,
+                                              self.seed,
+                                              P,Q,R)
+
+        neff /= self.nrand_cen
+        nuse = int( nuse/float(self.nrand_cen) )
+
+        # only seed the first call
+        self.seed=-1
+
+        P=P[0]
+
+        self._result={'mom':mom,
+                      'mom_cov':mom_cov,
+                      'P':P,
+                      'Q':Q,
+                      'R':R,
+                      'nuse':nuse,
+                      'neff':neff}
+
+
+    def _prep_pqr(self):
+        """
+        store the sheared moments
+        """
+
+        if self.shear_expand is None:
+            self.shear_expand = [0.0, 0.0]
+
+        print("expanding about shear:",self.shear_expand)
+
+        s1,s2 = self.shear_expand
+        h=self.h
+
+        templates = self.templates
+        ntot = templates.shape[0]
+
+        sheared_p0 = numpy.zeros( (ntot, 3) )
+        sheared_m0 = numpy.zeros( (ntot, 3) )
+        sheared_0p = numpy.zeros( (ntot, 3) )
+        sheared_0m = numpy.zeros( (ntot, 3) )
+
+        sheared_pp = numpy.zeros( (ntot, 3) )
+        sheared_mm = numpy.zeros( (ntot, 3) )
+        
+        M1, M2, T = templates[:,2], templates[:,3], templates[:,4]
+
+        # for first derivatives
+        tM1, tM2, tT = get_sheared_moments(M1, M2, T, s1+h, s2+0)
+
+        sheared_p0[:,0] = tM1
+        sheared_p0[:,1] = tM2
+        sheared_p0[:,2] = tT
+
+        tM1, tM2, tT = get_sheared_moments(M1, M2, T, s1-h, s2+0)
+
+        sheared_m0[:,0] = tM1
+        sheared_m0[:,1] = tM2
+        sheared_m0[:,2] = tT
+
+        tM1, tM2, tT = get_sheared_moments(M1, M2, T, s1+0, s2+h)
+
+        sheared_0p[:,0] = tM1
+        sheared_0p[:,1] = tM2
+        sheared_0p[:,2] = tT
+
+        tM1, tM2, tT = get_sheared_moments(M1, M2, T, s1+0, s2-h)
+
+        sheared_0m[:,0] = tM1
+        sheared_0m[:,1] = tM2
+        sheared_0m[:,2] = tT
+
+        # for 2nd derivatives
+        tM1, tM2, tT = get_sheared_moments(M1, M2, T, s1+h, s2+h)
+
+        sheared_pp[:,0] = tM1
+        sheared_pp[:,1] = tM2
+        sheared_pp[:,2] = tT
+
+        tM1, tM2, tT = get_sheared_moments(M1, M2, T, s1-h, s2-h)
+
+        sheared_mm[:,0] = tM1
+        sheared_mm[:,1] = tM2
+        sheared_mm[:,2] = tT
+
+        self.sheared_p0 = sheared_p0
+        self.sheared_m0 = sheared_m0
+        self.sheared_0p = sheared_0p
+        self.sheared_0m = sheared_0m
+        self.sheared_pp = sheared_pp
+        self.sheared_mm = sheared_mm
+
+
+
 
  
-def moms2e1e2(M1, M2, T):
+def moms_to_e1e2(M1, M2, T):
     """
     convert M1, M2, T to e1,e2
 
@@ -892,7 +1051,7 @@ def moms2e1e2(M1, M2, T):
             raise GMixRangeError("%d T were <= 0.0" % w.size)
     else:
         if T <= 0.0:
-            raise GMixRangeError("T <= 0.0: %g" % g)
+            raise GMixRangeError("T <= 0.0: %g" % T)
 
     Tinv=1.0/T
     e1 = M1*Tinv
@@ -946,7 +1105,7 @@ def get_sheared_moments(M1, M2, T, s1, s2):
     sheared M1, M2, T
     """
 
-    e1,e2 = moms2e1e2(M1, M2, T)
+    e1,e2 = moms_to_e1e2(M1, M2, T)
     g1,g2 = shape.e1e2_to_g1g2(e1,e2)
 
     g1s, g2s = shape.shear_reduced(g1, g2, s1, s2)
@@ -1060,3 +1219,50 @@ def test_pqr_moments(ntemplate=10000, seed=None, cen_radius=2.0, nrand_cen=10):
     print("neff,neffc:",pqr_res['neff'],slow_res['neff'])
     print("time: ",tm)
     print("timec:",tmc)
+
+def test_pqr_moments_full(ntemplate=10000, seed=None, cen_radius=2.0, nrand_cen=10):
+    """
+
+    note testing with neff_max=infinity in comparing to slow, so that we don't
+    get hit by randomness as badly
+
+    """
+    from numpy import array, diag
+    from .priors import MultivariateNormal, ZDisk2D
+    import time
+
+    numpy.random.seed(seed)
+
+    mean=array([0.15, -0.052, -1.96, 2.86, 4.85, 92.0])
+    cov=array([[+6.790897e-03, +1.451707e-03,  +1.860157e-03,  -1.059367e-03,  -1.901166e-03,  -1.461303e-03],
+               [+1.451707e-03, +4.352388e-03,  +6.346465e-04,  +3.439475e-04,  +5.323073e-04,  +6.906006e-03],
+               [+1.860157e-03,  +6.346465e-04,  +1.867478e-01,  -2.282856e-02,  -6.030356e-02,  -5.251863e-02],
+               [-1.059367e-03,  +3.439475e-04,  -2.282856e-02,  +2.054771e-01,  +1.194138e-01,  +3.461798e-01],
+               [-1.901166e-03,  +5.323073e-04,  -6.030356e-02,  +1.194138e-01,  +2.243873e-01,  +1.039051e+00],
+               [-1.461303e-03,  +6.906006e-03,  -5.251863e-02,  +3.461798e-01,  +1.039051e+00,  +1.063436e+01]])
+
+    mvn = MultivariateNormal(mean, cov)
+
+    templates = mvn.sample(ntemplate)
+
+    cen_dist = ZDisk2D(cen_radius)
+    pqrt = PQRMomTemplatesGaussFull(templates,
+                                    cen_dist,
+                                    nrand_cen,
+                                    neff_max=1.0e9)
+
+    tm0=time.time()
+    pqrt.calc_pqr(mean, cov)
+    pqr_res = pqrt.get_result()
+    tm=time.time()-tm0
+
+    print("P")
+    print('%.18g' % pqr_res['P'])
+    print("Q")
+    print('%.18g %.18g' % tuple(pqr_res['Q']))
+    print("R")
+    print(pqr_res['R'])
+
+    print("nuse",pqr_res['nuse'])
+    print("neff:",pqr_res['neff'])
+    print("time: ",tm)
