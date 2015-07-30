@@ -526,7 +526,7 @@ class Bootstrapper(object):
         else:
             print("        failed to find cen")
 
-    def fit_psfs(self, psf_model, Tguess, Tguess_key=None, skip_failed=True, ntry=4, fit_pars={}):
+    def fit_psfs(self, psf_model, Tguess, Tguess_key=None, skip_failed=True, ntry=4, fit_pars={}, skip_already_done=True):
         """
         Fit all psfs.  If the psf observations already have a gmix
         then this step is not necessary
@@ -543,6 +543,10 @@ class Bootstrapper(object):
             then an exception is raised
         ntry: integer
             Number of retries if the psf fit fails
+        fit_pars: dict
+            Fitting parameters for psf.
+        skip_already_done: bool
+            Skip psfs with a gmix already set
         """
 
         ntot=0
@@ -555,7 +559,21 @@ class Bootstrapper(object):
                     raise RuntimeError("observation does not have a psf set")
 
                 psf_obs = obs.get_psf()
-                try:
+                if skip_already_done:
+                    # if have a gmix, skip it
+                    if psf_obs.has_gmix():
+                        new_obslist.append(obs)
+                        ntot += 1
+                        continue
+
+                    # if have a fitter and flags != 0, skip it
+                    if 'fitter' in psf_obs.meta and psf_obs.meta['fitter'].get_result()['flags'] != 0:
+                        mess=("    failed psf fit band %d obs %d, "
+                              "skipping observation" % (band,i))
+                        print(mess)
+                        continue
+                    
+                try:                        
                     if Tguess_key is not None:
                         Tguess_i = psf_obs.meta[Tguess_key]
                     else:
