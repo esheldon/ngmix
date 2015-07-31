@@ -212,10 +212,10 @@ class GPriorBase(object):
         R22 = (Q2_p - 2*P + Q2_m)*hsq
         R12 = (R12_pp - Q1_p - Q2_p + 2*P - Q1_m - Q2_m + R12_mm)*hsq*0.5
 
-        d1_2p = self.get_pj(g1, g2, s1+twoh, s2)
-        d1_2m = self.get_pj(g1, g2, s1-twoh, s2)
-        d2_2p = self.get_pj(g1, g2, s1, s2+twoh)
-        d2_2m = self.get_pj(g1, g2, s1, s2-twoh)
+        #d1_2p = self.get_pj(g1, g2, s1+twoh, s2)
+        #d1_2m = self.get_pj(g1, g2, s1-twoh, s2)
+        #d2_2p = self.get_pj(g1, g2, s1, s2+twoh)
+        #d2_2m = self.get_pj(g1, g2, s1, s2-twoh)
 
         #S111 = (d1_2p - 2*Q1_p + 2*Q1_m - d1_2m)/(2*h**3)
         #S222 = (d2_2p - 2*Q2_p + 2*Q2_m - d2_2m)/(2*h**3)
