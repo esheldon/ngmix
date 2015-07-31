@@ -2410,6 +2410,29 @@ class GMixND(object):
         self._gmm=gmm
         self.set_mixture(gmm.weights_, gmm.means_, gmm.covars_)
 
+    def save_mixture(self, fname):
+        """
+        save the mixture to a file
+        """
+        import fitsio
+
+        with fitsio.FITS(fname,'rw',clobber=True) as fits:
+            fits.write(self.weights, extname='weights')
+            fits.write(self.means, extname='means')
+            fits.write(self.covars, extname='covars')
+        
+    def load_mixture(self, fname):
+        """
+        load the mixture from a file
+        """
+        import fitsio
+
+        with fitsio.FITS(fname) as fits:
+            weights = fits['weights'].read()
+            means = fits['means'].read()
+            covars = fits['covars'].read()
+        self.set_mixture(weights, means, covars)
+
     def get_lnprob_scalar(self, pars_in):
         """
         (x-xmean) icovar (x-xmean)

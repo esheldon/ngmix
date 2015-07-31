@@ -2939,6 +2939,7 @@ static void get_mom_Rsums(const PyObject* icovar,
  * Uses rand(), and so is affected-by/affects the same seed.
  */
 
+/*
 static int randint(int n) {
   if ((n - 1) == RAND_MAX) {
     return rand();
@@ -2957,6 +2958,7 @@ static int randint(int n) {
     return r % n;
   }
 }
+*/
 
 static 
 PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
@@ -3096,6 +3098,7 @@ PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
     return Py_BuildValue("ld", nuse, neff);
 }
 
+/*
 static int get_pvals(const PyObject* mean_obj,
                      const PyObject* icovar_obj,
                      const PyObject* templates_obj,
@@ -3139,42 +3142,42 @@ static int get_pvals(const PyObject* mean_obj,
 
     get_mom_xdiff_sheared(mean_obj,sheared_p0,i,xdiff);
     chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
-    if (chi2 > nsigma2) {
+    if (chi2 > nsigma2 || !isfinite(chi2)) {
         goto _bail;
     }
     tP_p0 = norm*exp(-0.5*chi2);
 
     get_mom_xdiff_sheared(mean_obj,sheared_m0,i,xdiff);
     chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
-    if (chi2 > nsigma2) {
+    if (chi2 > nsigma2 || !isfinite(chi2)) {
         goto _bail;
     }
     tP_m0 = norm*exp(-0.5*chi2);
 
     get_mom_xdiff_sheared(mean_obj,sheared_0p,i,xdiff);
     chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
-    if (chi2 > nsigma2) {
+    if (chi2 > nsigma2 || !isfinite(chi2)) {
         goto _bail;
     }
     tP_0p = norm*exp(-0.5*chi2);
 
     get_mom_xdiff_sheared(mean_obj,sheared_0m,i,xdiff);
     chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
-    if (chi2 > nsigma2) {
+    if (chi2 > nsigma2 || !isfinite(chi2)) {
         goto _bail;
     }
     tP_0m = norm*exp(-0.5*chi2);
 
     get_mom_xdiff_sheared(mean_obj,sheared_pp,i,xdiff);
     chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
-    if (chi2 > nsigma2) {
+    if (chi2 > nsigma2 || !isfinite(chi2)) {
         goto _bail;
     }
     tP_pp = norm*exp(-0.5*chi2);
 
     get_mom_xdiff_sheared(mean_obj,sheared_mm,i,xdiff);
     chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
-    if (chi2 > nsigma2) {
+    if (chi2 > nsigma2 || !isfinite(chi2)) {
         goto _bail;
     }
     tP_mm = norm*exp(-0.5*chi2);
@@ -3193,7 +3196,7 @@ _bail:
     return used;
  
 }
-                 
+*/             
 
 static 
 PyObject * PyGMix_mvn_calc_pqr_templates_full(PyObject* self, PyObject* args) {
@@ -3221,7 +3224,7 @@ PyObject * PyGMix_mvn_calc_pqr_templates_full(PyObject* self, PyObject* args) {
 
     double xdiff[PYGMIX_MAXDIMS]={0};
 
-    //double chi2=0;
+    double chi2=0;
     double prob=0;
     double P=0,
            P_p0=0, P_m0=0,
@@ -3230,7 +3233,7 @@ PyObject * PyGMix_mvn_calc_pqr_templates_full(PyObject* self, PyObject* args) {
     npy_intp ndim=0, npoints=0, i=0, ii=0;
     double Pmax=0, neff=0;
 
-    int used=0;
+    //int used=0;
     long nuse=0;
 
     // weight object is currently ignored
@@ -3283,39 +3286,11 @@ PyObject * PyGMix_mvn_calc_pqr_templates_full(PyObject* self, PyObject* args) {
         //i=randint(npoints);
         i=ii;
 
-        // only updates if the position and all derivatives are 
-        // within nsigma
-        used=get_pvals(mean_obj,icovar_obj,templates_obj,
-                       sheared_p0,
-                       sheared_m0,
-                       sheared_0p,
-                       sheared_0m,
-                       sheared_pp,
-                       sheared_mm,
-
-                       norm,
-                       xdiff,
-                       ndim,
-                       i,
-                       nsigma2,
-                       &prob,
-                       &P,
-                       &P_p0, &P_m0,
-                       &P_0p, &P_0m,
-                       &P_pp, &P_mm);
-        if (used) {
-            nuse += 1;
-            if (prob > Pmax) {
-                Pmax=prob;
-            }
-        }
-
-        /*
         get_mom_xdiff(mean_obj,templates_obj,i,xdiff,ndim);
 
         chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
 
-        if (chi2 < nsigma2) {
+        if (chi2 < nsigma2 && isfinite(chi2)) {
             nuse += 1;
             prob = norm*exp(-0.5*chi2);
 
@@ -3325,7 +3300,7 @@ PyObject * PyGMix_mvn_calc_pqr_templates_full(PyObject* self, PyObject* args) {
 
             P += prob;
 
-            // update the pars that respond to shear
+            // These calls only update the parameters that respond to shear
 
             get_mom_xdiff_sheared(mean_obj,sheared_p0,i,xdiff);
             chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
@@ -3352,7 +3327,6 @@ PyObject * PyGMix_mvn_calc_pqr_templates_full(PyObject* self, PyObject* args) {
             P_mm += norm*exp(-0.5*chi2);
 
         }
-        */
 
         // P is sum(prob)
         neff = P/Pmax;

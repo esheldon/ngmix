@@ -5024,7 +5024,6 @@ class ISampler(object):
         return vals
 
     def make_plots(self,
-                   weights=None,
                    title=None,
                    separate=False,
                    width=1200,
@@ -5034,6 +5033,8 @@ class ISampler(object):
                    **keys):
         import mcmc
         import biggles
+
+        weights = self._iweights
 
         biggles.configure('screen','width', width)
         biggles.configure('screen','height', height)
