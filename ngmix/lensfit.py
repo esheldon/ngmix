@@ -56,6 +56,7 @@ class LensfitSensitivity(object):
                  g_prior,
                  weights=None,
                  remove_prior=False,
+                 response=None,
                  h=_default_h):
         """
         parameters
@@ -75,6 +76,7 @@ class LensfitSensitivity(object):
         self._g=g
         self._g_prior=g_prior
         self._weights=weights
+        self._response=response
 
         self._remove_prior=remove_prior
         self._h=h
@@ -150,13 +152,24 @@ class LensfitSensitivity(object):
         R1 = g1diff*dpri_by_g1
         R2 = g2diff*dpri_by_g2
 
-        R1sum = (R1*weights).sum()
-        R2sum = (R2*weights).sum()
+        if self._response is not None:
+            res=self._response
+            R1sum = ((res[:,0]-R1)*weights).sum()
+            R2sum = ((res[:,1]-R2)*weights).sum()
+        else:
+            R1sum = ((1-R1)*weights).sum()
+            R2sum = ((1-R2)*weights).sum()
+
+
+        #R1sum = (R1*weights).sum()
+        #R2sum = (R2*weights).sum()
 
         g_mean[0] = g1mean
         g_mean[1] = g2mean
-        g_sens[0] = 1 - R1sum/wsum
-        g_sens[1] = 1 - R2sum/wsum
+        g_sens[0] = R1sum/wsum
+        g_sens[1] = R2sum/wsum
+        #g_sens[0] = 1 - R1sum/wsum
+        #g_sens[1] = 1 - R2sum/wsum
 
         self._nuse=w.size
 
@@ -175,6 +188,10 @@ class LensfitSensitivity(object):
 
         dpri_by_g1 = self._g_prior.dbyg1_array(g1,g2,h=self._h)
         dpri_by_g2 = self._g_prior.dbyg2_array(g1,g2,h=self._h)
+
+        if self._response is not None:
+            dpri_by_g1 *= self._response[:,0]
+            dpri_by_g2 *= self._response[:,1]
 
         prior=self._g_prior.get_prob_array2d(g1,g2)
 
@@ -200,15 +217,30 @@ class LensfitSensitivity(object):
 
         if doweights:
             # wsum is (w*prior).sum()
-            R1sum = (R1*extra_weights).sum()
-            R2sum = (R2*extra_weights).sum()
+            #R1sum = (R1*extra_weights).sum()
+            #R2sum = (R2*extra_weights).sum()
+            R1 *= extra_weights
+            R2 *= extra_weights
         else:
             # wsum is prior.sum()
-            R1sum = R1.sum()
-            R2sum = R2.sum()
+            #R1sum = R1.sum()
+            #R2sum = R2.sum()
+            pass
 
-        g_sens[0] = 1 - R1sum/wsum
-        g_sens[1] = 1 - R2sum/wsum
+        if self._response is not None:
+            raise RuntimeError("check response here")
+            res=self._response
+            R1sum = ((res[:,0]-R1)*weights).sum()
+            R2sum = ((res[:,1]-R2)*weights).sum()
+        else:
+            R1sum = ((1-R1)*weights).sum()
+            R2sum = ((1-R2)*weights).sum()
+
+
+        g_sens[0] = R1sum/wsum
+        g_sens[1] = R2sum/wsum
+        #g_sens[0] = 1 - R1sum/wsum
+        #g_sens[1] = 1 - R2sum/wsum
 
         self._nuse=g1.size
 
