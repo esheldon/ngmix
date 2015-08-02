@@ -154,8 +154,8 @@ class LensfitSensitivity(object):
 
         if self._response is not None:
             res=self._response
-            R1sum = ((res[:,0]-R1)*weights).sum()
-            R2sum = ((res[:,1]-R2)*weights).sum()
+            R1sum = (res[:,0]*(1-R1)*weights).sum()
+            R2sum = (res[:,1]*(1-R2)*weights).sum()
         else:
             R1sum = ((1-R1)*weights).sum()
             R2sum = ((1-R2)*weights).sum()
