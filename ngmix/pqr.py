@@ -80,11 +80,7 @@ def calc_shear(P, Q, R, get_sums=False):
 
     P_sum, Q_sum, Cinv_sum = calc_pqr_sums(P,Q,R)
 
-    print('Cinv_sum')
-    print(Cinv_sum)
     g1g2, C = combine_pqr_sums(P_sum, Q_sum, Cinv_sum)
-    print('C')
-    print(C)
 
     if get_sums:
         return g1g2, C, Q_sum, Cinv_sum
@@ -320,12 +316,9 @@ def calc_pqr_sums(P,Q,R):
 
     # QQ/P**2 - R/P
 
-    print("QQsum:",(QQ[:,0,0]*P2inv).sum(), "Rsum:",(R[:,0,0]*Pinv).sum())
     Cinv_all[:,0,0] = QQ[:,0,0]*P2inv - R[:,0,0]*Pinv
-    print("QQsum:",(QQ[:,0,1]*P2inv).sum(), "Rsum:",(R[:,0,1]*Pinv).sum())
     Cinv_all[:,0,1] = QQ[:,0,1]*P2inv - R[:,0,1]*Pinv
     Cinv_all[:,1,0] = QQ[:,1,0]*P2inv - R[:,1,0]*Pinv
-    print("QQsum:",(QQ[:,1,1]*P2inv).sum(), "Rsum:",(R[:,1,1]*Pinv).sum())
     Cinv_all[:,1,1] = QQ[:,1,1]*P2inv - R[:,1,1]*Pinv
 
     P_sum = P.sum()
