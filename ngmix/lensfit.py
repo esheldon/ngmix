@@ -114,6 +114,8 @@ class LensfitSensitivity(object):
         Calculate the sensitivity
         """
 
+        response=self._response
+
         g_mean = zeros(2)
         g_sens = zeros(2)
 
@@ -141,6 +143,9 @@ class LensfitSensitivity(object):
             dpri_by_g1 = dpri_by_g1[w]
             dpri_by_g2 = dpri_by_g2[w]
 
+            if response is not None:
+                response = response[w]
+
         wsum = weights.sum()
 
         g1mean = (g1*weights).sum()/wsum
@@ -152,14 +157,12 @@ class LensfitSensitivity(object):
         R1 = g1diff*dpri_by_g1
         R2 = g2diff*dpri_by_g2
 
-        if self._response is not None:
-            res=self._response
-            R1sum = (res[:,0]*(1-R1)*weights).sum()
-            R2sum = (res[:,1]*(1-R2)*weights).sum()
+        if response is not None:
+            R1sum = (response[:,0]*(1-R1)*weights).sum()
+            R2sum = (response[:,1]*(1-R2)*weights).sum()
         else:
             R1sum = ((1-R1)*weights).sum()
             R2sum = ((1-R2)*weights).sum()
-
 
         #R1sum = (R1*weights).sum()
         #R2sum = (R2*weights).sum()
