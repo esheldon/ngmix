@@ -1053,7 +1053,7 @@ class GMixCoellip(GMixModel):
 
         self.reset()
         gm=self._get_gmix_data()
-        _gmix.gmix_fill(data, pars, self._model)
+        _gmix.gmix_fill(gm, pars, self._model)
 
     def fill(self, pars):
         """
