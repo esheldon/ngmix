@@ -1688,6 +1688,38 @@ class LMSimple(FitterBase):
 
         return nprior
 
+class LMCoellip(LMSimple):
+    def __init__(self, obs, ngauss, **keys):
+        self._ngauss=ngauss
+        super(LMCoellip,self).__init__(obs, 'coellip', **keys)
+
+        if self.nband != 1:
+            raise ValueError("MaxCoellip only supports one band")
+
+        # over-write the band pars created by MaxSimple
+        self._band_pars=zeros(self.npars)
+
+    def _set_npars(self):
+        """
+        single band, npars determined from ngauss
+        """
+        self.npars=4 + 2*self._ngauss
+
+    def get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+        """
+
+        pars=self._band_pars
+
+        if self.use_logpars:
+            _gmix.convert_simple_double_logpars(pars_in, pars)
+        else:
+            pars=self._band_pars
+            pars[:] = pars_in[:]
+        return pars
+
+
 
 class LMGaussMom(LMSimple):
     """
