@@ -881,7 +881,6 @@ class Bootstrapper(object):
             scaling='linear'
 
         if guess is not None:
-            #print("    using ParsGuesser")
             guesser=ParsGuesser(guess, scaling=scaling)
         else:
             psf_T = self.mb_obs_list[0][0].psf.gmix.get_T()
@@ -1045,15 +1044,22 @@ class CompositeBootstrapper(Bootstrapper):
         if not hasattr(self,'psf_flux_res'):
             self.fit_gal_psf_flux()
 
+        if guess is not None:
+            exp_guess = guess.copy()
+            dev_guess = guess.copy()
+        else:
+            exp_guess = None
+            dev_guess = None
+            
         print("    fitting exp")
-        exp_fitter=self._fit_one_model_max('exp',pars,
+        exp_fitter=self._fit_one_model_max('exp',pars,guess=exp_guess,
                                            prior=exp_prior,ntry=ntry)
         fitting.print_pars(exp_fitter.get_result()['pars'], front='        gal_pars:')
         fitting.print_pars(exp_fitter.get_result()['pars_err'], front='        gal_perr:')
         print('        lnprob: %e' % exp_fitter.get_result()['lnprob'])
         
         print("    fitting dev")
-        dev_fitter=self._fit_one_model_max('dev',pars,
+        dev_fitter=self._fit_one_model_max('dev',pars,guess=dev_guess,
                                            prior=dev_prior,ntry=ntry)
         fitting.print_pars(dev_fitter.get_result()['pars'], front='        gal_pars:')
         fitting.print_pars(dev_fitter.get_result()['pars_err'], front='        gal_perr:')
