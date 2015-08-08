@@ -92,6 +92,15 @@ class Bootstrapper(object):
 
         return self.psf_flux_res
 
+    def get_metacal_max_result(self):
+        """
+        get result of metacal with a max likelihood fitter
+        """
+        if not hasattr(self, 'metacal_max_res'):
+            raise RuntimeError("you need to run fit_metacal_max first")
+        return self.metacal_max_res
+
+
     def get_round_result(self):
         """
         get result of set_round_s2n()
@@ -99,6 +108,7 @@ class Bootstrapper(object):
         if not hasattr(self, 'round_res'):
             raise RuntimeError("you need to run set_round_s2n")
         return self.round_res
+
 
     def set_round_s2n(self, max_pars,
                       ntry=4,
@@ -657,6 +667,158 @@ class Bootstrapper(object):
                                                   ntry=ntry)
         res=self.max_fitter.get_result()
 
+    def fit_metacal_max(self,
+                        psf_model,
+                        gal_model,
+                        pars,
+                        psf_Tguess,
+                        extra_noise=None,
+                        step=0.01,
+                        prior=None,
+                        psf_ntry=10,
+                        ntry=1):
+        """
+        run metacalibration
+
+        parameters
+        ----------
+        gal_model: string
+            model to fit
+        pars: dict
+            parameters for the maximum likelihood fitter
+        step: float, optional
+            Step for the metacal shear derivative.  Default 0.01
+        prior: prior on parameters, optional
+            Optional prior to apply
+        ntry: int, optional
+            Number of times to retry fitting, default 1
+        """
+        fits = self._do_metacal_fits(psf_model, gal_model, pars, psf_Tguess, step,
+                                     prior, psf_ntry, ntry, extra_noise=extra_noise)
+
+        pars_mean = (fits['pars1p']+
+                     fits['pars1m']+
+                     fits['pars2p']+
+                     fits['pars2m'])/4.0
+
+        sens=zeros( (2,2) ) 
+
+        fac = 1.0/(2.0*step)
+
+        sens[0,0] = (fits['pars1p'][2]-fits['pars1m'][2])*fac
+        sens[0,1] = (fits['pars1p'][3]-fits['pars1m'][3])*fac
+        sens[1,0] = (fits['pars2p'][2]-fits['pars2m'][2])*fac
+        sens[1,1] = (fits['pars2p'][3]-fits['pars2m'][3])*fac
+
+        self.metacal_max_res = {'pars_mean':pars_mean,
+                                'g_mean':pars_mean[2:2+2],
+                                'g_sens':sens,
+                                'step':step}
+
+    def _do_metacal_fits(self, psf_model, gal_model, pars, psf_Tguess, step, prior, psf_ntry, ntry, extra_noise=None):
+        obsdict = self._get_metacal_obslist(step, extra_noise=extra_noise)
+
+        bdict={}
+        bdict['1p'] = Bootstrapper(obsdict['obs1p'], use_logpars=self.use_logpars)
+        bdict['1m'] = Bootstrapper(obsdict['obs1m'], use_logpars=self.use_logpars)
+        bdict['2p'] = Bootstrapper(obsdict['obs2p'], use_logpars=self.use_logpars)
+        bdict['2m'] = Bootstrapper(obsdict['obs2m'], use_logpars=self.use_logpars)
+
+        for key in bdict:
+            boot = bdict[key]
+            boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry)
+            boot.fit_max(gal_model, pars, prior=prior, ntry=ntry)
+
+        res={}
+        for key in bdict:
+            rkey = 'pars%s' % key
+            pars = bdict[key].get_max_fitter().get_result()['pars']
+
+            res[rkey] = pars
+
+        return res
+
+    def _get_metacal_obslist(self, step, extra_noise=None):
+        """
+        get Observations for the sheared images
+        """
+        from .metacal import Metacal
+        from .shape import Shape
+
+        if len(self.mb_obs_list) > 1 or len(self.mb_obs_list[0]) > 1:
+            raise NotImplementedError("only a single obs for now")
+
+        mc=Metacal(self.mb_obs_list[0][0])
+
+        sh1m=Shape(-step,  0.00 )
+        sh1p=Shape( step,  0.00 )
+
+        sh2m=Shape(0.0, -step)
+        sh2p=Shape(0.0,  step)
+
+        obs1p = mc.get_obs_galshear(sh1p)
+        obs1m = mc.get_obs_galshear(sh1m)
+        obs2p = mc.get_obs_galshear(sh2p)
+        obs2m = mc.get_obs_galshear(sh2m)
+
+        obs_dict = {'obs1p':obs1p,
+                    'obs1m':obs1m,
+                    'obs2p':obs2p,
+                    'obs2m':obs2m}
+
+        if extra_noise is not None:
+            noise_image = self._get_noise_image(obs_dict['obs1p'], extra_noise)
+
+            for key in obs_dict:
+                obs=obs_dict[key]
+
+                new_weight = self._get_degraded_weight_image(obs, extra_noise)
+                new_obs = self._get_degraded_obs(obs, noise_image, new_weight)
+
+                obs_dict[key] = new_obs
+
+        return obs_dict
+
+    def _get_degraded_obs(self, obs, noise_image, new_weight):
+        """
+        get a new obs with extra noise added to image and the weight
+        map modified appropriately
+        """
+
+
+        new_im = obs.image + noise_image
+
+        new_obs = Observation(new_im,
+                              weight=new_weight,
+                              jacobian=obs.jacobian)
+        if obs.has_psf():
+            new_obs.set_psf(obs.psf)
+
+        return new_obs
+
+    def _get_noise_image(self, obs, noise):
+        """
+        get a noise image for use in degrading a high s/n image
+        """
+
+        noise_image = numpy.random.normal(loc=0.0,
+                                          scale=noise,
+                                          size=obs.image.shape)
+
+        return noise_image
+
+    def _get_degraded_weight_image(self, obs, noise):
+        """
+        get a new weight map reflecting additional noise
+        """
+
+        new_weight = obs.weight.copy()
+        w=numpy.where(new_weight > 0)
+        if w[0].size > 0:
+            new_weight[w] += 1.0/noise**2
+
+        return new_weight
+
     def fit_max_fixT(self, gal_model, pars, T,
                      guess=None, prior=None, extra_priors=None, ntry=1):
         """
@@ -720,17 +882,20 @@ class Bootstrapper(object):
 
 
 
-    def _fit_one_model_max(self, gal_model, pars, guess=None, prior=None, ntry=1):
+    def _fit_one_model_max(self, gal_model, pars, guess=None, prior=None, ntry=1, obs=None):
         """
         fit the galaxy.  You must run fit_psf() successfully first
         """
+
+        if obs is None:
+            obs = self.mb_obs_list
 
         if not hasattr(self,'psf_flux_res'):
             self.fit_gal_psf_flux()
 
         guesser=self._get_max_guesser(guess=guess, prior=prior)
 
-        runner=MaxRunner(self.mb_obs_list, gal_model, pars, guesser,
+        runner=MaxRunner(obs, gal_model, pars, guesser,
                          prior=prior,
                          use_logpars=self.use_logpars)
 
