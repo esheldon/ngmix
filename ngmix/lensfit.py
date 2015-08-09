@@ -325,11 +325,45 @@ class LensfitSensitivity(object):
         self._g_sens=g_sens
 
 
-def lensfit_jackknife(g, gsens, do_ring=False, **keys):
+def lensfit_jackknife(g, gsens, do_ring=False,
+                      gsens_alt=None,
+                      chunksize=1,
+                      get_sums=False,
+                      get_shears=False,
+                      weights=None,
+                      progress=False,
+                      show=False,
+                      eps=None,
+                      png=None):
     """
     get the shear lensfit style
 
     for keywords, see help for _lensfit_jackknife
+
+    parameters
+    ----------
+    g: array
+        [N,2] shape measurements
+    gsens: array
+        [N,2] shape sensitivity measurements
+    do_ring: bool, optional
+        Was the data in a ring configuration?
+    chunksize: int, optional
+        chunksize for jackknifing
+    get_sums: bool, optional
+        Get the sums as well
+    get_shears: bool, optional
+        Get shears from jackknife sub samples
+    weights: array, optional
+        Weights to apply
+    progress: bool, optional
+        show a progress bar 
+    show: bool, optional
+        Show a plot of the jackknife sample values
+    eps: string, optional
+        eps file to write
+    png: string, optional
+        png file to write
     """
     if do_ring:
         return _lensfit_jackknife_ring(g, gsens,**keys)
