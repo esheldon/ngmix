@@ -715,7 +715,8 @@ class Bootstrapper(object):
                                 'g_sens':sens,
                                 'step':step}
 
-    def _do_metacal_fits(self, psf_model, gal_model, pars, psf_Tguess, step, prior, psf_ntry, ntry, extra_noise=None):
+    def _do_metacal_fits(self, psf_model, gal_model, pars, 
+                         psf_Tguess, step, prior, psf_ntry, ntry, extra_noise=None):
         obsdict = self._get_metacal_obslist(step, extra_noise=extra_noise)
 
         bdict={}
@@ -814,8 +815,9 @@ class Bootstrapper(object):
 
         new_weight = obs.weight.copy()
         w=numpy.where(new_weight > 0)
+
         if w[0].size > 0:
-            new_weight[w] += 1.0/noise**2
+            new_weight[w] = 1.0/(1.0/new_weight[w] + noise**2)
 
         return new_weight
 
