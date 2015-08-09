@@ -665,7 +665,6 @@ class Bootstrapper(object):
                                                   guess=guess,
                                                   prior=prior,
                                                   ntry=ntry)
-        res=self.max_fitter.get_result()
 
     def fit_metacal_max(self,
                         psf_model,
