@@ -14,6 +14,7 @@ See TODO in the code
 """
 from __future__ import print_function
 import numpy
+from numpy import zeros, ones, newaxis
 from .jacobian import Jacobian, UnitJacobian
 from .observation import Observation
 from .shape import Shape
@@ -334,3 +335,91 @@ class Metacal(object):
 def _check_shape(shape):
     if not isinstance(shape, Shape):
         raise TypeError("shape must be of type ngmix.Shape")
+
+def jackknife_shear(g, gsens, do_ring=False, chunksize=1, weights=None):
+    """
+    get the shear lensfit style
+
+    for keywords, see help for _lensfit_jackknife
+
+    parameters
+    ----------
+    g: array
+        [N,2] shape measurements
+    gsens: array
+        [N,2,2] shape sensitivity measurements
+    do_ring: bool, optional
+        Was the data in a ring configuration?
+    chunksize: int, optional
+        chunksize for jackknifing
+    weights: array, optional
+        Weights to apply
+    """
+
+    if weights is None:
+        weights=ones(g.shape[0])
+
+    ntot = g.shape[0]
+
+    if do_ring:
+        if ( (ntot % 2) != 0 ):
+            raise  ValueError("expected factor of two, got %d" % ntot)
+
+        npair = ntot/2
+        nchunks = npair/chunksize
+    else:
+        nchunks = ntot/chunksize
+
+    wsum = weights.sum()
+    wa=weights[:,newaxis]
+    waa=weights[:,newaxis,newaxis]
+
+    g_sum = (g*wa).sum(axis=0)
+    gsens_sum = (gsens*waa).sum(axis=0)
+
+    gsens_sum_inv = numpy.linalg.inv(gsens_sum)
+    shear = numpy.dot(gsens_sum_inv, g_sum)
+
+    shears = zeros( (nchunks, 2) )
+    for i in xrange(nchunks):
+
+        if do_ring:
+            beg = i*chunksize*2
+            end = (i+1)*chunksize*2
+        else:
+            beg = i*chunksize
+            end = (i+1)*chunksize
+
+        wtsa = (weights[beg:end])[:,newaxis]
+        wtsaa = (weights[beg:end])[:,newaxis,newaxis]
+
+        tgsum = (g[beg:end,:]*wtsa).sum(axis=0)
+        tgsens_sum = (gsens[beg:end,:,:]*wtsaa).sum(axis=0)
+
+
+        j_g_sum     = g_sum     - tgsum
+        j_gsens_sum = gsens_sum - tgsens_sum
+
+        j_gsens_inv = numpy.linalg.inv(j_gsens_sum)
+
+        shears[i, :] = numpy.dot(j_gsens_inv, j_g_sum)
+
+    shear_cov = zeros( (2,2) )
+    fac = (nchunks-1)/float(nchunks)
+
+    shear_cov[0,0] = fac*( ((shear[0]-shears[:,0])**2).sum() )
+    shear_cov[0,1] = fac*( ((shear[0]-shears[:,0]) * (shear[1]-shears[:,1])).sum() )
+    shear_cov[1,0] = shear_cov[0,1]
+    shear_cov[1,1] = fac*( ((shear[1]-shears[:,1])**2).sum() )
+
+    return {'shear':shear,
+            'shear_cov':shear_cov,
+            'g_sum':g_sum,
+            'gsens_sum':gsens_sum,
+            'gsens_sum_inv':gsens_sum_inv,
+            'shears':shears,
+            'weights':weights,
+            'wsum':wsum}
+
+
+
