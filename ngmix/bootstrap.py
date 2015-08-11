@@ -15,6 +15,7 @@ from numpy import isfinite, median
 from numpy.linalg import LinAlgError
 
 from . import fitting
+from .fitting import print_pars
 from .gmix import GMix, GMixModel, GMixCM
 from .em import GMixEM, prep_image
 from .observation import Observation, ObsList, MultiBandObsList, get_mb_obs
@@ -110,18 +111,10 @@ class Bootstrapper(object):
         return self.round_res
 
 
-    def set_round_s2n(self, max_pars,
-                      ntry=4,
-                      fitter_type='max',
-                      method='simple',
-                      round_prior=None):
+    def set_round_s2n(self, fitter_type='max'):
         """
         set the s/n and (s/n)_T for the round model
-
-        round_prior used for sim fit
         """
-
-        assert method=="simple","method for round s/n must be simple"
 
         if fitter_type=='isample':
             fitter = self.get_isampler()
@@ -133,16 +126,6 @@ class Bootstrapper(object):
         res=fitter.get_result()
 
         pars, pars_lin = self._get_round_pars(res['pars'])
-
-        '''
-        if method=='sim':
-            s2n, Ts2n, psf_T, flags = self._get_s2n_Ts2n_r_sim(fitter,
-                                                               pars, ntry,
-                                                               max_pars,
-                                                               round_prior=round_prior)
-        elif method=='alg':
-            s2n, Ts2n, flags = self._get_s2n_Ts2n_r_alg(gm0_round)
-        '''
 
         s2n, psf_T, flags = self._get_s2n_round(pars)
 
@@ -675,7 +658,8 @@ class Bootstrapper(object):
                         step=0.01,
                         prior=None,
                         psf_ntry=10,
-                        ntry=1):
+                        ntry=1,
+                        verbose=True):
         """
         run metacalibration
 
@@ -693,49 +677,74 @@ class Bootstrapper(object):
             Number of times to retry fitting, default 1
         """
         fits = self._do_metacal_fits(psf_model, gal_model, pars, psf_Tguess, step,
-                                     prior, psf_ntry, ntry, extra_noise=extra_noise)
+                                     prior, psf_ntry, ntry, extra_noise=extra_noise,
+                                     verbose=verbose)
 
-        pars_mean = (fits['pars1p']+
-                     fits['pars1m']+
-                     fits['pars2p']+
-                     fits['pars2m'])/4.0
+        pars=fits['pars']
+        pars_mean = (pars['1p']+
+                     pars['1m']+
+                     pars['2p']+
+                     pars['2m'])/4.0
+
+        pars_cov=fits['pars_cov']
+        pars_cov_mean = (pars_cov['1p']+
+                         pars_cov['1m']+
+                         pars_cov['2p']+
+                         pars_cov['2m'])/4.0
+
+        if verbose:
+            print_pars(pars_mean, front='    mcmean:   ')
 
         sens=zeros( (2,2) ) 
 
         fac = 1.0/(2.0*step)
 
-        sens[0,0] = (fits['pars1p'][2]-fits['pars1m'][2])*fac
-        sens[0,1] = (fits['pars1p'][3]-fits['pars1m'][3])*fac
-        sens[1,0] = (fits['pars2p'][2]-fits['pars2m'][2])*fac
-        sens[1,1] = (fits['pars2p'][3]-fits['pars2m'][3])*fac
+        sens[0,0] = (pars['1p'][2]-pars['1m'][2])*fac
+        sens[0,1] = (pars['1p'][3]-pars['1m'][3])*fac
+        sens[1,0] = (pars['2p'][2]-pars['2m'][2])*fac
+        sens[1,1] = (pars['2p'][3]-pars['2m'][3])*fac
 
-        self.metacal_max_res = {'pars_mean':pars_mean,
-                                'g_mean':pars_mean[2:2+2],
-                                'g_sens':sens,
-                                'step':step}
+        self.metacal_max_res = {'mcal_pars_mean':pars_mean,
+                                'mcal_pars_mean_cov':pars_cov_mean,
+                                'mcal_g_mean':pars_mean[2:2+2],
+                                'mcal_g_sens':sens,
+                                'mcal_s2n_r':fits['s2n_r'],
+                                'mcal_step':step}
 
     def _do_metacal_fits(self, psf_model, gal_model, pars, 
-                         psf_Tguess, step, prior, psf_ntry, ntry, extra_noise=None):
+                         psf_Tguess, step, prior, psf_ntry, ntry, 
+                         extra_noise=None, verbose=False):
         obsdict = self._get_metacal_obslist(step, extra_noise=extra_noise)
 
         bdict={}
-        bdict['1p'] = Bootstrapper(obsdict['obs1p'], use_logpars=self.use_logpars)
-        bdict['1m'] = Bootstrapper(obsdict['obs1m'], use_logpars=self.use_logpars)
-        bdict['2p'] = Bootstrapper(obsdict['obs2p'], use_logpars=self.use_logpars)
-        bdict['2m'] = Bootstrapper(obsdict['obs2m'], use_logpars=self.use_logpars)
-
-        for key in bdict:
-            boot = bdict[key]
+        for key in ['1p','1m','2p','2m']:
+            boot = Bootstrapper(obsdict[key], use_logpars=self.use_logpars)
             boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry)
             boot.fit_max(gal_model, pars, prior=prior, ntry=ntry)
+            boot.set_round_s2n()
+            
+            if verbose:
+                print_pars(boot.get_max_fitter().get_result()['pars'],front='    mcpars:   ')
 
-        res={}
+            bdict[key] = boot
+
+        res={'pars':{}, 'pars_cov':{}}
+        s2n_r_mean = 0.0
+
         for key in bdict:
-            rkey = 'pars%s' % key
-            pars = bdict[key].get_max_fitter().get_result()['pars']
 
-            res[rkey] = pars
+            boot = bdict[key]
 
+            tres=boot.get_max_fitter().get_result()
+
+            res['pars'][key] = tres['pars']
+            res['pars_cov'][key] = tres['pars_cov']
+
+            rres=boot.get_round_result()
+
+            s2n_r_mean += rres['s2n_r']
+
+        res['s2n_r'] = s2n_r_mean
         return res
 
     def _get_metacal_obslist(self, step, extra_noise=None):
@@ -761,13 +770,13 @@ class Bootstrapper(object):
         obs2p = mc.get_obs_galshear(sh2p)
         obs2m = mc.get_obs_galshear(sh2m)
 
-        obs_dict = {'obs1p':obs1p,
-                    'obs1m':obs1m,
-                    'obs2p':obs2p,
-                    'obs2m':obs2m}
+        obs_dict = {'1p':obs1p,
+                    '1m':obs1m,
+                    '2p':obs2p,
+                    '2m':obs2m}
 
         if extra_noise is not None:
-            noise_image = self._get_noise_image(obs_dict['obs1p'], extra_noise)
+            noise_image = self._get_noise_image(obs_dict['1p'], extra_noise)
 
             for key in obs_dict:
                 obs=obs_dict[key]
