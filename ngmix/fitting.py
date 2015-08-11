@@ -18,7 +18,7 @@ from numpy import exp, sqrt, where, log, log10, isfinite
 from numpy import linalg
 from numpy.linalg import LinAlgError
 import time
-from pprint import pprint
+from pprint import pprint, pformat
 
 from . import gmix
 from .gmix import GMix, GMixList, MultiBandGMixList
@@ -105,6 +105,20 @@ class FitterBase(object):
 
         if 'aperture' in keys:
             self.set_aperture(keys['aperture'])
+
+    def __repr__(self):
+        rep="""
+    %(model)s
+    %(extra)s
+        """
+        if hasattr(self,'_result'):
+            extra=pformat(self._result)
+        else:
+            extra=''
+
+        rep=rep%{'model':self.model_name,
+                 'extra':extra}
+        return rep
 
     def get_result(self):
         """
