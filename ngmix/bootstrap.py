@@ -129,9 +129,12 @@ class Bootstrapper(object):
 
         s2n, psf_T, flags = self._get_s2n_round(pars)
 
+        T_r = pars_lin[4]
         self.round_res={'pars':pars,
+                        'pars_lin':pars_lin,
                         'flags':flags,
                         's2n_r':s2n,
+                        'T_r':T_r,
                         'psf_T_r':psf_T}
 
     def _get_s2n_round(self, pars_round):
@@ -709,6 +712,8 @@ class Bootstrapper(object):
                                 'mcal_g_mean':pars_mean[2:2+2],
                                 'mcal_g_sens':sens,
                                 'mcal_s2n_r':fits['s2n_r'],
+                                'mcal_T_r':fits['T_r'],
+                                'mcal_psf_T_r':fits['psf_T_r'],
                                 'mcal_step':step}
 
     def _do_metacal_fits(self, psf_model, gal_model, pars, 
@@ -724,14 +729,17 @@ class Bootstrapper(object):
             boot.set_round_s2n()
             
             if verbose:
-                print_pars(boot.get_max_fitter().get_result()['pars'],front='    mcpars:   ')
+                print_pars(boot.get_max_fitter().get_result()['pars'],
+                           front='    mcpars:   ')
 
             bdict[key] = boot
 
         res={'pars':{}, 'pars_cov':{}}
-        s2n_r_mean = 0.0
+        s2n_r_mean   = 0.0
+        T_r_mean     = 0.0
+        psf_T_r_mean = 0.0
 
-        for key in bdict:
+        for i,key in enumerate(bdict):
 
             boot = bdict[key]
 
@@ -742,9 +750,13 @@ class Bootstrapper(object):
 
             rres=boot.get_round_result()
 
-            s2n_r_mean += rres['s2n_r']
+            s2n_r_mean   += rres['s2n_r']
+            T_r_mean     += rres['T_r']
+            psf_T_r_mean += rres['psf_T_r']
 
-        res['s2n_r'] = s2n_r_mean
+        res['s2n_r']   = s2n_r_mean/4.0
+        res['T_r']     = T_r_mean/4.0
+        res['psf_T_r'] = psf_T_r_mean/4.0
         return res
 
     def _get_metacal_obslist(self, step, extra_noise=None):

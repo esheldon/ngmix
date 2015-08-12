@@ -325,16 +325,7 @@ class LensfitSensitivity(object):
         self._g_sens=g_sens
 
 
-def lensfit_jackknife(g, gsens, do_ring=False,
-                      gsens_alt=None,
-                      chunksize=1,
-                      get_sums=False,
-                      get_shears=False,
-                      weights=None,
-                      progress=False,
-                      show=False,
-                      eps=None,
-                      png=None):
+def lensfit_jackknife(g, gsens, do_ring=False, **keys):
     """
     get the shear lensfit style
 
@@ -368,7 +359,7 @@ def lensfit_jackknife(g, gsens, do_ring=False,
     if do_ring:
         return _lensfit_jackknife_ring(g, gsens,**keys)
     else:
-        return _lensfit_jackknife(g, gsens,**keys)
+        return _lensfit_jackknife(g, gsens, **keys)
 
 def _lensfit_jackknife(g, gsens,
                        gsens_alt=None,
