@@ -710,6 +710,7 @@ class Bootstrapper(object):
         self.metacal_max_res = {'mcal_pars_mean':pars_mean,
                                 'mcal_pars_mean_cov':pars_cov_mean,
                                 'mcal_g_mean':pars_mean[2:2+2],
+                                'mcal_g_cov':pars_cov_mean[2:2+2, 2:2+2],
                                 'mcal_g_sens':sens,
                                 'mcal_s2n_r':fits['s2n_r'],
                                 'mcal_T_r':fits['T_r'],
