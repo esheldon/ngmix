@@ -2393,6 +2393,9 @@ class GMixND(object):
         """
         from sklearn.mixture import GMM
 
+        if len(data.shape) == 1:
+            data = data[:,numpy.newaxis]
+
         print("ngauss:   ",ngauss)
         print("n_iter:   ",n_iter)
         print("min_covar:",min_covar)
@@ -2438,7 +2441,8 @@ class GMixND(object):
         (x-xmean) icovar (x-xmean)
         """
         dolog=1
-        pars=numpy.asanyarray(pars_in, dtype='f8')
+        #pars=numpy.asanyarray(pars_in, dtype='f8')
+        pars=numpy.array(pars_in, dtype='f8', ndmin=1, order='C')
         lnp=_gmix.gmixnd_get_prob_scalar(self.log_pnorms,
                                          self.means,
                                          self.icovars,
@@ -2452,7 +2456,7 @@ class GMixND(object):
         (x-xmean) icovar (x-xmean)
         """
         dolog=0
-        pars=numpy.asanyarray(pars_in, dtype='f8')
+        pars=numpy.array(pars_in, dtype='f8', ndmin=1, order='C')
         p=_gmix.gmixnd_get_prob_scalar(self.log_pnorms,
                                        self.means,
                                        self.icovars,
