@@ -522,7 +522,7 @@ class Bootstrapper(object):
         else:
             print("        failed to find cen")
 
-    def fit_psfs(self, psf_model, Tguess, Tguess_key=None, skip_failed=True, ntry=4, fit_pars={}, skip_already_done=True):
+    def fit_psfs(self, psf_model, Tguess, Tguess_key=None, skip_failed=True, ntry=4, fit_pars=None, skip_already_done=True):
         """
         Fit all psfs.  If the psf observations already have a gmix
         then this step is not necessary
@@ -623,7 +623,8 @@ class Bootstrapper(object):
 
         ngauss=get_em_ngauss(psf_model)
         em_pars={'tol': 1.0e-6, 'maxiter': 50000}
-        em_pars.update(fit_pars)
+        if fit_pars is not None:
+            em_pars.update(fit_pars)
         
         runner=EMRunner(psf_obs, Tguess, ngauss, em_pars)
         runner.go(ntry=ntry)
@@ -632,7 +633,10 @@ class Bootstrapper(object):
     
     def _fit_one_psf_max(self, psf_obs, psf_model, Tguess, ntry, fit_pars):
         lm_pars={'maxfev': 4000}
-        lm_pars.update(fit_pars)
+
+        if fit_pars is not None:
+            lm_pars.update(fit_pars)
+
         runner=PSFRunner(psf_obs, psf_model, Tguess, lm_pars)
         runner.go(ntry=ntry)
 
@@ -657,6 +661,7 @@ class Bootstrapper(object):
                         gal_model,
                         pars,
                         psf_Tguess,
+                        psf_fit_pars=None,
                         extra_noise=None,
                         step=0.01,
                         prior=None,
@@ -680,7 +685,9 @@ class Bootstrapper(object):
             Number of times to retry fitting, default 1
         """
         fits = self._do_metacal_fits(psf_model, gal_model, pars, psf_Tguess, step,
-                                     prior, psf_ntry, ntry, extra_noise=extra_noise,
+                                     prior, psf_ntry, ntry,
+                                     psf_fit_pars=psf_fit_pars,
+                                     extra_noise=extra_noise,
                                      verbose=verbose)
 
         pars=fits['pars']
@@ -719,13 +726,14 @@ class Bootstrapper(object):
 
     def _do_metacal_fits(self, psf_model, gal_model, pars, 
                          psf_Tguess, step, prior, psf_ntry, ntry, 
+                         psf_fit_pars=None,
                          extra_noise=None, verbose=False):
         obsdict = self._get_metacal_obslist(step, extra_noise=extra_noise)
 
         bdict={}
         for key in ['1p','1m','2p','2m']:
             boot = Bootstrapper(obsdict[key], use_logpars=self.use_logpars)
-            boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry)
+            boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry, fit_pars=psf_fit_pars)
             boot.fit_max(gal_model, pars, prior=prior, ntry=ntry)
             boot.set_round_s2n()
             

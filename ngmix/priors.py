@@ -4463,19 +4463,35 @@ class ZDisk2D(_gmix.ZDisk2D):
 
         super(ZDisk2D,self).__init__(radius)
 
-    def sample1d(self, n):
+    def sample1d(self, n=None):
         """
         Get samples in 1-d radius
         """
+
+        if n is None:
+            n=1
+            is_scalar=True
+        else:
+            is_scalar=False
+
         r2 = self.radius_sq*randu(n)
 
         r = sqrt(r2)
+
+        if is_scalar:
+            r=r[0]
+
         return r
 
-    def sample2d(self, n):
+    def sample2d(self, n=None):
         """
         Get samples.  Send no args to get a scalar.
         """
+        if n is None:
+            n=1
+            is_scalar=True
+        else:
+            is_scalar=False
 
         radius=self.sample1d(n)
 
@@ -4483,6 +4499,10 @@ class ZDisk2D(_gmix.ZDisk2D):
 
         x=radius*cos(theta)
         y=radius*sin(theta)
+
+        if is_scalar:
+            x=x[0]
+            y=y[0]
 
         return x,y
 
