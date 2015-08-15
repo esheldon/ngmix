@@ -445,7 +445,7 @@ class GPriorBase(object):
         return g
 
 
-    def sample2d(self, nrand, maxguess=0.1):
+    def sample2d(self, nrand=None, maxguess=0.1):
         """
         Get random g1,g2 values by first drawing
         from the 1-d distribution
@@ -456,11 +456,22 @@ class GPriorBase(object):
             Number to generate
         """
 
+        if nrand is None:
+            nrand=1
+            is_scalar=True
+        else:
+            is_scalar=False
+
         grand=self.sample1d(nrand,maxguess=maxguess)
         theta = randu(nrand)*2*numpy.pi
         twotheta = 2*theta
         g1rand = grand*numpy.cos(twotheta)
         g2rand = grand*numpy.sin(twotheta)
+
+        if is_scalar:
+            g1rand=g1rand[0]
+            g2rand=g2rand[0]
+
         return g1rand, g2rand
 
     def sample2d_brute(self, nrand):
