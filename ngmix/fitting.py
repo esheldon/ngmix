@@ -1710,6 +1710,11 @@ class LMCoellip(LMSimple):
         if self.nband != 1:
             raise ValueError("MaxCoellip only supports one band")
 
+        #                 c1 + c2 + g + Ts     + Fs
+        self.n_prior_pars=1  + 1  + 1 + ngauss + ngauss
+
+        self.fdiff_size=self.totpix + self.n_prior_pars
+
         # over-write the band pars created by MaxSimple
         self._band_pars=zeros(self.npars)
 

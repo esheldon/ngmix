@@ -16,7 +16,7 @@ from numpy.linalg import LinAlgError
 
 from . import fitting
 from .fitting import print_pars
-from .gmix import GMix, GMixModel, GMixCM
+from .gmix import GMix, GMixModel, GMixCM, get_coellip_npars
 from .em import GMixEM, prep_image
 from .observation import Observation, ObsList, MultiBandObsList, get_mb_obs
 from .priors import srandu
@@ -603,6 +603,8 @@ class Bootstrapper(object):
 
         if 'em' in psf_model:
             runner=self._fit_one_psf_em(psf_obs, psf_model, Tguess, ntry, fit_pars)
+        elif 'coellip' in psf_model:
+            runner=self._fit_one_psf_coellip(psf_obs, psf_model, Tguess, ntry, fit_pars)
         else:
             runner=self._fit_one_psf_max(psf_obs, psf_model, Tguess, ntry, fit_pars)
 
@@ -631,6 +633,20 @@ class Bootstrapper(object):
 
         return runner
     
+    def _fit_one_psf_coellip(self, psf_obs, psf_model, Tguess, ntry, fit_pars):
+
+        ngauss=get_coellip_ngauss(psf_model)
+        lm_pars={'maxfev': 4000}
+
+        if fit_pars is not None:
+            lm_pars.update(fit_pars)
+        
+        runner=PSFRunnerCoellip(psf_obs, Tguess, ngauss, lm_pars)
+        runner.go(ntry=ntry)
+
+        return runner
+    
+ 
     def _fit_one_psf_max(self, psf_obs, psf_model, Tguess, ntry, fit_pars):
         lm_pars={'maxfev': 4000}
 
@@ -1591,6 +1607,7 @@ class PSFRunner(object):
         Fguess *= self.obs.jacobian.get_scale()**2
         self.guess0=array( [0.0, 0.0, 0.0, 0.0, Tguess, Fguess] )
 
+
 class EMRunner(object):
     """
     wrapper to generate guesses and run the psf fitter a few times
@@ -1708,7 +1725,101 @@ class EMRunner(object):
 
         return GMix(pars=pars)
 
+class PSFRunnerCoellip(object):
+    """
+    wrapper to generate guesses and run the psf fitter a few times
+    """
+    def __init__(self, obs, Tguess, ngauss, lm_pars):
+        self.obs=obs
 
+        self.ngauss=ngauss
+        self.npars = get_coellip_npars(ngauss)
+        self.model='coellip'
+        self.lm_pars=lm_pars
+        self.set_guess0(Tguess)
+        self._set_prior()
+
+    def _set_prior(self):
+        from .joint_prior import PriorCoellipSame
+        from .priors import CenPrior, ZDisk2D, TwoSidedErf
+
+        Tguess=self.Tguess
+        Fguess=self.Fguess
+
+        cen_width=2*self.pixel_scale
+        cen_prior = CenPrior(0.0, 0.0, cen_width, cen_width)
+        g_prior=ZDisk2D(1.0)
+        T_prior = TwoSidedErf(0.01*Tguess, 0.001*Tguess, 100*Tguess, Tguess)
+        F_prior = TwoSidedErf(0.01*Fguess, 0.001*Fguess, 100*Fguess, Fguess)
+
+        self.prior=PriorCoellipSame(self.ngauss,
+                                    cen_prior,
+                                    g_prior,
+                                    T_prior,
+                                    F_prior)
+
+    def go(self, ntry=1):
+        from .fitting import LMCoellip
+
+        for i in xrange(ntry):
+            guess=self.get_guess()
+            fitter=LMCoellip(self.obs,self.ngauss,lm_pars=self.lm_pars, prior=self.prior)
+            fitter.go(guess)
+
+            res=fitter.get_result()
+            if res['flags']==0:
+                break
+
+        self.fitter=fitter
+
+    def get_guess(self):
+
+        guess=numpy.zeros(self.npars)
+
+        guess[0:0+2] = 0.01*srandu(2)
+        guess[2:2+2] = 0.05*srandu(2)
+
+        fac=0.01
+        if self.ngauss==1:
+            guess[4] = self.Tguess*(1.0 + 0.1*srandu())
+            guess[5] = self.Fguess*(1.0 + 0.1*srandu())
+        elif self.ngauss==2:
+            guess[4] = self.Tguess*_moffat2_fguess[0]*(1.0 + fac*srandu())
+            guess[5] = self.Tguess*_moffat2_fguess[1]*(1.0 + fac*srandu())
+
+            guess[6] = self.Fguess*_moffat2_pguess[0]*(1.0 + fac*srandu())
+            guess[7] = self.Fguess*_moffat2_pguess[1]*(1.0 + fac*srandu())
+
+        elif self.ngauss==3:
+            guess[4] = self.Tguess*_moffat3_fguess[0]*(1.0 + fac*srandu())
+            guess[5] = self.Tguess*_moffat3_fguess[1]*(1.0 + fac*srandu())
+            guess[6] = self.Tguess*_moffat3_fguess[2]*(1.0 + fac*srandu())
+
+            guess[7] = self.Fguess*_moffat3_pguess[0]*(1.0 + fac*srandu())
+            guess[8] = self.Fguess*_moffat3_pguess[1]*(1.0 + fac*srandu())
+            guess[9] = self.Fguess*_moffat3_pguess[2]*(1.0 + fac*srandu())
+
+        else:
+            raise RuntimeError("ngauss should be 1,2,3")
+
+        return guess
+
+    def set_guess0(self, Tguess):
+
+        self.pixel_scale = self.obs.jacobian.get_scale()
+        self.Tguess=Tguess
+        Fguess = self.obs.image.sum()
+        Fguess *= self.pixel_scale**2
+
+        self.Fguess=Fguess
+
+_moffat2_pguess=array([0.5, 0.5])
+_moffat2_fguess=array([0.48955064,  1.50658978])
+
+_moffat3_pguess=array([ 0.27559669,  0.55817131,  0.166232  ])
+_moffat3_fguess=array([ 0.36123609,  0.8426139,   2.58747785])
+#_moffat3_pguess=array([0.45, 0.45, 0.1])
+#_moffat3_fguess=array([0.48955064,  1.50658978, 3.0])
 
 class MaxRunner(object):
     """
@@ -2021,6 +2132,11 @@ class CompositeMaxRunnerRound(CompositeMaxRunner,RoundRunnerBase):
 def get_em_ngauss(name):
     ngauss=int( name[2:] )
     return ngauss
+
+def get_coellip_ngauss(name):
+    ngauss=int( name[7:] )
+    return ngauss
+
 
 _em2_fguess =array([0.5793612389470884,1.621860687127999])
 _em2_pguess =array([0.596510042804182,0.4034898268889178])

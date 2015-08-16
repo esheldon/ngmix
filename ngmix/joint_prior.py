@@ -1249,6 +1249,78 @@ class PriorSimpleSep(object):
         rep='\n'.join(reps)
         return rep
 
+class PriorCoellipSame(PriorSimpleSep):
+    def __init__(self,
+                 ngauss,
+                 cen_prior,
+                 g_prior,
+                 T_prior,
+                 F_prior):
+
+        super(PriorCoellipSame,self).__init__(cen_prior,
+                                              g_prior,
+                                              T_prior,
+                                              F_prior)
+
+        self.ngauss=ngauss
+
+    def get_lnprob_scalar(self, pars, **keys):
+        """
+        log probability for scalar input (meaning one point)
+        """
+
+        ngauss=self.ngauss
+
+        lnp = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
+        lnp += self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
+
+        for i in xrange(ngauss):
+            lnp += self.T_prior.get_lnprob_scalar(pars[4+i], **keys)
+
+        F_prior=self.F_priors[0]
+        for i in xrange(ngauss):
+            lnp += F_prior.get_lnprob_scalar(pars[4+ngauss+i], **keys)
+
+        return lnp
+
+    def fill_fdiff(self, pars, fdiff, **keys):
+        """
+        set sqrt(-2ln(p)) ~ (model-data)/err
+        """
+
+        ngauss=self.ngauss
+
+        index=0
+
+        #fdiff[index] = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
+
+        lnp1,lnp2=self.cen_prior.get_lnprob_scalar_sep(pars[0],pars[1])
+
+        fdiff[index] = lnp1
+        index += 1
+        fdiff[index] = lnp2
+        index += 1
+
+        fdiff[index] = self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
+        index += 1
+
+        for i in xrange(ngauss):
+            fdiff[index] =  self.T_prior.get_lnprob_scalar(pars[4+i], **keys)
+            index += 1
+
+        F_prior=self.F_priors[0]
+        for i in xrange(ngauss):
+            fdiff[index] = F_prior.get_lnprob_scalar(pars[4+ngauss+i], **keys)
+            index += 1
+
+        chi2 = -2*fdiff[0:index]
+        chi2.clip(min=0.0, max=None, out=chi2)
+        fdiff[0:index] = sqrt(chi2)
+
+        return index
+
+
+
 class PriorSimpleSepRound(PriorSimpleSep):
     """
     Separate priors on each parameter, no shape
