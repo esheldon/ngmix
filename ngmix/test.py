@@ -4933,7 +4933,7 @@ def test_moms_many(num, method='lm', use_errors=False, eps=None,show=False, **ke
         if show:
             tab.show()
 
-def fit_moffat_many(ngauss, n=100, g1=0.05, g2=0.05, **kw):
+def fit_moffat_many(ngauss, n=100, g1=0.05, g2=0.05, verbose=False, **kw):
     g1vals=numpy.zeros(n)
     g2vals=numpy.zeros(n)
 
@@ -4943,6 +4943,9 @@ def fit_moffat_many(ngauss, n=100, g1=0.05, g2=0.05, **kw):
         res=mf.get_result()
         g1vals[i] = res['pars'][2]
         g2vals[i] = res['pars'][3]
+
+        if verbose:
+            print('%s/%s nfev: %d' % (i+1,n,res['nfev']))
 
     g1m=g1vals.mean()
     g1e=g1vals.std()/numpy.sqrt(n)
@@ -4964,7 +4967,7 @@ def fit_moffat_many(ngauss, n=100, g1=0.05, g2=0.05, **kw):
 
 
 class MoffatFitter(object):
-    def __init__(self, ngauss, beta=3.5, r50=40.0, s2n=10000.0, g1=0.0, g2=0.05, nsub=1):
+    def __init__(self, ngauss, beta=3.5, r50=40.0, s2n=1.e5, g1=0.0, g2=0.05, nsub=1):
         self.ngauss=ngauss
         self.beta=beta
         self.r50=r50
@@ -4981,6 +4984,7 @@ class MoffatFitter(object):
         self._fit_one_gauss()
         self._set_prior()
         self._fit_n_gauss(ntry)
+        self._add_rel()
 
     def show(self):
         if hasattr(self,'fitter'):
@@ -4988,17 +4992,8 @@ class MoffatFitter(object):
             print_pars(res['pars'], front="    best fit:",fmt='%g')
             print_pars(res['pars_err'], front="    best err:",fmt='%g')
 
-            pvals = res['pars'][4+self.ngauss:].copy()
-            Tvals = res['pars'][4:4+self.ngauss].copy()
-
-            prel = pvals/pvals.sum()
-
-            gm=self.fitter.get_gmix()
-            T=gm.get_T()
-            Trel = Tvals/T
-
-            print_pars(prel, front="    prel:", fmt='%g')
-            print_pars(Trel, front="    Trel:", fmt='%g')
+            print_pars(res['prel'], front="    prel:", fmt='%g')
+            print_pars(res['Trel'], front="    Trel:", fmt='%g')
 
     def compare(self, show=False):
         import images
@@ -5035,6 +5030,21 @@ class MoffatFitter(object):
 
         self.fitter=fitter
 
+    def _add_rel(self):
+        res=self.fitter.get_result()
+        pvals = res['pars'][4+self.ngauss:].copy()
+        Tvals = res['pars'][4:4+self.ngauss].copy()
+
+        prel = pvals/pvals.sum()
+
+        gm=self.fitter.get_gmix()
+        T=gm.get_T()
+        Trel = Tvals/T
+
+        res['prel'] = prel
+        res['Trel'] = Trel
+
+
 
     def _get_guess(self):
 
@@ -5044,7 +5054,7 @@ class MoffatFitter(object):
         guess[2:2+2] = 0.01*srandu(2)
 
 
-        fac=0.01
+        fac=0.05
         if self.ngauss==2:
             pguess=array([0.5, 0.5])
             fguess=array([0.48955064,  1.50658978])
@@ -5058,8 +5068,10 @@ class MoffatFitter(object):
 
         elif self.ngauss==3:
 
-            pguess=array([ 0.27559669,  0.55817131,  0.166232  ])
-            fguess=array([ 0.36123609,  0.8426139,   2.58747785])
+            #pguess=array([ 0.27559669,  0.55817131,  0.166232  ])
+            #fguess=array([ 0.36123609,  0.8426139,   2.58747785])
+            pguess=array([0.22172,  0.573134,  0.205146 ])
+            fguess=array([0.315203,  0.766448,  2.39262])
 
             guess[4] = self.Tguess*fguess[0]*(1.0 + fac*srandu())
             guess[5] = self.Tguess*fguess[1]*(1.0 + fac*srandu())

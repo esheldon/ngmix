@@ -36,7 +36,7 @@ BOOT_WEIGHTS_LOW= 2**5
 
 
 class Bootstrapper(object):
-    def __init__(self, obs, use_logpars=False):
+    def __init__(self, obs, use_logpars=False, intpars=None):
         """
         The data can be mutated: If a PSF fit is performed, the gmix will be
         set for the input PSF observation
@@ -52,6 +52,8 @@ class Bootstrapper(object):
         """
 
         self.use_logpars=use_logpars
+        self.intpars=intpars
+
         self.mb_obs_list_orig = get_mb_obs(obs)
 
         # this will get replaced if fit_psfs is run
@@ -522,7 +524,12 @@ class Bootstrapper(object):
         else:
             print("        failed to find cen")
 
-    def fit_psfs(self, psf_model, Tguess, Tguess_key=None, skip_failed=True, ntry=4, fit_pars=None, skip_already_done=True):
+    def fit_psfs(self, psf_model, Tguess,
+                 Tguess_key=None,
+                 skip_failed=True,
+                 ntry=4,
+                 fit_pars=None,
+                 skip_already_done=True):
         """
         Fit all psfs.  If the psf observations already have a gmix
         then this step is not necessary
@@ -602,6 +609,7 @@ class Bootstrapper(object):
         """
 
         if 'em' in psf_model:
+            assert self.intpars is None,"sub-pixel only for max like fitting"
             runner=self._fit_one_psf_em(psf_obs, psf_model, Tguess, ntry, fit_pars)
         elif 'coellip' in psf_model:
             runner=self._fit_one_psf_coellip(psf_obs, psf_model, Tguess, ntry, fit_pars)
@@ -641,7 +649,7 @@ class Bootstrapper(object):
         if fit_pars is not None:
             lm_pars.update(fit_pars)
         
-        runner=PSFRunnerCoellip(psf_obs, Tguess, ngauss, lm_pars)
+        runner=PSFRunnerCoellip(psf_obs, Tguess, ngauss, lm_pars, intpars=self.intpars)
         runner.go(ntry=ntry)
 
         return runner
@@ -653,7 +661,7 @@ class Bootstrapper(object):
         if fit_pars is not None:
             lm_pars.update(fit_pars)
 
-        runner=PSFRunner(psf_obs, psf_model, Tguess, lm_pars)
+        runner=PSFRunner(psf_obs, psf_model, Tguess, lm_pars, intpars=self.intpars)
         runner.go(ntry=ntry)
 
         return runner
@@ -944,6 +952,7 @@ class Bootstrapper(object):
 
         runner=MaxRunner(obs, gal_model, pars, guesser,
                          prior=prior,
+                         intpars=self.intpars,
                          use_logpars=self.use_logpars)
 
         runner.go(ntry=ntry)
@@ -1568,8 +1577,10 @@ class PSFRunner(object):
     """
     wrapper to generate guesses and run the psf fitter a few times
     """
-    def __init__(self, obs, model, Tguess, lm_pars):
+    def __init__(self, obs, model, Tguess, lm_pars, intpars=None):
+
         self.obs=obs
+        self.intpars=intpars
 
         mess="psf model should be turb or gauss,got '%s'" % model
         assert model in ['turb','gauss'],mess
@@ -1581,9 +1592,15 @@ class PSFRunner(object):
     def go(self, ntry=1):
         from .fitting import LMSimple
 
+        if self.intpars is not None:
+            nsub=self.intpars['nsub']
+        else:
+            nsub=1
+
+
         for i in xrange(ntry):
             guess=self.get_guess()
-            fitter=LMSimple(self.obs,self.model,lm_pars=self.lm_pars)
+            fitter=LMSimple(self.obs,self.model,lm_pars=self.lm_pars,nsub=nsub)
             fitter.go(guess)
 
             res=fitter.get_result()
@@ -1729,8 +1746,10 @@ class PSFRunnerCoellip(object):
     """
     wrapper to generate guesses and run the psf fitter a few times
     """
-    def __init__(self, obs, Tguess, ngauss, lm_pars):
+    def __init__(self, obs, Tguess, ngauss, lm_pars, intpars=None):
+
         self.obs=obs
+        self.intpars=intpars
 
         self.ngauss=ngauss
         self.npars = get_coellip_npars(ngauss)
@@ -1761,9 +1780,15 @@ class PSFRunnerCoellip(object):
     def go(self, ntry=1):
         from .fitting import LMCoellip
 
+        if self.intpars is not None:
+            nsub=self.intpars['nsub']
+        else:
+            nsub=1
+
         for i in xrange(ntry):
             guess=self.get_guess()
-            fitter=LMCoellip(self.obs,self.ngauss,lm_pars=self.lm_pars, prior=self.prior)
+            fitter=LMCoellip(self.obs,self.ngauss,lm_pars=self.lm_pars, prior=self.prior,
+                             nsub=nsub)
             fitter.go(guess)
 
             res=fitter.get_result()
@@ -1825,8 +1850,12 @@ class MaxRunner(object):
     """
     wrapper to generate guesses and run the fitter a few times
     """
-    def __init__(self, obs, model, max_pars, guesser, prior=None, use_logpars=False):
+    def __init__(self, obs, model, max_pars, guesser, prior=None,
+                 intpars=None,
+                 use_logpars=False):
+
         self.obs=obs
+        self.intpars=intpars
 
         self.max_pars=max_pars
         self.method=max_pars['method']
@@ -1855,6 +1884,11 @@ class MaxRunner(object):
 
     def _go_lm(self, ntry=1):
         
+        if self.intpars is not None:
+            nsub=self.intpars['nsub']
+        else:
+            nsub=1
+
         fitclass=self._get_lm_fitter_class()
 
         for i in xrange(ntry):
@@ -1863,6 +1897,7 @@ class MaxRunner(object):
                             self.model,
                             lm_pars=self.send_pars,
                             use_logpars=self.use_logpars,
+                            nsub=nsub,
                             prior=self.prior)
 
             fitter.go(guess)
