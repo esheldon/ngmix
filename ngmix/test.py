@@ -4933,4 +4933,234 @@ def test_moms_many(num, method='lm', use_errors=False, eps=None,show=False, **ke
         if show:
             tab.show()
 
+def fit_moffat_many(ngauss, n=100, g1=0.05, g2=0.05, **kw):
+    g1vals=numpy.zeros(n)
+    g2vals=numpy.zeros(n)
+
+    for i in xrange(n):
+        mf=MoffatFitter(ngauss, **kw)
+        mf.go()
+        res=mf.get_result()
+        g1vals[i] = res['pars'][2]
+        g2vals[i] = res['pars'][3]
+
+    g1m=g1vals.mean()
+    g1e=g1vals.std()/numpy.sqrt(n)
+    g2m=g2vals.mean()
+    g2e=g2vals.std()/numpy.sqrt(n)
+
+    print("g1: %g +/- %g" % (g1m,g1e))
+    if g1 != 0.0:
+        fd=g1m/g1-1
+        fderr=g1e/g1
+        print("    fracdiff: %g +/- %g" % (fd,fderr))
+
+
+    print("g2: %g +/- %g" % (g2m,g2e))
+    if g2 != 0.0:
+        fd=g2m/g2-1
+        fderr=g2e/g2
+        print("    fracdiff: %g +/- %g" % (fd,fderr))
+
+
+class MoffatFitter(object):
+    def __init__(self, ngauss, beta=3.5, r50=40.0, s2n=10000.0, g1=0.0, g2=0.05, nsub=1):
+        self.ngauss=ngauss
+        self.beta=beta
+        self.r50=r50
+        self.s2n=s2n
+        self.noise=1.0
+        self.nsub=nsub
+
+        self.g1=g1
+        self.g2=g2
+
+        self._make_moffat()
+
+    def go(self, ntry=10):
+        self._fit_one_gauss()
+        self._set_prior()
+        self._fit_n_gauss(ntry)
+
+    def show(self):
+        if hasattr(self,'fitter'):
+            res=self.get_result()
+            print_pars(res['pars'], front="    best fit:",fmt='%g')
+            print_pars(res['pars_err'], front="    best err:",fmt='%g')
+
+            pvals = res['pars'][4+self.ngauss:].copy()
+            Tvals = res['pars'][4:4+self.ngauss].copy()
+
+            prel = pvals/pvals.sum()
+
+            gm=self.fitter.get_gmix()
+            T=gm.get_T()
+            Trel = Tvals/T
+
+            print_pars(prel, front="    prel:", fmt='%g')
+            print_pars(Trel, front="    Trel:", fmt='%g')
+
+    def compare(self, show=False):
+        import images
+        gm=self.fitter.get_gmix()
+        im=gm.make_image(self.image.shape,
+                         jacobian=self.obs.jacobian)
+        plt=images.compare_images(self.image,
+                                  im,
+                                  label1='image',
+                                  label2='model',
+                                  show=show)
+        return plt
+
+    def get_result(self):
+        return self.fitter.get_result()
+
+    def _fit_n_gauss(self, ntry):
+        from .fitting import LMCoellip
+
+        for i in xrange(ntry):
+            guess=self._get_guess()
+            fitter=LMCoellip(self.obs,
+                             self.ngauss,
+                             nsub=self.nsub,
+                             prior=self.prior)
+            fitter.go(guess)
+
+            res=fitter.get_result()
+            if res['flags']==0:
+                break
+
+        if res['flags'] != 0:
+            raise RuntimeError("failed to fit")
+
+        self.fitter=fitter
+
+
+    def _get_guess(self):
+
+        guess=numpy.zeros(4 + 2*self.ngauss)
+
+        guess[0:0+2] = 0.01*srandu(2)
+        guess[2:2+2] = 0.01*srandu(2)
+
+
+        fac=0.01
+        if self.ngauss==2:
+            pguess=array([0.5, 0.5])
+            fguess=array([0.48955064,  1.50658978])
+
+            guess[4] = self.Tguess*fguess[0]*(1.0 + fac*srandu())
+            guess[5] = self.Tguess*fguess[1]*(1.0 + fac*srandu())
+
+            guess[6] = self.Fguess*pguess[0]*(1.0 + fac*srandu())
+            guess[7] = self.Fguess*pguess[1]*(1.0 + fac*srandu())
+
+
+        elif self.ngauss==3:
+
+            pguess=array([ 0.27559669,  0.55817131,  0.166232  ])
+            fguess=array([ 0.36123609,  0.8426139,   2.58747785])
+
+            guess[4] = self.Tguess*fguess[0]*(1.0 + fac*srandu())
+            guess[5] = self.Tguess*fguess[1]*(1.0 + fac*srandu())
+            guess[6] = self.Tguess*fguess[2]*(1.0 + fac*srandu())
+
+            guess[7] = self.Fguess*pguess[0]*(1.0 + fac*srandu())
+            guess[8] = self.Fguess*pguess[1]*(1.0 + fac*srandu())
+            guess[9] = self.Fguess*pguess[2]*(1.0 + fac*srandu())
+
+        elif self.ngauss==4:
+            pguess=array([ 0.2,  0.5,  0.2, 0.1])
+            fguess=array([ 0.36123609,  0.8426139,   2.58747785, 4.0])
+
+            guess[4] = self.Tguess*fguess[0]*(1.0 + fac*srandu())
+            guess[5] = self.Tguess*fguess[1]*(1.0 + fac*srandu())
+            guess[6] = self.Tguess*fguess[2]*(1.0 + fac*srandu())
+            guess[7] = self.Tguess*fguess[3]*(1.0 + fac*srandu())
+
+            guess[8] = self.Fguess*pguess[0]*(1.0 + fac*srandu())
+            guess[9] = self.Fguess*pguess[1]*(1.0 + fac*srandu())
+            guess[10] = self.Fguess*pguess[2]*(1.0 + fac*srandu())
+            guess[11] = self.Fguess*pguess[3]*(1.0 + fac*srandu())
+
+        else:
+            raise ValueError("unsupported ngauss: %d" % self.ngauss)
+
+        return guess
+
+    def _fit_one_gauss(self):
+        from . import em
+        from .gmix import GMixModel
+
+        Tguess = 2*self.r50**2
+
+        pars = [0.0 + 0.01*srandu(),
+                0.0 + 0.01*srandu(),
+                0.0 + 0.01*srandu(),
+                0.0 + 0.01*srandu(),
+                Tguess*(1 + 0.1*srandu()),
+                1.0*(1.0 + 0.05*srandu())]
+        guess = GMixModel(pars,'gauss')
+
+        fitter=em.fit_em(self.obs, guess, maxiter=4000, tol=1.0e-6)
+        gm=fitter.get_gmix()
+
+        self.Tguess = gm.get_T()
+        self.Fguess = self.image.sum()
+
+    def _make_moffat(self):
+        import galsim
+        from .observation import Observation
+        from .jacobian import UnitJacobian
+
+        base_rng = galsim.BaseDeviate()
+        gauss_noise = galsim.GaussianNoise(base_rng, self.noise)
+
+        dim = 2.*5.*self.r50
+
+        dims = [dim]*2
+
+        gs_obj = galsim.Moffat(beta=self.beta,
+                               half_light_radius=self.r50)
+        gs_obj = gs_obj.shear(g1=self.g1, g2=self.g2)
+
+        cenoff1=0.5*srandu()
+        cenoff2=0.5*srandu()
+        gs_obj = gs_obj.shift(dx=cenoff1,dy=cenoff2)
+
+        gsimage = galsim.ImageD(dims[0], dims[1])
+
+        gs_obj.drawImage(gsimage, scale=1.0)
+
+        gsimage.addNoiseSNR(gauss_noise, self.s2n)
+
+        self.image = gsimage.array.copy()
+
+        weight=self.image*0 + 1.0/self.noise**2
+
+        row=(dim-1.0)/2.0
+        col=(dim-1.0)/2.0
+        jacobian = UnitJacobian(row,col)
+        self.obs = Observation(self.image, weight=weight, jacobian=jacobian)
+
+    def _set_prior(self):
+        from .joint_prior import PriorCoellipSame
+        from .priors import CenPrior, ZDisk2D, TwoSidedErf
+
+        Fguess=self.Fguess
+        Tguess=self.Tguess
+
+        cen_width=1.0
+        cen_prior = CenPrior(0.0, 0.0, cen_width, cen_width)
+        g_prior=ZDisk2D(1.0)
+        T_prior = TwoSidedErf(0.01*Tguess, 0.001*Tguess, 100*Tguess, Tguess)
+        F_prior = TwoSidedErf(0.01*Fguess, 0.001*Fguess, 100*Fguess, Fguess)
+
+        self.prior=PriorCoellipSame(self.ngauss,
+                                    cen_prior,
+                                    g_prior,
+                                    T_prior,
+                                    F_prior)
+
+
 
