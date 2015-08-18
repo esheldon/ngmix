@@ -730,6 +730,7 @@ class Bootstrapper(object):
             print_pars(pars_mean, front='    mcmean:   ')
 
         sens=zeros( (2,2) ) 
+        sens_psf=zeros(2)
 
         fac = 1.0/(2.0*step)
 
@@ -738,11 +739,19 @@ class Bootstrapper(object):
         sens[1,0] = (pars['2p'][2]-pars['2m'][2])*fac
         sens[1,1] = (pars['2p'][3]-pars['2m'][3])*fac
 
+        sens_psf[0] = (pars['1p_psf'][2]-pars['1m_psf'][2])*fac
+        sens_psf[1] = (pars['2p_psf'][3]-pars['2m_psf'][3])*fac
+
+        psf_ellip=fits['psf_ellip']
+        sens_psf[0] *= psf_ellip[0]
+        sens_psf[1] *= psf_ellip[1]
+
         self.metacal_max_res = {'mcal_pars_mean':pars_mean,
                                 'mcal_pars_mean_cov':pars_cov_mean,
                                 'mcal_g_mean':pars_mean[2:2+2],
                                 'mcal_g_cov':pars_cov_mean[2:2+2, 2:2+2],
                                 'mcal_g_sens':sens,
+                                'mcal_psf_sens':sens_psf,
                                 'mcal_s2n_r':fits['s2n_r'],
                                 'mcal_T_r':fits['T_r'],
                                 'mcal_psf_T_r':fits['psf_T_r'],
@@ -755,31 +764,47 @@ class Bootstrapper(object):
         obsdict = self._get_metacal_obslist(step, extra_noise=extra_noise)
 
         bdict={}
-        for key in ['1p','1m','2p','2m']:
-            boot = Bootstrapper(obsdict[key], use_logpars=self.use_logpars)
+        #for key in ['1p','1m','2p','2m']:
+        for key in obsdict:
+            boot = Bootstrapper(obsdict[key], use_logpars=self.use_logpars,intpars=self.intpars)
             boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry, fit_pars=psf_fit_pars)
             boot.fit_max(gal_model, pars, prior=prior, ntry=ntry)
             boot.set_round_s2n()
             
             if verbose:
+                if 'psf' in key:
+                    front='    psf mcpars:'
+                else:
+                    front='        mcpars:'
                 print_pars(boot.get_max_fitter().get_result()['pars'],
-                           front='    mcpars:   ')
+                           front=front)
 
             bdict[key] = boot
 
-        res={'pars':{}, 'pars_cov':{}}
+        res={'pars':{}, 'pars_cov':{}, 'psf_ellip':{}}
         s2n_r_mean   = 0.0
         T_r_mean     = 0.0
         psf_T_r_mean = 0.0
+        psf_ellip_mean = zeros(2)
+        npsf=0
 
         for i,key in enumerate(bdict):
-
             boot = bdict[key]
-
             tres=boot.get_max_fitter().get_result()
 
             res['pars'][key] = tres['pars']
             res['pars_cov'][key] = tres['pars_cov']
+
+            if 'psf' in key:
+                # don't copy averages from psf sheared model
+                continue
+
+            for obslist in boot.mb_obs_list:
+                for obs in obslist:
+                    g1,g2,T=obs.psf.gmix.get_g1g2T()
+                    psf_ellip_mean[0] += g1
+                    psf_ellip_mean[1] += g2
+                    npsf+=1
 
             rres=boot.get_round_result()
 
@@ -790,6 +815,7 @@ class Bootstrapper(object):
         res['s2n_r']   = s2n_r_mean/4.0
         res['T_r']     = T_r_mean/4.0
         res['psf_T_r'] = psf_T_r_mean/4.0
+        res['psf_ellip'] = psf_ellip_mean/npsf
         return res
 
     def _get_metacal_obslist(self, step, extra_noise=None):
@@ -815,15 +841,32 @@ class Bootstrapper(object):
         obs2p = mc.get_obs_galshear(sh2p)
         obs2m = mc.get_obs_galshear(sh2m)
 
-        obs_dict = {'1p':obs1p,
+        obs1p_psf = mc.get_obs_psfshear(sh1p)
+        obs1m_psf = mc.get_obs_psfshear(sh1m)
+        obs2p_psf = mc.get_obs_psfshear(sh2p)
+        obs2m_psf = mc.get_obs_psfshear(sh2m)
+
+ 
+        obs_dict = {
+                    '1p':obs1p,
                     '1m':obs1m,
                     '2p':obs2p,
-                    '2m':obs2m}
+                    '2m':obs2m,
+
+                    '1p_psf':obs1p_psf,
+                    '1m_psf':obs1m_psf,
+                    '2p_psf':obs2p_psf,
+                    '2m_psf':obs2m_psf,
+                   }
 
         if extra_noise is not None:
             noise_image = self._get_noise_image(obs_dict['1p'], extra_noise)
 
             for key in obs_dict:
+                # don't add noise to psf
+                if 'psf' in key:
+                    continue
+
                 obs=obs_dict[key]
 
                 new_weight = self._get_degraded_weight_image(obs, extra_noise)
@@ -1594,6 +1637,7 @@ class PSFRunner(object):
 
         if self.intpars is not None:
             nsub=self.intpars['nsub']
+            #print("psffit using nsub:",nsub)
         else:
             nsub=1
 
@@ -1886,6 +1930,7 @@ class MaxRunner(object):
         
         if self.intpars is not None:
             nsub=self.intpars['nsub']
+            #print("maxfit using nsub:",nsub)
         else:
             nsub=1
 
