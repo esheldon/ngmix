@@ -317,7 +317,7 @@ class GMix(object):
         _gmix.convolve_fill(output._data, gm, psf._data)
         return output
 
-    def make_image(self, dims, nsub=1, jacobian=None):
+    def make_image(self, dims, nsub=1, npoints=None, jacobian=None):
         """
         Render the mixture into a new image
 
@@ -330,7 +330,7 @@ class GMix(object):
         """
 
         image=numpy.zeros(dims, dtype='f8')
-        self._fill_image(image, nsub=nsub, jacobian=jacobian)
+        self._fill_image(image, nsub=nsub, npoints=npoints, jacobian=jacobian)
         return image
 
     def make_round(self):
@@ -371,7 +371,7 @@ class GMix(object):
         return gm
 
 
-    def _fill_image(self, image, nsub=1, jacobian=None):
+    def _fill_image(self, image, npoints=None, nsub=1, jacobian=None):
         """
         Internal routine.  Render the mixture into a new image.  No error
         checking on the image!
@@ -391,9 +391,10 @@ class GMix(object):
                                nsub,
                                jacobian._data)
         else:
-            _gmix.render(gm,
-                         image,
-                         nsub)
+            if npoints is not None:
+                _gmix.render_gauleg(gm, image, npoints)
+            else:
+                _gmix.render(gm, image, nsub)
 
 
     def fill_fdiff(self, obs, fdiff, start=0, nsub=1):
