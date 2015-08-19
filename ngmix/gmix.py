@@ -386,10 +386,16 @@ class GMix(object):
 
         gm=self._get_gmix_data()
         if jacobian is not None:
-            _gmix.render_jacob(gm,
-                               image,
-                               nsub,
-                               jacobian._data)
+            if npoints is not None:
+                _gmix.render_jacob_gauleg(gm,
+                                          image,
+                                          npoints,
+                                          jacobian._data)
+            else:
+                _gmix.render_jacob(gm,
+                                   image,
+                                   nsub,
+                                   jacobian._data)
         else:
             if npoints is not None:
                 _gmix.render_gauleg(gm, image, npoints)

@@ -4967,13 +4967,14 @@ def fit_moffat_many(ngauss, n=100, g1=0.05, g2=0.05, verbose=False, **kw):
 
 
 class MoffatFitter(object):
-    def __init__(self, ngauss, beta=3.5, r50=40.0, s2n=1.e5, g1=0.0, g2=0.05, nsub=1):
+    def __init__(self, ngauss, beta=3.5, r50=40.0, s2n=1.e5, g1=0.0, g2=0.05, nsub=None, npoints=None):
         self.ngauss=ngauss
         self.beta=beta
         self.r50=r50
         self.s2n=s2n
         self.noise=1.0
         self.nsub=nsub
+        self.npoints=npoints
 
         self.g1=g1
         self.g2=g2

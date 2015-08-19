@@ -22,12 +22,12 @@ static PyObject* GMixFatalError;
 #define PYGMIX_DOFFSET 2
 
 // for gauss legendre integration
-static const double xxi5[5] = {-0.906179845938664,  -0.5384693101056831,  0,  0.5384693101056831,  0.906179845938664};
-static const double wwi5[5] = {0.05613434886242515,  0.1133999999968999,  0.1347850723875167,  0.1133999999968999,  0.05613434886242515};
+static const double pygmix_gl_xxi5[5] = {-0.906179845938664,  -0.5384693101056831,  0,  0.5384693101056831,  0.906179845938664};
+static const double pygmix_gl_wwi5[5] = {0.05613434886242515,  0.1133999999968999,  0.1347850723875167,  0.1133999999968999,  0.05613434886242515};
 
-static const double xxi10[10] = {-0.9739065285171717,  -0.8650633666889845,  -0.6794095682990243,  -0.4333953941292472,  -0.1488743389816312,  0.1488743389816312,  0.4333953941292472,  0.6794095682990243,  0.8650633666889845,  0.9739065285171717};
+static const double pygmix_gl_xxi10[10] = {-0.9739065285171717,  -0.8650633666889845,  -0.6794095682990243,  -0.4333953941292472,  -0.1488743389816312,  0.1488743389816312,  0.4333953941292472,  0.6794095682990243,  0.8650633666889845,  0.9739065285171717};
 
-static const double wwi10[10] = {0.06667134430868371,  0.1494513490843985,  0.2190863625152871,  0.2692667193099917,  0.2955242247147529,  0.2955242247147529,  0.2692667193099917,  0.2190863625152871,  0.1494513490843985,  0.06667134430868371};
+static const double pygmix_gl_wwi10[10] = {0.06667134430868371,  0.1494513490843985,  0.2190863625152871,  0.2692667193099917,  0.2955242247147529,  0.2955242247147529,  0.2692667193099917,  0.2190863625152871,  0.1494513490843985,  0.06667134430868371};
 
 
 
@@ -1024,11 +1024,11 @@ static PyObject * PyGMix_render_gauleg(PyObject* self, PyObject* args) {
     }
 
     if (npoints==5) {
-        xxi=xxi5;
-        wwi=wwi5;
+        xxi=pygmix_gl_xxi5;
+        wwi=pygmix_gl_wwi5;
     } else if (npoints==10) {
-        xxi=xxi10;
-        wwi=wwi10;
+        xxi=pygmix_gl_xxi10;
+        wwi=pygmix_gl_wwi10;
     } else {
         PyErr_Format(PyExc_ValueError, "bad npoints: %d. npoints only 5,10 for now", npoints);
         return NULL;
@@ -1079,8 +1079,6 @@ static PyObject * PyGMix_render_gauleg(PyObject* self, PyObject* args) {
             // add to existing values
             ptr=(double*)PyArray_GETPTR2(image_obj,row,col);
 
-            // I don't know where the 4 comes from
-            //tval *= frow1*fcol1/wsum*4.0;
             // since we are averaging, we don't multiply by frow1*fcol1
             tval /= wsum;
 
@@ -1092,6 +1090,106 @@ static PyObject * PyGMix_render_gauleg(PyObject* self, PyObject* args) {
     Py_INCREF(Py_None);
     return Py_None;
 }
+
+static PyObject * PyGMix_render_jacob_gauleg(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    PyObject* image_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    struct PyGMix_Gauss2D *gmix=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    int npoints=0;
+
+    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+    npy_intp rowsub=0, colsub=0;
+
+    double *ptr=NULL, tval=0,
+           trow=0,rowmin=0,rowmax=0,frow1=0,frow2=0,wrow=0,
+           tcol=0,colmin=0,colmax=0,fcol1=0,fcol2=0,wcol=0;
+    double wsum=0;
+    double u=0,v=0;
+    const double *xxi=NULL, *wwi=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOiO",
+                          &gmix_obj, &image_obj, &npoints, &jacob_obj)) {
+        return NULL;
+    }
+
+    if (npoints==5) {
+        xxi=pygmix_gl_xxi5;
+        wwi=pygmix_gl_wwi5;
+    } else if (npoints==10) {
+        xxi=pygmix_gl_xxi10;
+        wwi=pygmix_gl_wwi10;
+    } else {
+        PyErr_Format(PyExc_ValueError, "bad npoints: %d. npoints only 5,10 for now", npoints);
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        return NULL;
+    }
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+
+            // integrate over the pixel
+
+            rowmax = row + 0.5;
+            rowmin = row - 0.5;
+            colmax = col + 0.5;
+            colmin = col - 0.5;
+
+            frow1 = (rowmax-rowmin)*0.5; // always 0.5.
+            frow2 = (rowmax+rowmin)*0.5; // always row
+            fcol1 = (colmax-colmin)*0.5; // always 0.5
+            fcol2 = (colmax+colmin)*0.5; // always col
+
+            wsum = 0.0;
+            tval = 0.0;
+
+            for (rowsub=0; rowsub<npoints; rowsub++) {
+                trow = frow1*xxi[rowsub] + frow2;
+                wrow = wwi[rowsub];
+
+                for (colsub=0; colsub<npoints; colsub++) {
+                    tcol = fcol1*xxi[colsub] + fcol2;
+                    wcol = wwi[colsub];
+
+                    u=PYGMIX_JACOB_GETU(jacob, trow, tcol);
+                    v=PYGMIX_JACOB_GETV(jacob, trow, tcol);
+
+                    tval += wrow*wcol*PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, u, v);
+
+                    wsum += wrow*wcol;
+
+                } // colsub
+            } // rowsub
+
+            // add to existing values
+            ptr=(double*)PyArray_GETPTR2(image_obj,row,col);
+
+            // since we are averaging, we don't multiply by frow1*fcol1
+            tval /= wsum;
+
+            (*ptr) += tval;
+
+        } // cols
+    } // rows
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
 
 
 
@@ -3529,6 +3627,7 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"fill_fdiff_sub",  (PyCFunction)PyGMix_fill_fdiff_sub,  METH_VARARGS,  "fill fdiff for LM with sub-pixel integration\n"},
     {"render",      (PyCFunction)PyGMix_render, METH_VARARGS,  "render without jacobian\n"},
     {"render_gauleg",      (PyCFunction)PyGMix_render_gauleg, METH_VARARGS,  "render without jacobian and using gauss-legendre integration\n"},
+    {"render_jacob_gauleg",      (PyCFunction)PyGMix_render_jacob_gauleg, METH_VARARGS,  "render with jacobian and using gauss-legendre integration\n"},
     {"render_jacob",(PyCFunction)PyGMix_render_jacob, METH_VARARGS,  "render with jacobian\n"},
 
     {"gmix_fill",(PyCFunction)PyGMix_gmix_fill, METH_VARARGS,  "Fill the input gmix with the input pars\n"},
