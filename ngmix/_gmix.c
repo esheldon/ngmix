@@ -30,6 +30,22 @@ static const double pygmix_gl_xxi10[10] = {-0.9739065285171717,  -0.865063366688
 static const double pygmix_gl_wwi10[10] = {0.06667134430868371,  0.1494513490843985,  0.2190863625152871,  0.2692667193099917,  0.2955242247147529,  0.2955242247147529,  0.2692667193099917,  0.2190863625152871,  0.1494513490843985,  0.06667134430868371};
 
 
+static int set_gauleg_data(int npoints, const double **xxi, const double **wwi)
+{
+    int status=1;
+    if (npoints==5) {
+        *xxi=pygmix_gl_xxi5;
+        *wwi=pygmix_gl_wwi5;
+    } else if (npoints==10) {
+        *xxi=pygmix_gl_xxi10;
+        *wwi=pygmix_gl_wwi10;
+    } else {
+        PyErr_Format(PyExc_ValueError,
+                     "bad npoints: %d, npoints only 5,10 for now", npoints);
+        status=0;
+    }
+    return status;
+}
 
 /*
     convert reduced shear g1,g2 to standard ellipticity
@@ -1012,10 +1028,12 @@ static PyObject * PyGMix_render_gauleg(PyObject* self, PyObject* args) {
     npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
     npy_intp rowsub=0, colsub=0;
 
-    double *ptr=NULL, tval=0,
+    double *ptr=NULL, tval=0;
+    // gauleg parameters
+    double
            trow=0,rowmin=0,rowmax=0,frow1=0,frow2=0,wrow=0,
-           tcol=0,colmin=0,colmax=0,fcol1=0,fcol2=0,wcol=0;
-    double wsum=0;
+           tcol=0,colmin=0,colmax=0,fcol1=0,fcol2=0,wcol=0,
+           wsum=0;
     const double *xxi=NULL, *wwi=NULL;
 
     if (!PyArg_ParseTuple(args, (char*)"OOi", 
@@ -1023,14 +1041,7 @@ static PyObject * PyGMix_render_gauleg(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    if (npoints==5) {
-        xxi=pygmix_gl_xxi5;
-        wwi=pygmix_gl_wwi5;
-    } else if (npoints==10) {
-        xxi=pygmix_gl_xxi10;
-        wwi=pygmix_gl_wwi10;
-    } else {
-        PyErr_Format(PyExc_ValueError, "bad npoints: %d. npoints only 5,10 for now", npoints);
+    if (!set_gauleg_data(npoints, &xxi, &wwi)) {
         return NULL;
     }
 
@@ -1104,26 +1115,23 @@ static PyObject * PyGMix_render_jacob_gauleg(PyObject* self, PyObject* args) {
     npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
     npy_intp rowsub=0, colsub=0;
 
-    double *ptr=NULL, tval=0,
+    double *ptr=NULL, tval=0;
+
+    // gauleg parameters
+    double
            trow=0,rowmin=0,rowmax=0,frow1=0,frow2=0,wrow=0,
-           tcol=0,colmin=0,colmax=0,fcol1=0,fcol2=0,wcol=0;
-    double wsum=0;
-    double u=0,v=0;
+           tcol=0,colmin=0,colmax=0,fcol1=0,fcol2=0,wcol=0,
+           wsum=0;
     const double *xxi=NULL, *wwi=NULL;
+
+    double u=0,v=0;
 
     if (!PyArg_ParseTuple(args, (char*)"OOiO",
                           &gmix_obj, &image_obj, &npoints, &jacob_obj)) {
         return NULL;
     }
 
-    if (npoints==5) {
-        xxi=pygmix_gl_xxi5;
-        wwi=pygmix_gl_wwi5;
-    } else if (npoints==10) {
-        xxi=pygmix_gl_xxi10;
-        wwi=pygmix_gl_wwi10;
-    } else {
-        PyErr_Format(PyExc_ValueError, "bad npoints: %d. npoints only 5,10 for now", npoints);
+    if (!set_gauleg_data(npoints, &xxi, &wwi)) {
         return NULL;
     }
 
@@ -1823,9 +1831,120 @@ static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
     loglike *= (-0.5);
 
     // fill in the retval
-    PYGMIX_PACK_RESULT4();
+    PYGMIX_PACK_RESULT4(loglike, s2n_numer, s2n_denom, npix);
     return retval;
 }
+
+static PyObject * PyGMix_get_loglike_gauleg(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    PyObject* image_obj=NULL;
+    PyObject* weight_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    int npoints=0;
+    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    double data=0, ivar=0, u=0, v=0;
+    double model_val=0, diff=0;
+    double s2n_numer=0.0, s2n_denom=0.0, loglike = 0.0;
+
+    // gauleg parameters
+    npy_intp rowsub=0, colsub=0;
+    double
+           trow=0,rowmin=0,rowmax=0,frow1=0,frow2=0,wrow=0,
+           tcol=0,colmin=0,colmax=0,fcol1=0,fcol2=0,wcol=0,
+           wsum=0;
+    const double *xxi=NULL, *wwi=NULL;
+
+    long npix = 0;
+
+    PyObject* retval=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOOi", 
+                          &gmix_obj,
+                          &image_obj,
+                          &weight_obj,
+                          &jacob_obj,
+                          &npoints)) {
+        return NULL;
+    }
+
+    if (!set_gauleg_data(npoints, &xxi, &wwi)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        return NULL;
+    }
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+
+            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
+            if ( ivar > 0.0) {
+
+                // integrate the model over the pixel
+                model_val=0;
+                wsum=0;
+
+                rowmax = row + 0.5;
+                rowmin = row - 0.5;
+                colmax = col + 0.5;
+                colmin = col - 0.5;
+
+                frow1 = (rowmax-rowmin)*0.5; // always 0.5.
+                frow2 = (rowmax+rowmin)*0.5; // always row
+                fcol1 = (colmax-colmin)*0.5; // always 0.5
+                fcol2 = (colmax+colmin)*0.5; // always col
+
+                for (rowsub=0; rowsub<npoints; rowsub++) {
+                    trow = frow1*xxi[rowsub] + frow2;
+                    wrow = wwi[rowsub];
+                    for (colsub=0; colsub<npoints; colsub++) {
+                        tcol = fcol1*xxi[colsub] + fcol2;
+                        wcol = wwi[colsub];
+
+                        u=PYGMIX_JACOB_GETU(jacob, trow, tcol);
+                        v=PYGMIX_JACOB_GETV(jacob, trow, tcol);
+
+                        model_val += wrow*wcol*PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
+                        wsum += wrow*wcol;
+                    }
+                }
+
+                model_val /= wsum;
+
+                data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
+
+                diff = model_val-data;
+                loglike += diff*diff*ivar;
+                s2n_numer += data*model_val*ivar;
+                s2n_denom += model_val*model_val*ivar;
+
+                npix += 1;
+            }
+        }
+    }
+
+    loglike *= (-0.5);
+
+    // fill in the retval
+    PYGMIX_PACK_RESULT4(loglike, s2n_numer, s2n_denom, npix);
+    return retval;
+}
+
+
 
 /*
    Calculate the loglike between the gmix and the input image
@@ -1909,7 +2028,7 @@ static PyObject * PyGMix_get_loglike_aper(PyObject* self, PyObject* args) {
     loglike *= (-0.5);
 
     // fill in the retval
-    PYGMIX_PACK_RESULT4();
+    PYGMIX_PACK_RESULT4(loglike, s2n_numer, s2n_denom, npix);
     return retval;
 }
 
@@ -1969,7 +2088,7 @@ static PyObject * PyGMix_get_loglike_images_margsky(PyObject* self, PyObject* ar
     loglike *= (-0.5);
 
     // fill in the retval
-    PYGMIX_PACK_RESULT4();
+    PYGMIX_PACK_RESULT4(loglike, s2n_numer, s2n_denom, npix);
     return retval;
 }
 
@@ -2062,7 +2181,7 @@ static PyObject * PyGMix_get_loglike_sub(PyObject* self, PyObject* args) {
     loglike *= (-0.5);
 
     // fill in the retval
-    PYGMIX_PACK_RESULT4();
+    PYGMIX_PACK_RESULT4(loglike, s2n_numer, s2n_denom, npix);
     return retval;
 }
 
@@ -2143,7 +2262,7 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
     }
 
     // fill in the retval
-    PYGMIX_PACK_RESULT4();
+    PYGMIX_PACK_RESULT4(loglike, s2n_numer, s2n_denom, npix);
 
     return retval;
 }
@@ -2227,9 +2346,126 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
     }
 
     // fill in the retval
-    PYGMIX_PACK_RESULT3();
+    PYGMIX_PACK_RESULT3(s2n_numer, s2n_denom, npix);
     return retval;
 }
+
+static PyObject * PyGMix_fill_fdiff_gauleg(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    PyObject* image_obj=NULL;
+    PyObject* weight_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    PyObject* fdiff_obj=NULL;
+    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+    int start=0,npoints=0;
+
+    long npix=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    double data=0, ivar=0, ierr=0, u=0, v=0, *fdiff_ptr=NULL;
+    double model_val=0;
+    double s2n_numer=0.0, s2n_denom=0.0;
+
+    // gauleg parameters
+    npy_intp rowsub=0, colsub=0;
+    double
+           trow=0,rowmin=0,rowmax=0,frow1=0,frow2=0,wrow=0,
+           tcol=0,colmin=0,colmax=0,fcol1=0,fcol2=0,wcol=0,
+           wsum=0;
+    const double *xxi=NULL, *wwi=NULL;
+
+
+    PyObject* retval=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOOOii", 
+                          &gmix_obj, &image_obj, &weight_obj, &jacob_obj,
+                          &fdiff_obj, &start,&npoints)) {
+        return NULL;
+    }
+
+    if (!set_gauleg_data(npoints, &xxi, &wwi)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        return NULL;
+    }
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    // we might start somewhere after the priors
+    // note fdiff is 1-d
+    fdiff_ptr=(double *)PyArray_GETPTR1(fdiff_obj,start);
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+
+            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
+            if ( ivar > 0.0) {
+
+                // integrate the model over the pixel
+                model_val=0;
+                wsum = 0.0;
+
+                rowmax = row + 0.5;
+                rowmin = row - 0.5;
+                colmax = col + 0.5;
+                colmin = col - 0.5;
+
+                frow1 = (rowmax-rowmin)*0.5; // always 0.5.
+                frow2 = (rowmax+rowmin)*0.5; // always row
+                fcol1 = (colmax-colmin)*0.5; // always 0.5
+                fcol2 = (colmax+colmin)*0.5; // always col
+
+                for (rowsub=0; rowsub<npoints; rowsub++) {
+                    trow = frow1*xxi[rowsub] + frow2;
+                    wrow = wwi[rowsub];
+                    for (colsub=0; colsub<npoints; colsub++) {
+                        tcol = fcol1*xxi[colsub] + fcol2;
+                        wcol = wwi[colsub];
+
+                        u=PYGMIX_JACOB_GETU(jacob, trow, tcol);
+                        v=PYGMIX_JACOB_GETV(jacob, trow, tcol);
+
+                        model_val += wrow*wcol*PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
+                        wsum += wrow*wcol;
+
+                    }
+                }
+
+                model_val /= wsum;
+
+                data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
+                ierr=sqrt(ivar);
+
+                (*fdiff_ptr) = (model_val-data)*ierr;
+                s2n_numer += data*model_val*ivar;
+                s2n_denom += model_val*model_val*ivar;
+
+                npix += 1;
+            } else {
+                (*fdiff_ptr) = 0.0;
+            }
+
+            fdiff_ptr++;
+
+        }
+    }
+
+    // fill in the retval
+    PYGMIX_PACK_RESULT3(s2n_numer, s2n_denom, npix);
+    return retval;
+}
+
 
 /*
    Fill the input fdiff=(model-data)/err, return s2n_numer, s2n_denom
@@ -2337,7 +2573,7 @@ static PyObject * PyGMix_fill_fdiff_sub(PyObject* self, PyObject* args) {
     }
 
     // fill in the retval
-    PYGMIX_PACK_RESULT3();
+    PYGMIX_PACK_RESULT3(s2n_numer, s2n_denom, npix);
     return retval;
 }
 
@@ -3616,6 +3852,8 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"get_weighted_mom_sums", (PyCFunction)PyGMix_get_weighted_mom_sums,  METH_VARARGS,  "calculate weighted mom sums\n"},
 
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
+    {"get_loglike_gauleg", (PyCFunction)PyGMix_get_loglike_gauleg,  METH_VARARGS,  "calculate likelihood, integrating model over the pixels\n"},
+
     {"get_loglike_images_margsky", (PyCFunction)PyGMix_get_loglike_images_margsky,  METH_VARARGS,  "calculate likelihood between images, subtracting mean\n"},
     {"get_loglike_aper", (PyCFunction)PyGMix_get_loglike_aper,  METH_VARARGS,  "calculate likelihood within the specified circular aperture\n"},
 
@@ -3624,6 +3862,7 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"get_loglike_robust", (PyCFunction)PyGMix_get_loglike_robust,  METH_VARARGS,  "calculate likelihood with robust metric\n"},
 
     {"fill_fdiff",  (PyCFunction)PyGMix_fill_fdiff,  METH_VARARGS,  "fill fdiff for LM\n"},
+    {"fill_fdiff_gauleg",  (PyCFunction)PyGMix_fill_fdiff_gauleg,  METH_VARARGS,  "fill fdiff for LM, integrating over pixels\n"},
     {"fill_fdiff_sub",  (PyCFunction)PyGMix_fill_fdiff_sub,  METH_VARARGS,  "fill fdiff for LM with sub-pixel integration\n"},
     {"render",      (PyCFunction)PyGMix_render, METH_VARARGS,  "render without jacobian\n"},
     {"render_gauleg",      (PyCFunction)PyGMix_render_gauleg, METH_VARARGS,  "render without jacobian and using gauss-legendre integration\n"},

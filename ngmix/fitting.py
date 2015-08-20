@@ -84,6 +84,7 @@ class FitterBase(object):
 
         # psf fitters might not have this set to 1
         self.nsub=keys.get('nsub',1)
+        self.npoints=keys.get('npoints',None)
 
         self.set_obs(obs)
 
@@ -249,8 +250,8 @@ class FitterBase(object):
         _get_ydiff method
         """
 
+        npoints=self.npoints
         nsub=self.nsub
-
 
 
         try:
@@ -278,7 +279,10 @@ class FitterBase(object):
                         res = gm.get_loglike_margsky(obs, obs.model_image, 
                                                      nsub=nsub, more=True)
                     else:
-                        res = gm.get_loglike(obs, nsub=nsub, more=True)
+                        res = gm.get_loglike(obs,
+                                             nsub=nsub,
+                                             npoints=npoints,
+                                             more=True)
 
                     lnprob    += res['loglike']
                     s2n_numer += res['s2n_numer']
@@ -1358,6 +1362,20 @@ class MaxSimple(FitterBase):
     """
     A class for direct maximization of the likelihood.
     Useful for seeding model parameters.
+
+    some keywords to control fitting
+    -----------------------------------------------------
+    xtol: float, optional
+        Tolerance in the vertices, relative to the vertex with
+        the lowest function value.  Default 1.0e-4
+    ftol: float, optional
+        Tolerance in the function value, relative to the
+        lowest function value for all vertices.  Default 1.0e-4
+    maxiter: int, optional
+        Default is npars*200
+    maxfev:
+        Default is npars*200
+
     """
     def __init__(self, obs, model, method='Nelder-Mead', **keys):
         super(MaxSimple,self).__init__(obs, model, **keys)
@@ -1365,6 +1383,9 @@ class MaxSimple(FitterBase):
         self._model = model
         self.method = method
         self._band_pars = numpy.zeros(6)
+
+        self._options={}
+        self._options.update(keys)
         
     def _setup_data(self, guess):
         """
@@ -1426,7 +1447,7 @@ class MaxSimple(FitterBase):
         else:
             import scipy.optimize
 
-            options={}
+            options=self._options
             options.update(keys)
 
             guess=numpy.array(guess,dtype='f8',copy=False)
@@ -1458,8 +1479,8 @@ class MaxSimple(FitterBase):
         """
         Run maximizer and set the result.
 
-        extra keywords are 
-        ------------------
+        extra keywords to override those sent on construction
+        -----------------------------------------------------
         xtol: float, optional
             Tolerance in the vertices, relative to the vertex with
             the lowest function value.  Default 1.0e-4
@@ -1474,7 +1495,7 @@ class MaxSimple(FitterBase):
         #from .simplex import minimize_neldermead
         from .simplex import minimize_neldermead_rel as minimize_neldermead
 
-        options={}
+        options=self._options
         options.update(keys)
 
         guess=numpy.array(guess,dtype='f8',copy=False)
@@ -1662,7 +1683,8 @@ class LMSimple(FitterBase):
 
                 for obs,gm in zip(obs_list, gmix_list):
 
-                    res = gm.fill_fdiff(obs, fdiff, start=start, nsub=self.nsub)
+                    res = gm.fill_fdiff(obs, fdiff, start=start,
+                                        nsub=self.nsub, npoints=self.npoints)
 
                     s2n_numer += res['s2n_numer']
                     s2n_denom += res['s2n_denom']

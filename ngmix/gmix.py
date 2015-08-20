@@ -403,7 +403,7 @@ class GMix(object):
                 _gmix.render(gm, image, nsub)
 
 
-    def fill_fdiff(self, obs, fdiff, start=0, nsub=1):
+    def fill_fdiff(self, obs, fdiff, start=0, nsub=1, npoints=None):
         """
         Fill fdiff=(model-data)/err given the input Observation
 
@@ -427,7 +427,15 @@ class GMix(object):
         assert nsub >= 1,"nsub must be >= 1"
 
         gm=self._get_gmix_data()
-        if nsub > 1:
+        if npoints is not None:
+            s2n_numer,s2n_denom,npix=_gmix.fill_fdiff_gauleg(gm,
+                                                             image,
+                                                             obs.weight,
+                                                             obs.jacobian._data,
+                                                             fdiff,
+                                                             start,
+                                                             npoints)
+        elif nsub > 1:
             s2n_numer,s2n_denom,npix=_gmix.fill_fdiff_sub(gm,
                                                           image,
                                                           obs.weight,
@@ -646,7 +654,7 @@ class GMix(object):
                 'flagstr':flagstr}
                 
 
-    def get_loglike(self, obs, nsub=1, more=False):
+    def get_loglike(self, obs, nsub=1, npoints=None, more=False):
         """
         Calculate the log likelihood given the input Observation
 
@@ -663,7 +671,14 @@ class GMix(object):
         """
 
         gm=self._get_gmix_data()
-        if nsub > 1:
+        if npoints is not None:
+            loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike_gauleg(gm,
+                                                                      obs.image,
+                                                                      obs.weight,
+                                                                      obs.jacobian._data,
+                                                                      npoints)
+
+        elif nsub > 1:
             #print("doing nsub")
             loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike_sub(gm,
                                                                    obs.image,

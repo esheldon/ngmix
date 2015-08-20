@@ -4934,24 +4934,79 @@ def test_moms_many(num, method='lm', use_errors=False, eps=None,show=False, **ke
             tab.show()
 
 def fit_moffat_many(ngauss, n=100, g1=0.05, g2=0.05, verbose=False, **kw):
+    """
+    r50=1.5
+
+    4 gauss
+        npoints=5
+            chi2per: 2.26948 +/- 0.0072747
+            g1: 0.0500002 +/- 7.57101e-07
+                fracdiff: 4.49606e-06 +/- 1.5142e-05
+            g2: 0.0500003 +/- 3.59605e-07
+                fracdiff: 6.32538e-06 +/- 7.1921e-06
+        npoints=10
+
+    3 gauss
+        npoints=5
+            chi2per: 65.0592 +/- 0.21742
+            g1: 0.0499933 +/- 3.17405e-06
+                fracdiff: -0.000134582 +/- 6.34809e-05
+            g2: 0.0499991 +/- 3.97517e-07
+                fracdiff: -1.81021e-05 +/- 7.95033e-06
+
+        npoints=10
+            chi2per: 65.3292 +/- 0.212992
+            g1: 0.0499943 +/- 3.2699e-06
+                fracdiff: -0.000113588 +/- 6.53979e-05
+            g2: 0.0499998 +/- 3.7721e-07
+                fracdiff: -4.66328e-06 +/- 7.5442e-06
+
+    2 gauss
+        npoints=5
+            chi2per: 3623.51 +/- 3.91564
+            g1: 0.0501271 +/- 4.38246e-06
+                fracdiff: 0.00254299 +/- 8.76492e-05
+            g2: 0.0499663 +/- 4.05564e-07
+                fracdiff: -0.000673996 +/- 8.11127e-06
+        npoints=10
+            chi2per: 3624.06 +/- 4.0222
+            g1: 0.0501374 +/- 4.39311e-06
+                fracdiff: 0.00274818 +/- 8.78622e-05
+            g2: 0.0499663 +/- 3.88417e-07
+                fracdiff: -0.000674415 +/- 7.76835e-06
+
+    """
+    from esutil.stat import sigma_clip
+
     g1vals=numpy.zeros(n)
     g2vals=numpy.zeros(n)
+    chi2per=numpy.zeros(n)
 
     for i in xrange(n):
-        mf=MoffatFitter(ngauss, **kw)
+        mf=MoffatFitter(ngauss, g1=g1, g2=g2, **kw)
         mf.go()
         res=mf.get_result()
         g1vals[i] = res['pars'][2]
         g2vals[i] = res['pars'][3]
+        chi2per[i] = res['chi2per']
 
         if verbose:
             print('%s/%s nfev: %d' % (i+1,n,res['nfev']))
 
+    chi2m,_,chi2err = sigma_clip(chi2per,get_err=True)
+    g1m,_,g1e= sigma_clip(g1vals,get_err=True)
+    g2m,_,g2e= sigma_clip(g2vals,get_err=True)
+
+    '''
+    chi2m = chi2per.mean()
+    chi2err = chi2per.std()/sqrt(n)
     g1m=g1vals.mean()
     g1e=g1vals.std()/numpy.sqrt(n)
     g2m=g2vals.mean()
     g2e=g2vals.std()/numpy.sqrt(n)
-
+    '''
+    
+    print("chi2per: %g +/- %g" % (chi2m,chi2err))
     print("g1: %g +/- %g" % (g1m,g1e))
     if g1 != 0.0:
         fd=g1m/g1-1
@@ -4967,7 +5022,11 @@ def fit_moffat_many(ngauss, n=100, g1=0.05, g2=0.05, verbose=False, **kw):
 
 
 class MoffatFitter(object):
-    def __init__(self, ngauss, beta=3.5, r50=40.0, s2n=1.e5, g1=0.0, g2=0.05, nsub=None, npoints=None):
+    def __init__(self, ngauss,
+                 beta=3.5, r50=40.0,
+                 s2n=1.e5, g1=0.05, g2=0.05,
+                 nsub=1, npoints=None,
+                 fitter_type='lm'):
         self.ngauss=ngauss
         self.beta=beta
         self.r50=r50
@@ -4975,6 +5034,8 @@ class MoffatFitter(object):
         self.noise=1.0
         self.nsub=nsub
         self.npoints=npoints
+
+        self.fitter_type=fitter_type
 
         self.g1=g1
         self.g2=g2
@@ -4990,6 +5051,7 @@ class MoffatFitter(object):
     def show(self):
         if hasattr(self,'fitter'):
             res=self.get_result()
+            print("chi2per:",res['chi2per'],'nfev:',res['nfev'])
             print_pars(res['pars'], front="    best fit:",fmt='%g')
             print_pars(res['pars_err'], front="    best err:",fmt='%g')
 
@@ -5014,12 +5076,17 @@ class MoffatFitter(object):
     def _fit_n_gauss(self, ntry):
         from .fitting import LMCoellip
 
+        cls = self._get_fitter_class()
+
         for i in xrange(ntry):
             guess=self._get_guess()
-            fitter=LMCoellip(self.obs,
-                             self.ngauss,
-                             nsub=self.nsub,
-                             prior=self.prior)
+            fitter=cls(self.obs,
+                       self.ngauss,
+                       nsub=self.nsub,
+                       npoints=self.npoints,
+                       prior=self.prior,
+                       maxfev=4000,
+                       maxiter=4000)
             fitter.go(guess)
 
             res=fitter.get_result()
@@ -5030,6 +5097,17 @@ class MoffatFitter(object):
             raise RuntimeError("failed to fit")
 
         self.fitter=fitter
+
+    def _get_fitter_class(self):
+        fitter_type=self.fitter_type
+        if fitter_type=='lm':
+            cls = LMCoellip
+        elif fitter_type=='nm':
+            cls = MaxCoellip
+        else:
+            raise RuntimeError("bad fitter class: '%s'" % fitter_type)
+
+        return cls
 
     def _add_rel(self):
         res=self.fitter.get_result()
@@ -5083,8 +5161,10 @@ class MoffatFitter(object):
             guess[9] = self.Fguess*pguess[2]*(1.0 + fac*srandu())
 
         elif self.ngauss==4:
-            pguess=array([ 0.2,  0.5,  0.2, 0.1])
-            fguess=array([ 0.36123609,  0.8426139,   2.58747785, 4.0])
+            #pguess=array([ 0.2,  0.5,  0.2, 0.1])
+            #fguess=array([ 0.36123609,  0.8426139,   2.58747785, 4.0])
+            pguess=array([0.443688,  0.37131,  0.0992682,  0.0857346])
+            fguess=array([0.518691,  1.18908,  0.248521,  3.54206 ])
 
             guess[4] = self.Tguess*fguess[0]*(1.0 + fac*srandu())
             guess[5] = self.Tguess*fguess[1]*(1.0 + fac*srandu())
@@ -5163,11 +5243,11 @@ class MoffatFitter(object):
         Fguess=self.Fguess
         Tguess=self.Tguess
 
-        cen_width=1.0
+        cen_width=2.0
         cen_prior = CenPrior(0.0, 0.0, cen_width, cen_width)
         g_prior=ZDisk2D(1.0)
-        T_prior = TwoSidedErf(0.01*Tguess, 0.001*Tguess, 100*Tguess, Tguess)
-        F_prior = TwoSidedErf(0.01*Fguess, 0.001*Fguess, 100*Fguess, Fguess)
+        T_prior = TwoSidedErf(0.01*Tguess, 0.01*Tguess, 100*Tguess, 10*Tguess)
+        F_prior = TwoSidedErf(0.01*Fguess, 0.01*Fguess, 100*Fguess, 10*Fguess)
 
         self.prior=PriorCoellipSame(self.ngauss,
                                     cen_prior,
