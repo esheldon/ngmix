@@ -609,7 +609,7 @@ class Bootstrapper(object):
         """
 
         if 'em' in psf_model:
-            assert self.intpars is None,"sub-pixel only for max like fitting"
+            assert self.intpars is None,"pixel integration only for max like fitting"
             runner=self._fit_one_psf_em(psf_obs, psf_model, Tguess, ntry, fit_pars)
         elif 'coellip' in psf_model:
             runner=self._fit_one_psf_coellip(psf_obs, psf_model, Tguess, ntry, fit_pars)
@@ -1636,15 +1636,15 @@ class PSFRunner(object):
         from .fitting import LMSimple
 
         if self.intpars is not None:
-            nsub=self.intpars['nsub']
-            #print("psffit using nsub:",nsub)
+            npoints=self.intpars['npoints']
+            #print("psffit using npoints:",npoints)
         else:
-            nsub=1
+            npoints=None
 
 
         for i in xrange(ntry):
             guess=self.get_guess()
-            fitter=LMSimple(self.obs,self.model,lm_pars=self.lm_pars,nsub=nsub)
+            fitter=LMSimple(self.obs,self.model,lm_pars=self.lm_pars,npoints=npoints)
             fitter.go(guess)
 
             res=fitter.get_result()
@@ -1825,14 +1825,15 @@ class PSFRunnerCoellip(object):
         from .fitting import LMCoellip
 
         if self.intpars is not None:
-            nsub=self.intpars['nsub']
+            npoints=self.intpars['npoints']
+            #print("psf coellip fit using npoints:",npoints)
         else:
-            nsub=1
+            npoints=None
 
         for i in xrange(ntry):
             guess=self.get_guess()
             fitter=LMCoellip(self.obs,self.ngauss,lm_pars=self.lm_pars, prior=self.prior,
-                             nsub=nsub)
+                             npoints=npoints)
             fitter.go(guess)
 
             res=fitter.get_result()
@@ -1929,10 +1930,10 @@ class MaxRunner(object):
     def _go_lm(self, ntry=1):
         
         if self.intpars is not None:
-            nsub=self.intpars['nsub']
-            #print("maxfit using nsub:",nsub)
+            npoints=self.intpars['npoints']
+            #print("max gal fit using npoints:",npoints)
         else:
-            nsub=1
+            npoints=None
 
         fitclass=self._get_lm_fitter_class()
 
@@ -1942,7 +1943,7 @@ class MaxRunner(object):
                             self.model,
                             lm_pars=self.send_pars,
                             use_logpars=self.use_logpars,
-                            nsub=nsub,
+                            npoints=npoints,
                             prior=self.prior)
 
             fitter.go(guess)
