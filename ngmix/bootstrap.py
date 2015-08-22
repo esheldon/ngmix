@@ -829,6 +829,7 @@ class Bootstrapper(object):
         psf_T_r_mean = 0.0
         psf_ellip_mean = zeros(2)
         npsf=0
+        navg=0
 
         for i,key in enumerate(bdict):
             boot = bdict[key]
@@ -837,9 +838,15 @@ class Bootstrapper(object):
             res['pars'][key] = tres['pars']
             res['pars_cov'][key] = tres['pars_cov']
 
-            if 'psf' in key:
-                # don't copy averages from psf sheared model
+            #
+            # averaging
+            #
+
+            if key=='noshear' or 'psf' in key:
+                # don't include noshear in the averages
+                # don't average over psf sheared model
                 continue
+
 
             for obslist in boot.mb_obs_list:
                 for obs in obslist:
@@ -853,11 +860,15 @@ class Bootstrapper(object):
             s2n_r_mean   += rres['s2n_r']
             T_r_mean     += rres['T_r']
             psf_T_r_mean += rres['psf_T_r']
+            navg += 1
 
-        res['s2n_r']   = s2n_r_mean/4.0
-        res['T_r']     = T_r_mean/4.0
-        res['psf_T_r'] = psf_T_r_mean/4.0
+        assert navg==4,"expected 4 to average"
+
+        res['s2n_r']   = s2n_r_mean/navg
+        res['T_r']     = T_r_mean/navg
+        res['psf_T_r'] = psf_T_r_mean/navg
         res['psf_ellip'] = psf_ellip_mean/npsf
+
         return res
 
     def _get_metacal_obslist(self, step, extra_noise, same_noise):
