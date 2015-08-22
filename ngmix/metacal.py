@@ -158,6 +158,7 @@ class Metacal(object):
         psf_grown = galsim.Convolve(psf_grown_nopix,self.pixel)
 
         if type=='psf_shear':
+            # eric remarked that he thought we should shear the pixelized version
             psf_grown = psf_grown.shear(g1=shear.g1, g2=shear.g2)
 
         newpsf = galsim.ImageD(self.gs_psf_image.bounds)
