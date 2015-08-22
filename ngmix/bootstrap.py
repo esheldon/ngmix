@@ -863,6 +863,12 @@ class Bootstrapper(object):
     def _get_metacal_obslist(self, step, extra_noise, same_noise):
         """
         get Observations for the sheared images
+
+
+        for same noise we add the noise *after* shearing/convolving etc.
+
+        otherwise we degrade the original and metacal happens on that
+        just as with the real data
         """
         from .metacal import Metacal
         from .shape import Shape
@@ -870,7 +876,19 @@ class Bootstrapper(object):
         if len(self.mb_obs_list) > 1 or len(self.mb_obs_list[0]) > 1:
             raise NotImplementedError("only a single obs for now")
 
-        mc=Metacal(self.mb_obs_list[0][0])
+        oobs = self.mb_obs_list[0][0]
+
+        if extra_noise is not None and not same_noise:
+            # we add noise up front and then let metacal happen
+            # on the noisy image
+            noise_image = self._get_noise_image(oobs, extra_noise)
+
+            new_weight = self._get_degraded_weight_image(oobs, extra_noise)
+            new_obs = self._get_degraded_obs(oobs, noise_image, new_weight)
+
+            oobs = new_obs
+
+        mc=Metacal(oobs)
 
         sh1m=Shape(-step,  0.00 )
         sh1p=Shape( step,  0.00 )
@@ -902,16 +920,14 @@ class Bootstrapper(object):
                     'noshear': obs_noshear,
                    }
 
-        if extra_noise is not None:
-            if same_noise:
-                noise_image = self._get_noise_image(obs_dict['1p'], extra_noise)
+        if extra_noise is not None and same_noise:
+            noise_image = self._get_noise_image(obs_dict['1p'], extra_noise)
 
             for key in obs_dict:
 
                 obs=obs_dict[key]
 
-                if not same_noise:
-                    noise_image = self._get_noise_image(obs_dict['1p'], extra_noise)
+                noise_image = self._get_noise_image(obs_dict['1p'], extra_noise)
 
                 new_weight = self._get_degraded_weight_image(obs, extra_noise)
                 new_obs = self._get_degraded_obs(obs, noise_image, new_weight)
