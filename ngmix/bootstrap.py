@@ -687,6 +687,8 @@ class Bootstrapper(object):
                         psf_Tguess,
                         psf_fit_pars=None,
                         extra_noise=None,
+                        same_noise=True,
+                        nrand=1,
                         step=0.01,
                         prior=None,
                         psf_ntry=10,
@@ -708,11 +710,43 @@ class Bootstrapper(object):
         ntry: int, optional
             Number of times to retry fitting, default 1
         """
+        if extra_noise is None:
+            nrand=1
+
+        for i in xrange(nrand):
+            if nrand > 1 and verbose:
+                print("    irand: %d/%d" % (i+1,nrand))
+            tres = self._fit_metacal_max_one(psf_model, gal_model, pars, psf_Tguess, step,
+                                             prior, psf_ntry, ntry,
+                                             psf_fit_pars,
+                                             extra_noise,
+                                             same_noise,
+                                             verbose)
+            if i == 0:
+                res=tres
+            else:
+                for key in res:
+                    res[key] = res[key] + tres[key]
+            
+        if nrand > 1:
+            for key in res:
+                res[key] = res[key]/float(nrand)
+
+        self.metacal_max_res = res
+
+    def _fit_metacal_max_one(self, psf_model, gal_model, pars, 
+                             psf_Tguess, step, prior, psf_ntry, ntry, 
+                             psf_fit_pars,
+                             extra_noise,
+                             same_noise,
+                             verbose):
+
         fits = self._do_metacal_fits(psf_model, gal_model, pars, psf_Tguess, step,
                                      prior, psf_ntry, ntry,
-                                     psf_fit_pars=psf_fit_pars,
-                                     extra_noise=extra_noise,
-                                     verbose=verbose)
+                                     psf_fit_pars,
+                                     extra_noise,
+                                     same_noise,
+                                     verbose)
 
         pars=fits['pars']
         pars_mean = (pars['1p']+
@@ -746,25 +780,33 @@ class Bootstrapper(object):
         sens_psf[0] *= psf_ellip[0]
         sens_psf[1] *= psf_ellip[1]
 
-        self.metacal_max_res = {'mcal_pars_mean':pars_mean,
-                                'mcal_pars_mean_cov':pars_cov_mean,
-                                'mcal_g_mean':pars_mean[2:2+2],
-                                'mcal_g_cov':pars_cov_mean[2:2+2, 2:2+2],
-                                'mcal_g_sens':sens,
-                                'mcal_psf_sens':sens_psf,
-                                'mcal_s2n_r':fits['s2n_r'],
-                                'mcal_T_r':fits['T_r'],
-                                'mcal_psf_T_r':fits['psf_T_r'],
-                                'mcal_step':step}
+        pars_noshear = pars['noshear']
+
+        c = pars_mean[2:2+2] - pars_noshear[2:2+2]
+
+        res = {'mcal_pars_mean':pars_mean,
+               'mcal_pars_mean_cov':pars_cov_mean,
+               'mcal_g_mean':pars_mean[2:2+2],
+               'mcal_g_cov':pars_cov_mean[2:2+2, 2:2+2],
+               'mcal_pars_noshear':pars_noshear,
+               'mcal_c':c,
+               'mcal_g_sens':sens,
+               'mcal_psf_sens':sens_psf,
+               'mcal_s2n_r':fits['s2n_r'],
+               'mcal_T_r':fits['T_r'],
+               'mcal_psf_T_r':fits['psf_T_r']}
+        return res
 
     def _do_metacal_fits(self, psf_model, gal_model, pars, 
                          psf_Tguess, step, prior, psf_ntry, ntry, 
-                         psf_fit_pars=None,
-                         extra_noise=None, verbose=False):
-        obsdict = self._get_metacal_obslist(step, extra_noise=extra_noise)
+                         psf_fit_pars,
+                         extra_noise,
+                         same_noise,
+                         verbose):
+        
+        obsdict = self._get_metacal_obslist(step, extra_noise, same_noise)
 
         bdict={}
-        #for key in ['1p','1m','2p','2m']:
         for key in obsdict:
             boot = Bootstrapper(obsdict[key], use_logpars=self.use_logpars,intpars=self.intpars)
             boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry, fit_pars=psf_fit_pars)
@@ -818,7 +860,7 @@ class Bootstrapper(object):
         res['psf_ellip'] = psf_ellip_mean/npsf
         return res
 
-    def _get_metacal_obslist(self, step, extra_noise=None):
+    def _get_metacal_obslist(self, step, extra_noise, same_noise):
         """
         get Observations for the sheared images
         """
@@ -836,7 +878,7 @@ class Bootstrapper(object):
         sh2m=Shape(0.0, -step)
         sh2p=Shape(0.0,  step)
 
-        obs1p = mc.get_obs_galshear(sh1p)
+        obs1p, obs_noshear = mc.get_obs_galshear(sh1p, get_unsheared=True)
         obs1m = mc.get_obs_galshear(sh1m)
         obs2p = mc.get_obs_galshear(sh2p)
         obs2m = mc.get_obs_galshear(sh2m)
@@ -845,7 +887,6 @@ class Bootstrapper(object):
         obs1m_psf = mc.get_obs_psfshear(sh1m)
         obs2p_psf = mc.get_obs_psfshear(sh2p)
         obs2m_psf = mc.get_obs_psfshear(sh2m)
-
  
         obs_dict = {
                     '1p':obs1p,
@@ -857,17 +898,20 @@ class Bootstrapper(object):
                     '1m_psf':obs1m_psf,
                     '2p_psf':obs2p_psf,
                     '2m_psf':obs2m_psf,
+
+                    'noshear': obs_noshear,
                    }
 
         if extra_noise is not None:
-            noise_image = self._get_noise_image(obs_dict['1p'], extra_noise)
+            if same_noise:
+                noise_image = self._get_noise_image(obs_dict['1p'], extra_noise)
 
             for key in obs_dict:
-                # don't add noise to psf
-                if 'psf' in key:
-                    continue
 
                 obs=obs_dict[key]
+
+                if not same_noise:
+                    noise_image = self._get_noise_image(obs_dict['1p'], extra_noise)
 
                 new_weight = self._get_degraded_weight_image(obs, extra_noise)
                 new_obs = self._get_degraded_obs(obs, noise_image, new_weight)
