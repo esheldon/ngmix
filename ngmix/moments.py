@@ -1027,8 +1027,55 @@ class PQRMomTemplatesGaussFull(PQRMomTemplatesGauss):
 
 
 
-
+def sigma_to_fwhm(sigma):
+    """
+    convert sigma to fwhm for a gaussian
+    """
+    return sigma*2.3548200450309493
  
+def fwhm_to_sigma(fwhm):
+    """
+    convert fwhm to sigma for a gaussian
+    """
+    return fwhm/2.3548200450309493
+ 
+def r50_to_sigma(r50):
+    """
+    convert r50, the half light radius, to sigma for a gaussian
+
+    half light radius is the radius that contains half the total light.
+    For a gaussian this is fwhm/2
+    """
+    fwhm = 2.0*r50
+    return fwhm_to_sigma(fwhm)
+
+def sigma_to_r50(sigma):
+    """
+    convert sigma to r50 for a gaussian
+    """
+    fwhm = sigma_to_fwhm(sigma)
+    r50 = fwhm/2.0
+    return r50
+
+def r50_to_T(r50):
+    """
+    convert r50, the half light radius, to T=2*sigma**2 for a gaussian
+
+    half light radius is the radius that contains half the total light.
+    For a gaussian this is fwhm/2
+    """
+
+    sigma = r50_to_sigma(r50)
+    T = 2*sigma**2
+    return T
+
+def T_to_r50(T):
+    """
+    convert T=2*sigma**2 to r50 for a gaussian
+    """
+    sigma = numpy.sqrt(T/2.0)
+    return sigma_to_r50(sigma)
+
 def moms_to_e1e2(M1, M2, T):
     """
     convert M1, M2, T to e1,e2
