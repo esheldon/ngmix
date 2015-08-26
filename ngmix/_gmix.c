@@ -1600,16 +1600,17 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
     double u=0, v=0, umod=0, vmod=0;
     double wdata=0, data=0, weight=0, w2=0;
     double T=0,M1=0,M2=0;
+    double wsum=0;
     double Isum=0, usum=0, vsum=0, Tsum=0, M1sum=0, M2sum=0;
     double VIsum=0, VTsum=0, VM1sum=0, VM2sum=0;
     double Vusum=0, Vvsum=0;
     double ucen=0, vcen=0, ucenold=0, vcenold=0;
     double centol=0, max_shift=0;
-    int maxiter=0, niter=0, flags=0;
+    int find_cen=0, maxiter=0, niter=0, flags=0;
 
-    if (!PyArg_ParseTuple(args, (char*)"OOOiddOOO", 
+    if (!PyArg_ParseTuple(args, (char*)"OOOiiddOOO", 
                           &image_obj, &gmix_obj, &jacob_obj,
-                          &maxiter, &centol, &max_shift,
+                          &find_cen, &maxiter, &centol, &max_shift,
                           &cen_obj, &pars_obj, &pvar_obj)) {
         return NULL;
     }
@@ -1632,68 +1633,72 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
     ucenold=9999;
     vcenold=9999;
 
-    // iterate for the centroid
-    for (niter=0; niter<maxiter; niter++) {
+    if (find_cen) {
+        // iterate for the centroid
+        for (niter=0; niter<maxiter; niter++) {
 
-        Isum=0;
-        usum=0;
-        vsum=0;
-        for (row=0; row < n_row; row++) {
-            u=PYGMIX_JACOB_GETU(jacob, row, 0);
-            v=PYGMIX_JACOB_GETV(jacob, row, 0);
+            Isum=0;
+            usum=0;
+            vsum=0;
+            for (row=0; row < n_row; row++) {
+                u=PYGMIX_JACOB_GETU(jacob, row, 0);
+                v=PYGMIX_JACOB_GETV(jacob, row, 0);
 
-            for (col=0; col < n_col; col++) {
+                for (col=0; col < n_col; col++) {
 
-                data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
+                    data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
 
-                umod = u-ucen;
-                vmod = v-vcen;
- 
-                weight=PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, umod, vmod);
+                    umod = u-ucen;
+                    vmod = v-vcen;
+     
+                    weight=PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, umod, vmod);
 
-                wdata = weight*data;
+                    wdata = weight*data;
 
-                Isum += wdata;
-                usum += wdata*umod;
-                vsum += wdata*vmod;
+                    Isum += wdata;
+                    usum += wdata*umod;
+                    vsum += wdata*vmod;
 
-                u += jacob->dudcol;
-                v += jacob->dvdcol;
+                    u += jacob->dudcol;
+                    v += jacob->dvdcol;
 
+                }
             }
+
+            if (Isum <= 0.0) {
+                flags = 2;
+                break;
+            }
+            ucen = usum/Isum;
+            vcen = vsum/Isum;
+            //fprintf(stderr,"%.10g %.10g %.10g %.10g\n", usum, vsum, ucen, vcen);
+
+            if ((fabs(ucen) > max_shift) || (fabs(vcen) > max_shift)) {
+                flags = 4;
+                break;
+            }
+
+            if ((fabs(ucen-ucenold) < centol) && (fabs(vcen-vcenold) < centol)) {
+                break;
+            }
+            ucenold=ucen;
+            vcenold=vcen;
         }
 
-        if (Isum <= 0.0) {
-            flags = 2;
-            break;
-        }
-        ucen = usum/Isum;
-        vcen = vsum/Isum;
-        //fprintf(stderr,"%.10g %.10g %.10g %.10g\n", usum, vsum, ucen, vcen);
-
-        if ((fabs(ucen) > max_shift) || (fabs(vcen) > max_shift)) {
-            flags = 4;
-            break;
+        if (niter==maxiter) {
+            flags = 1;
+        } else {
+            niter += 1;
         }
 
-        if ((fabs(ucen-ucenold) < centol) && (fabs(vcen-vcenold) < centol)) {
-            break;
+        if (flags != 0) {
+            goto _getmom_bail;
         }
-        ucenold=ucen;
-        vcenold=vcen;
-    }
-
-    if (niter==maxiter) {
-        flags = 1;
-    } else {
-        niter += 1;
-    }
-
-    if (flags != 0) {
-        goto _getmom_bail;
     }
 
     Isum=0;
+    usum=0;
+    vsum=0;
     for (row=0; row < n_row; row++) {
         u=PYGMIX_JACOB_GETU(jacob, row, 0);
         v=PYGMIX_JACOB_GETV(jacob, row, 0);
@@ -1707,6 +1712,7 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
 
             weight=PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, umod, vmod);
 
+            wsum += weight;
 
             T = umod*umod + vmod*vmod;
             M1 = vmod*vmod - umod*umod;
@@ -1716,6 +1722,8 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
             w2 = weight*weight;
 
             Isum  += wdata;
+            usum += wdata*umod;
+            vsum += wdata*vmod;
             Tsum  += wdata*T;
             M1sum += wdata*M1;
             M2sum += wdata*M2;
@@ -1756,7 +1764,7 @@ _getmom_bail:
     pvar[4]=VTsum;
     pvar[5]=VIsum;
 
-    return Py_BuildValue("ii",  niter, flags);
+    return Py_BuildValue("dii",  wsum, niter, flags);
 }
 
 

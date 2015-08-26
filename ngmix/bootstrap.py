@@ -103,6 +103,15 @@ class Bootstrapper(object):
             raise RuntimeError("you need to run fit_metacal_max first")
         return self.metacal_max_res
 
+    def get_metacal_metanoise_max_result(self):
+        """
+        get result of metacal with a max likelihood fitter
+        """
+        if not hasattr(self, 'metacal_metanoise_max_res'):
+            raise RuntimeError("you need to run fit_metanoise_metacal_max first")
+        return self.metacal_metanoise_max_res
+
+
 
     def get_round_result(self):
         """
@@ -708,14 +717,19 @@ class Bootstrapper(object):
         ntry: int, optional
             Number of times to retry fitting, default 1
         """
+
+        if len(self.mb_obs_list) > 1 or len(self.mb_obs_list[0]) > 1:
+            raise NotImplementedError("only a single obs for now")
+
         if extra_noise is None:
             nrand=1
 
-        obs_dict0 = self._get_metacal_obslist(step)
+        oobs = self.mb_obs_list[0][0]
+        obs_dict0 = self.get_metacal_obsdict(oobs, step)
 
         for i in xrange(nrand):
             if extra_noise is not None:
-                obs_dict = self._add_noise_to_metacal_obs(obs_dict0, extra_noise)
+                obs_dict = self._add_noise_to_metacal_obsdict(obs_dict0, extra_noise)
             else:
                 obs_dict=obs_dict0
 
@@ -740,8 +754,9 @@ class Bootstrapper(object):
 
         self.metacal_max_res = res
 
-    def _add_noise_to_metacal_obs(self, obs_dict, extra_noise):
-        noise_image = self._get_noise_image(obs_dict['1p'], extra_noise)
+    def _add_noise_to_metacal_obsdict(self, obs_dict, extra_noise):
+        noise_image = self._get_noise_image(obs_dict['1p'].image.shape,
+                                            extra_noise)
 
         nobs_dict={}
         for key in obs_dict:
@@ -1010,7 +1025,7 @@ class Bootstrapper(object):
                          extra_noise,
                          verbose):
         
-        obs_dict = self._get_metacal_obslist(step, extra_noise)
+        obs_dict = self.get_metacal_obsdict(step, extra_noise)
 
         bdict={}
         for key in obs_dict:
@@ -1078,7 +1093,7 @@ class Bootstrapper(object):
         return res
 
 
-    def _get_metacal_obslist(self, step):
+    def get_metacal_obsdict(self, oobs, step):
         """
         get Observations for the sheared images
 
@@ -1090,11 +1105,6 @@ class Bootstrapper(object):
         """
         from .metacal import Metacal
         from .shape import Shape
-
-        if len(self.mb_obs_list) > 1 or len(self.mb_obs_list[0]) > 1:
-            raise NotImplementedError("only a single obs for now")
-
-        oobs = self.mb_obs_list[0][0]
 
         mc=Metacal(oobs)
 
@@ -1129,73 +1139,6 @@ class Bootstrapper(object):
                    }
 
         return obs_dict
-
-    def _get_metacal_obslist_old(self, step, extra_noise):
-        """
-        get Observations for the sheared images
-
-
-        for same noise we add the noise *after* shearing/convolving etc.
-
-        otherwise we degrade the original and metacal happens on that
-        just as with the real data
-        """
-        from .metacal import Metacal
-        from .shape import Shape
-
-        if len(self.mb_obs_list) > 1 or len(self.mb_obs_list[0]) > 1:
-            raise NotImplementedError("only a single obs for now")
-
-        oobs = self.mb_obs_list[0][0]
-
-        mc=Metacal(oobs)
-
-        sh1m=Shape(-step,  0.00 )
-        sh1p=Shape( step,  0.00 )
-
-        sh2m=Shape(0.0, -step)
-        sh2p=Shape(0.0,  step)
-
-        obs1p, obs_noshear = mc.get_obs_galshear(sh1p, get_unsheared=True)
-        obs1m = mc.get_obs_galshear(sh1m)
-        obs2p = mc.get_obs_galshear(sh2p)
-        obs2m = mc.get_obs_galshear(sh2m)
-
-        obs1p_psf = mc.get_obs_psfshear(sh1p)
-        obs1m_psf = mc.get_obs_psfshear(sh1m)
-        obs2p_psf = mc.get_obs_psfshear(sh2p)
-        obs2m_psf = mc.get_obs_psfshear(sh2m)
- 
-        obs_dict = {
-                    '1p':obs1p,
-                    '1m':obs1m,
-                    '2p':obs2p,
-                    '2m':obs2m,
-
-                    '1p_psf':obs1p_psf,
-                    '1m_psf':obs1m_psf,
-                    '2p_psf':obs2p_psf,
-                    '2m_psf':obs2m_psf,
-
-                    'noshear': obs_noshear,
-                   }
-
-        if extra_noise is not None:
-            noise_image = self._get_noise_image(obs_dict['1p'], extra_noise)
-
-            for key in obs_dict:
-
-                obs=obs_dict[key]
-
-                noise_image = self._get_noise_image(obs_dict['1p'], extra_noise)
-
-                new_weight = self._get_degraded_weight_image(obs, extra_noise)
-                new_obs = self._get_degraded_obs(obs, noise_image, new_weight)
-
-                obs_dict[key] = new_obs
-
-        return obs_dict
-
 
     def _get_degraded_obs(self, obs, noise_image, new_weight):
         """
@@ -1214,14 +1157,14 @@ class Bootstrapper(object):
 
         return new_obs
 
-    def _get_noise_image(self, obs, noise):
+    def _get_noise_image(self, dims, noise):
         """
         get a noise image for use in degrading a high s/n image
         """
 
         noise_image = numpy.random.normal(loc=0.0,
                                           scale=noise,
-                                          size=obs.image.shape)
+                                          size=dims)
 
         return noise_image
 
@@ -1237,6 +1180,104 @@ class Bootstrapper(object):
             new_weight[w] = 1.0/(1.0/new_weight[w] + noise**2)
 
         return new_weight
+
+    def fit_metacal_metanoise_max(self,
+                                  psf_model,
+                                  gal_model,
+                                  fitter_pars,
+                                  psf_Tguess,
+                                  extra_noise,
+                                  nrand,
+                                  psf_fit_pars=None,
+                                  step=0.01,
+                                  prior=None,
+                                  psf_ntry=10,
+                                  ntry=1,
+                                  verbose=True):
+        """
+        run metacalibration
+
+        parameters
+        ----------
+        psf_model: string
+            model to fit to psfs
+        gal_model: string
+            model to fit
+        fitter_pars: dict
+            parameters for the fitter
+        psf_Tguess: float
+            guess for psf
+        nrand: int
+            number of images to use with extra noise
+        extra_noise: float
+            extra noise in each image
+        step: float, optional
+            Step for the metacal shear derivative.  Default 0.01
+        prior: prior on parameters, optional
+            Optional prior to apply
+        ntry: int, optional
+            Number of times to retry fitting, default 1
+        psf_ntry: int
+            number of tries for psf fitter
+        ntry: int
+            number of tries for fitter
+        psf_fit_pars: dict
+            pars for the psf fitter
+        """
+
+        obs_dict,obs_dict0 = self.get_metanoise_obsdict(nrand, extra_noise, step)
+        res = self._fit_metacal_max_one(obs_dict,
+                                        psf_model,
+                                        gal_model,
+                                        fitter_pars,
+                                        psf_Tguess,
+                                        step,
+                                        prior,
+                                        psf_ntry,
+                                        ntry,
+                                        psf_fit_pars,
+                                        extra_noise,
+                                        verbose)
+
+        self.metacal_metanoise_max_res = res
+
+    def get_metanoise_obsdict(self, nrand, extra_noise, step):
+        """
+        get the metacal obs dict
+
+        get nrand new versions of the image with extra noise added
+        """
+
+        if len(self.mb_obs_list) > 1 or len(self.mb_obs_list[0]) > 1:
+            raise NotImplementedError("only a single obs for now")
+
+        oobs = self.mb_obs_list[0][0]
+        obs_dict0 = self.get_metacal_obsdict(oobs, step)
+
+        # fixed noise images to be added to each metacal image in parallel
+        noise_images=[]
+        for i in xrange(nrand):
+            noise_image = self._get_noise_image(obs_dict0['1p'].image.shape,
+                                                extra_noise)
+            noise_images.append(noise_image)
+
+        obs_dict = {}
+        for key in obs_dict0:
+
+            obs0=obs_dict0[key]
+
+            obslist = ObsList()
+            for i in xrange(nrand):
+                noise_image = noise_images[i]
+
+                new_weight = self._get_degraded_weight_image(obs0, extra_noise)
+                new_obs = self._get_degraded_obs(obs0, noise_image, new_weight)
+
+                obslist.append(new_obs)     
+
+            obs_dict[key] = obslist
+
+        return obs_dict, obs_dict0
 
     def fit_max_fixT(self, gal_model, pars, T,
                      guess=None, prior=None, extra_priors=None, ntry=1):

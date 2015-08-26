@@ -578,6 +578,7 @@ class GMix(object):
 
     def get_weighted_mom_sums(self,
                               obs,
+                              find_cen=True,
                               maxiter=100,
                               centol=1.0e-4,
                               max_shift=5.0,
@@ -608,18 +609,19 @@ class GMix(object):
         returns
         --------
 
-        In the following, W is the weight function, I is the image, and
-        w is the weight map
+        In the following, W is the weight function, I is the image
 
-           Returns
-               ucen  = sum(W*I*u)/sum(W*I)
-               vcen  = sum(W*I*v)/sum(W*I)
-               Isum  = sum(W*I)
-               Tsum  = sum(W * I * {u^2 + v^2} )
+           Returns the folling in the 'pars' field, in this order
+               usum = sum(W*I*u)
+               vsum = sum(W*I*v)
                M1sum = sum(W * I * {u^2 - v^2} )
                M2sum = sum(W * I * 2*u*v)
+               Tsum  = sum(W * I * {u^2 + v^2} )
+               Isum  = sum(W*I)
 
-        where u,v are relative to the jacobian center
+        where u,v are relative to the jacobian center.  also returned are the
+        inferred cen and some metadata, such as flags if the center was
+        found iteratively
 
         Also returned are sums used to calculate variances in these quantities, but
         note the covariance can be significant
@@ -632,21 +634,29 @@ class GMix(object):
         These should be multiplied by the noise^2 to turn them into proper variances
 
         """
+
+        if find_cen:
+            find_cen=1
+        else:
+            find_cen=0
+
         gm=self._get_gmix_data()
         cen=zeros(2)
         pars=zeros(6)
         pvar=zeros(6)
-        niter,flags=_gmix.get_weighted_mom_sums(obs.image,
-                                                gm,
-                                                obs.jacobian._data,
-                                                maxiter, centol,max_shift,
-                                                cen,pars,pvar)
+        wsum,niter,flags=_gmix.get_weighted_mom_sums(obs.image,
+                                                     gm,
+                                                     obs.jacobian._data,
+                                                     find_cen,
+                                                     maxiter,
+                                                     centol,
+                                                     max_shift,
+                                                     cen,pars,pvar)
         flagstr=_moms_flagmap[flags]
-        cov=diag(pvar)
         return {'cen':cen,
                 'pars':pars,
-                'pars_cov':cov,
                 'pars_var':pvar,
+                'wsum':wsum,
                 'maxiter':maxiter,
                 'centol':centol,
                 'niter':niter,

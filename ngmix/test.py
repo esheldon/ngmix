@@ -4705,6 +4705,7 @@ def test_moms(model='gauss',
               show=False,
               do_admom=False,
               do_em=False,
+              find_cen=True,
               verbose=True):
     """
     wgmix is a gaussian mixture to use for the weight
@@ -4757,7 +4758,8 @@ def test_moms(model='gauss',
     wpars=array([0.0,0.0,wg1,wg2,wT,1.0],dtype='f8')
     wgm = gmix.GMixModel(wpars,wmodel)
 
-    res=wgm.get_weighted_mom_sums(obs,maxiter=maxiter,centol=centol,max_shift=max_shift)
+    res=wgm.get_weighted_mom_sums(obs,maxiter=maxiter,centol=centol,max_shift=max_shift,
+                                  find_cen=find_cen)
 
     if do_admom:
         import admom
