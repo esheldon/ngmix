@@ -1466,7 +1466,7 @@ class GMixND(object):
         """
         import fitsio
 
-        print("reading mixture from:",fname)
+        print("loading gaussian mixture from:",fname)
         with fitsio.FITS(fname) as fits:
             weights = fits['weights'].read()
             means = fits['means'].read()
