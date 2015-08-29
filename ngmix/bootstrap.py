@@ -696,7 +696,7 @@ class Bootstrapper(object):
                         psf_fit_pars=None,
                         extra_noise=None,
                         nrand=1,
-                        step=0.01,
+                        metacal_pars=None,
                         prior=None,
                         psf_ntry=10,
                         ntry=1,
@@ -710,8 +710,8 @@ class Bootstrapper(object):
             model to fit
         pars: dict
             parameters for the maximum likelihood fitter
-        step: float, optional
-            Step for the metacal shear derivative.  Default 0.01
+        metacal_pars: dict, optional
+            Parameters for metacal, default {'step':0.01}
         prior: prior on parameters, optional
             Optional prior to apply
         ntry: int, optional
@@ -721,11 +721,17 @@ class Bootstrapper(object):
         if len(self.mb_obs_list) > 1 or len(self.mb_obs_list[0]) > 1:
             raise NotImplementedError("only a single obs for now")
 
+        mpars={'step':0.01}
+        if metacal_pars is not None:
+            mpars.update(metacal_pars)
+
+        metacal_pars=mpars
+
         if extra_noise is None:
             nrand=1
 
         oobs = self.mb_obs_list[0][0]
-        obs_dict0 = self.get_metacal_obsdict(oobs, step)
+        obs_dict0 = self.get_metacal_obsdict(oobs, metacal_pars)
 
         for i in xrange(nrand):
             if extra_noise is not None:
@@ -736,8 +742,9 @@ class Bootstrapper(object):
             if nrand > 1 and verbose:
                 print("    irand: %d/%d" % (i+1,nrand))
 
-            tres = self._fit_metacal_max_one(obs_dict,
-                                             psf_model, gal_model, pars, psf_Tguess, step,
+            tres = self._fit_metacal_max_one(metacal_pars,
+                                             obs_dict,
+                                             psf_model, gal_model, pars, psf_Tguess,
                                              prior, psf_ntry, ntry,
                                              psf_fit_pars,
                                              extra_noise,
@@ -771,67 +778,20 @@ class Bootstrapper(object):
         return nobs_dict
 
 
-    def fit_metacal_max_old(self,
-                        psf_model,
-                        gal_model,
-                        pars,
-                        psf_Tguess,
-                        psf_fit_pars=None,
-                        extra_noise=None,
-                        nrand=1,
-                        step=0.01,
-                        prior=None,
-                        psf_ntry=10,
-                        ntry=1,
-                        verbose=True):
-        """
-        run metacalibration
 
-        parameters
-        ----------
-        gal_model: string
-            model to fit
-        pars: dict
-            parameters for the maximum likelihood fitter
-        step: float, optional
-            Step for the metacal shear derivative.  Default 0.01
-        prior: prior on parameters, optional
-            Optional prior to apply
-        ntry: int, optional
-            Number of times to retry fitting, default 1
-        """
-        if extra_noise is None:
-            nrand=1
-
-        for i in xrange(nrand):
-            if nrand > 1 and verbose:
-                print("    irand: %d/%d" % (i+1,nrand))
-            tres = self._fit_metacal_max_one(psf_model, gal_model, pars, psf_Tguess, step,
-                                             prior, psf_ntry, ntry,
-                                             psf_fit_pars,
-                                             extra_noise,
-                                             verbose)
-            if i == 0:
-                res=tres
-            else:
-                for key in res:
-                    res[key] = res[key] + tres[key]
-            
-        if nrand > 1:
-            for key in res:
-                res[key] = res[key]/float(nrand)
-
-        self.metacal_max_res = res
-
-    def _fit_metacal_max_one(self, obs_dict,
+    def _fit_metacal_max_one(self,
+                             metacal_pars,
+                             obs_dict,
                              psf_model, gal_model, max_pars, 
-                             psf_Tguess, step, prior, psf_ntry, ntry, 
+                             psf_Tguess, prior, psf_ntry, ntry, 
                              psf_fit_pars,
                              extra_noise,
                              verbose):
+
+        step = metacal_pars['step']
 
         fits = self._do_metacal_fits(obs_dict,
-                                     psf_model, gal_model, max_pars, psf_Tguess, step,
+                                     psf_model, gal_model, max_pars, psf_Tguess,
                                      prior, psf_ntry, ntry,
                                      psf_fit_pars,
                                      extra_noise,
@@ -886,70 +846,10 @@ class Bootstrapper(object):
                'mcal_psf_T_r':fits['psf_T_r']}
         return res
 
-    def _fit_metacal_max_one_old(self, psf_model, gal_model, max_pars, 
-                             psf_Tguess, step, prior, psf_ntry, ntry, 
-                             psf_fit_pars,
-                             extra_noise,
-                             verbose):
-
-        fits = self._do_metacal_fits(psf_model, gal_model, max_pars, psf_Tguess, step,
-                                     prior, psf_ntry, ntry,
-                                     psf_fit_pars,
-                                     extra_noise,
-                                     verbose)
-
-        pars=fits['pars']
-        pars_mean = (pars['1p']+
-                     pars['1m']+
-                     pars['2p']+
-                     pars['2m'])/4.0
-
-        pars_cov=fits['pars_cov']
-        pars_cov_mean = (pars_cov['1p']+
-                         pars_cov['1m']+
-                         pars_cov['2p']+
-                         pars_cov['2m'])/4.0
-
-        if verbose:
-            print_pars(pars_mean, front='    mcmean:   ')
-
-        sens=zeros( (2,2) ) 
-        sens_psf=zeros(2)
-
-        fac = 1.0/(2.0*step)
-
-        sens[0,0] = (pars['1p'][2]-pars['1m'][2])*fac
-        sens[0,1] = (pars['1p'][3]-pars['1m'][3])*fac
-        sens[1,0] = (pars['2p'][2]-pars['2m'][2])*fac
-        sens[1,1] = (pars['2p'][3]-pars['2m'][3])*fac
-
-        sens_psf[0] = (pars['1p_psf'][2]-pars['1m_psf'][2])*fac
-        sens_psf[1] = (pars['2p_psf'][3]-pars['2m_psf'][3])*fac
-
-        psf_ellip=fits['psf_ellip']
-        sens_psf[0] *= psf_ellip[0]
-        sens_psf[1] *= psf_ellip[1]
-
-        pars_noshear = pars['noshear']
-
-        c = pars_mean[2:2+2] - pars_noshear[2:2+2]
-
-        res = {'mcal_pars_mean':pars_mean,
-               'mcal_pars_mean_cov':pars_cov_mean,
-               'mcal_g_mean':pars_mean[2:2+2],
-               'mcal_g_cov':pars_cov_mean[2:2+2, 2:2+2],
-               'mcal_pars_noshear':pars_noshear,
-               'mcal_c':c,
-               'mcal_g_sens':sens,
-               'mcal_psf_sens':sens_psf,
-               'mcal_s2n_r':fits['s2n_r'],
-               'mcal_T_r':fits['T_r'],
-               'mcal_psf_T_r':fits['psf_T_r']}
-        return res
 
 
     def _do_metacal_fits(self, obs_dict, psf_model, gal_model, pars, 
-                         psf_Tguess, step, prior, psf_ntry, ntry, 
+                         psf_Tguess, prior, psf_ntry, ntry, 
                          psf_fit_pars,
                          extra_noise,
                          verbose):
@@ -1019,81 +919,7 @@ class Bootstrapper(object):
 
         return res
 
-    def _do_metacal_fits_old(self, psf_model, gal_model, pars, 
-                         psf_Tguess, step, prior, psf_ntry, ntry, 
-                         psf_fit_pars,
-                         extra_noise,
-                         verbose):
-        
-        obs_dict = self.get_metacal_obsdict(step, extra_noise)
-
-        bdict={}
-        for key in obs_dict:
-            boot = Bootstrapper(obs_dict[key], use_logpars=self.use_logpars,intpars=self.intpars)
-            boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry, fit_pars=psf_fit_pars)
-            boot.fit_max(gal_model, pars, prior=prior, ntry=ntry)
-            boot.set_round_s2n()
-            
-            if verbose:
-                if 'psf' in key:
-                    front='    psf mcpars:'
-                else:
-                    front='        mcpars:'
-                print_pars(boot.get_max_fitter().get_result()['pars'],
-                           front=front)
-
-            bdict[key] = boot
-
-        res={'pars':{}, 'pars_cov':{}, 'psf_ellip':{}}
-        s2n_r_mean   = 0.0
-        T_r_mean     = 0.0
-        psf_T_r_mean = 0.0
-        psf_ellip_mean = zeros(2)
-        npsf=0
-        navg=0
-
-        for i,key in enumerate(bdict):
-            boot = bdict[key]
-            tres=boot.get_max_fitter().get_result()
-
-            res['pars'][key] = tres['pars']
-            res['pars_cov'][key] = tres['pars_cov']
-
-            #
-            # averaging
-            #
-
-            if key=='noshear' or 'psf' in key:
-                # don't include noshear in the averages
-                # don't average over psf sheared model
-                continue
-
-
-            for obslist in boot.mb_obs_list:
-                for obs in obslist:
-                    g1,g2,T=obs.psf.gmix.get_g1g2T()
-                    psf_ellip_mean[0] += g1
-                    psf_ellip_mean[1] += g2
-                    npsf+=1
-
-            rres=boot.get_round_result()
-
-            s2n_r_mean   += rres['s2n_r']
-            T_r_mean     += rres['T_r']
-            psf_T_r_mean += rres['psf_T_r']
-            navg += 1
-
-        assert navg==4,"expected 4 to average"
-
-        res['s2n_r']   = s2n_r_mean/navg
-        res['T_r']     = T_r_mean/navg
-        res['psf_T_r'] = psf_T_r_mean/navg
-        res['psf_ellip'] = psf_ellip_mean/npsf
-
-        return res
-
-
-    def get_metacal_obsdict(self, oobs, step):
+    def get_metacal_obsdict(self, oobs, metacal_pars):
         """
         get Observations for the sheared images
 
@@ -1106,7 +932,13 @@ class Bootstrapper(object):
         from .metacal import Metacal
         from .shape import Shape
 
-        mc=Metacal(oobs)
+        step=metacal_pars['step']
+        whiten=metacal_pars.get('whiten',False)
+        same_seed=metacal_pars.get('same_seed',False)
+
+        print("        step:",step,"whiten:",whiten,"same_seed:",same_seed)
+
+        mc=Metacal(oobs, whiten=whiten, same_seed=same_seed)
 
         sh1m=Shape(-step,  0.00 )
         sh1p=Shape( step,  0.00 )
