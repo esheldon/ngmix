@@ -174,6 +174,8 @@ class Metacal(object):
         get the target image, convolved with the specified psf
         and possible sheared
 
+        This is where whitening happens
+
         parameters
         ----------
         psf: A galsim image
