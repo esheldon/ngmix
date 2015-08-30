@@ -177,6 +177,53 @@ class Observation(object):
         """
         return hasattr(self,'aperture')
 
+    def get_s2n(self):
+        """
+        get the the simple s/n estimator
+
+        sum(I)/sqrt( sum( 1/w ) ) = Isum/sqrt(Vsum)
+
+        returns
+        -------
+        s2n: float
+            The supid s/n estimator
+        """
+        
+        Isum, Vsum, Npix = self.get_s2n_sums()
+        if Vsum > 0.0:
+            s2n = Isum/numpy.sqrt(Vsum)
+        else:
+            s2n=-9999.0
+        return s2n
+
+
+    def get_s2n_sums(self):
+        """
+        get the sums for the simple s/n estimator
+
+        sum(I)/sqrt( sum( 1/w ) ) = Isum/sqrt(Vsum)
+
+        returns
+        -------
+        Isum, Vsum, Npix
+        """
+
+        image = self.image
+        weight = self.weight
+
+        w=numpy.where(weight > 0)
+
+        if w[0].size > 0:
+            Isum = image[w].sum()
+            Vsum = (1.0/weight[w]).sum()
+            Npix = w[0].size
+        else:
+            Isum = 0.0
+            Vsum = 0.0
+            Npix = 0
+
+        return Isum, Vsum, Npix
+
     def update_meta_data(self, meta):
         """
         Add some metadata
@@ -215,6 +262,49 @@ class ObsList(list):
         """
         for obs in self:
             obs.set_aperture(aper)
+
+    def get_s2n(self):
+        """
+        get the the simple s/n estimator
+
+        sum(I)/sqrt( sum( 1/w ) ) = Isum/sqrt(Vsum)
+
+        returns
+        -------
+        s2n: float
+            The supid s/n estimator
+        """
+        
+        Isum, Vsum, Npix = self.get_s2n_sums()
+        if Vsum > 0.0:
+            s2n = Isum/numpy.sqrt(Vsum)
+        else:
+            s2n=-9999.0
+        return s2n
+
+
+    def get_s2n_sums(self):
+        """
+        get the sums for the simple s/n estimator
+
+        sum(I)/sqrt( sum( 1/w ) ) = Isum/sqrt(Vsum)
+
+        returns
+        -------
+        Isum, Vsum, Npix
+        """
+
+        Isum = 0.0
+        Vsum = 0.0
+        Npix = 0
+
+        for obs in self:
+            tIsum,tVsum,tNpix = obs.get_s2n_sums()
+            Isum += tIsum
+            Vsum += tVsum
+            Npix += tNpix
+
+        return Isum, Vsum, Npix
 
     def update_meta_data(self, meta):
         """
@@ -264,6 +354,49 @@ class MultiBandObsList(list):
         for obslist in self:
             obslist.set_aperture(aper)
 
+    def get_s2n(self):
+        """
+        get the the simple s/n estimator
+
+        sum(I)/sqrt( sum( 1/w ) ) = Isum/sqrt(Vsum)
+
+        returns
+        -------
+        s2n: float
+            The supid s/n estimator
+        """
+        
+        Isum, Vsum, Npix = self.get_s2n_sums()
+        if Vsum > 0.0:
+            s2n = Isum/numpy.sqrt(Vsum)
+        else:
+            s2n=-9999.0
+        return s2n
+
+    def get_s2n_sums(self):
+        """
+        get the sums for the simple s/n estimator
+
+        sum(I)/sqrt( sum( 1/w ) ) = Isum/sqrt(Vsum)
+
+        returns
+        -------
+        Isum, Vsum, Npix
+        """
+
+        Isum = 0.0
+        Vsum = 0.0
+        Npix = 0
+
+        for obslist in self:
+            tIsum,tVsum,tNpix = obslist.get_s2n_sums()
+            Isum += tIsum
+            Vsum += tVsum
+            Npix += tNpix
+
+        return Isum, Vsum, Npix
+
+
     def update_meta_data(self, meta):
         """
         Add some metadata
@@ -303,71 +436,3 @@ def get_mb_obs(obs_in):
 
     return obs
 
-def get_s2n_pix(obs):
-    """
-    get the the stupid s/n estimator
-
-    sum(I)/sqrt( sum( 1/w ) ) = Isum/sqrt(Vsum)
-
-    parameters
-    ----------
-    obs: Observation, ObsList, or MultiBandObsList
-
-    returns
-    -------
-    s2n: float
-        The supid s/n estimator
-    """
-    
-    Isum, Vsum, Npix = get_s2n_pix_sums(obs)
-    if Vsum > 0.0:
-        s2n = Isum/numpy.sqrt(Vsum)
-    else:
-        s2n=-9999.0
-    return s2n
-
-
-def get_s2n_pix_sums(obsin):
-    """
-    get the sums for the stupid s/n estimator
-
-    sum(I)/sqrt( sum( 1/w ) ) = Isum/sqrt(Vsum)
-
-    parameters
-    ----------
-    obs: Observation, ObsList, or MultiBandObsList
-
-    returns
-    -------
-    Isum, Vsum, Npix
-    """
-    Isum=0.0
-    Vsum=0.0
-    Npix=0
-    if isinstance(obsin, MultiBandObsList):
-        for obslist in obsin:
-            tIsum,tVsum,tNpix = get_s2n_pix_sums(obslist)
-            Isum += tIsum
-            Vsum += tVsum
-            Npix += tNpix
-    elif isinstance(obsin,ObsList):
-        for obs in obsin:
-            tIsum,tVsum,tNpix = get_s2n_pix_sums(obs)
-            Isum += tIsum
-            Vsum += tVsum
-            Npix += tNpix
-    elif isinstance(obsin,Observation):
-        image = obsin.image
-        weight = obsin.weight
-
-        w=numpy.where(weight > 0)
-
-        if w[0].size > 0:
-            Isum += image[w].sum()
-            Vsum += (1.0/weight[w]).sum()
-            Npix += w[0].size
-    else:
-        raise ValueError("invalid obs type: %s, expected "
-                         "Observation,ObsList,MultiBandObsList" % type(obsin))
-
-    return Isum, Vsum, Npix
