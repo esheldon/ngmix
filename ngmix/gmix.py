@@ -1387,16 +1387,19 @@ class GMixND(object):
     Gaussian mixture in arbitrary dimensions.  A bit awkward
     in dim=1 e.g. becuase assumes means are [ndim,npars]
     """
-    def __init__(self, weights=None, means=None, covars=None):
+    def __init__(self, weights=None, means=None, covars=None, file=None):
 
-        if (weights is not None
-                and means is not None
-                and covars is not None):
-            self.set_mixture(weights, means, covars)
-        elif (weights is not None
-                or means is not None
-                or covars is not None):
-            raise RuntimeError("send all or none of weights, means, covars")
+        if file is not None:
+            self.load_mixture(file)
+        else:
+            if (weights is not None
+                    and means is not None
+                    and covars is not None):
+                self.set_mixture(weights, means, covars)
+            elif (weights is not None
+                    or means is not None
+                    or covars is not None):
+                raise RuntimeError("send all or none of weights, means, covars")
 
     def set_mixture(self, weights, means, covars):
         """
@@ -1537,15 +1540,19 @@ class GMixND(object):
             self._make_gmm()
 
         if n is None:
-            is_scalar=True
+            is_one=True
             n=1
+            if self.ndim==1:
+                is_scalar=1
         else:
-            is_scalar=False
+            is_one=False
 
         samples=self._gmm.sample(n)
 
-        if is_scalar:
+        if is_one:
             samples = samples[0,:]
+            if is_one:
+                samples = samples[0]
         return samples
 
 
