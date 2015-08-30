@@ -18,7 +18,7 @@ from . import fitting
 from .fitting import print_pars
 from .gmix import GMix, GMixModel, GMixCM, get_coellip_npars
 from .em import GMixEM, prep_image
-from .observation import Observation, ObsList, MultiBandObsList, get_mb_obs
+from .observation import Observation, ObsList, MultiBandObsList, get_mb_obs, get_s2n_pix
 from .priors import srandu
 from .shape import get_round_factor
 from .guessers import TFluxGuesser, TFluxAndPriorGuesser, ParsGuesser, RoundParsGuesser
@@ -842,6 +842,7 @@ class Bootstrapper(object):
                'mcal_g_sens':sens,
                'mcal_psf_sens':sens_psf,
                'mcal_s2n_r':fits['s2n_r'],
+               'mcal_s2n_pix':fits['s2n_pix'],
                'mcal_T_r':fits['T_r'],
                'mcal_psf_T_r':fits['psf_T_r']}
         return res
@@ -911,6 +912,9 @@ class Bootstrapper(object):
             navg += 1
 
         assert navg==4,"expected 4 to average"
+
+        bnoshear=bdict['noshear']
+        res['s2n_pix'] = get_s2n_pix(bnoshear.mb_obs_list)
 
         res['s2n_r']   = s2n_r_mean/navg
         res['T_r']     = T_r_mean/navg
