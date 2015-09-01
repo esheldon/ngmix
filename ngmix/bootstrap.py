@@ -2067,8 +2067,20 @@ class PSFRunnerCoellip(object):
             guess[8] = self.Fguess*_moffat3_pguess[1]*(1.0 + fac*srandu())
             guess[9] = self.Fguess*_moffat3_pguess[2]*(1.0 + fac*srandu())
 
+        elif self.ngauss==4:
+            guess[4] = self.Tguess*_moffat4_fguess[0]*(1.0 + fac*srandu())
+            guess[5] = self.Tguess*_moffat4_fguess[1]*(1.0 + fac*srandu())
+            guess[6] = self.Tguess*_moffat4_fguess[2]*(1.0 + fac*srandu())
+            guess[7] = self.Tguess*_moffat4_fguess[3]*(1.0 + fac*srandu())
+
+            guess[8] = self.Fguess*_moffat4_pguess[0]*(1.0 + fac*srandu())
+            guess[9] = self.Fguess*_moffat4_pguess[1]*(1.0 + fac*srandu())
+            guess[10] = self.Fguess*_moffat4_pguess[2]*(1.0 + fac*srandu())
+            guess[11] = self.Fguess*_moffat4_pguess[3]*(1.0 + fac*srandu())
+
+
         else:
-            raise RuntimeError("ngauss should be 1,2,3")
+            raise RuntimeError("ngauss should be 1,2,3,4")
 
         return guess
 
@@ -2086,6 +2098,9 @@ _moffat2_fguess=array([0.48955064,  1.50658978])
 
 _moffat3_pguess=array([ 0.27559669,  0.55817131,  0.166232  ])
 _moffat3_fguess=array([ 0.36123609,  0.8426139,   2.58747785])
+
+_moffat4_pguess=array([0.44534,  0.366951,  0.10506,  0.0826497])
+_moffat4_fguess=array([0.541019,  1.19701,  0.282176,  3.51086])
 #_moffat3_pguess=array([0.45, 0.45, 0.1])
 #_moffat3_fguess=array([0.48955064,  1.50658978, 3.0])
 

@@ -5028,7 +5028,8 @@ class MoffatFitter(object):
                  beta=3.5, r50=40.0,
                  s2n=1.e5, g1=0.05, g2=0.05,
                  nsub=1, npoints=None,
-                 fitter_type='lm'):
+                 fitter_type='lm',
+                 use_cen_offsets=False):
         self.ngauss=ngauss
         self.beta=beta
         self.r50=r50
@@ -5041,6 +5042,8 @@ class MoffatFitter(object):
 
         self.g1=g1
         self.g2=g2
+
+        self.use_cen_offsets=use_cen_offsets
 
         self._make_moffat()
 
@@ -5219,9 +5222,10 @@ class MoffatFitter(object):
                                half_light_radius=self.r50)
         gs_obj = gs_obj.shear(g1=self.g1, g2=self.g2)
 
-        cenoff1=0.5*srandu()
-        cenoff2=0.5*srandu()
-        gs_obj = gs_obj.shift(dx=cenoff1,dy=cenoff2)
+        if self.use_cen_offsets:
+            cenoff1=0.5*srandu()
+            cenoff2=0.5*srandu()
+            gs_obj = gs_obj.shift(dx=cenoff1,dy=cenoff2)
 
         gsimage = galsim.ImageD(dims[0], dims[1])
 
