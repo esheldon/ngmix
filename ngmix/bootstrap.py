@@ -2073,8 +2073,8 @@ class PSFRunnerCoellip(object):
             guess[6] = self.Tguess*_moffat4_fguess[2]*(1.0 + fac*srandu())
             guess[7] = self.Tguess*_moffat4_fguess[3]*(1.0 + fac*srandu())
 
-            guess[8] = self.Fguess*_moffat4_pguess[0]*(1.0 + fac*srandu())
-            guess[9] = self.Fguess*_moffat4_pguess[1]*(1.0 + fac*srandu())
+            guess[8]  = self.Fguess*_moffat4_pguess[0]*(1.0 + fac*srandu())
+            guess[9]  = self.Fguess*_moffat4_pguess[1]*(1.0 + fac*srandu())
             guess[10] = self.Fguess*_moffat4_pguess[2]*(1.0 + fac*srandu())
             guess[11] = self.Fguess*_moffat4_pguess[3]*(1.0 + fac*srandu())
 
