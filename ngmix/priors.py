@@ -3904,7 +3904,7 @@ class CenPrior(_gmix.Normal2D):
         return rand1, rand2
     sample2d=sample
 
-RoundGauss2D=CenPrior
+SimpleGauss2D=CenPrior
 
 
 
