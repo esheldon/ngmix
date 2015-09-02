@@ -695,6 +695,7 @@ class Bootstrapper(object):
                         psf_Tguess,
                         psf_fit_pars=None,
                         extra_noise=None,
+                        metacal_obs=None,
                         nrand=1,
                         metacal_pars=None,
                         prior=None,
@@ -731,13 +732,19 @@ class Bootstrapper(object):
             nrand=1
 
         oobs = self.mb_obs_list[0][0]
-        obs_dict0 = self.get_metacal_obsdict(oobs, metacal_pars)
+
+        if metacal_obs is not None:
+            if verbose:
+                print("        using input metacal obs dict")
+            obs_dict_orig=metacal_obs
+        else:
+            obs_dict_orig = self.get_metacal_obsdict(oobs, metacal_pars)
 
         for i in xrange(nrand):
             if extra_noise is not None:
-                obs_dict = self._add_noise_to_metacal_obsdict(obs_dict0, extra_noise)
+                obs_dict = self._add_noise_to_metacal_obsdict(obs_dict_orig, extra_noise)
             else:
-                obs_dict=obs_dict0
+                obs_dict=obs_dict_orig
 
             if nrand > 1 and verbose:
                 print("    irand: %d/%d" % (i+1,nrand))
@@ -760,6 +767,8 @@ class Bootstrapper(object):
                 res[key] = res[key]/float(nrand)
 
         self.metacal_max_res = res
+
+        return obs_dict_orig
 
     def _add_noise_to_metacal_obsdict(self, obs_dict, extra_noise):
         noise_image = self._get_noise_image(obs_dict['1p'].image.shape,
@@ -895,7 +904,6 @@ class Bootstrapper(object):
                 # don't include noshear in the averages
                 # don't average over psf sheared model
                 continue
-
 
             for obslist in boot.mb_obs_list:
                 for obs in obslist:
