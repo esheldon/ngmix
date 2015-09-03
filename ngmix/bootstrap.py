@@ -103,15 +103,6 @@ class Bootstrapper(object):
             raise RuntimeError("you need to run fit_metacal_max first")
         return self.metacal_max_res
 
-    def get_metacal_metanoise_max_result(self):
-        """
-        get result of metacal with a max likelihood fitter
-        """
-        if not hasattr(self, 'metacal_metanoise_max_res'):
-            raise RuntimeError("you need to run fit_metanoise_metacal_max first")
-        return self.metacal_metanoise_max_res
-
-
 
     def get_round_result(self):
         """
@@ -1025,103 +1016,6 @@ class Bootstrapper(object):
 
         return new_weight
 
-    def fit_metacal_metanoise_max(self,
-                                  psf_model,
-                                  gal_model,
-                                  fitter_pars,
-                                  psf_Tguess,
-                                  extra_noise,
-                                  nrand,
-                                  psf_fit_pars=None,
-                                  step=0.01,
-                                  prior=None,
-                                  psf_ntry=10,
-                                  ntry=1,
-                                  verbose=True):
-        """
-        run metacalibration
-
-        parameters
-        ----------
-        psf_model: string
-            model to fit to psfs
-        gal_model: string
-            model to fit
-        fitter_pars: dict
-            parameters for the fitter
-        psf_Tguess: float
-            guess for psf
-        nrand: int
-            number of images to use with extra noise
-        extra_noise: float
-            extra noise in each image
-        step: float, optional
-            Step for the metacal shear derivative.  Default 0.01
-        prior: prior on parameters, optional
-            Optional prior to apply
-        ntry: int, optional
-            Number of times to retry fitting, default 1
-        psf_ntry: int
-            number of tries for psf fitter
-        ntry: int
-            number of tries for fitter
-        psf_fit_pars: dict
-            pars for the psf fitter
-        """
-
-        obs_dict,obs_dict0 = self.get_metanoise_obsdict(nrand, extra_noise, step)
-        res = self._fit_metacal_max_one(obs_dict,
-                                        psf_model,
-                                        gal_model,
-                                        fitter_pars,
-                                        psf_Tguess,
-                                        step,
-                                        prior,
-                                        psf_ntry,
-                                        ntry,
-                                        psf_fit_pars,
-                                        extra_noise,
-                                        verbose)
-
-        self.metacal_metanoise_max_res = res
-
-    def get_metanoise_obsdict(self, nrand, extra_noise, step):
-        """
-        get the metacal obs dict
-
-        get nrand new versions of the image with extra noise added
-        """
-
-        if len(self.mb_obs_list) > 1 or len(self.mb_obs_list[0]) > 1:
-            raise NotImplementedError("only a single obs for now")
-
-        oobs = self.mb_obs_list[0][0]
-        obs_dict0 = self.get_metacal_obsdict(oobs, step)
-
-        # fixed noise images to be added to each metacal image in parallel
-        noise_images=[]
-        for i in xrange(nrand):
-            noise_image = self._get_noise_image(obs_dict0['1p'].image.shape,
-                                                extra_noise)
-            noise_images.append(noise_image)
-
-        obs_dict = {}
-        for key in obs_dict0:
-
-            obs0=obs_dict0[key]
-
-            obslist = ObsList()
-            for i in xrange(nrand):
-                noise_image = noise_images[i]
-
-                new_weight = self._get_degraded_weight_image(obs0, extra_noise)
-                new_obs = self._get_degraded_obs(obs0, noise_image, new_weight)
-
-                obslist.append(new_obs)     
-
-            obs_dict[key] = obslist
-
-        return obs_dict, obs_dict0
 
     def fit_max_fixT(self, gal_model, pars, T,
                      guess=None, prior=None, extra_priors=None, ntry=1):
