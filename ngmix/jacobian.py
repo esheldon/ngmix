@@ -27,8 +27,6 @@ _jacobian_dtype=[('row0','f8'),
 class Jacobian(object):
     def __init__(self, row0, col0, dudrow, dudcol, dvdrow, dvdcol):
         self._data = zeros(1, dtype=_jacobian_dtype)
-        self.row0=row0
-        self.col0=col0
         self._data['row0']=row0
         self._data['col0']=col0
 
@@ -45,7 +43,7 @@ class Jacobian(object):
         """
         Get the center of the coordinate system
         """
-        return copy.deepcopy(self.row0), copy.deepcopy(self.col0)
+        return copy.deepcopy(self._data['row0']), copy.deepcopy(self._data['col0'])
 
     def get_dudrow(self):
         """
