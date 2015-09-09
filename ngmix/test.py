@@ -4705,6 +4705,7 @@ def test_moms(model='gauss',
               show=False,
               do_admom=False,
               do_em=False,
+              find_cen=True,
               verbose=True):
     """
     wgmix is a gaussian mixture to use for the weight
@@ -4757,7 +4758,8 @@ def test_moms(model='gauss',
     wpars=array([0.0,0.0,wg1,wg2,wT,1.0],dtype='f8')
     wgm = gmix.GMixModel(wpars,wmodel)
 
-    res=wgm.get_weighted_mom_sums(obs,maxiter=maxiter,centol=centol,max_shift=max_shift)
+    res=wgm.get_weighted_mom_sums(obs,maxiter=maxiter,centol=centol,max_shift=max_shift,
+                                  find_cen=find_cen)
 
     if do_admom:
         import admom
@@ -4932,5 +4934,332 @@ def test_moms_many(num, method='lm', use_errors=False, eps=None,show=False, **ke
 
         if show:
             tab.show()
+
+def fit_moffat_many(ngauss, n=100, g1=0.05, g2=0.05, verbose=False, **kw):
+    """
+    r50=1.5
+
+    4 gauss
+        npoints=5
+            chi2per: 2.26948 +/- 0.0072747
+            g1: 0.0500002 +/- 7.57101e-07
+                fracdiff: 4.49606e-06 +/- 1.5142e-05
+            g2: 0.0500003 +/- 3.59605e-07
+                fracdiff: 6.32538e-06 +/- 7.1921e-06
+        npoints=10
+
+    3 gauss
+        npoints=5
+            chi2per: 65.0592 +/- 0.21742
+            g1: 0.0499933 +/- 3.17405e-06
+                fracdiff: -0.000134582 +/- 6.34809e-05
+            g2: 0.0499991 +/- 3.97517e-07
+                fracdiff: -1.81021e-05 +/- 7.95033e-06
+
+        npoints=10
+            chi2per: 65.3292 +/- 0.212992
+            g1: 0.0499943 +/- 3.2699e-06
+                fracdiff: -0.000113588 +/- 6.53979e-05
+            g2: 0.0499998 +/- 3.7721e-07
+                fracdiff: -4.66328e-06 +/- 7.5442e-06
+
+    2 gauss
+        npoints=5
+            chi2per: 3623.51 +/- 3.91564
+            g1: 0.0501271 +/- 4.38246e-06
+                fracdiff: 0.00254299 +/- 8.76492e-05
+            g2: 0.0499663 +/- 4.05564e-07
+                fracdiff: -0.000673996 +/- 8.11127e-06
+        npoints=10
+            chi2per: 3624.06 +/- 4.0222
+            g1: 0.0501374 +/- 4.39311e-06
+                fracdiff: 0.00274818 +/- 8.78622e-05
+            g2: 0.0499663 +/- 3.88417e-07
+                fracdiff: -0.000674415 +/- 7.76835e-06
+
+    """
+    from esutil.stat import sigma_clip
+
+    g1vals=numpy.zeros(n)
+    g2vals=numpy.zeros(n)
+    chi2per=numpy.zeros(n)
+
+    for i in xrange(n):
+        mf=MoffatFitter(ngauss, g1=g1, g2=g2, **kw)
+        mf.go()
+        res=mf.get_result()
+        g1vals[i] = res['pars'][2]
+        g2vals[i] = res['pars'][3]
+        chi2per[i] = res['chi2per']
+
+        if verbose:
+            print('%s/%s nfev: %d' % (i+1,n,res['nfev']))
+
+    chi2m,_,chi2err = sigma_clip(chi2per,get_err=True)
+    g1m,_,g1e= sigma_clip(g1vals,get_err=True)
+    g2m,_,g2e= sigma_clip(g2vals,get_err=True)
+
+    '''
+    chi2m = chi2per.mean()
+    chi2err = chi2per.std()/sqrt(n)
+    g1m=g1vals.mean()
+    g1e=g1vals.std()/numpy.sqrt(n)
+    g2m=g2vals.mean()
+    g2e=g2vals.std()/numpy.sqrt(n)
+    '''
+    
+    print("chi2per: %g +/- %g" % (chi2m,chi2err))
+    print("g1: %g +/- %g" % (g1m,g1e))
+    if g1 != 0.0:
+        fd=g1m/g1-1
+        fderr=g1e/g1
+        print("    fracdiff: %g +/- %g" % (fd,fderr))
+
+
+    print("g2: %g +/- %g" % (g2m,g2e))
+    if g2 != 0.0:
+        fd=g2m/g2-1
+        fderr=g2e/g2
+        print("    fracdiff: %g +/- %g" % (fd,fderr))
+
+
+class MoffatFitter(object):
+    def __init__(self, ngauss,
+                 beta=3.5, r50=40.0,
+                 s2n=1.e5, g1=0.05, g2=0.05,
+                 nsub=1, npoints=None,
+                 fitter_type='lm',
+                 use_cen_offsets=False):
+        self.ngauss=ngauss
+        self.beta=beta
+        self.r50=r50
+        self.s2n=s2n
+        self.noise=1.0
+        self.nsub=nsub
+        self.npoints=npoints
+
+        self.fitter_type=fitter_type
+
+        self.g1=g1
+        self.g2=g2
+
+        self.use_cen_offsets=use_cen_offsets
+
+        self._make_moffat()
+
+    def go(self, ntry=10):
+        self._fit_one_gauss()
+        self._set_prior()
+        self._fit_n_gauss(ntry)
+        self._add_rel()
+
+    def show(self):
+        if hasattr(self,'fitter'):
+            res=self.get_result()
+            print("chi2per:",res['chi2per'],'nfev:',res['nfev'])
+            print_pars(res['pars'], front="    best fit:",fmt='%g')
+            print_pars(res['pars_err'], front="    best err:",fmt='%g')
+
+            print_pars(res['prel'], front="    prel:", fmt='%g')
+            print_pars(res['Trel'], front="    Trel:", fmt='%g')
+
+    def compare(self, show=False):
+        import images
+        gm=self.fitter.get_gmix()
+        im=gm.make_image(self.image.shape,
+                         jacobian=self.obs.jacobian)
+        plt=images.compare_images(self.image,
+                                  im,
+                                  label1='image',
+                                  label2='model',
+                                  show=show)
+        return plt
+
+    def get_result(self):
+        return self.fitter.get_result()
+
+    def _fit_n_gauss(self, ntry):
+        from .fitting import LMCoellip
+
+        cls = self._get_fitter_class()
+
+        for i in xrange(ntry):
+            guess=self._get_guess()
+            fitter=cls(self.obs,
+                       self.ngauss,
+                       nsub=self.nsub,
+                       npoints=self.npoints,
+                       prior=self.prior,
+                       maxfev=4000,
+                       maxiter=4000)
+            fitter.go(guess)
+
+            res=fitter.get_result()
+            if res['flags']==0:
+                break
+
+        if res['flags'] != 0:
+            raise RuntimeError("failed to fit")
+
+        self.fitter=fitter
+
+    def _get_fitter_class(self):
+        fitter_type=self.fitter_type
+        if fitter_type=='lm':
+            cls = LMCoellip
+        elif fitter_type=='nm':
+            cls = MaxCoellip
+        else:
+            raise RuntimeError("bad fitter class: '%s'" % fitter_type)
+
+        return cls
+
+    def _add_rel(self):
+        res=self.fitter.get_result()
+        pvals = res['pars'][4+self.ngauss:].copy()
+        Tvals = res['pars'][4:4+self.ngauss].copy()
+
+        prel = pvals/pvals.sum()
+
+        gm=self.fitter.get_gmix()
+        T=gm.get_T()
+        Trel = Tvals/T
+
+        res['prel'] = prel
+        res['Trel'] = Trel
+
+
+
+    def _get_guess(self):
+
+        guess=numpy.zeros(4 + 2*self.ngauss)
+
+        guess[0:0+2] = 0.01*srandu(2)
+        guess[2:2+2] = 0.01*srandu(2)
+
+
+        fac=0.05
+        if self.ngauss==2:
+            pguess=array([0.5, 0.5])
+            fguess=array([0.48955064,  1.50658978])
+
+            guess[4] = self.Tguess*fguess[0]*(1.0 + fac*srandu())
+            guess[5] = self.Tguess*fguess[1]*(1.0 + fac*srandu())
+
+            guess[6] = self.Fguess*pguess[0]*(1.0 + fac*srandu())
+            guess[7] = self.Fguess*pguess[1]*(1.0 + fac*srandu())
+
+
+        elif self.ngauss==3:
+
+            #pguess=array([ 0.27559669,  0.55817131,  0.166232  ])
+            #fguess=array([ 0.36123609,  0.8426139,   2.58747785])
+            pguess=array([0.22172,  0.573134,  0.205146 ])
+            fguess=array([0.315203,  0.766448,  2.39262])
+
+            guess[4] = self.Tguess*fguess[0]*(1.0 + fac*srandu())
+            guess[5] = self.Tguess*fguess[1]*(1.0 + fac*srandu())
+            guess[6] = self.Tguess*fguess[2]*(1.0 + fac*srandu())
+
+            guess[7] = self.Fguess*pguess[0]*(1.0 + fac*srandu())
+            guess[8] = self.Fguess*pguess[1]*(1.0 + fac*srandu())
+            guess[9] = self.Fguess*pguess[2]*(1.0 + fac*srandu())
+
+        elif self.ngauss==4:
+            #pguess=array([ 0.2,  0.5,  0.2, 0.1])
+            #fguess=array([ 0.36123609,  0.8426139,   2.58747785, 4.0])
+            pguess=array([0.443688,  0.37131,  0.0992682,  0.0857346])
+            fguess=array([0.518691,  1.18908,  0.248521,  3.54206 ])
+
+            guess[4] = self.Tguess*fguess[0]*(1.0 + fac*srandu())
+            guess[5] = self.Tguess*fguess[1]*(1.0 + fac*srandu())
+            guess[6] = self.Tguess*fguess[2]*(1.0 + fac*srandu())
+            guess[7] = self.Tguess*fguess[3]*(1.0 + fac*srandu())
+
+            guess[8] = self.Fguess*pguess[0]*(1.0 + fac*srandu())
+            guess[9] = self.Fguess*pguess[1]*(1.0 + fac*srandu())
+            guess[10] = self.Fguess*pguess[2]*(1.0 + fac*srandu())
+            guess[11] = self.Fguess*pguess[3]*(1.0 + fac*srandu())
+
+        else:
+            raise ValueError("unsupported ngauss: %d" % self.ngauss)
+
+        return guess
+
+    def _fit_one_gauss(self):
+        from . import em
+        from .gmix import GMixModel
+
+        Tguess = 2*self.r50**2
+
+        pars = [0.0 + 0.01*srandu(),
+                0.0 + 0.01*srandu(),
+                0.0 + 0.01*srandu(),
+                0.0 + 0.01*srandu(),
+                Tguess*(1 + 0.1*srandu()),
+                1.0*(1.0 + 0.05*srandu())]
+        guess = GMixModel(pars,'gauss')
+
+        fitter=em.fit_em(self.obs, guess, maxiter=4000, tol=1.0e-6)
+        gm=fitter.get_gmix()
+
+        self.Tguess = gm.get_T()
+        self.Fguess = self.image.sum()
+
+    def _make_moffat(self):
+        import galsim
+        from .observation import Observation
+        from .jacobian import UnitJacobian
+
+        base_rng = galsim.BaseDeviate()
+        gauss_noise = galsim.GaussianNoise(base_rng, self.noise)
+
+        dim = 2.*5.*self.r50
+
+        dims = [dim]*2
+
+        gs_obj = galsim.Moffat(beta=self.beta,
+                               half_light_radius=self.r50)
+        gs_obj = gs_obj.shear(g1=self.g1, g2=self.g2)
+
+        if self.use_cen_offsets:
+            cenoff1=0.5*srandu()
+            cenoff2=0.5*srandu()
+            gs_obj = gs_obj.shift(dx=cenoff1,dy=cenoff2)
+
+        gsimage = galsim.ImageD(dims[0], dims[1])
+
+        gs_obj.drawImage(gsimage, scale=1.0)
+
+        gsimage.addNoiseSNR(gauss_noise, self.s2n)
+
+        self.image = gsimage.array.copy()
+
+        weight=self.image*0 + 1.0/self.noise**2
+
+        row=(dim-1.0)/2.0
+        col=(dim-1.0)/2.0
+        jacobian = UnitJacobian(row,col)
+        self.obs = Observation(self.image, weight=weight, jacobian=jacobian)
+
+    def _set_prior(self):
+        from .joint_prior import PriorCoellipSame
+        from .priors import CenPrior, ZDisk2D, TwoSidedErf
+
+        Fguess=self.Fguess
+        Tguess=self.Tguess
+
+        cen_width=2.0
+        cen_prior = CenPrior(0.0, 0.0, cen_width, cen_width)
+        g_prior=ZDisk2D(1.0)
+        T_prior = TwoSidedErf(0.01*Tguess, 0.01*Tguess, 100*Tguess, 10*Tguess)
+        F_prior = TwoSidedErf(0.01*Fguess, 0.01*Fguess, 100*Fguess, 10*Fguess)
+
+        self.prior=PriorCoellipSame(self.ngauss,
+                                    cen_prior,
+                                    g_prior,
+                                    T_prior,
+                                    F_prior)
+
 
 

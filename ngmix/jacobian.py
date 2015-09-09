@@ -90,7 +90,7 @@ class Jacobian(object):
 
     def get_sdet(self):
         """
-        Get the determinant of the jacobian matrix
+        Get the sqrt(determinant) of the jacobian matrix
         """
         return copy.deepcopy(self._data['sdet'][0])
 

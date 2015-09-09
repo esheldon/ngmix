@@ -445,7 +445,7 @@ class GPriorBase(object):
         return g
 
 
-    def sample2d(self, nrand, maxguess=0.1):
+    def sample2d(self, nrand=None, maxguess=0.1):
         """
         Get random g1,g2 values by first drawing
         from the 1-d distribution
@@ -456,11 +456,22 @@ class GPriorBase(object):
             Number to generate
         """
 
+        if nrand is None:
+            nrand=1
+            is_scalar=True
+        else:
+            is_scalar=False
+
         grand=self.sample1d(nrand,maxguess=maxguess)
         theta = randu(nrand)*2*numpy.pi
         twotheta = 2*theta
         g1rand = grand*numpy.cos(twotheta)
         g2rand = grand*numpy.sin(twotheta)
+
+        if is_scalar:
+            g1rand=g1rand[0]
+            g2rand=g2rand[0]
+
         return g1rand, g2rand
 
     def sample2d_brute(self, nrand):
@@ -3893,7 +3904,7 @@ class CenPrior(_gmix.Normal2D):
         return rand1, rand2
     sample2d=sample
 
-RoundGauss2D=CenPrior
+SimpleGauss2D=CenPrior
 
 
 
@@ -4452,19 +4463,35 @@ class ZDisk2D(_gmix.ZDisk2D):
 
         super(ZDisk2D,self).__init__(radius)
 
-    def sample1d(self, n):
+    def sample1d(self, n=None):
         """
         Get samples in 1-d radius
         """
+
+        if n is None:
+            n=1
+            is_scalar=True
+        else:
+            is_scalar=False
+
         r2 = self.radius_sq*randu(n)
 
         r = sqrt(r2)
+
+        if is_scalar:
+            r=r[0]
+
         return r
 
-    def sample2d(self, n):
+    def sample2d(self, n=None):
         """
         Get samples.  Send no args to get a scalar.
         """
+        if n is None:
+            n=1
+            is_scalar=True
+        else:
+            is_scalar=False
 
         radius=self.sample1d(n)
 
@@ -4472,6 +4499,10 @@ class ZDisk2D(_gmix.ZDisk2D):
 
         x=radius*cos(theta)
         y=radius*sin(theta)
+
+        if is_scalar:
+            x=x[0]
+            y=y[0]
 
         return x,y
 

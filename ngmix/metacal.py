@@ -158,6 +158,7 @@ class Metacal(object):
         psf_grown = galsim.Convolve(psf_grown_nopix,self.pixel)
 
         if type=='psf_shear':
+            # eric remarked that he thought we should shear the pixelized version
             psf_grown = psf_grown.shear(g1=shear.g1, g2=shear.g2)
 
         newpsf = galsim.ImageD(self.gs_psf_image.bounds)
@@ -172,6 +173,8 @@ class Metacal(object):
         """
         get the target image, convolved with the specified psf
         and possible sheared
+
+        This is where whitening happens
 
         parameters
         ----------
@@ -336,11 +339,83 @@ def _check_shape(shape):
     if not isinstance(shape, Shape):
         raise TypeError("shape must be of type ngmix.Shape")
 
-def jackknife_shear(g, gsens, do_ring=False, chunksize=1, weights=None):
+def jackknife_shear(g, R, Rpsf=None, chunksize=1):
     """
-    get the shear lensfit style
+    get the shear metacalibration style
 
-    for keywords, see help for _lensfit_jackknife
+    parameters
+    ----------
+    g: array
+        [N,2] shape measurements
+    R: array
+        [N,2,2] shape response measurements
+    Rpsf: array, optional
+        [N,2] psf response
+    chunksize: int, optional
+        chunksize for jackknifing
+    """
+
+
+    ntot = g.shape[0]
+
+    nchunks = ntot/chunksize
+
+    g_sum = g.sum(axis=0)
+    R_sum = R.sum(axis=0)
+
+    if Rpsf is not None:
+        Rpsf_sum = Rpsf.sum(axis=0)
+        g_sum -= Rpsf_sum
+
+    R_sum_inv = numpy.linalg.inv(R_sum)
+    shear = numpy.dot(R_sum_inv, g_sum)
+
+
+    shears = zeros( (nchunks, 2) )
+    for i in xrange(nchunks):
+
+        beg = i*chunksize
+        end = (i+1)*chunksize
+
+        tgsum = g[beg:end,:].sum(axis=0)
+        tR_sum = R[beg:end,:,:].sum(axis=0)
+
+        if Rpsf is not None:
+            tRpsf_sum = Rpsf[beg:end,:].sum(axis=0)
+            tgsum -= tRpsf_sum
+
+        j_g_sum = g_sum - tgsum
+        j_R_sum = R_sum - tR_sum
+
+        j_R_inv = numpy.linalg.inv(j_R_sum)
+
+
+        shears[i, :] = numpy.dot(j_R_inv, j_g_sum)
+
+    shear_cov = zeros( (2,2) )
+    fac = (nchunks-1)/float(nchunks)
+
+    shear_cov[0,0] = fac*( ((shear[0]-shears[:,0])**2).sum() )
+    shear_cov[0,1] = fac*( ((shear[0]-shears[:,0]) * (shear[1]-shears[:,1])).sum() )
+    shear_cov[1,0] = shear_cov[0,1]
+    shear_cov[1,1] = fac*( ((shear[1]-shears[:,1])**2).sum() )
+
+    out={'shear':shear,
+         'shear_cov':shear_cov,
+         'g_sum':g_sum,
+         'R_sum':R_sum,
+         'gsens_sum':R_sum, # another name
+         'R_sum_inv':R_sum_inv,
+         'Rpsf_sum':Rpsf_sum,
+         'nuse':g.shape[0],
+         'shears':shears}
+    return out
+
+
+
+def jackknife_shear_weighted(g, gsens, weights, chunksize=1):
+    """
+    get the shear metacal style
 
     parameters
     ----------
@@ -348,12 +423,10 @@ def jackknife_shear(g, gsens, do_ring=False, chunksize=1, weights=None):
         [N,2] shape measurements
     gsens: array
         [N,2,2] shape sensitivity measurements
-    do_ring: bool, optional
-        Was the data in a ring configuration?
-    chunksize: int, optional
-        chunksize for jackknifing
     weights: array, optional
         Weights to apply
+    chunksize: int, optional
+        chunksize for jackknifing
     """
 
     if weights is None:
@@ -361,14 +434,7 @@ def jackknife_shear(g, gsens, do_ring=False, chunksize=1, weights=None):
 
     ntot = g.shape[0]
 
-    if do_ring:
-        if ( (ntot % 2) != 0 ):
-            raise  ValueError("expected factor of two, got %d" % ntot)
-
-        npair = ntot/2
-        nchunks = npair/chunksize
-    else:
-        nchunks = ntot/chunksize
+    nchunks = ntot/chunksize
 
     wsum = weights.sum()
     wa=weights[:,newaxis]
@@ -383,12 +449,8 @@ def jackknife_shear(g, gsens, do_ring=False, chunksize=1, weights=None):
     shears = zeros( (nchunks, 2) )
     for i in xrange(nchunks):
 
-        if do_ring:
-            beg = i*chunksize*2
-            end = (i+1)*chunksize*2
-        else:
-            beg = i*chunksize
-            end = (i+1)*chunksize
+        beg = i*chunksize
+        end = (i+1)*chunksize
 
         wtsa = (weights[beg:end])[:,newaxis]
         wtsaa = (weights[beg:end])[:,newaxis,newaxis]
@@ -419,7 +481,98 @@ def jackknife_shear(g, gsens, do_ring=False, chunksize=1, weights=None):
             'gsens_sum_inv':gsens_sum_inv,
             'shears':shears,
             'weights':weights,
-            'wsum':wsum}
+            'wsum':wsum,
+            'nuse':g.shape[0]}
 
 
+def bootstrap_shear(g, R, Rpsf, nboot, verbose=False):
+    """
+    get the shear metacalstyle
+
+    The responses are bootstrapped independently of the
+    shear estimators
+
+    parameters
+    ----------
+    g: array
+        [N,2] shape measurements
+    R: array
+        [N,2,2] shape response measurements
+    Rpsf: array
+        [N,2] psf response
+    nboot: int
+        number of bootstraps to do
+    """
+
+    ng = g.shape[0]
+    nR = R.shape[0]
+
+    # overall mean
+    if verbose:
+        print("    getting overall mean")
+    shear,g_sum,R_sum,Rpsf_sum = _get_mean_shear(g, R, Rpsf, replicate_mean=True)
+
+    # need workspace for ng from both data and
+    # deep response data
+
+    g_scratch = zeros( (ng, 2) )
+    R_scratch = zeros( (ng, 2, 2) )
+    Rpsf_scratch = zeros( (ng, 2) )
+
+    shears = zeros( (nboot, 2) )
+
+    for i in xrange(nboot):
+        if verbose:
+            print("    boot %d/%d" % (i+1,nboot))
+        g_rind = numpy.random.randint(0, ng, ng)
+        R_rind = numpy.random.randint(0, nR, ng)
+
+        g_scratch[:, :] = g[g_rind, :]
+        R_scratch[:, :, :] = R[R_rind, :, :]
+        Rpsf_scratch[:, :] = Rpsf[R_rind, :]
+
+        tshear,_,_,_ = _get_mean_shear(g_scratch, R_scratch, Rpsf_scratch)
+        shears[i,:] = tshear
+
+    shear_cov = zeros( (2,2) )
+    fac = 1.0/(nboot-1.0)
+
+    shear_mean = shears.mean(axis=0)
+    shear_cov[0,0] = fac*( ((shear[0]-shears[:,0])**2).sum() )
+    shear_cov[0,1] = fac*( ((shear[0]-shears[:,0]) * (shear[1]-shears[:,1])).sum() )
+    shear_cov[1,0] = shear_cov[0,1]
+    shear_cov[1,1] = fac*( ((shear[1]-shears[:,1])**2).sum() )
+
+    out={'shear':shear,
+         'shear_mean':shear_mean,
+         'shear_cov':shear_cov,
+         'g_sum':g_sum,
+         'R_sum':R_sum,
+         'gsens_sum':R_sum, # another name
+         'Rpsf_sum':Rpsf_sum,
+         'nuse':g.shape[0],
+         'shears':shears}
+    return out
+
+def _get_mean_shear(g, R, Rpsf, replicate_mean=False):
+
+    ng = g.shape[0]
+
+    g_sum = g.sum(axis=0)
+    if replicate_mean:
+        R_mean = R.mean(axis=0)
+        Rpsf_mean = Rpsf.mean(axis=0)
+
+        R_sum = ng*R_mean
+        Rpsf_sum = ng*Rpsf_mean
+    else:
+        R_sum = R.sum(axis=0)
+        Rpsf_sum = Rpsf.sum(axis=0)
+
+    g_sum -= Rpsf_sum
+
+    R_sum_inv = numpy.linalg.inv(R_sum)
+    shear = numpy.dot(R_sum_inv, g_sum)
+
+    return shear, g_sum, R_sum, Rpsf_sum
 
