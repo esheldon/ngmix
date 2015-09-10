@@ -833,9 +833,9 @@ class Bootstrapper(object):
 
         c = pars_mean[2:2+2] - pars_noshear[2:2+2]
 
-        res = {'mcal_pars_mean':pars_mean,
-               'mcal_pars_mean_cov':pars_cov_mean,
-               'mcal_g_mean':pars_mean[2:2+2],
+        res = {'mcal_pars':pars_mean,
+               'mcal_pars_cov':pars_cov_mean,
+               'mcal_g':pars_mean[2:2+2],
                'mcal_g_cov':pars_cov_mean[2:2+2, 2:2+2],
                'mcal_pars_noshear':pars_noshear,
                'mcal_c':c,
