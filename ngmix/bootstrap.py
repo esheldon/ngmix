@@ -812,22 +812,22 @@ class Bootstrapper(object):
         if verbose:
             print_pars(pars_mean, front='    mcmean:   ')
 
-        sens=zeros( (2,2) ) 
-        sens_psf=zeros(2)
+        R=zeros( (2,2) ) 
+        Rpsf=zeros(2)
 
         fac = 1.0/(2.0*step)
 
-        sens[0,0] = (pars['1p'][2]-pars['1m'][2])*fac
-        sens[0,1] = (pars['1p'][3]-pars['1m'][3])*fac
-        sens[1,0] = (pars['2p'][2]-pars['2m'][2])*fac
-        sens[1,1] = (pars['2p'][3]-pars['2m'][3])*fac
+        R[0,0] = (pars['1p'][2]-pars['1m'][2])*fac
+        R[0,1] = (pars['1p'][3]-pars['1m'][3])*fac
+        R[1,0] = (pars['2p'][2]-pars['2m'][2])*fac
+        R[1,1] = (pars['2p'][3]-pars['2m'][3])*fac
 
-        sens_psf[0] = (pars['1p_psf'][2]-pars['1m_psf'][2])*fac
-        sens_psf[1] = (pars['2p_psf'][3]-pars['2m_psf'][3])*fac
+        Rpsf[0] = (pars['1p_psf'][2]-pars['1m_psf'][2])*fac
+        Rpsf[1] = (pars['2p_psf'][3]-pars['2m_psf'][3])*fac
 
         psf_ellip=fits['psf_ellip']
-        sens_psf[0] *= psf_ellip[0]
-        sens_psf[1] *= psf_ellip[1]
+        Rpsf[0] *= psf_ellip[0]
+        Rpsf[1] *= psf_ellip[1]
 
         pars_noshear = pars['noshear']
 
@@ -839,8 +839,8 @@ class Bootstrapper(object):
                'mcal_g_cov':pars_cov_mean[2:2+2, 2:2+2],
                'mcal_pars_noshear':pars_noshear,
                'mcal_c':c,
-               'mcal_g_sens':sens,
-               'mcal_psf_sens':sens_psf,
+               'mcal_R':R,
+               'mcal_Rpsf':Rpsf,
                'mcal_s2n_r':fits['s2n_r'],
                'mcal_s2n_simple':fits['s2n_simple'],
                'mcal_T_r':fits['T_r'],
