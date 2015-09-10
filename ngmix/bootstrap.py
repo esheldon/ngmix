@@ -486,7 +486,7 @@ class Bootstrapper(object):
         return pars, pars_lin
 
 
-    def find_cen(self):
+    def find_cen(self, ntry=10):
         """
         run a single-gaussian em fit, just to find the center
 
@@ -495,26 +495,38 @@ class Bootstrapper(object):
         If it fails, don't modify anything
         """
 
-        raise RuntimeError("adapt to multiple observations")
+        if len(self.mb_obs_list) > 1 or len(self.mb_obs_list[0]) > 1:
+            raise RuntimeError("adapt to multiple observations")
 
-        jacob=self.gal_obs.jacobian
+        obs_orig = self.mb_obs_list[0][0]
+        jacob=obs_orig.jacobian
 
-        row,col=jacob.get_cen()
+        row0,col0=jacob.get_cen()
 
-        guess=array([1.0, # p
-                     row, # row in current jacobian coords
-                     col, # col in current jacobian coords
-                     4.0,
-                     0.0,
-                     4.0])
+        T0=8.0
 
-        gm_guess = GMix(pars=guess)
+        for i in xrange(ntry):
+            guess=[1.0*(1.0 + 0.01*srandu()),
+                   row0*(1.0+0.5*srandu()),
+                   col0*(1.0+0.5*srandu()),
+                   T0/2.0*(1.0 + 0.1*srandu()),
+                   0.1*srandu(),
+                   T0/2.0*(1.0 + 0.1*srandu())]
 
-        im,sky = prep_image(self.gal_obs.image)
-        obs = Observation(im)
-        fitter=GMixEM(obs)
-        fitter.go(gm_guess, sky, maxiter=4000) 
-        res=fitter.get_result()
+            gm_guess = GMix(pars=guess)
+
+            im,sky = prep_image(obs_orig.image)
+
+            obs = Observation(im)
+
+            fitter=GMixEM(obs)
+            fitter.go(gm_guess, sky, maxiter=4000) 
+
+            res=fitter.get_result()
+
+            if res['flags']==0:
+                break
+
         if res['flags']==0:
             gm=fitter.get_gmix()
             row,col=gm.get_cen()
