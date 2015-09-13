@@ -36,7 +36,10 @@ BOOT_WEIGHTS_LOW= 2**5
 
 
 class Bootstrapper(object):
-    def __init__(self, obs, use_logpars=False, intpars=None, find_cen=False):
+    def __init__(self, obs,
+                 use_logpars=False, intpars=None, find_cen=False,
+                 verbose=False,
+                 **kw):
         """
         The data can be mutated: If a PSF fit is performed, the gmix will be
         set for the input PSF observation
@@ -53,6 +56,8 @@ class Bootstrapper(object):
 
         self.use_logpars=use_logpars
         self.intpars=intpars
+        self.find_cen=find_cen
+        self.verbose=verbose
 
         # this never gets modified in any way
         self.mb_obs_list_orig = get_mb_obs(obs)
@@ -60,7 +65,7 @@ class Bootstrapper(object):
         # this will get replaced if fit_psfs is run
         self.mb_obs_list=self.mb_obs_list_orig
 
-        if find_cen:
+        if self.find_cen:
             self._find_cen()
 
         self.model_fits={}
@@ -493,7 +498,7 @@ class Bootstrapper(object):
         """
         run a single-gaussian em fit, just to find the center
 
-        Modify the jacobian center accordingly.
+        Modify the jacobian of our version of the observations accordingly.
 
         If it fails, don't modify anything
         """
@@ -533,8 +538,9 @@ class Bootstrapper(object):
         if res['flags']==0:
             gm=fitter.get_gmix()
             row,col=gm.get_cen()
-            print("        setting jacobian cen to:",row,col,
-                  "numiter:",res['numiter'])
+            if self.verbose:
+                print("        setting jacobian cen to:",row,col,
+                      "numiter:",res['numiter'])
             jacob.set_cen(row,col)
         else:
             print("        failed to find cen")
@@ -709,8 +715,7 @@ class Bootstrapper(object):
                         metacal_pars=None,
                         prior=None,
                         psf_ntry=10,
-                        ntry=1,
-                        verbose=True):
+                        ntry=1):
         """
         run metacalibration
 
@@ -746,7 +751,7 @@ class Bootstrapper(object):
             nrand=1
 
         if metacal_obs is not None:
-            if verbose:
+            if self.verbose:
                 print("        using input metacal obs dict")
             obs_dict_orig=metacal_obs
         else:
@@ -760,7 +765,7 @@ class Bootstrapper(object):
             else:
                 obs_dict=obs_dict_orig
 
-            if nrand > 1 and verbose:
+            if nrand > 1 and self.verbose:
                 print("    irand: %d/%d" % (i+1,nrand))
 
             tres = self._fit_metacal_max_one(metacal_pars,
@@ -768,8 +773,7 @@ class Bootstrapper(object):
                                              psf_model, gal_model, pars, psf_Tguess,
                                              prior, psf_ntry, ntry,
                                              psf_fit_pars,
-                                             extra_noise,
-                                             verbose)
+                                             extra_noise)
             if i == 0:
                 res=tres
             else:
@@ -828,8 +832,7 @@ class Bootstrapper(object):
                              psf_model, gal_model, max_pars, 
                              psf_Tguess, prior, psf_ntry, ntry, 
                              psf_fit_pars,
-                             extra_noise,
-                             verbose):
+                             extra_noise):
 
         step = metacal_pars['step']
 
@@ -837,8 +840,7 @@ class Bootstrapper(object):
                                      psf_model, gal_model, max_pars, psf_Tguess,
                                      prior, psf_ntry, ntry,
                                      psf_fit_pars,
-                                     extra_noise,
-                                     verbose)
+                                     extra_noise)
 
         pars=fits['pars']
         pars_mean = (pars['1p']+
@@ -852,7 +854,7 @@ class Bootstrapper(object):
                          pars_cov['2p']+
                          pars_cov['2m'])/4.0
 
-        if verbose:
+        if self.verbose:
             print_pars(pars_mean, front='    mcmean:   ')
 
         R=zeros( (2,2) ) 
@@ -895,17 +897,21 @@ class Bootstrapper(object):
     def _do_metacal_fits(self, obs_dict, psf_model, gal_model, pars, 
                          psf_Tguess, prior, psf_ntry, ntry, 
                          psf_fit_pars,
-                         extra_noise,
-                         verbose):
+                         extra_noise):
 
         bdict={}
         for key in obs_dict:
-            boot = Bootstrapper(obs_dict[key], use_logpars=self.use_logpars,intpars=self.intpars)
+            boot = Bootstrapper(obs_dict[key],
+                                use_logpars=self.use_logpars,
+                                intpars=self.intpars,
+                                find_cen=self.find_cen,
+                                verbose=self.verbose)
+
             boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry, fit_pars=psf_fit_pars)
             boot.fit_max(gal_model, pars, prior=prior, ntry=ntry)
             boot.set_round_s2n()
             
-            if verbose:
+            if self.verbose:
                 if 'psf' in key:
                     front='    psf mcpars:'
                 else:
@@ -1154,7 +1160,7 @@ class Bootstrapper(object):
 
 
 
-    def isample(self, ipars, prior=None, verbose=True):
+    def isample(self, ipars, prior=None):
         """
         bootstrap off the maxlike run
         """
@@ -1164,7 +1170,7 @@ class Bootstrapper(object):
 
         niter=len(ipars['nsample'])
         for i,nsample in enumerate(ipars['nsample']):
-            sampler=self._make_isampler(use_fitter, ipars, verbose=verbose)
+            sampler=self._make_isampler(use_fitter, ipars)
             if sampler is None:
                 raise BootGalFailure("isampling failed")
 
@@ -1175,7 +1181,7 @@ class Bootstrapper(object):
 
             tres=sampler.get_result()
 
-            if verbose:
+            if self.verbose:
                 print("    eff iter %d: %.2f" % (i,tres['efficiency']))
             use_fitter = sampler
 
@@ -1184,7 +1190,7 @@ class Bootstrapper(object):
 
         self.isampler=sampler
 
-    def _make_isampler(self, fitter, ipars, verbose=True):
+    def _make_isampler(self, fitter, ipars):
         from .fitting import ISampler
         from numpy.linalg import LinAlgError
 
@@ -1199,14 +1205,14 @@ class Bootstrapper(object):
                              max_err=ipars['max_err'],
                              ifactor=ipars.get('ifactor',1.0),
                              asinh_pars=ipars.get('asinh_pars',[]),
-                             verbose=verbose)
+                             verbose=self.verbose)
         except LinAlgError:
             print("        bad cov")
             sampler=None
 
         return sampler
 
-    def psample(self, psample_pars, samples, verbose=True):
+    def psample(self, psample_pars, samples):
         """
         bootstrap off the maxlike run
         """
@@ -1224,7 +1230,7 @@ class Bootstrapper(object):
         sampler=PSampler(res['pars'],
                          res['pars_err'],
                          samples,
-                         verbose=verbose,
+                         verbose=self.verbose,
                          **psample_pars)
 
         sampler.calc_loglikes(tfitter.calc_lnprob)
@@ -1370,7 +1376,7 @@ class BootstrapperGaussMom(Bootstrapper):
 
         return fitter
 
-    def _make_isampler(self, fitter, ipars, verbose=True):
+    def _make_isampler(self, fitter, ipars):
         from .fitting import ISamplerMom
         from numpy.linalg import LinAlgError
 
@@ -1385,7 +1391,7 @@ class BootstrapperGaussMom(Bootstrapper):
                                 max_err=ipars['max_err'],
                                 ifactor=ipars.get('ifactor',1.0),
                                 asinh_pars=ipars.get('asinh_pars',[]),
-                                verbose=verbose)
+                                verbose=self.verbose)
         except LinAlgError:
             print("        bad cov")
             sampler=None
