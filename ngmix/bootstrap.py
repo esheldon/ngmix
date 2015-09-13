@@ -36,7 +36,7 @@ BOOT_WEIGHTS_LOW= 2**5
 
 
 class Bootstrapper(object):
-    def __init__(self, obs, use_logpars=False, intpars=None):
+    def __init__(self, obs, use_logpars=False, intpars=None, find_cen=False):
         """
         The data can be mutated: If a PSF fit is performed, the gmix will be
         set for the input PSF observation
@@ -54,11 +54,14 @@ class Bootstrapper(object):
         self.use_logpars=use_logpars
         self.intpars=intpars
 
+        # this never gets modified in any way
         self.mb_obs_list_orig = get_mb_obs(obs)
 
         # this will get replaced if fit_psfs is run
         self.mb_obs_list=self.mb_obs_list_orig
 
+        if find_cen:
+            self._find_cen()
 
         self.model_fits={}
 
@@ -486,7 +489,7 @@ class Bootstrapper(object):
         return pars, pars_lin
 
 
-    def find_cen(self, ntry=10):
+    def _find_cen(self, ntry=10):
         """
         run a single-gaussian em fit, just to find the center
 
@@ -566,7 +569,9 @@ class Bootstrapper(object):
 
         ntot=0
         new_mb_obslist=MultiBandObsList()
-        for band,obslist in enumerate(self.mb_obs_list_orig):
+
+        mb_obs_list = self.mb_obs_list
+        for band,obslist in enumerate(mb_obs_list):
             new_obslist=ObsList()
 
             for i,obs in enumerate(obslist):
@@ -697,6 +702,7 @@ class Bootstrapper(object):
                         pars,
                         psf_Tguess,
                         psf_fit_pars=None,
+                        target_noise=None,
                         extra_noise=None,
                         metacal_obs=None,
                         nrand=1,
@@ -731,10 +737,13 @@ class Bootstrapper(object):
 
         metacal_pars=mpars
 
+        oobs = self.mb_obs_list[0][0]
+
+        if target_noise is not None:
+            extra_noise = self._get_extra_noise_from_target(oobs, target_noise)
+
         if extra_noise is None:
             nrand=1
-
-        oobs = self.mb_obs_list[0][0]
 
         if metacal_obs is not None:
             if verbose:
@@ -744,6 +753,8 @@ class Bootstrapper(object):
             obs_dict_orig = self.get_metacal_obsdict(oobs, metacal_pars)
 
         for i in xrange(nrand):
+
+
             if extra_noise is not None:
                 obs_dict = self._add_noise_to_metacal_obsdict(obs_dict_orig, extra_noise)
             else:
@@ -772,6 +783,26 @@ class Bootstrapper(object):
         self.metacal_max_res = res
 
         return obs_dict_orig
+
+    def _get_extra_noise_from_target(self, obs, target_noise):
+        weight = obs.weight
+        w=where(weight > 0.0)
+        if w[0].size == 0:
+            print("    no weight > 0")
+            extra_noise = target_noise
+        else:
+            noise_mean = sqrt( (1.0/weight[w]).mean() )
+
+            if target_noise < noise_mean:
+                tup = (target_noise, noise_mean)
+                raise ValueError("target noise %g is "
+                                 "less than mean noise "
+                                 "in weight map: %g" % tup)
+
+            extra_noise = sqrt(target_noise**2 - noise_mean**2)
+
+        print("    target_noise: %g extra_noise: %g" % (target_noise, extra_noise))
+        return extra_noise
 
     def _add_noise_to_metacal_obsdict(self, obs_dict, extra_noise):
         noise_image = self._get_noise_image(obs_dict['1p'].image.shape,
