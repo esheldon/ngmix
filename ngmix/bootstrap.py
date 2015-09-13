@@ -911,7 +911,8 @@ class Bootstrapper(object):
             boot.fit_max(gal_model, pars, prior=prior, ntry=ntry)
             boot.set_round_s2n()
             
-            if self.verbose:
+            # verbose can be bool or a number
+            if self.verbose > 1:
                 if 'psf' in key:
                     front='    psf mcpars:'
                 else:
