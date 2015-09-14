@@ -1,16 +1,8 @@
 """
 class to create manipulated images for use in metacalibration
 
-limitations
-
-See TODO in the code
-
-    - assumes psf and image are on same pixel scale
-    - code copied from Eric Huff seems not quite general, unless I
-    misunderstand how galsim is working.  The pixel_scale is used in a few
-    places rather than the proper wcs
-    - get conventions right
-
+based off reading through Eric Huffs code, but it has departed
+significantly
 """
 from __future__ import print_function
 import numpy
