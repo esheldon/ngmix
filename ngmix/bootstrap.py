@@ -870,10 +870,6 @@ class Bootstrapper(object):
         Rpsf[0] = (pars['1p_psf'][2]-pars['1m_psf'][2])*fac
         Rpsf[1] = (pars['2p_psf'][3]-pars['2m_psf'][3])*fac
 
-        psf_ellip=fits['psf_ellip']
-        Rpsf[0] *= psf_ellip[0]
-        Rpsf[1] *= psf_ellip[1]
-
         pars_noshear = pars['noshear']
 
         c = pars_mean[2:2+2] - pars_noshear[2:2+2]
@@ -886,6 +882,7 @@ class Bootstrapper(object):
                'mcal_c':c,
                'mcal_R':R,
                'mcal_Rpsf':Rpsf,
+               'mcal_gpsf':fits['gpsf'],
                'mcal_s2n_r':fits['s2n_r'],
                'mcal_s2n_simple':fits['s2n_simple'],
                'mcal_T_r':fits['T_r'],
@@ -922,11 +919,11 @@ class Bootstrapper(object):
 
             bdict[key] = boot
 
-        res={'pars':{}, 'pars_cov':{}, 'psf_ellip':{}}
+        res={'pars':{}, 'pars_cov':{}}
         s2n_r_mean   = 0.0
         T_r_mean     = 0.0
         psf_T_r_mean = 0.0
-        psf_ellip_mean = zeros(2)
+        gpsf_mean = zeros(2)
         npsf=0
         navg=0
 
@@ -949,8 +946,8 @@ class Bootstrapper(object):
             for obslist in boot.mb_obs_list:
                 for obs in obslist:
                     g1,g2,T=obs.psf.gmix.get_g1g2T()
-                    psf_ellip_mean[0] += g1
-                    psf_ellip_mean[1] += g2
+                    gpsf_mean[0] += g1
+                    gpsf_mean[1] += g2
                     npsf+=1
 
             rres=boot.get_round_result()
@@ -968,7 +965,7 @@ class Bootstrapper(object):
         res['s2n_r']   = s2n_r_mean/navg
         res['T_r']     = T_r_mean/navg
         res['psf_T_r'] = psf_T_r_mean/navg
-        res['psf_ellip'] = psf_ellip_mean/npsf
+        res['gpsf'] = gpsf_mean/npsf
 
         return res
 
