@@ -398,9 +398,10 @@ def jackknife_shear(g, R, Rpsf=None, chunksize=1):
          'R_sum':R_sum,
          'gsens_sum':R_sum, # another name
          'R_sum_inv':R_sum_inv,
-         'Rpsf_sum':Rpsf_sum,
          'nuse':g.shape[0],
          'shears':shears}
+    if Rpsf is not None:
+        out['Rpsf_sum'] = Rpsf_sum
     return out
 
 
