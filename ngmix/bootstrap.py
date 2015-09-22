@@ -550,7 +550,8 @@ class Bootstrapper(object):
                  skip_failed=True,
                  ntry=4,
                  fit_pars=None,
-                 skip_already_done=True):
+                 skip_already_done=True,
+                 norm_key=None):
         """
         Fit all psfs.  If the psf observations already have a gmix
         then this step is not necessary
@@ -571,6 +572,9 @@ class Bootstrapper(object):
             Fitting parameters for psf.
         skip_already_done: bool
             Skip psfs with a gmix already set
+        norm_key: will use this key in the PSF meta data to fudge the normalization 
+            of the PSF model via amplitude -> amplitude*norm where amplitude is the PSF normalization
+            (usually 1)
         """
 
         ntot=0
@@ -604,7 +608,7 @@ class Bootstrapper(object):
                         Tguess_i = psf_obs.meta[Tguess_key]
                     else:
                         Tguess_i = Tguess
-                    self._fit_one_psf(psf_obs, psf_model, Tguess_i, ntry, fit_pars)
+                    self._fit_one_psf(psf_obs, psf_model, Tguess_i, ntry, fit_pars, norm_key=norm_key)
                     new_obslist.append(obs)
                     ntot += 1
                 except BootPSFFailure:
@@ -624,7 +628,7 @@ class Bootstrapper(object):
 
         self.mb_obs_list=new_mb_obslist
 
-    def _fit_one_psf(self, psf_obs, psf_model, Tguess, ntry, fit_pars):
+    def _fit_one_psf(self, psf_obs, psf_model, Tguess, ntry, fit_pars, norm_key=None):
         """
         fit the psf using a PSFRunner or EMRunner
 
@@ -646,7 +650,10 @@ class Bootstrapper(object):
         if res['flags']==0:
             self.psf_fitter=psf_fitter
             gmix=self.psf_fitter.get_gmix()
-
+            
+            if norm_key is not None:
+                gmix.set_psum(psf_obs.meta[norm_key])
+            
             psf_obs.set_gmix(gmix)
 
         else:
@@ -1241,7 +1248,7 @@ class Bootstrapper(object):
 
 
 
-    def fit_gal_psf_flux(self):
+    def fit_gal_psf_flux(self, normalize_psf=True):
         """
         use psf as a template, measure flux (linear)
         """
@@ -1260,7 +1267,7 @@ class Bootstrapper(object):
         for i in xrange(nband):
             obs_list = mbo[i]
 
-            fitter=fitting.TemplateFluxFitter(obs_list, do_psf=True)
+            fitter=fitting.TemplateFluxFitter(obs_list, do_psf=True, normalize_psf=normalize_psf)
             fitter.go()
 
             res=fitter.get_result()
@@ -1333,8 +1340,8 @@ class Bootstrapper(object):
             res['flags']=0
 
 class BootstrapperGaussMom(Bootstrapper):
-    def __init__(self, obs):
-        super(BootstrapperGaussMom,self).__init__(obs)
+    def __init__(self, obs, **kw):
+        super(BootstrapperGaussMom,self).__init__(obs, **kw)
 
     def fit_max(self, pars, guess=None, prior=None, extra_priors=None, ntry=1):
         """
@@ -1420,10 +1427,10 @@ class CompositeBootstrapper(Bootstrapper):
     def __init__(self, obs,
                  use_logpars=False,
                  fracdev_prior=None,
-                 fracdev_grid=None):
+                 fracdev_grid=None, **kw):
 
         super(CompositeBootstrapper,self).__init__(obs,
-                                                   use_logpars=use_logpars)
+                                                   use_logpars=use_logpars, **kw)
 
         self.fracdev_prior=fracdev_prior
         if fracdev_grid is not None:
@@ -1719,9 +1726,9 @@ class CompositeBootstrapper(Bootstrapper):
 class BestBootstrapper(Bootstrapper):
     def __init__(self, obs,
                  use_logpars=False,
-                 fracdev_prior=None):
+                 fracdev_prior=None, **kw):
         super(BestBootstrapper,self).__init__(obs,
-                                              use_logpars=use_logpars)
+                                              use_logpars=use_logpars, **kw)
 
     def fit_max(self, exp_prior, dev_prior, exp_rate, pars, ntry=1):
         """
