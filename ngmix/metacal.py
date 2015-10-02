@@ -6,7 +6,7 @@ significantly
 """
 from __future__ import print_function
 import numpy
-from numpy import zeros, ones, newaxis
+from numpy import zeros, ones, newaxis, sqrt, diag, dot, linalg
 from .jacobian import Jacobian, UnitJacobian
 from .observation import Observation
 from .shape import Shape
@@ -478,7 +478,7 @@ def jackknife_shear_weighted(g, gsens, weights, chunksize=1):
             'nuse':g.shape[0]}
 
 
-def bootstrap_shear(g, R, Rpsf, nboot, verbose=False):
+def bootstrap_shear(g, gpsf, R, Rpsf, nboot, verbose=False):
     """
     get the shear metacalstyle
 
@@ -489,10 +489,12 @@ def bootstrap_shear(g, R, Rpsf, nboot, verbose=False):
     ----------
     g: array
         [N,2] shape measurements
+    gpsf: array
+        [N,2] shape measurements
     R: array
-        [N,2,2] shape response measurements
+        [NR,2,2] shape response measurements
     Rpsf: array
-        [N,2] psf response
+        [NR,2] psf response
     nboot: int
         number of bootstraps to do
     """
@@ -502,70 +504,97 @@ def bootstrap_shear(g, R, Rpsf, nboot, verbose=False):
 
     # overall mean
     if verbose:
-        print("    getting overall mean")
-    shear,g_sum,R_sum,Rpsf_sum = _get_mean_shear(g, R, Rpsf, replicate_mean=True)
+        print("    getting overall mean and naive error")
+    res = get_mean_shear(g, gpsf, R, Rpsf)
+    if verbose:
+        print("    shear:         ",res['shear'])
+        print("    shear_err:     ",res['shear_err'])
 
     # need workspace for ng from both data and
     # deep response data
 
-    g_scratch = zeros( (ng, 2) )
-    R_scratch = zeros( (ng, 2, 2) )
-    Rpsf_scratch = zeros( (ng, 2) )
+    g_scratch    = zeros( (ng, 2) )
+    gpsf_scratch = zeros( (ng, 2) )
+    R_scratch    = zeros( (nR, 2, 2) )
+    Rpsf_scratch = zeros( (nR, 2) )
 
     shears = zeros( (nboot, 2) )
 
     for i in xrange(nboot):
         if verbose:
             print("    boot %d/%d" % (i+1,nboot))
-        g_rind = numpy.random.randint(0, ng, ng)
-        R_rind = numpy.random.randint(0, nR, ng)
 
-        g_scratch[:, :] = g[g_rind, :]
+        g_rind = numpy.random.randint(0, ng, ng)
+        R_rind = numpy.random.randint(0, nR, nR)
+
+        g_scratch[:, :]    = g[g_rind, :]
+        gpsf_scratch[:, :] = gpsf[g_rind, :]
         R_scratch[:, :, :] = R[R_rind, :, :]
         Rpsf_scratch[:, :] = Rpsf[R_rind, :]
 
-        tshear,_,_,_ = _get_mean_shear(g_scratch, R_scratch, Rpsf_scratch)
-        shears[i,:] = tshear
+        tres = get_mean_shear(g_scratch,
+                              gpsf_scratch,
+                              R_scratch,
+                              Rpsf_scratch)
+        shears[i,:] = tres['shear']
 
     shear_cov = zeros( (2,2) )
-    fac = 1.0/(nboot-1.0)
 
+    shear = res['shear']
     shear_mean = shears.mean(axis=0)
+
+    fac = 1.0/(nboot-1.0)
     shear_cov[0,0] = fac*( ((shear[0]-shears[:,0])**2).sum() )
     shear_cov[0,1] = fac*( ((shear[0]-shears[:,0]) * (shear[1]-shears[:,1])).sum() )
     shear_cov[1,0] = shear_cov[0,1]
     shear_cov[1,1] = fac*( ((shear[1]-shears[:,1])**2).sum() )
 
-    out={'shear':shear,
-         'shear_mean':shear_mean,
-         'shear_cov':shear_cov,
-         'g_sum':g_sum,
-         'R_sum':R_sum,
-         'gsens_sum':R_sum, # another name
-         'Rpsf_sum':Rpsf_sum,
-         'nuse':g.shape[0],
-         'shears':shears}
-    return out
+    res['shear_mean'] = shear_mean
+    res['shear_err'] = sqrt(diag(shear_cov))
+    res['shear_cov'] = shear_cov
+    res['shears'] = shears
+    return res
 
-def _get_mean_shear(g, R, Rpsf, replicate_mean=False):
-
-    ng = g.shape[0]
+def get_mean_shear(g, gpsf, R, Rpsf):
 
     g_sum = g.sum(axis=0)
-    if replicate_mean:
-        R_mean = R.mean(axis=0)
-        Rpsf_mean = Rpsf.mean(axis=0)
+    g_err = g.std(axis=0)/sqrt(g.shape[0])
 
-        R_sum = ng*R_mean
-        Rpsf_sum = ng*Rpsf_mean
-    else:
-        R_sum = R.sum(axis=0)
-        Rpsf_sum = Rpsf.sum(axis=0)
+    g_mean = g_sum/g.shape[0]
 
-    g_sum -= Rpsf_sum
+    R_sum = R.sum(axis=0)
+    R_mean = R_sum/R.shape[0]
 
-    R_sum_inv = numpy.linalg.inv(R_sum)
-    shear = numpy.dot(R_sum_inv, g_sum)
+    Rpsf_sum = Rpsf.sum(axis=0)
+    Rpsf_mean = Rpsf_sum/Rpsf.shape[0]
 
-    return shear, g_sum, R_sum, Rpsf_sum
+    psf_corr_arr = gpsf.copy()
+    psf_corr_arr[:,0] *= Rpsf_mean[0]
+    psf_corr_arr[:,1] *= Rpsf_mean[1]
 
+    psf_corr_sum = psf_corr_arr.sum(axis=0)
+    psf_corr = psf_corr_sum/g.shape[0]
+
+    Rinv = linalg.inv(R_mean)
+
+    shear = dot(Rinv, g_mean - psf_corr)
+    # naive error
+    shear_err = dot(Rinv, g_err)
+
+    return {
+            'shear':shear,
+            'shear_err':shear_err,
+            'g_mean':g_mean,
+
+            'R':R_mean,
+            'Rpsf':Rpsf_mean,
+            'psf_corr':psf_corr,
+
+            'g_sum':g_sum,
+            'R_sum':R_sum,
+            'Rpsf_sum':Rpsf_sum,
+            'psf_corr_sum':psf_corr_sum,
+
+            'ng': g.shape[0],
+            'nR': R.shape[0]
+           }
