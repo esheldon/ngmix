@@ -3,6 +3,10 @@ class to create manipulated images for use in metacalibration
 
 based off reading through Eric Huffs code, but it has departed
 significantly
+
+BUG:
+    - should take absolute value of shear!
+
 """
 from __future__ import print_function
 import numpy
