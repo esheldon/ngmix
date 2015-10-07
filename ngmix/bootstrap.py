@@ -1444,6 +1444,7 @@ class CompositeBootstrapper(Bootstrapper):
                 model,
                 pars,
                 guess=None,
+                guess_TdbyTe=1.0,
                 prior=None,
                 extra_priors=None,
                 ntry=1):
@@ -1465,6 +1466,7 @@ class CompositeBootstrapper(Bootstrapper):
         if guess is not None:
             exp_guess = guess.copy()
             dev_guess = guess.copy()
+            dev_guess[4] *= guess_TdbyTe
         else:
             exp_guess = None
             dev_guess = None
