@@ -150,7 +150,11 @@ class Metacal(object):
         import galsim
 
         _check_shape(shear)
-        psf_grown_nopix = self.gs_psf_nopix.dilate(1 + 2*max([shear.g1,shear.g2]))
+
+        g1abs = abs(shear.g1)
+        g2abs = abs(shear.g2)
+        psf_grown_nopix = self.gs_psf_nopix.dilate(1 + 2*max([g1abs,g2abs]))
+
         psf_grown = galsim.Convolve(psf_grown_nopix,self.pixel)
 
         if type=='psf_shear':
