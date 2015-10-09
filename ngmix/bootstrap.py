@@ -36,7 +36,10 @@ BOOT_WEIGHTS_LOW= 2**5
 
 
 class Bootstrapper(object):
-    def __init__(self, obs, use_logpars=False, intpars=None):
+    def __init__(self, obs,
+                 use_logpars=False, intpars=None, find_cen=False,
+                 verbose=False,
+                 **kw):
         """
         The data can be mutated: If a PSF fit is performed, the gmix will be
         set for the input PSF observation
@@ -53,12 +56,17 @@ class Bootstrapper(object):
 
         self.use_logpars=use_logpars
         self.intpars=intpars
+        self.find_cen=find_cen
+        self.verbose=verbose
 
+        # this never gets modified in any way
         self.mb_obs_list_orig = get_mb_obs(obs)
 
         # this will get replaced if fit_psfs is run
         self.mb_obs_list=self.mb_obs_list_orig
 
+        if self.find_cen:
+            self._find_cen()
 
         self.model_fits={}
 
@@ -102,15 +110,6 @@ class Bootstrapper(object):
         if not hasattr(self, 'metacal_max_res'):
             raise RuntimeError("you need to run fit_metacal_max first")
         return self.metacal_max_res
-
-    def get_metacal_metanoise_max_result(self):
-        """
-        get result of metacal with a max likelihood fitter
-        """
-        if not hasattr(self, 'metacal_metanoise_max_res'):
-            raise RuntimeError("you need to run fit_metanoise_metacal_max first")
-        return self.metacal_metanoise_max_res
-
 
 
     def get_round_result(self):
@@ -495,40 +494,53 @@ class Bootstrapper(object):
         return pars, pars_lin
 
 
-    def find_cen(self):
+    def _find_cen(self, ntry=10):
         """
         run a single-gaussian em fit, just to find the center
 
-        Modify the jacobian center accordingly.
+        Modify the jacobian of our version of the observations accordingly.
 
         If it fails, don't modify anything
         """
 
-        raise RuntimeError("adapt to multiple observations")
+        if len(self.mb_obs_list) > 1 or len(self.mb_obs_list[0]) > 1:
+            raise RuntimeError("adapt to multiple observations")
 
-        jacob=self.gal_obs.jacobian
+        obs_orig = self.mb_obs_list[0][0]
+        jacob=obs_orig.jacobian
 
-        row,col=jacob.get_cen()
+        row0,col0=jacob.get_cen()
 
-        guess=array([1.0, # p
-                     row, # row in current jacobian coords
-                     col, # col in current jacobian coords
-                     4.0,
-                     0.0,
-                     4.0])
+        T0=8.0
 
-        gm_guess = GMix(pars=guess)
+        for i in xrange(ntry):
+            guess=[1.0*(1.0 + 0.01*srandu()),
+                   row0*(1.0+0.5*srandu()),
+                   col0*(1.0+0.5*srandu()),
+                   T0/2.0*(1.0 + 0.1*srandu()),
+                   0.1*srandu(),
+                   T0/2.0*(1.0 + 0.1*srandu())]
 
-        im,sky = prep_image(self.gal_obs.image)
-        obs = Observation(im)
-        fitter=GMixEM(obs)
-        fitter.go(gm_guess, sky, maxiter=4000) 
-        res=fitter.get_result()
+            gm_guess = GMix(pars=guess)
+
+            im,sky = prep_image(obs_orig.image)
+
+            obs = Observation(im)
+
+            fitter=GMixEM(obs)
+            fitter.go(gm_guess, sky, maxiter=4000) 
+
+            res=fitter.get_result()
+
+            if res['flags']==0:
+                break
+
         if res['flags']==0:
             gm=fitter.get_gmix()
             row,col=gm.get_cen()
-            print("        setting jacobian cen to:",row,col,
-                  "numiter:",res['numiter'])
+            if self.verbose:
+                print("        setting jacobian cen to:",row,col,
+                      "numiter:",res['numiter'])
             jacob.set_cen(row,col)
         else:
             print("        failed to find cen")
@@ -538,7 +550,8 @@ class Bootstrapper(object):
                  skip_failed=True,
                  ntry=4,
                  fit_pars=None,
-                 skip_already_done=True):
+                 skip_already_done=True,
+                 norm_key=None):
         """
         Fit all psfs.  If the psf observations already have a gmix
         then this step is not necessary
@@ -559,11 +572,16 @@ class Bootstrapper(object):
             Fitting parameters for psf.
         skip_already_done: bool
             Skip psfs with a gmix already set
+        norm_key: will use this key in the PSF meta data to fudge the normalization 
+            of the PSF model via amplitude -> amplitude*norm where amplitude is the PSF normalization
+            (usually 1)
         """
 
         ntot=0
         new_mb_obslist=MultiBandObsList()
-        for band,obslist in enumerate(self.mb_obs_list_orig):
+
+        mb_obs_list = self.mb_obs_list
+        for band,obslist in enumerate(mb_obs_list):
             new_obslist=ObsList()
 
             for i,obs in enumerate(obslist):
@@ -590,7 +608,7 @@ class Bootstrapper(object):
                         Tguess_i = psf_obs.meta[Tguess_key]
                     else:
                         Tguess_i = Tguess
-                    self._fit_one_psf(psf_obs, psf_model, Tguess_i, ntry, fit_pars)
+                    self._fit_one_psf(psf_obs, psf_model, Tguess_i, ntry, fit_pars, norm_key=norm_key)
                     new_obslist.append(obs)
                     ntot += 1
                 except BootPSFFailure:
@@ -610,7 +628,7 @@ class Bootstrapper(object):
 
         self.mb_obs_list=new_mb_obslist
 
-    def _fit_one_psf(self, psf_obs, psf_model, Tguess, ntry, fit_pars):
+    def _fit_one_psf(self, psf_obs, psf_model, Tguess, ntry, fit_pars, norm_key=None):
         """
         fit the psf using a PSFRunner or EMRunner
 
@@ -632,7 +650,10 @@ class Bootstrapper(object):
         if res['flags']==0:
             self.psf_fitter=psf_fitter
             gmix=self.psf_fitter.get_gmix()
-
+            
+            if norm_key is not None:
+                gmix.set_psum(psf_obs.meta[norm_key])
+            
             psf_obs.set_gmix(gmix)
 
         else:
@@ -694,13 +715,14 @@ class Bootstrapper(object):
                         pars,
                         psf_Tguess,
                         psf_fit_pars=None,
+                        target_noise=None,
                         extra_noise=None,
+                        metacal_obs=None,
                         nrand=1,
                         metacal_pars=None,
                         prior=None,
                         psf_ntry=10,
-                        ntry=1,
-                        verbose=True):
+                        ntry=1):
         """
         run metacalibration
 
@@ -727,19 +749,30 @@ class Bootstrapper(object):
 
         metacal_pars=mpars
 
+        oobs = self.mb_obs_list[0][0]
+
+        if target_noise is not None:
+            extra_noise = self._get_extra_noise_from_target(oobs, target_noise)
+
         if extra_noise is None:
             nrand=1
 
-        oobs = self.mb_obs_list[0][0]
-        obs_dict0 = self.get_metacal_obsdict(oobs, metacal_pars)
+        if metacal_obs is not None:
+            if self.verbose:
+                print("        using input metacal obs dict")
+            obs_dict_orig=metacal_obs
+        else:
+            obs_dict_orig = self.get_metacal_obsdict(oobs, metacal_pars)
 
         for i in xrange(nrand):
-            if extra_noise is not None:
-                obs_dict = self._add_noise_to_metacal_obsdict(obs_dict0, extra_noise)
-            else:
-                obs_dict=obs_dict0
 
-            if nrand > 1 and verbose:
+
+            if extra_noise is not None:
+                obs_dict = self._add_noise_to_metacal_obsdict(obs_dict_orig, extra_noise)
+            else:
+                obs_dict=obs_dict_orig
+
+            if nrand > 1 and self.verbose:
                 print("    irand: %d/%d" % (i+1,nrand))
 
             tres = self._fit_metacal_max_one(metacal_pars,
@@ -747,8 +780,7 @@ class Bootstrapper(object):
                                              psf_model, gal_model, pars, psf_Tguess,
                                              prior, psf_ntry, ntry,
                                              psf_fit_pars,
-                                             extra_noise,
-                                             verbose)
+                                             extra_noise)
             if i == 0:
                 res=tres
             else:
@@ -760,6 +792,28 @@ class Bootstrapper(object):
                 res[key] = res[key]/float(nrand)
 
         self.metacal_max_res = res
+
+        return obs_dict_orig
+
+    def _get_extra_noise_from_target(self, obs, target_noise):
+        weight = obs.weight
+        w=where(weight > 0.0)
+        if w[0].size == 0:
+            print("    no weight > 0")
+            extra_noise = target_noise
+        else:
+            noise_mean = sqrt( (1.0/weight[w]).mean() )
+
+            if target_noise < noise_mean:
+                tup = (target_noise, noise_mean)
+                raise ValueError("target noise %g is "
+                                 "less than mean noise "
+                                 "in weight map: %g" % tup)
+
+            extra_noise = sqrt(target_noise**2 - noise_mean**2)
+
+        print("    target_noise: %g extra_noise: %g" % (target_noise, extra_noise))
+        return extra_noise
 
     def _add_noise_to_metacal_obsdict(self, obs_dict, extra_noise):
         noise_image = self._get_noise_image(obs_dict['1p'].image.shape,
@@ -785,8 +839,7 @@ class Bootstrapper(object):
                              psf_model, gal_model, max_pars, 
                              psf_Tguess, prior, psf_ntry, ntry, 
                              psf_fit_pars,
-                             extra_noise,
-                             verbose):
+                             extra_noise):
 
         step = metacal_pars['step']
 
@@ -794,8 +847,7 @@ class Bootstrapper(object):
                                      psf_model, gal_model, max_pars, psf_Tguess,
                                      prior, psf_ntry, ntry,
                                      psf_fit_pars,
-                                     extra_noise,
-                                     verbose)
+                                     extra_noise)
 
         pars=fits['pars']
         pars_mean = (pars['1p']+
@@ -809,38 +861,35 @@ class Bootstrapper(object):
                          pars_cov['2p']+
                          pars_cov['2m'])/4.0
 
-        if verbose:
+        if self.verbose:
             print_pars(pars_mean, front='    mcmean:   ')
 
-        sens=zeros( (2,2) ) 
-        sens_psf=zeros(2)
+        R=zeros( (2,2) ) 
+        Rpsf=zeros(2)
 
         fac = 1.0/(2.0*step)
 
-        sens[0,0] = (pars['1p'][2]-pars['1m'][2])*fac
-        sens[0,1] = (pars['1p'][3]-pars['1m'][3])*fac
-        sens[1,0] = (pars['2p'][2]-pars['2m'][2])*fac
-        sens[1,1] = (pars['2p'][3]-pars['2m'][3])*fac
+        R[0,0] = (pars['1p'][2]-pars['1m'][2])*fac
+        R[0,1] = (pars['1p'][3]-pars['1m'][3])*fac
+        R[1,0] = (pars['2p'][2]-pars['2m'][2])*fac
+        R[1,1] = (pars['2p'][3]-pars['2m'][3])*fac
 
-        sens_psf[0] = (pars['1p_psf'][2]-pars['1m_psf'][2])*fac
-        sens_psf[1] = (pars['2p_psf'][3]-pars['2m_psf'][3])*fac
-
-        psf_ellip=fits['psf_ellip']
-        sens_psf[0] *= psf_ellip[0]
-        sens_psf[1] *= psf_ellip[1]
+        Rpsf[0] = (pars['1p_psf'][2]-pars['1m_psf'][2])*fac
+        Rpsf[1] = (pars['2p_psf'][3]-pars['2m_psf'][3])*fac
 
         pars_noshear = pars['noshear']
 
         c = pars_mean[2:2+2] - pars_noshear[2:2+2]
 
-        res = {'mcal_pars_mean':pars_mean,
-               'mcal_pars_mean_cov':pars_cov_mean,
-               'mcal_g_mean':pars_mean[2:2+2],
+        res = {'mcal_pars':pars_mean,
+               'mcal_pars_cov':pars_cov_mean,
+               'mcal_g':pars_mean[2:2+2],
                'mcal_g_cov':pars_cov_mean[2:2+2, 2:2+2],
                'mcal_pars_noshear':pars_noshear,
                'mcal_c':c,
-               'mcal_g_sens':sens,
-               'mcal_psf_sens':sens_psf,
+               'mcal_R':R,
+               'mcal_Rpsf':Rpsf,
+               'mcal_gpsf':fits['gpsf'],
                'mcal_s2n_r':fits['s2n_r'],
                'mcal_s2n_simple':fits['s2n_simple'],
                'mcal_T_r':fits['T_r'],
@@ -852,17 +901,22 @@ class Bootstrapper(object):
     def _do_metacal_fits(self, obs_dict, psf_model, gal_model, pars, 
                          psf_Tguess, prior, psf_ntry, ntry, 
                          psf_fit_pars,
-                         extra_noise,
-                         verbose):
+                         extra_noise):
 
         bdict={}
         for key in obs_dict:
-            boot = Bootstrapper(obs_dict[key], use_logpars=self.use_logpars,intpars=self.intpars)
+            boot = Bootstrapper(obs_dict[key],
+                                use_logpars=self.use_logpars,
+                                intpars=self.intpars,
+                                find_cen=self.find_cen,
+                                verbose=self.verbose)
+
             boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry, fit_pars=psf_fit_pars)
             boot.fit_max(gal_model, pars, prior=prior, ntry=ntry)
             boot.set_round_s2n()
             
-            if verbose:
+            # verbose can be bool or a number
+            if self.verbose > 1:
                 if 'psf' in key:
                     front='    psf mcpars:'
                 else:
@@ -872,11 +926,11 @@ class Bootstrapper(object):
 
             bdict[key] = boot
 
-        res={'pars':{}, 'pars_cov':{}, 'psf_ellip':{}}
+        res={'pars':{}, 'pars_cov':{}}
         s2n_r_mean   = 0.0
         T_r_mean     = 0.0
         psf_T_r_mean = 0.0
-        psf_ellip_mean = zeros(2)
+        gpsf_mean = zeros(2)
         npsf=0
         navg=0
 
@@ -896,12 +950,11 @@ class Bootstrapper(object):
                 # don't average over psf sheared model
                 continue
 
-
             for obslist in boot.mb_obs_list:
                 for obs in obslist:
                     g1,g2,T=obs.psf.gmix.get_g1g2T()
-                    psf_ellip_mean[0] += g1
-                    psf_ellip_mean[1] += g2
+                    gpsf_mean[0] += g1
+                    gpsf_mean[1] += g2
                     npsf+=1
 
             rres=boot.get_round_result()
@@ -919,7 +972,7 @@ class Bootstrapper(object):
         res['s2n_r']   = s2n_r_mean/navg
         res['T_r']     = T_r_mean/navg
         res['psf_T_r'] = psf_T_r_mean/navg
-        res['psf_ellip'] = psf_ellip_mean/npsf
+        res['gpsf'] = gpsf_mean/npsf
 
         return res
 
@@ -1017,103 +1070,6 @@ class Bootstrapper(object):
 
         return new_weight
 
-    def fit_metacal_metanoise_max(self,
-                                  psf_model,
-                                  gal_model,
-                                  fitter_pars,
-                                  psf_Tguess,
-                                  extra_noise,
-                                  nrand,
-                                  psf_fit_pars=None,
-                                  step=0.01,
-                                  prior=None,
-                                  psf_ntry=10,
-                                  ntry=1,
-                                  verbose=True):
-        """
-        run metacalibration
-
-        parameters
-        ----------
-        psf_model: string
-            model to fit to psfs
-        gal_model: string
-            model to fit
-        fitter_pars: dict
-            parameters for the fitter
-        psf_Tguess: float
-            guess for psf
-        nrand: int
-            number of images to use with extra noise
-        extra_noise: float
-            extra noise in each image
-        step: float, optional
-            Step for the metacal shear derivative.  Default 0.01
-        prior: prior on parameters, optional
-            Optional prior to apply
-        ntry: int, optional
-            Number of times to retry fitting, default 1
-        psf_ntry: int
-            number of tries for psf fitter
-        ntry: int
-            number of tries for fitter
-        psf_fit_pars: dict
-            pars for the psf fitter
-        """
-
-        obs_dict,obs_dict0 = self.get_metanoise_obsdict(nrand, extra_noise, step)
-        res = self._fit_metacal_max_one(obs_dict,
-                                        psf_model,
-                                        gal_model,
-                                        fitter_pars,
-                                        psf_Tguess,
-                                        step,
-                                        prior,
-                                        psf_ntry,
-                                        ntry,
-                                        psf_fit_pars,
-                                        extra_noise,
-                                        verbose)
-
-        self.metacal_metanoise_max_res = res
-
-    def get_metanoise_obsdict(self, nrand, extra_noise, step):
-        """
-        get the metacal obs dict
-
-        get nrand new versions of the image with extra noise added
-        """
-
-        if len(self.mb_obs_list) > 1 or len(self.mb_obs_list[0]) > 1:
-            raise NotImplementedError("only a single obs for now")
-
-        oobs = self.mb_obs_list[0][0]
-        obs_dict0 = self.get_metacal_obsdict(oobs, step)
-
-        # fixed noise images to be added to each metacal image in parallel
-        noise_images=[]
-        for i in xrange(nrand):
-            noise_image = self._get_noise_image(obs_dict0['1p'].image.shape,
-                                                extra_noise)
-            noise_images.append(noise_image)
-
-        obs_dict = {}
-        for key in obs_dict0:
-
-            obs0=obs_dict0[key]
-
-            obslist = ObsList()
-            for i in xrange(nrand):
-                noise_image = noise_images[i]
-
-                new_weight = self._get_degraded_weight_image(obs0, extra_noise)
-                new_obs = self._get_degraded_obs(obs0, noise_image, new_weight)
-
-                obslist.append(new_obs)     
-
-            obs_dict[key] = obslist
-
-        return obs_dict, obs_dict0
 
     def fit_max_fixT(self, gal_model, pars, T,
                      guess=None, prior=None, extra_priors=None, ntry=1):
@@ -1209,7 +1165,7 @@ class Bootstrapper(object):
 
 
 
-    def isample(self, ipars, prior=None, verbose=True):
+    def isample(self, ipars, prior=None):
         """
         bootstrap off the maxlike run
         """
@@ -1219,7 +1175,7 @@ class Bootstrapper(object):
 
         niter=len(ipars['nsample'])
         for i,nsample in enumerate(ipars['nsample']):
-            sampler=self._make_isampler(use_fitter, ipars, verbose=verbose)
+            sampler=self._make_isampler(use_fitter, ipars)
             if sampler is None:
                 raise BootGalFailure("isampling failed")
 
@@ -1230,7 +1186,7 @@ class Bootstrapper(object):
 
             tres=sampler.get_result()
 
-            if verbose:
+            if self.verbose:
                 print("    eff iter %d: %.2f" % (i,tres['efficiency']))
             use_fitter = sampler
 
@@ -1239,7 +1195,7 @@ class Bootstrapper(object):
 
         self.isampler=sampler
 
-    def _make_isampler(self, fitter, ipars, verbose=True):
+    def _make_isampler(self, fitter, ipars):
         from .fitting import ISampler
         from numpy.linalg import LinAlgError
 
@@ -1254,14 +1210,14 @@ class Bootstrapper(object):
                              max_err=ipars['max_err'],
                              ifactor=ipars.get('ifactor',1.0),
                              asinh_pars=ipars.get('asinh_pars',[]),
-                             verbose=verbose)
+                             verbose=self.verbose)
         except LinAlgError:
             print("        bad cov")
             sampler=None
 
         return sampler
 
-    def psample(self, psample_pars, samples, verbose=True):
+    def psample(self, psample_pars, samples):
         """
         bootstrap off the maxlike run
         """
@@ -1279,7 +1235,7 @@ class Bootstrapper(object):
         sampler=PSampler(res['pars'],
                          res['pars_err'],
                          samples,
-                         verbose=verbose,
+                         verbose=self.verbose,
                          **psample_pars)
 
         sampler.calc_loglikes(tfitter.calc_lnprob)
@@ -1292,7 +1248,7 @@ class Bootstrapper(object):
 
 
 
-    def fit_gal_psf_flux(self):
+    def fit_gal_psf_flux(self, normalize_psf=True):
         """
         use psf as a template, measure flux (linear)
         """
@@ -1311,7 +1267,7 @@ class Bootstrapper(object):
         for i in xrange(nband):
             obs_list = mbo[i]
 
-            fitter=fitting.TemplateFluxFitter(obs_list, do_psf=True)
+            fitter=fitting.TemplateFluxFitter(obs_list, do_psf=True, normalize_psf=normalize_psf)
             fitter.go()
 
             res=fitter.get_result()
@@ -1384,8 +1340,8 @@ class Bootstrapper(object):
             res['flags']=0
 
 class BootstrapperGaussMom(Bootstrapper):
-    def __init__(self, obs):
-        super(BootstrapperGaussMom,self).__init__(obs)
+    def __init__(self, obs, **kw):
+        super(BootstrapperGaussMom,self).__init__(obs, **kw)
 
     def fit_max(self, pars, guess=None, prior=None, extra_priors=None, ntry=1):
         """
@@ -1425,7 +1381,7 @@ class BootstrapperGaussMom(Bootstrapper):
 
         return fitter
 
-    def _make_isampler(self, fitter, ipars, verbose=True):
+    def _make_isampler(self, fitter, ipars):
         from .fitting import ISamplerMom
         from numpy.linalg import LinAlgError
 
@@ -1440,7 +1396,7 @@ class BootstrapperGaussMom(Bootstrapper):
                                 max_err=ipars['max_err'],
                                 ifactor=ipars.get('ifactor',1.0),
                                 asinh_pars=ipars.get('asinh_pars',[]),
-                                verbose=verbose)
+                                verbose=self.verbose)
         except LinAlgError:
             print("        bad cov")
             sampler=None
@@ -1471,10 +1427,10 @@ class CompositeBootstrapper(Bootstrapper):
     def __init__(self, obs,
                  use_logpars=False,
                  fracdev_prior=None,
-                 fracdev_grid=None):
+                 fracdev_grid=None, **kw):
 
         super(CompositeBootstrapper,self).__init__(obs,
-                                                   use_logpars=use_logpars)
+                                                   use_logpars=use_logpars, **kw)
 
         self.fracdev_prior=fracdev_prior
         if fracdev_grid is not None:
@@ -1488,6 +1444,7 @@ class CompositeBootstrapper(Bootstrapper):
                 model,
                 pars,
                 guess=None,
+                guess_TdbyTe=1.0,
                 prior=None,
                 extra_priors=None,
                 ntry=1):
@@ -1509,6 +1466,7 @@ class CompositeBootstrapper(Bootstrapper):
         if guess is not None:
             exp_guess = guess.copy()
             dev_guess = guess.copy()
+            dev_guess[4] *= guess_TdbyTe
         else:
             exp_guess = None
             dev_guess = None
@@ -1770,9 +1728,9 @@ class CompositeBootstrapper(Bootstrapper):
 class BestBootstrapper(Bootstrapper):
     def __init__(self, obs,
                  use_logpars=False,
-                 fracdev_prior=None):
+                 fracdev_prior=None, **kw):
         super(BestBootstrapper,self).__init__(obs,
-                                              use_logpars=use_logpars)
+                                              use_logpars=use_logpars, **kw)
 
     def fit_max(self, exp_prior, dev_prior, exp_rate, pars, ntry=1):
         """

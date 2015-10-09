@@ -638,10 +638,12 @@ class TemplateFluxFitter(FitterBase):
         See ngmix.observation.Observation.  The observation should
         have a gmix set.
     cen: 2-element sequence, optional
-
         The center in sky coordinates, relative to the jacobian center(s).  If
         not sent, the gmix (or psf gmix) object(s) in the observation(s) should
         be set to the wanted center.
+    normalize_psf: True or False
+        if True, then normalize PSF gmix to flux of unity, otherwise use input
+        normalization.
 
     """
     def __init__(self, obs, **keys):
@@ -649,7 +651,9 @@ class TemplateFluxFitter(FitterBase):
         self.keys=keys
         self.do_psf=keys.get('do_psf',False)
         self.cen=keys.get('cen',None)
-
+        
+        self.normalize_psf = keys.get('normalize_psf',True)
+        
         if self.cen is None:
             self.cen_was_sent=False
         else:
@@ -684,12 +688,16 @@ class TemplateFluxFitter(FitterBase):
                 j=obs.jacobian
 
                 if ipass==1:
-                    gm.set_psum(1.0)
+                    if self.normalize_psf:
+                        gm.set_psum(1.0)
+                        psf_norm = 1.0
+                    else:
+                        psf_norm = gm.get_psum()
                     model=gm.make_image(im.shape, jacobian=j)
                     xcorr_sum += (model*im*wt).sum()
                     msq_sum += (model*model*wt).sum()
                 else:
-                    gm.set_psum(flux)
+                    gm.set_psum(flux*psf_norm)
                     model=gm.make_image(im.shape, jacobian=j)
                     chi2 +=( (model-im)**2 *wt ).sum()
             if ipass==1:
@@ -1600,7 +1608,9 @@ class LMSimple(FitterBase):
 
         guess=array(guess,dtype='f8',copy=False)
         self._setup_data(guess)
-
+        
+        print_pars(guess,front='        guess:   ')
+        
         result = run_leastsq(self._calc_fdiff,
                              guess,
                              self.n_prior_pars,
