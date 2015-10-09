@@ -3,17 +3,6 @@ from numpy import zeros, sqrt
 
 import copy
 
-'''
-_jacobian=struct([('row0',float64),
-                  ('col0',float64),
-                  ('dudrow',float64),
-                  ('dudcol',float64),
-                  ('dvdrow',float64),
-                  ('dvdcol',float64),
-                  ('det',float64),
-                  ('sdet',float64)],packed=True)
-_jacobian_dtype=_jacobian.get_dtype()
-'''
 _jacobian_dtype=[('row0','f8'),
                   ('col0','f8'),
                   ('dudrow','f8'),

@@ -14,7 +14,7 @@ See TODO in the code
 """
 from __future__ import print_function
 import numpy
-from numpy import zeros, ones, newaxis
+from numpy import zeros, ones, newaxis, array
 from .jacobian import Jacobian, UnitJacobian
 from .observation import Observation
 from .shape import Shape
@@ -154,7 +154,7 @@ class Metacal(object):
         import galsim
 
         _check_shape(shear)
-        psf_grown_nopix = self.gs_psf_nopix.dilate(1 + 2*max([shear.g1,shear.g2]))
+        psf_grown_nopix = self.gs_psf_int_nopix.dilate(1 + 2*max([shear.g1,shear.g2]))
         psf_grown = galsim.Convolve(psf_grown_nopix,self.pixel)
 
         if type=='psf_shear':
@@ -260,7 +260,7 @@ class Metacal(object):
         self.gs_psf_int = galsim.InterpolatedImage(self.gs_psf_image,
                                                    x_interpolant = self.l5int)
         # interpolated psf deconvolved from pixel
-        self.gs_psf_nopix = galsim.Convolve([self.gs_psf_int, self.pixel_inv])
+        self.gs_psf_int_nopix = galsim.Convolve([self.gs_psf_int, self.pixel_inv])
 
         # this can be used to deconvolve the psf from the galaxy image
         self.gs_psf_int_inv = galsim.Deconvolve(self.gs_psf_int)
@@ -426,3 +426,65 @@ def jackknife_shear(g, gsens, do_ring=False, chunksize=1, weights=None):
 
 
 
+def test():
+    import images
+
+    step=0.01
+    shear_p0 = Shape(step, 0.0)
+
+    obs, obs_sheared = _get_sim_obs(shear_p0)
+
+    m=Metacal(obs)
+    obs_p0 = m.get_obs_galshear(shear_p0)
+
+    images.compare_images(obs_sheared.image,
+                          obs_p0.image,
+                          label1='sheared',
+                          label2='metacal')
+    
+def _get_sim_obs(shear):
+    from .gmix import GMixModel
+    model='gauss'
+
+
+    g1=0.2
+    g2=0.1
+    T=4.0
+    flux=100.0
+
+    sh=Shape(g1, g2)
+    sh_sheared=Shape(g1, g2)
+    sh_sheared.shear(shear)
+
+    model_psf='gauss'
+    g1psf=0.05
+    g2psf=-0.07
+    Tpsf=4.0
+    fluxpsf=1.0
+
+    Ttot = T+Tpsf
+    sigma = numpy.sqrt(Ttot/2.0)
+    dim=int( 2*5*sigma )
+
+    dims=[dim]*2
+    cen=(array(dims)-1.0)/2.0
+    
+    pars=[cen[0],cen[1],sh.g1,sh.g2,T,flux]
+
+    pars_sheared=[cen[0],cen[1],sh_sheared.g1,sh_sheared.g2,T,flux]
+
+    pars_psf=[cen[0],cen[1],g1psf,g2psf,Tpsf,fluxpsf]
+
+    obj0 = GMixModel(pars, model)
+    psf = GMixModel(pars_psf, model_psf)
+    obj = obj0.convolve(psf)
+    obj_sheared = GMixModel(pars_sheared, model)
+
+    im = obj.make_image(dims)
+    im_sheared = obj_sheared.make_image(dims)
+    psf_im = psf.make_image(dims)
+
+    psf_obs = Observation(psf_im)
+    obs = Observation(im, psf=psf_obs)
+    obs_sheared = Observation(im_sheared, psf=psf_obs)
+    return obs, obs_sheared
