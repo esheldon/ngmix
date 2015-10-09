@@ -88,13 +88,13 @@ class Metacal(object):
             sheared
         """
 
-        newpsf = self.get_target_psf(shear, 'gal_shear')
-        sheared_image = self.get_target_image(newpsf, shear=shear)
+        newpsf, newpsf_interp = self.get_target_psf(shear, 'gal_shear')
+        sheared_image = self.get_target_image(newpsf_interp, shear=shear)
 
         newobs = self._make_obs(sheared_image, newpsf)
 
         if get_unsheared:
-            unsheared_image = self.get_target_image(newpsf, shear=None)
+            unsheared_image = self.get_target_image(newpsf_interp, shear=None)
             uobs = self._make_obs(unsheared_image, newpsf)
             return newobs, uobs
         else:
@@ -110,8 +110,8 @@ class Metacal(object):
             The shear to apply
         """
 
-        newpsf = self.get_target_psf(shear, 'gal_shear')
-        unsheared_image = self.get_target_image(newpsf, shear=None)
+        newpsf, newpsf_interp = self.get_target_psf(shear, 'gal_shear')
+        unsheared_image = self.get_target_image(newpsf_interp, shear=None)
         uobs = self._make_obs(unsheared_image, newpsf)
 
         return uobs
@@ -125,8 +125,8 @@ class Metacal(object):
         shear: ngmix.Shape
             The shear to apply
         """
-        newpsf = self.get_target_psf(shear, 'psf_shear')
-        conv_image = self.get_target_image(newpsf, shear=None)
+        newpsf, newpsf_interp = self.get_target_psf(shear, 'psf_shear')
+        conv_image = self.get_target_image(newpsf_interp, shear=None)
 
         newobs = self._make_obs(conv_image, newpsf)
         return newobs
@@ -134,6 +134,8 @@ class Metacal(object):
 
     def get_target_psf(self, shear, type):
         """
+        get galsim interpolated image for dilated, possibly sheared, psf
+
         parameters
         ----------
         shear: ngmix.Shape
@@ -155,30 +157,31 @@ class Metacal(object):
         g2abs = abs(shear.g2)
         psf_grown_nopix = self.gs_psf_int_nopix.dilate(1 + 2*max([g1abs,g2abs]))
 
-        psf_grown = galsim.Convolve(psf_grown_nopix,self.pixel)
+        psf_grown_interp = galsim.Convolve(psf_grown_nopix,self.pixel)
 
         if type=='psf_shear':
             # eric remarked that he thought we should shear the pixelized version
-            psf_grown = psf_grown.shear(g1=shear.g1, g2=shear.g2)
+            psf_grown_interp = psf_grown_interp.shear(g1=shear.g1, g2=shear.g2)
 
-        newpsf = galsim.ImageD(self.gs_psf_image.bounds)
+        psf_grown_image = galsim.ImageD(self.gs_psf_image.bounds)
 
         # TODO not general, using just pixel scale
-        psf_grown.drawImage(image=newpsf,
-                            scale=self.pixel_scale,
-                            method='no_pixel')
-        return newpsf
+        psf_grown_interp.drawImage(image=psf_grown_image,
+                                   scale=self.pixel_scale,
+                                   method='no_pixel')
 
-    def get_target_image(self, psf, shear=None):
+        return psf_grown_image, psf_grown_interp
+
+    def get_target_image(self, psf_interp, shear=None):
         """
         get the target image, convolved with the specified psf
-        and possible sheared
+        and possibly sheared
 
         This is where whitening happens
 
         parameters
         ----------
-        psf: A galsim image
+        psf: A galsim interpolated image
             psf by which to convolve
         shear: ngmix.Shape, optional
             The shear to apply
@@ -189,14 +192,15 @@ class Metacal(object):
         """
         import galsim
         if shear is not None:
-            shim_nopsf = self.get_sheared_image_nopsf(shear)
+            shim_interp_nopsf = self.get_sheared_image_interp_nopsf(shear)
         else:
-            shim_nopsf = self.gs_image_int_nopsf
+            shim_interp_nopsf = self.gs_image_int_nopsf
 
-        psfint = galsim.InterpolatedImage(psf, x_interpolant = self.l5int)
-        imconv = galsim.Convolve([shim_nopsf, psfint])
+        #psfint = galsim.InterpolatedImage(psf, x_interpolant = self.l5int)
+        imconv = galsim.Convolve([shim_interp_nopsf, psf_interp])
 
         # Draw reconvolved, sheared image to an ImageD object, and return.
+        # pixel is already in the interpolated psf image
         newim = galsim.ImageD(self.gs_image.bounds)
         imconv.drawImage(image=newim,
                          method='no_pixel',
@@ -209,7 +213,7 @@ class Metacal(object):
 
         return newim
 
-    def get_sheared_image_nopsf(self, shear):
+    def get_sheared_image_interp_nopsf(self, shear):
         """
         get the image sheared by the reqested amount, pre-psf and pre-pixel
 
@@ -265,7 +269,7 @@ class Metacal(object):
         # this can be used to deconvolve the psf from the galaxy image
         self.gs_psf_int_inv = galsim.Deconvolve(self.gs_psf_int)
 
-        # interpolated galaxy image
+        # interpolated galaxy image, still pixelized
         self.gs_image_int = galsim.InterpolatedImage(self.gs_image,
                                                      x_interpolant=self.l5int)
         if self.whiten:
@@ -276,7 +280,7 @@ class Metacal(object):
             if self.same_seed:
                 self.seed=numpy.random.randint(0, 2**30-1)
 
-        # deconvolved galaxy image
+        # deconvolved galaxy image, psf+pixel removed
         self.gs_image_int_nopsf = galsim.Convolve(self.gs_image_int,
                                                   self.gs_psf_int_inv)
 
@@ -612,59 +616,84 @@ def test():
     step=0.01
     shear_p0 = Shape(step, 0.0)
 
-    obs, obs_sheared = _get_sim_obs(shear_p0)
+    obs, obs_sheared_dilated = _get_sim_obs(shear_p0.g1,shear_p0.g2,
+                                           r50=2.0, r50_psf=1.5)
 
     m=Metacal(obs)
     obs_p0 = m.get_obs_galshear(shear_p0)
 
-    images.compare_images(obs_sheared.image,
+    images.compare_images(obs_sheared_dilated.image,
                           obs_p0.image,
-                          label1='sheared',
-                          label2='metacal')
+                          label1='shear/dilate',
+                          label2='metacal',
+                          width=1000,
+                          height=1000)
     
-def _get_sim_obs(shear):
-    from .gmix import GMixModel
-    model='gauss'
+    '''
+    images.compare_images(obs.image,
+                          obs_p0.image,
+                          label1='unsheared, undilated',
+                          label2='metacal',
+                          width=1000,
+                          height=1000)
+    '''
 
+def _get_sim_obs(s1, s2, g1=0.2, g2=0.1, r50=3.0, r50_psf=1.8):
+    import galsim
 
-    g1=0.2
-    g2=0.1
-    T=4.0
+    dims=32,32
+
     flux=100.0
 
-    sh=Shape(g1, g2)
-    sh_sheared=Shape(g1, g2)
-    sh_sheared.shear(shear)
-
-    model_psf='gauss'
     g1psf=0.05
     g2psf=-0.07
-    Tpsf=4.0
     fluxpsf=1.0
 
-    Ttot = T+Tpsf
-    sigma = numpy.sqrt(Ttot/2.0)
-    dim=int( 2*5*sigma )
+    s1abs = abs(s1)
+    s2abs = abs(s2)
+    dilate = 1. + 2.*max([s1abs,s2abs])
 
-    dims=[dim]*2
-    cen=(array(dims)-1.0)/2.0
-    
-    pars=[cen[0],cen[1],sh.g1,sh.g2,T,flux]
+    r50_psf_dilated = r50_psf * dilate
 
-    pars_sheared=[cen[0],cen[1],sh_sheared.g1,sh_sheared.g2,T,flux]
+    gal0 = galsim.Gaussian(flux=flux, half_light_radius=r50)
+    gal0 = gal0.shear(g1=g1, g2=g2)
+    gal0_sheared = gal0.shear(g1=s1, g2=s2)
 
-    pars_psf=[cen[0],cen[1],g1psf,g2psf,Tpsf,fluxpsf]
+    psf = galsim.Gaussian(flux=fluxpsf, half_light_radius=r50_psf)
+    psf = psf.shear(g1=g1psf,g2=g2psf)
 
-    obj0 = GMixModel(pars, model)
-    psf = GMixModel(pars_psf, model_psf)
-    obj = obj0.convolve(psf)
-    obj_sheared = GMixModel(pars_sheared, model)
+    psf_dilated = galsim.Gaussian(flux=fluxpsf, half_light_radius=r50_psf_dilated)
+    psf_dilated = psf_dilated.shear(g1=g1psf,g2=g2psf)
 
-    im = obj.make_image(dims)
-    im_sheared = obj_sheared.make_image(dims)
-    psf_im = psf.make_image(dims)
+    gal = galsim.Convolve([psf, gal0])
+    gal_sheared_dilated = galsim.Convolve([psf_dilated, gal0_sheared])
 
-    psf_obs = Observation(psf_im)
-    obs = Observation(im, psf=psf_obs)
-    obs_sheared = Observation(im_sheared, psf=psf_obs)
-    return obs, obs_sheared
+    psf_image = psf.drawImage(nx=dims[1],
+                              ny=dims[0],
+                              scale=1.0,
+                              dtype=numpy.float64)
+    psf_image_dilated = psf_dilated.drawImage(nx=dims[1],
+                                              ny=dims[0],
+                                              scale=1.0,
+                                              dtype=numpy.float64)
+
+
+    image = gal.drawImage(nx=dims[1],
+                          ny=dims[0],
+                          scale=1.0,
+                          dtype=numpy.float64)
+
+    image_sheared_dilated = gal_sheared_dilated.drawImage(nx=dims[1],
+                                                          ny=dims[0],
+                                                          scale=1.0,
+                                                          dtype=numpy.float64)
+
+
+    psf_obs = Observation(psf_image.array)
+    psf_obs_dilated = Observation(psf_image_dilated.array)
+
+    obs = Observation(image.array, psf=psf_obs)
+    obs_sheared_dilated = Observation(image_sheared_dilated.array,
+                                      psf=psf_obs_dilated)
+
+    return obs, obs_sheared_dilated
