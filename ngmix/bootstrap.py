@@ -991,11 +991,12 @@ class Bootstrapper(object):
 
         step=metacal_pars['step']
         whiten=metacal_pars.get('whiten',False)
+        symmetrize=metacal_pars.get('symmetrize',False)
         same_seed=metacal_pars.get('same_seed',False)
 
-        print("        step:",step,"whiten:",whiten,"same_seed:",same_seed)
+        print("        step:",step,"symmetrize:",symmetrize)
 
-        mc=Metacal(oobs, whiten=whiten, same_seed=same_seed)
+        mc=Metacal(oobs, symmetrize=symmetrize, whiten=whiten, same_seed=same_seed)
 
         sh1m=Shape(-step,  0.00 )
         sh1p=Shape( step,  0.00 )

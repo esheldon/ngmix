@@ -104,10 +104,12 @@ class Metacal(object):
 
         if get_unsheared:
             unsheared_image = self.get_target_image(newpsf_interp, shear=None)
-            unsheared_image = self._symmetrize_noise('gal',
-                                                     unsheared_image,
-                                                     newpsf_interp,
-                                                     Shape(0.0,0.0))
+
+            if self.symmetrize:
+                unsheared_image = self._symmetrize_noise('gal',
+                                                         unsheared_image,
+                                                         newpsf_interp,
+                                                         Shape(0.0,0.0))
 
 
             uobs = self._make_obs(unsheared_image, newpsf)
@@ -240,14 +242,13 @@ class Metacal(object):
                 imconv.noise.rng.reset(self.seed)
             newvar=imconv.noise.whitenImage(newim)
 
-        if self.symmetrize:
-
         return newim
 
     def _symmetrize_noise(self, type, image_in, psf_target_interp, shear):
         """
         mostly direct from Eric's code
         """
+        import galsim
 
         image = image_in.copy()
 
@@ -260,8 +261,9 @@ class Metacal(object):
             image += Metacal.sym_cache[key]
         else:
 
+            print("        getting symm. noise for:",key)
             GN = galsim.GaussianNoise(sigma=self.med_err)
-            test_im = galsim.Image(512,512,scale=self.pixel_scale)
+            test_im = galsim.Image(ncol,nrow,scale=self.pixel_scale)
             test_im.addNoise(GN)
             CN = galsim.CorrelatedNoise(test_im, scale=self.pixel_scale)
 
