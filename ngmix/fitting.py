@@ -1609,8 +1609,6 @@ class LMSimple(FitterBase):
         guess=array(guess,dtype='f8',copy=False)
         self._setup_data(guess)
         
-        print_pars(guess,front='        guess:   ')
-        
         result = run_leastsq(self._calc_fdiff,
                              guess,
                              self.n_prior_pars,
