@@ -697,7 +697,7 @@ class Bootstrapper(object):
         return runner
 
 
-    def fit_max(self, gal_model, pars, guess=None, prior=None, extra_priors=None, ntry=1):
+    def fit_max(self, gal_model, pars, guess=None, prior=None, extra_priors=None, ntry=1, guess_widths=None):
         """
         fit the galaxy.  You must run fit_psf() successfully first
 
@@ -708,7 +708,8 @@ class Bootstrapper(object):
                                                   pars,
                                                   guess=guess,
                                                   prior=prior,
-                                                  ntry=ntry)
+                                                  ntry=ntry,
+                                                  guess_widths=guess_widths)
     def fit_metacal_max(self,
                         psf_model,
                         gal_model,
@@ -1134,7 +1135,7 @@ class Bootstrapper(object):
 
 
 
-    def _fit_one_model_max(self, gal_model, pars, guess=None, prior=None, ntry=1, obs=None):
+    def _fit_one_model_max(self, gal_model, pars, guess=None, prior=None, ntry=1, obs=None, guess_widths=None):
         """
         fit the galaxy.  You must run fit_psf() successfully first
         """
@@ -1145,7 +1146,7 @@ class Bootstrapper(object):
         if not hasattr(self,'psf_flux_res'):
             self.fit_gal_psf_flux()
 
-        guesser=self._get_max_guesser(guess=guess, prior=prior)
+        guesser=self._get_max_guesser(guess=guess, prior=prior, widths=guess_widths)
 
         runner=MaxRunner(obs, gal_model, pars, guesser,
                          prior=prior,
@@ -1287,7 +1288,7 @@ class Bootstrapper(object):
                            'psf_flux':psf_flux,
                            'psf_flux_err':psf_flux_err}
 
-    def _get_max_guesser(self, guess=None, prior=None):
+    def _get_max_guesser(self, guess=None, prior=None, widths=None):
         """
         get a guesser that uses the psf T and galaxy psf flux to
         generate a guess, drawing from priors on the other parameters
@@ -1299,7 +1300,7 @@ class Bootstrapper(object):
             scaling='linear'
 
         if guess is not None:
-            guesser=ParsGuesser(guess, scaling=scaling)
+            guesser=ParsGuesser(guess, scaling=scaling, widths=widths)
         else:
             psf_T = self.mb_obs_list[0][0].psf.gmix.get_T()
 
@@ -1447,6 +1448,7 @@ class CompositeBootstrapper(Bootstrapper):
                 guess_TdbyTe=1.0,
                 prior=None,
                 extra_priors=None,
+                guess_widths=None,
                 ntry=1):
         """
         fit the galaxy.  You must run fit_psf() successfully first
@@ -1473,14 +1475,14 @@ class CompositeBootstrapper(Bootstrapper):
             
         print("    fitting exp")
         exp_fitter=self._fit_one_model_max('exp',pars,guess=exp_guess,
-                                           prior=exp_prior,ntry=ntry)
+                                           prior=exp_prior,ntry=ntry,guess_widths=guess_widths)
         fitting.print_pars(exp_fitter.get_result()['pars'], front='        gal_pars:')
         fitting.print_pars(exp_fitter.get_result()['pars_err'], front='        gal_perr:')
         print('        lnprob: %e' % exp_fitter.get_result()['lnprob'])
         
         print("    fitting dev")
         dev_fitter=self._fit_one_model_max('dev',pars,guess=dev_guess,
-                                           prior=dev_prior,ntry=ntry)
+                                           prior=dev_prior,ntry=ntry,guess_widths=guess_widths)
         fitting.print_pars(dev_fitter.get_result()['pars'], front='        gal_pars:')
         fitting.print_pars(dev_fitter.get_result()['pars_err'], front='        gal_perr:')
         print('        lnprob: %e' % dev_fitter.get_result()['lnprob'])           
@@ -1498,7 +1500,7 @@ class CompositeBootstrapper(Bootstrapper):
 
         TdByTe = self._get_TdByTe(exp_fitter, dev_fitter)
 
-        guesser=self._get_max_guesser(guess=guess, prior=prior)
+        guesser=self._get_max_guesser(guess=guess, prior=prior, widths=guess_widths)
 
         print("    fitting composite")
         ok=False
