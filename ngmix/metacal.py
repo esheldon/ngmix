@@ -65,8 +65,7 @@ class Metacal(object):
                  obs,
                  lanczos_pars=None):
 
-        self._set_data(obs,
-                       lanczos_pars=lanczos_pars)
+        self._set_data(obs, lanczos_pars=lanczos_pars)
 
     def get_obs_galshear(self, shear, get_unsheared=False):
         """
@@ -149,9 +148,14 @@ class Metacal(object):
 
         _check_shape(shear)
 
-        g1abs = abs(shear.g1)
-        g2abs = abs(shear.g2)
-        psf_grown_nopix = self.gs_psf_int_nopix.dilate(1 + 2*max([g1abs,g2abs]))
+        g = sqrt(shear.g1**2 + shear.g2**2)
+        dilation = 1.0 + 2.0*g
+        psf_grown_nopix = self.gs_psf_int_nopix.dilate(dilation)
+
+        #g1abs = abs(shear.g1)
+        #g2abs = abs(shear.g2)
+        #dilation = 1 + 2*max([g1abs,g2abs])
+        #psf_grown_nopix = self.gs_psf_int_nopix.dilate(dilation)
 
         psf_grown_interp = galsim.Convolve(psf_grown_nopix,self.pixel)
 
@@ -590,31 +594,84 @@ def get_mean_shear(g, gpsf, R, Rpsf):
 
 def test():
     import images
+    import fitsio
+    import os
+
+    dir='./mcal-tests'
+    if not os.path.exists(dir):
+        os.makedirs(dir)
 
     step=0.01
-    shear_p0 = Shape(step, 0.0)
+    shears=[Shape(step,0.0), Shape(0.0,step)]
 
-    obs, obs_sheared_dilated = _get_sim_obs(shear_p0.g1,shear_p0.g2,
-                                           r50=2.0, r50_psf=1.5)
+    for i,shear in enumerate(shears):
+        for type in ['gal','psf']:
 
-    m=Metacal(obs)
-    obs_p0 = m.get_obs_galshear(shear_p0)
+            obs, obs_sheared_dilated = _get_sim_obs(shear.g1,shear.g2,
+                                                    r50=2.0, r50_psf=1.5)
 
-    images.compare_images(obs_sheared_dilated.image,
-                          obs_p0.image,
-                          label1='shear/dilate',
-                          label2='metacal',
-                          width=1000,
-                          height=1000)
-    
-    '''
-    images.compare_images(obs.image,
-                          obs_p0.image,
-                          label1='unsheared, undilated',
-                          label2='metacal',
-                          width=1000,
-                          height=1000)
-    '''
+            m=Metacal(obs)
+
+            if type=='gal':
+                obs_mcal = m.get_obs_galshear(shear)
+            else:
+                obs_mcal = m.get_obs_psfshear(shear)
+
+            images.compare_images(obs_sheared_dilated.image,
+                                  obs_mcal.image,
+                                  label1='shear/dilate',
+                                  label2='metacal',
+                                  width=1000,
+                                  height=1000)
+
+            if i==0 and type=='gal':
+                imfile='test-image.fits'
+                imfile=os.path.join(dir, imfile)
+                print("writing image:",imfile)
+                fitsio.write(imfile, obs.image, clobber=True)
+
+                psffile='test-psf.fits'
+                psffile=os.path.join(dir, psffile)
+                print("writing psf:",psffile)
+                fitsio.write(psffile, obs.psf.image, clobber=True)
+
+            mcalfile='test-image-mcal-%sshear-%.2f-%.2f.fits' % (type,shear.g1,shear.g2)
+            mcalfile=os.path.join(dir,mcalfile)
+            print("writing metacaled imag:",mcalfile)
+            fitsio.write(mcalfile, obs_mcal.image, clobber=True)
+
+            mcal_psf_file='test-psf-mcal-%sshear-%.2f-%.2f.fits' % (type,shear.g1,shear.g2)
+            mcal_psf_file=os.path.join(dir,mcal_psf_file)
+            print("writing metacaled psf image:",mcal_psf_file)
+            fitsio.write(mcal_psf_file, obs_mcal.psf.image, clobber=True)
+
+
+    readme=os.path.join(dir, 'README')
+    with open(readme,'w') as fobj:
+        fobj.write("""metacal test files
+
+original images:
+----------------
+test-image.fits
+test-psf.fits
+
+metacaled images:
+-----------------
+
+# galaxy sheared
+test-image-mcal-galshear-0.01-0.00.fits
+test-psf-mcal-galshear-0.01-0.00.fits
+
+test-image-mcal-galshear-0.00-0.01.fits
+test-psf-mcal-galshear-0.00-0.01.fits
+
+# psf sheared
+test-image-mcal-psfshear-0.01-0.00.fits
+test-psf-mcal-psfshear-0.01-0.00.fits
+
+test-image-mcal-psfshear-0.00-0.01.fits
+test-psf-mcal-psfshear-0.00-0.01.fits
+"""     )
 
 def _get_sim_obs(s1, s2, g1=0.2, g2=0.1, r50=3.0, r50_psf=1.8):
     import galsim
