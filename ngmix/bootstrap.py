@@ -697,7 +697,12 @@ class Bootstrapper(object):
         return runner
 
 
-    def fit_max(self, gal_model, pars, guess=None, prior=None, extra_priors=None, ntry=1, guess_widths=None):
+    def fit_max(self, gal_model, pars,
+                guess=None,
+                guess_widths=None,
+                prior=None,
+                extra_priors=None,
+                ntry=1):
         """
         fit the galaxy.  You must run fit_psf() successfully first
 
@@ -723,7 +728,8 @@ class Bootstrapper(object):
                         metacal_pars=None,
                         prior=None,
                         psf_ntry=10,
-                        ntry=1):
+                        ntry=1,
+                        guess_from_max=False):
         """
         run metacalibration
 
@@ -743,6 +749,11 @@ class Bootstrapper(object):
 
         if len(self.mb_obs_list) > 1 or len(self.mb_obs_list[0]) > 1:
             raise NotImplementedError("only a single obs for now")
+
+        if guess_from_max:
+            guess = self.get_max_fitter().get_result()['pars']
+        else:
+            guess=None
 
         mpars={'step':0.01}
         if metacal_pars is not None:
@@ -781,7 +792,8 @@ class Bootstrapper(object):
                                              psf_model, gal_model, pars, psf_Tguess,
                                              prior, psf_ntry, ntry,
                                              psf_fit_pars,
-                                             extra_noise)
+                                             extra_noise,
+                                             guess=guess)
             if i == 0:
                 res=tres
             else:
@@ -840,7 +852,8 @@ class Bootstrapper(object):
                              psf_model, gal_model, max_pars, 
                              psf_Tguess, prior, psf_ntry, ntry, 
                              psf_fit_pars,
-                             extra_noise):
+                             extra_noise,
+                             guess=None):
 
         step = metacal_pars['step']
 
@@ -848,7 +861,8 @@ class Bootstrapper(object):
                                      psf_model, gal_model, max_pars, psf_Tguess,
                                      prior, psf_ntry, ntry,
                                      psf_fit_pars,
-                                     extra_noise)
+                                     extra_noise,
+                                     guess=guess)
 
         pars=fits['pars']
         pars_mean = (pars['1p']+
@@ -902,7 +916,15 @@ class Bootstrapper(object):
     def _do_metacal_fits(self, obs_dict, psf_model, gal_model, pars, 
                          psf_Tguess, prior, psf_ntry, ntry, 
                          psf_fit_pars,
-                         extra_noise):
+                         extra_noise,
+                         guess=None):
+
+        if guess is not None:
+            guess_widths = guess*0.0 + 1.0e-6
+            #print("    using guess: ",guess)
+            #print("    using widths:",guess_widths)
+        else:
+            guess_widths=None
 
         bdict={}
         for key in obs_dict:
@@ -913,7 +935,9 @@ class Bootstrapper(object):
                                 verbose=self.verbose)
 
             boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry, fit_pars=psf_fit_pars)
-            boot.fit_max(gal_model, pars, prior=prior, ntry=ntry)
+            boot.fit_max(gal_model, pars, prior=prior, ntry=ntry,
+                         guess=guess,
+                         guess_widths=guess_widths)
             boot.set_round_s2n()
             
             # verbose can be bool or a number
@@ -991,13 +1015,10 @@ class Bootstrapper(object):
         from .shape import Shape
 
         step=metacal_pars['step']
-        whiten=metacal_pars.get('whiten',False)
-        symmetrize=metacal_pars.get('symmetrize',False)
-        same_seed=metacal_pars.get('same_seed',False)
 
-        print("        step:",step,"symmetrize:",symmetrize)
+        print("        step:",step)
 
-        mc=Metacal(oobs, symmetrize=symmetrize, whiten=whiten, same_seed=same_seed)
+        mc=Metacal(oobs)
 
         sh1m=Shape(-step,  0.00 )
         sh1p=Shape( step,  0.00 )
