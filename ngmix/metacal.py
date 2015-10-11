@@ -61,22 +61,12 @@ class Metacal(object):
     Rpsf_obs2p = mc.get_obs_psfshear(sh2p)
     """
 
-    # for caching symmetrized noise realizations, which we only do based on the
-    # shear or psf shear
-    sym_cache={}
-
     def __init__(self,
                  obs,
-                 lanczos_pars=None,
-                 whiten=False,
-                 symmetrize=False,
-                 same_seed=False):
+                 lanczos_pars=None):
 
         self._set_data(obs,
-                       lanczos_pars=lanczos_pars,
-                       whiten=whiten,
-                       symmetrize=symmetrize,
-                       same_seed=same_seed)
+                       lanczos_pars=lanczos_pars)
 
     def get_obs_galshear(self, shear, get_unsheared=False):
         """
@@ -94,23 +84,11 @@ class Metacal(object):
 
         newpsf, newpsf_interp = self.get_target_psf(shear, 'gal_shear')
         sheared_image = self.get_target_image(newpsf_interp, shear=shear)
-        if self.symmetrize:
-            sheared_image = self._symmetrize_noise('gal',
-                                                   sheared_image,
-                                                   newpsf_interp,
-                                                   shear)
 
         newobs = self._make_obs(sheared_image, newpsf)
 
         if get_unsheared:
             unsheared_image = self.get_target_image(newpsf_interp, shear=None)
-
-            if self.symmetrize:
-                unsheared_image = self._symmetrize_noise('gal',
-                                                         unsheared_image,
-                                                         newpsf_interp,
-                                                         Shape(0.0,0.0))
-
 
             uobs = self._make_obs(unsheared_image, newpsf)
             return newobs, uobs
@@ -130,13 +108,6 @@ class Metacal(object):
         newpsf, newpsf_interp = self.get_target_psf(shear, 'gal_shear')
         unsheared_image = self.get_target_image(newpsf_interp, shear=None)
 
-        if self.symmetrize:
-            unsheared_image = self._symmetrize_noise('gal',
-                                                     unsheared_image,
-                                                     newpsf_interp,
-                                                     Shape(0.0,0.0))
-
-
         uobs = self._make_obs(unsheared_image, newpsf)
 
         return uobs
@@ -152,12 +123,6 @@ class Metacal(object):
         """
         newpsf, newpsf_interp = self.get_target_psf(shear, 'psf_shear')
         conv_image = self.get_target_image(newpsf_interp, shear=None)
-
-        if self.symmetrize:
-            conv_image = self._symmetrize_noise('psf',
-                                                conv_image,
-                                                newpsf_interp,
-                                                shear)
 
         newobs = self._make_obs(conv_image, newpsf)
         return newobs
@@ -208,8 +173,6 @@ class Metacal(object):
         get the target image, convolved with the specified psf
         and possibly sheared
 
-        This is where whitening happens
-
         parameters
         ----------
         psf: A galsim interpolated image
@@ -237,73 +200,7 @@ class Metacal(object):
                          method='no_pixel',
                          scale=self.pixel_scale)
 
-        if self.whiten:
-            if self.same_seed:
-                imconv.noise.rng.reset(self.seed)
-            newvar=imconv.noise.whitenImage(newim)
-
         return newim
-
-    def _symmetrize_noise(self, type, image_in, psf_target_interp, shear):
-        """
-        mostly direct from Eric's code
-        """
-        import galsim
-
-        image = image_in.copy()
-
-        nrow,ncol=image.array.shape
-
-        g1,g2,g1psf,g2psf=self._get_symmetrize_shapes(type, shear)
-        key=self._get_symmetrize_key(g1,g2,g1psf,g2psf,nrow,ncol)
-
-        if key in Metacal.sym_cache:
-            image += Metacal.sym_cache[key]
-        else:
-
-            print("        getting symm. noise for:",key)
-            GN = galsim.GaussianNoise(sigma=self.med_err)
-            test_im = galsim.Image(ncol,nrow,scale=self.pixel_scale)
-            test_im.addNoise(GN)
-            CN = galsim.CorrelatedNoise(test_im, scale=self.pixel_scale)
-
-            # Now apply the same set of operations to this...
-            CN = CN.convolvedWith(self.gs_psf_int_inv)
-
-            if type=='gal':
-                CN = CN.shear(g1 = g1, g2 = g2)
-            else:
-                CN = CN.shear(g1 = g1psf, g2 = g2psf)
-
-            CN = CN.convolvedWith(psf_target_interp)
-
-            # this modifies in place
-            image.symmetrizeNoise(CN,order=4)
-            noise_diff = image - image_in
-
-            Metacal.sym_cache[key] = noise_diff
-
-        return image
-
-    def _get_symmetrize_key(self, g1,g2,g1psf,g2psf,nrow,ncol):
-        key = '%s %s %s %s %s %s' % (nrow,ncol,g1,g2,g1psf,g2psf)
-        return key
-
-    def _get_symmetrize_shapes(self, type, shear):
-        if type=='gal':
-            g1psf,g2psf=0.0,0.0
-            if shear is None:
-                g1,g2=0.0,0.0
-            else:
-                g1,g2=shear.g1,shear.g2
-        else:
-            g1,g2=0.0,0.0
-            if shear is None:
-                g1psf,g2psf=0.0,0.0
-            else:
-                g1psf,g2psf=shear.g1,shear.g2
-
-        return g1,g2,g1psf,g2psf
 
     def get_sheared_image_interp_nopsf(self, shear):
         """
@@ -325,10 +222,7 @@ class Metacal(object):
 
     def _set_data(self,
                   obs,
-                  lanczos_pars=None,
-                  symmetrize=False,
-                  whiten=False,
-                  same_seed=False):
+                  lanczos_pars=None):
         """
         create galsim objects based on the input observation
         """
@@ -338,9 +232,6 @@ class Metacal(object):
             raise ValueError("observation must have a psf observation set")
 
         self.obs=obs
-        self.symmetrize=symmetrize
-        self.whiten=whiten
-        self.same_seed=same_seed
         self._set_wcs(obs.jacobian)
         self._set_lanczos(lanczos_pars=lanczos_pars)
 
@@ -366,16 +257,6 @@ class Metacal(object):
         # interpolated galaxy image, still pixelized
         self.gs_image_int = galsim.InterpolatedImage(self.gs_image,
                                                      x_interpolant=self.l5int)
-        if self.whiten or self.symmetrize:
-            # TODO constant noise won't work for real data
-            med_wt = numpy.median( self.obs.weight )
-            self.med_var = 1.0/med_wt
-            self.med_err = numpy.sqrt(self.med_var)
-
-        if self.whiten:
-            self.gs_image_int.noise = galsim.UncorrelatedNoise(self.med_var)
-            if self.same_seed:
-                self.seed=numpy.random.randint(0, 2**30-1)
 
         # deconvolved galaxy image, psf+pixel removed
         self.gs_image_int_nopsf = galsim.Convolve(self.gs_image_int,
