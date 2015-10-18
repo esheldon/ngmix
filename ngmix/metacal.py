@@ -312,12 +312,13 @@ class Metacal(object):
         """
         obs=self.obs
 
-        psf_obs = Observation(psf_im.array, jacobian=obs.jacobian)
+        psf_obs = Observation(psf_im.array,
+                              weight=obs.psf.weight,
+                              jacobian=obs.psf.jacobian)
 
-        weight=obs.weight
         newobs=Observation(im.array,
                            jacobian=obs.jacobian,
-                           weight=weight,
+                           weight=obs.weight,
                            psf=psf_obs)
         return newobs
 
