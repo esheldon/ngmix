@@ -152,11 +152,6 @@ class Metacal(object):
         dilation = 1.0 + 2.0*g
         psf_grown_nopix = self.gs_psf_int_nopix.dilate(dilation)
 
-        #g1abs = abs(shear.g1)
-        #g2abs = abs(shear.g2)
-        #dilation = 1 + 2*max([g1abs,g2abs])
-        #psf_grown_nopix = self.gs_psf_int_nopix.dilate(dilation)
-
         psf_grown_interp = galsim.Convolve(psf_grown_nopix,self.pixel)
 
         if type=='psf_shear':
@@ -194,7 +189,6 @@ class Metacal(object):
         else:
             shim_interp_nopsf = self.gs_image_int_nopsf
 
-        #psfint = galsim.InterpolatedImage(psf, x_interpolant = self.l5int)
         imconv = galsim.Convolve([shim_interp_nopsf, psf_interp])
 
         # Draw reconvolved, sheared image to an ImageD object, and return.
