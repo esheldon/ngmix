@@ -231,7 +231,8 @@ class Metacal(object):
 
         self.obs=obs
         self._set_wcs(obs.jacobian)
-        self._set_lanczos(lanczos_pars=lanczos_pars)
+        self._set_pixel()
+        self._set_interp(lanczos_pars=lanczos_pars)
 
         # these would share data with the original numpy arrays, make copies
         # to be sure they don't get modified
@@ -247,7 +248,7 @@ class Metacal(object):
 
         # interpolated psf image
         self.psf_int = galsim.InterpolatedImage(self.psf_image,
-                                                x_interpolant = self.l5int)
+                                                x_interpolant = self.interp)
         # interpolated psf deconvolved from pixel
         self.psf_int_nopix = galsim.Convolve([self.psf_int, self.pixel_inv])
 
@@ -256,7 +257,7 @@ class Metacal(object):
 
         # interpolated galaxy image, still pixelized
         self.image_int = galsim.InterpolatedImage(self.image,
-                                                  x_interpolant=self.l5int)
+                                                  x_interpolant=self.interp)
 
         # deconvolved galaxy image, psf+pixel removed
         self.image_int_nopsf = galsim.Convolve(self.image_int,
@@ -272,7 +273,8 @@ class Metacal(object):
 
         self.jacobian=jacobian
 
-        # TODO might be reversed row->y or x?
+        # TODO get conventions right and use full jacobian
+        '''
         self.gs_wcs = galsim.JacobianWCS(jacobian.dudrow,
                                          jacobian.dudcol,
                                          jacobian.dvdrow, 
@@ -280,10 +282,24 @@ class Metacal(object):
 
         # TODO how this gets used does not seem general, why not use full wcs
         self.pixel_scale=self.gs_wcs.maxLinearScale()
+        '''
+        self.pixel_scale=self.jacobian.get_scale()
+        self.gs_wcs = galsim.JacobianWCS(self.pixel_scale,
+                                         0.0,
+                                         0.0, 
+                                         self.pixel_scale)
+
+
+    def _set_pixel(self):
+        """
+        set the pixel based on the pixel scale, for convolutions
+        """
+        import galsim
+
         self.pixel = galsim.Pixel(self.pixel_scale)
         self.pixel_inv = galsim.Deconvolve(self.pixel)
 
-    def _set_lanczos(self, lanczos_pars=None):
+    def _set_interp(self, lanczos_pars=None):
         """
         set the laczos interpolation configuration
         """
@@ -296,11 +312,9 @@ class Metacal(object):
 
         self.lanczos_pars=lanczos_pars
 
-        self.l5 = galsim.Lanczos(lanczos_pars['order'],
-                                 lanczos_pars['conserve_dc'],
-                                 lanczos_pars['tol'])
-        self.l5int = self.l5
-        #self.l5int = galsim.InterpolantXY(self.l5)
+        self.interp = galsim.Lanczos(lanczos_pars['order'],
+                                     lanczos_pars['conserve_dc'],
+                                     lanczos_pars['tol'])
 
     def _make_obs(self, im, psf_im):
         """
@@ -593,6 +607,8 @@ def test():
     import images
     import fitsio
     import os
+    #import mchuff
+    import galsim
 
     dir='./mcal-tests'
     if not os.path.exists(dir):
@@ -609,10 +625,22 @@ def test():
 
             m=Metacal(obs)
 
+           
+
             if type=='gal':
                 obs_mcal = m.get_obs_galshear(shear)
             else:
                 obs_mcal = m.get_obs_psfshear(shear)
+
+            '''
+            s, us, tpsf = mchuff.metaCalibrate(galsim.Image(obs.image, scale=1.0),
+                                               galsim.Image(obs.psf.image,scale=1.0),
+                                               g1=shear.g1, g2=shear.g2,
+                                               gal_shear=type=='gal')
+ 
+            print("psf:",numpy.abs(tpsf.array - obs_mcal.psf.image).max()/obs_mcal.psf.image.max())
+            print("im:",numpy.abs(s.array - obs_mcal.image).max()/obs_mcal.image.max())
+            '''
 
             images.compare_images(obs_sheared_dilated.image,
                                   obs_mcal.image,
