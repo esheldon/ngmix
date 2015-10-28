@@ -150,7 +150,7 @@ class Metacal(object):
 
         g = sqrt(shear.g1**2 + shear.g2**2)
         dilation = 1.0 + 2.0*g
-        psf_grown_nopix = self.gs_psf_int_nopix.dilate(dilation)
+        psf_grown_nopix = self.psf_int_nopix.dilate(dilation)
 
         psf_grown_interp = galsim.Convolve(psf_grown_nopix,self.pixel)
 
@@ -158,7 +158,7 @@ class Metacal(object):
             # eric remarked that he thought we should shear the pixelized version
             psf_grown_interp = psf_grown_interp.shear(g1=shear.g1, g2=shear.g2)
 
-        psf_grown_image = galsim.ImageD(self.gs_psf_image.bounds)
+        psf_grown_image = galsim.ImageD(self.psf_image.bounds)
 
         # TODO not general, using just pixel scale
         psf_grown_interp.drawImage(image=psf_grown_image,
@@ -187,13 +187,13 @@ class Metacal(object):
         if shear is not None:
             shim_interp_nopsf = self.get_sheared_image_interp_nopsf(shear)
         else:
-            shim_interp_nopsf = self.gs_image_int_nopsf
+            shim_interp_nopsf = self.image_int_nopsf
 
         imconv = galsim.Convolve([shim_interp_nopsf, psf_interp])
 
         # Draw reconvolved, sheared image to an ImageD object, and return.
         # pixel is already in the interpolated psf image
-        newim = galsim.ImageD(self.gs_image.bounds)
+        newim = galsim.ImageD(self.image.bounds)
         imconv.drawImage(image=newim,
                          method='no_pixel',
                          scale=self.pixel_scale)
@@ -215,7 +215,7 @@ class Metacal(object):
         """
         _check_shape(shear)
         # this is the interpolated, devonvolved image
-        sheared_image = self.gs_image_int_nopsf.shear(g1=shear.g1, g2=shear.g2)
+        sheared_image = self.image_int_nopsf.shear(g1=shear.g1, g2=shear.g2)
         return sheared_image
 
     def _set_data(self,
@@ -235,30 +235,32 @@ class Metacal(object):
 
         # these would share data with the original numpy arrays, make copies
         # to be sure they don't get modified
+        #
+        # use xmin,ymin so wcs origin is correct
         mval=0
-        self.gs_image = galsim.Image(obs.image.copy(),
-                                     wcs=self.gs_wcs,
-                                     xmin=mval,ymin=mval)
-        self.gs_psf_image = galsim.Image(obs.psf.image.copy(),
-                                         wcs=self.gs_wcs,
-                                         xmin=mval,ymin=mval)
+        self.image = galsim.Image(obs.image.copy(),
+                                  wcs=self.gs_wcs,
+                                  xmin=mval,ymin=mval)
+        self.psf_image = galsim.Image(obs.psf.image.copy(),
+                                      wcs=self.gs_wcs,
+                                      xmin=mval,ymin=mval)
 
         # interpolated psf image
-        self.gs_psf_int = galsim.InterpolatedImage(self.gs_psf_image,
-                                                   x_interpolant = self.l5int)
+        self.psf_int = galsim.InterpolatedImage(self.psf_image,
+                                                x_interpolant = self.l5int)
         # interpolated psf deconvolved from pixel
-        self.gs_psf_int_nopix = galsim.Convolve([self.gs_psf_int, self.pixel_inv])
+        self.psf_int_nopix = galsim.Convolve([self.psf_int, self.pixel_inv])
 
         # this can be used to deconvolve the psf from the galaxy image
-        self.gs_psf_int_inv = galsim.Deconvolve(self.gs_psf_int)
+        self.psf_int_inv = galsim.Deconvolve(self.psf_int)
 
         # interpolated galaxy image, still pixelized
-        self.gs_image_int = galsim.InterpolatedImage(self.gs_image,
-                                                     x_interpolant=self.l5int)
+        self.image_int = galsim.InterpolatedImage(self.image,
+                                                  x_interpolant=self.l5int)
 
         # deconvolved galaxy image, psf+pixel removed
-        self.gs_image_int_nopsf = galsim.Convolve(self.gs_image_int,
-                                                  self.gs_psf_int_inv)
+        self.image_int_nopsf = galsim.Convolve(self.image_int,
+                                               self.psf_int_inv)
 
 
     def _set_wcs(self, jacobian):
