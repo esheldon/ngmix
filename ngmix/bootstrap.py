@@ -11,7 +11,7 @@ from __future__ import print_function
 from pprint import pprint
 import numpy
 from numpy import where, array, sqrt, exp, log, linspace, zeros
-from numpy import isfinite, median
+from numpy import isfinite, median, diag
 from numpy.linalg import LinAlgError
 
 from . import fitting
@@ -110,6 +110,15 @@ class Bootstrapper(object):
         if not hasattr(self, 'metacal_max_res'):
             raise RuntimeError("you need to run fit_metacal_max first")
         return self.metacal_max_res
+
+    def get_metacal_regauss_result(self):
+        """
+        get result of metacal with a max likelihood fitter
+        """
+        if not hasattr(self, 'metacal_regauss_res'):
+            raise RuntimeError("you need to run fit_metacal_regauss first")
+        return self.metacal_regauss_res
+
 
 
     def get_round_result(self):
@@ -787,13 +796,15 @@ class Bootstrapper(object):
             if nrand > 1 and self.verbose:
                 print("    irand: %d/%d" % (i+1,nrand))
 
-            tres = self._fit_metacal_max_one(metacal_pars,
-                                             obs_dict,
+            fits = self._do_metacal_max_fits(obs_dict,
                                              psf_model, gal_model, pars, psf_Tguess,
                                              prior, psf_ntry, ntry,
                                              psf_fit_pars,
                                              extra_noise,
                                              guess=guess)
+            tres=self._extract_metacal_responses(fits, metacal_pars)
+
+
             if i == 0:
                 res=tres
             else:
@@ -845,24 +856,13 @@ class Bootstrapper(object):
         return nobs_dict
 
 
+    def _extract_metacal_responses(self, fits,metacal_pars, shape_type='g'):
+        """
+        pars pars_cov gpsf, s2n_r, s2n_simple, T_r, psf_T_r required
 
-    def _fit_metacal_max_one(self,
-                             metacal_pars,
-                             obs_dict,
-                             psf_model, gal_model, max_pars, 
-                             psf_Tguess, prior, psf_ntry, ntry, 
-                             psf_fit_pars,
-                             extra_noise,
-                             guess=None):
-
+        expect the shape to be in pars[2] and pars[3]
+        """
         step = metacal_pars['step']
-
-        fits = self._do_metacal_fits(obs_dict,
-                                     psf_model, gal_model, max_pars, psf_Tguess,
-                                     prior, psf_ntry, ntry,
-                                     psf_fit_pars,
-                                     extra_noise,
-                                     guess=guess)
 
         pars=fits['pars']
         pars_mean = (pars['1p']+
@@ -896,28 +896,27 @@ class Bootstrapper(object):
 
         c = pars_mean[2:2+2] - pars_noshear[2:2+2]
 
+        gname = 'mcal_%s' % shape_type
+        gcovname = 'mcal_%s_cov' % shape_type
+        gpsf_name = 'mcal_%spsf' % shape_type
+        raw_gpsf_name = '%spsf' % shape_type
         res = {'mcal_pars':pars_mean,
                'mcal_pars_cov':pars_cov_mean,
-               'mcal_g':pars_mean[2:2+2],
-               'mcal_g_cov':pars_cov_mean[2:2+2, 2:2+2],
+               gname:pars_mean[2:2+2],
+               gcovname:pars_cov_mean[2:2+2, 2:2+2],
                'mcal_pars_noshear':pars_noshear,
                'mcal_c':c,
                'mcal_R':R,
                'mcal_Rpsf':Rpsf,
-               'mcal_gpsf':fits['gpsf'],
-               'mcal_s2n_r':fits['s2n_r'],
-               'mcal_s2n_simple':fits['s2n_simple'],
-               'mcal_T_r':fits['T_r'],
-               'mcal_psf_T_r':fits['psf_T_r']}
+               gpsf_name:fits[raw_gpsf_name]}
         return res
 
 
-
-    def _do_metacal_fits(self, obs_dict, psf_model, gal_model, pars, 
-                         psf_Tguess, prior, psf_ntry, ntry, 
-                         psf_fit_pars,
-                         extra_noise,
-                         guess=None):
+    def _do_metacal_max_fits(self, obs_dict, psf_model, gal_model, pars, 
+                             psf_Tguess, prior, psf_ntry, ntry, 
+                             psf_fit_pars,
+                             extra_noise,
+                             guess=None):
 
         if guess is not None:
             guess_widths = guess*0.0 + 1.0e-6
@@ -1000,6 +999,227 @@ class Bootstrapper(object):
         res['gpsf'] = gpsf_mean/npsf
 
         return res
+
+    def fit_metacal_regauss(self,
+                            psf_Tguess,
+                            Tguess,
+                            psf_ntry=1,
+                            ntry=1,
+                            metacal_pars=None,
+                            target_noise=None,
+                            extra_noise=None):
+
+        """
+        run metacalibration using regauss from the galsim
+        HSM module
+
+        parameters
+        ----------
+        psf_Tguess: float
+            guess for T
+        metacal_pars: dict, optional
+            Parameters for metacal, default {'step':0.01}
+        extra_noise: float
+            extra noise to add, default None
+        target_noise: float
+            Add extra noise to reach target, over-rides extra_noise
+        psf_ntry: int
+            number of tries at psf fitting with different size guess
+        ntry: int
+            number of tries at shear fitting with different size guess
+        """
+
+        if len(self.mb_obs_list) > 1 or len(self.mb_obs_list[0]) > 1:
+            raise NotImplementedError("only a single obs for now")
+
+        mpars={'step':0.01}
+        if metacal_pars is not None:
+            mpars.update(metacal_pars)
+
+        metacal_pars=mpars
+
+        oobs = self.mb_obs_list[0][0]
+
+        if target_noise is not None:
+            extra_noise = self._get_extra_noise_from_target(oobs,
+                                                            target_noise)
+
+        obs_dict_orig = self.get_metacal_obsdict(oobs, metacal_pars)
+
+        if extra_noise is not None:
+            obs_dict = self._add_noise_to_metacal_obsdict(obs_dict_orig,
+                                                          extra_noise)
+        else:
+            obs_dict=obs_dict_orig
+
+        fits = self._do_metacal_regauss(obs_dict,
+                                        psf_Tguess,
+                                        Tguess,
+                                        psf_ntry,
+                                        ntry)
+
+        res=self._extract_metacal_responses(fits, metacal_pars, shape_type='e')
+
+        res['flags']=0
+
+        self.metacal_regauss_res = res
+
+    def _do_metacal_regauss(self,
+                            obs_dict,
+                            psf_Tguess,
+                            Tguess,
+                            psf_ntry,
+                            ntry):
+
+        import galsim
+
+        res_dict={}
+        for key in obs_dict:
+
+            obs = obs_dict[key]
+
+            im = galsim.Image( obs.image )
+            psf_im = galsim.Image( obs.psf.image )
+            wt = galsim.Image( obs.weight )
+
+            res = self._do_one_regauss(
+                im,
+                psf_im,
+                wt,
+                psf_Tguess,
+                Tguess,
+                psf_ntry,
+                ntry
+            )
+            res_dict[key] = res
+
+        res={'pars':{}, 'pars_cov':{}}
+        epsf_mean = zeros(2)
+        npsf=0
+
+        for i,key in enumerate(res_dict):
+            tres = res_dict[key]
+
+            res['pars'][key] = tres['pars']
+            res['pars_cov'][key] = tres['pars_cov']
+
+            #
+            # averaging
+            #
+
+            if key=='noshear' or 'psf' in key:
+                # don't include noshear in the averages
+                # don't average over psf sheared model
+                continue
+
+            psf_pars=tres['psf_pars']
+
+            epsf_mean[:] += psf_pars[2:2+2]
+            npsf+=1
+
+        res['epsf'] = epsf_mean/npsf
+
+        return res
+
+    def _get_regauss_sig_guess(self, psf_im, Tguess, ntry):
+        import galsim
+        psf_guess_sig = sqrt(Tguess/2.0)
+
+        # Eric recommends trying a few different psf sigma sizes
+        ok=False
+        for i in xrange(ntry):
+            psf_guess_sig = sqrt(Tguess/2.0)*(1.0 + 0.1*srandu())
+            try:
+                galsim.hsm.FindAdaptiveMom(psf_im, guess_sig=psf_guess_sig)
+                ok=True
+                break
+            except RuntimeError as err:
+                print("error in FindAdaptiveMoments: '%s'" % str(err))
+                pass
+        
+        if not ok:
+            raise BootPSFFailure("failed to fit regauss psf: '%s'" % str(err))
+
+        return psf_guess_sig
+
+    def _do_one_regauss(self,
+                        im,
+                        psf_im,
+                        wt,
+                        psf_Tguess,
+                        Tguess,
+                        psf_ntry,
+                        ntry):
+        import galsim
+
+        psf_guess_sig = self._get_regauss_sig_guess(psf_im,
+                                                    psf_Tguess,
+                                                    psf_ntry)
+
+
+        # hsm doesn't use the weight map except for "non-zero"
+        # still need to get the sky var
+
+        w=where(wt.array > 0)
+        if w[0].size == 0:
+            raise BootGalFailure("no weight > 0")
+
+        var = 1.0/wt.array[w]
+        sky_var = median(var)
+
+        ok=False
+        for i in xrange(ntry):
+            guess_sig = sqrt(Tguess/2.0)*(1.0 + 0.1*srandu())
+            try:
+                hres = galsim.hsm.EstimateShear(im,
+                                                psf_im,
+                                                sky_var=sky_var,
+                                                weight=wt,
+                                                guess_sig_PSF=psf_guess_sig,
+                                                guess_sig_gal=guess_sig,
+                                                strict=True)
+                ok=True
+                break
+            except RuntimeError as err:
+                print("        error in regauss: '%s'" % str(err))
+                pass
+        
+        if not ok:
+            raise BootGalFailure("failed to do regauss: '%s'" % str(err))
+
+        # the centroid is not recorded!  Use 0.0
+        row,col=0.0,0.0
+        # pre-psf size not recorded, so use the observed
+        T = 2.0*hres.moments_sigma**2
+        e1,e2=hres.corrected_e1, hres.corrected_e2
+        eerr = hres.corrected_shape_err
+        evar = eerr**2
+
+        pars=array([0.0, 0.0,
+                    e1, e2,
+                    T,
+                    hres.moments_amp])
+        perr = array([9999.0, 9999.0,
+                      eerr,eerr,
+                      9999.0,
+                      9999.0])
+        pvar = array([9999.0, 9999.0,
+                      evar,evar,
+                      9999.0,
+                      9999.0])
+
+        psf_pars = array([0.0, 0.0,
+                          hres.psf_shape.e1, hres.psf_shape.e2,
+                          2*hres.psf_sigma**2,
+                          1.0])
+        pcov = diag(pvar)
+
+        res=dict(pars=pars,
+                 perr=perr,
+                 pars_cov=pcov,
+                 psf_pars=psf_pars)
+        return res
+
 
     def get_metacal_obsdict(self, oobs, metacal_pars):
         """
