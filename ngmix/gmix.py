@@ -1458,6 +1458,7 @@ class GMixND(object):
         """
         import fitsio
 
+        print("writing gaussian mixture to :",fname)
         with fitsio.FITS(fname,'rw',clobber=True) as fits:
             fits.write(self.weights, extname='weights')
             fits.write(self.means, extname='means')
