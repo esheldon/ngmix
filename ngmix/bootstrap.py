@@ -1123,7 +1123,6 @@ class Bootstrapper(object):
 
     def _get_regauss_sig_guess(self, psf_im, Tguess, ntry):
         import galsim
-        psf_guess_sig = sqrt(Tguess/2.0)
 
         # Eric recommends trying a few different psf sigma sizes
         ok=False
