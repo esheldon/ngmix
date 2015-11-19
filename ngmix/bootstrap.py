@@ -900,15 +900,21 @@ class Bootstrapper(object):
         gcovname = 'mcal_%s_cov' % shape_type
         gpsf_name = 'mcal_%spsf' % shape_type
         raw_gpsf_name = '%spsf' % shape_type
-        res = {'mcal_pars':pars_mean,
-               'mcal_pars_cov':pars_cov_mean,
-               gname:pars_mean[2:2+2],
-               gcovname:pars_cov_mean[2:2+2, 2:2+2],
-               'mcal_pars_noshear':pars_noshear,
-               'mcal_c':c,
-               'mcal_R':R,
-               'mcal_Rpsf':Rpsf,
-               gpsf_name:fits[raw_gpsf_name]}
+        res = {
+            'mcal_pars':pars_mean,
+            'mcal_pars_cov':pars_cov_mean,
+            gname:pars_mean[2:2+2],
+            gcovname:pars_cov_mean[2:2+2, 2:2+2],
+            'mcal_pars_noshear':pars_noshear,
+            'mcal_c':c,
+            'mcal_R':R,
+            'mcal_Rpsf':Rpsf,
+            gpsf_name:fits[raw_gpsf_name],
+            'mcal_s2n_r':fits['s2n_r'],
+            'mcal_s2n_simple':fits['s2n_simple'],
+            'mcal_T_r':fits['T_r'],
+            'mcal_psf_T_r':fits['psf_T_r'],
+        }
         return res
 
 
