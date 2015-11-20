@@ -819,9 +819,6 @@ class Bootstrapper(object):
                 res[key] = res[key]/float(nrand)
         '''
         res=self._do_mean_dictlist(reslist)
-        print('        R: %g +/- %g (%g)' % (res['mcal_R'][0,0],
-                                             res['mcal_R_err'][0,0],
-                                             res['mcal_R_std'][0,0]))
         self.metacal_max_res = res
 
         return obs_dict_orig
