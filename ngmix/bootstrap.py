@@ -773,13 +773,6 @@ class Bootstrapper(object):
         oobs = self.mb_obs_list[0][0]
 
         extra_noise = self._get_extra_noise(oobs, target_noise, extra_noise)
-        '''
-        if target_noise is not None:
-            extra_noise = self._get_extra_noise_from_target(oobs, target_noise)
-        else:
-            if extra_noise is not None:
-                print("    extra_noise: %g" % extra_noise)
-        '''
 
         if extra_noise is None:
             nrand=1
@@ -791,6 +784,7 @@ class Bootstrapper(object):
         else:
             obs_dict_orig = self.get_metacal_obsdict(oobs, metacal_pars)
 
+        reslist=[]
         for i in xrange(nrand):
 
             if extra_noise is not None:
@@ -812,6 +806,8 @@ class Bootstrapper(object):
             tres=self._extract_metacal_responses(fits, metacal_pars)
 
 
+            reslist.append(tres)
+            '''
             if i == 0:
                 res=tres
             else:
@@ -821,10 +817,52 @@ class Bootstrapper(object):
         if nrand > 1:
             for key in res:
                 res[key] = res[key]/float(nrand)
-
+        '''
+        res=self._do_mean_dictlist(reslist)
+        print('        R: %g +/- %g (%g)' % (res['mcal_R'][0,0],
+                                             res['mcal_R_err'][0,0],
+                                             res['mcal_R_std'][0,0]))
         self.metacal_max_res = res
 
         return obs_dict_orig
+
+    def _do_mean_dictlist(self, reslist):
+        n=len(reslist)
+
+        res={}
+
+        keys=list(reslist[0].keys())
+
+        for i,tres in enumerate(reslist):
+            for key in keys:
+                if i==0:
+                    res[key] = tres[key]
+                else:
+                    res[key] = res[key] + tres[key]
+
+        for key in keys:
+            res[key] = res[key]/n
+
+        for i,tres in enumerate(reslist):
+            for key in keys:
+                stdkey = '%s_std' % key
+
+                diff = tres[key] - res[key]
+                diff2 = diff**2
+
+                if i==0:
+                    res[stdkey] = diff2
+                else:
+                    res[stdkey] = res[stdkey] + diff2
+
+        if n > 1:
+            for key in keys:
+                stdkey = '%s_std' % key
+                errkey = '%s_err' % key
+                res[stdkey] = sqrt(res[stdkey]/(n-1))
+                res[errkey] = res[stdkey]/sqrt(n)
+
+        return res
 
     def _get_extra_noise(self, obs, target_noise, extra_noise):
         if target_noise is not None:
@@ -855,6 +893,9 @@ class Bootstrapper(object):
         return extra_noise
 
     def _add_noise_to_metacal_obsdict(self, obs_dict, extra_noise):
+        """
+        add noise to all images, adjusting weight maps accordingly
+        """
         noise_image = self._get_noise_image(obs_dict['1p'].image.shape,
                                             extra_noise)
 
@@ -870,6 +911,46 @@ class Bootstrapper(object):
 
         return nobs_dict
 
+    def _get_noise_image(self, dims, noise):
+        """
+        get a noise image for use in degrading a high s/n image
+        """
+
+        noise_image = numpy.random.normal(loc=0.0,
+                                          scale=noise,
+                                          size=dims)
+
+        return noise_image
+
+    def _get_degraded_weight_image(self, obs, noise):
+        """
+        get a new weight map reflecting additional noise
+        """
+
+        new_weight = obs.weight.copy()
+        w=numpy.where(new_weight > 0)
+
+        if w[0].size > 0:
+            new_weight[w] = 1.0/(1.0/new_weight[w] + noise**2)
+
+        return new_weight
+
+    def _get_degraded_obs(self, obs, noise_image, new_weight):
+        """
+        get a new obs with extra noise added to image and the weight
+        map modified appropriately
+        """
+
+
+        new_im = obs.image + noise_image
+
+        new_obs = Observation(new_im,
+                              weight=new_weight,
+                              jacobian=obs.jacobian)
+        if obs.has_psf():
+            new_obs.set_psf(obs.psf)
+
+        return new_obs
 
     def _extract_metacal_responses(self, fits,metacal_pars, shape_type='g'):
         """
@@ -1291,48 +1372,6 @@ class Bootstrapper(object):
                    }
 
         return obs_dict
-
-    def _get_degraded_obs(self, obs, noise_image, new_weight):
-        """
-        get a new obs with extra noise added to image and the weight
-        map modified appropriately
-        """
-
-
-        new_im = obs.image + noise_image
-
-        new_obs = Observation(new_im,
-                              weight=new_weight,
-                              jacobian=obs.jacobian)
-        if obs.has_psf():
-            new_obs.set_psf(obs.psf)
-
-        return new_obs
-
-    def _get_noise_image(self, dims, noise):
-        """
-        get a noise image for use in degrading a high s/n image
-        """
-
-        noise_image = numpy.random.normal(loc=0.0,
-                                          scale=noise,
-                                          size=dims)
-
-        return noise_image
-
-    def _get_degraded_weight_image(self, obs, noise):
-        """
-        get a new weight map reflecting additional noise
-        """
-
-        new_weight = obs.weight.copy()
-        w=numpy.where(new_weight > 0)
-
-        if w[0].size > 0:
-            new_weight[w] = 1.0/(1.0/new_weight[w] + noise**2)
-
-        return new_weight
-
 
     def fit_max_fixT(self, gal_model, pars, T,
                      guess=None, prior=None, extra_priors=None, ntry=1):
