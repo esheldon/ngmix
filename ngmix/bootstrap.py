@@ -772,8 +772,14 @@ class Bootstrapper(object):
 
         oobs = self.mb_obs_list[0][0]
 
+        extra_noise = self._get_extra_noise(oobs, target_noise, extra_noise)
+        '''
         if target_noise is not None:
             extra_noise = self._get_extra_noise_from_target(oobs, target_noise)
+        else:
+            if extra_noise is not None:
+                print("    extra_noise: %g" % extra_noise)
+        '''
 
         if extra_noise is None:
             nrand=1
@@ -787,9 +793,9 @@ class Bootstrapper(object):
 
         for i in xrange(nrand):
 
-
             if extra_noise is not None:
-                obs_dict = self._add_noise_to_metacal_obsdict(obs_dict_orig, extra_noise)
+                obs_dict = self._add_noise_to_metacal_obsdict(obs_dict_orig,
+                                                              extra_noise)
             else:
                 obs_dict=obs_dict_orig
 
@@ -797,7 +803,8 @@ class Bootstrapper(object):
                 print("    irand: %d/%d" % (i+1,nrand))
 
             fits = self._do_metacal_max_fits(obs_dict,
-                                             psf_model, gal_model, pars, psf_Tguess,
+                                             psf_model, gal_model,
+                                             pars, psf_Tguess,
                                              prior, psf_ntry, ntry,
                                              psf_fit_pars,
                                              extra_noise,
@@ -818,6 +825,14 @@ class Bootstrapper(object):
         self.metacal_max_res = res
 
         return obs_dict_orig
+
+    def _get_extra_noise(self, obs, target_noise, extra_noise):
+        if target_noise is not None:
+            return self._get_extra_noise_from_target(obs, target_noise)
+        else:
+            if extra_noise is not None:
+                print("    extra_noise: %g" % extra_noise)
+            return extra_noise
 
     def _get_extra_noise_from_target(self, obs, target_noise):
         weight = obs.weight
