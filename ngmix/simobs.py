@@ -48,7 +48,8 @@ def _simulate_mobs(gmix_list, mobs, **kw):
     if not isinstance(gmix_list[0], GMix):
         raise ValueError("input must be gaussian mixtures")
 
-    if not len(gmix_list)==len(obs):
+    if not len(gmix_list)==len(mobs):
+
         mess="len(obs)==%d but len(gmix_list)==%d"
         mess=mess % (len(obs),len(gmix_list))
         raise ValueError(mess)
@@ -69,7 +70,7 @@ def _simulate_obslist(gmix, obslist, **kw):
         newobs = simulate_obs(gmix, o, **kw)
         new_obslist.append( newobs )
 
-    return new_mobs
+    return new_obslist
 
 def _simulate_obs(gmix, obs, **kw):
     sim_image = _get_simulated_image(gmix, obs, **kw)
@@ -78,11 +79,13 @@ def _simulate_obs(gmix, obs, **kw):
     if add_noise:
         print("    adding noise")
         sim_image = _get_noisy_image(obs, sim_image)
+    else:
+        print("    not adding noise")
 
-    if not gmix.has_psf():
+    if not obs.has_psf():
         psf=None
     else:
-        psf=deepcopy( gmix.psf )
+        psf=deepcopy( obs.psf )
 
     new_obs = Observation(
         sim_image,
@@ -95,7 +98,7 @@ def _simulate_obs(gmix, obs, **kw):
 def _get_simulated_image(gmix, obs, **kw):
     convolve_psf=kw.get('convolve_psf',True)
     if convolve_psf:
-        print("    convolving psf")
+        #print("    convolving psf")
         psf_gmix = _get_psf_gmix(obs)
 
         gm = gmix.convolve(psf_gmix)
@@ -129,11 +132,11 @@ def get_noise_image(weight):
 
 
 def _get_psf_gmix(obs):
-    if not gmix.has_psf():
+    if not obs.has_psf():
         raise RuntimeError("You requested to convolve by the psf, "
                            "but the observation has no psf observation set")
  
-    psf = gmix.get_psf()
+    psf = obs.get_psf()
     if not psf.has_gmix():
         raise RuntimeError("You requested to convolve by the psf, "
                            "but the observation has no psf gmix set")
