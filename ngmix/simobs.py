@@ -21,6 +21,8 @@ def simulate_obs(gmix, obs, **kw):
         If True, convolve by the PSF.  Default True.
     add_noise: bool
         If True, add noise according to the weight map.  Default True.
+
+        The noise image is monkey-patched in as obs.noise_image
     """
 
     if isinstance(obs, MultiBandObsList):
@@ -78,9 +80,9 @@ def _simulate_obs(gmix, obs, **kw):
     add_noise = kw.get('add_noise',True)
     if add_noise:
         #print("    adding noise")
-        sim_image = _get_noisy_image(obs, sim_image)
+        sim_image, noise_image = _get_noisy_image(obs, sim_image)
     else:
-        pass
+        noise_image=None
         #print("    not adding noise")
 
     if not obs.has_psf():
@@ -94,6 +96,8 @@ def _simulate_obs(gmix, obs, **kw):
         jacobian=obs.jacobian.copy(),
         psf=psf
     )
+
+    new_obs.noise_image = noise_image
     return new_obs
 
 def _get_simulated_image(gmix, obs, **kw):
@@ -113,7 +117,7 @@ def _get_simulated_image(gmix, obs, **kw):
 
 def _get_noisy_image(obs, sim_image):
     noise_image = get_noise_image(obs.weight)
-    return sim_image + noise_image
+    return sim_image + noise_image, noise_image
 
 def get_noise_image(weight):
     """
