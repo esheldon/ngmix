@@ -1334,7 +1334,7 @@ class Bootstrapper(object):
 
         step=metacal_pars['step']
 
-        print("        step:",step)
+        #print("        step:",step)
 
         mc=Metacal(oobs)
 

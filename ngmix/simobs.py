@@ -77,10 +77,11 @@ def _simulate_obs(gmix, obs, **kw):
 
     add_noise = kw.get('add_noise',True)
     if add_noise:
-        print("    adding noise")
+        #print("    adding noise")
         sim_image = _get_noisy_image(obs, sim_image)
     else:
-        print("    not adding noise")
+        pass
+        #print("    not adding noise")
 
     if not obs.has_psf():
         psf=None
