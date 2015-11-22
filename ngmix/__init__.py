@@ -47,5 +47,7 @@ from . import roundify
 
 from . import metacal
 
+from . import simobs
+
 from . import test
 
