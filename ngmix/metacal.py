@@ -336,7 +336,7 @@ def _check_shape(shape):
     if not isinstance(shape, Shape):
         raise TypeError("shape must be of type ngmix.Shape")
 
-def jackknife_shear(g, R, Rpsf=None, chunksize=1):
+def jackknife_shear(g, gpsf, R, Rpsf, chunksize=1):
     """
     get the shear metacalibration style
 
@@ -360,9 +360,8 @@ def jackknife_shear(g, R, Rpsf=None, chunksize=1):
     g_sum = g.sum(axis=0)
     R_sum = R.sum(axis=0)
 
-    if Rpsf is not None:
-        Rpsf_sum = Rpsf.sum(axis=0)
-        g_sum -= Rpsf_sum
+    psf_corr = (Rpsf*gpsf).sum(axis=0)
+    g_sum -= psf_corr
 
     R_sum_inv = numpy.linalg.inv(R_sum)
     shear = numpy.dot(R_sum_inv, g_sum)
@@ -377,15 +376,13 @@ def jackknife_shear(g, R, Rpsf=None, chunksize=1):
         tgsum = g[beg:end,:].sum(axis=0)
         tR_sum = R[beg:end,:,:].sum(axis=0)
 
-        if Rpsf is not None:
-            tRpsf_sum = Rpsf[beg:end,:].sum(axis=0)
-            tgsum -= tRpsf_sum
+        tpsfcorr_sum = (Rpsf[beg:end,:]*gpsf[beg:end,:]).sum(axis=0)
+        tgsum -= tRpsf_sum
 
         j_g_sum = g_sum - tgsum
         j_R_sum = R_sum - tR_sum
 
         j_R_inv = numpy.linalg.inv(j_R_sum)
-
 
         shears[i, :] = numpy.dot(j_R_inv, j_g_sum)
 
