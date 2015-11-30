@@ -14,7 +14,7 @@ def simulate_obs(gmix, obs, **kw):
     parameters
     ----------
     gmix: GMix or subclass
-        The gaussian mixture
+        The gaussian mixture or None
     obs: observation(s)
         One of Observation, ObsList, or MultiBandObsList
     convolve_psf: bool
@@ -29,7 +29,7 @@ def simulate_obs(gmix, obs, **kw):
         return _simulate_mobs(gmix, obs, **kw)
     else:
 
-        if not isinstance(gmix, GMix):
+        if gmix is not None and not isinstance(gmix, GMix):
             raise ValueError("input gmix must be a gaussian mixture")
 
         elif isinstance(obs, ObsList):
@@ -43,23 +43,28 @@ def simulate_obs(gmix, obs, **kw):
                              "ObsList, or MultiBandObsList")
 
 def _simulate_mobs(gmix_list, mobs, **kw):
-    if not isinstance(gmix_list, list):
-        raise ValueError("for simulating MultiBandObsLists, the "
-                         "input must be a list of gaussian mixtures")
+    if gmix_list is not None:
+        if not isinstance(gmix_list, list):
+            raise ValueError("for simulating MultiBandObsLists, the "
+                             "input must be a list of gaussian mixtures")
 
-    if not isinstance(gmix_list[0], GMix):
-        raise ValueError("input must be gaussian mixtures")
+        if not isinstance(gmix_list[0], GMix):
+            raise ValueError("input must be gaussian mixtures")
 
-    if not len(gmix_list)==len(mobs):
+        if not len(gmix_list)==len(mobs):
 
-        mess="len(obs)==%d but len(gmix_list)==%d"
-        mess=mess % (len(obs),len(gmix_list))
-        raise ValueError(mess)
+            mess="len(obs)==%d but len(gmix_list)==%d"
+            mess=mess % (len(obs),len(gmix_list))
+            raise ValueError(mess)
 
     new_mobs=MultiBandObsList()
     nband = len(mobs)
     for i in xrange(nband):
-        gmix = gmix_list[i]
+        if gmix_list is None:
+            gmix=None
+        else:
+            gmix = gmix_list[i]
+
         ol = mobs[i]
         new_obslist=_simulate_obslist(gmix, ol, **kw)
         new_mobs.append(new_obslist)
@@ -101,6 +106,9 @@ def _simulate_obs(gmix, obs, **kw):
     return new_obs
 
 def _get_simulated_image(gmix, obs, **kw):
+    if gmix is None:
+        return zeros(obs.image.shape)
+
     convolve_psf=kw.get('convolve_psf',True)
     if convolve_psf:
         #print("    convolving psf")
@@ -140,10 +148,10 @@ def _get_psf_gmix(obs):
     if not obs.has_psf():
         raise RuntimeError("You requested to convolve by the psf, "
                            "but the observation has no psf observation set")
- 
+
     psf = obs.get_psf()
     if not psf.has_gmix():
         raise RuntimeError("You requested to convolve by the psf, "
                            "but the observation has no psf gmix set")
-    
+
     return psf.gmix
