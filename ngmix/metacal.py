@@ -9,10 +9,44 @@ from __future__ import print_function
 import numpy
 from numpy import zeros, ones, newaxis, sqrt, diag, dot, linalg, array
 from .jacobian import Jacobian, UnitJacobian
-from .observation import Observation
+from .observation import Observation, ObsList, MultiBandObsList
 from .shape import Shape
 
 LANCZOS_PARS_DEFAULT={'order':5, 'conserve_dc':True, 'tol':1.0e-4}
+
+def get_all_metacal(obs, step):
+    """
+    Get all combinations of metacal images in a dict
+
+    parameters
+    ----------
+    obs: Observation, ObsList, or MultiBandObsList
+        The values in the dict correspond to these
+    step: float
+        The shear step value to use for metacal
+
+    returns
+    -------
+    A dictionary with all the relevant metacaled images
+        dict keys:
+            1p -> ( shear, 0)
+            1m -> (-shear, 0)
+            2p -> ( 0, shear)
+            2m -> ( 0, -shear)
+        simular for 1p_psf etc.  Also included is 'noshear',
+        the reconvolved but unsheared galaxy
+    """
+
+    if isinstance(obs, MultiBandObsList):
+        return _make_metacal_mb_obs_list_dict(obs, step)
+    elif isinstance(obs, ObsList):
+        return _make_metacal_obs_list_dict(obs, step)
+    elif isinstance(obs, Observation):
+        m=Maker(obs)
+        return m.get_all(step)
+    else:
+        raise ValueError("obs must be Observation, ObsList, "
+                         "or MultiBandObsList")
 
 class Metacal(object):
     """
@@ -660,6 +694,49 @@ def get_mean_shear(g, gpsf, R, Rpsf):
             'ng': g.shape[0],
             'nR': R.shape[0]
            }
+
+def _make_metacal_mb_obs_list_dict(mb_obs_list, step):
+
+    new_dict=None
+    for obs_list in mb_obs_list:
+        odict = _make_metacal_obs_list_dict(obs_list, step)
+
+        if new_dict is None:
+            new_dict=_init_mb_obs_list_dict(odict.keys())
+
+        for key in odict:
+            new_dict[key].append(odict[key])
+
+    return new_dict
+
+def _make_metacal_obs_list_dict(obs_list, step):
+    odict = None
+    first=True
+    for obs in obs_list:
+
+        mc=Metacal(obs)
+        todict=mc.get_all(step)
+
+        if odict is None:
+            odict=_init_obs_list_dict(todict.keys())
+
+        for key in odict:
+            odict[key].append( todict[key] )
+
+    return odict
+
+def _init_obs_list_dict(keys):
+    odict={}
+    for key in keys:
+        odict[key] = ObsList()
+    return odict
+
+def _init_mb_obs_list_dict(keys):
+    odict={}
+    for key in keys:
+        odict[key] = MultiBandObsList()
+    return odict
+
 
 def test():
     import images

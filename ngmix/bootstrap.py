@@ -782,8 +782,8 @@ class Bootstrapper(object):
                 print("        using input metacal obs dict")
             obs_dict_orig=metacal_obs
         else:
-            obs_dict_orig = self.get_metacal_obsdict(self.mb_obs_list,
-                                                     metacal_pars)
+            obs_dict_orig = ngmix.metacal.get_all_metacal(self.mb_obs_list,
+                                                          metacal_pars['step'])
 
         reslist=[]
         for i in xrange(nrand):
@@ -1134,7 +1134,10 @@ class Bootstrapper(object):
             extra_noise = self._get_extra_noise_from_target(oobs,
                                                             target_noise)
 
-        obs_dict_orig = self.get_metacal_obsdict(oobs, metacal_pars)
+        obs_dict_orig = ngmix.metacal.get_all_metacal(oobs,
+                                                      metacal_pars['step'])
+
+
 
         if extra_noise is not None:
             obs_dict = self._add_noise_to_metacal_obsdict(obs_dict_orig,
@@ -1309,92 +1312,6 @@ class Bootstrapper(object):
                  psf_pars=psf_pars)
         return res
 
-
-    def get_metacal_obsdict(self, mb_obs_list, metacal_pars):
-        """
-        get Observations for the sheared images
-
-
-        for same noise we add the noise *after* shearing/convolving etc.
-
-        otherwise we degrade the original and metacal happens on that
-        just as with the real data
-        """
-        from .metacal import Metacal
-        from .shape import Shape
-
-        step=metacal_pars['step']
-
-        types=['1p','1m','2p','2m',
-               '1p_psf','1m_psf','2p_psf','2m_psf',
-               'noshear']
-
-        first_mb=True
-        obs_dict={}
-        for obs_list in mb_obs_list:
-
-            first_obslist=True
-            for obs in obs_list:
-
-                mc=Metacal(obs)
-                odict=mc.get_all(step)
-
-                # first time through, initialize a new dict
-                # with ObsLists, for appending
-                if first_obslist:
-                    first_obslist=False
-                    todict = {}
-                    for key in odict:
-                        todict[key] = ObsList()
-
-                for key in odict:
-                    todict[key].append( odict[key] )
-
-            # first time, init MultiBandObsLists for appending
-            if first_mb:
-                first_mb=False
-                for key in todict:
-                    obs_dict[key] = MultiBandObsList()
-
-            for key in todict:
-                obs_dict[key].append(todict[key])
-
-        return obs_dict
-        #return mc.get_all(step)
-
-        '''
-        sh1m=Shape(-step,  0.00 )
-        sh1p=Shape( step,  0.00 )
-
-        sh2m=Shape(0.0, -step)
-        sh2p=Shape(0.0,  step)
-
-        obs1p, obs_noshear = mc.get_obs_galshear(sh1p, get_unsheared=True)
-        obs1m = mc.get_obs_galshear(sh1m)
-        obs2p = mc.get_obs_galshear(sh2p)
-        obs2m = mc.get_obs_galshear(sh2m)
-
-        obs1p_psf = mc.get_obs_psfshear(sh1p)
-        obs1m_psf = mc.get_obs_psfshear(sh1m)
-        obs2p_psf = mc.get_obs_psfshear(sh2p)
-        obs2m_psf = mc.get_obs_psfshear(sh2m)
-
-        obs_dict = {
-                    '1p':obs1p,
-                    '1m':obs1m,
-                    '2p':obs2p,
-                    '2m':obs2m,
-
-                    '1p_psf':obs1p_psf,
-                    '1m_psf':obs1m_psf,
-                    '2p_psf':obs2p_psf,
-                    '2m_psf':obs2m_psf,
-
-                    'noshear': obs_noshear,
-                   }
-
-        return obs_dict
-        '''
 
     def fit_max_fixT(self, gal_model, pars, T,
                      guess=None, prior=None, extra_priors=None, ntry=1):
@@ -2721,7 +2638,6 @@ _em2_pguess =array([0.596510042804182,0.4034898268889178])
 
 _em3_pguess = array([0.596510042804182,0.4034898268889178,1.303069003078001e-07])
 _em3_fguess = array([0.5793612389470884,1.621860687127999,7.019347162356363],dtype='f8')
-
 
 def test_boot(model,**keys):
     from .test import make_test_observations
