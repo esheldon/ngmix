@@ -706,7 +706,9 @@ class Bootstrapper(object):
         return runner
 
 
-    def fit_max(self, gal_model, pars,
+    def fit_max(self,
+                gal_model,
+                pars,
                 guess=None,
                 guess_widths=None,
                 prior=None,
@@ -1376,7 +1378,14 @@ class Bootstrapper(object):
 
 
 
-    def _fit_one_model_max(self, gal_model, pars, guess=None, prior=None, ntry=1, obs=None, guess_widths=None):
+    def _fit_one_model_max(self,
+                           gal_model,
+                           pars,
+                           guess=None,
+                           guess_widths=None,
+                           prior=None,
+                           ntry=1,
+                           obs=None):
         """
         fit the galaxy.  You must run fit_psf() successfully first
         """
