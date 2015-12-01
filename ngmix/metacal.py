@@ -67,6 +67,67 @@ class Metacal(object):
 
         self._set_data(obs, lanczos_pars=lanczos_pars)
 
+    def get_all(self, step):
+        """
+        Get all combinations of metacal images in a dict
+
+        parameters
+        ----------
+        step: float
+            The shear step value to use for metacal
+
+        returns
+        -------
+        A dictionary with all the relevant metacaled images
+            dict keys:
+                1p -> ( shear, 0)
+                1m -> (-shear, 0)
+                2p -> ( 0, shear)
+                2m -> ( 0, -shear)
+            simular for 1p_psf etc.  Also included is 'noshear',
+            the reconvolved but unsheared galaxy
+        """
+
+        # noshear is added with 1p
+        types=[
+            '1p','1m','2p','2m',
+            '1p_psf','1m_psf','2p_psf','2m_psf',
+        ]
+
+        shdict={}
+
+        # galshear keys
+        shdict['1m']=Shape(-step,  0.0)
+        shdict['1p']=Shape( step,  0.0)
+
+        shdict['2m']=Shape(0.0, -step)
+        shdict['2p']=Shape(0.0,  step)
+
+        # psfshear keys
+        keys=list(shdict.keys())
+        for key in keys:
+            pkey = '%s_psf' % key
+            shdict[pkey] = shdict[key].copy()
+
+        odict={}
+
+        for type in types:
+            sh=shdict[type]
+
+            if 'psf' in type:
+                obs = self.get_obs_psfshear(sh)
+            else:
+                if type=='1p':
+                    obs, noshear = self.get_obs_galshear(sh, get_unsheared=True)
+                    odict['noshear']=noshear
+                else:
+                    obs = self.get_obs_galshear(sh)
+
+            odict[type] = obs
+
+        return odict
+
+
     def get_obs_galshear(self, shear, get_unsheared=False):
         """
         This is the case where we shear the image, for calculating R

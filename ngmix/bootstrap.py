@@ -756,8 +756,8 @@ class Bootstrapper(object):
             Number of times to retry fitting, default 1
         """
 
-        if len(self.mb_obs_list) > 1 or len(self.mb_obs_list[0]) > 1:
-            raise NotImplementedError("only a single obs for now")
+        if extra_noise is not None or target_noise is not None:
+            raise NotImplementedError("fix noise adding")
 
         if guess_from_max:
             guess = self.get_max_fitter().get_result()['pars']
@@ -772,7 +772,7 @@ class Bootstrapper(object):
 
         oobs = self.mb_obs_list[0][0]
 
-        extra_noise = self._get_extra_noise(oobs, target_noise, extra_noise)
+        #extra_noise = self._get_extra_noise(oobs, target_noise, extra_noise)
 
         if extra_noise is None:
             nrand=1
@@ -782,7 +782,8 @@ class Bootstrapper(object):
                 print("        using input metacal obs dict")
             obs_dict_orig=metacal_obs
         else:
-            obs_dict_orig = self.get_metacal_obsdict(oobs, metacal_pars)
+            obs_dict_orig = self.get_metacal_obsdict(self.mb_obs_list,
+                                                     metacal_pars)
 
         reslist=[]
         for i in xrange(nrand):
@@ -807,17 +808,7 @@ class Bootstrapper(object):
 
 
             reslist.append(tres)
-            '''
-            if i == 0:
-                res=tres
-            else:
-                for key in res:
-                    res[key] = res[key] + tres[key]
-            
-        if nrand > 1:
-            for key in res:
-                res[key] = res[key]/float(nrand)
-        '''
+
         res=self._do_mean_dictlist(reslist)
         self.metacal_max_res = res
 
@@ -1025,7 +1016,7 @@ class Bootstrapper(object):
             guess_widths=None
 
         bdict={}
-        for key in obs_dict:
+        for key in sorted(obs_dict):
             boot = Bootstrapper(obs_dict[key],
                                 use_logpars=self.use_logpars,
                                 intpars=self.intpars,
@@ -1037,7 +1028,7 @@ class Bootstrapper(object):
                          guess=guess,
                          guess_widths=guess_widths)
             boot.set_round_s2n()
-            
+
             # verbose can be bool or a number
             if self.verbose > 1:
                 if 'psf' in key:
@@ -1319,7 +1310,7 @@ class Bootstrapper(object):
         return res
 
 
-    def get_metacal_obsdict(self, oobs, metacal_pars):
+    def get_metacal_obsdict(self, mb_obs_list, metacal_pars):
         """
         get Observations for the sheared images
 
@@ -1334,10 +1325,44 @@ class Bootstrapper(object):
 
         step=metacal_pars['step']
 
-        #print("        step:",step)
+        types=['1p','1m','2p','2m',
+               '1p_psf','1m_psf','2p_psf','2m_psf',
+               'noshear']
 
-        mc=Metacal(oobs)
+        first_mb=True
+        obs_dict={}
+        for obs_list in mb_obs_list:
 
+            first_obslist=True
+            for obs in obs_list:
+
+                mc=Metacal(obs)
+                odict=mc.get_all(step)
+
+                # first time through, initialize a new dict
+                # with ObsLists, for appending
+                if first_obslist:
+                    first_obslist=False
+                    todict = {}
+                    for key in odict:
+                        todict[key] = ObsList()
+
+                for key in odict:
+                    todict[key].append( odict[key] )
+
+            # first time, init MultiBandObsLists for appending
+            if first_mb:
+                first_mb=False
+                for key in todict:
+                    obs_dict[key] = MultiBandObsList()
+
+            for key in todict:
+                obs_dict[key].append(todict[key])
+
+        return obs_dict
+        #return mc.get_all(step)
+
+        '''
         sh1m=Shape(-step,  0.00 )
         sh1p=Shape( step,  0.00 )
 
@@ -1353,7 +1378,7 @@ class Bootstrapper(object):
         obs1m_psf = mc.get_obs_psfshear(sh1m)
         obs2p_psf = mc.get_obs_psfshear(sh2p)
         obs2m_psf = mc.get_obs_psfshear(sh2m)
- 
+
         obs_dict = {
                     '1p':obs1p,
                     '1m':obs1m,
@@ -1369,6 +1394,7 @@ class Bootstrapper(object):
                    }
 
         return obs_dict
+        '''
 
     def fit_max_fixT(self, gal_model, pars, T,
                      guess=None, prior=None, extra_priors=None, ntry=1):
