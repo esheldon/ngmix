@@ -58,12 +58,21 @@ class Shape(object):
         if g >= 1.0:
             raise GMixRangeError("g out of range: %.16g" % g)
 
-    def shear(self, s1, s2):
+    def get_sheared(self, s1, s2=None):
         """
-        shear the shape.
+        Get a new shape, sheared by the specified amount
         """
+
+        if isinstance(s1,Shape):
+            sh = s1
+            s1 = sh.g1
+            s2 = sh.g2
+        else:
+            if s2 is None:
+                raise ValueError("send s1,s2 or a Shape")
+
         g1,g2 = shear_reduced(self.g1,self.g2, s1, s2)
-        self.set_g1g2(g1, g2)
+        return Shape(g1, g2)
 
     def rotate(self, theta_radians):
         """
