@@ -772,8 +772,7 @@ class Bootstrapper(object):
 
         metacal_pars=mpars
 
-        oobs = self.mb_obs_list[0][0]
-
+        #oobs = self.mb_obs_list[0][0]
         #extra_noise = self._get_extra_noise(oobs, target_noise, extra_noise)
 
         if extra_noise is None:
@@ -790,11 +789,12 @@ class Bootstrapper(object):
         reslist=[]
         for i in xrange(nrand):
 
-            if extra_noise is not None:
-                obs_dict = self._add_noise_to_metacal_obsdict(obs_dict_orig,
-                                                              extra_noise)
-            else:
-                obs_dict=obs_dict_orig
+            #if extra_noise is not None:
+            #    obs_dict = self._add_noise_to_metacal_obsdict(obs_dict_orig,
+            #                                                  extra_noise)
+            #else:
+            #    obs_dict=obs_dict_orig
+            obs_dict=obs_dict_orig
 
             if nrand > 1 and self.verbose:
                 print("    irand: %d/%d" % (i+1,nrand))
