@@ -144,6 +144,56 @@ def get_sheared_moments(M1, M2, T, s1, s2):
 
     return M1s, M2s, Ts
 
+def get_sheared_g1g2T(g1,g2,T, s1, s2):
+
+    sh=shape.Shape(g1,g2)
+    shear = shape.Shape(s1,s2)
+
+    ssh = sh.get_sheared(shear)
+
+    g1s,g2s = shape.shear_reduced(g1,g2,s1,s2)
+
+    Tround = get_Tround(mT, s1, s2)
+    Ts = get_T(Tround, g1s, g2s)
+
+    return g1s, g2s, Ts
+
+def get_sheared_imoments(irr, irc, icc, s1, s2):
+    g1,g2,T=mom2g(irr, irc, icc)
+    g1s,g2s,Ts = get_sheared_g1g2T(g1,g2,T,s1,s2)
+    irr_s, irc_s, icc_s = g2mom(g1s, g2s, Ts)
+    return irr_s, irc_s, icc_s
+
+
+def mom2e(Irr, Irc, Icc):
+    T = Irr+Icc
+    e1=(Icc-Irr)/T
+    e2=2.0*Irc/T
+
+    return e1,e2,T
+
+def mom2g(Irr, Irc, Icc):
+    e1,e2,T = mom2e(Irr, Irc, Icc)
+    g1,g2=shape.e1e2_to_g1g2(e1,e2)
+
+    return g1,g2,T
+
+def e2mom(e1,e2,T):
+
+    Irc = e2*T/2.0
+    Icc = (1+e1)*T/2.0
+    Irr = (1-e1)*T/2.0
+
+    return Irr, Irc, Icc
+
+def g2mom(g1, g2, T):
+
+    e1,e2=shape.g1g2_to_e1e2(g1,g2)
+    Irc = e2*T/2.0
+    Icc = (1+e1)*T/2.0
+    Irr = (1-e1)*T/2.0
+
+    return Irr, Irc, Icc
 
 
 

@@ -12,7 +12,9 @@ import numpy
 from numpy import array, zeros, exp, log10, log, dot, sqrt, diag
 from . import fastmath
 from .jacobian import Jacobian
-from .shape import g1g2_to_e1e2, e1e2_to_g1g2
+from .shape import Shape, g1g2_to_e1e2, e1e2_to_g1g2
+
+from . import moments
 
 from .gexceptions import GMixRangeError, GMixFatalError
 
@@ -297,6 +299,53 @@ class GMix(object):
         gmix = GMix(self._ngauss)
         gmix._data[:] = self._data[:]
         return gmix
+
+    def get_sheared(self, s1, s2=None):
+        """
+        Get a sheared version of the gaussian mixture
+
+        call with either 
+            gmnew = gm.get_sheared(shape)
+        or
+            gmnew = gm.get_sheared(g1,g2)
+
+        parameters
+        ----------
+        Either c
+        s1 or Shape
+            a g1 value or a Shape representing a shera
+        """
+        if isinstance(s1, Shape):
+            shear1=s1.g1
+            shear2=s1.g2
+        elif s2 is not None:
+            shear1=s1
+            shear2=s2
+        else:
+            raise RuntimeError("send a Shape or s1,s2")
+
+        gm = GMix(ngauss=self._ngauss)
+
+        sdata = self._get_gmix_data()
+
+        ndata = gm._get_gmix_data()
+        ndata[:] = sdata[:]
+        ndata['norm_set']=0
+
+        for i in xrange(self._ngauss):
+            irr=sdata['irr'][i]
+            irc=sdata['irc'][i]
+            icc=sdata['icc'][i]
+
+            irr_s,irc_s,icc_s=moments.get_sheared_imoments(irr,irc,icc,
+                                                           shear1,shear2)
+
+            ndata['irr'][i] = irr_s
+            ndata['irc'][i] = irc_s
+            ndata['icc'][i] = icc_s
+
+        return gm
+
 
     def convolve(self, psf):
         """
