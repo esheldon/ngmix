@@ -153,7 +153,7 @@ def get_sheared_g1g2T(g1,g2,T, s1, s2):
 
     g1s,g2s = shape.shear_reduced(g1,g2,s1,s2)
 
-    Tround = get_Tround(mT, s1, s2)
+    Tround = get_Tround(T, g1, g2)
     Ts = get_T(Tround, g1s, g2s)
 
     return g1s, g2s, Ts
