@@ -473,11 +473,12 @@ class MetacalAnalyticPSF(Metacal):
         self.im_shape=obs.image.shape
 
         # interpolated galaxy image, still pixelized
-        self.image_int = galsim.InterpolatedImage(self.image,
-                                                  x_interpolant=self.interp)
+        image_int = galsim.InterpolatedImage(self.image,
+                                             x_interpolant=self.interp)
 
         # deconvolved galaxy image, psf+pixel removed
-        self.image_int_nopsf = galsim.Convolve(self.image_int, self.psf_obj)
+        psf_inv = galsim.Deconvolve(self.psf_obj)
+        self.image_int_nopsf = galsim.Convolve(image_int, psf_inv)
 
 
 
