@@ -309,8 +309,7 @@ def get_shape_guess(g1, g2, n, width, max=0.99):
             try:
                 g1_offset = width[0]*srandu()
                 g2_offset = width[1]*srandu()
-                shape_new=shape.copy()
-                shape_new.shear(g1_offset, g2_offset)
+                shape_new = shape.get_sheared(g1_offset, g2_offset)
                 break
             except GMixRangeError:
                 pass
