@@ -304,16 +304,10 @@ class GMix(object):
         """
         Get a sheared version of the gaussian mixture
 
-        call with either 
+        call as either 
             gmnew = gm.get_sheared(shape)
         or
             gmnew = gm.get_sheared(g1,g2)
-
-        parameters
-        ----------
-        Either c
-        s1 or Shape
-            a g1 value or a Shape representing a shera
         """
         if isinstance(s1, Shape):
             shear1=s1.g1
@@ -324,27 +318,29 @@ class GMix(object):
         else:
             raise RuntimeError("send a Shape or s1,s2")
 
-        gm = GMix(ngauss=self._ngauss)
+        new_gmix = self.copy()
 
-        sdata = self._get_gmix_data()
 
-        ndata = gm._get_gmix_data()
-        ndata[:] = sdata[:]
+        ndata = new_gmix._get_gmix_data()
         ndata['norm_set']=0
 
-        for i in xrange(self._ngauss):
-            irr=sdata['irr'][i]
-            irc=sdata['irc'][i]
-            icc=sdata['icc'][i]
+        for i in xrange(len(self)):
+            irr=ndata['irr'][i]
+            irc=ndata['irc'][i]
+            icc=ndata['icc'][i]
 
-            irr_s,irc_s,icc_s=moments.get_sheared_imoments(irr,irc,icc,
-                                                           shear1,shear2)
+            irr_s,irc_s,icc_s=moments.get_sheared_moments(
+                irr,irc,icc,
+                shear1,shear2
+            )
 
+            det = irr_s*icc_s - irc_s*irc_s
             ndata['irr'][i] = irr_s
             ndata['irc'][i] = irc_s
             ndata['icc'][i] = icc_s
+            ndata['det'][i] = det
 
-        return gm
+        return new_gmix
 
 
     def convolve(self, psf):
@@ -861,6 +857,46 @@ class GMix(object):
         Replace the data array with a zeroed one.
         """
         self._data = zeros(self._ngauss, dtype=_gauss2d_dtype)
+
+    def make_galsim_object(self):
+        """
+        make a galsim representation for the gaussian mixture
+        """
+        import galsim
+
+        data = self._get_gmix_data()
+
+        row,col = self.get_cen()
+
+        gsobjects=[]
+        for i in xrange(len(self)):
+            flux = data['p'][i]
+            T = data['irr'][i] + data['icc'][i]
+            e1 = (data['icc'][i] - data['irr'][i])/T
+            e2 = 2.0*data['irc'][i]/T
+
+            rowshift = data['row'][i]-row
+            colshift = data['col'][i]-col
+
+            g1,g2=e1e2_to_g1g2(e1,e2)
+            
+            Tround = moments.get_Tround(T, g1, g2)
+            sigma_round = sqrt(Tround/2.0)
+
+            gsobj = galsim.Gaussian(flux=flux, sigma=sigma_round)
+
+            gsobj = gsobj.shear(g1=g1, g2=g2)
+            gsobj = gsobj.shift(colshift, rowshift)
+
+            gsobjects.append( gsobj )
+
+        gs_obj = galsim.Add(gsobjects)
+
+        rowshift = row-int(row)-0.5
+        colshift = col-int(col)-0.5
+        gs_obj = gs_obj.shift(colshift, rowshift)
+
+        return gs_obj
 
     def __len__(self):
         return self._ngauss

@@ -110,7 +110,7 @@ def get_T(Tround, g1, g2):
     gsq = g1**2 + g2**2
     return Tround*(1+gsq)/(1-gsq)
 
-def get_sheared_moments(M1, M2, T, s1, s2):
+def get_sheared_M1M2T(M1, M2, T, s1, s2):
     """
     Get sheared moments
 
@@ -146,11 +146,6 @@ def get_sheared_moments(M1, M2, T, s1, s2):
 
 def get_sheared_g1g2T(g1,g2,T, s1, s2):
 
-    sh=shape.Shape(g1,g2)
-    shear = shape.Shape(s1,s2)
-
-    ssh = sh.get_sheared(shear)
-
     g1s,g2s = shape.shear_reduced(g1,g2,s1,s2)
 
     Tround = get_Tround(T, g1, g2)
@@ -158,7 +153,7 @@ def get_sheared_g1g2T(g1,g2,T, s1, s2):
 
     return g1s, g2s, Ts
 
-def get_sheared_imoments(irr, irc, icc, s1, s2):
+def get_sheared_moments(irr, irc, icc, s1, s2):
     g1,g2,T=mom2g(irr, irc, icc)
     g1s,g2s,Ts = get_sheared_g1g2T(g1,g2,T,s1,s2)
     irr_s, irc_s, icc_s = g2mom(g1s, g2s, Ts)
@@ -234,8 +229,8 @@ class Deriv(object):
         """
 
         #h=self.h
-        #_,_,Tp0=get_sheared_moments(self.M1, self.M2, self.T, +h, 0.0)
-        #_,_,Tm0=get_sheared_moments(self.M1, self.M2, self.T, -h, 0.0)
+        #_,_,Tp0=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
+        #_,_,Tm0=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
 
         #return (Tp0-Tm0)*self.h2inv
 
@@ -247,8 +242,8 @@ class Deriv(object):
         derivative of T with respect to shear2 at zero shear
         """
         #h=self.h
-        #_,_,T0p=get_sheared_moments(self.M1, self.M2, self.T, 0.0, +h)
-        #_,_,T0m=get_sheared_moments(self.M1, self.M2, self.T, 0.0, -h)
+        #_,_,T0p=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
+        #_,_,T0m=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
 
         #return (T0p-T0m)*self.h2inv
 
@@ -261,8 +256,8 @@ class Deriv(object):
         """
 
         #h=self.h
-        #_,_,Tp0=get_sheared_moments(self.M1, self.M2, self.T, +h, 0.0)
-        #_,_,Tm0=get_sheared_moments(self.M1, self.M2, self.T, -h, 0.0)
+        #_,_,Tp0=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
+        #_,_,Tm0=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
 
         #return (Tp0 - 2*self.T + Tm0)*self.hsqinv
 
@@ -275,13 +270,13 @@ class Deriv(object):
         """
 
         #h=self.h
-        #_,_,Tp0=get_sheared_moments(self.M1, self.M2, self.T, +h, 0.0)
-        #_,_,Tm0=get_sheared_moments(self.M1, self.M2, self.T, -h, 0.0)
-        #_,_,T0p=get_sheared_moments(self.M1, self.M2, self.T, 0.0, +h)
-        #_,_,T0m=get_sheared_moments(self.M1, self.M2, self.T, 0.0, -h)
+        #_,_,Tp0=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
+        #_,_,Tm0=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
+        #_,_,T0p=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
+        #_,_,T0m=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
 
-        #_,_,Tpp=get_sheared_moments(self.M1, self.M2, self.T, +h, +h)
-        #_,_,Tmm=get_sheared_moments(self.M1, self.M2, self.T, -h, -h)
+        #_,_,Tpp=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, +h)
+        #_,_,Tmm=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, -h)
 
         #return (Tpp - Tp0 - T0p + 2*self.T - Tm0 - T0m + Tmm)*self.hsqinv*0.5
 
@@ -294,8 +289,8 @@ class Deriv(object):
         """
 
         #h=self.h
-        #_,_,T0p=get_sheared_moments(self.M1, self.M2, self.T, 0.0, +h)
-        #_,_,T0m=get_sheared_moments(self.M1, self.M2, self.T, 0.0, -h)
+        #_,_,T0p=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
+        #_,_,T0m=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
 
         #return (T0p - 2*self.T + T0m)*self.hsqinv
 
@@ -308,8 +303,8 @@ class Deriv(object):
         """
 
         #h=self.h
-        #Mp0,_,_=get_sheared_moments(self.M1, self.M2, self.T, +h, 0.0)
-        #Mm0,_,_=get_sheared_moments(self.M1, self.M2, self.T, -h, 0.0)
+        #Mp0,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
+        #Mm0,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
 
         #return (Mp0-Mm0)*self.h2inv
 
@@ -322,8 +317,8 @@ class Deriv(object):
         derivative of M1 with respect to shear2 at zero shear
         """
         #h=self.h
-        #M0p,_,_=get_sheared_moments(self.M1, self.M2, self.T, 0.0, +h)
-        #M0m,_,_=get_sheared_moments(self.M1, self.M2, self.T, 0.0, -h)
+        #M0p,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
+        #M0m,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
 
         #return (M0p-M0m)*self.h2inv
 
@@ -335,8 +330,8 @@ class Deriv(object):
         2nd derivative of M1 with respect to shear1 and shear1 at zero shear
         """
         #h=self.h
-        #Mp0,_,_=get_sheared_moments(self.M1, self.M2, self.T, +h, 0.0)
-        #Mm0,_,_=get_sheared_moments(self.M1, self.M2, self.T, -h, 0.0)
+        #Mp0,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
+        #Mm0,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
 
         #return (Mp0 - 2*self.M1 + Mm0)*self.hsqinv
         # for zero shear seems to always be 4*M1?
@@ -349,13 +344,13 @@ class Deriv(object):
         """
 
         #h=self.h
-        #Mp0,_,_=get_sheared_moments(self.M1, self.M2, self.T, +h, 0.0)
-        #Mm0,_,_=get_sheared_moments(self.M1, self.M2, self.T, -h, 0.0)
-        #M0p,_,_=get_sheared_moments(self.M1, self.M2, self.T, 0.0, +h)
-        #M0m,_,_=get_sheared_moments(self.M1, self.M2, self.T, 0.0, -h)
+        #Mp0,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
+        #Mm0,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
+        #M0p,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
+        #M0m,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
 
-        #Mpp,_,_=get_sheared_moments(self.M1, self.M2, self.T, +h, +h)
-        #Mmm,_,_=get_sheared_moments(self.M1, self.M2, self.T, -h, -h)
+        #Mpp,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, +h)
+        #Mmm,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, -h)
 
         #return (Mpp - Mp0 - M0p + 2*self.M1 - Mm0 - M0m + Mmm)*self.hsqinv*0.5
 
@@ -368,8 +363,8 @@ class Deriv(object):
         """
 
         #h=self.h
-        #M0p,_,_=get_sheared_moments(self.M1, self.M2, self.T, 0.0, +h)
-        #M0m,_,_=get_sheared_moments(self.M1, self.M2, self.T, 0.0, -h)
+        #M0p,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
+        #M0m,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
 
         #return (M0p - 2*self.M1 + M0m)*self.hsqinv
 
@@ -382,8 +377,8 @@ class Deriv(object):
         derivative of M2 with respect to shear1 at zero shear
         """
         #h=self.h
-        #_,Mp0,_=get_sheared_moments(self.M1, self.M2, self.T, +h, 0.0)
-        #_,Mm0,_=get_sheared_moments(self.M1, self.M2, self.T, -h, 0.0)
+        #_,Mp0,_=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
+        #_,Mm0,_=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
 
         #return (Mp0-Mm0)*self.h2inv
 
@@ -396,8 +391,8 @@ class Deriv(object):
         """
 
         #h=self.h
-        #_,M0p,_=get_sheared_moments(self.M1, self.M2, self.T, 0.0, +h)
-        #_,M0m,_=get_sheared_moments(self.M1, self.M2, self.T, 0.0, -h)
+        #_,M0p,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
+        #_,M0m,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
 
         #return (M0p-M0m)*self.h2inv
         # zero shear 2*T
@@ -409,8 +404,8 @@ class Deriv(object):
         """
 
         #h=self.h
-        #_,Mp0,_=get_sheared_moments(self.M1, self.M2, self.T, +h, 0.0)
-        #_,Mm0,_=get_sheared_moments(self.M1, self.M2, self.T, -h, 0.0)
+        #_,Mp0,_=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
+        #_,Mm0,_=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
 
         # for zero shear, always nearly zero?
         #return (Mp0 - 2*self.M2 + Mm0)*self.hsqinv
@@ -423,13 +418,13 @@ class Deriv(object):
         2nd derivative of M2 with respect to shear1 and shear2 at zero shear
         """
         #h=self.h
-        #_,Mp0,_=get_sheared_moments(self.M1, self.M2, self.T, +h, 0.0)
-        #_,Mm0,_=get_sheared_moments(self.M1, self.M2, self.T, -h, 0.0)
-        #_,M0p,_=get_sheared_moments(self.M1, self.M2, self.T, 0.0, +h)
-        #_,M0m,_=get_sheared_moments(self.M1, self.M2, self.T, 0.0, -h)
+        #_,Mp0,_=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
+        #_,Mm0,_=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
+        #_,M0p,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
+        #_,M0m,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
 
-        #_,Mpp,_=get_sheared_moments(self.M1, self.M2, self.T, +h, +h)
-        #_,Mmm,_=get_sheared_moments(self.M1, self.M2, self.T, -h, -h)
+        #_,Mpp,_=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, +h)
+        #_,Mmm,_=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, -h)
 
         #return (Mpp - Mp0 - M0p + 2*self.M2 - Mm0 - M0m + Mmm)*self.hsqinv*0.5
 
@@ -442,8 +437,8 @@ class Deriv(object):
         2nd derivative of M2 with respect to shear2 and shear2 at zero shear
         """
         #h=self.h
-        #_,M0p,_=get_sheared_moments(self.M1, self.M2, self.T, 0.0, +h)
-        #_,M0m,_=get_sheared_moments(self.M1, self.M2, self.T, 0.0, -h)
+        #_,M0p,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
+        #_,M0m,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
 
         #return (M0p - 2*self.M2 + M0m)*self.hsqinv
 
@@ -1175,38 +1170,38 @@ class PQRMomTemplatesGaussFull(PQRMomTemplatesGauss):
         M1, M2, T = templates[:,2], templates[:,3], templates[:,4]
 
         # for first derivatives
-        tM1, tM2, tT = get_sheared_moments(M1, M2, T, s1+h, s2+0)
+        tM1, tM2, tT = get_sheared_M1M2T(M1, M2, T, s1+h, s2+0)
 
         sheared_p0[:,0] = tM1
         sheared_p0[:,1] = tM2
         sheared_p0[:,2] = tT
 
-        tM1, tM2, tT = get_sheared_moments(M1, M2, T, s1-h, s2+0)
+        tM1, tM2, tT = get_sheared_M1M2T(M1, M2, T, s1-h, s2+0)
 
         sheared_m0[:,0] = tM1
         sheared_m0[:,1] = tM2
         sheared_m0[:,2] = tT
 
-        tM1, tM2, tT = get_sheared_moments(M1, M2, T, s1+0, s2+h)
+        tM1, tM2, tT = get_sheared_M1M2T(M1, M2, T, s1+0, s2+h)
 
         sheared_0p[:,0] = tM1
         sheared_0p[:,1] = tM2
         sheared_0p[:,2] = tT
 
-        tM1, tM2, tT = get_sheared_moments(M1, M2, T, s1+0, s2-h)
+        tM1, tM2, tT = get_sheared_M1M2T(M1, M2, T, s1+0, s2-h)
 
         sheared_0m[:,0] = tM1
         sheared_0m[:,1] = tM2
         sheared_0m[:,2] = tT
 
         # for 2nd derivatives
-        tM1, tM2, tT = get_sheared_moments(M1, M2, T, s1+h, s2+h)
+        tM1, tM2, tT = get_sheared_M1M2T(M1, M2, T, s1+h, s2+h)
 
         sheared_pp[:,0] = tM1
         sheared_pp[:,1] = tM2
         sheared_pp[:,2] = tT
 
-        tM1, tM2, tT = get_sheared_moments(M1, M2, T, s1-h, s2-h)
+        tM1, tM2, tT = get_sheared_M1M2T(M1, M2, T, s1-h, s2-h)
 
         sheared_mm[:,0] = tM1
         sheared_mm[:,1] = tM2

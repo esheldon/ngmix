@@ -25,6 +25,7 @@ from .guessers import TFluxGuesser, TFluxAndPriorGuesser, ParsGuesser, RoundPars
 from .gexceptions import GMixRangeError, BootPSFFailure, BootGalFailure
 
 from . import roundify
+from . import metacal
 
 BOOT_S2N_LOW = 2**0
 BOOT_R2_LOW = 2**1
@@ -783,8 +784,10 @@ class Bootstrapper(object):
                 print("        using input metacal obs dict")
             obs_dict_orig=metacal_obs
         else:
-            obs_dict_orig = ngmix.metacal.get_all_metacal(self.mb_obs_list,
-                                                          metacal_pars['step'])
+            # metacal pars can contain extra keywords such as
+            # use_psf_model and psf_shape
+            obs_dict_orig = metacal.get_all_metacal(self.mb_obs_list,
+                                                    **metacal_pars)
 
         reslist=[]
         for i in xrange(nrand):
@@ -955,12 +958,14 @@ class Bootstrapper(object):
                      pars['1m']+
                      pars['2p']+
                      pars['2m'])/4.0
-
         pars_cov=fits['pars_cov']
         pars_cov_mean = (pars_cov['1p']+
                          pars_cov['1m']+
                          pars_cov['2p']+
                          pars_cov['2m'])/4.0
+
+        pars_mean[2] = 0.5*(pars['1p'][2] + pars['1m'][2])
+        pars_mean[3] = 0.5*(pars['2p'][3] + pars['2m'][3])
 
         if self.verbose:
             print_pars(pars_mean, front='    mcmean:   ')
@@ -1137,7 +1142,7 @@ class Bootstrapper(object):
                                                             target_noise)
 
         obs_dict_orig = ngmix.metacal.get_all_metacal(oobs,
-                                                      metacal_pars['step'])
+                                                      **metacal_pars)
 
 
 
