@@ -50,10 +50,10 @@ def get_all_metacal(obs, step=0.01, **kw):
 
             shape = kw['shape']
             print("    Using psf model with shape",shape)
-            m=MetacalAnalyticPSF(obs, shape)
+            m=MetacalAnalyticPSF(obs, shape, **kw)
 
         else:
-            m=Metacal(obs)
+            m=Metacal(obs, **kw)
 
         odict=m.get_all(step)
 
@@ -112,9 +112,10 @@ class Metacal(object):
     Rpsf_obs2p = mc.get_obs_psfshear(sh2p)
     """
 
-    def __init__(self, obs):
+    def __init__(self, obs, **kw):
 
         self.obs=obs
+        self.symmetrize_noise=kw.get('symmetrize_noise',False)
         self._setup()
         self._set_data()
 
@@ -313,6 +314,9 @@ class Metacal(object):
                          method='no_pixel',
                          scale=self.pixel_scale)
 
+        if self.symmetrize_noise:
+            newim.symmetrizeNoise(imconv.noise, order=4)
+
         return newim
 
     def get_sheared_image_nopsf(self, shear):
@@ -371,13 +375,23 @@ class Metacal(object):
         self.psf_int_inv = galsim.Deconvolve(self.psf_int)
 
         # interpolated galaxy image, still pixelized
-        self.image_int = galsim.InterpolatedImage(self.image,
-                                                  x_interpolant=self.interp)
+        image_int = galsim.InterpolatedImage(self.image,
+                                             x_interpolant=self.interp)
+
+        # this will get passed on through
+        self._set_uncorrelated_noise(image_int, obs.weight)
 
         # deconvolved galaxy image, psf+pixel removed
-        self.image_int_nopsf = galsim.Convolve(self.image_int,
+        self.image_int_nopsf = galsim.Convolve(image_int,
                                                self.psf_int_inv)
 
+
+
+    def _set_uncorrelated_noise(self, im, wt):
+        w=numpy.where(wt > 0)
+        variance = numpy.median(1/wt[w])
+
+        im.noise = galsim.UncorrelatedNoise(variance=variance)
 
     def _set_wcs(self, jacobian):
         """
@@ -424,6 +438,7 @@ class Metacal(object):
         """
         inputs are galsim objects
         """
+
         obs=self.obs
 
         psf_obs = Observation(psf_im.array,
@@ -443,7 +458,7 @@ class MetacalAnalyticPSF(Metacal):
 
     The psf galsim object should have the pixelization in it
     """
-    def __init__(self, obs, psf_shape):
+    def __init__(self, obs, psf_shape, **kw):
         psf_gmix = obs.get_psf_gmix()
 
         psf_obj = psf_gmix.make_galsim_object()
@@ -451,7 +466,7 @@ class MetacalAnalyticPSF(Metacal):
         self.psf_shape = psf_shape
 
 
-        super(MetacalAnalyticPSF,self).__init__(obs)
+        super(MetacalAnalyticPSF,self).__init__(obs, **kw)
 
     def _get_dilated_psf(self, shear):
         """
@@ -476,9 +491,13 @@ class MetacalAnalyticPSF(Metacal):
         image_int = galsim.InterpolatedImage(self.image,
                                              x_interpolant=self.interp)
 
+        # this will get passed on through
+        self._set_uncorrelated_noise(image_int, obs.weight)
+
         # deconvolved galaxy image, psf+pixel removed
         psf_inv = galsim.Deconvolve(self.psf_obj)
         self.image_int_nopsf = galsim.Convolve(image_int, psf_inv)
+
 
 
 
