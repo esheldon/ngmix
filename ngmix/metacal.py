@@ -315,6 +315,7 @@ class Metacal(object):
                          scale=self.pixel_scale)
 
         if self.symmetrize_noise:
+            #print("    symmetrizing")
             newim.symmetrizeNoise(imconv.noise, order=4)
 
         return newim
@@ -377,6 +378,19 @@ class Metacal(object):
         # interpolated galaxy image, still pixelized
         image_int = galsim.InterpolatedImage(self.image,
                                              x_interpolant=self.interp)
+
+        '''
+        pad_size=max(obs.image.shape)*4
+        w=numpy.where(obs.weight > 0)
+        var = median(1.0/obs.weight[w])
+        image_int = galsim.InterpolatedImage(
+            self.image,
+            x_interpolant=self.interp,
+            noise_pad_size=pad_size,
+            noise_pad=var,
+        )
+        '''
+
 
         # this will get passed on through
         self._set_uncorrelated_noise(image_int, obs.weight)
