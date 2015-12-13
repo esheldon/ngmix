@@ -815,6 +815,7 @@ class Bootstrapper(object):
             reslist.append(tres)
 
         res=self._do_mean_dictlist(reslist)
+        res['obs_dict'] = obs_dict_orig
         self.metacal_max_res = res
 
         return obs_dict_orig
