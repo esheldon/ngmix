@@ -789,6 +789,16 @@ class Bootstrapper(object):
             obs_dict_orig = metacal.get_all_metacal(self.mb_obs_list,
                                                     **metacal_pars)
 
+        if False:
+            import images
+            images.multiview(obs_dict_orig['1p'][0][0].image,
+                            width=1000,height=1000)
+            images.compare_images(self.mb_obs_list[0][0].image,
+                                  obs_dict_orig['1p'][0][0].image,
+                                  width=1000,height=1000)
+            if raw_input('hit a key: ')=='q':
+                stop
+
         reslist=[]
         for i in xrange(nrand):
 

@@ -8,6 +8,7 @@ significantly
 from __future__ import print_function
 import numpy
 from numpy import zeros, ones, newaxis, sqrt, diag, dot, linalg, array
+from numpy import median, where
 from .jacobian import Jacobian, UnitJacobian
 from .observation import Observation, ObsList, MultiBandObsList
 from .shape import Shape
@@ -116,6 +117,8 @@ class Metacal(object):
 
         self.obs=obs
         self.symmetrize_noise=kw.get('symmetrize_noise',False)
+        self.whiten_noise=kw.get('whiten_noise',False)
+        self.pad_with_noise=kw.get('pad_with_noise',False)
         self._setup()
         self._set_data()
 
@@ -315,8 +318,11 @@ class Metacal(object):
                          scale=self.pixel_scale)
 
         if self.symmetrize_noise:
-            #print("    symmetrizing")
+            print("    symmetrizing")
             newim.symmetrizeNoise(imconv.noise, order=4)
+        if self.whiten_noise:
+            print("    whitening")
+            newim.whitenNoise(imconv.noise)
 
         return newim
 
@@ -376,20 +382,25 @@ class Metacal(object):
         self.psf_int_inv = galsim.Deconvolve(self.psf_int)
 
         # interpolated galaxy image, still pixelized
-        image_int = galsim.InterpolatedImage(self.image,
-                                             x_interpolant=self.interp)
+        if self.pad_with_noise:
+            #print("    padding with noise")
+            seed=numpy.random.randint(0,2**15-1)
+            rng=galsim.BaseDeviate(seed)
+            noise_pad_size=max(obs.image.shape)*4/self.pixel_scale
+            w=where(obs.weight > 0)
+            var = median(1.0/obs.weight[w])
+            image_int = galsim.InterpolatedImage(
+                self.image,
+                x_interpolant=self.interp,
+                pad_factor=1.0,  # this is messed up
+                noise_pad_size=noise_pad_size,
+                noise_pad=var,
+                rng=rng,
+            )
+        else:
+            image_int = galsim.InterpolatedImage(self.image,
+                                                 x_interpolant=self.interp)
 
-        '''
-        pad_size=max(obs.image.shape)*4
-        w=numpy.where(obs.weight > 0)
-        var = median(1.0/obs.weight[w])
-        image_int = galsim.InterpolatedImage(
-            self.image,
-            x_interpolant=self.interp,
-            noise_pad_size=pad_size,
-            noise_pad=var,
-        )
-        '''
 
 
         # this will get passed on through
