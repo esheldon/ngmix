@@ -20,6 +20,11 @@ except ImportError:
 
 LANCZOS_PARS_DEFAULT={'order':5, 'conserve_dc':True, 'tol':1.0e-4}
 
+METACAL_TYPES = [
+    '1p','1m','2p','2m',
+    '1p_psf','1m_psf','2p_psf','2m_psf',
+]
+
 def get_all_metacal(obs, step=0.01, **kw):
     """
     Get all combinations of metacal images in a dict
@@ -56,7 +61,7 @@ def get_all_metacal(obs, step=0.01, **kw):
         else:
             m=Metacal(obs, **kw)
 
-        odict=m.get_all(step)
+        odict=m.get_all(step, **kw)
 
 
     elif isinstance(obs, MultiBandObsList):
@@ -122,7 +127,7 @@ class Metacal(object):
         self._setup()
         self._set_data()
 
-    def get_all(self, step):
+    def get_all(self, step, **kw):
         """
         Get all combinations of metacal images in a dict
 
@@ -130,6 +135,8 @@ class Metacal(object):
         ----------
         step: float
             The shear step value to use for metacal
+        types: list
+            Types to get.  Default is given in METACAL_TYPES
 
         returns
         -------
@@ -142,12 +149,7 @@ class Metacal(object):
             simular for 1p_psf etc.  Also included is 'noshear',
             the reconvolved but unsheared galaxy
         """
-
-        # noshear is added with 1p
-        types=[
-            '1p','1m','2p','2m',
-            '1p_psf','1m_psf','2p_psf','2m_psf',
-        ]
+        types=kw.get('types',METACAL_TYPES)
 
         shdict={}
 

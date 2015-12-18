@@ -741,7 +741,8 @@ class Bootstrapper(object):
                         prior=None,
                         psf_ntry=10,
                         ntry=1,
-                        guess_from_max=False):
+                        guess_from_max=False,
+                        **kw):
         """
         run metacalibration
 
@@ -786,6 +787,8 @@ class Bootstrapper(object):
         else:
             # metacal pars can contain extra keywords such as
             # use_psf_model and psf_shape
+            # this can contain things like type= for metacal types
+            metacal_pars.update(kw)
             obs_dict_orig = metacal.get_all_metacal(self.mb_obs_list,
                                                     **metacal_pars)
 
@@ -991,8 +994,9 @@ class Bootstrapper(object):
         R[1,0] = (pars['2p'][2]-pars['2m'][2])*fac
         R[1,1] = (pars['2p'][3]-pars['2m'][3])*fac
 
-        Rpsf[0] = (pars['1p_psf'][2]-pars['1m_psf'][2])*fac
-        Rpsf[1] = (pars['2p_psf'][3]-pars['2m_psf'][3])*fac
+        if '1p_psf' in pars:
+            Rpsf[0] = (pars['1p_psf'][2]-pars['1m_psf'][2])*fac
+            Rpsf[1] = (pars['2p_psf'][3]-pars['2m_psf'][3])*fac
 
         pars_noshear = pars['noshear']
 
