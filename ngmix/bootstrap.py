@@ -998,10 +998,6 @@ class Bootstrapper(object):
             Rpsf[0] = (pars['1p_psf'][2]-pars['1m_psf'][2])*fac
             Rpsf[1] = (pars['2p_psf'][3]-pars['2m_psf'][3])*fac
 
-        pars_noshear = pars['noshear']
-
-        c = pars_mean[2:2+2] - pars_noshear[2:2+2]
-
         gname = 'mcal_%s' % shape_type
         gcovname = 'mcal_%s_cov' % shape_type
         gpsf_name = 'mcal_%spsf' % shape_type
@@ -1011,16 +1007,20 @@ class Bootstrapper(object):
             'mcal_pars_cov':pars_cov_mean,
             gname:pars_mean[2:2+2],
             gcovname:pars_cov_mean[2:2+2, 2:2+2],
-            'mcal_pars_noshear':pars_noshear,
-            'mcal_c':c,
             'mcal_R':R,
             'mcal_Rpsf':Rpsf,
             gpsf_name:fits[raw_gpsf_name],
             'mcal_s2n_r':fits['s2n_r'],
-            'mcal_s2n_simple':fits['s2n_simple'],
             'mcal_T_r':fits['T_r'],
             'mcal_psf_T_r':fits['psf_T_r'],
         }
+
+        if 'noshear' in pars:
+            res['mcal_pars_noshear'] = pars['noshear']
+            res['c'] = pars_mean[2:2+2] - pars['noshear'][2:2+2]
+
+        if 's2n_simple' in fits:
+            res['s2n_simple'] = fits['s2n_simple']
         return res
 
 
@@ -1102,8 +1102,9 @@ class Bootstrapper(object):
 
         assert navg==4,"expected 4 to average"
 
-        bnoshear=bdict['noshear']
-        res['s2n_simple'] = bnoshear.mb_obs_list.get_s2n()
+        if 'noshear' in bdict:
+            bnoshear=bdict['noshear']
+            res['s2n_simple'] = bnoshear.mb_obs_list.get_s2n()
 
         res['s2n_r']   = s2n_r_mean/navg
         res['T_r']     = T_r_mean/navg
