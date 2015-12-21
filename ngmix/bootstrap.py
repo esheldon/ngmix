@@ -2668,6 +2668,8 @@ _em2_pguess =array([0.596510042804182,0.4034898268889178])
 
 _em3_pguess = array([0.596510042804182,0.4034898268889178,1.303069003078001e-07])
 _em3_fguess = array([0.5793612389470884,1.621860687127999,7.019347162356363],dtype='f8')
+#_em3_pguess = array([0.7189864,0.2347828,0.04623086])
+#_em3_fguess = array([0.4431912,1.354587,8.274546])
 
 def test_boot(model,**keys):
     from .test import make_test_observations
