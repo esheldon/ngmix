@@ -121,18 +121,6 @@ class Metacal(object):
 
         self.obs=obs
 
-        # attempts to whiten or symmetrize the noise
-        self.symmetrize_noise=kw.get('symmetrize_noise',False)
-        self.whiten_noise=kw.get('whiten_noise',False)
-
-        # alternate padding
-        self.pad_with_noise=kw.get('pad_with_noise',False)
-
-        # roundify the psf
-        self.psf_shape=kw.get('psf_shape',None)
-        if self.psf_shape is not None and not isinstance(self.psf_shape,Shape):
-            raise ValueError("psf_shape must be an instance of ngmix.Shape")
-
         self._setup()
         self._set_data()
 
@@ -291,11 +279,6 @@ class Metacal(object):
         psf_grown_nopix = _do_dilate(self.psf_int_nopix, shear)
         psf_grown_interp = galsim.Convolve(psf_grown_nopix,self.pixel)
 
-        if self.psf_shape is not None:
-            #print("    unshearing psf post pixel:",self.psf_shape)
-            psf_grown_interp = psf_grown_interp.shear(g1=-self.psf_shape.g1,
-                                                      g2=-self.psf_shape.g2)
-
         return psf_grown_interp
 
     def get_target_image(self, psf_obj, shear=None):
@@ -328,13 +311,6 @@ class Metacal(object):
         imconv.drawImage(image=newim,
                          method='no_pixel',
                          scale=self.pixel_scale)
-
-        if self.symmetrize_noise:
-            print("    symmetrizing")
-            newim.symmetrizeNoise(imconv.noise, order=4)
-        if self.whiten_noise:
-            print("    whitening")
-            newim.whitenNoise(imconv.noise)
 
         return newim
 
@@ -390,33 +366,11 @@ class Metacal(object):
         # interpolated psf deconvolved from pixel
         self.psf_int_nopix = galsim.Convolve([self.psf_int, self.pixel_inv])
 
-        #if self.psf_shape is not None:
-        #    #print("    unshearing psf:",self.psf_shape)
-        #    self.psf_int_nopix = self.psf_int_nopix.shear(g1=-self.psf_shape.g1,
-        #                                                  g2=-self.psf_shape.g2)
-
         # this can be used to deconvolve the psf from the galaxy image
         psf_int_inv = galsim.Deconvolve(self.psf_int)
 
-        # interpolated galaxy image, still pixelized
-        if self.pad_with_noise:
-            #print("    padding with noise")
-            seed=numpy.random.randint(0,2**15-1)
-            rng=galsim.BaseDeviate(seed)
-            noise_pad_size=max(obs.image.shape)*4/self.pixel_scale
-            w=where(obs.weight > 0)
-            var = median(1.0/obs.weight[w])
-            image_int = galsim.InterpolatedImage(
-                self.image,
-                x_interpolant=self.interp,
-                pad_factor=1.0,  # this is messed up
-                noise_pad_size=noise_pad_size,
-                noise_pad=var,
-                rng=rng,
-            )
-        else:
-            image_int = galsim.InterpolatedImage(self.image,
-                                                 x_interpolant=self.interp)
+        image_int = galsim.InterpolatedImage(self.image,
+                                             x_interpolant=self.interp)
 
 
 
