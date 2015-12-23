@@ -290,6 +290,12 @@ class Metacal(object):
         """
         psf_grown_nopix = _do_dilate(self.psf_int_nopix, shear)
         psf_grown_interp = galsim.Convolve(psf_grown_nopix,self.pixel)
+
+        if self.psf_shape is not None:
+            #print("    unshearing psf post pixel:",self.psf_shape)
+            psf_grown_interp = psf_grown_interp.shear(g1=-self.psf_shape.g1,
+                                                      g2=-self.psf_shape.g2)
+
         return psf_grown_interp
 
     def get_target_image(self, psf_obj, shear=None):
@@ -384,10 +390,10 @@ class Metacal(object):
         # interpolated psf deconvolved from pixel
         self.psf_int_nopix = galsim.Convolve([self.psf_int, self.pixel_inv])
 
-        if self.psf_shape is not None:
-            #print("    unshearing psf:",self.psf_shape)
-            self.psf_int_nopix = self.psf_int_nopix.shear(g1=-self.psf_shape.g1,
-                                                          g2=-self.psf_shape.g2)
+        #if self.psf_shape is not None:
+        #    #print("    unshearing psf:",self.psf_shape)
+        #    self.psf_int_nopix = self.psf_int_nopix.shear(g1=-self.psf_shape.g1,
+        #                                                  g2=-self.psf_shape.g2)
 
         # this can be used to deconvolve the psf from the galaxy image
         psf_int_inv = galsim.Deconvolve(self.psf_int)
