@@ -371,7 +371,7 @@ class GMix(object):
         dims: 2-element sequence
             dimensions [nrows, ncols]
         nsub: integer, optional
-            Defines a grid for sub-pixel integration 
+            Defines a grid for sub-pixel integration
         """
 
         image=numpy.zeros(dims, dtype='f8')
@@ -383,7 +383,7 @@ class GMix(object):
         make a round version of the mixture
 
         The transformation is performed as if a shear were applied,
-        so 
+        so
 
             Tround = T * (1-g^2) / (1+g^2)
 
@@ -431,6 +431,7 @@ class GMix(object):
 
         gm=self._get_gmix_data()
         if jacobian is not None:
+            assert isinstance(jacobian,Jacobian)
             if npoints is not None:
                 _gmix.render_jacob_gauleg(gm,
                                           image,
@@ -462,6 +463,9 @@ class GMix(object):
         start: int, optional
             Where to start in the array, default 0
         """
+
+        if obs.jacobian is not None:
+            assert isinstance(obs.jacobian,Jacobian)
 
         nuse=fdiff.size-start
 
@@ -500,6 +504,21 @@ class GMix(object):
                 's2n_denom':s2n_denom,
                 'npix':npix}
 
+    def __call__(self, row, col, jacobian=None):
+        """
+        evaluate the mixture at the specified location
+
+        no need to send jacobian unless row,col are actually image
+        coords
+        """
+
+        gm=self._get_gmix_data()
+
+        if jacobian is not None:
+            assert isinstance(jacobian,Jacobian)
+            return _gmix.eval_jacob(gm, jacobian._data, row, col)
+        else:
+            return _gmix.eval(gm, row, col)
 
     def get_model_s2n_sum(self, obs):
         """
@@ -518,8 +537,11 @@ class GMix(object):
             The Observation must have a weight map set
         """
 
+        if obs.jacobian is not None:
+            assert isinstance(obs.jacobian,Jacobian)
+
         gm=self._get_gmix_data()
-        
+
         s2n_sum =_gmix.get_model_s2n_sum(gm,
                                          obs.weight,
                                          obs.jacobian._data)
@@ -562,6 +584,9 @@ class GMix(object):
             The Observation must have a weight map set
         """
 
+        if obs.jacobian is not None:
+            assert isinstance(obs.jacobian,Jacobian)
+
         gm=self._get_gmix_data()
 
         if altweight is not None:
@@ -576,7 +601,7 @@ class GMix(object):
                 raise ValueError("altweight must be a GMix")
 
         else:
-        
+
             res =_gmix.get_model_s2n_Tvar_sums(gm,
                                                obs.weight,
                                                obs.jacobian._data)
@@ -600,7 +625,7 @@ class GMix(object):
         s2n, r2_mean, Tvar
 
         """
-        
+
         s2n_sum, r2sum, r4sum = \
             self.get_model_s2n_Tvar_sums(obs, altweight=altweight)
         s2n = sqrt(s2n_sum)
@@ -680,6 +705,9 @@ class GMix(object):
 
         """
 
+        if obs.jacobian is not None:
+            assert isinstance(obs.jacobian,Jacobian)
+
         if find_cen:
             find_cen=1
         else:
@@ -707,7 +735,7 @@ class GMix(object):
                 'niter':niter,
                 'flags':flags,
                 'flagstr':flagstr}
-                
+
 
     def get_loglike(self, obs, nsub=1, npoints=None, more=False):
         """
@@ -724,6 +752,9 @@ class GMix(object):
         more:
             if True, return a dict with more informatioin
         """
+
+        if obs.jacobian is not None:
+            assert isinstance(obs.jacobian,Jacobian)
 
         gm=self._get_gmix_data()
         if npoints is not None:
@@ -780,6 +811,10 @@ class GMix(object):
         """
         #print("using robust")
         assert nsub==1,"nsub must be 1 for robust"
+
+
+        if obs.jacobian is not None:
+            assert isinstance(obs.jacobian,Jacobian)
 
         gm=self._get_gmix_data()
         loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike_robust(gm,

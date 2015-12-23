@@ -1012,6 +1012,65 @@ static PyObject * PyGMix_render(PyObject* self, PyObject* args) {
     return Py_None;
 }
 
+static PyObject * PyGMix_eval(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    double row=0, col=0, val=0;
+    npy_intp n_gauss=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"Odd", &gmix_obj, &row, &col)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        return NULL;
+    }
+
+    val = PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, row, col);
+
+    return Py_BuildValue("d", val);
+}
+
+static PyObject * PyGMix_eval_jacob(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    double row=0,col=0,val=0,u=0,v=0;
+    npy_intp n_gauss=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOdd", 
+                          &gmix_obj, &jacob_obj, &row, &col)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        return NULL;
+    }
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    u=PYGMIX_JACOB_GETU(jacob, row, col);
+    v=PYGMIX_JACOB_GETV(jacob, row, col);
+
+    val = PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, u, v);
+
+    return Py_BuildValue("d", val);
+}
+
+
+
+
 /*
    use approximate integral over pixels, good to fractional error
    of a part in a thousand
@@ -3876,6 +3935,9 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"render_gauleg",      (PyCFunction)PyGMix_render_gauleg, METH_VARARGS,  "render without jacobian and using gauss-legendre integration\n"},
     {"render_jacob_gauleg",      (PyCFunction)PyGMix_render_jacob_gauleg, METH_VARARGS,  "render with jacobian and using gauss-legendre integration\n"},
     {"render_jacob",(PyCFunction)PyGMix_render_jacob, METH_VARARGS,  "render with jacobian\n"},
+
+    {"eval",      (PyCFunction)PyGMix_eval, METH_VARARGS,  "eval without jacobian\n"},
+    {"eval_jacob",      (PyCFunction)PyGMix_eval_jacob, METH_VARARGS,  "eval with a jacobian\n"},
 
     {"gmix_fill",(PyCFunction)PyGMix_gmix_fill, METH_VARARGS,  "Fill the input gmix with the input pars\n"},
     {"gmix_fill_cm",(PyCFunction)PyGMix_gmix_fill_cm, METH_VARARGS,  "Fill the input gmix with the input pars\n"},
