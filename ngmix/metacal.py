@@ -44,8 +44,7 @@ def get_all_metacal(obs, step=0.01, **kw):
             1m -> (-shear, 0)
             2p -> ( 0, shear)
             2m -> ( 0, -shear)
-        simular for 1p_psf etc.  Also included is 'noshear',
-        the reconvolved but unsheared galaxy
+        simular for 1p_psf etc.
     """
 
     if isinstance(obs, Observation):
@@ -121,9 +120,19 @@ class Metacal(object):
     def __init__(self, obs, **kw):
 
         self.obs=obs
+
+        # attempts to whiten or symmetrize the noise
         self.symmetrize_noise=kw.get('symmetrize_noise',False)
         self.whiten_noise=kw.get('whiten_noise',False)
+
+        # alternate padding
         self.pad_with_noise=kw.get('pad_with_noise',False)
+
+        # roundify the psf
+        self.psf_shape=kw.get('psf_shape',None)
+        if self.psf_shape is not None and not isinstance(self.psf_shape,Shape):
+            raise ValueError("psf_shape must be an instance of ngmix.Shape")
+
         self._setup()
         self._set_data()
 
@@ -146,8 +155,7 @@ class Metacal(object):
                 1m -> (-shear, 0)
                 2p -> ( 0, shear)
                 2m -> ( 0, -shear)
-            simular for 1p_psf etc.  Also included is 'noshear',
-            the reconvolved but unsheared galaxy
+            simular for 1p_psf etc.
         """
         types=kw.get('types',METACAL_TYPES)
 
@@ -174,11 +182,7 @@ class Metacal(object):
             if 'psf' in type:
                 obs = self.get_obs_psfshear(sh)
             else:
-                if type=='1p':
-                    obs, noshear = self.get_obs_galshear(sh, get_unsheared=True)
-                    odict['noshear']=noshear
-                else:
-                    obs = self.get_obs_galshear(sh)
+                obs = self.get_obs_galshear(sh)
 
             odict[type] = obs
 
@@ -271,7 +275,7 @@ class Metacal(object):
             # eric remarked that he thought we should shear the pixelized version
             psf_grown = psf_grown.shear(g1=shear.g1, g2=shear.g2)
 
-        psf_grown_image = galsim.ImageD(self.psf_shape[1], self.psf_shape[0])
+        psf_grown_image = galsim.ImageD(self.psf_dims[1], self.psf_dims[0])
 
         # TODO not general, using just pixel scale
         psf_grown.drawImage(image=psf_grown_image,
@@ -314,7 +318,7 @@ class Metacal(object):
 
         # Draw reconvolved, sheared image to an ImageD object, and return.
         # pixel is already in the psf
-        newim = galsim.ImageD(self.im_shape[1], self.im_shape[0])
+        newim = galsim.ImageD(self.im_dims[1], self.im_dims[0])
         imconv.drawImage(image=newim,
                          method='no_pixel',
                          scale=self.pixel_scale)
@@ -371,8 +375,8 @@ class Metacal(object):
         self.psf_image = galsim.Image(obs.psf.image.copy(),
                                       wcs=self.gs_wcs)
 
-        self.psf_shape=obs.psf.image.shape
-        self.im_shape=obs.image.shape
+        self.psf_dims=obs.psf.image.shape
+        self.im_dims=obs.image.shape
 
         # interpolated psf image
         self.psf_int = galsim.InterpolatedImage(self.psf_image,
@@ -380,8 +384,13 @@ class Metacal(object):
         # interpolated psf deconvolved from pixel
         self.psf_int_nopix = galsim.Convolve([self.psf_int, self.pixel_inv])
 
+        if self.psf_shape is not None:
+            #print("    unshearing psf:",self.psf_shape)
+            self.psf_int_nopix = self.psf_int_nopix.shear(g1=-self.psf_shape.g1,
+                                                          g2=-self.psf_shape.g2)
+
         # this can be used to deconvolve the psf from the galaxy image
-        self.psf_int_inv = galsim.Deconvolve(self.psf_int)
+        psf_int_inv = galsim.Deconvolve(self.psf_int)
 
         # interpolated galaxy image, still pixelized
         if self.pad_with_noise:
@@ -410,7 +419,7 @@ class Metacal(object):
 
         # deconvolved galaxy image, psf+pixel removed
         self.image_int_nopsf = galsim.Convolve(image_int,
-                                               self.psf_int_inv)
+                                               psf_int_inv)
 
 
 
@@ -485,12 +494,12 @@ class MetacalAnalyticPSF(Metacal):
 
     The psf galsim object should have the pixelization in it
     """
-    def __init__(self, obs, psf_shape, **kw):
+    def __init__(self, obs, psf_dims, **kw):
         psf_gmix = obs.get_psf_gmix()
 
         psf_obj = psf_gmix.make_galsim_object()
         self.psf_obj = psf_obj
-        self.psf_shape = psf_shape
+        self.psf_dims = psf_dims
 
 
         super(MetacalAnalyticPSF,self).__init__(obs, **kw)
@@ -512,7 +521,7 @@ class MetacalAnalyticPSF(Metacal):
         # to be sure they don't get modified
         #
         self.image = galsim.Image(obs.image.copy(), wcs=self.gs_wcs)
-        self.im_shape=obs.image.shape
+        self.im_dims=obs.image.shape
 
         # interpolated galaxy image, still pixelized
         image_int = galsim.InterpolatedImage(self.image,
