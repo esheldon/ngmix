@@ -12,18 +12,23 @@ class Observation(object):
     ----------
     image: ndarray
         The image
-    weight: ndarray
+    weight: ndarray, optional
         Weight map, same shape as image
+    bmask: ndarray, optional
+        A bitmask array
     jacobian: Jacobian, optional
         Type Jacobian or a sub-type
     gmix: GMix, optional
         Optional GMix object associated with this observation
     psf: Observation, optional
         Optional psf Observation
+    meta: dict
+        Optional dictionary
     """
 
     def __init__(self, image,
                  weight=None,
+                 bmask=None,
                  jacobian=None,
                  gmix=None,
                  aperture=None,
@@ -43,6 +48,8 @@ class Observation(object):
 
         # if weight is None, set unity weights
         self.set_weight(weight)
+
+        self.set_bmask(bmask)
 
         if gmix is not None:
             self.set_gmix(gmix)
@@ -72,6 +79,24 @@ class Observation(object):
             weight = numpy.zeros(self.image.shape) + 1.0
 
         self.weight=weight
+
+    def set_bmask(self, bmask):
+        """
+        Set the bitmask
+
+        parameters
+        ----------
+        bmask: ndarray (or None)
+        """
+
+        if bmask is not None:
+            bmask=numpy.asanyarray(bmask, dtype='f8')
+            assert len(bmask.shape)==2,"bmask must be 2d"
+
+            assert (bmask.shape==self.image.shape),"image and bmask must be same shape"
+
+        self.bmask=bmask
+
 
     def set_jacobian(self, jacobian):
         """
