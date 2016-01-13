@@ -706,6 +706,42 @@ class Bootstrapper(object):
 
         return runner
 
+    def replace_masked_pixels(self, method='best-fit'):
+        """
+        replaced masked pixels
+
+        parameters
+        ----------
+        method: string, optional
+            Method for replacement.  Supported methods are 'best-fit'.
+            Default is 'best-fit'
+        """
+
+        assert method=='best-fit',"only best-fit replacement is supported"
+        fitter=self.get_max_fitter()
+
+        mbo = self.mb_obs_list
+        nband = len(mbo)
+
+        for band in xrange(nband):
+            olist = mbo[band]
+            nobs = len(olist)
+            for iobs,obs in enumerate(olist):
+
+                bmask = obs.bmask
+                if bmask is not None:
+                    w=where(bmask != 0)
+
+                    if w[0].size > 0:
+                        print("    replacing %d/%d masked pixels" % (w[0].size,bmask.size))
+                        obs.image_orig = obs.image.copy()
+                        gm = fitter.get_convolved_gmix(band=band, obsnum=iobs)
+
+                        im = obs.image
+                        model_image = gm.make_image(im.shape, jacobian=obs.jacobian)
+
+                        im[w] = model_image[w]
+
 
     def fit_max(self,
                 gal_model,
