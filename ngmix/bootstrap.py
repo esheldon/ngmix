@@ -742,6 +742,16 @@ class Bootstrapper(object):
 
                         im[w] = model_image[w]
 
+                        if False:
+                            import images
+                            imdiff=im-obs.image_orig
+                            images.view_mosaic([bmask,obs.image_orig,im,imdiff],
+                                               titles=['mask','orig','mod image','mod-orig'])
+                            maxdiff=numpy.abs(imdiff).max()
+                            print("    Max abs diff:",maxdiff)
+                            images.multiview(imdiff,title='mod-orig max diff %g' % maxdiff)
+                            if raw_input('hit a key: ') == 'q':
+                                stop
 
     def fit_max(self,
                 gal_model,
