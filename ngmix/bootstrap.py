@@ -873,7 +873,10 @@ class Bootstrapper(object):
 
             reslist.append(tres)
 
-        res=self._do_mean_dictlist(reslist)
+        if nrand==1:
+            res=reslist[0]
+        else:
+            res=self._do_mean_dictlist(reslist)
         res['obs_dict'] = obs_dict_orig
         self.metacal_max_res = res
 
@@ -1058,6 +1061,7 @@ class Bootstrapper(object):
             gpsf_name:fits[raw_gpsf_name],
             'mcal_s2n_r':fits['s2n_r'],
             'mcal_T_r':fits['T_r'],
+            'mcal_psf_T':fits['psf_T'],
             'mcal_psf_T_r':fits['psf_T_r'],
         }
 
@@ -1111,6 +1115,7 @@ class Bootstrapper(object):
         res={'pars':{}, 'pars_cov':{}}
         s2n_r_mean   = 0.0
         T_r_mean     = 0.0
+        psf_T_mean = 0.0
         psf_T_r_mean = 0.0
         gpsf_mean = zeros(2)
         npsf=0
@@ -1137,6 +1142,7 @@ class Bootstrapper(object):
                     g1,g2,T=obs.psf.gmix.get_g1g2T()
                     gpsf_mean[0] += g1
                     gpsf_mean[1] += g2
+                    psf_T_mean += T
                     npsf+=1
 
             rres=boot.get_round_result()
@@ -1155,6 +1161,7 @@ class Bootstrapper(object):
         res['s2n_r']   = s2n_r_mean/navg
         res['T_r']     = T_r_mean/navg
         res['psf_T_r'] = psf_T_r_mean/navg
+        res['psf_T'] = psf_T_mean/navg
         res['gpsf'] = gpsf_mean/npsf
 
         return res
