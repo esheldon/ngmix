@@ -60,6 +60,8 @@ class Bootstrapper(object):
         self.find_cen=find_cen
         self.verbose=verbose
 
+        self.use_round_T = kw.get('use_round_T',False)
+
         # this never gets modified in any way
         self.mb_obs_list_orig = get_mb_obs(obs)
 
@@ -173,9 +175,12 @@ class Bootstrapper(object):
 
                 # pars_round could be in log and include all bands
                 # this is unconvolved by a psf
-                gm_round_band0 = self._get_gmix_round(max_fitter, pars_round, band)
+                gm_round_band0 = self._get_gmix_round(max_fitter,
+                                                      pars_round,
+                                                      band)
 
                 for obs in obslist:
+                    # note psf does not use round T
                     psf_round = obs.psf.gmix.make_round()
                     gmix = gm_round_band0.convolve(psf_round)
 
@@ -186,7 +191,7 @@ class Bootstrapper(object):
                     psf_T=psf_round.get_T()
                     psf_T_sum += wt*psf_T
                     wsum += wt
-            
+
             if s2n_sum <= 0.0:
                 print("    failure: s2n_sum <= 0.0 :",s2n_sum)
                 flags |= BOOT_S2N_LOW
@@ -199,11 +204,11 @@ class Bootstrapper(object):
 
         except GMixRangeError:
             print("    failure convolving round gmixes")
-            flags |= BOOT_ROUND_CONVOLVE_FAIL 
+            flags |= BOOT_ROUND_CONVOLVE_FAIL
 
 
         return s2n, psf_T, flags
- 
+
     def _get_s2n_Ts2n_r_sim(self, fitter, pars_round, ntry, max_pars,
                             round_prior=None):
 
@@ -364,51 +369,11 @@ class Bootstrapper(object):
 
         return s2n, Ts2n, flags
 
-    def set_round_s2n_old(self, prior=None, ntry=4):
-        """
-        set the s/n and (s/n)_T for the round model
-
-        the s/n measure is stable, the size will require a prior and may
-        need retries
-        """
-
-        raise RuntimeError("adapt to multiple observations")
-
-        obs=self.gal_obs
-
-        max_fitter=self.get_max_fitter()
-        res=max_fitter.get_result()
-
-        pars, pars_lin = self._get_round_pars(res['pars'])
-
-        gm0_round = self._get_gmix_round(res, pars_lin)
-
-        gmpsf_round = obs.psf.gmix.make_round()
-
-        gm_round = gm0_round.convolve(gmpsf_round)
-
-        # first the overall s/n, this is stable
-        res['round_pars'] = pars
-        res['s2n_r'] = gm_round.get_model_s2n(obs)
-
-        # now the covariance matrix, which can be more unstable
-        cov=self._sim_cov_round(obs,
-                                gm_round, gmpsf_round,
-                                res, pars,
-                                prior=prior,
-                                ntry=ntry)
-
-        if cov is None:
-            print("    failed to fit round (S/N)_T")
-            res['T_s2n_r'] = -9999.0
-        else:
-            if self.use_logpars:
-                Ts2n_round = sqrt(1.0/cov[4,4])
-            else:
-                Ts2n_round = pars_lin[4]/sqrt(cov[4,4])
-            res['T_s2n_r'] = Ts2n_round
 
     def _get_gmix_round(self, fitter, pars, band):
+        """
+        input pars are round
+        """
         res=fitter.get_result()
         band_pars = fitter.get_band_pars(pars,band)
         gm_round = GMixModel(band_pars, res['model'])
@@ -417,64 +382,6 @@ class Bootstrapper(object):
     def _get_gmix_round_old(self, res, pars):
         gm_round = GMixModel(pars, res['model'])
         return gm_round
-
-    def _sim_cov_round_old(self,
-                       obs,
-                       gm_round, gmpsf_round,
-                       res, pars_round,
-                       prior=None,
-                       ntry=4):
-        """
-        deprecated
-        gm_round is convolved
-        """
-        
-        im0=gm_round.make_image(obs.image.shape,
-                                jacobian=obs.jacobian)
-        
-        
-        # image here is not used
-        psf_obs = Observation(im0, gmix=gmpsf_round)
-
-        noise=1.0/sqrt( median(obs.weight) )
-
-        cov=None
-        for i in xrange(ntry):
-            nim = numpy.random.normal(scale=noise,
-                                      size=im0.shape)
-
-            im = im0 + nim
-            
-
-            newobs = Observation(im,
-                                 weight=obs.weight,
-                                 jacobian=obs.get_jacobian(),
-                                 psf=psf_obs)
-            
-            fitter=self._get_round_fitter_old(newobs, res, prior=prior)
-
-            # we can't recover from this error
-            try:
-                fitter._setup_data(pars_round)
-            except GMixRangeError:
-                break
-
-            try:
-                tcov=fitter.get_cov(pars_round, 1.0e-3, 5.0)
-                if tcov[4,4] > 0:
-                    cov=tcov
-                    break
-            except LinAlgError:
-                pass
-
-        return cov
-
-    def _get_round_fitter_old(self, obs, res, prior=None):
-        fitter=fitting.LMSimple(obs, res['model'],
-                                prior=prior,
-                                use_logpars=self.use_logpars)
-        return fitter
-
 
     def _get_round_pars(self, pars_in):
 
@@ -486,8 +393,11 @@ class Bootstrapper(object):
 
         g1,g2,T = pars_lin[2],pars_lin[3],pars_lin[4]
 
-        f = get_round_factor(g1, g2)
-        Tround = T*f
+        if self.use_round_T:
+            Tround=T
+        else:
+            f = get_round_factor(g1, g2)
+            Tround = T*f
 
         pars[2]=0.0
         pars[3]=0.0
@@ -607,18 +517,21 @@ class Bootstrapper(object):
                         continue
 
                     # if have a fitter and flags != 0, skip it
-                    if 'fitter' in psf_obs.meta and psf_obs.meta['fitter'].get_result()['flags'] != 0:
-                        mess=("    failed psf fit band %d obs %d, "
-                              "skipping observation" % (band,i))
-                        print(mess)
-                        continue
-                    
-                try:                        
+                    if 'fitter' in psf_obs.meta:
+                        tres=psf_obs.meta['fitter'].get_result()
+                        if tres['flags'] != 0:
+                            mess=("    failed psf fit band %d obs %d, "
+                                  "skipping observation" % (band,i))
+                            print(mess)
+                            continue
+
+                try:
                     if Tguess_key is not None:
                         Tguess_i = psf_obs.meta[Tguess_key]
                     else:
                         Tguess_i = Tguess
-                    self._fit_one_psf(psf_obs, psf_model, Tguess_i, ntry, fit_pars, norm_key=norm_key)
+                    self._fit_one_psf(psf_obs, psf_model, Tguess_i,
+                                      ntry, fit_pars, norm_key=norm_key)
                     new_obslist.append(obs)
                     ntot += 1
                 except BootPSFFailure:
@@ -628,17 +541,18 @@ class Bootstrapper(object):
                         mess=("    failed psf fit band %d obs %d, "
                               "skipping observation" % (band,i))
                         print(mess)
-                        continue 
-                
+                        continue
+
 
             new_mb_obslist.append(new_obslist)
-        
+
         if ntot == 0:
             raise BootPSFFailure("no psf fits succeeded")
 
         self.mb_obs_list=new_mb_obslist
 
-    def _fit_one_psf(self, psf_obs, psf_model, Tguess, ntry, fit_pars, norm_key=None):
+    def _fit_one_psf(self, psf_obs, psf_model, Tguess, ntry,
+                     fit_pars, norm_key=None):
         """
         fit the psf using a PSFRunner or EMRunner
 
@@ -647,23 +561,29 @@ class Bootstrapper(object):
 
         if 'em' in psf_model:
             assert self.intpars is None,"pixel integration only for max like fitting"
-            runner=self._fit_one_psf_em(psf_obs, psf_model, Tguess, ntry, fit_pars)
+            assert self.use_round_T==False,"round_T only in simple fitters for now"
+
+            runner=self._fit_one_psf_em(psf_obs, psf_model,
+                                        Tguess, ntry, fit_pars)
         elif 'coellip' in psf_model:
-            runner=self._fit_one_psf_coellip(psf_obs, psf_model, Tguess, ntry, fit_pars)
+            assert self.use_round_T==False,"round_T only in simple fitters for now"
+            runner=self._fit_one_psf_coellip(psf_obs, psf_model,
+                                             Tguess, ntry, fit_pars)
         else:
-            runner=self._fit_one_psf_max(psf_obs, psf_model, Tguess, ntry, fit_pars)
+            runner=self._fit_one_psf_max(psf_obs, psf_model,
+                                         Tguess, ntry, fit_pars)
 
         psf_fitter = runner.fitter
         res=psf_fitter.get_result()
         psf_obs.update_meta_data({'fitter':psf_fitter})
-        
+
         if res['flags']==0:
             self.psf_fitter=psf_fitter
             gmix=self.psf_fitter.get_gmix()
-            
+
             if norm_key is not None:
                 gmix.set_psum(psf_obs.meta[norm_key])
-            
+
             psf_obs.set_gmix(gmix)
 
         else:
@@ -675,12 +595,12 @@ class Bootstrapper(object):
         em_pars={'tol': 1.0e-6, 'maxiter': 50000}
         if fit_pars is not None:
             em_pars.update(fit_pars)
-        
+
         runner=EMRunner(psf_obs, Tguess, ngauss, em_pars)
         runner.go(ntry=ntry)
 
         return runner
-    
+
     def _fit_one_psf_coellip(self, psf_obs, psf_model, Tguess, ntry, fit_pars):
 
         ngauss=get_coellip_ngauss(psf_model)
@@ -688,20 +608,21 @@ class Bootstrapper(object):
 
         if fit_pars is not None:
             lm_pars.update(fit_pars)
-        
+
         runner=PSFRunnerCoellip(psf_obs, Tguess, ngauss, lm_pars, intpars=self.intpars)
         runner.go(ntry=ntry)
 
         return runner
-    
- 
+
+
     def _fit_one_psf_max(self, psf_obs, psf_model, Tguess, ntry, fit_pars):
         lm_pars={'maxfev': 4000}
 
         if fit_pars is not None:
             lm_pars.update(fit_pars)
 
-        runner=PSFRunner(psf_obs, psf_model, Tguess, lm_pars, intpars=self.intpars)
+        runner=PSFRunner(psf_obs, psf_model, Tguess, lm_pars,
+                         intpars=self.intpars)
         runner.go(ntry=ntry)
 
         return runner
@@ -1092,6 +1013,7 @@ class Bootstrapper(object):
             boot = Bootstrapper(obs_dict[key],
                                 use_logpars=self.use_logpars,
                                 intpars=self.intpars,
+                                use_round_T=self.use_round_T,
                                 find_cen=self.find_cen,
                                 verbose=self.verbose)
 
@@ -1908,28 +1830,15 @@ class CompositeBootstrapper(Bootstrapper):
 
 
     def _get_gmix_round(self, fitter, pars, band):
+        """
+        input pars are round
+        """
         res=fitter.get_result()
         band_pars = fitter.get_band_pars(pars,band)
         gm_round = GMixCM(res['fracdev'],
                           res['TdByTe'],
                           band_pars)
         return gm_round
-
-    def _get_gmix_round_old(self, res, pars):
-        gm_round = GMixCM(res['fracdev'],
-                          res['TdByTe'],
-                          pars)
-        return gm_round
-
-
-    def _get_round_fitter_old(self, obs, res, prior=None):
-        fitter=fitting.LMComposite(obs,
-                                   res['fracdev'],
-                                   res['TdByTe'],
-                                   prior=prior,
-                                   use_logpars=self.use_logpars)
-
-        return fitter
 
     def _fit_sim_round(self, fitter, pars_round, mb_obs_list,
                        ntry, max_pars, round_prior=None):
@@ -2101,11 +2010,15 @@ class BestBootstrapper(Bootstrapper):
 class PSFRunner(object):
     """
     wrapper to generate guesses and run the psf fitter a few times
+
+    I never use "round_T"
     """
-    def __init__(self, obs, model, Tguess, lm_pars, intpars=None):
+    def __init__(self, obs, model, Tguess, lm_pars,
+                 intpars=None, use_round_T=False):
 
         self.obs=obs
         self.intpars=intpars
+        self.use_round_T=use_round_T
 
         mess="psf model should be turb or gauss,got '%s'" % model
         assert model in ['turb','gauss'],mess
@@ -2126,7 +2039,9 @@ class PSFRunner(object):
 
         for i in xrange(ntry):
             guess=self.get_guess()
-            fitter=LMSimple(self.obs,self.model,lm_pars=self.lm_pars,npoints=npoints)
+            fitter=LMSimple(self.obs,self.model,lm_pars=self.lm_pars,
+                            use_round_T=self.use_round_T,
+                            npoints=npoints)
             fitter.go(guess)
 
             res=fitter.get_result()
@@ -2394,10 +2309,11 @@ class MaxRunner(object):
     """
     def __init__(self, obs, model, max_pars, guesser, prior=None,
                  intpars=None,
-                 use_logpars=False):
+                 use_logpars=False, use_round_T=False):
 
         self.obs=obs
         self.intpars=intpars
+        self.use_round_T=use_round_T
 
         self.max_pars=max_pars
         self.method=max_pars['method']
@@ -2440,6 +2356,7 @@ class MaxRunner(object):
                             self.model,
                             lm_pars=self.send_pars,
                             use_logpars=self.use_logpars,
+                            use_round_T=self.use_round_T,
                             npoints=npoints,
                             prior=self.prior)
 

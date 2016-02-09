@@ -82,6 +82,8 @@ class FitterBase(object):
         self.margsky = keys.get('margsky', False)
         self.use_logpars=keys.get('use_logpars',False)
 
+        self.use_round_T=keys.get('use_round_T',False)
+
         # psf fitters might not have this set to 1
         self.nsub=keys.get('nsub',1)
         self.npoints=keys.get('npoints',None)
@@ -1428,6 +1430,10 @@ class MaxSimple(FitterBase):
             pars[0:5] = pars_in[0:5]
             pars[5] = pars_in[5+band]
 
+        if self.use_round_T:
+            from .moments import get_T
+            pars[4] = get_T(pars[4], pars[2], pars[3])
+
         return pars
 
     def neglnprob(self, pars):
@@ -1660,6 +1666,27 @@ class LMSimple(FitterBase):
 
 
         return pars
+
+    def get_T_s2n(self):
+        """
+        Get the s/n of T, dealing properly
+        with logarithmic variables
+        """
+        res=self.get_result()
+        T=res['pars'][4]
+        Terr=res['pars_err'][4]
+
+        if self.use_logpars:
+            # sigma(logT) = dT/T
+            # => s2n(T) = 1.0/Terr
+            T_s2n = 1.0/Terr
+        else:
+            if T==0.0 or Terr==0.0:
+                T_s2n=0.0
+            else:
+                T_s2n = T/Terr
+
+        return T_s2n
 
 
     def _calc_fdiff(self, pars, more=False):
