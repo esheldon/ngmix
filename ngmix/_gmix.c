@@ -505,7 +505,11 @@ static int gmix_fill_cm(struct PyGMixCM*self,
     col=pars[1];
     g1=pars[2];
     g2=pars[3];
-    T=pars[4] * self->Tfactor;
+    if (pars[4] == 0.0) {
+      T = 0.0;
+    } else {
+      T=pars[4] * self->Tfactor;
+    }
     counts=pars[5];
 
     ifracdev = 1.0-self->fracdev;
