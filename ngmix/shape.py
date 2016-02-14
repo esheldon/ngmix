@@ -74,9 +74,24 @@ class Shape(object):
         g1,g2 = shear_reduced(self.g1,self.g2, s1, s2)
         return Shape(g1, g2)
 
-    def rotate(self, theta_radians):
+    def get_rotated(self, theta_radians):
         """
         Rotate the shape by the input angle
+        """
+        twotheta = 2.0*theta_radians
+
+        cos2angle = numpy.cos(twotheta)
+        sin2angle = numpy.sin(twotheta)
+        g1rot =  self.g1*cos2angle + self.g2*sin2angle
+        g2rot = -self.g1*sin2angle + self.g2*cos2angle
+
+        return Shape(g1rot, g2rot)
+
+    def rotate(self, theta_radians):
+        """
+        In-place rotation of the shape by the input angle
+
+        deprecated, use get_rotated()
         """
         twotheta = 2.0*theta_radians
 
