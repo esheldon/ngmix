@@ -58,9 +58,17 @@ class TFluxGuesser(GuesserBase):
         self.fluxes=fluxes
         self.prior=prior
         self.scaling=scaling
+        
+        if T <= 0.0:
+            self.log_T = log(1.0e-10)
+        else:
+            self.log_T = log(T)
 
-        self.log_T = log(T)
-        self.log_fluxes = log(fluxes)
+        lfluxes = fluxes.copy()
+        w, = numpy.where(fluxes < 0.0)
+        if w.size > 0:
+            lfluxes[w[:]] = 1.0e-10
+        self.log_fluxes = log(lfluxes)
 
     def __call__(self, n=1, **keys):
         """
@@ -120,8 +128,16 @@ class TFluxAndPriorGuesser(GuesserBase):
         self.prior=prior
         self.scaling=scaling
 
-        self.log_T = log(T)
-        self.log_fluxes = log(fluxes)
+        if T <= 0.0:
+            self.log_T = log(1.0e-10)
+        else:
+            self.log_T = log(T)
+
+        lfluxes = fluxes.copy()
+        w, = numpy.where(fluxes < 0.0)
+        if w.size > 0:
+            lfluxes[w[:]] = 1.0e-10
+        self.log_fluxes = log(lfluxes)
 
     def __call__(self, n=1, **keys):
         """
