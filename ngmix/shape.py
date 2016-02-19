@@ -74,6 +74,12 @@ class Shape(object):
         g1,g2 = shear_reduced(self.g1,self.g2, s1, s2)
         return Shape(g1, g2)
 
+    def __neg__(self):
+        """
+        get Shape(-g1, -g2)
+        """
+        return Shape(-self.g1, -self.g2)
+
     def get_rotated(self, theta_radians):
         """
         Rotate the shape by the input angle
