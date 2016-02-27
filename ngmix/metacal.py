@@ -146,6 +146,7 @@ class Metacal(object):
             simular for 1p_psf etc.
         """
         types=kw.get('types',METACAL_TYPES)
+        shear_psf=kw.get('shear_psf',False)
 
         shdict={}
 
@@ -168,7 +169,7 @@ class Metacal(object):
             sh=shdict[type]
 
             if 'psf' in type:
-                obs = self.get_obs_psfshear(sh)
+                obs = self.get_obs_psfshear(sh, shear_psf=shear_psf)
             else:
                 obs = self.get_obs_galshear(sh)
 
@@ -177,7 +178,7 @@ class Metacal(object):
         return odict
 
 
-    def get_obs_galshear(self, shear, get_unsheared=False):
+    def get_obs_galshear(self, shear, get_unsheared=False, shear_psf=False):
         """
         This is the case where we shear the image, for calculating R
 
@@ -191,7 +192,13 @@ class Metacal(object):
             sheared
         """
 
-        newpsf_image, newpsf_obj = self.get_target_psf(shear, 'gal_shear')
+        if shear_psf:
+            type='shear_both'
+        else:
+            type='gal_shear'
+        print("shear type:",type)
+
+        newpsf_image, newpsf_obj = self.get_target_psf(shear, type)
         sheared_image = self.get_target_image(newpsf_obj, shear=shear)
 
         newobs = self._make_obs(sheared_image, newpsf_image)
@@ -259,7 +266,7 @@ class Metacal(object):
 
         psf_grown = self._get_dilated_psf(shear)
 
-        if type=='psf_shear':
+        if type=='psf_shear' or type=='both_shear':
             # eric remarked that he thought we should shear the pixelized version
             psf_grown = psf_grown.shear(g1=shear.g1, g2=shear.g2)
 
