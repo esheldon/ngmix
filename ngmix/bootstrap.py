@@ -1765,9 +1765,12 @@ class CompositeBootstrapper(Bootstrapper):
             print('    psf vs exp prob: %.6e' % prob_psf)
             do_psf = False
         except:
-            print('    exp fit failed - resorting to PSF model')
-            do_psf = True
-            pass
+            if pars.get('resort_to_psf_on_exp_failure',False):
+                print('    exp fit failed - resorting to PSF model')
+                do_psf = True
+                pass
+            else:
+                raise
             
         if do_psf or (pars.get('use_bic_test_for_simp_models',False) and prob_psf > pars.get('psf_prob_thresh',1.1)):
             print("    fitting psf only")
@@ -1812,18 +1815,11 @@ class CompositeBootstrapper(Bootstrapper):
             self.max_fitter._result = res
             
         elif pars.get('use_bic_test_for_simp_models',False) and prob_psf > pars.get('exp_prob_thresh',1.1):
-            if True:
-                print('    fitting exp only')
-                fracdev = numpy.array(0.0)
-                fracdev_clipped = fracdev
-                TdByTe = numpy.array(0.0)
-            else:
-                print('    fitting exp+psf only')
-                # exp + psf model
-                fracdev = nump.array(prob_psf)
-                fracdev_clipped = fracdev
-                TdByTe = numpy.array(0.0)
-                
+            print('    fitting exp only')
+            fracdev = numpy.array(0.0)
+            fracdev_clipped = fracdev
+            TdByTe = numpy.array(0.0)
+            
             guesser=self._get_max_guesser(guess=guess, prior=prior, widths=guess_widths)
             
             mess='        fracpsf: %.3f clipped: %.3f'
