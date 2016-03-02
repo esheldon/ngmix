@@ -1447,9 +1447,13 @@ _gmix_npars_dict={GMIX_GAUSS:6,
                   GMIX_GAUSSMOM: 6}
 
 _gmix_ngauss_dict={GMIX_GAUSS:1,
+                   'gauss':1,
                    GMIX_TURB:3,
+                   'turb':3,
                    GMIX_EXP:6,
+                   'exp':6,
                    GMIX_DEV:10,
+                   'dev':10,
 
                    GMIX_FRACDEV:16,
 

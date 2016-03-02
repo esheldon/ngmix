@@ -191,7 +191,9 @@ class Metacal(object):
             sheared
         """
 
-        newpsf_image, newpsf_obj = self.get_target_psf(shear, 'gal_shear')
+        type='gal_shear'
+
+        newpsf_image, newpsf_obj = self.get_target_psf(shear, type)
         sheared_image = self.get_target_image(newpsf_obj, shear=shear)
 
         newobs = self._make_obs(sheared_image, newpsf_image)
