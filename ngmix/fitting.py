@@ -807,6 +807,256 @@ class TemplateFluxFitter(FitterBase):
 
         return self._npix
 
+
+class MultiBandTemplateFluxFitter(FitterBase):
+    """
+    We fix the center, so this is linear.  Just cross-correlations
+    between model and data.
+
+    The center of the jacobian(s) must point to a common place on the sky, and
+    if the center is input (to reset the gmix centers),) it is relative to that
+    position
+
+    parameters
+    -----------
+    obs: MultibandObsList
+        The observations should all have a gmix set and at least one obs per band must be provided.
+    cen: 2-element sequence, optional
+        The center in sky coordinates, relative to the jacobian center(s).  If
+        not sent, the gmix (or psf gmix) object(s) in the observation(s) should
+        be set to the wanted center.
+    normalize_psf: True or False
+        if True, then normalize PSF gmix to flux of unity, otherwise use input
+        normalization.
+    do_psf: If set to True, use the PSF gmix from each observation to build the template.
+
+    """
+    def __init__(self, mb_obs_list, **keys):
+
+        self.keys=keys
+        self.do_psf=keys.get('do_psf',False)
+        self.cen=keys.get('cen',None)
+        
+        self.normalize_psf = keys.get('normalize_psf',True)
+        
+        if self.cen is None:
+            self.cen_was_sent=False
+        else:
+            self.cen_was_sent=True
+
+        self.set_obs(mb_obs_list)
+
+        self.model_name='template'
+        self.npars=self.nband
+        
+        self._set_totpix()
+
+    def _go_band(self,band):
+        cen=self.cen
+        obs_list = self.obs[band]
+        nobs = len(obs_list)
+        
+        xcorr_sum=0.0
+        msq_sum=0.0
+        chi2=0.0
+
+        for ipass in [1,2]:
+            for iobs in xrange(nobs):
+                obs=self.obs[band][iobs]
+                gm = self.mb_gmix_list[band][iobs]
+
+                im=obs.image
+                wt=obs.weight
+                j=obs.jacobian
+
+                if ipass==1:
+                    if self.normalize_psf:
+                        gm.set_psum(1.0)
+                        psf_norm = 1.0
+                    else:
+                        psf_norm = gm.get_psum()
+                    model=gm.make_image(im.shape, jacobian=j)
+                    xcorr_sum += (model*im*wt).sum()
+                    msq_sum += (model*model*wt).sum()
+                else:
+                    gm.set_psum(flux*psf_norm)
+                    model=gm.make_image(im.shape, jacobian=j)
+                    chi2 +=( (model-im)**2 *wt ).sum()
+            if ipass==1:
+                flux = xcorr_sum/msq_sum
+
+        flags=0
+        arg=chi2/msq_sum/(self.get_band_effective_npix(band)-1) 
+        if arg >= 0.0:
+            flux_err = sqrt(arg)
+        else:
+            flags=BAD_VAR
+            flux_err=9999.0
+                        
+        res = {'flags':flags,
+               'chi2':chi2,
+               'flux':flux,
+               'flux_err':flux_err,
+               'xcorr_sum':xcorr_sum,
+               'msq_sum':msq_sum,
+               'dof':self.get_band_effective_npix(band)-1.0}
+        
+        return res
+
+    def go(self):
+        """
+        calculate the flux using zero-lag cross-correlation
+        """
+        flags = 0
+        
+        band_flux = numpy.zeros(self.npars)
+        band_flux_err = numpy.zeros(self.npars)
+        band_res = []
+        
+        xcorr_sum = 0.0
+        msq_sum = 0.0
+        chi2 = 0.0
+        dof = 0.0
+        
+        for band in xrange(len(self.obs)):                        
+            res = self._go_band(band)
+            band_res.append(res)            
+            band_flux[band] = res['flux']            
+            band_flux_err[band] = res['flux_err']
+            flags |= res['flags']
+            
+            chi2 += res['chi2']
+            dof += res['dof']
+            xcorr_sum += res['xcorr_sum']
+            msq_sum += res['msq_sum']
+            
+        chi2per=9999.0
+        if dof > 0:
+            chi2per=chi2/dof
+        
+        if msq_sum > 0:
+            s2n=xcorr_sum/sqrt(msq_sum)
+        else:
+            s2n=0.0
+        
+        pars_cov = numpy.zeros((self.npars,self.npars))
+        for i in xrange(self.npars):
+            pars_cov[i,i] = band_flux_err[i]**2
+            
+        res = {'model':self.model_name,
+               'flags':flags,
+               'chi2per':chi2per,
+               'dof':dof,
+               'flux':band_flux,
+               'flux_err':band_flux_err,
+               'pars':band_flux,
+               'pars_cov':pars_cov,
+               'pars_err':band_flux_err}
+        res['lnprob'] = -0.5*chi2
+        res['npix'] = dof + self.npars
+        res['s2n_w'] = s2n
+        res['npars'] = self.npars
+        
+        self._result = res
+
+    def get_dof(self):
+        """
+        Effective def based on effective number of pixels
+        """
+        npix=self.get_effective_npix()
+        dof = npix-self.npars
+        if dof <= 0:
+            dof = 1.e-6
+        return dof
+
+    def set_obs(self, obs_in):
+        """
+        Input should be a MultiBandObsList
+        """
+        
+        self.obs = get_mb_obs(obs_in)
+        self.nband=len(self.obs)
+        
+        cen=self.cen
+        mb_gmix_list = []
+        for band,obs_list in enumerate(self.obs):
+            gmix_list = []
+            for obs in obs_list:
+                # these return copies, ok to modify
+                if self.do_psf:
+                    gmix=obs.get_psf_gmix()
+                else:
+                    gmix=obs.get_gmix()
+
+                if self.cen_was_sent:
+                    gmix.set_cen(cen[0], cen[1])
+                    
+                gmix_list.append(gmix)
+            mb_gmix_list.append(gmix_list)
+        
+        self.mb_gmix_list = mb_gmix_list
+
+    def _set_totpix(self):
+        """
+        Make sure the data are consistent.
+        """
+
+        totpix=0
+        for band,obs_list in enumerate(self.obs):
+            for obs in obs_list:
+                shape=obs.image.shape
+                totpix += shape[0]*shape[1]
+                
+        self.totpix = totpix
+
+    def _get_eff_npix(self):
+        band_npix = []
+        npix=0
+        for band,obs_list in enumerate(self.obs):
+            bnpix = 0
+            for obs in obs_list:
+                wt=obs.weight                
+                w=where(wt > 0)
+
+                npix += w[0].size
+                bnpix += w[0].size
+            band_npix.append(bnpix)
+
+        self.eff_npix = npix
+        self.band_eff_npix = band_npix        
+
+    def get_effective_npix(self):
+        """
+        We don't use all pixels, only those with weight > 0
+        """
+        if not hasattr(self, 'eff_npix'):
+            self._get_eff_npix()
+
+        return self.eff_npix
+
+    def get_band_effective_npix(self,band):
+        """
+        We don't use all pixels, only those with weight > 0
+        """
+        if not hasattr(self, 'band_eff_npix'):
+            self._get_eff_npix()
+
+        return self.band_eff_npix[band]
+
+    def get_npix(self):
+        """
+        just get the total number of pixels in all images
+        """
+        if not hasattr(self, '_npix'):
+            npix=0
+            for band,obs_list in enumerate(self.obs):
+                for obs in obs_list:
+                    npix += obs.image.size
+
+            self._npix=npix
+
+        return self._npix
+
 class FracdevFitterMax(FitterBase):
     def __init__(self, obs, exp_pars, dev_pars, **keys):
         """
