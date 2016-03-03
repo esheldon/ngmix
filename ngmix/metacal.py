@@ -12,6 +12,7 @@ from numpy import median, where
 from .jacobian import Jacobian, UnitJacobian
 from .observation import Observation, ObsList, MultiBandObsList
 from .shape import Shape
+from . import simobs
 
 try:
     import galsim
@@ -25,7 +26,7 @@ METACAL_TYPES = [
     '1p_psf','1m_psf','2p_psf','2m_psf',
 ]
 
-def get_all_metacal(obs, step=0.01, **kw):
+def get_all_metacal(obs, step=0.01, fixnoise=False, **kw):
     """
     Get all combinations of metacal images in a dict
 
@@ -35,6 +36,11 @@ def get_all_metacal(obs, step=0.01, **kw):
         The values in the dict correspond to these
     step: float
         The shear step value to use for metacal
+    fixnoise: bool
+        If True, add a compensating noise field to cancel the correlated noise
+        component.
+    **kw:
+        other keywords for metacal
 
     returns
     -------
@@ -47,31 +53,88 @@ def get_all_metacal(obs, step=0.01, **kw):
         simular for 1p_psf etc.
     """
 
-    if isinstance(obs, Observation):
-
-        use_psf_model = kw.get('use_psf_model',False)
-        if use_psf_model:
-            assert 'shape' in kw,"shape keyword missing"
-
-            shape = kw['shape']
-            print("    Using psf model with shape",shape)
-            m=MetacalAnalyticPSF(obs, shape, **kw)
-
-        else:
-            m=Metacal(obs, **kw)
-
-        odict=m.get_all(step, **kw)
-
-
-    elif isinstance(obs, MultiBandObsList):
-        odict=_make_metacal_mb_obs_list_dict(obs, step, **kw)
-    elif isinstance(obs, ObsList):
-        odict=_make_metacal_obs_list_dict(obs, step, **kw)
+    if fixnoise:
+        print("    Doing fixnoise")
+        odict= _get_all_metacal_fixnoise(obs, step=step, **kw)
     else:
-        raise ValueError("obs must be Observation, ObsList, "
-                         "or MultiBandObsList")
+        if isinstance(obs, Observation):
+            m=Metacal(obs, **kw)
+            odict=m.get_all(step, **kw)
+        elif isinstance(obs, MultiBandObsList):
+            odict=_make_metacal_mb_obs_list_dict(obs, step, **kw)
+        elif isinstance(obs, ObsList):
+            odict=_make_metacal_obs_list_dict(obs, step, **kw)
+        else:
+            raise ValueError("obs must be Observation, ObsList, "
+                             "or MultiBandObsList")
 
     return odict
+
+def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
+    """
+    internal routine
+
+    Run get_all_metacal to get all combinations of metacal images in a single
+    dict.  Add a sheared noise field to cancel the correlated noise
+
+    parameters
+    ----------
+    obs: Observation, ObsList, or MultiBandObsList
+        The values in the dict correspond to these
+    step: float
+        The shear step value to use for metacal
+    **kw:
+        other keywords for metacal
+
+    returns
+    -------
+    A dictionary with all the relevant metacaled images
+        dict keys:
+            1p -> ( shear, 0)
+            1m -> (-shear, 0)
+            2p -> ( 0, shear)
+            2m -> ( 0, -shear)
+        simular for 1p_psf etc.
+    """
+
+    # Using None for the model means we get just noise
+    noise_obs = simobs.simulate_obs(None, obs)
+
+    obsdict       = get_all_metacal(obs, step=step, **kw)
+    noise_obsdict = get_all_metacal(noise_obs, step=step, **kw)
+
+    for ipairs in [('1p','1m'),
+                   ('1m','1p'),
+                   ('2p','2m'),
+                   ('2m','2p'),
+                   ('1p_psf','1m_psf'),
+                   ('1m_psf','1p_psf'),
+                   ('2p_psf','2m_psf'),
+                   ('2m_psf','2p_psf')]:
+
+
+        mk=ipairs[0]
+        nk=ipairs[1]
+
+        imbobs = obsdict[mk]
+        nmbobs = noise_obsdict[nk]
+
+        for imb in xrange(len(imbobs)):
+            iolist=imbobs[imb]
+            nolist=nmbobs[imb]
+
+            for iobs in xrange(len(iolist)):
+
+                obs  = iolist[iobs]
+                nobs = nolist[iobs]
+
+                im  = obs.image
+                nim = nobs.image
+
+                obs.image = im + nim
+                obs.weight = 0.5*obs.weight
+
+    return obsdict
 
 class Metacal(object):
     """

@@ -84,11 +84,9 @@ def _simulate_obs(gmix, obs, **kw):
 
     add_noise = kw.get('add_noise',True)
     if add_noise:
-        #print("    adding noise")
         sim_image, noise_image = _get_noisy_image(obs, sim_image)
     else:
         noise_image=None
-        #print("    not adding noise")
 
     if not obs.has_psf():
         psf=None
@@ -111,7 +109,6 @@ def _get_simulated_image(gmix, obs, **kw):
 
     convolve_psf=kw.get('convolve_psf',True)
     if convolve_psf:
-        #print("    convolving psf")
         psf_gmix = _get_psf_gmix(obs)
 
         gm = gmix.convolve(psf_gmix)
