@@ -27,6 +27,8 @@ from .gexceptions import GMixRangeError, BootPSFFailure, BootGalFailure
 from . import roundify
 from . import metacal
 
+from copy import deepcopy
+
 BOOT_S2N_LOW = 2**0
 BOOT_R2_LOW = 2**1
 BOOT_R4_LOW = 2**2
@@ -627,19 +629,42 @@ class Bootstrapper(object):
 
         return runner
 
-    def replace_masked_pixels(self, method='best-fit'):
+    def replace_masked_pixels(self,
+                              inplace=False,
+                              method='best-fit',
+                              fitter=None):
         """
         replaced masked pixels
 
+        If a modification is made, the original image is stored for each
+        Observation as .image_orig
+
+        The original mb_obs_list is always in self.mb_obs_list_old,
+        which is just a ref if inplace=True
+
         parameters
         ----------
+        inplace: bool
+            If True, modify the data in place.  Default False; a full
+            copy is made.
         method: string, optional
             Method for replacement.  Supported methods are 'best-fit'.
             Default is 'best-fit'
+        fitter: a fitter from fitters.py
+            If not sent, the max fitter from self is used.
         """
 
+        self.mb_obs_list_old = self.mb_obs_list
+
+        if fitter is None:
+            fitter=self.get_max_fitter()
+
+        self.mb_obs_list=replace_masked_pixels(self.mb_obs_list,
+                                               inplace=inplace,
+                                               method=method,
+                                               fitter=fitter)
+        '''
         assert method=='best-fit',"only best-fit replacement is supported"
-        fitter=self.get_max_fitter()
 
         mbo = self.mb_obs_list
         nband = len(mbo)
@@ -673,7 +698,7 @@ class Bootstrapper(object):
                             images.multiview(imdiff,title='mod-orig max diff %g' % maxdiff)
                             if raw_input('hit a key: ') == 'q':
                                 stop
-
+        '''
     def fit_max(self,
                 gal_model,
                 pars,
@@ -2631,6 +2656,63 @@ def get_em_ngauss(name):
 def get_coellip_ngauss(name):
     ngauss=int( name[7:] )
     return ngauss
+
+
+def replace_masked_pixels(mb_obs_list,
+                          inplace=False,
+                          method='best-fit',
+                          fitter=None):
+    """
+    replaced masked pixels
+
+    The original image is stored for each Observation as .image_orig
+
+    parameters
+    ----------
+    mb_obs_list: MultiBandObsList
+        The original observations
+    inplace: bool
+        If True, modify the data in place.  Default False; a full
+        copy is made.
+    method: string, optional
+        Method for replacement.  Supported methods are 'best-fit'.
+        Default is 'best-fit'
+    fitter:
+        when method=='best-fit', a fitter from fitting.py
+    """
+
+    assert method=='best-fit',"only best-fit replacement is supported"
+    assert fitter is not None,"fitter required"
+
+    if inplace:
+        mbo = mb_obs_list
+    else:
+        mbo = deepcopy( mb_obs_list )
+
+    nband = len(mbo)
+
+    for band in xrange(nband):
+        olist = mbo[band]
+        nobs = len(olist)
+        for iobs,obs in enumerate(olist):
+
+            bmask = obs.bmask
+            if bmask is not None:
+                w=where(bmask != 0)
+
+                if w[0].size > 0:
+                    print("    replacing %d/%d masked pixels" % (w[0].size,bmask.size))
+                    obs.image_orig = obs.image.copy()
+                    gm = fitter.get_convolved_gmix(band=band, obsnum=iobs)
+
+                    im = obs.image
+                    model_image = gm.make_image(im.shape, jacobian=obs.jacobian)
+
+                    im[w] = model_image[w]
+                else:
+                    obs.image_orig=None
+
+    return mbo
 
 
 _em2_fguess =array([0.5793612389470884,1.621860687127999])
