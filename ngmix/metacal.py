@@ -1,9 +1,22 @@
 """
 class to create manipulated images for use in metacalibration
 
-based off reading through Eric Huffs code, but it has departed
-significantly
+based off reading through Eric Huffs code; it has departed
+significantly in detail but not in essence
 
+conversion to wcs
+
+#??
+wcs = galsim.JacobianWCS(jacobian.dvdcol,
+                         jacobian.dvdrow,
+                         jacobian.dudcol, 
+                         jacobian.dudrow)
+
+orig_image = galsim.Image(array, wcs=wcs)
+newim = galsim.ImageD(self.im_dims[1],
+                      self.im_dims[0],
+                      wcs=orig_image.wcs)
+imconv.drawImage(image=newim, method='no_pixel')
 """
 from __future__ import print_function
 import numpy

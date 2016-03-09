@@ -1511,7 +1511,11 @@ class GMixND(object):
     Gaussian mixture in arbitrary dimensions.  A bit awkward
     in dim=1 e.g. becuase assumes means are [ndim,npars]
     """
-    def __init__(self, weights=None, means=None, covars=None, file=None):
+    def __init__(self, weights=None, means=None, covars=None, file=None, rng=None):
+
+        if rng is None:
+            rng=numpy.random.RandomState()
+        self.rng=rng
 
         if file is not None:
             self.load_mixture(file)
@@ -1693,7 +1697,8 @@ class GMixND(object):
         gmm=GMM(n_components=self.ngauss,
                 n_iter=10000,
                 min_covar=1.0e-12,
-                covariance_type='full')
+                covariance_type='full',
+                random_state=self.rng)
         gmm.means_ = self.means.copy()
         gmm.covars_ = self.covars.copy()
         gmm.weights_ = self.weights.copy()

@@ -20,7 +20,6 @@ import math
 import numpy
 from numpy import where, array, exp, log, log10, sqrt, cos, sin, zeros, ones, diag
 from numpy import newaxis, pi
-from numpy.random import random as randu
 from numpy.random import randn
 
 from . import gmix
@@ -34,12 +33,20 @@ from . import shape
 LOWVAL=-numpy.inf
 BIGVAL =9999.0e47
 
-class GPriorBase(object):
+class PriorBase(object):
+    def __init__(self, rng=None):
+        if rng is None:
+            rng=numpy.random.RandomState()
+        self.rng=rng
+
+class GPriorBase(PriorBase):
     """
     This is the base class.  You need to over-ride a few of
     the functions, see below
     """
-    def __init__(self, pars):
+    def __init__(self, pars, rng=None):
+        PriorBase.__init__(self, rng=rng)
+
         self.pars = array(pars, dtype='f8')
 
         # sub-class may want to over-ride this, see GPriorM
@@ -373,6 +380,8 @@ class GPriorBase(object):
             Number to generate
         """
 
+        rng=self.rng
+
         maxval2d = self.get_prob_scalar2d(0.0,0.0)
         g1,g2=numpy.zeros(nrand),numpy.zeros(nrand)
 
@@ -381,12 +390,12 @@ class GPriorBase(object):
         while ngood < nrand:
 
             # generate on cube [-1,1,h]
-            g1rand=srandu(nleft)
-            g2rand=srandu(nleft)
+            g1rand=srandu(nleft, rng=rng)
+            g2rand=srandu(nleft, rng=rng)
 
             # a bit of padding since we are modifying the distribution
             fac=1.3
-            h = fac*maxval2d*randu(nleft)
+            h = fac*maxval2d*rng.uniform(size=nleft)
 
             pjvals = self.get_pj(g1rand,g2rand,s1,s2)
             
@@ -413,6 +422,8 @@ class GPriorBase(object):
             Number to generate
         """
 
+        rng=self.rng
+
         if not hasattr(self,'maxval1d'):
             self.set_maxval1d(maxguess=maxguess)
 
@@ -429,10 +440,10 @@ class GPriorBase(object):
         while ngood < nrand:
 
             # generate total g in [0,gmax)
-            grand = gmax*randu(nleft)
+            grand = gmax*rng.uniform(size=nleft)
 
             # now the height from [0,maxval)
-            h = maxval1d*randu(nleft)
+            h = maxval1d*rng.uniform(size=nleft)
 
             pvals = self.get_prob_array1d(grand)
 
@@ -456,6 +467,8 @@ class GPriorBase(object):
             Number to generate
         """
 
+        rng=self.rng
+
         if nrand is None:
             nrand=1
             is_scalar=True
@@ -463,7 +476,7 @@ class GPriorBase(object):
             is_scalar=False
 
         grand=self.sample1d(nrand,maxguess=maxguess)
-        theta = randu(nrand)*2*numpy.pi
+        theta = rng.uniform(size=nrand)*2*numpy.pi
         twotheta = 2*theta
         g1rand = grand*numpy.cos(twotheta)
         g2rand = grand*numpy.sin(twotheta)
@@ -485,19 +498,21 @@ class GPriorBase(object):
             Number to generate
         """
 
+        rng=self.rng
+
         maxval2d = self.get_prob_scalar2d(0.0,0.0)
         g1,g2=numpy.zeros(nrand),numpy.zeros(nrand)
 
         ngood=0
         nleft=nrand
         while ngood < nrand:
-            
+
             # generate on cube [-1,1,h]
-            g1rand=srandu(nleft)
-            g2rand=srandu(nleft)
+            g1rand=srandu(nleft, rng=rng)
+            g2rand=srandu(nleft, rng=rng)
 
             # a bit of padding since we are modifying the distribution
-            h = maxval2d*randu(nleft)
+            h = maxval2d*rng.uniform(size=nleft)
 
             vals = self.get_prob_array2d(g1rand,g2rand)
 
@@ -507,7 +522,7 @@ class GPriorBase(object):
                 g2[ngood:ngood+w.size] = g2rand[w]
                 ngood += w.size
                 nleft -= w.size
-   
+
         return g1,g2
 
 
@@ -1373,10 +1388,12 @@ class GPriorBA(GPriorBase):
     automatically has max lnprob 0 and max prob 1
     """
 
-    def __init__(self, sigma=0.3, A=1.0):
+    def __init__(self, sigma=0.3, A=1.0, rng=None):
         """
-        pars are scalar gsigma from B&A 
+        pars are scalar gsigma from B&A
         """
+        PriorBase.__init__(self, rng=rng)
+
         self.set_pars([A,sigma])
         self.gmax=1.0
 
@@ -1387,7 +1404,7 @@ class GPriorBA(GPriorBase):
     def sample1d(self, nrand, maxguess=None):
 
         if maxguess is None:
-            maxguess= self.sigma + 0.0001*srandu(),
+            maxguess= self.sigma + 0.0001*srandu(rng=self.rng)
 
         return super(GPriorBA,self).sample1d(nrand, maxguess=maxguess)
 
@@ -1782,8 +1799,8 @@ class GPriorBA(GPriorBase):
 
         guess=zeros( (n, 2) )
 
-        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n))
-        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n))
+        guess[:,0] = cen[0]*( 1.0 + 0.2*srandu(n,rng=self.rng) )
+        guess[:,1] = cen[1]*( 1.0 + 0.2*srandu(n,rng=self.rng) )
 
         if is_scalar:
             guess=guess[0,:]
@@ -1831,16 +1848,16 @@ def _gprior1d_exp_scalar(A, a, g0sq, gmax, g, gsq, output):
 
 
 
-class FlatPriorBase(object):
+class FlatPriorBase(PriorBase):
     def sample(self, n=None):
-        from numpy.random import random as randu
         if n is None:
             is_scalar=True
             n=1
         else:
             is_scalar=False
 
-        rvals = self.minval + (self.maxval-self.minval)*randu(n)
+        rvals = self.rng.uniform(size=n)
+        rvals = self.minval + (self.maxval-self.minval)*rvals
 
         if is_scalar:
             rvals=rvals[0]
@@ -1848,7 +1865,9 @@ class FlatPriorBase(object):
         return rvals
 
 class FlatPrior(FlatPriorBase):
-    def __init__(self, minval, maxval):
+    def __init__(self, minval, maxval, rng=None):
+        PriorBase.__init__(self, rng=rng)
+
         self.minval=minval
         self.maxval=maxval
 
@@ -1866,14 +1885,15 @@ class FlatPrior(FlatPriorBase):
                                  "[%s,%s]" % (val, self.minval, self.maxval))
         return retval
 
-class TwoSidedErf(object):
+class TwoSidedErf(PriorBase):
     """
     A two-sided error function that evaluates to 1 in the middle, zero at
     extremes.
 
     A limitation seems to be the accuracy of the erf....
     """
-    def __init__(self, minval, width_at_min, maxval, width_at_max):
+    def __init__(self, minval, width_at_min, maxval, width_at_max, rng=None):
+        PriorBase.__init__(self, rng=rng)
 
         self.minval=minval
         self.width_at_min=width_at_min
@@ -1948,6 +1968,9 @@ class TwoSidedErf(object):
         draw random samples; not perfect, only goes from
         -5,5 sigma past each side
         """
+
+        rng=self.rng
+
         if nrand is None:
             nrand=1
             is_scalar=True
@@ -1962,10 +1985,10 @@ class TwoSidedErf(object):
         ngood=0
         nleft=nrand
         while ngood < nrand:
-            randx=numpy.random.uniform(low=xmin, high=xmax, size=nleft)
+            randx=rng.uniform(low=xmin, high=xmax, size=nleft)
 
             pvals=self.get_prob_array(randx)
-            randy=numpy.random.uniform(size=nleft)
+            randy=rng.uniform(size=nleft)
 
             w,=where(randy < pvals)
             if w.size > 0:
@@ -1982,7 +2005,8 @@ class GPriorGreat3Exp(GPriorBase):
     """
     This doesn't fit very well
     """
-    def __init__(self, pars=None, gmax=1.0):
+    def __init__(self, pars=None, gmax=1.0, rng=None):
+        PriorBase.__init__(self, rng=rng)
 
         self.gmax=float(gmax)
 
@@ -2109,6 +2133,7 @@ class GPriorGreat3Exp(GPriorBase):
         return prob
 
     def _get_guess(self, num, n=None):
+        rng=self.rng
         Aguess=1.3*num*(self.xdata[1]-self.xdata[0])
         cen=[Aguess, 1.64042, 0.0554674]
 
@@ -2117,16 +2142,17 @@ class GPriorGreat3Exp(GPriorBase):
         else:
             guess=zeros( (n, self.npars) )
 
-            guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n))
-            guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n))
-            guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n))
+            guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n,rng=rng))
+            guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n,rng=rng))
+            guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n,rng=rng))
 
             return guess
 
 class GPriorGreatDES(GPriorGreat3Exp):
     """
     """
-    def __init__(self, pars=None, gmax=1.0):
+    def __init__(self, pars=None, gmax=1.0, rng=None):
+        PriorBase.__init__(self, rng=rng)
 
         self.gmax=float(gmax)
 
@@ -2177,6 +2203,8 @@ class GPriorGreatDES(GPriorGreat3Exp):
         return prob
 
     def _get_guess(self, num, n=None):
+        rng=self.rng
+
         Aguess=1.3*num*(self.xdata[1]-self.xdata[0])
         cen=[Aguess, 1.64042, 0.0554674, 0.5]
 
@@ -2188,11 +2216,11 @@ class GPriorGreatDES(GPriorGreat3Exp):
 
         guess=zeros( (n, self.npars) )
 
-        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n))
-        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n))
-        guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n))
-        guess[:,3] = cen[3]*(1.0 + 0.2*srandu(n))
-        #guess[:,4] = cen[4]*(1.0 + 0.2*srandu(n))
+        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n,rng=rng))
+        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n,rng=rng))
+        guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n,rng=rng))
+        guess[:,3] = cen[3]*(1.0 + 0.2*srandu(n,rng=rng))
+        #guess[:,4] = cen[4]*(1.0 + 0.2*srandu(n,rng=rng))
 
         if is_scalar:
             guess=guess[0,:]
@@ -2201,12 +2229,14 @@ class GPriorGreatDES(GPriorGreat3Exp):
 class GPriorGreatDES2(GPriorGreat3Exp):
     """
     """
-    def __init__(self, pars=None):
+    def __init__(self, pars=None, rng=None):
         """
         [A, g0, gmax, gsigma]
 
         From Miller et al. multiplied by an erf
         """
+        PriorBase.__init__(self, rng=rng)
+
         self.npars=4
         if pars is not None:
             self.set_pars(pars)
@@ -2247,6 +2277,9 @@ class GPriorGreatDES2(GPriorGreat3Exp):
 
 
     def _get_guess(self, num, n=None):
+
+        rng=self.rng
+
         Aguess=1.3*num*(self.xdata[1]-self.xdata[0])
         cen=[Aguess, 0.0793992, 0.706151, 0.124546]
 
@@ -2258,10 +2291,10 @@ class GPriorGreatDES2(GPriorGreat3Exp):
 
         guess=zeros( (n, self.npars) )
 
-        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n))
-        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n))
-        guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n))
-        guess[:,3] = cen[3]*(1.0 + 0.2*srandu(n))
+        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n,rng=rng))
+        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n,rng=rng))
+        guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n,rng=rng))
+        guess[:,3] = cen[3]*(1.0 + 0.2*srandu(n,rng=rng))
 
         if is_scalar:
             guess=guess[0,:]
@@ -2272,7 +2305,8 @@ class GPriorGreatDES2(GPriorGreat3Exp):
 class GPriorGreatDESNoExp(GPriorGreat3Exp):
     """
     """
-    def __init__(self, pars=None, gmax=1.0):
+    def __init__(self, pars=None, gmax=1.0, rng=None):
+        PriorBase.__init__(self, rng=rng)
 
         self.gmax=float(gmax)
 
@@ -2319,6 +2353,9 @@ class GPriorGreatDESNoExp(GPriorGreat3Exp):
         return prob
 
     def _get_guess(self, num, n=None):
+
+        rng=self.rng
+
         Aguess=1.3*num*(self.xdata[1]-self.xdata[0])
         cen=[Aguess, 0.0554674, 0.5]
 
@@ -2330,9 +2367,9 @@ class GPriorGreatDESNoExp(GPriorGreat3Exp):
 
         guess=zeros( (n, self.npars) )
 
-        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n))
-        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n))
-        guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n))
+        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n,rng=rng))
+        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n,rng=rng))
+        guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n,rng=rng))
 
         if is_scalar:
             guess=guess[0,:]
@@ -2394,12 +2431,15 @@ def make_gprior_cosmos_sersic(type='erf'):
 
 
 class GPriorM(GPriorBase):
-    def __init__(self, pars):
+    def __init__(self, pars, rng=None):
         """
         [A, a, g0, gmax]
 
         From Miller et al.
         """
+
+        PriorBase.__init__(self, rng=rng)
+
         self.pars=pars
 
         self.A    = pars[0]
@@ -2496,12 +2536,15 @@ class GPriorM(GPriorBase):
 
 
 class GPriorMErf(GPriorBase):
-    def __init__(self, pars=None):
+    def __init__(self, pars=None, rng=None):
         """
         [A, a, g0, gmax, gsigma]
 
         From Miller et al. multiplied by an erf
         """
+
+        PriorBase.__init__(self, rng=rng)
+
         self.npars=5
         if pars is not None:
             self.set_pars(pars)
@@ -2668,21 +2711,23 @@ class GPriorMErf(GPriorBase):
 
         guess=zeros( (n, self.npars) )
 
-        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n))
-        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n))
-        guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n))
-        guess[:,3] = cen[3]*(1.0 + 0.2*srandu(n))
-        guess[:,4] = cen[4]*(1.0 + 0.2*srandu(n))
+        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n,rng=rng))
+        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n,rng=rng))
+        guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n,rng=rng))
+        guess[:,3] = cen[3]*(1.0 + 0.2*srandu(n,rng=rng))
+        guess[:,4] = cen[4]*(1.0 + 0.2*srandu(n,rng=rng))
 
         if is_scalar:
             guess=guess[0,:]
         return guess
 
 class GPriorMErf2(GPriorMErf):
-    def __init__(self, pars=None):
+    def __init__(self, pars=None, rng=None):
         """
         [A, g0, gmax, gsigma]
         """
+        PriorBase.__init__(self, rng=rng)
+
         self.npars=4
         if pars is not None:
             self.set_pars(pars)
@@ -2745,6 +2790,8 @@ class GPriorMErf2(GPriorMErf):
         return model
 
     def _get_guess(self, num, n=None):
+        rng=self.rng
+
         Aguess=1.3*num*(self.xdata[1]-self.xdata[0])
         cen=[Aguess, 0.0793992, 0.706151, 0.124546]
 
@@ -2756,10 +2803,10 @@ class GPriorMErf2(GPriorMErf):
 
         guess=zeros( (n, self.npars) )
 
-        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n))
-        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n))
-        guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n))
-        guess[:,3] = cen[3]*(1.0 + 0.2*srandu(n))
+        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n,rng=rng))
+        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n,rng=rng))
+        guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n,rng=rng))
+        guess[:,3] = cen[3]*(1.0 + 0.2*srandu(n,rng=rng))
 
         if is_scalar:
             guess=guess[0,:]
@@ -2767,7 +2814,7 @@ class GPriorMErf2(GPriorMErf):
 
 
 
-class FlatEtaPrior(object):
+class FlatEtaPrior(PriorBase):
     def __init__(self):
         self.max_eta_sq = 9.0**2 + 9.0**2
 
@@ -2816,20 +2863,29 @@ class Normal(_gmix.Normal):
 
     C class defined get_lnprob_scalar(x) and get_prob_scalar(x)
     """
-    def __init__(self, cen, sigma):
+    def __init__(self, cen, sigma, rng=None):
         self.cen=cen
         self.sigma=sigma
         self.ndim=1
+
+        if rng is None:
+            rng=numpy.random.RandomState()
+        self.rng=rng
+
+
         super(Normal,self).__init__(cen, sigma)
 
-    def sample(self, *args):
+    def sample(self, size=None):
         """
         Get samples.  Send no args to get a scalar.
         """
-        rand=self.cen + self.sigma*numpy.random.randn(*args)
+        return self.rng.normal(loc=self.cen,
+                               scale=self.sigma,
+                               size=size)
+        #rand=self.cen + self.sigma*self.rng.randn(*args)
         return rand
 
-class LogNormal(object):
+class LogNormal(PriorBase):
     """
     Lognormal distribution
 
@@ -2858,7 +2914,8 @@ class LogNormal(object):
         Get the probability of x.  x can be an array
     """
 
-    def __init__(self, mean, sigma):
+    def __init__(self, mean, sigma, rng=None):
+        PriorBase.__init__(self, rng=rng)
 
         if mean <= 0:
             raise ValueError("mean %s is < 0" % mean)
@@ -2936,10 +2993,11 @@ class LogNormal(object):
         If z is drawn from a normal random distribution, then exp(logmean+logsigma*z)
         is drawn from lognormal
         """
-        if nrand is None:
-            z=numpy.random.randn()
-        else:
-            z=numpy.random.randn(nrand)
+        z = self.rng.normal(size=nrand)
+        #if nrand is None:
+        #    z=self.rng.randn()
+        #else:
+        #    z=self.rng.randn(nrand)
         return numpy.exp(self.logmean + self.logsigma*z)
 
     def sample_brute(self, nrand=None, maxval=None):
@@ -2949,6 +3007,8 @@ class LogNormal(object):
         This is really to check that our probabilities are being calculated
         correctly, by comparing to the regular sampler
         """
+
+        rng=self.rng
 
         if maxval is None:
             maxval=self.mean + 10*self.sigma
@@ -2966,10 +3026,10 @@ class LogNormal(object):
         nleft=nrand
         while ngood < nrand:
             
-            rvals = maxval*randu(nleft)
+            rvals = maxval*rng.rand(nleft)
 
             # between 0,1 which is max for prob
-            h = randu(nleft)
+            h = rng.uniform(size=nleft)
 
             pvals = self.get_prob_array(rvals)
 
@@ -2997,6 +3057,7 @@ class MultivariateLogNormal(object):
         [Ndim,Ndim] covariance matrix
     """
     def __init__(self, mean, cov):
+        print("warning: can only use global rng")
         self.mean=array(mean,ndmin=1,dtype='f8',copy=True)
         self.cov=array(cov,ndmin=1,dtype='f8',copy=True)
 
@@ -3148,6 +3209,7 @@ class MVNMom(object):
         [Irr,Irc,Icc]
     """
     def __init__(self, mean, cov, psf_mean):
+        print("warning: can only use global rng")
         self.mean=array(mean,ndmin=1,dtype='f8',copy=True)
         self.cov=array(cov,ndmin=1,dtype='f8',copy=True)
         self.sigmas=sqrt(diag(self.cov))
@@ -3450,7 +3512,7 @@ class MultivariateNormal(object):
 
 
 
-class BFracBase(object):
+class BFracBase(PriorBase):
     """
     Base class for bulge fraction distribution
     """
@@ -3461,29 +3523,32 @@ class BFracBase(object):
             return self.sample_many(nrand)
 
     def sample_one(self):
+        rng=self.rng
         while True:
-            t=numpy.random.random()
+            t=rng.uniform()
             if t < self.bd_frac:
-                r=self.bd_sigma*randn()
+                r=self.bd_sigma*rng.normal()
             else:
-                r=1.0 + self.dev_sigma*randn()
+                r=1.0 + self.dev_sigma*rng.normal()
             if r >= 0.0 and r <= 1.0:
                 break
         return r
 
     def sample_many(self, nrand):
+        rng=self.rng
+
         r=numpy.zeros(nrand)-9999
         ngood=0
         nleft=nrand
         while ngood < nrand:
             tr=numpy.zeros(nleft)
 
-            tmpu=randu(nleft)
+            tmpu=rng.uniform(size=nleft)
             w,=numpy.where( tmpu < self.bd_frac )
             if w.size > 0:
-                tr[0:w.size] = self.bd_loc  + self.bd_sigma*randn(w.size)
+                tr[0:w.size] = self.bd_loc  + self.bd_sigma*rng.normal(size=w.size)
             if w.size < nleft:
-                tr[w.size:]  = self.dev_loc + self.dev_sigma*randn(nleft-w.size)
+                tr[w.size:]  = self.dev_loc + self.dev_sigma*rng.normal(size=nleft-w.size)
 
             wg,=numpy.where( (tr >= 0.0) & (tr <= 1.0) )
 
@@ -3517,7 +3582,9 @@ class BFrac(BFracBase):
     smaller half gaussian at 1.0 with width 0.01 for bulge-only
     galaxies
     """
-    def __init__(self):
+    def __init__(self, rng=None):
+        PriorBase.__init__(self, rng=rng)
+
         sq2pi=numpy.sqrt(2*numpy.pi)
 
         # bd is half-gaussian centered at 0.0
@@ -3555,11 +3622,13 @@ class BFrac(BFracBase):
         lnp = numpy.log(p_bd + p_dev)
         return lnp
 
-class TruncatedGaussian(object):
+class TruncatedGaussian(PriorBase):
     """
     Truncated gaussian
     """
-    def __init__(self, mean, sigma, minval, maxval):
+    def __init__(self, mean, sigma, minval, maxval, rng=None):
+        PriorBase.__init__(self, rng=rng)
+
         self.mean=mean
         self.sigma=sigma
         self.ivar=1.0/sigma**2
@@ -3589,7 +3658,9 @@ class TruncatedGaussian(object):
         return lnp
 
     def sample(self, nrand=1):
-        from numpy.random import normal
+
+        rng=self.rng
+
         if nrand is None:
             is_scalar=True
             nrand=1
@@ -3601,26 +3672,28 @@ class TruncatedGaussian(object):
         ngood=0
         nleft=nrand
         while ngood < nrand:
-            
-            tvals = normal(loc=self.mean, scale=self.sigma, size=nleft)
+
+            tvals = rng.normal(loc=self.mean, scale=self.sigma, size=nleft)
 
             w,=numpy.where( (tvals > self.minval) & (tvals < self.maxval) )
             if w.size > 0:
                 vals[ngood:ngood+w.size] = tvals[w]
                 ngood += w.size
                 nleft -= w.size
- 
+
         if is_scalar:
             vals=vals[0]
 
         return vals
 
 
-class TruncatedGaussianPolar(object):
+class TruncatedGaussianPolar(PriorBase):
     """
     Truncated gaussian on a circle
     """
-    def __init__(self, mean1, mean2, sigma1, sigma2, maxval):
+    def __init__(self, mean1, mean2, sigma1, sigma2, maxval, rng=None):
+        PriorBase.__init__(self, rng=rng)
+
         self.mean1=mean1
         self.mean2=mean2
         self.sigma1=sigma1
@@ -3635,14 +3708,23 @@ class TruncatedGaussianPolar(object):
         """
         Sample from truncated gaussian
         """
+
+        rng=self.rng
+
         x1=numpy.zeros(nrand)
         x2=numpy.zeros(nrand)
 
         nleft=nrand
         ngood=0
         while nleft > 0:
-            r1=self.mean1 + self.sigma1*randn(nleft)
-            r2=self.mean2 + self.sigma2*randn(nleft)
+            #r1=self.mean1 + self.sigma1*randn(nleft)
+            #r2=self.mean2 + self.sigma2*randn(nleft)
+            r1=rng.normal(loc=self.mean1,
+                          scale=self.sigma1,
+                          size=nleft)
+            r2=rng.normal(loc=self.mean2,
+                          scale=self.sigma2,
+                          size=nleft)
 
             rsq=r1**2 + r2**2
 
@@ -3687,6 +3769,7 @@ class Student(object):
         """
         sigma is not std(x)
         """
+        print("warning: cannot use local rng")
         self.reset(mean,sigma)
 
     def reset(self, mean, sigma):
@@ -3881,12 +3964,16 @@ class CenPrior(_gmix.Normal2D):
     """
     Independent gaussians in each dimension
     """
-    def __init__(self, cen1, cen2, sigma1, sigma2):
+    def __init__(self, cen1, cen2, sigma1, sigma2, rng=None):
 
         self.cen1 = cen1
         self.cen2 = cen2
         self.sigma1 = sigma1
         self.sigma2 = sigma2
+
+        if rng is None:
+            rng=numpy.random.RandomState()
+        self.rng=rng
 
         super(CenPrior,self).__init__(cen1,cen2,sigma1,sigma2)
 
@@ -3894,13 +3981,20 @@ class CenPrior(_gmix.Normal2D):
         """
         Get a single sample or arrays
         """
-        if n is None:
-            rand1=self.cen1 + self.sigma1*numpy.random.randn()
-            rand2=self.cen2 + self.sigma2*numpy.random.randn()
-        else:
-            rand1=self.cen1 + self.sigma1*numpy.random.randn(n)
-            rand2=self.cen2 + self.sigma2*numpy.random.randn(n)
 
+        rng=self.rng
+
+        rand1=rng.normal(loc=self.cen1, scale=self.sigma1, size=n)
+        rand2=rng.normal(loc=self.cen2, scale=self.sigma2, size=n)
+
+        '''
+        if n is None:
+            rand1=self.cen1 + self.sigma1*rng.randn()
+            rand2=self.cen2 + self.sigma2*rng.randn()
+        else:
+            rand1=self.cen1 + self.sigma1*rng.randn(n)
+            rand2=self.cen2 + self.sigma2*rng.randn(n)
+        '''
         return rand1, rand2
     sample2d=sample
 
@@ -3908,13 +4002,14 @@ SimpleGauss2D=CenPrior
 
 
 
-class TruncatedSimpleGauss2D(object):
+class TruncatedSimpleGauss2D(PriorBase):
     """
     Independent gaussians in each dimension, with a specified
     maximum length
     """
 
-    def __init__(self, cen1, cen2, sigma1, sigma2, maxval):
+    def __init__(self, cen1, cen2, sigma1, sigma2, maxval, rng=None):
+        PriorBase.__init__(self, rng=rng)
 
         self.cen1 = cen1
         self.cen2 = cen2
@@ -3986,6 +4081,8 @@ class TruncatedSimpleGauss2D(object):
         Get nrand random deviates from the distribution
         """
 
+        rng=self.rng
+
         if nrand is None:
             is_scalar=True
             nrand=1
@@ -3999,8 +4096,14 @@ class TruncatedSimpleGauss2D(object):
         nleft=nrand
         while ngood < nrand:
             
-            rvals1=self.cen1 + self.sigma1*randn(nleft)
-            rvals2=self.cen2 + self.sigma2*randn(nleft)
+            #rvals1=self.cen1 + self.sigma1*randn(nleft)
+            #rvals2=self.cen2 + self.sigma2*randn(nleft)
+            rvals1=rng.normal(loc=self.cen1,
+                              scale=self.sigma1,
+                              size=nleft)
+            rvals2=rng.normal(loc=self.cen2,
+                              scale=self.sigma2,
+                              size=nleft)
 
             rsq = rvals1**2 + rvals2**2
 
@@ -4023,13 +4126,15 @@ JOINT_MIN_COVAR=1.0e-6
 JOINT_COVARIANCE_TYPE='full'
 
 
-class TFluxPriorCosmosBase(object):
+class TFluxPriorCosmosBase(PriorBase):
     """
     T is in arcsec**2
     """
     def __init__(self,
                  T_bounds=[1.e-6,100.0],
                  flux_bounds=[1.e-6,100.0]):
+
+        print("warning: cannot use local rng")
 
         self.set_bounds(T_bounds=T_bounds, flux_bounds=flux_bounds)
 
@@ -4372,16 +4477,22 @@ def _2gauss_prob_array(means, ivars, weights, vals, output):
 '''
 
 
-def srandu(num=None):
+def srandu(num=None, rng=None):
     """
     Generate random numbers in the symmetric distribution [-1,1]
     """
-    return 2*(numpy.random.random(num)-0.5)
+
+    if rng is None:
+        r = numpy.random.random(size=num)
+    else:
+        r = rng.uniform(size=num)
+    return 2*(r-0.5)
 
 
 
 class GPriorCosmosSersicSpline(GPriorMErf):
-    def __init__(self):
+    def __init__(self, rng=None):
+        PriorBase.__init__(self, rng=rng)
         self.gmax=1.0
 
     def _get_prob_nocheck(self, g):
@@ -4457,11 +4568,16 @@ class ZDisk2D(_gmix.ZDisk2D):
     Note get_lnprob_scalar1d and get_prob_scalar1d and 2d are already
     part of base class
     """
-    def __init__(self, radius):
+    def __init__(self, radius, rng=None):
+
+        if rng is None:
+            rng=numpy.random.RandomState()
+        self.rng=rng
+
         self.radius = radius
         self.radius_sq = radius**2
 
-        super(ZDisk2D,self).__init__(radius)
+        super(ZDisk2D,self).__init__(radius, rng=rng)
 
     def sample1d(self, n=None):
         """
@@ -4474,7 +4590,7 @@ class ZDisk2D(_gmix.ZDisk2D):
         else:
             is_scalar=False
 
-        r2 = self.radius_sq*randu(n)
+        r2 = self.radius_sq*self.rng.uniform(size=n)
 
         r = sqrt(r2)
 
@@ -4495,7 +4611,7 @@ class ZDisk2D(_gmix.ZDisk2D):
 
         radius=self.sample1d(n)
 
-        theta=2.0*numpy.pi*randu(n)
+        theta=2.0*numpy.pi*self.rng.uniform(size=n)
 
         x=radius*cos(theta)
         y=radius*sin(theta)
