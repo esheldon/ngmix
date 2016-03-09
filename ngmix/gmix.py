@@ -1462,7 +1462,15 @@ _gmix_ngauss_dict={GMIX_GAUSS:1,
                    GMIX_BDC:16,
                    GMIX_BDF:16,
                    GMIX_SERSIC:4,
-                   GMIX_GAUSSMOM: 1}
+                   GMIX_GAUSSMOM: 1,
+
+                   'em1':1,
+                   'em2':2,
+                   'em3':3,
+                   'coellip1':1,
+                   'coellip2':2,
+                   'coellip3':3}
+
 
 _gauss2d_dtype=[('p','f8'),
                 ('row','f8'),
