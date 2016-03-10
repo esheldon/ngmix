@@ -84,7 +84,7 @@ def _simulate_obs(gmix, obs, **kw):
 
     add_noise = kw.get('add_noise',True)
     if add_noise:
-        sim_image, noise_image = _get_noisy_image(obs, sim_image)
+        sim_image, noise_image = _get_noisy_image(obs, sim_image, **kw)
     else:
         noise_image=None
 
@@ -120,13 +120,19 @@ def _get_simulated_image(gmix, obs, **kw):
 
     return sim_image
 
-def _get_noisy_image(obs, sim_image):
-    noise_image = get_noise_image(obs.weight)
+def _get_noisy_image(obs, sim_image, **kw):
+    noise_image = get_noise_image(obs.weight, **kw)
     return sim_image + noise_image, noise_image
 
-def get_noise_image(weight):
+def get_noise_image(weight, add_all=True):
     """
+
     get a noise image based on the input weight map
+
+    If add_all, we set weight==0 pixels with the median noise.  This should not
+    be a problem for algorithms that use the weight map, but at the same time
+    is nice for algorithms that need to convolve or shear the image
+
     """
     noise_image = numpy.random.normal(loc=0.0,
                                       scale=1.0,
@@ -136,6 +142,15 @@ def get_noise_image(weight):
     w=where(weight > 0)
     if w[0].size > 0:
         err[w] = sqrt(1.0/weight[w])
+
+        if add_all and (w[0].size != weight.size):
+            print("adding noise to all")
+            # there were some zero weight pixels, and we
+            # want to add noise there anyway
+            median_err = numpy.median(err[w])
+
+            wzero=where(weight <= 0)
+            err[wzero] = median_err
 
     noise_image *= err
     return noise_image
