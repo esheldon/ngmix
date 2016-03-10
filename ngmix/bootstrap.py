@@ -632,7 +632,8 @@ class Bootstrapper(object):
     def replace_masked_pixels(self,
                               inplace=False,
                               method='best-fit',
-                              fitter=None):
+                              fitter=None,
+                              add_noise=True):
         """
         replaced masked pixels
 
@@ -652,6 +653,10 @@ class Bootstrapper(object):
             Default is 'best-fit'
         fitter: a fitter from fitters.py
             If not sent, the max fitter from self is used.
+
+        add_noise: bool
+            If True, add noise to the replaced pixels based on the median
+            noise in the image, derived from the weight map
         """
 
         self.mb_obs_list_old = self.mb_obs_list
@@ -662,7 +667,8 @@ class Bootstrapper(object):
         self.mb_obs_list=replace_masked_pixels(self.mb_obs_list,
                                                inplace=inplace,
                                                method=method,
-                                               fitter=fitter)
+                                               fitter=fitter,
+                                               add_noise=add_noise)
         '''
         assert method=='best-fit',"only best-fit replacement is supported"
 
@@ -2661,7 +2667,8 @@ def get_coellip_ngauss(name):
 def replace_masked_pixels(mb_obs_list,
                           inplace=False,
                           method='best-fit',
-                          fitter=None):
+                          fitter=None,
+                          add_noise=True):
     """
     replaced masked pixels
 
@@ -2679,6 +2686,10 @@ def replace_masked_pixels(mb_obs_list,
         Default is 'best-fit'
     fitter:
         when method=='best-fit', a fitter from fitting.py
+
+    add_noise: bool
+        If True, add noise to the replaced pixels based on the median
+        noise in the image, derived from the weight map
     """
 
     assert method=='best-fit',"only best-fit replacement is supported"
@@ -2701,7 +2712,8 @@ def replace_masked_pixels(mb_obs_list,
                 w=where(bmask != 0)
 
                 if w[0].size > 0:
-                    print("    replacing %d/%d masked pixels" % (w[0].size,bmask.size))
+                    print("    replacing %d/%d masked "
+                          "pixels" % (w[0].size,bmask.size))
                     obs.image_orig = obs.image.copy()
                     gm = fitter.get_convolved_gmix(band=band, obsnum=iobs)
 
@@ -2709,6 +2721,33 @@ def replace_masked_pixels(mb_obs_list,
                     model_image = gm.make_image(im.shape, jacobian=obs.jacobian)
 
                     im[w] = model_image[w]
+
+                    if add_noise:
+                        print("adding noise to replaced pixels")
+                        weight=obs.weight
+                        wgood=where( (weight > 0.0) & (bmask==0) )
+                        if wgood[0].size > 0:
+                            median_err=numpy.median(1.0/weight[wgood])
+
+                            noise_image=numpy.random.normal(
+                                loc=0.0,
+                                scale=median_err,
+                                size=im.shape
+                            )
+
+                            im[w] += noise_image[w]
+
+                    if False:
+                        import images
+                        imdiff=im-obs.image_orig
+                        images.view_mosaic([bmask,obs.image_orig,im,imdiff],
+                                           titles=['mask','orig','mod image','mod-orig'])
+                        maxdiff=numpy.abs(imdiff).max()
+                        print("    Max abs diff:",maxdiff)
+                        images.multiview(imdiff,title='mod-orig max diff %g' % maxdiff)
+                        if raw_input('hit a key: ') == 'q':
+                            stop
+
                 else:
                     obs.image_orig=None
 
