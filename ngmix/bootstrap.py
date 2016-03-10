@@ -1535,7 +1535,8 @@ class Bootstrapper(object):
         flags=[]
         psf_flux = zeros(nband) - 9999.0
         psf_flux_err = zeros(nband)
-
+        fitters = []
+        results = []
         for i in xrange(nband):
             obs_list = mbo[i]
 
@@ -1545,7 +1546,9 @@ class Bootstrapper(object):
             res=fitter.get_result()
             tflags = res['flags']
             flags.append( tflags )
-
+            fitters.append(fitter)
+            results.append(res)
+            
             if tflags == 0:
 
                 psf_flux[i] = res['flux']
@@ -1557,7 +1560,9 @@ class Bootstrapper(object):
 
         self.psf_flux_res={'flags':flags,
                            'psf_flux':psf_flux,
-                           'psf_flux_err':psf_flux_err}
+                           'psf_flux_err':psf_flux_err,
+                           'fitters':fitters,
+                           'results':results}
 
     def _get_max_guesser(self, guess=None, prior=None, widths=None):
         """
@@ -1725,6 +1730,13 @@ class CompositeBootstrapper(Bootstrapper):
         fit the galaxy.  You must run fit_psf() successfully first
         """
 
+        def get_bic(chi2per,dof,npars):
+            chi2 = chi2per*dof
+            ndata = dof + npars
+            lnprob = -0.5*chi2
+            bic = -2.0*lnprob + npars*(numpy.log(ndata) - numpy.log(2.0*numpy.pi))
+            return bic
+
         assert model=='cm','model must be cm'
         if extra_priors is None:
             exp_prior=prior
@@ -1733,10 +1745,25 @@ class CompositeBootstrapper(Bootstrapper):
             exp_prior=extra_priors['exp']
             dev_prior=extra_priors['dev']
 
-        if not hasattr(self,'psf_flux_res'):
-            self.fit_gal_psf_flux()
-
-        if guess is not None:
+        # do template flux fit
+        from .fitting import MultiBandTemplateFluxFitter,LMComposite
+        flux_fit = MultiBandTemplateFluxFitter(self.mb_obs_list,do_psf=True,normalize_psf=True)
+        try:
+            flux_fit.go()
+            flux_res = flux_fit.get_result()        
+        except:
+            raise BootGalFailure("failed to fit galaxy with PSF flux fitter")
+        
+        if flux_res['flags'] != 0:
+            raise BootGalFailure("failed to fit galaxy with PSF flux fitter")
+        
+        # get PSF BIC
+        psf_bic = get_bic(flux_res['chi2per'],flux_res['dof'],len(flux_res['pars']))
+        
+        print('        lnprob: %e' % (flux_res['lnprob']))
+        print('        BIC: %e' % (psf_bic))
+        
+        if guess is not None and not numpy.array_equal(guess[0:5],numpy.zeros(5)):
             exp_guess = guess.copy()
             dev_guess = guess.copy()
             dev_guess[4] *= guess_TdbyTe
@@ -1745,66 +1772,183 @@ class CompositeBootstrapper(Bootstrapper):
             dev_guess = None
             
         print("    fitting exp")
-        exp_fitter=self._fit_one_model_max('exp',pars,guess=exp_guess,
-                                           prior=exp_prior,ntry=ntry,guess_widths=guess_widths)
-        fitting.print_pars(exp_fitter.get_result()['pars'], front='        gal_pars:')
-        fitting.print_pars(exp_fitter.get_result()['pars_err'], front='        gal_perr:')
-        print('        lnprob: %e' % exp_fitter.get_result()['lnprob'])
+        try:
+            exp_fitter=self._fit_one_model_max('exp',pars,guess=exp_guess,
+                                               prior=exp_prior,ntry=ntry,guess_widths=guess_widths)
+            fitting.print_pars(exp_fitter.get_result()['pars'], front='        gal_pars:')
+            fitting.print_pars(exp_fitter.get_result()['pars_err'], front='        gal_perr:')
+            print('        lnprob: %e' % exp_fitter.get_result()['lnprob'])
         
-        print("    fitting dev")
-        dev_fitter=self._fit_one_model_max('dev',pars,guess=dev_guess,
-                                           prior=dev_prior,ntry=ntry,guess_widths=guess_widths)
-        fitting.print_pars(dev_fitter.get_result()['pars'], front='        gal_pars:')
-        fitting.print_pars(dev_fitter.get_result()['pars_err'], front='        gal_perr:')
-        print('        lnprob: %e' % dev_fitter.get_result()['lnprob'])           
+            # get exp bic
+            exp_bic = get_bic(exp_fitter.get_result()['chi2per'],
+                              exp_fitter.get_result()['dof'],
+                              len(exp_fitter.get_result()['pars']))
+            print('        BIC: %e' % (exp_bic))
+
+            psf_to_exp_odds = numpy.exp(numpy.clip(-0.5*psf_bic + 0.5*exp_bic,-300.0,300.0))
+            prob_psf = psf_to_exp_odds/(1.0 + psf_to_exp_odds)
+            print('    psf vs exp prob: %.6e' % prob_psf)
+            do_psf = False
+        except:
+            if pars.get('resort_to_psf_on_exp_failure',False):
+                print('    exp fit failed - resorting to PSF model')
+                do_psf = True
+                pass
+            else:
+                raise
             
-        print("    fitting fracdev")
-        use_grid=pars.get('use_fracdev_grid',False)
-        fres=self._fit_fracdev(exp_fitter, dev_fitter, use_grid=use_grid)
+        if do_psf or (pars.get('use_bic_test_for_simp_models',False) and prob_psf > pars.get('psf_prob_thresh',1.1)):
+            print("    fitting psf only")
+            
+            fracdev = numpy.array(1.0)
+            fracdev_clipped = numpy.array(1.0)
+            TdByTe = numpy.array(0.0)
+                            
+            res = {}
+            res['TdByTe'] = TdByTe
+            res['fracdev_nfev'] = -9999.0
+            res['fracdev'] = fracdev_clipped
+            res['fracdev_noclip'] = fracdev
+            res['fracdev_err'] = -9999.0
+            
+            npars = 5+len(flux_res['pars'])
+            err = 1.0e-3
+            res['pars'] = numpy.zeros(npars)
+            res['pars_err'] = numpy.zeros(npars)
+            res['pars_cov'] = numpy.zeros((npars,npars))                
+            
+            res['pars'][5:] = flux_res['pars']
+            res['pars_err'][0:5] = err
+            res['pars_err'][5:] = flux_res['pars_err']
+            res['chi2per'] = flux_res['chi2per']
+            res['dof'] = flux_res['dof']
+            res['lnprob'] = flux_res['lnprob']
+            res['flags'] = flux_res['flags']
+            res['npix'] = flux_res['npix']
+            res['model'] = 'cm'
+            res['g'] = numpy.zeros(2)
+            res['g_cov'] = numpy.zeros((2,2))                
+            res['s2n_w'] = flux_res['s2n_w']
+            
+            for i in xrange(5):
+                res['pars_cov'][i,i] = err*err
+            for i in xrange(npars-5):
+                res['pars_cov'][5+i,5+i] = flux_res['pars_err'][i]**2
+                
+            self.max_fitter = LMComposite(self.mb_obs_list,fracdev_clipped,TdByTe)
+            self.max_fitter._setup_data(res['pars'])
+            self.max_fitter._result = res
+            
+        elif pars.get('use_bic_test_for_simp_models',False) and prob_psf > pars.get('exp_prob_thresh',1.1):
+            print('    fitting exp only')
+            fracdev = numpy.array(0.0)
+            fracdev_clipped = fracdev
+            TdByTe = numpy.array(0.0)
+            
+            guesser=self._get_max_guesser(guess=guess, prior=prior, widths=guess_widths)
+            
+            mess='        fracpsf: %.3f clipped: %.3f'
+            print(mess % (fracdev,fracdev_clipped))
+            print('        Td/Te: %.3f' % (TdByTe))
+            
+            ok=False
+            for i in range(1,5):
+                try:
+                    runner=CompositeMaxRunner(self.mb_obs_list,
+                                              pars,
+                                              guesser,
+                                              fracdev_clipped,
+                                              TdByTe,
+                                              prior=prior,
+                                              use_logpars=self.use_logpars)
+                    runner.go(ntry=ntry)
+                    ok=True
+                    break
+                except GMixRangeError:
+                    #if i==1:
+                    #    print("caught GMixRange, clipping [-1.0,1.5]")
+                    #    fracdev_clipped = fracdev_clipped.clip(min=-1.0, max=1.5)
+                    #elif i==2:
+                    #    print("caught GMixRange, clipping [ 0.0,1.0]")
+                    #    fracdev_clipped = fracdev_clipped.clip(min=0.0, max=1.0)
+                    print("caught GMixRange, clipping [ 0.0,1.0]")
+                    fracdev_clipped = fracdev_clipped.clip(min=0.0, max=1.0)
 
-        fracdev = fres['fracdev']
-        fracdev_clipped = self._clip_fracdev(fracdev,pars)
 
-        mess='        nfev: %d fracdev: %.3f +/- %.3f clipped: %.3f'
-        print(mess % (fres['nfev'],fracdev,fres['fracdev_err'],fracdev_clipped))
+            if not ok:
+                raise BootGalFailure("failed to fit galaxy with maxlike: GMixRange "
+                                     "indicating model problems")
+
+            self.max_fitter=runner.fitter
+            res=self.max_fitter.get_result()
+            res['TdByTe'] = TdByTe
+            res['fracdev_nfev'] = -9999.0
+            res['fracdev'] = fracdev_clipped
+            res['fracdev_noclip'] = fracdev
+            res['fracdev_err'] = -9999.0
+            
+        else:
+            print("    fitting dev")
+            dev_fitter=self._fit_one_model_max('dev',pars,guess=dev_guess,
+                                               prior=dev_prior,ntry=ntry,guess_widths=guess_widths)
+            fitting.print_pars(dev_fitter.get_result()['pars'], front='        gal_pars:')
+            fitting.print_pars(dev_fitter.get_result()['pars_err'], front='        gal_perr:')
+            print('        lnprob: %e' % dev_fitter.get_result()['lnprob'])           
+            
+            print("    fitting fracdev")
+            use_grid=pars.get('use_fracdev_grid',False)
+            fres=self._fit_fracdev(exp_fitter, dev_fitter, use_grid=use_grid)
+            
+            fracdev = fres['fracdev']
+            fracdev_clipped = self._clip_fracdev(fracdev,pars)
+            
+            mess='        nfev: %d fracdev: %.3f +/- %.3f clipped: %.3f'
+            print(mess % (fres['nfev'],fracdev,fres['fracdev_err'],fracdev_clipped))
+            
+            TdByTe_raw = self._get_TdByTe(exp_fitter, dev_fitter)
+            TdByTe_range = pars.get('TdByTe_range',[-1.0e9,1.0e-9])
+            TdByTe = numpy.clip(TdByTe_raw,TdByTe_range[0],TdByTe_range[1])
+            print('        Td/Te: %.3f clipped: %.3f' % (TdByTe_raw,TdByTe))
+            
+            guesser=self._get_max_guesser(guess=guess, prior=prior, widths=guess_widths)
+
+            print("    fitting composite")
+            ok=False
+            for i in range(1,5):
+                try:
+                    runner=CompositeMaxRunner(self.mb_obs_list,
+                                              pars,
+                                              guesser,
+                                              fracdev_clipped,
+                                              TdByTe,
+                                              prior=prior,
+                                              use_logpars=self.use_logpars)
+                    runner.go(ntry=ntry)
+                    ok=True
+                    break
+                except GMixRangeError:
+                    #if i==1:
+                    #    print("caught GMixRange, clipping [-1.0,1.5]")
+                    #    fracdev_clipped = fracdev_clipped.clip(min=-1.0, max=1.5)
+                    #elif i==2:
+                    #    print("caught GMixRange, clipping [ 0.0,1.0]")
+                    #    fracdev_clipped = fracdev_clipped.clip(min=0.0, max=1.0)
+                    print("caught GMixRange, clipping [ 0.0,1.0]")
+                    fracdev_clipped = fracdev_clipped.clip(min=0.0, max=1.0)
 
 
-        TdByTe = self._get_TdByTe(exp_fitter, dev_fitter)
+            if not ok:
+                raise BootGalFailure("failed to fit galaxy with maxlike: GMixRange "
+                                     "indicating model problems")
 
-        guesser=self._get_max_guesser(guess=guess, prior=prior, widths=guess_widths)
-
-        print("    fitting composite")
-        ok=False
-        for i in range(1,5):
-            try:
-                runner=CompositeMaxRunner(self.mb_obs_list,
-                                          pars,
-                                          guesser,
-                                          fracdev_clipped,
-                                          TdByTe,
-                                          prior=prior,
-                                          use_logpars=self.use_logpars)
-                runner.go(ntry=ntry)
-                ok=True
-                break
-            except GMixRangeError:
-                #if i==1:
-                #    print("caught GMixRange, clipping [-1.0,1.5]")
-                #    fracdev_clipped = fracdev_clipped.clip(min=-1.0, max=1.5)
-                #elif i==2:
-                #    print("caught GMixRange, clipping [ 0.0,1.0]")
-                #    fracdev_clipped = fracdev_clipped.clip(min=0.0, max=1.0)
-                print("caught GMixRange, clipping [ 0.0,1.0]")
-                fracdev_clipped = fracdev_clipped.clip(min=0.0, max=1.0)
-
-
-        if not ok:
-            raise BootGalFailure("failed to fit galaxy with maxlike: GMixRange "
-                                 "indicating model problems")
-
-        self.max_fitter=runner.fitter
-
-        res=self.max_fitter.get_result()
+            self.max_fitter=runner.fitter
+            res=self.max_fitter.get_result()
+            res['TdByTe'] = TdByTe
+            res['fracdev_nfev'] = fres['nfev']
+            res['fracdev'] = fracdev_clipped
+            res['fracdev_noclip'] = fracdev
+            res['fracdev_err'] = fres['fracdev_err']
+            
         if res['flags'] != 0:
             raise BootGalFailure("failed to fit galaxy with maxlike")
 
@@ -1818,11 +1962,7 @@ class CompositeBootstrapper(Bootstrapper):
         print('        lnprob: %e' % res['lnprob'])
         
 
-        res['TdByTe'] = TdByTe
-        res['fracdev_nfev'] = fres['nfev']
-        res['fracdev'] = fracdev_clipped
-        res['fracdev_noclip'] = fracdev
-        res['fracdev_err'] = fres['fracdev_err']
+
 
     def _maybe_clip(self, efitter, dfitter, pars, fracdev):
         """
@@ -1862,7 +2002,7 @@ class CompositeBootstrapper(Bootstrapper):
         band_pars = fitter.get_band_pars(pars,band)
         gm_round = GMixCM(res['fracdev'],
                           res['TdByTe'],
-                          band_pars)
+                          band_pars)        
         return gm_round
 
     def _fit_sim_round(self, fitter, pars_round, mb_obs_list,
@@ -1980,8 +2120,7 @@ class CompositeBootstrapper(Bootstrapper):
             Te = epars[4]
             Td = dpars[4]
         TdByTe = Td/Te
-
-        print('        Td/Te: %.3f' % TdByTe)
+        
         return TdByTe
 
 
