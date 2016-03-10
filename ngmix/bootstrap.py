@@ -1768,9 +1768,11 @@ class CompositeBootstrapper(Bootstrapper):
         mess='        nfev: %d fracdev: %.3f +/- %.3f clipped: %.3f'
         print(mess % (fres['nfev'],fracdev,fres['fracdev_err'],fracdev_clipped))
 
-
-        TdByTe = self._get_TdByTe(exp_fitter, dev_fitter)
-
+        TdByTe_raw = self._get_TdByTe(exp_fitter, dev_fitter)
+        TdByTe_range = pars.get('TdByTe_range',[-1.0e9,1.0e-9])
+        TdByTe = numpy.clip(TdByTe_raw,TdByTe_range[0],TdByTe_range[1])
+        print('        Td/Te: %.3f clipped: %.3f' % (TdByTe_raw,TdByTe))
+        
         guesser=self._get_max_guesser(guess=guess, prior=prior, widths=guess_widths)
 
         print("    fitting composite")
@@ -1819,6 +1821,7 @@ class CompositeBootstrapper(Bootstrapper):
         
 
         res['TdByTe'] = TdByTe
+        res['TdByTe_noclip'] = TdByTe_raw
         res['fracdev_nfev'] = fres['nfev']
         res['fracdev'] = fracdev_clipped
         res['fracdev_noclip'] = fracdev
@@ -1981,7 +1984,6 @@ class CompositeBootstrapper(Bootstrapper):
             Td = dpars[4]
         TdByTe = Td/Te
 
-        print('        Td/Te: %.3f' % TdByTe)
         return TdByTe
 
 
