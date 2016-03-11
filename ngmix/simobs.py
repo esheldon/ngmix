@@ -144,7 +144,7 @@ def get_noise_image(weight, add_all=True):
         err[w] = sqrt(1.0/weight[w])
 
         if add_all and (w[0].size != weight.size):
-            print("adding noise to all")
+            #print("adding noise to all")
             # there were some zero weight pixels, and we
             # want to add noise there anyway
             median_err = numpy.median(err[w])
