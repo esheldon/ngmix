@@ -2723,7 +2723,7 @@ def replace_masked_pixels(mb_obs_list,
                     im[w] = model_image[w]
 
                     if add_noise:
-                        print("adding noise to replaced pixels")
+                        #print("adding noise to replaced pixels")
                         weight=obs.weight
                         wgood=where( (weight > 0.0) & (bmask==0) )
                         if wgood[0].size > 0:
