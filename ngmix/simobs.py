@@ -124,15 +124,12 @@ def _get_noisy_image(obs, sim_image, **kw):
     noise_image = get_noise_image(obs.weight, **kw)
     return sim_image + noise_image, noise_image
 
-def get_noise_image(weight, add_all=True):
+def get_noise_image(weight, add_all=False):
     """
-
     get a noise image based on the input weight map
 
     If add_all, we set weight==0 pixels with the median noise.  This should not
-    be a problem for algorithms that use the weight map, but at the same time
-    is nice for algorithms that need to convolve or shear the image
-
+    be a problem for algorithms that use the weight map
     """
     noise_image = numpy.random.normal(loc=0.0,
                                       scale=1.0,

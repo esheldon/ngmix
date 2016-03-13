@@ -633,7 +633,7 @@ class Bootstrapper(object):
                               inplace=False,
                               method='best-fit',
                               fitter=None,
-                              add_noise=True):
+                              add_noise=False):
         """
         replaced masked pixels
 
@@ -2668,7 +2668,7 @@ def replace_masked_pixels(mb_obs_list,
                           inplace=False,
                           method='best-fit',
                           fitter=None,
-                          add_noise=True):
+                          add_noise=False):
     """
     replaced masked pixels
 
@@ -2744,7 +2744,7 @@ def replace_masked_pixels(mb_obs_list,
                                            titles=['mask','orig','mod image','mod-orig'])
                         maxdiff=numpy.abs(imdiff).max()
                         print("    Max abs diff:",maxdiff)
-                        images.multiview(imdiff,title='mod-orig max diff %g' % maxdiff)
+                        #images.multiview(imdiff,title='mod-orig max diff %g' % maxdiff)
                         if raw_input('hit a key: ') == 'q':
                             stop
 
