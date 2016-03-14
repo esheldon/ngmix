@@ -83,6 +83,28 @@ def get_all_metacal(obs, step=0.01, fixnoise=False, **kw):
 
     return odict
 
+
+_FIXNOISE_PAIRS=[
+    ('1p','1m'),
+    ('1m','1p'),
+    ('2p','2m'),
+    ('2m','2p'),
+    ('1p_psf','1m_psf'),
+    ('1m_psf','1p_psf'),
+    ('2p_psf','2m_psf'),
+    ('2m_psf','2p_psf')
+]
+_ROTNOISE_PAIRS=[
+    ('1p','1p'),
+    ('1m','1m'),
+    ('2p','2p'),
+    ('2m','2m'),
+    ('1p_psf','1p_psf'),
+    ('1m_psf','1m_psf'),
+    ('2p_psf','2p_psf'),
+    ('2m_psf','2m_psf')
+]
+
 def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     """
     internal routine
@@ -113,24 +135,30 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     # Using None for the model means we get just noise
     noise_obs = simobs.simulate_obs(None, obs)
 
+    rotnoise=kw.get('rotnoise',False)
+    if rotnoise:
+        pairs=_ROTNOISE_PAIRS
+        # rotate by 90
+        #print("doing first rotate")
+        _rotate_obs_image(noise_obs, k=1)
+    else:
+        pairs=_FIXNOISE_PAIRS
+
     obsdict       = get_all_metacal(obs, step=step, **kw)
     noise_obsdict = get_all_metacal(noise_obs, step=step, **kw)
 
-    for ipairs in [('1p','1m'),
-                   ('1m','1p'),
-                   ('2p','2m'),
-                   ('2m','2p'),
-                   ('1p_psf','1m_psf'),
-                   ('1m_psf','1p_psf'),
-                   ('2p_psf','2m_psf'),
-                   ('2m_psf','2p_psf')]:
-
+    for ipairs in pairs:
 
         mk=ipairs[0]
         nk=ipairs[1]
 
         imbobs = obsdict[mk]
         nmbobs = noise_obsdict[nk]
+
+        if rotnoise:
+            # rotate by 90, which is 3 more rotations
+            #print("doing second rotate")
+            _rotate_obs_image(nmbobs, k=3)
 
         for imb in xrange(len(imbobs)):
             iolist=imbobs[imb]
@@ -895,6 +923,24 @@ def _init_mb_obs_list_dict(keys):
     for key in keys:
         odict[key] = MultiBandObsList()
     return odict
+
+def _rotate_obs_image(obs, k=1):
+    """
+    rotate the image.  internal routine just for fixnoise with rotnoise=True
+    """
+
+    if isinstance(obs, Observation):
+        #print("   rot k=",k)
+        obs.image = numpy.rot90(obs.image, k=k)
+    elif isinstance(obs, ObsList):
+        for tobs in obs:
+            _rotate_obs_image(tobs, k=k)
+    elif isinstance(obs, MultiBandObsList):
+        for obslist in obs:
+            _rotate_obs_image(obslist, k=k)
+    else:
+        raise ValueError("obs must be Observation, ObsList, "
+                         "or MultiBandObsList")
 
 
 def test():
