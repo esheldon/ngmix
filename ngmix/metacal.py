@@ -1,22 +1,8 @@
 """
 class to create manipulated images for use in metacalibration
 
-based off reading through Eric Huffs code; it has departed
-significantly in detail but not in essence
-
-conversion to wcs
-
-#??
-wcs = galsim.JacobianWCS(jacobian.dvdcol,
-                         jacobian.dvdrow,
-                         jacobian.dudcol, 
-                         jacobian.dudrow)
-
-orig_image = galsim.Image(array, wcs=wcs)
-newim = galsim.ImageD(self.im_dims[1],
-                      self.im_dims[0],
-                      wcs=orig_image.wcs)
-imconv.drawImage(image=newim, method='no_pixel')
+Originally based off reading through Eric Huffs code; it has departed
+significantly.
 """
 from __future__ import print_function
 import numpy
@@ -118,6 +104,11 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
         The values in the dict correspond to these
     step: float
         The shear step value to use for metacal
+    rotnoise: bool
+        If True, use the noise rotation method rather than
+        minus shear method.  This method should be come the
+        default in the future
+
     **kw:
         other keywords for metacal
 
@@ -230,7 +221,7 @@ class Metacal(object):
 
     def get_all(self, step, **kw):
         """
-        Get all combinations of metacal images in a dict
+        Get all the "usual" combinations of metacal images in a dict
 
         parameters
         ----------
@@ -245,7 +236,7 @@ class Metacal(object):
             dict keys:
                 1p -> ( shear, 0)
                 1m -> (-shear, 0)
-                2p -> ( 0, shear)
+                2p -> ( 0,  shear)
                 2m -> ( 0, -shear)
             simular for 1p_psf etc.
         """
@@ -369,18 +360,18 @@ class Metacal(object):
             # eric remarked that he thought we should shear the pixelized version
             psf_grown = psf_grown.shear(g1=shear.g1, g2=shear.g2)
 
-        psf_grown_image = galsim.ImageD(self.psf_dims[1], self.psf_dims[0])
+        psf_grown_image = galsim.ImageD(self.psf_dims[1],
+                                        self.psf_dims[0],
+                                        wcs=self.gs_wcs)
 
-        # TODO not general, using just pixel scale
-        psf_grown.drawImage(image=psf_grown_image,
-                            scale=self.pixel_scale,
-                            method='no_pixel')
+        psf_grown.drawImage(image=psf_grown_image, method='no_pixel')
 
         return psf_grown_image, psf_grown
 
     def _get_dilated_psf(self, shear):
         """
-        this case for psf being an interpolated image
+        dilate the psf by the input shear and reconvolve by the pixel.  See
+        _do_dilate for the algorithm
         """
         psf_grown_nopix = _do_dilate(self.psf_int_nopix, shear)
         psf_grown_interp = galsim.Convolve(psf_grown_nopix,self.pixel)
@@ -413,10 +404,11 @@ class Metacal(object):
 
         # Draw reconvolved, sheared image to an ImageD object, and return.
         # pixel is already in the psf
-        newim = galsim.ImageD(self.im_dims[1], self.im_dims[0])
-        imconv.drawImage(image=newim,
-                         method='no_pixel',
-                         scale=self.pixel_scale)
+        newim = galsim.ImageD(self.im_dims[1],
+                              self.im_dims[0],
+                              wcs=self.gs_wcs)
+
+        imconv.drawImage(image=newim, method='no_pixel')
 
         return newim
 
@@ -439,7 +431,10 @@ class Metacal(object):
         return sheared_image
 
     def _setup(self):
-
+        """
+        set up the Galsim objects, Galsim version of Jacobian/wcs, and
+        the interpolation
+        """
         obs=self.obs
         if not obs.has_psf():
             raise ValueError("observation must have a psf observation set")
@@ -479,21 +474,10 @@ class Metacal(object):
                                              x_interpolant=self.interp)
 
 
-
-        # this will get passed on through
-        self._set_uncorrelated_noise(image_int, obs.weight)
-
         # deconvolved galaxy image, psf+pixel removed
         self.image_int_nopsf = galsim.Convolve(image_int,
                                                psf_int_inv)
 
-
-
-    def _set_uncorrelated_noise(self, im, wt):
-        w=numpy.where(wt > 0)
-        variance = numpy.median(1/wt[w])
-
-        im.noise = galsim.UncorrelatedNoise(variance=variance)
 
     def _set_wcs(self, jacobian):
         """
@@ -503,22 +487,13 @@ class Metacal(object):
 
         self.jacobian=jacobian
 
-        # TODO get conventions right and use full jacobian
-        '''
         self.gs_wcs = galsim.JacobianWCS(jacobian.dudrow,
                                          jacobian.dudcol,
-                                         jacobian.dvdrow, 
+                                         jacobian.dvdrow,
                                          jacobian.dvdcol)
 
         # TODO how this gets used does not seem general, why not use full wcs
         self.pixel_scale=self.gs_wcs.maxLinearScale()
-        '''
-        self.pixel_scale=self.jacobian.get_scale()
-        self.gs_wcs = galsim.JacobianWCS(self.pixel_scale,
-                                         0.0,
-                                         0.0, 
-                                         self.pixel_scale)
-
 
     def _set_pixel(self):
         """
@@ -538,7 +513,18 @@ class Metacal(object):
 
     def _make_obs(self, im, psf_im):
         """
-        inputs are galsim objects
+        Make new Observation objects for the image and psf.
+        Copy out the weight maps and jacobians from the original
+        Observation.
+
+        parameters
+        ----------
+        im: Galsim Image
+        psf_im: Galsim Image
+
+        returns
+        -------
+        A new Observation
         """
 
         obs=self.obs
@@ -555,7 +541,7 @@ class Metacal(object):
 
 class MetacalAnalyticPSF(Metacal):
     """
-    The user inputs a galsim object (e.g. galsim.Gaussian) 
+    The user inputs a galsim object (e.g. galsim.Gaussian)
     and the size of the requested postage stamp
 
     The psf galsim object should have the pixelization in it
@@ -605,7 +591,17 @@ class MetacalAnalyticPSF(Metacal):
 
 def _do_dilate(obj, shear):
     """
-    obj could be an interpolated image or a galsim object
+    Dilate the input Galsim image object according to
+    the input shear
+
+    dilation = 1.0 + 2.0*|g|
+
+    parameters
+    ----------
+    obj: Galsim Image or object
+        The object to dilate
+    shear: ngmix.Shape
+        The shape to use for dilation
     """
     g = sqrt(shear.g1**2 + shear.g2**2)
     dilation = 1.0 + 2.0*g
@@ -613,6 +609,9 @@ def _do_dilate(obj, shear):
 
 
 def _check_shape(shape):
+    """
+    ensure the input is an instantiation of ngmix.Shape
+    """
     if not isinstance(shape, Shape):
         raise TypeError("shape must be of type ngmix.Shape")
 
@@ -964,7 +963,7 @@ def test():
 
             m=Metacal(obs)
 
-           
+
 
             if type=='gal':
                 obs_mcal = m.get_obs_galshear(shear)
@@ -976,7 +975,7 @@ def test():
                                                galsim.Image(obs.psf.image,scale=1.0),
                                                g1=shear.g1, g2=shear.g2,
                                                gal_shear=type=='gal')
- 
+
             print("psf:",numpy.abs(tpsf.array - obs_mcal.psf.image).max()/obs_mcal.psf.image.max())
             print("im:",numpy.abs(s.array - obs_mcal.image).max()/obs_mcal.image.max())
             '''
