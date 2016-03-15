@@ -503,15 +503,15 @@ class Metacal(object):
 
         self.jacobian=jacobian
 
-        # TODO get conventions right and use full jacobian
         '''
-        self.gs_wcs = galsim.JacobianWCS(jacobian.dudrow,
-                                         jacobian.dudcol,
-                                         jacobian.dvdrow, 
-                                         jacobian.dvdcol)
-
-        # TODO how this gets used does not seem general, why not use full wcs
-        self.pixel_scale=self.gs_wcs.maxLinearScale()
+        #
+        # Mike's suggestion:
+        #     (dudx,dudy,dvdx,dvdy)->(dudcol,dudrow,dvdcol,dvdrow)
+        #
+        self.gs_wcs = galsim.JacobianWCS(jacobian.dudcol,
+                                         jacobian.dudrow,
+                                         jacobian.dvdcol,
+                                         jacobian.dvdrow)
         '''
         self.pixel_scale=self.jacobian.get_scale()
         self.gs_wcs = galsim.JacobianWCS(self.pixel_scale,
