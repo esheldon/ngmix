@@ -487,10 +487,10 @@ class Metacal(object):
 
         self.jacobian=jacobian
 
-        self.gs_wcs = galsim.JacobianWCS(jacobian.dudrow,
-                                         jacobian.dudcol,
-                                         jacobian.dvdrow,
-                                         jacobian.dvdcol)
+        self.gs_wcs = galsim.JacobianWCS(jacobian.dudcol,
+                                         jacobian.dudrow,
+                                         jacobian.dvdcol,
+                                         jacobian.dvdrow)
 
         # TODO how this gets used does not seem general, why not use full wcs
         self.pixel_scale=self.gs_wcs.maxLinearScale()
