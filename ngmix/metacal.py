@@ -216,7 +216,7 @@ class Metacal(object):
 
         self.obs=obs
 
-        self._setup()
+        self._setup(**kw)
         self._set_data()
 
     def get_all(self, step, **kw):
@@ -430,7 +430,7 @@ class Metacal(object):
         sheared_image = self.image_int_nopsf.shear(g1=shear.g1, g2=shear.g2)
         return sheared_image
 
-    def _setup(self):
+    def _setup(self, **kw):
         """
         set up the Galsim objects, Galsim version of Jacobian/wcs, and
         the interpolation
@@ -439,7 +439,7 @@ class Metacal(object):
         if not obs.has_psf():
             raise ValueError("observation must have a psf observation set")
 
-        self._set_wcs(obs.jacobian)
+        self._set_wcs(obs.jacobian, **kw)
         self._set_pixel()
         self._set_interp()
 
@@ -479,7 +479,7 @@ class Metacal(object):
                                                psf_int_inv)
 
 
-    def _set_wcs(self, jacobian):
+    def _set_wcs(self, jacobian, **kw):
         """
         create a galsim JacobianWCS from the input ngmix.Jacobian, as
         well as pixel objects
