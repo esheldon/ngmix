@@ -24,6 +24,37 @@ _XY_REQ=['x','y',
          'dvdx',
          'dvdy']
 
+def from_galsim_wcs(wcs, **kw):
+    """
+    convert an input galsim.JacobianWCS and center to
+    a Jacobian
+
+    parameters
+    ----------
+    wcs: galsim.JacobianWCS
+        The wcs to convert
+
+    parameters for row/col style
+    ---------------------------
+    row: keyword
+        The row of the jacobian center
+    col: keyword
+        The column of the jacobian center
+
+    parameters for x,y mode
+    ---------------------------
+    x: keyword
+        The x (column) of the jacobian center
+    y: keyword
+        The y (row) of the jacobian center
+    """
+    kw['dudx'] = wcs.dudx
+    kw['dudy'] = wcs.dudy
+    kw['dvdx'] = wcs.dvdx
+    kw['dvdy'] = wcs.dvdy
+
+    return Jacobian(**kw)
+
 class Jacobian(object):
     """
     A class representing a jacobian matrix of a transformation.  The
@@ -193,12 +224,31 @@ class Jacobian(object):
         return copy.deepcopy(self._data['sdet'][0])
 
     def copy(self):
+        """
+        get a new Jacobian with the same values as self
+        """
         return Jacobian(row=self._data['row0'][0],
                         col=self._data['col0'][0],
                         dudrow=self._data['dudrow'][0],
                         dudcol=self._data['dudcol'][0],
                         dvdrow=self._data['dvdrow'][0],
                         dvdcol=self._data['dvdcol'][0])
+
+    def get_galsim_wcs(self):
+        """
+        get a galsim.JacobianWCS object with the same contents
+        as self
+        """
+        import galsim
+
+        d=self._data
+        dudx=d['dudcol'][0]
+        dudy=d['dudrow'][0]
+        dvdx=d['dvdcol'][0]
+        dvdy=d['dvdrow'][0]
+
+        return galsim.JacobianWCS(dudx,dudy,dvdx,dvdy)
+
     def __repr__(self):
         fmt="row0: %-10.5g col0: %-10.5g dvdrow: %-10.5g dvdcol: %-10.5g dudrow: %-10.5g dudcol: %-10.5g"
         return fmt % (self._data['row0'][0],
