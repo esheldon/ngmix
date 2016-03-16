@@ -25,8 +25,6 @@ from .gmix import GMix, GMixList, MultiBandGMixList
 
 from . import _gmix
 
-from .jacobian import Jacobian, UnitJacobian
-
 from . import priors
 from .priors import LOWVAL, BIGVAL
 

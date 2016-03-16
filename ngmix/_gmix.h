@@ -51,10 +51,10 @@ struct __attribute__((__packed__)) PyGMix_Jacobian {
     double row0;
     double col0;
 
-    double dudrow;
-    double dudcol;
     double dvdrow;
     double dvdcol;
+    double dudrow;
+    double dudcol;
 
     double det;
     double sdet;

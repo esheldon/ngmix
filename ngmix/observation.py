@@ -107,7 +107,7 @@ class Observation(object):
         jacobian: Jacobian (or None)
         """
         if jacobian is None:
-            jacobian=UnitJacobian(0.0, 0.0)
+            jacobian=UnitJacobian(row=0.0, col=0.0)
         assert isinstance(jacobian,Jacobian),"jacobian must be of type Jacobian"
         self.jacobian=jacobian
 

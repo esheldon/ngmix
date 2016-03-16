@@ -540,7 +540,12 @@ def test_1gauss_jacob(counts_sky=100.0, noise_sky=0.0, maxiter=100, jfac=0.27, s
     dims=[25,25]
     cen=[dims[0]/2., dims[1]/2.]
 
-    j=Jacobian(cen[0],cen[1], jfac, jfac*0.1, jfac*0.1, jfac)
+    j=Jacobian(row=cen[0],
+               col=cen[1],
+               dvdrow=jfac,
+               dvdcol=jfac*0.1,
+               dudrow=jfac*0.1,
+               dudcol=jfac)
 
     g1=0.1
     g2=0.05

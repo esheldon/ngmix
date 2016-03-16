@@ -174,13 +174,9 @@ class Metacal(object):
 
     parameters
     ----------
-    image: numpy array
-        2d array representing the image
-    psf_image: numpy array
-        2d array representing the psf image
-    jacobian: Jacobian, optional
-        An ngmix.Jacobian or None.  If None, an ngmix.UnitJacobian is
-        constructed
+    obs: ngmix.Observation
+        The observation must have a psf observation set, holding
+        the psf image
 
     examples
     --------
