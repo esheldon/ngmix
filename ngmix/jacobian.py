@@ -254,7 +254,6 @@ class DiagonalJacobian(Jacobian):
                                                   dudcol=scale)
         else:
             raise ValueError("expected row=,col= or x=,y=")
-        super(DiagonalJacobian,self).__init__(cen1, cen2, scale, 0., 0., scale)
 
 class UnitJacobian(DiagonalJacobian):
     """
