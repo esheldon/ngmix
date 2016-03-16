@@ -130,34 +130,34 @@ class Jacobian(object):
         """
         return copy.deepcopy(self._data['row0']), copy.deepcopy(self._data['col0'])
 
-    def get_dudrow(self):
-        """
-        get the dudrow value
-        """
-        return copy.deepcopy(self._data['dudrow'][0])
-
-    dudrow=property(fget=get_dudrow)
-
-    def get_dudcol(self):
-        """
-        get the dudcol value
-        """
-        return copy.deepcopy(self._data['dudcol'][0])
-    dudcol=property(fget=get_dudcol)
-
     def get_dvdrow(self):
         """
         get the dvdrow value
         """
         return copy.deepcopy(self._data['dvdrow'][0])
-    dvdrow=property(fget=get_dvdrow)
 
     def get_dvdcol(self):
         """
         get the dvdcol value
         """
         return copy.deepcopy(self._data['dvdcol'][0])
+
+    def get_dudrow(self):
+        """
+        get the dudrow value
+        """
+        return copy.deepcopy(self._data['dudrow'][0])
+
+    def get_dudcol(self):
+        """
+        get the dudcol value
+        """
+        return copy.deepcopy(self._data['dudcol'][0])
+
+    dvdrow=property(fget=get_dvdrow)
     dvdcol=property(fget=get_dvdcol)
+    dudrow=property(fget=get_dudrow)
+    dudcol=property(fget=get_dudcol)
 
 
     def set_cen(self, **kw):
