@@ -226,7 +226,7 @@ class BootstrapperTest(object):
             if self.verbose:
                 print("        setting jacobian cen to:",row,col,
                       "numiter:",res['numiter'])
-            jacob.set_cen(row,col)
+            jacob.set_cen(row=row,col=col)
         else:
             print("        failed to find cen")
 
