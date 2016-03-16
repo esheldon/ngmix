@@ -137,15 +137,15 @@ static double _exp3_lookup[] = {  5.10908903e-12,   1.38879439e-11,   3.77513454
 #define PYGMIX_MAX_CHI2 25.0
 //#define PYGMIX_MAX_CHI2 1000.0
 
-#define PYGMIX_GAUSS_EVAL_FULL(gauss, rowval, colval) ({            \
-    double _u = (rowval)-(gauss)->row;                         \
-    double _v = (colval)-(gauss)->col;                         \
+#define PYGMIX_GAUSS_EVAL_FULL(gauss, rowval, colval) ({       \
+    double _vtmp = (rowval)-(gauss)->row;                      \
+    double _utmp = (colval)-(gauss)->col;                      \
     double _g_val=0.0;                                         \
                                                                \
     double _chi2 =                                             \
-          (gauss)->dcc*_u*_u                                   \
-        + (gauss)->drr*_v*_v                                   \
-        - 2.0*(gauss)->drc*_u*_v;                              \
+          (gauss)->dcc*_vtmp*_vtmp                             \
+        + (gauss)->drr*_utmp*_utmp                             \
+        - 2.0*(gauss)->drc*_vtmp*_utmp;                        \
                                                                \
     if (_chi2 >= 0.0) {                                        \
         _g_val = (gauss)->pnorm*exp( -0.5*_chi2 );             \
@@ -157,14 +157,14 @@ static double _exp3_lookup[] = {  5.10908903e-12,   1.38879439e-11,   3.77513454
 
 
 #define PYGMIX_GAUSS_EVAL(gauss, rowval, colval) ({            \
-    double _u = (rowval)-(gauss)->row;                         \
-    double _v = (colval)-(gauss)->col;                         \
+    double _vtmp = (rowval)-(gauss)->row;                      \
+    double _utmp = (colval)-(gauss)->col;                      \
     double _g_val=0.0;                                         \
                                                                \
     double _chi2 =                                             \
-          (gauss)->dcc*_u*_u                                   \
-        + (gauss)->drr*_v*_v                                   \
-        - 2.0*(gauss)->drc*_u*_v;                              \
+          (gauss)->dcc*_vtmp*_vtmp                             \
+        + (gauss)->drr*_utmp*_utmp                             \
+        - 2.0*(gauss)->drc*_vtmp*_utmp;                        \
                                                                \
     if (_chi2 < PYGMIX_MAX_CHI2 && _chi2 >= 0.0) {             \
         _g_val = (gauss)->pnorm*expd( -0.5*_chi2 );            \
