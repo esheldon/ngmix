@@ -24,37 +24,6 @@ _XY_REQ=['x','y',
          'dvdx',
          'dvdy']
 
-def from_galsim_wcs(wcs, **kw):
-    """
-    convert an input galsim.JacobianWCS and center to
-    a Jacobian
-
-    parameters
-    ----------
-    wcs: galsim.JacobianWCS
-        The wcs to convert
-
-    parameters for row/col style
-    ---------------------------
-    row: keyword
-        The row of the jacobian center
-    col: keyword
-        The column of the jacobian center
-
-    parameters for x,y mode
-    ---------------------------
-    x: keyword
-        The x (column) of the jacobian center
-    y: keyword
-        The y (row) of the jacobian center
-    """
-    kw['dudx'] = wcs.dudx
-    kw['dudy'] = wcs.dudy
-    kw['dvdx'] = wcs.dvdx
-    kw['dvdy'] = wcs.dvdy
-
-    return Jacobian(**kw)
-
 class Jacobian(object):
     """
     A class representing a jacobian matrix of a transformation.  The
@@ -64,20 +33,27 @@ class Jacobian(object):
     but internally row,col is used to make correspondence to C row-major arrays
     clear
 
+    You can always send wcs= instead of the indivual derivatives, which must have
+    the attributes following the galsim convention dudx, dudy, etc. 
+
     parameters for row,col mode
     ---------------------------
     row: keyword
         The row of the jacobian center
     col: keyword
         The column of the jacobian center
-    dvdrow: keyword
-        How v varies with row
-    dvdcol: keyword
-        How v varies with column
-    dudrow: keyword
-        How u varies with row
-    dudcol: keyword
-        How u varies with column
+    Either of the following
+        wcs: keyword
+            object with attributes .dudx,.dudy,etc.
+    OR
+        dvdrow: keyword
+            How v varies with row
+        dvdcol: keyword
+            How v varies with column
+        dudrow: keyword
+            How u varies with row
+        dudcol: keyword
+            How u varies with column
 
     parameters for x,y mode
     ---------------------------
@@ -85,14 +61,18 @@ class Jacobian(object):
         The x (column) of the jacobian center
     y: keyword
         The y (row) of the jacobian center
-    dudx: keyword
-        How u varies with x
-    dudy: keyword
-        How u varies with y
-    dvdx: keyword
-        How v varies with x
-    dvdy: keyword
-        How v varies with y
+    Either of the following
+        wcs: keyword
+            object with attributes .dudx,.dudy,etc.
+    OR
+        dudx: keyword
+            How u varies with x
+        dudy: keyword
+            How u varies with y
+        dvdx: keyword
+            How v varies with x
+        dvdy: keyword
+            How v varies with y
     """
     def __init__(self, **kw):
         self._data = zeros(1, dtype=_jacobian_dtype)
@@ -105,15 +85,24 @@ class Jacobian(object):
             raise ValueError("send by row,col or x,y")
 
     def _init_rowcol(self, **kw):
-        for k in _ROWCOL_REQ:
-            if k not in kw:
-                raise ValueError("missing keyword: '%s'" % k)
 
-        dvdrow=kw['dvdrow']
-        dvdcol=kw['dvdcol']
+        if 'wcs' in kw:
+            wcs=kw['wcs']
+            dvdrow=wcs.dvdy
+            dvdcol=wcs.dvdx
 
-        dudrow=kw['dudrow']
-        dudcol=kw['dudcol']
+            dudrow=wcs.dudy
+            dudcol=wcs.dudx
+        else:
+            for k in _ROWCOL_REQ:
+                if k not in kw:
+                    raise ValueError("missing keyword: '%s'" % k)
+
+            dvdrow=kw['dvdrow']
+            dvdcol=kw['dvdcol']
+
+            dudrow=kw['dudrow']
+            dudcol=kw['dudcol']
 
 
         self._data['row0']=kw['row']
@@ -129,15 +118,23 @@ class Jacobian(object):
         self._data['sdet'] = sqrt(self._data['det'])
 
     def _init_xy(self, **kw):
-        for k in _XY_REQ:
-            if k not in kw:
-                raise ValueError("missing keyword: '%s'" % k)
+        if 'wcs' in kw:
+            wcs=kw['wcs']
+            dvdrow=wcs.dvdy
+            dvdcol=wcs.dvdx
 
-        dvdrow=kw['dvdy']
-        dvdcol=kw['dvdx']
+            dudrow=wcs.dudy
+            dudcol=wcs.dudx
+        else:
+            for k in _XY_REQ:
+                if k not in kw:
+                    raise ValueError("missing keyword: '%s'" % k)
 
-        dudrow=kw['dudy']
-        dudcol=kw['dudx']
+            dvdrow=kw['dvdy']
+            dvdcol=kw['dvdx']
+
+            dudrow=kw['dudy']
+            dudcol=kw['dudx']
 
         self._data['row0']=kw['y']
         self._data['col0']=kw['x']
