@@ -532,11 +532,6 @@ class Bootstrapper(object):
                         Tguess_i = psf_obs.meta[Tguess_key]
                     else:
                         Tguess_i = Tguess
-                    if True:
-                        import images
-                        images.multiview(psf_obs.image)
-                        if raw_input('hit a key (q to quit): ')=='q':
-                            stop
 
                     self._fit_one_psf(psf_obs, psf_model, Tguess_i,
                                       ntry, fit_pars, norm_key=norm_key)
