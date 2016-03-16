@@ -2744,9 +2744,9 @@ int em_set_gmix_from_sums(struct PyGMix_Gauss2D *gmix,
                            p,
                            sum->rowsum*pinv,
                            sum->colsum*pinv,
-                           sum->u2sum*pinv,
+                           sum->v2sum*pinv,
                            sum->uvsum*pinv,
-                           sum->v2sum*pinv);
+                           sum->u2sum*pinv);
 
         status=gauss2d_set_norm(gauss);
 
@@ -2825,8 +2825,10 @@ static int em_run(PyObject* image_obj,
                     double v2 = vdiff*vdiff;
                     double uv = udiff*vdiff;
 
+                    //double chi2=
+                    //    gauss->dcc*u2 + gauss->drr*v2 - 2.0*gauss->drc*uv;
                     double chi2=
-                        gauss->dcc*u2 + gauss->drr*v2 - 2.0*gauss->drc*uv;
+                        gauss->dcc*v2 + gauss->drr*u2 - 2.0*gauss->drc*uv;
 
                     if (chi2 < PYGMIX_MAX_CHI2 && chi2 >= 0.0) {
                         sum->gi = gauss->pnorm*expd( -0.5*chi2 );
@@ -2834,11 +2836,11 @@ static int em_run(PyObject* image_obj,
                         sum->gi = 0.0;
                     }
                     gtot += sum->gi;
-                    sum->trowsum = u*sum->gi;
-                    sum->tcolsum = v*sum->gi;
-                    sum->tu2sum  = u2*sum->gi;
-                    sum->tuvsum  = uv*sum->gi;
+                    sum->trowsum = v*sum->gi;
+                    sum->tcolsum = u*sum->gi;
                     sum->tv2sum  = v2*sum->gi;
+                    sum->tuvsum  = uv*sum->gi;
+                    sum->tu2sum  = u2*sum->gi;
 
                 } // gaussians
 
