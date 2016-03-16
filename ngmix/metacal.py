@@ -487,7 +487,7 @@ class Metacal(object):
 
         self.jacobian=jacobian
         wcs_convention=kw.get("wcs_convention",None)
-        #print("        wcs convention:",wcs_convention)
+        print("        wcs convention:",wcs_convention)
 
         if wcs_convention==1:
             # old way, probably backward
