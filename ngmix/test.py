@@ -2371,6 +2371,10 @@ def test_max(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
     import images
     from .em import GMixMaxIterEM
 
+    j1,j2,j3,j4=0.26,0.02,-0.03,0.23
+    det = numpy.abs( j1*j4-j2*j3)
+    jfac = sqrt(det)
+
     jfac2=jfac*jfac
     numpy.random.seed(seed)
 
@@ -2402,10 +2406,10 @@ def test_max(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
 
     j=Jacobian(row=cen[0],
                col=cen[1],
-               dvdrow=jfac,
-               dvdcol= 0.1*jfac,
-               dudrow=-0.1*jfac,
-               dudcol=jfac)
+               dvdrow=j1,
+               dvdcol=j2,
+               dudrow=j3,
+               dudcol=j4)
 
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
     gm_psf=gmix.GMixModel(pars_psf, "gauss")
@@ -2418,10 +2422,10 @@ def test_max(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
 
     jpsf=Jacobian(row=cen_orig[0],
                   col=cen_orig[1],
-                  dvdrow=jfac,
-                  dvdcol= 0.1*jfac,
-                  dudrow=-0.1*jfac,
-                  dudcol=jfac)
+                  dvdrow=j1,
+                  dvdcol=j2,
+                  dudrow=j3,
+                  dudcol=j4)
     im_psf=gm_psf.make_image(dims, jacobian=jpsf, nsub=16)
     im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
     wt_psf=zeros(im_psf.shape) + 1./noise_psf**2

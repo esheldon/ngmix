@@ -534,18 +534,21 @@ def test_1gauss_T_recovery(noise, T = 8.0, counts=1.0, ntrial=100, show=True, pn
         print(png)
         plt.write_img(800, 800, png)
 
-def test_1gauss_jacob(counts_sky=100.0, noise_sky=0.0, maxiter=100, jfac=0.27, show=False):
+def test_1gauss_jacob(counts_sky=100.0, noise_sky=0.0, maxiter=100, show=False):
     import time
     #import images
     dims=[25,25]
     cen=[dims[0]/2., dims[1]/2.]
 
+    j1,j2,j3,j4=0.26,0.02,-0.03,0.23
     j=Jacobian(row=cen[0],
                col=cen[1],
-               dvdrow=jfac,
-               dvdcol=jfac*0.1,
-               dudrow=jfac*0.1,
-               dudcol=jfac)
+               dvdrow=j1,
+               dvdcol=j2,
+               dudrow=j3,
+               dudcol=j4)
+
+    jfac=j.get_scale()
 
     g1=0.1
     g2=0.05
