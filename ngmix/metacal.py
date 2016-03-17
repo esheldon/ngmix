@@ -356,11 +356,12 @@ class Metacal(object):
             # eric remarked that he thought we should shear the pixelized version
             psf_grown = psf_grown.shear(g1=shear.g1, g2=shear.g2)
 
-        psf_grown_image = galsim.ImageD(self.psf_dims[1],
-                                        self.psf_dims[0],
-                                        wcs=self.gs_wcs)
-
-        psf_grown.drawImage(image=psf_grown_image, method='no_pixel')
+        # this should carry over the wcs
+        psf_grown_image = self.psf_image.copy()
+        psf_grown.drawImage(
+            image=psf_grown_image,
+            method='no_pixel' # pixel is in the psf
+        )
 
         return psf_grown_image, psf_grown
 
@@ -398,13 +399,12 @@ class Metacal(object):
 
         imconv = galsim.Convolve([shim_nopsf, psf_obj])
 
-        # Draw reconvolved, sheared image to an ImageD object, and return.
-        # pixel is already in the psf
-        newim = galsim.ImageD(self.im_dims[1],
-                              self.im_dims[0],
-                              wcs=self.gs_wcs)
-
-        imconv.drawImage(image=newim, method='no_pixel')
+        # this should carry over the wcs
+        newim = self.image.copy()
+        imconv.drawImage(
+            image=newim,
+            method='no_pixel' # pixel is in the PSF
+        )
 
         return newim
 
@@ -453,9 +453,6 @@ class Metacal(object):
                                   wcs=self.gs_wcs)
         self.psf_image = galsim.Image(obs.psf.image.copy(),
                                       wcs=self.gs_wcs)
-
-        self.psf_dims=obs.psf.image.shape
-        self.im_dims=obs.image.shape
 
         # interpolated psf image
         self.psf_int = galsim.InterpolatedImage(self.psf_image,
@@ -509,16 +506,15 @@ class Metacal(object):
         else:
             raise ValueError("bad wcs_convention: %s" % wcs_convention)
 
-        # TODO how this gets used does not seem general, why not use full wcs
-        self.pixel_scale=self.gs_wcs.maxLinearScale()
 
     def _set_pixel(self):
         """
         set the pixel based on the pixel scale, for convolutions
         """
 
-        self.pixel = galsim.Pixel(self.pixel_scale)
-        self.pixel_inv = galsim.Deconvolve(self.pixel)
+        self.pixel_scale = self.gs_wcs.maxLinearScale()
+        self.pixel       = galsim.Pixel(self.pixel_scale)
+        self.pixel_inv   = galsim.Deconvolve(self.pixel)
 
     def _set_interp(self):
         """
