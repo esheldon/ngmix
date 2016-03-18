@@ -479,6 +479,15 @@ class Metacal(object):
         well as pixel objects
         """
 
+        self.jacobian = jacobian
+        self.gs_wcs   = jacobian.get_galsim_wcs()
+
+    def _set_wcs_choose(self, jacobian, **kw):
+        """
+        create a galsim JacobianWCS from the input ngmix.Jacobian, as
+        well as pixel objects
+        """
+
         self.jacobian=jacobian
         wcs_convention=kw.get("wcs_convention",None)
         print("        wcs convention:",wcs_convention)
@@ -501,6 +510,8 @@ class Metacal(object):
                                              jacobian.dudrow)
         else:
             raise ValueError("bad wcs_convention: %s" % wcs_convention)
+
+
 
 
     def _set_pixel(self):
