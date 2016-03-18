@@ -483,22 +483,17 @@ class Metacal(object):
         print("        wcs convention:",wcs_convention)
 
         if wcs_convention==1:
-            # old way, probably backward
             self.gs_wcs = galsim.JacobianWCS(jacobian.dudrow,
                                              jacobian.dudcol,
                                              jacobian.dvdrow,
                                              jacobian.dvdcol)
         elif wcs_convention==2:
-            # mike's suggestion, wrong for e1 for sure, at least relative
-            # to what ngmix is doing internally
             self.gs_wcs = galsim.JacobianWCS(jacobian.dudcol,
                                              jacobian.dudrow,
                                              jacobian.dvdcol,
                                              jacobian.dvdrow)
 
         elif wcs_convention==3:
-            # this is what I guessed would work, but is probably degenerate
-            # with 1 for our unit jacobian
             self.gs_wcs = galsim.JacobianWCS(jacobian.dvdcol,
                                              jacobian.dvdrow,
                                              jacobian.dudcol,
@@ -510,11 +505,13 @@ class Metacal(object):
     def _set_pixel(self):
         """
         set the pixel based on the pixel scale, for convolutions
+
+        Thanks to M. Jarvis for the suggestion to use toWorld
+        to get the proper pixel
         """
 
-        self.pixel_scale = self.gs_wcs.maxLinearScale()
-        self.pixel       = galsim.Pixel(self.pixel_scale)
-        self.pixel_inv   = galsim.Deconvolve(self.pixel)
+        self.pixel     = self.gs_wcs.toWorld(galsim.Pixel(scale=1))
+        self.pixel_inv = galsim.Deconvolve(self.pixel)
 
     def _set_interp(self):
         """
