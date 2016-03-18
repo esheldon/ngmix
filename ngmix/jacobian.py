@@ -33,27 +33,31 @@ class Jacobian(object):
     but internally row,col is used to make correspondence to C row-major arrays
     clear
 
-    You can always send wcs= instead of the indivual derivatives, which must have
-    the attributes following the galsim convention dudx, dudy, etc. 
+
+    parameters
+    -----------
+    Note: You can always send wcs= instead of the individual derivatives, which must have
+    the attributes following the galsim convention dudx, dudy, etc.
 
     parameters for row,col mode
     ---------------------------
+
     row: keyword
         The row of the jacobian center
     col: keyword
         The column of the jacobian center
     Either of the following
-        wcs: keyword
-            object with attributes .dudx,.dudy,etc.
-    OR
-        dvdrow: keyword
-            How v varies with row
-        dvdcol: keyword
-            How v varies with column
-        dudrow: keyword
-            How u varies with row
-        dudcol: keyword
-            How u varies with column
+            wcs: keyword
+                object with attributes .dudx,.dudy,etc.
+        OR
+            dvdrow: keyword
+                How v varies with row
+            dvdcol: keyword
+                How v varies with column
+            dudrow: keyword
+                How u varies with row
+            dudcol: keyword
+                How u varies with column
 
     parameters for x,y mode
     ---------------------------
@@ -62,17 +66,17 @@ class Jacobian(object):
     y: keyword
         The y (row) of the jacobian center
     Either of the following
-        wcs: keyword
-            object with attributes .dudx,.dudy,etc.
-    OR
-        dudx: keyword
-            How u varies with x
-        dudy: keyword
-            How u varies with y
-        dvdx: keyword
-            How v varies with x
-        dvdy: keyword
-            How v varies with y
+            wcs: keyword
+                object with attributes .dudx,.dudy,etc.
+        OR
+            dudx: keyword
+                How u varies with x
+            dudy: keyword
+                How u varies with y
+            dvdx: keyword
+                How v varies with x
+            dvdy: keyword
+                How v varies with y
     """
     def __init__(self, **kw):
         self._data = zeros(1, dtype=_jacobian_dtype)
@@ -84,71 +88,6 @@ class Jacobian(object):
         else:
             raise ValueError("send by row,col or x,y")
 
-    def _init_rowcol(self, **kw):
-
-        if 'wcs' in kw:
-            wcs=kw['wcs']
-            dvdrow=wcs.dvdy
-            dvdcol=wcs.dvdx
-
-            dudrow=wcs.dudy
-            dudcol=wcs.dudx
-        else:
-            for k in _ROWCOL_REQ:
-                if k not in kw:
-                    raise ValueError("missing keyword: '%s'" % k)
-
-            dvdrow=kw['dvdrow']
-            dvdcol=kw['dvdcol']
-
-            dudrow=kw['dudrow']
-            dudcol=kw['dudcol']
-
-
-        self._data['row0']=kw['row']
-        self._data['col0']=kw['col']
-
-        self._data['dvdrow']=dvdrow
-        self._data['dvdcol']=dvdcol
-
-        self._data['dudrow']=dudrow
-        self._data['dudcol']=dudcol
-
-        self._data['det'] = numpy.abs( dudrow*dvdcol-dudcol*dvdrow )
-        self._data['sdet'] = sqrt(self._data['det'])
-
-    def _init_xy(self, **kw):
-        if 'wcs' in kw:
-            wcs=kw['wcs']
-            dvdrow=wcs.dvdy
-            dvdcol=wcs.dvdx
-
-            dudrow=wcs.dudy
-            dudcol=wcs.dudx
-        else:
-            for k in _XY_REQ:
-                if k not in kw:
-                    raise ValueError("missing keyword: '%s'" % k)
-
-            dvdrow=kw['dvdy']
-            dvdcol=kw['dvdx']
-
-            dudrow=kw['dudy']
-            dudcol=kw['dudx']
-
-        self._data['row0']=kw['y']
-        self._data['col0']=kw['x']
-
-        self._data['dvdrow']=dvdrow
-        self._data['dvdcol']=dvdcol
-
-        self._data['dudrow']=dudrow
-        self._data['dudcol']=dudcol
-
-        self._data['det'] = numpy.abs( dudrow*dvdcol-dudcol*dvdrow )
-        self._data['sdet'] = sqrt(self._data['det'])
-
-
     def get_cen(self):
         """
         Get the center of the coordinate system
@@ -156,36 +95,72 @@ class Jacobian(object):
         returns
             (row,col)
         """
-        return copy.deepcopy(self._data['row0']), copy.deepcopy(self._data['col0'])
+        return self._data['row0'][0], self._data['col0'][0]
+
+    def get_row0(self):
+        """
+        get the dvdrow value
+        """
+        return self._data['row0'][0]
+    def get_col0(self):
+        """
+        get the dvdrow value
+        """
+        return self._data['col0'][0]
 
     def get_dvdrow(self):
         """
         get the dvdrow value
         """
-        return copy.deepcopy(self._data['dvdrow'][0])
+        return self._data['dvdrow'][0]
 
     def get_dvdcol(self):
         """
         get the dvdcol value
         """
-        return copy.deepcopy(self._data['dvdcol'][0])
+        return self._data['dvdcol'][0]
 
     def get_dudrow(self):
         """
         get the dudrow value
         """
-        return copy.deepcopy(self._data['dudrow'][0])
+        return self._data['dudrow'][0]
 
     def get_dudcol(self):
         """
         get the dudcol value
         """
-        return copy.deepcopy(self._data['dudcol'][0])
+        return self._data['dudcol'][0]
+
+    def get_det(self):
+        """
+        Get the determinant of the jacobian matrix
+        """
+        return self._data['det'][0]
+
+    def get_sdet(self):
+        """
+        Get the sqrt(determinant) of the jacobian matrix
+        """
+        return self._data['sdet'][0]
+
+    def get_scale(self):
+        """
+        Get the scale, defined as sqrt(det)
+        """
+        return self._data['sdet'][0]
+
+    row0=property(fget=get_row0)
+    col0=property(fget=get_col0)
 
     dvdrow=property(fget=get_dvdrow)
     dvdcol=property(fget=get_dvdcol)
     dudrow=property(fget=get_dudrow)
     dudcol=property(fget=get_dudcol)
+
+    det=property(fget=get_det)
+    sdet=property(fget=get_sdet)
+    scale=property(fget=get_scale)
 
 
     def set_cen(self, **kw):
@@ -202,34 +177,17 @@ class Jacobian(object):
         else:
             raise ValueError("expected row=,col= or x=,y=")
 
-    def get_det(self):
-        """
-        Get the determinant of the jacobian matrix
-        """
-        return copy.deepcopy(self._data['det'][0])
-
-    def get_sdet(self):
-        """
-        Get the sqrt(determinant) of the jacobian matrix
-        """
-        return copy.deepcopy(self._data['sdet'][0])
-
-    def get_scale(self):
-        """
-        Get the scale, defined as sqrt(det)
-        """
-        return copy.deepcopy(self._data['sdet'][0])
 
     def copy(self):
         """
         get a new Jacobian with the same values as self
         """
-        return Jacobian(row=self._data['row0'][0],
-                        col=self._data['col0'][0],
-                        dudrow=self._data['dudrow'][0],
-                        dudcol=self._data['dudcol'][0],
-                        dvdrow=self._data['dvdrow'][0],
-                        dvdcol=self._data['dvdcol'][0])
+        return Jacobian(row=self.row0,
+                        col=self.col0,
+                        dudrow=self.dudrow,
+                        dudcol=self.dudcol,
+                        dvdrow=self.dvdrow,
+                        dvdcol=self.dvdcol)
 
     def get_galsim_wcs(self):
         """
@@ -239,21 +197,108 @@ class Jacobian(object):
         import galsim
 
         d=self._data
-        dudx=d['dudcol'][0]
-        dudy=d['dudrow'][0]
-        dvdx=d['dvdcol'][0]
-        dvdy=d['dvdrow'][0]
+        dudx=self.dudcol
+        dudy=self.dudrow
+        dvdx=self.dvdcol
+        dvdy=self.dvdrow
 
         return galsim.JacobianWCS(dudx,dudy,dvdx,dvdy)
 
+
+    def _init_rowcol(self, **kw):
+
+        if 'wcs' in kw:
+            dvdrow, dvdcol, dudrow, dudcol = self._extract_wcs(kw['wcs'])
+        else:
+            for k in _ROWCOL_REQ:
+                if k not in kw:
+                    raise ValueError("missing keyword: '%s'" % k)
+
+            dvdrow=kw['dvdrow']
+            dvdcol=kw['dvdcol']
+
+            dudrow=kw['dudrow']
+            dudcol=kw['dudcol']
+
+        self._finish_init(kw['row'], kw['col'],
+                          dvdrow, dvdcol, dudrow, dudcol)
+
+        '''
+        self._data['row0']=kw['row']
+        self._data['col0']=kw['col']
+
+        self._data['dvdrow']=dvdrow
+        self._data['dvdcol']=dvdcol
+
+        self._data['dudrow']=dudrow
+        self._data['dudcol']=dudcol
+
+        self._data['det'] = numpy.abs( dudrow*dvdcol-dudcol*dvdrow )
+        self._data['sdet'] = sqrt(self._data['det'])
+        '''
+
+    def _init_xy(self, **kw):
+        if 'wcs' in kw:
+            dvdrow, dvdcol, dudrow, dudcol = self._extract_wcs(kw['wcs'])
+        else:
+            for k in _XY_REQ:
+                if k not in kw:
+                    raise ValueError("missing keyword: '%s'" % k)
+
+            dvdrow=kw['dvdy']
+            dvdcol=kw['dvdx']
+
+            dudrow=kw['dudy']
+            dudcol=kw['dudx']
+
+        self._finish_init(kw['y'], kw['x'],
+                          dvdrow, dvdcol, dudrow, dudcol)
+        '''
+        self._data['row0']=kw['y']
+        self._data['col0']=kw['x']
+
+        self._data['dvdrow']=dvdrow
+        self._data['dvdcol']=dvdcol
+
+        self._data['dudrow']=dudrow
+        self._data['dudcol']=dudcol
+
+        self._data['det'] = numpy.abs( dudrow*dvdcol-dudcol*dvdrow )
+        self._data['sdet'] = sqrt(self._data['det'])
+        '''
+
+    def _extract_wcs(self, wcs):
+        dvdrow=wcs.dvdy
+        dvdcol=wcs.dvdx
+
+        dudrow=wcs.dudy
+        dudcol=wcs.dudx
+
+        return dvdrow, dvdcol, dudrow, dudcol
+
+    def _finish_init(self, row0, col0, dvdrow, dvdcol, dudrow, dudcol):
+        self._data['row0']=row0
+        self._data['col0']=col0
+
+        self._data['dvdrow']=dvdrow
+        self._data['dvdcol']=dvdcol
+
+        self._data['dudrow']=dudrow
+        self._data['dudcol']=dudcol
+
+        self._data['det'] = numpy.abs( dudrow*dvdcol-dudcol*dvdrow )
+        self._data['sdet'] = sqrt(self._data['det'])
+
+
+
     def __repr__(self):
         fmt="row0: %-10.5g col0: %-10.5g dvdrow: %-10.5g dvdcol: %-10.5g dudrow: %-10.5g dudcol: %-10.5g"
-        return fmt % (self._data['row0'][0],
-                      self._data['col0'][0],
-                      self._data['dvdrow'][0],
-                      self._data['dvdcol'][0],
-                      self._data['dudrow'][0],
-                      self._data['dudcol'][0])
+        return fmt % (self.row0,
+                      self.col0,
+                      self.dvdrow,
+                      self.dvdcol,
+                      self.dudrow,
+                      self.dudcol)
 
 class DiagonalJacobian(Jacobian):
     """
