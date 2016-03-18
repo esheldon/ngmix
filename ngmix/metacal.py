@@ -128,6 +128,7 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
 
     rotnoise=kw.get('rotnoise',False)
     if rotnoise:
+        print("    Doing rotnoise")
         pairs=_ROTNOISE_PAIRS
         # rotate by 90
         #print("doing first rotate")
