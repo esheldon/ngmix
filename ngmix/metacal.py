@@ -351,11 +351,16 @@ class Metacal(object):
 
         _check_shape(shear)
 
-        psf_grown = self._get_dilated_psf(shear)
-
         if type=='psf_shear':
-            # eric remarked that he thought we should shear the pixelized version
-            psf_grown = psf_grown.shear(g1=shear.g1, g2=shear.g2)
+            doshear=True
+        else:
+            doshear=False
+
+        psf_grown = self._get_dilated_psf(shear, doshear=doshear)
+
+        #if type=='psf_shear':
+        #    # eric remarked that he thought we should shear the pixelized version
+        #    psf_grown = psf_grown.shear(g1=shear.g1, g2=shear.g2)
 
         # this should carry over the wcs
         psf_grown_image = self.psf_image.copy()
@@ -366,12 +371,20 @@ class Metacal(object):
 
         return psf_grown_image, psf_grown
 
-    def _get_dilated_psf(self, shear):
+    def _get_dilated_psf(self, shear, doshear=False):
         """
         dilate the psf by the input shear and reconvolve by the pixel.  See
         _do_dilate for the algorithm
+
+        If doshear, also shear it
         """
         psf_grown_nopix = _do_dilate(self.psf_int_nopix, shear)
+        if doshear:
+            #print("    shearing pre-pixel psf")
+            psf_grown_nopix = psf_grown_nopix.shear(g1=shear.g1,
+                                                    g2=shear.g2)
+        #else:
+        #    print("    not shearing psf")
         psf_grown_interp = galsim.Convolve(psf_grown_nopix,self.pixel)
 
         return psf_grown_interp
