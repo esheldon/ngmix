@@ -467,6 +467,8 @@ class GMix(object):
         if obs.jacobian is not None:
             assert isinstance(obs.jacobian,Jacobian)
 
+        fdiff = numpy.ascontiguousarray(fdiff, dtype='f8')
+
         nuse=fdiff.size-start
 
         image=obs.image
