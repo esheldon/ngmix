@@ -449,7 +449,6 @@ class Metacal(object):
         if not obs.has_psf():
             raise ValueError("observation must have a psf observation set")
 
-        self._set_wcs(obs.jacobian, **kw)
         self._set_pixel()
         self._set_interp()
 
@@ -464,9 +463,9 @@ class Metacal(object):
         # to be sure they don't get modified
         #
         self.image = galsim.Image(obs.image.copy(),
-                                  wcs=self.gs_wcs)
+                                  wcs=self.get_wcs())
         self.psf_image = galsim.Image(obs.psf.image.copy(),
-                                      wcs=self.gs_wcs)
+                                      wcs=self.get_psf_wcs())
 
         # interpolated psf image
         self.psf_int = galsim.InterpolatedImage(self.psf_image,
@@ -486,14 +485,22 @@ class Metacal(object):
                                                psf_int_inv)
 
 
-    def _set_wcs(self, jacobian, **kw):
+    def get_wcs(self):
         """
-        create a galsim JacobianWCS from the input ngmix.Jacobian, as
-        well as pixel objects
+        get a galsim wcs from the input jacobian
         """
+        #print("jacobian:",self.obs.jacobian)
+        #print("wcs:",self.obs.jacobian.get_galsim_wcs())
+        return self.obs.jacobian.get_galsim_wcs()
 
-        self.jacobian = jacobian
-        self.gs_wcs   = jacobian.get_galsim_wcs()
+    def get_psf_wcs(self):
+        """
+        get a galsim wcs from the input jacobian
+        """
+        #print("psf jacobian:",self.obs.psf.jacobian)
+        #print("psf wcs:",self.obs.jacobian.get_galsim_wcs())
+        return self.obs.psf.jacobian.get_galsim_wcs()
+
 
     def _set_wcs_choose(self, jacobian, **kw):
         """
@@ -535,7 +542,8 @@ class Metacal(object):
         to get the proper pixel
         """
 
-        self.pixel     = self.gs_wcs.toWorld(galsim.Pixel(scale=1))
+        wcs=self.get_wcs()
+        self.pixel     = wcs.toWorld(galsim.Pixel(scale=1))
         self.pixel_inv = galsim.Deconvolve(self.pixel)
 
     def _set_interp(self):
@@ -607,7 +615,7 @@ class MetacalAnalyticPSF(Metacal):
         # these would share data with the original numpy arrays, make copies
         # to be sure they don't get modified
         #
-        self.image = galsim.Image(obs.image.copy(), wcs=self.gs_wcs)
+        self.image = galsim.Image(obs.image.copy(), wcs=self.get_wcs())
         self.im_dims=obs.image.shape
 
         # interpolated galaxy image, still pixelized
@@ -964,8 +972,7 @@ def _rotate_obs_image(obs, k=1):
     """
 
     if isinstance(obs, Observation):
-        #print("   rot k=",k)
-        obs.image = numpy.rot90(obs.image, k=k)
+        obs.set_image(numpy.rot90(obs.image, k=k)
     elif isinstance(obs, ObsList):
         for tobs in obs:
             _rotate_obs_image(tobs, k=k)
