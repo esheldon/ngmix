@@ -540,13 +540,14 @@ def test_1gauss_jacob(counts_sky=100.0, noise_sky=0.0, maxiter=100, show=False):
     dims=[25,25]
     cen=[dims[0]/2., dims[1]/2.]
 
-    j1,j2,j3,j4=0.26,0.02,-0.03,0.23
+    #j1,j2,j3,j4=0.26,0.02,-0.03,0.23
+    dvdrow,dvdcol,dudrow,dudcol=-0.04,-0.915,1.10,0.12
     j=Jacobian(row=cen[0],
                col=cen[1],
-               dvdrow=j1,
-               dvdcol=j2,
-               dudrow=j3,
-               dudcol=j4)
+               dvdrow=dvdrow,
+               dvdcol=dvdcol,
+               dudrow=dudrow,
+               dudcol=dudcol)
 
     jfac=j.get_scale()
 
@@ -563,7 +564,6 @@ def test_1gauss_jacob(counts_sky=100.0, noise_sky=0.0, maxiter=100, show=False):
     print(gm)
 
     im0=gm.make_image(dims, jacobian=j)
-    #images.view(im0)
 
     im = im0 + noise_pix*numpy.random.randn(im0.size).reshape(dims)
 
@@ -573,15 +573,15 @@ def test_1gauss_jacob(counts_sky=100.0, noise_sky=0.0, maxiter=100, show=False):
 
     gm_guess=gm.copy()
     gm_guess._data['p']=1.0
-    gm_guess._data['row'] += 1*srandu()
-    gm_guess._data['col'] += 1*srandu()
-    gm_guess._data['irr'] += 0.5*srandu()
-    gm_guess._data['irc'] += 0.5*srandu()
-    gm_guess._data['icc'] += 0.5*srandu()
+    gm_guess._data['row'] += srandu()
+    gm_guess._data['col'] += srandu()
+    gm_guess._data['irr'] += srandu()
+    gm_guess._data['irc'] += srandu()
+    gm_guess._data['icc'] += srandu()
 
     print('guess:')
     print(gm_guess)
-    
+
     tm0=time.time()
     em=GMixEM(obs)
     em.go(gm_guess, sky, maxiter=maxiter)

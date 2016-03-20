@@ -2338,7 +2338,7 @@ def test_nm_many(n=1000, **kw):
             'ntry':ntrys}
 
 def test_max(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
-             method='nm',
+             method='lm',
              g1=0.1,
              g2=0.05,
              sigma_fac=5.0,
@@ -2361,8 +2361,6 @@ def test_max(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
              do_emcee=False,
              nwalkers=80, burnin=800, nstep=800):
     """
-    Fit with nelder-mead, calculating cov matrix with our code
-
     if do_emcee is True, compare with a mcmc fit using emcee
     """
     from . import em
