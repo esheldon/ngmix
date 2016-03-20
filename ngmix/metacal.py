@@ -972,7 +972,7 @@ def _rotate_obs_image(obs, k=1):
     """
 
     if isinstance(obs, Observation):
-        obs.set_image(numpy.rot90(obs.image, k=k)
+        obs.set_image(numpy.rot90(obs.image, k=k))
     elif isinstance(obs, ObsList):
         for tobs in obs:
             _rotate_obs_image(tobs, k=k)
