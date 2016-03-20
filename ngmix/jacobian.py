@@ -102,6 +102,7 @@ class Jacobian(object):
         get the dvdrow value
         """
         return self._data['row0'][0]
+
     def get_col0(self):
         """
         get the dvdrow value
@@ -223,20 +224,6 @@ class Jacobian(object):
         self._finish_init(kw['row'], kw['col'],
                           dvdrow, dvdcol, dudrow, dudcol)
 
-        '''
-        self._data['row0']=kw['row']
-        self._data['col0']=kw['col']
-
-        self._data['dvdrow']=dvdrow
-        self._data['dvdcol']=dvdcol
-
-        self._data['dudrow']=dudrow
-        self._data['dudcol']=dudcol
-
-        self._data['det'] = numpy.abs( dudrow*dvdcol-dudcol*dvdrow )
-        self._data['sdet'] = sqrt(self._data['det'])
-        '''
-
     def _init_xy(self, **kw):
         if 'wcs' in kw:
             dvdrow, dvdcol, dudrow, dudcol = self._extract_wcs(kw['wcs'])
@@ -253,19 +240,6 @@ class Jacobian(object):
 
         self._finish_init(kw['y'], kw['x'],
                           dvdrow, dvdcol, dudrow, dudcol)
-        '''
-        self._data['row0']=kw['y']
-        self._data['col0']=kw['x']
-
-        self._data['dvdrow']=dvdrow
-        self._data['dvdcol']=dvdcol
-
-        self._data['dudrow']=dudrow
-        self._data['dudcol']=dudcol
-
-        self._data['det'] = numpy.abs( dudrow*dvdcol-dudcol*dvdrow )
-        self._data['sdet'] = sqrt(self._data['det'])
-        '''
 
     def _extract_wcs(self, wcs):
         dvdrow=wcs.dvdy
