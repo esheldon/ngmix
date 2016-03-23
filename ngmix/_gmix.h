@@ -135,7 +135,7 @@ static double _exp3_lookup[] = {  5.10908903e-12,   1.38879439e-11,   3.77513454
 
 
 #define PYGMIX_MAX_CHI2 25.0
-//#define PYGMIX_MAX_CHI2 1000.0
+#define PYGMIX_MAX_CHI2_FAST 300.0
 
 #define PYGMIX_GAUSS_EVAL_FULL(gauss, rowval, colval) ({       \
     double _u = (rowval)-(gauss)->row;                         \
@@ -183,7 +183,7 @@ static double _exp3_lookup[] = {  5.10908903e-12,   1.38879439e-11,   3.77513454
         + (gauss)->drr*_v*_v                                   \
         - 2.0*(gauss)->drc*_u*_v;                              \
                                                                \
-    if (_chi2 >= 0.0) {					       \
+    if (_chi2 < PYGMIX_MAX_CHI2_FAST && _chi2 >= 0.0) {	       \
         _g_val = (gauss)->pnorm*expd( -0.5*_chi2 );            \
     }                                                          \
                                                                \
