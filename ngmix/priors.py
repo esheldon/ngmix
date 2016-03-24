@@ -2885,6 +2885,43 @@ class Normal(_gmix.Normal):
         #rand=self.cen + self.sigma*self.rng.randn(*args)
         return rand
 
+class Bounded1D(PriorBase):
+    """
+    wrap a pdf and limit samples to the input bounds
+    """
+    def __init__(self, pdf, bounds):
+        self.pdf=pdf
+        self.bounds=bounds
+        assert len(bounds)==2,"bounds must be length 2"
+
+    def sample(self, size=None):
+
+        bounds = self.bounds
+
+        if size is None:
+            nval=1
+        else:
+            nval=size
+
+        values=numpy.zeros(nval)
+        ngood=0
+        nleft=nval
+
+        while nleft > 0:
+            tmp = self.pdf.sample(nleft)
+
+            w,=numpy.where( (tmp > bounds[0]) & (tmp < bounds[1]) )
+
+            if w.size > 0:
+                values[ngood:ngood+w.size] = tmp[w]
+
+                ngood += w.size
+                nleft -= w.size
+
+        if size is None:
+            values=values[0]
+        return values
+
 class LogNormal(PriorBase):
     """
     Lognormal distribution
