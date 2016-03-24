@@ -489,16 +489,12 @@ class Metacal(object):
         """
         get a galsim wcs from the input jacobian
         """
-        #print("jacobian:",self.obs.jacobian)
-        #print("wcs:",self.obs.jacobian.get_galsim_wcs())
         return self.obs.jacobian.get_galsim_wcs()
 
     def get_psf_wcs(self):
         """
         get a galsim wcs from the input jacobian
         """
-        #print("psf jacobian:",self.obs.psf.jacobian)
-        #print("psf wcs:",self.obs.jacobian.get_galsim_wcs())
         return self.obs.psf.jacobian.get_galsim_wcs()
 
 
