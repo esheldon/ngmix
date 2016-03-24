@@ -135,9 +135,9 @@ static double _exp3_lookup[] = {  5.10908903e-12,   1.38879439e-11,   3.77513454
 
 
 #define PYGMIX_MAX_CHI2 25.0
-//#define PYGMIX_MAX_CHI2 1000.0
+#define PYGMIX_MAX_CHI2_FAST 300.0
 
-#define PYGMIX_GAUSS_EVAL_FULL(gauss, rowval, colval) ({            \
+#define PYGMIX_GAUSS_EVAL_FULL(gauss, rowval, colval) ({       \
     double _u = (rowval)-(gauss)->row;                         \
     double _v = (colval)-(gauss)->col;                         \
     double _g_val=0.0;                                         \
@@ -173,6 +173,23 @@ static double _exp3_lookup[] = {  5.10908903e-12,   1.38879439e-11,   3.77513454
     _g_val;                                                    \
 })
 
+#define PYGMIX_GAUSS_EVAL_FAST(gauss, rowval, colval) ({       \
+    double _u = (rowval)-(gauss)->row;                         \
+    double _v = (colval)-(gauss)->col;                         \
+    double _g_val=0.0;                                         \
+                                                               \
+    double _chi2 =                                             \
+          (gauss)->dcc*_u*_u                                   \
+        + (gauss)->drr*_v*_v                                   \
+        - 2.0*(gauss)->drc*_u*_v;                              \
+                                                               \
+    if (_chi2 < PYGMIX_MAX_CHI2_FAST && _chi2 >= 0.0) {	       \
+        _g_val = (gauss)->pnorm*expd( -0.5*_chi2 );            \
+    }                                                          \
+                                                               \
+    _g_val;                                                    \
+})
+
 // using full exp() function
 #define PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, rowval, colval) ({     \
     int _i=0;                                                  \
@@ -197,7 +214,17 @@ static double _exp3_lookup[] = {  5.10908903e-12,   1.38879439e-11,   3.77513454
     _gm_val;                                                   \
 })
 
-
+// using approximate exp() function w/ no cut in chi2
+#define PYGMIX_GMIX_EVAL_FAST(gmix, n_gauss, rowval, colval) ({		\
+      int _i=0;								\
+    double _gm_val=0.0;							\
+    struct PyGMix_Gauss2D* _gauss=gmix;					\
+    for (_i=0; _i< (n_gauss); _i++) {					\
+        _gm_val += PYGMIX_GAUSS_EVAL_FAST(_gauss, (rowval), (colval));  \
+        _gauss++;							\
+    }									\
+    _gm_val;								\
+})
 
 #define PYGMIX_JACOB_GETU(jacob, row, col) ({           \
     double _u_val;                                      \
