@@ -362,7 +362,7 @@ class GMix(object):
         _gmix.convolve_fill(output._data, gm, psf._data)
         return output
 
-    def make_image(self, dims, nsub=1, npoints=None, jacobian=None):
+    def make_image(self, dims, nsub=1, npoints=None, jacobian=None, fast_exp=False):
         """
         Render the mixture into a new image
 
@@ -372,10 +372,12 @@ class GMix(object):
             dimensions [nrows, ncols]
         nsub: integer, optional
             Defines a grid for sub-pixel integration
+        fast_exp: bool, optional
+            use fast, approximate exp function
         """
 
         image=numpy.zeros(dims, dtype='f8')
-        self._fill_image(image, nsub=nsub, npoints=npoints, jacobian=jacobian)
+        self._fill_image(image, nsub=nsub, npoints=npoints, jacobian=jacobian, fast_exp=fast_exp)
         return image
 
     def make_round(self):
@@ -416,7 +418,7 @@ class GMix(object):
         return gm
 
 
-    def _fill_image(self, image, npoints=None, nsub=1, jacobian=None):
+    def _fill_image(self, image, npoints=None, nsub=1, jacobian=None, fast_exp=False):
         """
         Internal routine.  Render the mixture into a new image.  No error
         checking on the image!
@@ -426,8 +428,15 @@ class GMix(object):
         image: 2-d double array
             image to render into
         nsub: integer, optional
-            Defines a grid for sub-pixel integration 
+            Defines a grid for sub-pixel integration
+        fast_exp: bool, optional
+            use fast, approximate exp function
         """
+
+        if fast_exp:
+            fexp = 1
+        else:
+            fexp = 0
 
         gm=self._get_gmix_data()
         if jacobian is not None:
@@ -436,17 +445,19 @@ class GMix(object):
                 _gmix.render_jacob_gauleg(gm,
                                           image,
                                           npoints,
-                                          jacobian._data)
+                                          jacobian._data,
+                                          fexp)
             else:
                 _gmix.render_jacob(gm,
                                    image,
                                    nsub,
-                                   jacobian._data)
+                                   jacobian._data,
+                                   fexp)
         else:
             if npoints is not None:
-                _gmix.render_gauleg(gm, image, npoints)
+                _gmix.render_gauleg(gm, image, npoints, fexp)
             else:
-                _gmix.render(gm, image, nsub)
+                _gmix.render(gm, image, nsub, fexp)
 
 
     def fill_fdiff(self, obs, fdiff, start=0, nsub=1, npoints=None):
