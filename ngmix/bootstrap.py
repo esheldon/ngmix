@@ -62,6 +62,8 @@ class Bootstrapper(object):
         self.find_cen=find_cen
         self.verbose=verbose
 
+        self.do_prepix_gpsf=False
+
         self.use_round_T = kw.get('use_round_T',False)
 
         # this never gets modified in any way
@@ -1004,8 +1006,6 @@ class Bootstrapper(object):
         gcovname = 'mcal_%s_cov' % shape_type
         gpsf_name = 'mcal_%spsf' % shape_type
         raw_gpsf_name = '%spsf' % shape_type
-        gpsf_prepix_name = 'mcal_%spsf_prepix' % shape_type
-        raw_gpsf_prepix_name = '%spsf_prepix' % shape_type
         res = {
             'mcal_pars':pars_mean,
             'mcal_pars_cov':pars_cov_mean,
@@ -1014,12 +1014,15 @@ class Bootstrapper(object):
             'mcal_R':R,
             'mcal_Rpsf':Rpsf,
             gpsf_name:fits[raw_gpsf_name],
-            gpsf_prepix_name:fits[raw_gpsf_prepix_name],
             'mcal_s2n_r':fits['s2n_r'],
             'mcal_T_r':fits['T_r'],
             'mcal_psf_T':fits['psf_T'],
             'mcal_psf_T_r':fits['psf_T_r'],
         }
+        if self.do_prepix_gpsf:
+            gpsf_prepix_name = 'mcal_%spsf_prepix' % shape_type
+            raw_gpsf_prepix_name = '%spsf_prepix' % shape_type
+            res[gpsf_prepix_name]=fits[raw_gpsf_prepix_name]
 
         if 'noshear' in pars:
             res['mcal_pars_noshear'] = pars['noshear']
@@ -1061,8 +1064,6 @@ class Bootstrapper(object):
                              extra_noise,
                              guess=None):
 
-        do_prepix_gpsf=True
-
         if guess is not None:
             guess_widths = guess*0.0 + 1.0e-6
             #print("    using guess: ",guess)
@@ -1085,7 +1086,7 @@ class Bootstrapper(object):
                          guess_widths=guess_widths)
             boot.set_round_s2n()
 
-            if do_prepix_gpsf and 'psf' not in key:
+            if self.do_prepix_gpsf and 'psf' not in key:
                 self._do_metacal_prepix_fits(boot.mb_obs_list,psf_model,
                                              psf_Tguess,psf_ntry)
 
@@ -1106,7 +1107,7 @@ class Bootstrapper(object):
         psf_T_mean = 0.0
         psf_T_r_mean = 0.0
         gpsf_mean = zeros(2)
-        if do_prepix_gpsf:
+        if self.do_prepix_gpsf:
             gpsf_prepix_mean = zeros(2)
 
         npsf=0
@@ -1131,7 +1132,7 @@ class Bootstrapper(object):
             for obslist in boot.mb_obs_list:
                 for obs in obslist:
                     g1,g2,T=obs.psf.gmix.get_g1g2T()
-                    if do_prepix_gpsf :
+                    if self.do_prepix_gpsf :
                         gpsf_prepix_mean[0] += obs.psf.meta['g1_prepix']
                         gpsf_prepix_mean[1] += obs.psf.meta['g2_prepix']
                     gpsf_mean[0] += g1
@@ -1158,7 +1159,7 @@ class Bootstrapper(object):
         res['psf_T'] = psf_T_mean/navg
         res['gpsf'] = gpsf_mean/npsf
 
-        if do_prepix_gpsf:
+        if self.do_prepix_gpsf:
             res['gpsf_prepix'] = gpsf_prepix_mean/npsf
 
         return res
