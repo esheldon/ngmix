@@ -36,7 +36,7 @@ BIGVAL =9999.0e47
 class PriorBase(object):
     def __init__(self, rng=None):
         if rng is None:
-            rng=numpy.random.RandomState(seed=numpy.random.randint(0,2**30))
+            rng=numpy.random.RandomState()
         self.rng=rng
 
 class GPriorBase(PriorBase):
@@ -2869,7 +2869,7 @@ class Normal(_gmix.Normal):
         self.ndim=1
 
         if rng is None:
-            rng=numpy.random.RandomState(seed=numpy.random.randint(0,2**30))
+            rng=numpy.random.RandomState()
         self.rng=rng
 
 
@@ -4009,7 +4009,7 @@ class CenPrior(_gmix.Normal2D):
         self.sigma2 = sigma2
 
         if rng is None:
-            rng=numpy.random.RandomState(seed=numpy.random.randint(0,2**30))
+            rng=numpy.random.RandomState()
         self.rng=rng
 
         super(CenPrior,self).__init__(cen1,cen2,sigma1,sigma2)
@@ -4608,7 +4608,7 @@ class ZDisk2D(_gmix.ZDisk2D):
     def __init__(self, radius, rng=None):
 
         if rng is None:
-            rng=numpy.random.RandomState(seed=numpy.random.randint(0,2**30))
+            rng=numpy.random.RandomState()
         self.rng=rng
 
         self.radius = radius
