@@ -385,9 +385,13 @@ class Metacal(object):
                                                     g2=shear.g2)
         #else:
         #    print("    not shearing psf")
-        psf_grown_interp = galsim.Convolve(psf_grown_nopix,self.pixel)
+        if self.prepix:
+            #print("using prepix")
+            return psf_grown_nopix
+        else:
+            psf_grown_interp = galsim.Convolve(psf_grown_nopix,self.pixel)
 
-        return psf_grown_interp
+            return psf_grown_interp
 
     def get_target_image(self, psf_obj, shear=None):
         """
@@ -445,6 +449,9 @@ class Metacal(object):
         set up the Galsim objects, Galsim version of Jacobian/wcs, and
         the interpolation
         """
+
+        self.prepix=kw.get('prepix',False)
+
         obs=self.obs
         if not obs.has_psf():
             raise ValueError("observation must have a psf observation set")
