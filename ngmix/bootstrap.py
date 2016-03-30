@@ -1700,7 +1700,112 @@ class BootstrapperGaussMom(Bootstrapper):
         guesser=MomGuesser(guess, prior=prior)
         return guesser
 
+class MetacalBootstrapper(Bootstrapper):
 
+    def get_metacal_result(self):
+        """
+        get result of metacal
+        """
+        if not hasattr(self, 'metacal_res'):
+            raise RuntimeError("you need to run fit_metacal first")
+        return self.metacal_res
+
+    def fit_metacal(self,
+                    psf_model,
+                    gal_model,
+                    pars,
+                    psf_Tguess,
+                    psf_fit_pars=None,
+                    metacal_pars=None,
+                    prior=None,
+                    psf_ntry=5,
+                    ntry=1,
+                    **kw):
+        """
+        run metacalibration
+
+        parameters
+        ----------
+        psf_model: string
+            model to fit for psf
+        gal_model: string
+            model to fit
+        pars: dict
+            parameters for the maximum likelihood fitter
+        psf_Tguess: float
+            T guess for psf
+        psf_fit_pars: dict
+            parameters for psf fit
+        metacal_pars: dict, optional
+            Parameters for metacal, default {'step':0.01}
+        prior: prior on parameters, optional
+            Optional prior to apply
+        psf_ntry: int, optional
+            Number of times to retry psf fitting, default 5
+        ntry: int, optional
+            Number of times to retry fitting, default 1
+        **kw:
+            extra keywords for get_all_metacal
+        """
+
+        metacal_pars_in=metacal_pars
+        metacal_pars={'step':0.01}
+        if metacal_pars_in is not None:
+            metacal_pars.update(metacal_pars_in)
+
+        metacal_pars.update(kw)
+        obs_dict = metacal.get_all_metacal(self.mb_obs_list, **metacal_pars)
+
+        res = self._do_metacal_max_fits(obs_dict,
+                                        psf_model, gal_model,
+                                        pars, psf_Tguess,
+                                        prior, psf_ntry, ntry,
+                                        psf_fit_pars)
+
+        self.metacal_res = res
+
+    def _do_metacal_max_fits(self, obs_dict, psf_model, gal_model, pars, 
+                             psf_Tguess, prior, psf_ntry, ntry, 
+                             psf_fit_pars):
+
+        res={}
+        for key in sorted(obs_dict):
+            # run a regular Bootstrapper on these observations
+            boot = Bootstrapper(obs_dict[key],
+                                use_logpars=self.use_logpars,
+                                intpars=self.intpars,
+                                use_round_T=self.use_round_T,
+                                find_cen=self.find_cen,
+                                verbose=self.verbose)
+
+            boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry, fit_pars=psf_fit_pars)
+            boot.fit_max(gal_model, pars, prior=prior, ntry=ntry)
+            boot.set_round_s2n()
+
+            tres=boot.get_max_fitter().get_result()
+            rres=boot.get_round_result()
+
+            tres['s2n_r'] = rres['s2n_r']
+            tres['T_r'] = rres['T_r']
+            tres['psf_T_r'] = rres['psf_T_r']
+
+            gpsf_sum = zeros(2)
+            Tpsf_sum = 0.0
+            npsf=0
+            for obslist in boot.mb_obs_list:
+                for obs in obslist:
+                    g1,g2,T=obs.psf.gmix.get_g1g2T()
+                    gpsf_sum[0] += g1
+                    gpsf_sum[1] += g2
+                    Tpsf_sum += T
+                    npsf+=1
+
+            tres['gpsf'] = gpsf_sum/npsf
+            tres['Tpsf'] = Tpsf_sum/npsf
+
+            res[key] = tres
+
+        return res
 
 class CompositeBootstrapper(Bootstrapper):
     def __init__(self, obs,
