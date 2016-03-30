@@ -20,6 +20,7 @@ except ImportError:
 
 LANCZOS_PARS_DEFAULT={'order':5, 'conserve_dc':True, 'tol':1.0e-4}
 
+# 'noshear' is also returned
 METACAL_TYPES = [
     '1p','1m','2p','2m',
     '1p_psf','1m_psf','2p_psf','2m_psf',
@@ -235,7 +236,8 @@ class Metacal(object):
                 1m -> (-shear, 0)
                 2p -> ( 0,  shear)
                 2m -> ( 0, -shear)
-            simular for 1p_psf etc.
+            similar for 1p_psf etc.
+            'noshear' is also returned
         """
         types=kw.get('types',METACAL_TYPES)
 
@@ -262,7 +264,16 @@ class Metacal(object):
             if 'psf' in type:
                 obs = self.get_obs_psfshear(sh)
             else:
-                obs = self.get_obs_galshear(sh)
+                if type=='1p':
+                    # add in noshear from this one
+                    print("getting noshear")
+                    obs, obs_noshear = self.get_obs_galshear(
+                        sh,
+                        get_unsheared=True
+                    )
+                    odict['noshear'] = obs_noshear
+                else:
+                    obs = self.get_obs_galshear(sh)
 
             odict[type] = obs
 
