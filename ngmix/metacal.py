@@ -132,7 +132,6 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
         print("    Doing rotnoise")
         pairs=_ROTNOISE_PAIRS
         # rotate by 90
-        #print("doing first rotate")
         _rotate_obs_image(noise_obs, k=1)
     else:
         pairs=_FIXNOISE_PAIRS
@@ -149,8 +148,7 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
         nmbobs = noise_obsdict[nk]
 
         if rotnoise:
-            # rotate by 90, which is 3 more rotations
-            #print("doing second rotate")
+            # rotate back, which is 3 more rotations
             _rotate_obs_image(nmbobs, k=3)
 
         for imb in xrange(len(imbobs)):
