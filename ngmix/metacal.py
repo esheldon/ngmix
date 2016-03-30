@@ -54,7 +54,7 @@ def get_all_metacal(obs, step=0.01, fixnoise=True, **kw):
     """
 
     if fixnoise:
-        print("    Doing fixnoise")
+        #print("    Doing fixnoise")
         odict= _get_all_metacal_fixnoise(obs, step=step, **kw)
     else:
         odict= _get_all_metacal(obs, step=step, **kw)
@@ -90,7 +90,7 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     # Using None for the model means we get just noise
     noise_obs = simobs.simulate_obs(None, obs)
 
-    print("    Doing rotnoise")
+    #print("    Doing rotnoise")
 
     # rotate by 90
     _rotate_obs_image(noise_obs, k=1)
