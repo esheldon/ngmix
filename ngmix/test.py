@@ -11,6 +11,7 @@ from .priors import srandu
 from . import joint_prior
 from .fitting import *
 from .gexceptions import *
+from .jacobian import Jacobian
 
 from . import stats
 
@@ -2337,7 +2338,7 @@ def test_nm_many(n=1000, **kw):
             'ntry':ntrys}
 
 def test_max(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
-             method='nm',
+             method='lm',
              g1=0.1,
              g2=0.05,
              sigma_fac=5.0,
@@ -2360,8 +2361,6 @@ def test_max(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
              do_emcee=False,
              nwalkers=80, burnin=800, nstep=800):
     """
-    Fit with nelder-mead, calculating cov matrix with our code
-
     if do_emcee is True, compare with a mcmc fit using emcee
     """
     from . import em
@@ -2369,6 +2368,10 @@ def test_max(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
     import time
     import images
     from .em import GMixMaxIterEM
+
+    j1,j2,j3,j4=0.26,0.02,-0.03,0.23
+    det = numpy.abs( j1*j4-j2*j3)
+    jfac = sqrt(det)
 
     jfac2=jfac*jfac
     numpy.random.seed(seed)
@@ -2399,7 +2402,12 @@ def test_max(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
     else:
         cen = cen_orig.copy()
 
-    j=Jacobian(cen[0],cen[1], jfac, 0.0, 0.0, jfac)
+    j=Jacobian(row=cen[0],
+               col=cen[1],
+               dvdrow=j1,
+               dvdcol=j2,
+               dudrow=j3,
+               dudcol=j4)
 
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
     gm_psf=gmix.GMixModel(pars_psf, "gauss")
@@ -2410,7 +2418,12 @@ def test_max(model, sigma=2.82, counts=100.0, noise=0.001, nimages=1,
 
     gm=gm_obj0.convolve(gm_psf)
 
-    jpsf=Jacobian(cen_orig[0], cen_orig[1], jfac, 0.0, 0.0, jfac)
+    jpsf=Jacobian(row=cen_orig[0],
+                  col=cen_orig[1],
+                  dvdrow=j1,
+                  dvdcol=j2,
+                  dudrow=j3,
+                  dudcol=j4)
     im_psf=gm_psf.make_image(dims, jacobian=jpsf, nsub=16)
     im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
     wt_psf=zeros(im_psf.shape) + 1./noise_psf**2

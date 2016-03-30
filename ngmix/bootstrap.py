@@ -463,7 +463,7 @@ class Bootstrapper(object):
             if self.verbose:
                 print("        setting jacobian cen to:",row,col,
                       "numiter:",res['numiter'])
-            jacob.set_cen(row,col)
+            jacob.set_cen(row=row,col=col)
         else:
             print("        failed to find cen")
 
@@ -532,11 +532,12 @@ class Bootstrapper(object):
                         Tguess_i = psf_obs.meta[Tguess_key]
                     else:
                         Tguess_i = Tguess
+
                     self._fit_one_psf(psf_obs, psf_model, Tguess_i,
                                       ntry, fit_pars, norm_key=norm_key)
                     new_obslist.append(obs)
                     ntot += 1
-                except BootPSFFailure:
+                except BootPSFFailure as err:
                     if not skip_failed:
                         raise
                     else:

@@ -33,11 +33,20 @@ from . import shape
 LOWVAL=-numpy.inf
 BIGVAL =9999.0e47
 
+def make_rng(rng=None):
+    """
+    if the input rng is None, create a new RandomState
+    but with a seed generated from current numpy state
+    """
+    if rng is None:
+        seed=numpy.random.randint(0,2**30)
+        rng = numpy.random.RandomState(seed)
+
+    return rng
+
 class PriorBase(object):
     def __init__(self, rng=None):
-        if rng is None:
-            rng=numpy.random.RandomState()
-        self.rng=rng
+        self.rng=make_rng(rng=rng)
 
 class GPriorBase(PriorBase):
     """
@@ -2868,10 +2877,7 @@ class Normal(_gmix.Normal):
         self.sigma=sigma
         self.ndim=1
 
-        if rng is None:
-            rng=numpy.random.RandomState()
-        self.rng=rng
-
+        self.rng=make_rng(rng=rng)
 
         super(Normal,self).__init__(cen, sigma)
 
@@ -2884,6 +2890,43 @@ class Normal(_gmix.Normal):
                                size=size)
         #rand=self.cen + self.sigma*self.rng.randn(*args)
         return rand
+
+class Bounded1D(PriorBase):
+    """
+    wrap a pdf and limit samples to the input bounds
+    """
+    def __init__(self, pdf, bounds):
+        self.pdf=pdf
+        self.bounds=bounds
+        assert len(bounds)==2,"bounds must be length 2"
+
+    def sample(self, size=None):
+
+        bounds = self.bounds
+
+        if size is None:
+            nval=1
+        else:
+            nval=size
+
+        values=numpy.zeros(nval)
+        ngood=0
+        nleft=nval
+
+        while nleft > 0:
+            tmp = self.pdf.sample(nleft)
+
+            w,=numpy.where( (tmp > bounds[0]) & (tmp < bounds[1]) )
+
+            if w.size > 0:
+                values[ngood:ngood+w.size] = tmp[w]
+
+                ngood += w.size
+                nleft -= w.size
+
+        if size is None:
+            values=values[0]
+        return values
 
 class LogNormal(PriorBase):
     """
@@ -3971,9 +4014,7 @@ class CenPrior(_gmix.Normal2D):
         self.sigma1 = sigma1
         self.sigma2 = sigma2
 
-        if rng is None:
-            rng=numpy.random.RandomState()
-        self.rng=rng
+        self.rng=make_rng(rng=rng)
 
         super(CenPrior,self).__init__(cen1,cen2,sigma1,sigma2)
 
@@ -4570,9 +4611,7 @@ class ZDisk2D(_gmix.ZDisk2D):
     """
     def __init__(self, radius, rng=None):
 
-        if rng is None:
-            rng=numpy.random.RandomState()
-        self.rng=rng
+        self.rng=make_rng(rng=rng)
 
         self.radius = radius
         self.radius_sq = radius**2

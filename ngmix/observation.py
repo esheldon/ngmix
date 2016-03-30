@@ -35,8 +35,8 @@ class Observation(object):
                  psf=None,
                  meta=None):
 
-        self.image=numpy.asanyarray(image, dtype='f8')
-        assert len(image.shape)==2,"image must be 2d"
+        self.image=None
+        self.set_image(image)
 
         self.meta={}
 
@@ -60,6 +60,29 @@ class Observation(object):
         if psf is not None:
             self.set_psf(psf)
 
+    def set_image(self, image):
+        """
+        Set the image.  If the image is being reset, must be
+        same shape as previous incarnation in order to remain
+        consistent
+
+        parameters
+        ----------
+        image: ndarray (or None)
+        """
+
+        image_old=self.image
+
+        # force f8 with native byte ordering, contiguous C layout
+        self.image=numpy.ascontiguousarray(image,dtype='f8')
+
+        assert len(self.image.shape)==2,"image must be 2d"
+
+        if image_old is not None:
+            mess=("old and new image must have same shape, to "
+                  "maintain consistency")
+            assert self.image.shape == image_old.shape,mess
+
     def set_weight(self, weight):
         """
         Set the weight map.
@@ -70,10 +93,12 @@ class Observation(object):
         """
 
         if weight is not None:
-            weight=numpy.asanyarray(weight, dtype='f8')
+            # force f8 with native byte ordering, contiguous C layout
+            weight=numpy.ascontiguousarray(weight, dtype='f8')
             assert len(weight.shape)==2,"weight must be 2d"
 
-            assert (weight.shape==self.image.shape),"image and weight must be same shape"
+            mess="image and weight must be same shape"
+            assert (weight.shape==self.image.shape),mess
 
         else:
             weight = numpy.zeros(self.image.shape) + 1.0
@@ -90,7 +115,8 @@ class Observation(object):
         """
 
         if bmask is not None:
-            bmask=numpy.asanyarray(bmask, dtype='f8')
+            # force contiguous C, but we don't know what dtype to expect
+            bmask=numpy.ascontiguousarray(bmask)
             assert len(bmask.shape)==2,"bmask must be 2d"
 
             assert (bmask.shape==self.image.shape),"image and bmask must be same shape"
@@ -107,11 +133,14 @@ class Observation(object):
         jacobian: Jacobian (or None)
         """
         if jacobian is None:
-            jacobian=UnitJacobian(0.0, 0.0)
+            jacobian=UnitJacobian(row=0.0, col=0.0)
         assert isinstance(jacobian,Jacobian),"jacobian must be of type Jacobian"
         self.jacobian=jacobian
 
     def get_jacobian(self):
+        """
+        get a copy of the jacobian
+        """
         return self.jacobian.copy()
 
     def set_psf(self,psf):
@@ -213,7 +242,7 @@ class Observation(object):
         s2n: float
             The supid s/n estimator
         """
-        
+
         Isum, Vsum, Npix = self.get_s2n_sums()
         if Vsum > 0.0:
             s2n = Isum/numpy.sqrt(Vsum)
@@ -299,7 +328,7 @@ class ObsList(list):
         s2n: float
             The supid s/n estimator
         """
-        
+
         Isum, Vsum, Npix = self.get_s2n_sums()
         if Vsum > 0.0:
             s2n = Isum/numpy.sqrt(Vsum)
@@ -390,7 +419,7 @@ class MultiBandObsList(list):
         s2n: float
             The supid s/n estimator
         """
-        
+
         Isum, Vsum, Npix = self.get_s2n_sums()
         if Vsum > 0.0:
             s2n = Isum/numpy.sqrt(Vsum)

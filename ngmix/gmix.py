@@ -460,7 +460,7 @@ class GMix(object):
                 _gmix.render(gm, image, nsub, fexp)
 
 
-    def fill_fdiff(self, obs, fdiff, start=0, nsub=1, npoints=None):
+    def fill_fdiff(self, obs, fdiff, start=0, nsub=1, npoints=None, nocheck=False):
         """
         Fill fdiff=(model-data)/err given the input Observation
 
@@ -477,6 +477,9 @@ class GMix(object):
 
         if obs.jacobian is not None:
             assert isinstance(obs.jacobian,Jacobian)
+
+        if not nocheck:
+            fdiff = numpy.ascontiguousarray(fdiff, dtype='f8')
 
         nuse=fdiff.size-start
 
