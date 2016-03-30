@@ -1070,8 +1070,6 @@ static PyObject * PyGMix_eval_jacob(PyObject* self, PyObject* args) {
     u=PYGMIX_JACOB_GETU(jacob, row, col);
     v=PYGMIX_JACOB_GETV(jacob, row, col);
 
-    //val = PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, u, v);
-    // Mike suggests the correct convention is u->x->row and v->y->col
     val = PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, v, u);
 
     return Py_BuildValue("d", val);
@@ -1736,8 +1734,6 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
                     umod = u-ucen;
                     vmod = v-vcen;
      
-                    //weight=PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, umod, vmod);
-                    // Mike suggests the correct convention is u->x->row and v->y->col
                     weight=PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, vmod, umod);
 
                     wdata = weight*data;
@@ -1797,8 +1793,6 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
             umod = u-ucen;
             vmod = v-vcen;
 
-            //weight=PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, umod, vmod);
-            // Mike suggests the correct convention is u->x->row and v->y->col
             weight=PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, vmod, umod);
 
             wsum += weight;
