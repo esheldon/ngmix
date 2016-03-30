@@ -139,7 +139,7 @@ class Metacal(object):
     psf_obs=Observation(psf_image)
     obs=Observation(image, psf=psf_obs)
 
-    mc=Metacal(obs)
+    mc=Metacal(obs, prepix=True)
 
     # observations used to calculate R
 
