@@ -1445,8 +1445,6 @@ static PyObject * PyGMix_get_model_s2n_sum(PyObject* self, PyObject* args) {
 
             ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
             if ( ivar > 0.0) {
-                //model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
-                // Mike suggests the correct convention is u->x->row and v->y->col
                 model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
 
                 s2n_sum += model_val*model_val*ivar;
@@ -1522,8 +1520,6 @@ static PyObject * PyGMix_get_model_s2n_Tvar_sums(PyObject* self, PyObject* args)
 
             ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
             if ( ivar > 0.0) {
-                //model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
-                // Mike suggests the correct convention is u->x->row and v->y->col
                 model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
                 m2 = model_val*model_val;
 
@@ -1600,9 +1596,6 @@ static PyObject * PyGMix_get_model_s2n_Tvar_sums_altweight(PyObject* self, PyObj
 
             ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
             if ( ivar > 0.0) {
-                //model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
-                //wval=PYGMIX_GMIX_EVAL(wgmix, wn_gauss, u, v);
-                // Mike suggests the correct convention is u->x->row and v->y->col
                 model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
                 wval=PYGMIX_GMIX_EVAL(wgmix, wn_gauss, v, u);
 
@@ -1903,8 +1896,6 @@ static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
             ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
             if ( ivar > 0.0) {
                 data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
-                // Mike suggests the correct convention is u->x->row and v->y->col
-                //model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
                 model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
 
                 diff = model_val-data;
@@ -2011,8 +2002,6 @@ static PyObject * PyGMix_get_loglike_gauleg(PyObject* self, PyObject* args) {
                         u=PYGMIX_JACOB_GETU(jacob, trow, tcol);
                         v=PYGMIX_JACOB_GETV(jacob, trow, tcol);
 
-                        // Mike suggests the correct convention is u->x->row and v->y->col
-                        //model_val += wrow*wcol*PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
                         model_val += wrow*wcol*PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
                         wsum += wrow*wcol;
                     }
@@ -2104,8 +2093,6 @@ static PyObject * PyGMix_get_loglike_aper(PyObject* self, PyObject* args) {
                 if ( ivar > 0.0) {
                     data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
 
-                    // Mike suggests the correct convention is u->x->row and v->y->col
-                    //model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
                     model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
 
                     diff = model_val-data;
@@ -2254,8 +2241,6 @@ static PyObject * PyGMix_get_loglike_sub(PyObject* self, PyObject* args) {
 
                     for (colsub=0; colsub<nsub; colsub++) {
 
-                        // Mike suggests the correct convention is u->x->row and v->y->col
-                        //model_val += PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
                         model_val += PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
 
                         u += ustepsize;
@@ -2335,8 +2320,6 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
     nupow = -0.5*(nu+1.0);
     
     for (row=0; row < n_row; row++) {
-        //u=jacob->dudrow*(row - jacob->row0) + jacob->dudcol*(0 - jacob->col0);
-        //v=jacob->dvdrow*(row - jacob->row0) + jacob->dvdcol*(0 - jacob->col0);
         u=PYGMIX_JACOB_GETU(jacob, row, 0);
         v=PYGMIX_JACOB_GETV(jacob, row, 0);
 
@@ -2346,8 +2329,6 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
             if ( ivar > 0.0) {
                 data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
 
-                // Mike suggests the correct convention is u->x->row and v->y->col
-                //model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
                 model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
 
                 diff = model_val-data;
@@ -2430,8 +2411,6 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
 
                 data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
 
-                // Mike suggests the correct convention is u->x->row and v->y->col
-                //model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
                 model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
 
                 (*fdiff_ptr) = (model_val-data)*ierr;
@@ -2542,7 +2521,6 @@ static PyObject * PyGMix_fill_fdiff_gauleg(PyObject* self, PyObject* args) {
                         u=PYGMIX_JACOB_GETU(jacob, trow, tcol);
                         v=PYGMIX_JACOB_GETV(jacob, trow, tcol);
 
-                        //model_val += wrow*wcol*PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
                         model_val += wrow*wcol*PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
                         wsum += wrow*wcol;
 
@@ -2646,14 +2624,11 @@ static PyObject * PyGMix_fill_fdiff_sub(PyObject* self, PyObject* args) {
 
                 model_val=0.;
                 for (rowsub=0; rowsub<nsub; rowsub++) {
-                    //u=jacob->dudrow*(trow - jacob->row0) + jacob->dudcol*(lowcol - jacob->col0);
-                    //v=jacob->dvdrow*(trow - jacob->row0) + jacob->dvdcol*(lowcol - jacob->col0);
                     u=PYGMIX_JACOB_GETU(jacob, trow, lowcol);
                     v=PYGMIX_JACOB_GETV(jacob, trow, lowcol);
 
                     for (colsub=0; colsub<nsub; colsub++) {
 
-                        //model_val += PYGMIX_GMIX_EVAL(gmix, n_gauss, u, v);
                         model_val += PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
 
                         u += ustepsize;
