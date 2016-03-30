@@ -20,13 +20,13 @@ except ImportError:
 
 LANCZOS_PARS_DEFAULT={'order':5, 'conserve_dc':True, 'tol':1.0e-4}
 
-# 'noshear' is also returned
-METACAL_TYPES = [
+METACAL_TYPES_SUB = [
     '1p','1m','2p','2m',
     '1p_psf','1m_psf','2p_psf','2m_psf',
 ]
+METACAL_TYPES = ['noshear'] + METACAL_TYPES_SUB
 
-def get_all_metacal(obs, step=0.01, fixnoise=False, **kw):
+def get_all_metacal(obs, step=0.01, fixnoise=True, **kw):
     """
     Get all combinations of metacal images in a dict
 
@@ -38,7 +38,7 @@ def get_all_metacal(obs, step=0.01, fixnoise=False, **kw):
         The shear step value to use for metacal
     fixnoise: bool
         If True, add a compensating noise field to cancel the correlated noise
-        component.
+        component.  Default True
     **kw:
         other keywords for metacal
 
@@ -57,99 +57,54 @@ def get_all_metacal(obs, step=0.01, fixnoise=False, **kw):
         print("    Doing fixnoise")
         odict= _get_all_metacal_fixnoise(obs, step=step, **kw)
     else:
-        if isinstance(obs, Observation):
-            m=Metacal(obs, **kw)
-            odict=m.get_all(step, **kw)
-        elif isinstance(obs, MultiBandObsList):
-            odict=_make_metacal_mb_obs_list_dict(obs, step, **kw)
-        elif isinstance(obs, ObsList):
-            odict=_make_metacal_obs_list_dict(obs, step, **kw)
-        else:
-            raise ValueError("obs must be Observation, ObsList, "
-                             "or MultiBandObsList")
+        odict= _get_all_metacal(obs, step=step, **kw)
 
     return odict
 
+def _get_all_metacal(obs, step=0.01, **kw):
+    """
+    internal routine
 
-_FIXNOISE_PAIRS=[
-    ('1p','1m'),
-    ('1m','1p'),
-    ('2p','2m'),
-    ('2m','2p'),
-    ('1p_psf','1m_psf'),
-    ('1m_psf','1p_psf'),
-    ('2p_psf','2m_psf'),
-    ('2m_psf','2p_psf')
-]
-_ROTNOISE_PAIRS=[
-    ('1p','1p'),
-    ('1m','1m'),
-    ('2p','2p'),
-    ('2m','2m'),
-    ('1p_psf','1p_psf'),
-    ('1m_psf','1m_psf'),
-    ('2p_psf','2p_psf'),
-    ('2m_psf','2m_psf')
-]
+    get all metacal
+    """
+    if isinstance(obs, Observation):
+        m=Metacal(obs, **kw)
+        odict=m.get_all(step, **kw)
+    elif isinstance(obs, MultiBandObsList):
+        odict=_make_metacal_mb_obs_list_dict(obs, step, **kw)
+    elif isinstance(obs, ObsList):
+        odict=_make_metacal_obs_list_dict(obs, step, **kw)
+    else:
+        raise ValueError("obs must be Observation, ObsList, "
+                         "or MultiBandObsList")
+
+    return odict
 
 def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     """
     internal routine
 
-    Run get_all_metacal to get all combinations of metacal images in a single
-    dict.  Add a sheared noise field to cancel the correlated noise
-
-    parameters
-    ----------
-    obs: Observation, ObsList, or MultiBandObsList
-        The values in the dict correspond to these
-    step: float
-        The shear step value to use for metacal
-    rotnoise: bool
-        If True, use the noise rotation method rather than
-        minus shear method.  This method should be come the
-        default in the future
-
-    **kw:
-        other keywords for metacal
-
-    returns
-    -------
-    A dictionary with all the relevant metacaled images
-        dict keys:
-            1p -> ( shear, 0)
-            1m -> (-shear, 0)
-            2p -> ( 0, shear)
-            2m -> ( 0, -shear)
-        simular for 1p_psf etc.
+    Add a sheared noise field to cancel the correlated noise
     """
 
     # Using None for the model means we get just noise
     noise_obs = simobs.simulate_obs(None, obs)
 
-    rotnoise=kw.get('rotnoise',False)
-    if rotnoise:
-        print("    Doing rotnoise")
-        pairs=_ROTNOISE_PAIRS
-        # rotate by 90
-        _rotate_obs_image(noise_obs, k=1)
-    else:
-        pairs=_FIXNOISE_PAIRS
+    print("    Doing rotnoise")
 
-    obsdict       = get_all_metacal(obs, step=step, **kw)
-    noise_obsdict = get_all_metacal(noise_obs, step=step, **kw)
+    # rotate by 90
+    _rotate_obs_image(noise_obs, k=1)
 
-    for ipairs in pairs:
+    obsdict       = _get_all_metacal(obs, step=step, **kw)
+    noise_obsdict = _get_all_metacal(noise_obs, step=step, **kw)
 
-        mk=ipairs[0]
-        nk=ipairs[1]
+    for type in METACAL_TYPES:
 
-        imbobs = obsdict[mk]
-        nmbobs = noise_obsdict[nk]
+        imbobs = obsdict[type]
+        nmbobs = noise_obsdict[type]
 
-        if rotnoise:
-            # rotate back, which is 3 more rotations
-            _rotate_obs_image(nmbobs, k=3)
+        # rotate back, which is 3 more rotations
+        _rotate_obs_image(nmbobs, k=3)
 
         for imb in xrange(len(imbobs)):
             iolist=imbobs[imb]
@@ -237,7 +192,9 @@ class Metacal(object):
             similar for 1p_psf etc.
             'noshear' is also returned
         """
-        types=kw.get('types',METACAL_TYPES)
+
+        # we add noshear to it
+        types=kw.get('types',METACAL_TYPES_SUB)
 
         shdict={}
 
@@ -952,10 +909,7 @@ def _make_metacal_obs_list_dict(obs_list, step, **kw):
     first=True
     for obs in obs_list:
 
-        #mc=Metacal(obs)
-        #todict=mc.get_all(step)
-
-        todict=get_all_metacal(obs, step=step, **kw)
+        todict=_get_all_metacal(obs, step=step, **kw)
 
         if odict is None:
             odict=_init_obs_list_dict(todict.keys())
