@@ -264,7 +264,6 @@ class Metacal(object):
             else:
                 if type=='1p':
                     # add in noshear from this one
-                    print("getting noshear")
                     obs, obs_noshear = self.get_obs_galshear(
                         sh,
                         get_unsheared=True
