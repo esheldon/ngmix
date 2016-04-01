@@ -152,7 +152,7 @@ dependencies
 ------------
 
 * numpy
-* scipy: optional needed for generating random samples from shape PDFs.
+* scipy: optional needed for Levenberg-Marquardt fitter
 * emcee: optional for doing MCMC fitting: http://dan.iel.fm/emcee/current/ Affine invariant MCMC sampler.
 * statsmodels: optional for importance sampling (multivariate student
     T distribution)
