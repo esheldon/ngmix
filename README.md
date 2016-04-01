@@ -15,7 +15,7 @@ from ngmix.observation import Observation, ObsList, MultiBandObsList
 from ngmix.fitting import LMSimple
 import numpy
 from numpy import array
-from numpy.random import uniform, normal
+from numpy.random import uniform as urand
 
 eps=0.01
 numpy.random.seed(8381)
@@ -82,12 +82,12 @@ pfitter=LMSimple(psf_obs,'gauss')
 
 # for simplicity, guess pars before pixelization
 guess=array(psf_pars)
-guess[0] += uniform(low=-eps,high=eps)
-guess[1] += uniform(low=-eps,high=eps)
-guess[2] += uniform(low=-eps, high=eps)
-guess[3] += uniform(low=-eps, high=eps)
-guess[4] *= (1.0 + uniform(low=-eps, high=eps))
-guess[5] *= (1.0 + uniform(low=-eps, high=eps))
+guess[0] += urand(low=-eps,high=eps)
+guess[1] += urand(low=-eps,high=eps)
+guess[2] += urand(low=-eps, high=eps)
+guess[3] += urand(low=-eps, high=eps)
+guess[4] *= (1.0 + urand(low=-eps, high=eps))
+guess[5] *= (1.0 + urand(low=-eps, high=eps))
 
 pfitter.go(guess)
 
@@ -111,12 +111,12 @@ obs = Observation(image, weight=weight, jacobian=gal_jacob, psf=psf_obs)
 fitter=LMSimple(obs,'exp')
 
 guess=array(pars)
-guess[0] += uniform(low=-eps, high=eps)
-guess[1] += uniform(low=-eps, high=eps)
-guess[2] += uniform(low=-eps, high=eps)
-guess[3] += uniform(low=-eps, high=eps)
-guess[4] *= (1.0 + uniform(low=-eps, high=eps))
-guess[5] *= (1.0 + uniform(low=-eps, high=eps))
+guess[0] += urand(low=-eps, high=eps)
+guess[1] += urand(low=-eps, high=eps)
+guess[2] += urand(low=-eps, high=eps)
+guess[3] += urand(low=-eps, high=eps)
+guess[4] *= (1.0 + urand(low=-eps, high=eps))
+guess[5] *= (1.0 + urand(low=-eps, high=eps))
 
 fitter.go(guess)
 
