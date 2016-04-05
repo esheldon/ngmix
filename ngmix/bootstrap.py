@@ -510,6 +510,12 @@ class Bootstrapper(object):
                 if not obs.has_psf():
                     raise RuntimeError("observation does not have a psf set")
 
+                # this is a metacal thing
+                if hasattr(obs,'psf_nopix'):
+                    print("    fitting psf nopix")
+                    self._fit_one_psf(obs.psf_nopix, psf_model, Tguess,
+                                      ntry, fit_pars)
+
                 psf_obs = obs.get_psf()
                 if skip_already_done:
                     # if have a gmix, skip it
@@ -1794,7 +1800,11 @@ class MetacalBootstrapper(Bootstrapper):
             npsf=0
             for obslist in boot.mb_obs_list:
                 for obs in obslist:
-                    g1,g2,T=obs.psf.gmix.get_g1g2T()
+                    if hasattr(obs,'psf_nopix'):
+                        print("    summing nopix")
+                        g1,g2,T=obs.psf_nopix.gmix.get_g1g2T()
+                    else:
+                        g1,g2,T=obs.psf.gmix.get_g1g2T()
                     gpsf_sum[0] += g1
                     gpsf_sum[1] += g2
                     Tpsf_sum += T
