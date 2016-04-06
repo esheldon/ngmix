@@ -510,30 +510,36 @@ class Bootstrapper(object):
                 if not obs.has_psf():
                     raise RuntimeError("observation does not have a psf set")
 
-                # this is a metacal thing
-                if hasattr(obs,'psf_nopix'):
-                    print("    fitting psf nopix")
-                    self._fit_one_psf(obs.psf_nopix, psf_model, Tguess,
-                                      ntry, fit_pars)
+                try:
 
-                psf_obs = obs.get_psf()
-                if skip_already_done:
-                    # if have a gmix, skip it
-                    if psf_obs.has_gmix():
-                        new_obslist.append(obs)
-                        ntot += 1
-                        continue
+                    # this is a metacal thing
+                    if hasattr(obs,'psf_nopix'):
+                        print("    fitting psf nopix")
+                        if skip_already_done and obs.psf_nopix.has_gmix():
+                            # pass but don't continue, since we may still need
+                            # to fit some images below
+                            pass
+                        else:
+                            self._fit_one_psf(obs.psf_nopix, psf_model, Tguess,
+                                              ntry, fit_pars)
 
-                    # if have a fitter and flags != 0, skip it
-                    if 'fitter' in psf_obs.meta:
-                        tres=psf_obs.meta['fitter'].get_result()
-                        if tres['flags'] != 0:
-                            mess=("    failed psf fit band %d obs %d, "
-                                  "skipping observation" % (band,i))
-                            print(mess)
+                    psf_obs = obs.get_psf()
+                    if skip_already_done:
+                        # if have a gmix, skip it
+                        if psf_obs.has_gmix():
+                            new_obslist.append(obs)
+                            ntot += 1
                             continue
 
-                try:
+                        # if have a fitter and flags != 0, skip it
+                        if 'fitter' in psf_obs.meta:
+                            tres=psf_obs.meta['fitter'].get_result()
+                            if tres['flags'] != 0:
+                                mess=("    failed psf fit band %d obs %d, "
+                                      "skipping observation" % (band,i))
+                                print(mess)
+                                continue
+
                     if Tguess_key is not None:
                         Tguess_i = psf_obs.meta[Tguess_key]
                     else:
@@ -543,6 +549,7 @@ class Bootstrapper(object):
                                       ntry, fit_pars, norm_key=norm_key)
                     new_obslist.append(obs)
                     ntot += 1
+
                 except BootPSFFailure as err:
                     if not skip_failed:
                         raise
