@@ -124,6 +124,7 @@ def _get_noisy_image(obs, sim_image, **kw):
     noise_image = get_noise_image(obs.weight, **kw)
     return sim_image + noise_image, noise_image
 
+BIGNOISE=1.0e15
 def get_noise_image(weight, add_all=False):
     """
     get a noise image based on the input weight map
@@ -148,6 +149,11 @@ def get_noise_image(weight, add_all=False):
 
             wzero=where(weight <= 0)
             err[wzero] = median_err
+
+    else:
+        print("    All weight is zero!  Setting noise to",BIGNOISE)
+        err[:,:] = BIGNOISE
+
 
     noise_image *= err
     return noise_image
