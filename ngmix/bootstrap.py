@@ -514,7 +514,7 @@ class Bootstrapper(object):
 
                     # this is a metacal thing
                     if hasattr(obs,'psf_nopix'):
-                        print("    fitting psf nopix")
+                        #print("    fitting psf nopix")
                         if skip_already_done and obs.psf_nopix.has_gmix():
                             # pass but don't continue, since we may still need
                             # to fit some images below
@@ -1808,7 +1808,7 @@ class MetacalBootstrapper(Bootstrapper):
             for obslist in boot.mb_obs_list:
                 for obs in obslist:
                     if hasattr(obs,'psf_nopix'):
-                        print("    summing nopix")
+                        #print("    summing nopix")
                         g1,g2,T=obs.psf_nopix.gmix.get_g1g2T()
                     else:
                         g1,g2,T=obs.psf.gmix.get_g1g2T()
