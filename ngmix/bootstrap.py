@@ -1781,7 +1781,8 @@ class MetacalBootstrapper(Bootstrapper):
                              psf_Tguess, prior, psf_ntry, ntry, 
                              psf_fit_pars):
 
-        res={}
+        # overall flags, or'ed from each bootstrapper
+        res={'mcal_flags':0}
         for key in sorted(obs_dict):
             # run a regular Bootstrapper on these observations
             boot = Bootstrapper(obs_dict[key],
@@ -1797,6 +1798,9 @@ class MetacalBootstrapper(Bootstrapper):
 
             tres=boot.get_max_fitter().get_result()
             rres=boot.get_round_result()
+
+            res['mcal_flags'] |= tres['flags']
+            res['mcal_flags'] |= rres['flags']
 
             tres['s2n_r'] = rres['s2n_r']
             tres['T_r'] = rres['T_r']
