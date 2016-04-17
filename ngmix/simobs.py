@@ -121,7 +121,13 @@ def _get_simulated_image(gmix, obs, **kw):
     return sim_image
 
 def _get_noisy_image(obs, sim_image, **kw):
-    noise_image = get_noise_image(obs.weight, **kw)
+    if hasattr(obs,'weight_raw'):
+        #print("    using weight_raw")
+        weight=obs.weight_raw
+    else:
+        weight=obs.weight
+
+    noise_image = get_noise_image(weight, **kw)
     return sim_image + noise_image, noise_image
 
 BIGNOISE=1.0e15
