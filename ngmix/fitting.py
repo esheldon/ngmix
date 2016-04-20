@@ -732,7 +732,6 @@ class TemplateFluxFitter(FitterBase):
                 flux_err = sqrt(arg)
             else:
                 flags |= BAD_VAR
-                flux_err=CDEF
 
         self._result={'model':self.model_name,
                       'flags':flags,
