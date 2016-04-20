@@ -2930,8 +2930,8 @@ static int em_run(PyObject* image_obj,
         */
         if ( 
                   (*frac_diff < tol)
-               && (e1diff < 1.0e-4)
-               && (e2diff < 1.0e-4)
+               && (e1diff < tol)
+               && (e2diff < tol)
            )
         {
             break;
