@@ -684,6 +684,9 @@ class TemplateFluxFitter(FitterBase):
         cen=self.cen
         nobs=len(self.obs)
 
+        flux=PDEF
+        flux_err=CDEF
+
         for ipass in [1,2]:
             for iobs in xrange(nobs):
                 obs=self.obs[iobs]
@@ -720,7 +723,6 @@ class TemplateFluxFitter(FitterBase):
             flags |= ZERO_DOF
 
         # final flux calculation with error checking
-        flux_err=CDEF
         if msq_sum==0 or self.totpix==1:
             flags |= DIV_ZERO
         else:
