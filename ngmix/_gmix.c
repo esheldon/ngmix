@@ -122,26 +122,6 @@ static int eta1eta2_to_g1g2(double eta1, double eta2, double *g1, double *g2) {
     return 1;
 }
 
-
-
-static double gmix_get_T(struct PyGMix_Gauss2D *gmix,
-                         npy_intp n_gauss)
-{
-
-    double T=0.0, psum=0;
-    npy_intp i=0;
-
-    for (i=0; i<n_gauss; i++) {
-        struct PyGMix_Gauss2D *gauss=&gmix[i];
-
-        psum += gauss->p;
-        T += gauss->p*(gauss->irr + gauss->icc);
-    }
-    T /= psum;
-    return T;
-}
-
-
 static void gmix_get_cen(const struct PyGMix_Gauss2D *self,
                          npy_intp n_gauss,
                          double* row,
@@ -2911,7 +2891,6 @@ static int em_run(PyObject* image_obj,
         psky = skysum;
         nsky = psky/area;
 
-        //T = gmix_get_T(gmix, n_gauss);
         status=gmix_get_e1e2T(gmix, n_gauss, &e1, &e2, &T);
         if (!status) {
             PyErr_Format(GMixRangeError, "em psum = 0");
