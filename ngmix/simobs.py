@@ -17,12 +17,17 @@ def simulate_obs(gmix, obs, **kw):
         The gaussian mixture or None
     obs: observation(s)
         One of Observation, ObsList, or MultiBandObsList
-    convolve_psf: bool
+    convolve_psf: bool, optional
         If True, convolve by the PSF.  Default True.
-    add_noise: bool
+    add_noise: bool, optional
         If True, add noise according to the weight map.  Default True.
 
         The noise image is monkey-patched in as obs.noise_image
+    use_raw_weight: bool, optional
+        If True, look for a .weight_raw attribute for generating
+        the noise.  Often one is using modified weight map to simplify
+        masking neighbors, but may want to use the raw map for
+        adding noise.
     """
 
     if isinstance(obs, MultiBandObsList):
@@ -121,23 +126,43 @@ def _get_simulated_image(gmix, obs, **kw):
     return sim_image
 
 def _get_noisy_image(obs, sim_image, **kw):
-    if hasattr(obs,'weight_raw'):
-        #print("    using weight_raw")
-        weight=obs.weight_raw
+    """
+    create a noise image from the weight map
+    """
+
+    # often we are using a modified weight map for fitting,
+    # to simplify masking of neighbors.  The user can request
+    # to use an attribute called `weight_raw` instead, which
+    # would have the unmodified weight map, good for adding the
+    # correct noise
+
+    use_raw_weight=kw.get('use_raw_weight',False)
+    if use_raw_weight:
+
+        #print("    Using raw weight map to simulate noise")
+
+        if not hasattr(obs,'weight_raw'):
+            raise RuntimeError("requested use_raw_weight, but "
+                               "Observation has no weight_raw "
+                               "attribute")
+
+        weight = obs.weight_raw
     else:
-        weight=obs.weight
+        weight = obs.weight
 
     noise_image = get_noise_image(weight, **kw)
     return sim_image + noise_image, noise_image
 
 BIGNOISE=1.0e15
-def get_noise_image(weight, add_all=False):
+def get_noise_image(weight, **kw):
     """
     get a noise image based on the input weight map
 
     If add_all, we set weight==0 pixels with the median noise.  This should not
     be a problem for algorithms that use the weight map
     """
+    add_all=kw.get('add_all',False)
+
     noise_image = numpy.random.normal(loc=0.0,
                                       scale=1.0,
                                       size=weight.shape)

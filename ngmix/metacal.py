@@ -40,7 +40,7 @@ def get_all_metacal(obs, step=0.01, fixnoise=True, **kw):
         If True, add a compensating noise field to cancel the correlated noise
         component.  Default True
     **kw:
-        other keywords for metacal
+        other keywords for metacal and simobs.
 
     returns
     -------
@@ -88,7 +88,7 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     """
 
     # Using None for the model means we get just noise
-    noise_obs = simobs.simulate_obs(None, obs)
+    noise_obs = simobs.simulate_obs(None, obs, **kw)
 
     #print("    Doing rotnoise")
 
