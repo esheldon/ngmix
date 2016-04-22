@@ -39,9 +39,14 @@ MAX_TAU=0.1
 MIN_ARATE=0.2
 MCMC_NTRY=1
 
-BAD_VAR=2**0
-LOW_ARATE=2**1
-#LARGE_TAU=2**2
+# default values
+PDEF=-9.999e9    # parameter defaults
+CDEF=9.999e9     # covariance or error defaults
+
+# flags
+
+BAD_VAR=2**0     # variance not positive definite
+LOW_ARATE=2**1   # info flag about arate
 
 # error codes in LM start at 2**0 and go to 2**3
 # this is because we set 2**(ier-5)
@@ -51,12 +56,10 @@ LM_NEG_COV_DIAG = 2**6
 EIG_NOTFINITE = 2**7
 LM_FUNC_NOTFINITE = 2**8
 
-LM_DIV_ZERO = 2**9
+DIV_ZERO = 2**9  # division by zero
 
-BAD_STATS=2**9
+ZERO_DOF = 2**10 # dof zero so can't do chi^2/dof
 
-PDEF=-9.999e9
-CDEF=9.999e9
 
 class FitterBase(object):
     """
@@ -670,6 +673,9 @@ class TemplateFluxFitter(FitterBase):
         """
         calculate the flux using zero-lag cross-correlation
         """
+
+        flags=0
+
         xcorr_sum=0.0
         msq_sum=0.0
 
@@ -677,6 +683,9 @@ class TemplateFluxFitter(FitterBase):
 
         cen=self.cen
         nobs=len(self.obs)
+
+        flux=PDEF
+        flux_err=CDEF
 
         for ipass in [1,2]:
             for iobs in xrange(nobs):
@@ -701,20 +710,28 @@ class TemplateFluxFitter(FitterBase):
                     model=gm.make_image(im.shape, jacobian=j)
                     chi2 +=( (model-im)**2 *wt ).sum()
             if ipass==1:
+                if msq_sum==0:
+                    break
                 flux = xcorr_sum/msq_sum
 
+        # chi^2 per dof and error checking
         dof=self.get_dof()
         chi2per=9999.0
         if dof > 0:
             chi2per=chi2/dof
-
-        flags=0
-        arg=chi2/msq_sum/(self.totpix-1)
-        if arg >= 0.0:
-            flux_err = sqrt(arg)
         else:
-            flags=BAD_VAR
-            flux_err=9999.0
+            flags |= ZERO_DOF
+
+        # final flux calculation with error checking
+        if msq_sum==0 or self.totpix==1:
+            flags |= DIV_ZERO
+        else:
+
+            arg=chi2/msq_sum/(self.totpix-1)
+            if arg >= 0.0:
+                flux_err = sqrt(arg)
+            else:
+                flags |= BAD_VAR
 
         self._result={'model':self.model_name,
                       'flags':flags,
@@ -1939,7 +1956,7 @@ def run_leastsq(func, guess, n_prior_pars, **keys):
         res['pars_cov']=pcov
         res['nfev']=-1
 
-        res['flags']=LM_DIV_ZERO
+        res['flags']=DIV_ZERO
         res['errmsg']="zero division"
         print('    zero division')
 
