@@ -108,6 +108,7 @@ class Bootstrapper(object):
 
         return self.psf_flux_res
 
+    '''
     def get_metacal_max_result(self):
         """
         get result of metacal with a max likelihood fitter
@@ -123,7 +124,7 @@ class Bootstrapper(object):
         if not hasattr(self, 'metacal_regauss_res'):
             raise RuntimeError("you need to run fit_metacal_regauss first")
         return self.metacal_regauss_res
-
+    '''
 
 
     def get_round_result(self):
@@ -739,6 +740,7 @@ class Bootstrapper(object):
                                                   prior=prior,
                                                   ntry=ntry,
                                                   guess_widths=guess_widths)
+    '''
     def fit_metacal_max(self,
                         psf_model,
                         gal_model,
@@ -847,7 +849,6 @@ class Bootstrapper(object):
         self.metacal_max_res = res
 
         return obs_dict_orig
-
     def _do_mean_dictlist(self, reslist):
         n=len(reslist)
 
@@ -1355,6 +1356,7 @@ class Bootstrapper(object):
                  psf_pars=psf_pars)
         return res
 
+    '''
 
     def fit_max_fixT(self, gal_model, pars, T,
                      guess=None, prior=None, extra_priors=None, ntry=1):
@@ -1713,7 +1715,7 @@ class BootstrapperGaussMom(Bootstrapper):
         guesser=MomGuesser(guess, prior=prior)
         return guesser
 
-class MetacalBootstrapper(Bootstrapper):
+class MaxMetacalBootstrapper(Bootstrapper):
 
     def get_metacal_result(self):
         """
@@ -1827,6 +1829,109 @@ class MetacalBootstrapper(Bootstrapper):
             res[key] = tres
 
         return res
+
+class DeconvMetacalBootstrapper(MaxMetacalBootstrapper):
+    def fit_metacal(self,
+                    psf_model, # to get gpsf,Tpsf
+                    psf_Tguess,
+                    weight_sigma=3.5, # pixels
+                    psf_fit_pars=None,
+                    metacal_pars=None,
+                    psf_ntry=5,
+                    ntry=1,
+                    **kw):
+        """
+        run metacalibration
+
+        parameters
+        ----------
+        psf_model: string
+            model to fit for psf
+        psf_Tguess: float
+            T guess for psf
+        psf_fit_pars: dict, optional
+            parameters for psf fit
+        weight_sigma: float, optional
+            sigma for the weight function in k space
+        metacal_pars: dict, optional
+            Parameters for metacal, default {'step':0.01}
+        psf_ntry: int, optional
+            Number of times to retry psf fitting, default 5
+        ntry: int, optional
+            Number of times to retry fitting, default 1
+        **kw:
+            extra keywords for get_all_metacal
+        """
+
+        metacal_pars_in=metacal_pars
+        metacal_pars={'step':0.01}
+        if metacal_pars_in is not None:
+            metacal_pars.update(metacal_pars_in)
+
+        metacal_pars.update(kw)
+        obs_dict = metacal.get_all_metacal(self.mb_obs_list, **metacal_pars)
+
+        res = self._do_metacal_deconv(
+            obs_dict,
+            psf_model, psf_Tguess, psf_ntry, psf_fit_pars,
+            ntry,
+        )
+
+        self.metacal_res = res
+
+    def _do_metacal_deconv(self,
+                           obs_dict,
+                           psf_model, psf_Tguess, psf_ntry, psf_fit_pars,
+                           ntry):
+
+        # overall flags, or'ed from each bootstrapper
+        res={'mcal_flags':0}
+        for key in sorted(obs_dict):
+            # run a regular Bootstrapper on these observations
+            boot = DeconvBootstrapper(obs_dict[key])
+
+            boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry, fit_pars=psf_fit_pars)
+            boot.do_deconv(ntry=ntry)
+
+            tres=boot.get_deconv_fitter().get_result()
+
+            res['mcal_flags'] |= tres['flags']
+
+            tres['s2n_w'] = tres['s2n_r']
+            tres['T'] = tres['T']
+
+            gpsf,Tpsf=self._calc_mean_psf_stats(boot.mb_obs_list)
+            tres['gpsf'] = gpsf
+            tres['Tpsf'] = Tpsf
+
+            res[key] = tres
+
+        return res
+
+    def _calc_mean_psf_stats(self, mbobs):
+
+        gpsf_sum = zeros(2)
+        Tpsf_sum = 0.0
+        wsum=0.0
+        for obslist in mbobs:
+            for obs in obslist:
+                if hasattr(obs,'psf_nopix'):
+                    g1,g2,T=obs.psf_nopix.gmix.get_g1g2T()
+                else:
+                    g1,g2,T=obs.psf.gmix.get_g1g2T()
+
+                twsum += obs.weight.sum()
+
+                wsum += twsum
+                gpsf_sum[0] += g1*twsum
+                gpsf_sum[1] += g2*twsum
+                Tpsf_sum += T*twsum
+
+
+        gpsf = gpsf_sum/wsum
+        Tpsf = Tpsf_sum/wsum
+        return gpsf,Tpsf
+
 
 class CompositeBootstrapper(Bootstrapper):
     def __init__(self, obs,
