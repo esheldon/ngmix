@@ -27,7 +27,7 @@ def simulate_obs(gmix, obs, **kw):
         If True, look for a .weight_raw attribute for generating
         the noise.  Often one is using modified weight map to simplify
         masking neighbors, but may want to use the raw map for
-        adding noise.
+        adding noise.  Default True
     """
 
     if isinstance(obs, MultiBandObsList):
@@ -136,16 +136,8 @@ def _get_noisy_image(obs, sim_image, **kw):
     # would have the unmodified weight map, good for adding the
     # correct noise
 
-    use_raw_weight=kw.get('use_raw_weight',False)
-    if use_raw_weight:
-
-        #print("    Using raw weight map to simulate noise")
-
-        if not hasattr(obs,'weight_raw'):
-            raise RuntimeError("requested use_raw_weight, but "
-                               "Observation has no weight_raw "
-                               "attribute")
-
+    use_raw_weight=kw.get('use_raw_weight',True)
+    if hasattr(obs, 'weight_raw') and use_raw_weight:
         weight = obs.weight_raw
     else:
         weight = obs.weight
