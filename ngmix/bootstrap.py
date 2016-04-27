@@ -1551,15 +1551,14 @@ class Bootstrapper(object):
         mbo = self.mb_obs_list
         nband = len(mbo)
 
-        if not mbo[0][0].psf.has_gmix():
-            raise RuntimeError("you need to fit the psfs first")
-
         flags=[]
         psf_flux = zeros(nband) - 9999.0
         psf_flux_err = zeros(nband)
 
-        for i in xrange(nband):
-            obs_list = mbo[i]
+        for i,obs_list in enumerate(mbo):
+
+            if not obs_list[0].has_psf_gmix():
+                raise RuntimeError("you need to fit the psfs first")
 
             fitter=fitting.TemplateFluxFitter(obs_list, do_psf=True, normalize_psf=normalize_psf)
             fitter.go()
@@ -1794,7 +1793,8 @@ class MaxMetacalBootstrapper(Bootstrapper):
                                 find_cen=self.find_cen,
                                 verbose=self.verbose)
 
-            boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry, fit_pars=psf_fit_pars)
+            boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry, fit_pars=psf_fit_pars,
+                          skip_already_done=False)
             boot.fit_max(gal_model, pars, prior=prior, ntry=ntry)
             boot.set_round_s2n()
 
