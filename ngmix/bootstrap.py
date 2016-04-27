@@ -1557,6 +1557,9 @@ class Bootstrapper(object):
 
         for i,obs_list in enumerate(mbo):
 
+            if len(obs_list)==0:
+                raise BootPSFFailure("no epochs for band %d" % i)
+
             if not obs_list[0].has_psf_gmix():
                 raise RuntimeError("you need to fit the psfs first")
 
