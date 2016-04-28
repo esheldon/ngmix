@@ -2952,48 +2952,53 @@ def replace_masked_pixels(mb_obs_list,
         for iobs,obs in enumerate(olist):
 
             bmask = obs.bmask
+            if hasattr(obs,'weight_raw'):
+                weight = obs.weight_raw
+            else:
+                weight = obs.weight
+
             if bmask is not None:
-                w=where(bmask != 0)
+                w=where( (bmask != 0) | (weight == 0.0) )
+            else:
+                w=where(weight = 0.0)
 
-                if w[0].size > 0:
-                    print("    replacing %d/%d masked "
-                          "pixels" % (w[0].size,bmask.size))
-                    obs.image_orig = obs.image.copy()
-                    gm = fitter.get_convolved_gmix(band=band, obsnum=iobs)
+            if w[0].size > 0:
+                print("        replacing %d/%d masked or zero weight "
+                      "pixels" % (w[0].size,bmask.size))
+                obs.image_orig = obs.image.copy()
+                gm = fitter.get_convolved_gmix(band=band, obsnum=iobs)
 
-                    im = obs.image
-                    model_image = gm.make_image(im.shape, jacobian=obs.jacobian)
+                im = obs.image
+                model_image = gm.make_image(im.shape, jacobian=obs.jacobian)
 
-                    im[w] = model_image[w]
+                im[w] = model_image[w]
 
-                    if add_noise:
-                        #print("adding noise to replaced pixels")
-                        weight=obs.weight
-                        wgood=where( (weight > 0.0) & (bmask==0) )
-                        if wgood[0].size > 0:
-                            median_err=numpy.median(1.0/weight[wgood])
+                if add_noise:
+                    wgood=where( (weight > 0.0) & (bmask==0) )
+                    if wgood[0].size > 0:
+                        median_err=numpy.median(1.0/weight[wgood])
 
-                            noise_image=numpy.random.normal(
-                                loc=0.0,
-                                scale=median_err,
-                                size=im.shape
-                            )
+                        noise_image=numpy.random.normal(
+                            loc=0.0,
+                            scale=median_err,
+                            size=im.shape
+                        )
 
-                            im[w] += noise_image[w]
+                        im[w] += noise_image[w]
 
-                    if False:
-                        import images
-                        imdiff=im-obs.image_orig
-                        images.view_mosaic([bmask,obs.image_orig,im,imdiff],
-                                           titles=['mask','orig','mod image','mod-orig'])
-                        maxdiff=numpy.abs(imdiff).max()
-                        print("    Max abs diff:",maxdiff)
-                        #images.multiview(imdiff,title='mod-orig max diff %g' % maxdiff)
-                        if raw_input('hit a key: ') == 'q':
-                            stop
+                if False:
+                    import images
+                    imdiff=im-obs.image_orig
+                    images.view_mosaic([bmask,obs.image_orig,im,imdiff],
+                                       titles=['mask','orig','mod image','mod-orig'])
+                    maxdiff=numpy.abs(imdiff).max()
+                    print("    Max abs diff:",maxdiff)
+                    #images.multiview(imdiff,title='mod-orig max diff %g' % maxdiff)
+                    if raw_input('hit a key: ') == 'q':
+                        stop
 
-                else:
-                    obs.image_orig=None
+            else:
+                obs.image_orig=None
 
     return mbo
 
