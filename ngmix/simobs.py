@@ -28,6 +28,10 @@ def simulate_obs(gmix, obs, **kw):
         the noise.  Often one is using modified weight map to simplify
         masking neighbors, but may want to use the raw map for
         adding noise.  Default True
+    add_all: bool, optional
+        If True, add noise to zero-weight pixels as well.  For max like methods
+        this makes no difference, but if the image is being run through an FFT
+        it might be important. Default is True.
     """
 
     if isinstance(obs, MultiBandObsList):
@@ -153,7 +157,7 @@ def get_noise_image(weight, **kw):
     If add_all, we set weight==0 pixels with the median noise.  This should not
     be a problem for algorithms that use the weight map
     """
-    add_all=kw.get('add_all',False)
+    add_all=kw.get('add_all',True)
 
     noise_image = numpy.random.normal(loc=0.0,
                                       scale=1.0,
