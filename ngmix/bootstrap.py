@@ -2953,7 +2953,7 @@ def replace_masked_pixels(mb_obs_list,
 
             bmask = obs.bmask
             if hasattr(obs,'weight_raw'):
-                print("    using raw weight for replace")
+                #print("    using raw weight for replace")
                 weight = obs.weight_raw
             else:
                 weight = obs.weight

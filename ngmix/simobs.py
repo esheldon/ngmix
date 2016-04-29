@@ -142,7 +142,7 @@ def _get_noisy_image(obs, sim_image, **kw):
 
     use_raw_weight=kw.get('use_raw_weight',True)
     if hasattr(obs, 'weight_raw') and use_raw_weight:
-        print("        using weight raw for simobs noise")
+        #print("        using weight raw for simobs noise")
         weight = obs.weight_raw
     else:
         weight = obs.weight
