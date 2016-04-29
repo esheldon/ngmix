@@ -2953,6 +2953,7 @@ def replace_masked_pixels(mb_obs_list,
 
             bmask = obs.bmask
             if hasattr(obs,'weight_raw'):
+                print("    using raw weight for replace")
                 weight = obs.weight_raw
             else:
                 weight = obs.weight
@@ -2960,7 +2961,7 @@ def replace_masked_pixels(mb_obs_list,
             if bmask is not None:
                 w=where( (bmask != 0) | (weight == 0.0) )
             else:
-                w=where(weight = 0.0)
+                w=where(weight == 0.0)
 
             if w[0].size > 0:
                 print("        replacing %d/%d masked or zero weight "
@@ -2989,8 +2990,16 @@ def replace_masked_pixels(mb_obs_list,
                 if False:
                     import images
                     imdiff=im-obs.image_orig
-                    images.view_mosaic([bmask,obs.image_orig,im,imdiff],
-                                       titles=['mask','orig','mod image','mod-orig'])
+                    imlist=[bmask,weight,obs.image_orig,im,imdiff]
+                    tlist=[
+                        'mask','weight','original imag','modified image',
+                        'modified-orig',
+                    ]
+                    images.view_mosaic(
+                        imlist,
+                        titles=tlist,
+                        width=1200,height=1200,
+                    )
                     maxdiff=numpy.abs(imdiff).max()
                     print("    Max abs diff:",maxdiff)
                     #images.multiview(imdiff,title='mod-orig max diff %g' % maxdiff)
