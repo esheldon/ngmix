@@ -380,7 +380,7 @@ class GMix(object):
         self._fill_image(image, nsub=nsub, npoints=npoints, jacobian=jacobian, fast_exp=fast_exp)
         return image
 
-    def make_round(self):
+    def make_round(self, preserve_size=False):
         """
         make a round version of the mixture
 
@@ -401,7 +401,10 @@ class GMix(object):
 
         g1,g2,T=gm.get_g1g2T()
 
-        factor = shape.get_round_factor(g1,g2)
+        if preserve_size:
+            factor=1.0
+        else:
+            factor = shape.get_round_factor(g1,g2)
 
         gdata=gm._get_gmix_data()
 
@@ -928,7 +931,7 @@ class GMix(object):
             colshift = data['col'][i]-col
 
             g1,g2=e1e2_to_g1g2(e1,e2)
-            
+
             Tround = moments.get_Tround(T, g1, g2)
             sigma_round = sqrt(Tround/2.0)
 
@@ -941,9 +944,9 @@ class GMix(object):
 
         gs_obj = galsim.Add(gsobjects)
 
-        rowshift = row-int(row)-0.5
-        colshift = col-int(col)-0.5
-        gs_obj = gs_obj.shift(colshift, rowshift)
+        #rowshift = row-int(row)-0.5
+        #colshift = col-int(col)-0.5
+        #gs_obj = gs_obj.shift(colshift, rowshift)
 
         return gs_obj
 

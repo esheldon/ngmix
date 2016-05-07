@@ -1765,13 +1765,10 @@ class MaxMetacalBootstrapper(Bootstrapper):
             extra keywords for get_all_metacal
         """
 
-        metacal_pars_in=metacal_pars
-        metacal_pars={'step':0.01}
-        if metacal_pars_in is not None:
-            metacal_pars.update(metacal_pars_in)
-
-        metacal_pars.update(kw)
-        obs_dict = metacal.get_all_metacal(self.mb_obs_list, **metacal_pars)
+        obs_dict = self._get_all_metacal(
+            metacal_pars,
+            **kw
+        )
 
         res = self._do_metacal_max_fits(obs_dict,
                                         psf_model, gal_model,
@@ -1780,6 +1777,22 @@ class MaxMetacalBootstrapper(Bootstrapper):
                                         psf_fit_pars)
 
         self.metacal_res = res
+
+    def _get_all_metacal(self, metacal_pars, **kw):
+
+        metacal_pars=self._extract_metacal_pars(metacal_pars)
+        return metacal.get_all_metacal(self.mb_obs_list, **metacal_pars)
+
+    def _extract_metacal_pars(self, metacal_pars_in):
+        """
+        make sure at least the step is specified
+        """
+        metacal_pars={'step':0.01}
+
+        if metacal_pars_in is not None:
+            metacal_pars.update(metacal_pars_in)
+
+        return metacal_pars
 
     def _do_metacal_max_fits(self, obs_dict, psf_model, gal_model, pars, 
                              psf_Tguess, prior, psf_ntry, ntry, 
@@ -1796,7 +1809,15 @@ class MaxMetacalBootstrapper(Bootstrapper):
                                 find_cen=self.find_cen,
                                 verbose=self.verbose)
 
-            boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry, fit_pars=psf_fit_pars,
+            if False:
+                import images
+                images.multiview(obs_dict[key][0][0].image)
+                images.multiview(obs_dict[key][0][0].psf.image)
+                if 'q'==raw_input('hit a key: '):
+                    stop
+
+            boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry,
+                          fit_pars=psf_fit_pars,
                           skip_already_done=False)
             boot.fit_max(gal_model, pars, prior=prior, ntry=ntry)
             boot.set_round_s2n()
@@ -1832,6 +1853,27 @@ class MaxMetacalBootstrapper(Bootstrapper):
             res[key] = tres
 
         return res
+
+class MetacalAnalyticPSFBootstrapper(MaxMetacalBootstrapper):
+    def _get_all_metacal(self, metacal_pars, **kw):
+
+        metacal_pars=self._extract_metacal_pars(metacal_pars)
+
+        # noshear gets added in automatically when doing 1p
+        types=[ '1p','1m','2p','2m' ]
+
+        # the psf ot use for metacal
+        psf=kw.pop('psf',None)
+        if psf is None:
+            raise ValueError('expected psf= for analytic psf')
+
+        odict=metacal.get_all_metacal(
+            self.mb_obs_list,
+            psf=psf,
+            types=types,
+            **metacal_pars
+        )
+        return odict
 
 class DeconvMetacalBootstrapper(MaxMetacalBootstrapper):
     def fit_metacal(self,
@@ -2306,7 +2348,9 @@ class PSFRunner(object):
 
 
         for i in xrange(ntry):
+
             guess=self.get_guess()
+
             fitter=LMSimple(self.obs,self.model,lm_pars=self.lm_pars,
                             use_round_T=self.use_round_T,
                             npoints=npoints)
@@ -2321,8 +2365,8 @@ class PSFRunner(object):
     def get_guess(self):
         guess=self.guess0.copy()
 
-        guess[0:0+2] + 0.01*srandu(2)
-        guess[2:2+2] + 0.1*srandu(2)
+        guess[0:0+2] += 0.01*srandu(2)
+        guess[2:2+2] += 0.1*srandu(2)
         guess[4] = guess[4]*(1.0 + 0.1*srandu())
         guess[5] = guess[5]*(1.0 + 0.1*srandu())
 

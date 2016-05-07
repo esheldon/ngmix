@@ -54,7 +54,7 @@ def get_all_metacal(obs, step=0.01, fixnoise=True, **kw):
     """
 
     if fixnoise:
-        #print("    Doing fixnoise")
+        print("    Doing fixnoise")
         odict= _get_all_metacal_fixnoise(obs, step=step, **kw)
     else:
         odict= _get_all_metacal(obs, step=step, **kw)
@@ -68,7 +68,12 @@ def _get_all_metacal(obs, step=0.01, **kw):
     get all metacal
     """
     if isinstance(obs, Observation):
-        m=Metacal(obs, **kw)
+        if 'psf' in kw:
+            #print("using analytic psf")
+            #print(kw['psf'])
+            m=MetacalAnalyticPSF(obs, kw['psf'], **kw)
+        else:
+            m=Metacal(obs, **kw)
         odict=m.get_all(step, **kw)
     elif isinstance(obs, MultiBandObsList):
         odict=_make_metacal_mb_obs_list_dict(obs, step, **kw)
@@ -98,7 +103,7 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     obsdict       = _get_all_metacal(obs, step=step, **kw)
     noise_obsdict = _get_all_metacal(noise_obs, step=step, **kw)
 
-    for type in METACAL_TYPES:
+    for type in obsdict:
 
         imbobs = obsdict[type]
         nmbobs = noise_obsdict[type]
@@ -573,48 +578,47 @@ class MetacalAnalyticPSF(Metacal):
 
     The psf galsim object should have the pixelization in it
     """
-    def __init__(self, obs, psf_dims, **kw):
-        psf_gmix = obs.get_psf_gmix()
+    def __init__(self, obs, psf_obj, **kw):
 
-        psf_obj = psf_gmix.make_galsim_object()
         self.psf_obj = psf_obj
-        self.psf_dims = psf_dims
 
-
+        self.psf_noise_image=numpy.random.normal(
+            scale=0.001,
+            size=obs.psf.image.shape,
+        )
         super(MetacalAnalyticPSF,self).__init__(obs, **kw)
 
-    def _get_dilated_psf(self, shear):
+    def get_target_psf(self, shear, type, get_nopix=False):
+        res=super(MetacalAnalyticPSF,self).get_target_psf(
+            shear,
+            type,
+            get_nopix=get_nopix,
+        )
+        if get_nopix:
+            im,imnopix,pg=res
+            arr=im.array
+            arr += self.psf_noise_image
+            arr=imnopix.array
+            arr += self.psf_noise_image
+        else:
+            im,pg=res
+            arr=im.array
+            arr += self.psf_noise_image
+
+        return res
+
+    def _get_dilated_psf(self, shear, doshear=False):
         """
-        this case for psf being an interpolated image
+        For this version we never pixelize the input
+        analytic model
         """
-        return _do_dilate(self.psf_obj, shear)
+        psf_grown = _do_dilate(self.psf_obj, shear)
 
-    def _set_data(self):
-        """
-        create galsim objects based on the input observation
-        """
-
-        obs=self.obs
-
-        # these would share data with the original numpy arrays, make copies
-        # to be sure they don't get modified
-        #
-        self.image = galsim.Image(obs.image.copy(), wcs=self.get_wcs())
-        self.im_dims=obs.image.shape
-
-        # interpolated galaxy image, still pixelized
-        image_int = galsim.InterpolatedImage(self.image,
-                                             x_interpolant=self.interp)
-
-        # this will get passed on through
-        self._set_uncorrelated_noise(image_int, obs.weight)
-
-        # deconvolved galaxy image, psf+pixel removed
-        psf_inv = galsim.Deconvolve(self.psf_obj)
-        self.image_int_nopsf = galsim.Convolve(image_int, psf_inv)
-
-
-
+        #psf_grown = psf_grown.withFlux(1.0)
+        if doshear:
+            psf_grown = psf_grown.shear(g1=shear.g1,
+                                        g2=shear.g2)
+        return psf_grown, psf_grown.copy()
 
 def _do_dilate(obj, shear):
     """
