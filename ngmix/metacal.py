@@ -437,6 +437,7 @@ class Metacal(object):
         """
 
         self.prepix=kw.get('prepix',False)
+        self.symmetrize_psf=kw.get('symmetrize_psf',False)
 
         obs=self.obs
         if not obs.has_psf():
@@ -461,13 +462,11 @@ class Metacal(object):
                                       wcs=self.get_psf_wcs())
 
         # interpolated psf image
-        self.psf_int = galsim.InterpolatedImage(self.psf_image,
-                                                x_interpolant = self.interp)
-        # interpolated psf deconvolved from pixel
-        self.psf_int_nopix = galsim.Convolve([self.psf_int, self.pixel_inv])
+        psf_int = galsim.InterpolatedImage(self.psf_image,
+                                           x_interpolant = self.interp)
 
         # this can be used to deconvolve the psf from the galaxy image
-        psf_int_inv = galsim.Deconvolve(self.psf_int)
+        psf_int_inv = galsim.Deconvolve(psf_int)
 
         image_int = galsim.InterpolatedImage(self.image,
                                              x_interpolant=self.interp)
@@ -476,6 +475,21 @@ class Metacal(object):
         # deconvolved galaxy image, psf+pixel removed
         self.image_int_nopsf = galsim.Convolve(image_int,
                                                psf_int_inv)
+
+        # interpolated psf deconvolved from pixel.  This is what
+        # we dilate, shear, etc and reconvolve the image by
+        if self.symmetrize_psf:
+            print("    Getting symmetrized psf")
+            sym_psf_int = _make_symmetrized_gsimage_int(
+                obs.psf.image,
+                self.get_psf_wcs(),
+                self.interp
+            )
+            self.psf_int_nopix = galsim.Convolve([sym_psf_int, self.pixel_inv])
+        else:
+            self.psf_int_nopix = galsim.Convolve([psf_int, self.pixel_inv])
+
+
 
 
     def get_wcs(self):
@@ -638,6 +652,34 @@ def _do_dilate(obj, shear):
     dilation = 1.0 + 2.0*g
     return obj.dilate(dilation)
 
+
+def _make_symmetrized_gsimage_int(im_input, wcs, interp):
+    """
+    get the symmetrized galsim image and create an
+    interpolated image from it
+    """
+    gsim=_make_symmetrized_gsimage(im_input, wcs)
+    return galsim.InterpolatedImage(gsim,
+                                    x_interpolant = interp)
+
+
+def _make_symmetrized_gsimage(im_input, wcs):
+    """
+    wrap the symmetrized image int a galsim Image
+    """
+    im=_make_symmetrized_image(im_input)
+    return galsim.Image(im, wcs=wcs)
+
+def _make_symmetrized_image(im_input):
+    """
+    add a version of itself roated by 90,180,270 degrees
+    """
+    im = im_input + \
+            numpy.rot90(im_input, k=1) + \
+            numpy.rot90(im_input, k=2) + \
+            numpy.rot90(im_input, k=3)
+
+    return im
 
 def _check_shape(shape):
     """
