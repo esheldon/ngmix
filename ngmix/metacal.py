@@ -674,10 +674,12 @@ def _make_symmetrized_image(im_input):
     """
     add a version of itself roated by 90,180,270 degrees
     """
-    im = im_input + \
-            numpy.rot90(im_input, k=1) + \
-            numpy.rot90(im_input, k=2) + \
-            numpy.rot90(im_input, k=3)
+    im = im_input.copy()
+    im += numpy.rot90(im_input, k=1)
+    im += numpy.rot90(im_input, k=2)
+    im += numpy.rot90(im_input, k=3)
+
+    im *= (1.0/4.0)
 
     return im
 
