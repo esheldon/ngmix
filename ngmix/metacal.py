@@ -20,11 +20,15 @@ except ImportError:
 
 LANCZOS_PARS_DEFAULT={'order':5, 'conserve_dc':True, 'tol':1.0e-4}
 
-METACAL_TYPES_SUB = [
+METACAL_TYPES = [
     '1p','1m','2p','2m',
     '1p_psf','1m_psf','2p_psf','2m_psf',
+    'noshear',
 ]
-METACAL_TYPES = ['noshear'] + METACAL_TYPES_SUB
+METACAL_REQUIRED_TYPES = [
+    'noshear',
+    '1p','1m','2p','2m',
+]
 
 def get_all_metacal(obs, step=0.01, fixnoise=True, **kw):
     """
@@ -198,8 +202,13 @@ class Metacal(object):
             'noshear' is also returned
         """
 
-        # we add noshear to it
-        types=kw.get('types',METACAL_TYPES_SUB)
+        # we always want these, plus noshear
+        # will be added
+        ttypes=kw.get('types',METACAL_TYPES)
+        types=[t for t in ttypes]
+        for rtype in METACAL_REQUIRED_TYPES:
+            if rtype not in types:
+                types.append(rtype)
 
         shdict={}
 
@@ -219,6 +228,10 @@ class Metacal(object):
         odict={}
 
         for type in types:
+            if type == 'noshear':
+                # we get noshear with 1p
+                continue
+
             sh=shdict[type]
 
             if 'psf' in type:
@@ -479,7 +492,7 @@ class Metacal(object):
         # interpolated psf deconvolved from pixel.  This is what
         # we dilate, shear, etc and reconvolve the image by
         if self.symmetrize_psf:
-            print("    Getting symmetrized psf")
+            #print("    Getting symmetrized psf")
             sym_psf_int = _make_symmetrized_gsimage_int(
                 obs.psf.image,
                 self.get_psf_wcs(),
@@ -680,6 +693,20 @@ def _make_symmetrized_image(im_input):
     im += numpy.rot90(im_input, k=3)
 
     im *= (1.0/4.0)
+
+    if False:
+        import images
+        images.multiview(im)
+        images.compare_images(
+            im_input,
+            im,
+            label1='orig',
+            label2='symm',
+            width=1000,
+            height=1000,
+        )
+        if 'q'==raw_input('hit a key: '):
+            stop
 
     return im
 
