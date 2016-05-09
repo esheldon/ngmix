@@ -492,15 +492,46 @@ class Metacal(object):
         # interpolated psf deconvolved from pixel.  This is what
         # we dilate, shear, etc and reconvolve the image by
         if self.symmetrize_psf:
-            #print("    Getting symmetrized psf")
-            sym_psf_int = _make_symmetrized_gsimage_int(
-                obs.psf.image,
-                self.get_psf_wcs(),
-                self.interp
-            )
-            self.psf_int_nopix = galsim.Convolve([sym_psf_int, self.pixel_inv])
+            self.psf_int_nopix = self._get_symmetrized_psf_nopix()
         else:
             self.psf_int_nopix = galsim.Convolve([psf_int, self.pixel_inv])
+
+    def _get_symmetrized_psf_nopix(self):
+        print("    Getting symmetrized psf")
+        sym_psf_int = _make_symmetrized_gsimage_int(
+            self.obs.psf.image,
+            self.get_psf_wcs(),
+            self.interp,
+        )
+
+        psf_int_nopix = galsim.Convolve([sym_psf_int, self.pixel_inv])
+
+        dilation=self._get_symmetrize_dilation()
+        print("    dilating by:",dilation)
+
+        psf_int_nopix = psf_int_nopix.dilate(dilation)
+        return psf_int_nopix
+
+    def _get_symmetrize_dilation(self):
+        from . import moments
+        psf_gmix = self.obs.psf.gmix
+
+        # g1,g2,T = psf_gmix.get_g1g2T()
+        e1,e2,T = psf_gmix.get_e1e2T()
+
+        irr, irc, icc = moments.e2mom(e1,e2,T)
+
+        # we have symmetrized by averaging, so irr=icc
+        # and each by (irr+icc)/2 = T/2
+        # 
+        # but this means our psf is too small now along
+        # the direction where it was originally largest
+        # we should thus dilate by max(irr,icc)/(T/2)
+
+        dilation2 = max(irr, icc)/(T/2.)
+        dilation=sqrt(dilation2)
+
+        return dilation
 
 
 
@@ -672,8 +703,7 @@ def _make_symmetrized_gsimage_int(im_input, wcs, interp):
     interpolated image from it
     """
     gsim=_make_symmetrized_gsimage(im_input, wcs)
-    return galsim.InterpolatedImage(gsim,
-                                    x_interpolant = interp)
+    return galsim.InterpolatedImage( gsim, x_interpolant = interp)
 
 
 def _make_symmetrized_gsimage(im_input, wcs):
