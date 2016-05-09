@@ -514,6 +514,11 @@ class Metacal(object):
 
     def _get_symmetrize_dilation(self):
         from . import moments
+
+        if not self.obs.has_psf_gmix():
+            raise RuntimeError("you need to fit the psf "
+                               "before symmetrizing")
+
         psf_gmix = self.obs.psf.gmix
 
         # g1,g2,T = psf_gmix.get_g1g2T()
