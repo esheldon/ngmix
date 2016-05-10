@@ -526,14 +526,15 @@ class Metacal(object):
 
         irr, irc, icc = moments.e2mom(e1,e2,T)
 
-        # we have symmetrized by averaging, so irr=icc
-        # and each by (irr+icc)/2 = T/2
-        # 
-        # but this means our psf is too small now along
-        # the direction where it was originally largest
-        # we should thus dilate by max(irr,icc)/(T/2)
+        mat=numpy.zeros( (2,2) )
+        mat[0,0]=irr
+        mat[0,1]=irc
+        mat[1,0]=irc
+        mat[1,1]=icc
 
-        dilation2 = max(irr, icc)/(T/2.)
+        eigs=numpy.linalg.eigvals(mat)
+
+        dilation2 = eigs.max()/(T/2.)
         dilation=sqrt(dilation2)
 
         return dilation
