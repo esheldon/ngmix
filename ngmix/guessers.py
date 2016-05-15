@@ -81,8 +81,8 @@ class TFluxGuesser(GuesserBase):
         guess=numpy.zeros( (n, np) )
         guess[:,0] = 0.01*srandu(n)
         guess[:,1] = 0.01*srandu(n)
-        guess[:,2] = 0.1*srandu(n)
-        guess[:,3] = 0.1*srandu(n)
+        guess[:,2] = 0.02*srandu(n)
+        guess[:,3] = 0.02*srandu(n)
 
         if self.scaling=='linear':
             guess[:,4] = self.T*(1.0 + 0.1*srandu(n))
