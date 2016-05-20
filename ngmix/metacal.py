@@ -89,6 +89,24 @@ def _get_all_metacal(obs, step=0.01, **kw):
 
     return odict
 
+def _add_obs_images(obs1, obs2):
+    """
+    add obs2 to obs1, in place in obs1
+    """
+    if isinstance(obs1, Observation):
+        obs1.image += obs2.image
+    elif isinstance(obs1, ObsList):
+        for o1,o2 in zip(obs1,obs2):
+            _add_obs_images(o1, o2)
+    elif isinstance(obs1, MultiBandObsList):
+        for olist1, olist2 in zip(obs1, obs2):
+            for o1,o2 in zip(olist1,olist2):
+                _add_obs_images(o1, o2)
+    else:
+        raise ValueError("obs must be Observation, ObsList, "
+                         "or MultiBandObsList")
+
+
 def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     """
     internal routine
@@ -96,16 +114,25 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     Add a sheared noise field to cancel the correlated noise
     """
 
-    # Using None for the model means we get just noise
-    noise_obs = simobs.simulate_obs(None, obs, **kw)
+    obsdict = _get_all_metacal(obs, step=step, **kw)
 
-    #print("    Doing rotnoise")
+    nrand=kw.pop('nrand',1)
+    for i in xrange(nrand):
+        print("        irand:",i+1)
+        # Using None for the model means we get just noise
+        noise_obs = simobs.simulate_obs(None, obs, **kw)
 
-    # rotate by 90
-    _rotate_obs_image(noise_obs, k=1)
+        # rotate by 90
+        _rotate_obs_image(noise_obs, k=1)
 
-    obsdict       = _get_all_metacal(obs, step=step, **kw)
-    noise_obsdict = _get_all_metacal(noise_obs, step=step, **kw)
+        # always returns a dictionary of MultiBandObsLists
+        tdict = _get_all_metacal(noise_obs, step=step, **kw)
+
+        if i==0:
+            noise_obsdict = tdict
+        else:
+            for type in obsdict:
+                _add_obs_images(noise_obsdict[type], tdict[type])
 
     for type in obsdict:
 
@@ -126,6 +153,8 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
 
                 im  = obs.image
                 nim = nobs.image
+                if nrand > 1:
+                    nim *= (1.0/nrand)
 
                 obs.image = im + nim
                 obs.weight = 0.5*obs.weight
@@ -497,7 +526,7 @@ class Metacal(object):
             self.psf_int_nopix = galsim.Convolve([psf_int, self.pixel_inv])
 
     def _get_symmetrized_psf_nopix(self):
-        print("    Getting symmetrized psf")
+        #print("    Getting symmetrized psf")
         sym_psf_int = _make_symmetrized_gsimage_int(
             self.obs.psf.image,
             self.get_psf_wcs(),
@@ -507,7 +536,7 @@ class Metacal(object):
         psf_int_nopix = galsim.Convolve([sym_psf_int, self.pixel_inv])
 
         dilation=self._get_symmetrize_dilation()
-        print("    dilating by:",dilation)
+        #print("    dilating by:",dilation)
 
         psf_int_nopix = psf_int_nopix.dilate(dilation)
         return psf_int_nopix
