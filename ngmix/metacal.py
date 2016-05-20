@@ -110,6 +110,49 @@ def _add_obs_images(obs1, obs2):
 def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     """
     internal routine
+    Add a sheared noise field to cancel the correlated noise
+    """
+
+    # Using None for the model means we get just noise
+    noise_obs = simobs.simulate_obs(None, obs, **kw)
+
+    #print("    Doing rotnoise")
+
+    # rotate by 90
+    _rotate_obs_image(noise_obs, k=1)
+
+    obsdict       = _get_all_metacal(obs, step=step, **kw)
+    noise_obsdict = _get_all_metacal(noise_obs, step=step, **kw)
+
+    for type in obsdict:
+
+        imbobs = obsdict[type]
+        nmbobs = noise_obsdict[type]
+
+        # rotate back, which is 3 more rotations
+        _rotate_obs_image(nmbobs, k=3)
+
+        for imb in xrange(len(imbobs)):
+            iolist=imbobs[imb]
+            nolist=nmbobs[imb]
+
+            for iobs in xrange(len(iolist)):
+
+                obs  = iolist[iobs]
+                nobs = nolist[iobs]
+
+                im  = obs.image
+                nim = nobs.image
+
+                obs.image = im + nim
+                obs.weight = 0.5*obs.weight
+
+    return obsdict
+
+'''
+def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
+    """
+    internal routine
 
     Add a sheared noise field to cancel the correlated noise
     """
@@ -160,6 +203,7 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
                 obs.weight = 0.5*obs.weight
 
     return obsdict
+'''
 
 class Metacal(object):
     """
