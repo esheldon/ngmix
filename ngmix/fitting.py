@@ -348,7 +348,7 @@ class FitterBase(object):
         initialize the list of lists of gaussian mixtures
         """
 
-        if self.obs[0][0].has_psf():
+        if self.obs[0][0].has_psf_gmix():
             self.dopsf=True
         else:
             self.dopsf=False
