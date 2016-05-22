@@ -663,20 +663,14 @@ class GMix(object):
         return s2n, r2_mean, r4_mean, Tvar
 
 
-    def get_weighted_mom_sums(self,
-                              obs,
-                              find_cen=True,
-                              maxiter=100,
-                              centol=1.0e-4,
-                              max_shift=5.0,
-                              **kw):
+    def get_weighted_moments(self, obs, **kw):
         """
-        Get the raw weighted moment sums of the image, using the input
+        Get the raw weighted moments of the image, using the input
         gaussian mixture as the weight function.  The moments are *not*
         normalized
 
-        Just iterating for the centroid, with the first location taken as the
-        jacobian center, so you should have a good guess
+        The weight map in the observation must be accurate for accurate
+        error estimates
 
         parameters
         ----------
@@ -686,12 +680,6 @@ class GMix(object):
 
             These are moments, so there cannot be masked portions of the image,
             and the weight map of the observation is ignored.
-        maxiter: int, optional
-            Maximum number of iterations to find the center
-        centol: float, optional
-            Tolerance to find the center in either direction
-        max_shift: float, optional
-            Max allowed shift in centroid
 
         returns
         --------
@@ -699,59 +687,55 @@ class GMix(object):
         In the following, W is the weight function, I is the image
 
            Returns the folling in the 'pars' field, in this order
-               usum = sum(W*I*u)
-               vsum = sum(W*I*v)
-               M1sum = sum(W * I * {u^2 - v^2} )
-               M2sum = sum(W * I * 2*u*v)
-               Tsum  = sum(W * I * {u^2 + v^2} )
-               Isum  = sum(W*I)
+               sum(W * I * F[i])
+           where
+               F = {
+                  v,
+                  u,
+                  u^2-v^2,
+                  2*v*u,
+                  u^2+v^2,
+                  1.0
+               }
 
-        where u,v are relative to the jacobian center.  also returned are the
-        inferred cen and some metadata, such as flags if the center was
-        found iteratively
+        where v,u are in sky coordinates relative to the jacobian center.
 
-        Also returned are sums used to calculate variances in these quantities, but
-        note the covariance can be significant
+        Also returned are the covariance sums in a 6x6 matrix
 
-               VIsum  = sum(W^2)
-               VTsum  = sum(W^2 * {u^2 + v^2}^2 )
-               VM1sum = sum(W^2 * {u^2 - v^2}^2 )
-               VM2sum = sum(W^2 * {2*u*v}^2 )
+            sum( W^2 * V * F[i]*F[j] )
 
-        These should be multiplied by the noise^2 to turn them into proper variances
-
+        where V is the variance from the weight map
         """
 
         if obs.jacobian is not None:
             assert isinstance(obs.jacobian,Jacobian)
 
-        if find_cen:
-            find_cen=1
-        else:
-            find_cen=0
-
         gm=self._get_gmix_data()
-        cen=zeros(2)
         pars=zeros(6)
-        pvar=zeros(6)
-        wsum,niter,flags=_gmix.get_weighted_mom_sums(obs.image,
-                                                     gm,
-                                                     obs.jacobian._data,
-                                                     find_cen,
-                                                     maxiter,
-                                                     centol,
-                                                     max_shift,
-                                                     cen,pars,pvar)
+        pcov=zeros( (6,6) )
+        flags,wsum,s2n_numer,s2n_denom=_gmix.get_weighted_moments(
+            obs.image,
+            obs.weight,
+            obs.jacobian._data,
+            gm,
+
+            pars, # these get modified internally
+            pcov,
+        )
+
         flagstr=_moms_flagmap[flags]
-        return {'cen':cen,
-                'pars':pars,
-                'pars_var':pvar,
-                'wsum':wsum,
-                'maxiter':maxiter,
-                'centol':centol,
-                'niter':niter,
-                'flags':flags,
-                'flagstr':flagstr}
+        return {
+            'flags':flags,
+            'flagstr':flagstr,
+
+            'pars':pars,
+            'pars_cov':pcov,
+
+            'wsum':wsum,
+
+            's2n_numer_sum':s2n_numer,
+            's2n_denom_sum':s2n_denom,
+        }
 
 
     def get_loglike(self, obs, nsub=1, npoints=None, more=False):
@@ -1762,9 +1746,9 @@ class GMixND(object):
 
 
 
-_moms_flagmap={0:'ok',
-               1:'maxit',
-               2:'low s2n',
-               4:'max shift'}
+_moms_flagmap={
+    0:'ok',
+    1:'zero weight encountered',
+}
 
 
