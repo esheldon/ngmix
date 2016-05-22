@@ -580,7 +580,7 @@ class Metacal(object):
         psf_int_nopix = galsim.Convolve([sym_psf_int, self.pixel_inv])
 
         dilation=self._get_symmetrize_dilation()
-        #print("    dilating by:",dilation)
+        print("    dilating by:",dilation)
 
         psf_int_nopix = psf_int_nopix.dilate(dilation)
         return psf_int_nopix

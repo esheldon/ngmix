@@ -1721,12 +1721,12 @@ static PyObject * PyGMix_get_weighted_moments(PyObject* self, PyObject* args) {
 
             var=1.0/ivar;
 
+            // evaluate the gaussian mixture at the specified location
+            weight=PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, v, u);
+
             // sky coordinates relative to the gaussian mixture center
             vmod = v-vcen;
             umod = u-ucen;
-
-            // evaluate the gaussian mixture at the specified location
-            weight=PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, vmod, umod);
 
             wdata = weight*data;
             w2 = weight*weight;
