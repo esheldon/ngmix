@@ -607,8 +607,8 @@ class Metacal(object):
 
         eigs=numpy.linalg.eigvals(mat)
 
-        dilation2 = eigs.max()/(T/2.)
-        dilation=sqrt(dilation2)
+        dilation = eigs.max()/(T/2.)
+        dilation=sqrt(dilation)
 
         return dilation
 
