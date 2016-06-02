@@ -522,6 +522,9 @@ class Metacal(object):
         the interpolation
         """
 
+        # if None, we will calculate it from the PSF ellipticity
+        self.symmetrize_dilation=kw.get('symmetrize_dilation',None)
+
         self.prepix=kw.get('prepix',False)
         self.symmetrize_psf=kw.get('symmetrize_psf',False)
 
@@ -587,6 +590,9 @@ class Metacal(object):
 
     def _get_symmetrize_dilation(self):
         from . import moments
+
+        if self.symmetrize_dilation is not None:
+            return self.symmetrize_dilation
 
         if not self.obs.has_psf_gmix():
             raise RuntimeError("you need to fit the psf "
