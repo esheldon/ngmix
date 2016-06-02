@@ -1650,66 +1650,40 @@ static PyObject * PyGMix_get_model_s2n_Tvar_sums_altweight(PyObject* self, PyObj
 Get the weighted moments of the image, using the input gaussian
 mixture as the weight function.  The moments are *not* normalized
 
-Just iterating for the centroid, with the first location taken as the
-jacobian center, so you should have a good guess
-
-These are moments, so there cannot be masked portions of the image.
-
-In the following, W is the weight function, I is the image, and
-w is the weight map
-
-Returns
-
-       ucen  = sum(W*I*u)/sum(W*I)
-       vcen  = sum(W*I*v)/sum(W*I)
-       Isum  = sum(W*I)
-       Tsum  = sum(W * I * {u^2 + v^2} )
-       M1sum = sum(W * I * {u^2 - v^2} )
-       M2sum = sum(W * I * 2*u*v)
-
-where u,v are relative to the jacobian center
-
-Also returned are sums used to calculate variances in these quantities, but
-note the covariance can be significant
-
-       VIsum  = sum(W^2)
-       VTsum  = sum(W^2 * {u^2 + v^2}^2 )
-       VM1sum = sum(W^2 * {u^2 - v^2}^2 )
-       VM2sum = sum(W^2 * {2*u*v}^2 )
-
-These should be multiplied by the noise^2 to turn them into proper variances
+See the get_weighted_moments method in gmix.py
 
 */
-static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
+static PyObject * PyGMix_get_weighted_moments(PyObject* self, PyObject* args) {
 
-    PyObject* gmix_obj=NULL;
     PyObject* image_obj=NULL;
+    PyObject* weight_obj=NULL;
     PyObject* jacob_obj=NULL;
-    PyObject* cen_obj=NULL;
+    PyObject* gmix_obj=NULL;
+
     PyObject* pars_obj=NULL;
-    PyObject* pvar_obj=NULL;
+    PyObject* pcov_obj=NULL;
 
     npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
 
     struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
     struct PyGMix_Jacobian *jacob=NULL;
-    double *cen=NULL, *pars=NULL, *pvar=NULL;
+    double *pars=NULL, *pcov=NULL;
+    double F[6];
 
     double u=0, v=0, umod=0, vmod=0;
-    double wdata=0, data=0, weight=0, w2=0;
-    double T=0,M1=0,M2=0;
-    double wsum=0;
-    double Isum=0, usum=0, vsum=0, Tsum=0, M1sum=0, M2sum=0;
-    double VIsum=0, VTsum=0, VM1sum=0, VM2sum=0;
-    double Vusum=0, Vvsum=0;
-    double ucen=0, vcen=0, ucenold=0, vcenold=0;
-    double centol=0, max_shift=0;
-    int find_cen=0, maxiter=0, niter=0, flags=0;
+    double wdata=0, data=0, weight=0, w2=0, wsum=0;
+    double s2n_numer=0, s2n_denom=0;
+    double ivar=0, var=0;
+    double ucen=0, vcen=0, psum=0;
+    int flags=0, i=0, j=0;
 
-    if (!PyArg_ParseTuple(args, (char*)"OOOiiddOOO", 
-                          &image_obj, &gmix_obj, &jacob_obj,
-                          &find_cen, &maxiter, &centol, &max_shift,
-                          &cen_obj, &pars_obj, &pvar_obj)) {
+    if (!PyArg_ParseTuple(args, (char*)"OOOOOO", 
+                          &image_obj,
+                          &weight_obj,
+                          &jacob_obj,
+                          &gmix_obj,
+                          &pars_obj,
+                          &pcov_obj)) {
         return NULL;
     }
 
@@ -1720,149 +1694,68 @@ static PyObject * PyGMix_get_weighted_mom_sums(PyObject* self, PyObject* args) {
         return NULL;
     }
 
+    gmix_get_cen(gmix, n_gauss, &vcen, &ucen, &psum);
+
     n_row=PyArray_DIM(image_obj, 0);
     n_col=PyArray_DIM(image_obj, 1);
 
     jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
 
-    // start guess at the jacobian center
-    ucen=0.0;
-    vcen=0.0;
-    ucenold=9999;
-    vcenold=9999;
+    pars=PyArray_DATA(pars_obj); // pars[6]
+    pcov=PyArray_DATA(pcov_obj); // pcov[6,6]
 
-    if (find_cen) {
-        // iterate for the centroid
-        for (niter=0; niter<maxiter; niter++) {
-
-            Isum=0;
-            usum=0;
-            vsum=0;
-            for (row=0; row < n_row; row++) {
-                u=PYGMIX_JACOB_GETU(jacob, row, 0);
-                v=PYGMIX_JACOB_GETV(jacob, row, 0);
-
-                for (col=0; col < n_col; col++) {
-
-                    data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
-
-                    umod = u-ucen;
-                    vmod = v-vcen;
-     
-                    weight=PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, vmod, umod);
-
-                    wdata = weight*data;
-
-                    Isum += wdata;
-                    usum += wdata*umod;
-                    vsum += wdata*vmod;
-
-                    u += jacob->dudcol;
-                    v += jacob->dvdcol;
-
-                }
-            }
-
-            if (Isum <= 0.0) {
-                flags = 2;
-                break;
-            }
-            ucen = usum/Isum;
-            vcen = vsum/Isum;
-            //fprintf(stderr,"%.10g %.10g %.10g %.10g\n", usum, vsum, ucen, vcen);
-
-            if ((fabs(ucen) > max_shift) || (fabs(vcen) > max_shift)) {
-                flags = 4;
-                break;
-            }
-
-            if ((fabs(ucen-ucenold) < centol) && (fabs(vcen-vcenold) < centol)) {
-                break;
-            }
-            ucenold=ucen;
-            vcenold=vcen;
-        }
-
-        if (niter==maxiter) {
-            flags = 1;
-        } else {
-            niter += 1;
-        }
-
-        if (flags != 0) {
-            goto _getmom_bail;
-        }
-    }
-
-    Isum=0;
-    usum=0;
-    vsum=0;
     for (row=0; row < n_row; row++) {
-        u=PYGMIX_JACOB_GETU(jacob, row, 0);
-        v=PYGMIX_JACOB_GETV(jacob, row, 0);
-
         for (col=0; col < n_col; col++) {
 
-            data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
+            // sky coordinates relative to the jacobian center
+            v=PYGMIX_JACOB_GETV(jacob, row, col);
+            u=PYGMIX_JACOB_GETU(jacob, row, col);
 
-            umod = u-ucen;
+            data = *( (double*)PyArray_GETPTR2(image_obj,row,col) );
+            ivar = *( (double*)PyArray_GETPTR2(weight_obj,row,col) );
+
+            if (ivar <= 0.0) {
+                flags = 1;
+                goto _getmom_bail;
+            }
+
+            var=1.0/ivar;
+
+            // evaluate the gaussian mixture at the specified location
+            weight=PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, v, u);
+
+            // sky coordinates relative to the gaussian mixture center
             vmod = v-vcen;
-
-            weight=PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, vmod, umod);
-
-            wsum += weight;
-
-            T = umod*umod + vmod*vmod;
-            M1 = vmod*vmod - umod*umod;
-            M2 = 2*umod*vmod;
+            umod = u-ucen;
 
             wdata = weight*data;
             w2 = weight*weight;
+            wsum += weight;
 
-            Isum  += wdata;
-            usum += wdata*umod;
-            vsum += wdata*vmod;
-            Tsum  += wdata*T;
-            M1sum += wdata*M1;
-            M2sum += wdata*M2;
+            // for the s/n sums
+            s2n_numer += wdata*ivar;
+            s2n_denom += w2*ivar;
 
-            VIsum += w2;
-            Vusum  += w2*umod*umod;
-            Vvsum  += w2*vmod*vmod;
-            VTsum  += w2*T*T;
-            VM1sum += w2*M1*M1;
-            VM2sum += w2*M2*M2;
+            F[0] = vmod;
+            F[1] = umod;
+            F[2] = umod*umod - vmod*vmod;
+            F[3] = 2*vmod*umod;
+            F[4] = umod*umod + vmod*vmod;
+            F[5] = 1.0;
 
-            u += jacob->dudcol;
-            v += jacob->dvdcol;
+            for (i=0; i<6; i++) {
+                pars[i] += wdata*F[i];
+                for (j=0; j<6; j++) {
+                    pcov[i + 6*j] += w2*var*F[i]*F[j];
+                }
+            }
 
         }
     }
 
 _getmom_bail:
 
-    cen=PyArray_DATA(cen_obj);
-    pars=PyArray_DATA(pars_obj);
-    pvar=PyArray_DATA(pvar_obj);
-
-    cen[0]=ucen;
-    cen[1]=vcen;
-
-    pars[0]=usum;
-    pars[1]=vsum;
-    pars[2]=M1sum;
-    pars[3]=M2sum;
-    pars[4]=Tsum;
-    pars[5]=Isum;
-
-    pvar[0]=Vusum;
-    pvar[1]=Vvsum;
-    pvar[2]=VM1sum;
-    pvar[3]=VM2sum;
-    pvar[4]=VTsum;
-    pvar[5]=VIsum;
-
-    return Py_BuildValue("dii",  wsum, niter, flags);
+    return Py_BuildValue("iddd", flags, wsum, s2n_numer, s2n_denom);
 }
 
 
@@ -3982,7 +3875,7 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"get_model_s2n_Tvar_sums", (PyCFunction)PyGMix_get_model_s2n_Tvar_sums,  METH_VARARGS,  "calculate the s/n of the model\n"},
     {"get_model_s2n_Tvar_sums_altweight", (PyCFunction)PyGMix_get_model_s2n_Tvar_sums_altweight,  METH_VARARGS,  "calculate the s/n of the model\n"},
 
-    {"get_weighted_mom_sums", (PyCFunction)PyGMix_get_weighted_mom_sums,  METH_VARARGS,  "calculate weighted mom sums\n"},
+    {"get_weighted_moments", (PyCFunction)PyGMix_get_weighted_moments,  METH_VARARGS,  "calculate weighted moments\n"},
 
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
     {"get_loglike_gauleg", (PyCFunction)PyGMix_get_loglike_gauleg,  METH_VARARGS,  "calculate likelihood, integrating model over the pixels\n"},
