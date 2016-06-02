@@ -46,6 +46,7 @@ class Shape(object):
         g=numpy.sqrt(g1*g1 + g2*g2)
         if g >= 1.0:
             raise GMixRangeError("g out of range: %.16g" % g)
+        self.g=g
 
     def set_g1g2(self, g1, g2):
         """
