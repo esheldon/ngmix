@@ -1760,6 +1760,102 @@ _getmom_bail:
 
 
 /*
+   weighted moments of one gaussian mixture with another
+*/
+static PyObject * PyGMix_get_weighted_gmix_moments(PyObject* self, PyObject* args) {
+
+    // arguments
+    PyObject* gmix_obj=NULL;
+    PyObject* wt_gmix_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    int n_row=0, n_col=0;
+    PyObject* pars_obj=NULL;
+
+    // for unpacking input arrays
+    npy_intp n_gauss=0, wt_n_gauss=0;
+    struct PyGMix_Gauss2D *gmix=NULL;
+    struct PyGMix_Gauss2D *wt_gmix=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+    double *pars=NULL;
+
+    // local variables
+    int i=0, row=0, col=0;
+    double u=0, v=0, umod=0, vmod=0;
+    double model_val=0, wmodel, weight=0, w2=0, wsum=0;
+    double wt_ucen=0, wt_vcen=0, wt_psum=0;
+    double F[6];
+
+    if (!PyArg_ParseTuple(
+            args, (char*)"OOOiiO", 
+            &gmix_obj,
+            &wt_gmix_obj,
+            &jacob_obj,
+            &n_row,
+            &n_col,
+            &pars_obj
+        ) ) {
+        return NULL;
+    }
+
+    // unpack the input and output arrays
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        return NULL;
+    }
+
+    wt_gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(wt_gmix_obj);
+    wt_n_gauss=PyArray_SIZE(wt_gmix_obj);
+    if (!gmix_set_norms_if_needed(wt_gmix, wt_n_gauss)) {
+        return NULL;
+    }
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    pars=PyArray_DATA(pars_obj); // pars[6]
+
+    // center of the weight gmix
+    gmix_get_cen(wt_gmix, wt_n_gauss, &wt_vcen, &wt_ucen, &wt_psum);
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+            // sky coordinates relative to the jacobian center
+            v=PYGMIX_JACOB_GETV(jacob, row, col);
+            u=PYGMIX_JACOB_GETU(jacob, row, col);
+
+            model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
+
+            // evaluate the gaussian mixture at the specified location
+            weight=PYGMIX_GMIX_EVAL_FULL(wt_gmix, wt_n_gauss, v, u);
+
+            // sky coordinates relative to the gaussian mixture center
+            vmod = v-wt_vcen;
+            umod = u-wt_ucen;
+
+            wmodel = weight*model_val;
+            w2 = weight*weight;
+            wsum += weight;
+
+            F[0] = vmod;
+            F[1] = umod;
+            F[2] = umod*umod - vmod*vmod;
+            F[3] = 2*vmod*umod;
+            F[4] = umod*umod + vmod*vmod;
+            F[5] = 1.0;
+
+            for (i=0; i<6; i++) {
+                pars[i] += wmodel*F[i];
+            }
+
+        }
+    }
+
+    return Py_BuildValue("d", wsum);
+}
+
+
+
+/*
    Calculate the loglike between the gmix and the input image
 
    Error checking should be done in python.
@@ -3876,6 +3972,7 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"get_model_s2n_Tvar_sums_altweight", (PyCFunction)PyGMix_get_model_s2n_Tvar_sums_altweight,  METH_VARARGS,  "calculate the s/n of the model\n"},
 
     {"get_weighted_moments", (PyCFunction)PyGMix_get_weighted_moments,  METH_VARARGS,  "calculate weighted moments\n"},
+    {"get_weighted_gmix_moments", (PyCFunction)PyGMix_get_weighted_gmix_moments,  METH_VARARGS,  "calculate weighted moments of one gmix with another\n"},
 
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
     {"get_loglike_gauleg", (PyCFunction)PyGMix_get_loglike_gauleg,  METH_VARARGS,  "calculate likelihood, integrating model over the pixels\n"},

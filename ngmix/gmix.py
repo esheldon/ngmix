@@ -11,7 +11,7 @@ import copy
 import numpy
 from numpy import array, zeros, exp, log10, log, dot, sqrt, diag
 from . import fastmath
-from .jacobian import Jacobian
+from .jacobian import Jacobian, UnitJacobian
 from .shape import Shape, g1g2_to_e1e2, e1e2_to_g1g2
 
 from . import moments
@@ -735,6 +735,77 @@ class GMix(object):
 
             's2n_numer_sum':s2n_numer,
             's2n_denom_sum':s2n_denom,
+        }
+
+    def get_weighted_gmix_moments(self, gm, nrow, ncol, jacobian=None):
+        """
+
+        Get the weighted moments of this gmix against another.  The moments are
+        *not* normalized
+
+        This parallels the get_weighted_moments method
+
+        parameters
+        ----------
+        gm: GMix
+            The Gaussian mixture for which to measure moments
+        nrow: int
+            Number of image rows to mimic for evaluation
+        ncol: int
+            Number of image columns to mimic for evaluation
+        jacobian: Jacobian, optional
+            Transformation between pixel and sky coords.  The gaussian mixture
+            centers should be set relative to the jacobian center.  If not
+            sent, UnitJacobian(row=0.,col=0.) is used.
+
+        returns
+        --------
+
+        In the following, W is the weight function, I is the image
+
+           Returns the folling in the 'pars' field, in this order
+               sum(W * I * F[i])
+           where
+               F = {
+                  v,
+                  u,
+                  u^2-v^2,
+                  2*v*u,
+                  u^2+v^2,
+                  1.0
+               }
+
+        where v,u are in sky coordinates relative to the jacobian center.
+        """
+
+        assert isinstance(gm,GMix)
+        if jacobian is None:
+            jacobian=UnitJacobian(row=0.0, col=0.0)
+        else:
+            assert isinstance(jacobian,Jacobian)
+
+        # use self as the weight
+        wt_gmdata=self._get_gmix_data()
+        gmdata=gm._get_gmix_data()
+
+        pars=zeros(6)
+        wsum=_gmix.get_weighted_gmix_moments(
+            gmdata,
+            wt_gmdata,
+            jacobian._data,
+            nrow,
+            ncol,
+            pars, # these get modified internally
+        )
+
+        flags=0
+        flagstr=_moms_flagmap[flags]
+        return {
+            'flags':flags,
+            'flagstr':flagstr,
+
+            'wsum':wsum,
+            'pars':pars,
         }
 
 
