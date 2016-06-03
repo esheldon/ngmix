@@ -185,6 +185,11 @@ class FitterBase(object):
 
 
         self.nband=len(self.obs)
+        nimage = 0
+        for obslist in self.obs:
+            for obs in obslist:
+                nimage += 1
+        self.nimage=nimage
 
         if self.margsky:
             for band_obs in self.obs:
@@ -1605,7 +1610,7 @@ class LMSimple(FitterBase):
         super(LMSimple,self).__init__(obs, model, **keys)
 
         # this is a dict
-        # can contain maxfev (maxiter), ftol (tol in sum of squares)
+        # can contain maxfev, ftol (tol in sum of squares)
         # xtol (tol in solution), etc
 
         lm_pars=keys.get('lm_pars',None)
@@ -1774,6 +1779,134 @@ class LMSimple(FitterBase):
 
         return nprior
 
+class LMMetaMomSimple(LMSimple):
+    def __init__(self, obs, model, wt_gmix, **keys):
+        super(LMSimple,self).__init__(obs, model, **keys)
+
+        # this is a dict
+        # can contain maxfev, ftol (tol in sum of squares)
+        # xtol (tol in solution), etc
+
+        lm_pars=keys.get('lm_pars',None)
+        if lm_pars is None:
+            lm_pars=_default_lm_pars
+        self.lm_pars=lm_pars
+
+        # center1 + center2 + shape + T + fluxes
+        self.n_prior_pars=1 + 1 + 1 + 1 + self.nband
+
+        self.fdiff_size=6*self.nimage + self.n_prior_pars
+        self._band_pars=zeros(6)
+
+        self.wt_gmix=wt_gmix
+        assert isinstance(wt_gmix,GMix)
+
+        self._calculate_obs_moments()
+
+    def run_lm(self, guess):
+        """
+        Run leastsq and set the result
+        """
+        from scipy.optimize import leastsq
+
+        guess=array(guess,dtype='f8',copy=False)
+        self._setup_data(guess)
+
+        result = run_leastsq(self._calc_fdiff,
+                             guess,
+                             self.n_prior_pars,
+                             **self.lm_pars)
+
+        # we will allow this for this fitter, but not ideal
+        if result['flags'] == ZERO_DOF:
+            result['flags']=0
+
+        result['model'] = self.model_name
+        if result['flags']==0:
+            result['g'] = result['pars'][2:2+2].copy()
+            result['g_cov'] = result['pars_cov'][2:2+2, 2:2+2].copy()
+            stat_dict=self.get_fit_stats(result['pars'])
+            result.update(stat_dict)
+
+        self._result=result
+    run_max=run_lm
+    go=run_lm
+
+
+    def _calculate_obs_moments(self):
+        """
+        calculate sums over all bands and epochs
+        """
+
+        wt_gmix=self.wt_gmix
+
+        moments=zeros(6*self.nimage)
+        momerr=zeros(6*self.nimage)
+
+        start=0
+        for obslist in self.obs:
+            for obs in obslist:
+
+                res=wt_gmix.get_weighted_moments(obs)
+
+                if res['flags'] != 0:
+                    tup=(res['flags'],res['flagstr'])
+                    raise RuntimeError("got flags %d (%s) in moms" % tup)
+
+                end=start+6
+                moments[start:end] = res['pars']
+                momerr[start:end] = sqrt(diag(res['pars_cov']))
+
+                start += 6
+
+        self.moments=moments
+        self.momerr=momerr
+
+    def _calc_fdiff(self, pars):
+        """
+        vector with (model-data)/error.
+        """
+
+        # we cannot keep sending existing array into leastsq, don't know why
+        fdiff=zeros(self.fdiff_size)
+        wt_gmix=self.wt_gmix
+
+        try:
+
+            self._fill_gmix_all(pars)
+
+            start=self._fill_priors(pars, fdiff)
+            mstart=0
+
+            for band in xrange(self.nband):
+
+                obs_list=self.obs[band]
+                gmix_list=self._gmix_all[band]
+
+                for obs,gm in zip(obs_list, gmix_list):
+
+                    res=wt_gmix.get_weighted_gmix_moments(
+                        gm,
+                        obs.image.shape,
+                        jacobian=obs.jacobian,
+                    )
+
+                    tmoments=res['pars']
+
+                    mend=mstart+6
+                    mom=self.moments[mstart:mend]
+                    momerr=self.momerr[mstart:mend]
+
+                    fdiff[start:start+6] = (tmoments-mom)/momerr
+
+                    start  += 6
+                    mstart += 6
+
+        except GMixRangeError as err:
+            fdiff[:] = LOWVAL
+
+        return fdiff
+
 class LMCoellip(LMSimple):
     def __init__(self, obs, ngauss, **keys):
         self._ngauss=ngauss
@@ -1910,18 +2043,22 @@ def run_leastsq(func, guess, n_prior_pars, **keys):
 
             dof = fdiff.size - n_prior_pars - npars
 
-            s_sq = (fdiff[n_prior_pars:]**2).sum()/dof
-            pcov = pcov0 * s_sq
-
-            cflags = _test_cov(pcov)
-            if cflags != 0:
-                flags += cflags
-                errmsg = "bad covariance matrix"
-                print('    ',errmsg)
-                junk1,junk2,perr=_get_def_stuff(npars)
+            if dof==0:
+                junk,pcov,perr=_get_def_stuff(npars)
+                flags |= ZERO_DOF
             else:
-                # only if we reach here did everything go well
-                perr=sqrt( numpy.diag(pcov) )
+                s_sq = (fdiff[n_prior_pars:]**2).sum()/dof
+                pcov = pcov0 * s_sq
+
+                cflags = _test_cov(pcov)
+                if cflags != 0:
+                    flags += cflags
+                    errmsg = "bad covariance matrix"
+                    print('    ',errmsg)
+                    junk1,junk2,perr=_get_def_stuff(npars)
+                else:
+                    # only if we reach here did everything go well
+                    perr=sqrt( diag(pcov) )
 
         res['flags']=flags
         res['nfev'] = infodict['nfev']
