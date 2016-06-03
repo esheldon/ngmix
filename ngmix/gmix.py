@@ -737,7 +737,7 @@ class GMix(object):
             's2n_denom_sum':s2n_denom,
         }
 
-    def get_weighted_gmix_moments(self, gm, nrow, ncol, jacobian=None):
+    def get_weighted_gmix_moments(self, gm, dims, jacobian=None):
         """
 
         Get the weighted moments of this gmix against another.  The moments are
@@ -749,10 +749,8 @@ class GMix(object):
         ----------
         gm: GMix
             The Gaussian mixture for which to measure moments
-        nrow: int
-            Number of image rows to mimic for evaluation
-        ncol: int
-            Number of image columns to mimic for evaluation
+        dims: int
+            [nrow,ncol] Number of image rows and columns to mimic for evaluation
         jacobian: Jacobian, optional
             Transformation between pixel and sky coords.  The gaussian mixture
             centers should be set relative to the jacobian center.  If not
@@ -793,8 +791,8 @@ class GMix(object):
             gmdata,
             wt_gmdata,
             jacobian._data,
-            nrow,
-            ncol,
+            dims[0],
+            dims[1],
             pars, # these get modified internally
         )
 
