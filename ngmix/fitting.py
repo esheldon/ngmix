@@ -1620,7 +1620,10 @@ class LMSimple(FitterBase):
 
 
         # center1 + center2 + shape + T + fluxes
-        self.n_prior_pars=1 + 1 + 1 + 1 + self.nband
+        if self.prior is None:
+            self.n_prior_pars=0
+        else:
+            self.n_prior_pars=1 + 1 + 1 + 1 + self.nband
 
         self.fdiff_size=self.totpix + self.n_prior_pars
 
@@ -1793,7 +1796,10 @@ class LMMetaMomSimple(LMSimple):
         self.lm_pars=lm_pars
 
         # center1 + center2 + shape + T + fluxes
-        self.n_prior_pars=1 + 1 + 1 + 1 + self.nband
+        if self.prior is None:
+            self.n_prior_pars=0
+        else:
+            self.n_prior_pars=1 + 1 + 1 + 1 + self.nband
 
         self.fdiff_size=6*self.nimage + self.n_prior_pars
         self._band_pars=zeros(6)
@@ -1905,6 +1911,7 @@ class LMMetaMomSimple(LMSimple):
         except GMixRangeError as err:
             fdiff[:] = LOWVAL
 
+        #print("fdiff:",fdiff)
         return fdiff
 
 class LMCoellip(LMSimple):
