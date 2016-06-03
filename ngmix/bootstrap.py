@@ -136,23 +136,34 @@ class Bootstrapper(object):
         return self.round_res
 
 
-    def set_round_s2n(self, fitter_type='max'):
+    def get_fitter(self, fitter_type):
         """
-        set the s/n and (s/n)_T for the round model
-        """
+        get fitter by name
 
+        'max'
+        'isample'
+        etc.
+        """
         if fitter_type=='isample':
             fitter = self.get_isampler()
         elif fitter_type=='max':
             fitter = self.get_max_fitter()
         else:
-            raise ValueError("fitter_type should be isample or max")
+            raise ValueError("bad fitter_type: '%s'" % fitter_type)
+        return fitter
+
+    def set_round_s2n(self, fitter_type='max'):
+        """
+        set the s/n and (s/n)_T for the round model
+        """
+
+        fitter=self.get_fitter(fitter_type)
 
         res=fitter.get_result()
 
         pars, pars_lin = self._get_round_pars(res['pars'])
 
-        s2n, psf_T, flags = self._get_s2n_round(pars)
+        s2n, psf_T, flags = self._get_s2n_round(pars, fitter)
 
         T_r = pars_lin[4]
         self.round_res={'pars':pars,
@@ -162,7 +173,7 @@ class Bootstrapper(object):
                         'T_r':T_r,
                         'psf_T_r':psf_T}
 
-    def _get_s2n_round(self, pars_round):
+    def _get_s2n_round(self, pars_round, fitter):
         s2n=-9999.0
         psf_T=-9999.0
         flags=0
@@ -171,14 +182,12 @@ class Bootstrapper(object):
         psf_T_sum=0.0
         wsum=0.0
 
-        max_fitter=self.get_max_fitter()
-
         try:
             for band,obslist in enumerate(self.mb_obs_list):
 
                 # pars_round could be in log and include all bands
                 # this is unconvolved by a psf
-                gm_round_band0 = self._get_gmix_round(max_fitter,
+                gm_round_band0 = self._get_gmix_round(fitter,
                                                       pars_round,
                                                       band)
 
@@ -1420,7 +1429,6 @@ class Bootstrapper(object):
         self.max_fitter = fitter
 
 
-
     def _fit_one_model_max(self,
                            gal_model,
                            pars,
@@ -1441,10 +1449,12 @@ class Bootstrapper(object):
 
         guesser=self._get_max_guesser(guess=guess, prior=prior, widths=guess_widths)
 
-        runner=MaxRunner(obs, gal_model, pars, guesser,
-                         prior=prior,
-                         intpars=self.intpars,
-                         use_logpars=self.use_logpars)
+        runner=MaxRunner(
+            obs, gal_model, pars, guesser,
+            prior=prior,
+            intpars=self.intpars,
+            use_logpars=self.use_logpars,
+        )
 
         runner.go(ntry=ntry)
 
