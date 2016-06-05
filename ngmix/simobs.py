@@ -183,6 +183,11 @@ def get_noise_image(weight, **kw):
         err[:,:] = BIGNOISE
 
 
+    noise_factor=kw.get("noise_factor",None)
+    if noise_factor is not None:
+        print("Applying Noise Factor:",noise_factor)
+        err *= noise_factor
+
     noise_image *= err
     return noise_image
 
