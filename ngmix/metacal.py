@@ -107,6 +107,25 @@ def _add_obs_images(obs1, obs2):
                          "or MultiBandObsList")
 
 
+def _doadd_single_obs(obs, nobs):
+    im  = obs.image
+    nim = nobs.image
+
+    obs.image = im + nim
+
+    wpos=numpy.where(
+        (obs.weight != 0.0) &
+        (nobs.weight != 0.0)
+    )
+    if wpos[0].size > 0:
+        tvar = obs.weight*0
+        # add the variances
+        tvar[wpos] = (
+            1.0/obs.weight[wpos]  +
+            1.0/nobs.weight[wpos]
+        )
+        obs.weight[wpos] = 1.0/tvar[wpos]
+
 def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     """
     internal routine
@@ -132,32 +151,28 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
         # rotate back, which is 3 more rotations
         _rotate_obs_image(nmbobs, k=3)
 
-        for imb in xrange(len(imbobs)):
-            iolist=imbobs[imb]
-            nolist=nmbobs[imb]
+        if isinstance(imbobs,Observation):
+            _doadd_single_obs(imbobs, nmbobs)
 
-            for iobs in xrange(len(iolist)):
+        elif isinstance(imbobs,ObsList):
+            for iobs in xrange(len(imbobs)):
 
-                obs  = iolist[iobs]
-                nobs = nolist[iobs]
+                obs  = imbobs[iobs]
+                nobs = nmbobs[iobs]
 
-                im  = obs.image
-                nim = nobs.image
+                _doadd_single_obs(obs, nobs)
 
-                obs.image = im + nim
+        elif isinstance(imbobs,MultiBandObsList):
+            for imb in xrange(len(imbobs)):
+                iolist=imbobs[imb]
+                nolist=nmbobs[imb]
 
-                wpos=numpy.where(
-                    (obs.weight != 0.0) &
-                    (nobs.weight != 0.0)
-                )
-                if wpos[0].size > 0:
-                    tvar = obs.weight*0
-                    # add the variances
-                    tvar[wpos] = (
-                        1.0/obs.weight[wpos]  +
-                        1.0/nobs.weight[wpos]
-                    )
-                    obs.weight[wpos] = 1.0/tvar[wpos]
+                for iobs in xrange(len(iolist)):
+
+                    obs  = iolist[iobs]
+                    nobs = nolist[iobs]
+
+                    _doadd_single_obs(obs, nobs)
 
 
     return obsdict
