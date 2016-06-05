@@ -145,7 +145,20 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
                 nim = nobs.image
 
                 obs.image = im + nim
-                obs.weight = 0.5*obs.weight
+
+                wpos=numpy.where(
+                    (obs.weight != 0.0) &
+                    (nobs.weight != 0.0)
+                )
+                if wpos[0].size > 0:
+                    tvar = obs.weight*0
+                    # add the variances
+                    tvar[wpos] = (
+                        1.0/obs.weight[wpos]  +
+                        1.0/nobs.weight[wpos]
+                    )
+                    obs.weight[wpos] = 1.0/tvar[wpos]
+
 
     return obsdict
 

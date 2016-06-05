@@ -102,9 +102,16 @@ def _simulate_obs(gmix, obs, **kw):
     else:
         psf=deepcopy( obs.psf )
 
+    weight=obs.weight.copy()
+
+    noise_factor=kw.get("noise_factor",None)
+    if noise_factor is not None:
+        print("    Modding weight with noise factor:",noise_factor)
+        weight *= (1.0/noise_factor**2)
+
     new_obs = Observation(
         sim_image,
-        weight=obs.weight.copy(),
+        weight=weight,
         jacobian=obs.jacobian.copy(),
         psf=psf
     )
@@ -178,15 +185,15 @@ def get_noise_image(weight, **kw):
             wzero=where(weight <= 0)
             err[wzero] = median_err
 
+        noise_factor=kw.get("noise_factor",None)
+        if noise_factor is not None:
+            print("    Adding noise factor:",noise_factor)
+            err *= noise_factor
+
     else:
         print("    All weight is zero!  Setting noise to",BIGNOISE)
         err[:,:] = BIGNOISE
 
-
-    noise_factor=kw.get("noise_factor",None)
-    if noise_factor is not None:
-        print("Applying Noise Factor:",noise_factor)
-        err *= noise_factor
 
     noise_image *= err
     return noise_image
