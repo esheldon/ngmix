@@ -1,7 +1,7 @@
 from __future__ import print_function
 import numpy
 
-from .gmix import GMix
+from .gmix import GMix, GMixModel
 from . import _gmix
 
 class Admom(object):
@@ -30,7 +30,21 @@ class Admom(object):
         """
         get the result
         """
+
+        if not hasattr(self,'result'):
+            raise RuntimeError("run go() first")
+
         return self.result
+
+    def get_gmix(self):
+        """
+        get a gmix representing the best fit, normalized
+        """
+
+        pars=self.result['pars'].copy()
+        pars[5]=1.0
+
+        return GMixModel(pars, "gauss")
 
     def go(self, guess_gmix):
         """
@@ -41,20 +55,38 @@ class Admom(object):
         guess_gmix: ngmix.GMix
             A guess for the fitter.
         """
+
         if not isinstance(guess_gmix,GMix):
             raise ValueError("guess should be GMix, but got "
                              "type %s" % type(guess_gmix))
 
+        obs=self.obs
+
         gdata = guess_gmix._data
 
-        _gmix.admom(
-            self.conf,
-            self.obs.image,
-            self.obs.weight,
-            self.obs.jacobian._data,
-            guess_gmix._data,
-            self.am_result,
-        )
+        if obs.has_psf_gmix():
+            psf_gmix=obs.psf.gmix
+
+            # we'll have a call here with the psf
+            _gmix.admom(
+                self.conf,
+                obs.image,
+                obs.weight,
+                obs.jacobian._data,
+                guess_gmix._data,
+                self.am_result,
+            )
+
+        else:
+
+            _gmix.admom(
+                self.conf,
+                obs.image,
+                obs.weight,
+                obs.jacobian._data,
+                guess_gmix._data,
+                self.am_result,
+            )
 
         self._copy_result()
 

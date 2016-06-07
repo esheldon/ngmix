@@ -3036,10 +3036,10 @@ struct AdmomResult {
     double s2n_denom;
 
     // Fsum, vsum, usum, vvsum, vusum, uusum
-    double pars[6];
+    double sums[6];
 
     // cov of above
-    double pars_cov[36];
+    double sums_cov[36];
 
 
 };
@@ -3138,9 +3138,9 @@ static void admom_censums(
 
             wdata=weight*data;
 
-            res->pars[0] += wdata*v;
-            res->pars[1] += wdata*u;
-            res->pars[5] += wdata;
+            res->sums[0] += wdata*v;
+            res->sums[1] += wdata*u;
+            res->sums[5] += wdata;
 
         } // cols
     } // rows
@@ -3165,11 +3165,11 @@ static void admom_momsums(
         vmod=0, umod=0,
         ivar=0,var=0,
         weight=0, w2=0,data=0, wdata=0;
-    double *pars=NULL, *pars_cov=NULL;
+    double *sums=NULL, *sums_cov=NULL;
     double F[6];
 
-    pars=res->pars;
-    pars_cov=res->pars_cov;
+    sums=res->sums;
+    sums_cov=res->sums_cov;
 
     n_row=PyArray_DIM(image, 0);
     n_col=PyArray_DIM(image, 1);
@@ -3215,9 +3215,9 @@ static void admom_momsums(
             res->s2n_denom += w2*ivar;
 
             for (i=0; i<6; i++) {
-                pars[i] += wdata*F[i];
+                sums[i] += wdata*F[i];
                 for (j=0; j<6; j++) {
-                    pars_cov[i + 6*j] += w2*var*F[i]*F[j];
+                    sums_cov[i + 6*j] += w2*var*F[i]*F[j];
                 }
             }
 
@@ -3322,13 +3322,13 @@ static void admom(
         // First the center
         admom_clear_result(res);
         admom_censums(self, image, jacob, &wt, res);
-        if (res->pars[5] <= 0.0) {
+        if (res->sums[5] <= 0.0) {
             res->flags |= ADMOM_FAINT;
             goto admom_bail;
         }
 
-        wt.row = res->pars[0]/res->pars[5];
-        wt.col = res->pars[1]/res->pars[5];
+        wt.row = res->sums[0]/res->sums[5];
+        wt.col = res->sums[1]/res->sums[5];
 
         // bail if the center shifted too far
         if ( ( fabs(wt.row-roworig) > self->shiftmax)
@@ -3343,15 +3343,15 @@ static void admom(
         admom_clear_result(res);
         admom_momsums(self, image, ivarim, jacob, &wt, res);
 
-        if (res->pars[5] <= 0.0) {
+        if (res->sums[5] <= 0.0) {
             res->flags |= ADMOM_FAINT;
             goto admom_bail;
         }
 
         // look for convergence
-        M1 = res->pars[2]/res->pars[5];
-        M2 = res->pars[3]/res->pars[5];
-        T  = res->pars[4]/res->pars[5];
+        M1 = res->sums[2]/res->sums[5];
+        M2 = res->sums[3]/res->sums[5];
+        T  = res->sums[4]/res->sums[5];
 
         Irr = 0.5*(T - M1);
         Icc = 0.5*(T + M1);
@@ -3412,6 +3412,7 @@ static PyObject * PyGMix_admom(PyObject* self, PyObject* args) {
     PyObject* res_obj=NULL;
 
     struct PyGMix_Gauss2D *wt=NULL;//, *gauss=NULL;
+
     struct PyGMix_Jacobian *jacob=NULL;
 
     struct Admom *admom_conf =NULL;
