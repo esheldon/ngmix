@@ -33,6 +33,8 @@ from .bootstrap import Bootstrapper, CompositeBootstrapper
 
 from . import em
 
+from . import admom
+
 from . import observation
 from .observation import Observation, ObsList, MultiBandObsList
 

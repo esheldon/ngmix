@@ -2981,6 +2981,463 @@ static PyObject * PyGMix_em_run(PyObject* self, PyObject* args) {
     }
 }
 
+
+/*
+	for now straight conversion of the fortran
+*/
+
+
+#define AM_TOL1 0.001
+#define AM_TOL2 0.01
+#define AM_DETTOL 1.e-7
+
+#define ADMOM_EDGE 0x1
+#define ADMOM_SHIFT 0x2
+#define ADMOM_FAINT 0x4
+#define ADMOM_SMALL 0x8
+#define ADMOM_DET 0x10
+#define ADMOM_MAXIT 0x20
+
+struct Admom {
+    int maxit;
+    double shiftmax;
+    double etol;
+    double Ttol;
+};
+
+/*
+struct AdmomMask {
+    ssize_t rowmin;
+    ssize_t rowmax;
+    ssize_t colmin;
+    ssize_t colmax;
+};
+*/
+
+/*
+struct AdmomSums {
+    double fsum;     // weight*data
+    double vsum;     // weight*v*data
+    double usum;     // weight*u*data
+    double vvsum;     // weight*v*v*data
+    double vusum;     // weight*v*u*data
+    double uusum;     // weight*u*u*data
+    double wsqsum;     // weight*weight
+};
+*/
+
+struct AdmomResult {
+    int flags;
+
+    int numiter;
+
+    double wsum;
+    double s2n_numer;
+    double s2n_denom;
+
+    // Fsum, vsum, usum, vvsum, vusum, uusum
+    double pars[6];
+
+    // cov of above
+    double pars_cov[36];
+
+
+};
+
+/*
+static void admom_sums_clear(struct AdmomSums *self)
+{
+    memset(self, 0, sizeof(struct AdmomSums));
+}
+*/
+
+static void admom_clear_result(struct AdmomResult *self)
+{
+    memset(self, 0, sizeof(struct AdmomResult));
+}
+
+
+
+/* 
+   calculate the mask covering a certain number
+   of sigma around the center.
+
+   For the edge flagging
+*/
+/*
+static void admom_get_mask(const struct Admom *self,
+                           const struct PyGMix_Gauss2D *gauss,
+                           const struct PyGMix_Jacobian *jacob,
+                           npy_intp n_row, npy_intp n_col,
+                           struct AdmomMask *mask,
+                           )
+{
+    double grad=0;
+    double rlow=0,rhigh=0,clow=0,chigh=0;
+    double vlow=0,vhigh=0,vlow=0,vhigh=0;
+    double iscale=0.0;
+
+    // sdet is the scale in arcsec/pixel
+    iscale = 1.0/jacob->sdet;
+
+    self->info_flags=0;
+
+    // in pixels
+    grad = self->nsigma*sqrt(fmax(gauss->irr,gauss->icc));
+
+    vlow  = gauss->row-grad-0.5;
+    vhigh = gauss->row+grad+0.5;
+    ulow  = gauss->col-grad-0.5;
+    uhigh = gauss->col+grad+0.5;
+
+    // keep track of when our bounding box hits an edge
+    if ( (rlow < 0) || (rhigh > n_row-1)
+         (clow < 0) || (chigh > n_col-1) ) {
+        self->info_flags |= ADMOM_EDGE;
+    }
+
+    mask->rowmin = lround(fmax( rlow,0.) );
+    mask->rowmax = lround(fmin( rhigh, ((double)n_row)-1 ) );
+
+    mask->colmin = lround(fmax( clow,0.) );
+    mask->colmax = lround(fmin( chigh, ((double)n_col)-1 ) );
+
+}
+*/
+
+/*
+   set the center
+*/
+
+static void admom_censums(
+          const struct Admom *self,
+          const PyObject* image,
+          const struct PyGMix_Jacobian *jacob,
+          const struct PyGMix_Gauss2D *wt,
+          struct AdmomResult *res)
+
+{
+
+    npy_intp n_row=0, n_col=0, irow=0, icol=0;
+    double 
+        u=0, v=0,
+        weight=0, data=0, wdata=0;
+
+    n_row=PyArray_DIM(image, 0);
+    n_col=PyArray_DIM(image, 1);
+
+    // get the weighted center
+    for (irow=0; irow<n_row; irow++) {
+        for (icol=0; icol<n_col; icol++) {
+            // v->row and u->col in calculations
+            v=PYGMIX_JACOB_GETV(jacob, irow, icol);
+            u=PYGMIX_JACOB_GETU(jacob, irow, icol);
+
+            data=*( (double*)PyArray_GETPTR2(image,irow,icol) );
+            weight=PYGMIX_GAUSS_EVAL(wt, v, u);
+
+            wdata=weight*data;
+
+            res->pars[0] += wdata*v;
+            res->pars[1] += wdata*u;
+            res->pars[5] += wdata;
+
+        } // cols
+    } // rows
+
+}
+
+static void admom_momsums(
+          const struct Admom *self,
+          const PyObject* image,
+          const PyObject* ivarim,
+          const struct PyGMix_Jacobian *jacob,
+          const struct PyGMix_Gauss2D *wt,
+          struct AdmomResult* res)
+
+{
+
+    npy_intp n_row=0, n_col=0, irow=0, icol=0;
+    int i=0, j=0;
+    double 
+        u=0, v=0,
+        vcen=0, ucen=0,
+        vmod=0, umod=0,
+        ivar=0,var=0,
+        weight=0, w2=0,data=0, wdata=0;
+    double *pars=NULL, *pars_cov=NULL;
+    double F[6];
+
+    pars=res->pars;
+    pars_cov=res->pars_cov;
+
+    n_row=PyArray_DIM(image, 0);
+    n_col=PyArray_DIM(image, 1);
+
+    // row->v col->u
+    vcen=wt->row;
+    ucen=wt->col;
+
+    // get the weighted center
+    for (irow=0; irow<n_row; irow++) {
+        for (icol=0; icol<n_col; icol++) {
+
+            // sky coordinates relative to the jacobian center
+            v=PYGMIX_JACOB_GETV(jacob, irow, icol);
+            u=PYGMIX_JACOB_GETU(jacob, irow, icol);
+
+            data = *( (double*)PyArray_GETPTR2(image,irow,icol) );
+            ivar = *( (double*)PyArray_GETPTR2(ivarim,irow,icol) );
+
+            var=1.0/ivar;
+
+            // evaluate the gaussian at the specified location
+            weight=PYGMIX_GAUSS_EVAL(wt, v, u);
+
+            // sky coordinates relative to the gaussian mixture center
+            vmod = v-vcen;
+            umod = u-ucen;
+
+            wdata = weight*data;
+            w2 = weight*weight;
+
+            F[0] = v;
+            F[1] = u;
+            F[2] = umod*umod - vmod*vmod;
+            F[3] = 2*vmod*umod;
+            F[4] = umod*umod + vmod*vmod;
+            F[5] = 1.0;
+
+
+            // for the s/n sums
+            res->wsum      += weight;
+            res->s2n_numer += wdata*ivar;
+            res->s2n_denom += w2*ivar;
+
+            for (i=0; i<6; i++) {
+                pars[i] += wdata*F[i];
+                for (j=0; j<6; j++) {
+                    pars_cov[i + 6*j] += w2*var*F[i]*F[j];
+                }
+            }
+
+        } // cols
+    } // rows
+
+}
+
+/*
+   set a new weight function
+
+   Since these are weighted moments, the following would hold
+   for gaussians
+
+       Cinv_meas = Cinv_true + Cinv_weight
+
+   So for the next iteration, subtract the covariance
+   matrix of the weight
+
+*/
+
+static int take_adaptive_step(
+          struct PyGMix_Gauss2D *wt,
+          double Irr, double Irc, double Icc)
+{
+    int flags=0;
+
+    double 
+        Nrr=0, Ncc=0, Nrc=0,
+        detn=0, idetn=0,
+        detm=0, idetm=0,
+        idetw=0;
+
+    detm = Irr*Icc - Irc*Irc;
+    if (detm <= 1.0e-200) {
+        flags=ADMOM_DET;
+        goto adaptive_step_bail;
+    }
+
+    idetw=1.0/wt->det;
+    idetm=1.0/detm;
+
+    // Nrr etc. are actually of the inverted covariance matrix
+    Nrr =  Icc*idetm - wt->icc*idetw;
+    Ncc =  Irr*idetm - wt->irr*idetw;
+    Nrc = -Irc*idetm + wt->irc*idetw;
+    detn = Nrr*Ncc - Nrc*Nrc;
+
+    if (detn <= 1.0e-200) {
+        flags=ADMOM_DET;
+        goto adaptive_step_bail;
+    }
+
+    // now set from the inverted matrix
+    idetn=1./detn;
+    wt->irr =  Ncc*idetn;
+    wt->icc =  Nrr*idetn;
+    wt->irc = -Nrc*idetn;
+
+    wt->det = wt->irr*wt->icc - wt->irc*wt->irc;
+
+adaptive_step_bail:
+    return flags;
+}
+static void admom(
+
+          const struct Admom *self,
+          const PyObject* image,
+          const PyObject* ivarim,
+          const struct PyGMix_Jacobian *jacob,
+
+          // weight should initially hold the guess
+          const struct PyGMix_Gauss2D *wtin,
+
+          struct AdmomResult *res
+	)
+
+{
+
+    struct PyGMix_Gauss2D wt={0};
+    double 
+        roworig=0, colorig=0,
+        e1old=-9999, e2old=-9999, Told=-9999.0,
+        Irr=0, Irc=0, Icc, M1=0, M2=0, T=0, e1=0, e2=0;
+
+    int i=0;
+
+    wt = *wtin;
+
+    res->flags=0;
+
+    roworig=wt.row;
+    colorig=wt.col;
+
+    for (i=0; i<self->maxit; i++) {
+
+        if (!gauss2d_set_norm(&wt) ) {
+            res->flags |= ADMOM_DET;
+            goto admom_bail;
+        }
+
+        // First the center
+        admom_clear_result(res);
+        admom_censums(self, image, jacob, &wt, res);
+        if (res->pars[5] <= 0.0) {
+            res->flags |= ADMOM_FAINT;
+            goto admom_bail;
+        }
+
+        wt.row = res->pars[0]/res->pars[5];
+        wt.col = res->pars[1]/res->pars[5];
+
+        // bail if the center shifted too far
+        if ( ( fabs(wt.row-roworig) > self->shiftmax)
+             ||
+             ( fabs(wt.col-colorig) > self->shiftmax)
+             ) {
+            res->flags |= ADMOM_SHIFT;
+            goto admom_bail;
+        }
+
+        // now the rest of the moment sums
+        admom_clear_result(res);
+        admom_momsums(self, image, ivarim, jacob, &wt, res);
+
+        if (res->pars[5] <= 0.0) {
+            res->flags |= ADMOM_FAINT;
+            goto admom_bail;
+        }
+
+        // look for convergence
+        M1 = res->pars[2]/res->pars[5];
+        M2 = res->pars[3]/res->pars[5];
+        T  = res->pars[4]/res->pars[5];
+
+        Irr = 0.5*(T - M1);
+        Icc = 0.5*(T + M1);
+        Irc = 0.5*M2;
+
+        if (T <= 0.0) {
+            res->flags |= ADMOM_SMALL;
+            goto admom_bail;
+        }
+
+        e1 = (Icc - Irr)/T;
+        e2 = 2*Irc/T;
+
+        if ( 
+                ( fabs(e1-e1old) < self->etol)
+                &&
+                ( fabs(e2-e2old) < self->etol)
+                &&
+                ( fabs(T/Told-1.) < self->Ttol)
+           )  {
+
+             break;
+
+        } else {
+            // take the adaptive step
+
+            res->flags |= take_adaptive_step(&wt, Irr, Irc, Icc);
+            if (res->flags != 0) {
+                goto admom_bail;
+            }
+
+            e1old=e1;
+            e2old=e2;
+            Told=T;
+
+        }
+
+    }
+
+admom_bail:
+
+    res->numiter = i+1;
+
+    return;
+}
+
+static PyObject * PyGMix_admom(PyObject* self, PyObject* args) {
+
+    PyObject* admom_obj=NULL;
+
+    // the weight gaussian
+    PyObject* wt_obj=NULL;
+
+    PyObject* image_obj=NULL;
+    PyObject* ivarim_obj=NULL;
+    PyObject* jacob_obj=NULL;
+
+    PyObject* res_obj=NULL;
+
+    struct PyGMix_Gauss2D *wt=NULL;//, *gauss=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    struct Admom *admom_conf =NULL;
+    struct AdmomResult *res=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOOOO", 
+                          &admom_obj,
+                          &image_obj,
+                          &ivarim_obj,
+                          &jacob_obj,
+                          &wt_obj,
+                          &res_obj)) {
+        return NULL;
+    }
+
+    admom_conf=(struct Admom* ) PyArray_DATA(admom_obj);
+    wt=(struct PyGMix_Gauss2D* ) PyArray_DATA(wt_obj);
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    res=(struct AdmomResult* ) PyArray_DATA(res_obj);
+
+    admom(admom_conf, image_obj, ivarim_obj, jacob, wt, res);
+
+    Py_RETURN_NONE;
+}
+
+
 /*
    convert log pars to linear pars
    pars 4: are converted
@@ -4002,6 +4459,9 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"set_norms",(PyCFunction)PyGMix_gmix_set_norms, METH_VARARGS,  "set the normalizations used during evaluation of the gaussians\n"},
 
     {"em_run",(PyCFunction)PyGMix_em_run, METH_VARARGS,  "run the em algorithm\n"},
+
+    {"admom",(PyCFunction)PyGMix_admom, METH_VARARGS,  "get adaptive moments\n"},
+
 
     {"get_cm_Tfactor",        (PyCFunction)PyGMix_get_cm_Tfactor,         METH_VARARGS,  "get T factor for composite model\n"},
 
