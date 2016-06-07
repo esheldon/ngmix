@@ -94,13 +94,14 @@ class Admom(object):
 
             if res['s2n_denom'] > 0:
                 res['s2n'] = res['s2n_numer']/numpy.sqrt(res['s2n_denom'])
-                sigma = numpy.sqrt(pars[4]/2.0)
-                # BJ02 for gaussians
-                res['err'] = 2.0/res['s2n']
 
+                # error on each shape component from BJ02 for gaussians
+                # assumes round
+
+                res['err'] = 2.0/res['s2n']
                 res['e_cov'] = numpy.diag( [ res['err']**2 ]*2 )
 
-                # very approximate cov
+                # very approximate off-diagonal terms
                 scov=res['sums_cov']
                 cross=res['err']**2 * scov[2,3]/numpy.sqrt(scov[2,2]*scov[3,3])
                 res['e_cov'][0,1] = cross
