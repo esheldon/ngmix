@@ -65,28 +65,19 @@ class Admom(object):
         gdata = guess_gmix._data
 
         if obs.has_psf_gmix():
-            psf_gmix=obs.psf.gmix
-
-            # we'll have a call here with the psf
-            _gmix.admom(
-                self.conf,
-                obs.image,
-                obs.weight,
-                obs.jacobian._data,
-                guess_gmix._data,
-                self.am_result,
-            )
-
+            psf_gmix_data=obs.psf.gmix._data
         else:
+            psf_gmix_data=None
 
-            _gmix.admom(
-                self.conf,
-                obs.image,
-                obs.weight,
-                obs.jacobian._data,
-                guess_gmix._data,
-                self.am_result,
-            )
+        _gmix.admom(
+            self.conf,
+            obs.image,
+            obs.weight,
+            psf_gmix_data,
+            obs.jacobian._data,
+            guess_gmix._data,
+            self.am_result,
+        )
 
         self._copy_result()
 
@@ -111,18 +102,10 @@ class Admom(object):
             # now want pars and cov for [cen1,cen2,e1,e2,T,flux]
             sums=res['sums']
 
-            pars = sums.copy()
-            pars[0] = sums[0]/sums[5]
-            pars[1] = sums[1]/sums[5]
-
-            pars[2] = sums[2]/sums[4]
-            pars[3] = sums[3]/sums[4]
-            pars[4] = 2*sums[4]/sums[5]
-
-            pars[5] = sums[5]/res['wsum']
-
-            res['pars'] = pars
-            res['e'] = pars[2:2+2]
+            pars=res['pars']
+            T = pars[4]
+            if T > 0.0:
+                res['e'][:] = res['pars'][2:2+2]/T
 
             if res['s2n_denom'] > 0:
                 res['s2n'] = res['s2n_numer']/numpy.sqrt(res['s2n_denom'])
@@ -131,7 +114,7 @@ class Admom(object):
                 # assumes round
 
                 res['err'] = 2.0/res['s2n']
-                res['e_cov'] = numpy.diag( [ res['err']**2 ]*2 )
+                res['e_cov'][:,:] = numpy.diag( [ res['err']**2 ]*2 )
 
                 # very approximate off-diagonal terms
                 scov=res['sums_cov']
@@ -176,4 +159,5 @@ _admom_result_dtype=[
     ('sums','f8',6),
     ('sums_cov','f8', 36),
 
+    ('pars','f8',6),
 ]

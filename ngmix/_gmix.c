@@ -3035,12 +3035,12 @@ struct AdmomResult {
     double s2n_numer;
     double s2n_denom;
 
-    // Fsum, vsum, usum, vvsum, vusum, uusum
     double sums[6];
 
     // cov of above
     double sums_cov[36];
 
+    double pars[6];
 
 };
 
@@ -3051,7 +3051,7 @@ static void admom_sums_clear(struct AdmomSums *self)
 }
 */
 
-static void admom_clear_result(struct AdmomResult *self)
+static inline void admom_clear_result(struct AdmomResult *self)
 {
     memset(self, 0, sizeof(struct AdmomResult));
 }
@@ -3240,8 +3240,9 @@ static void admom_momsums(
 */
 
 static int take_adaptive_step(
-          struct PyGMix_Gauss2D *wt,
-          double Irr, double Irc, double Icc)
+          double Wrr, double Wrc, double Wcc,
+          double Irr, double Irc, double Icc,
+          double *NewIrr, double *NewIrc, double *NewIcc)
 {
     int flags=0;
 
@@ -3249,21 +3250,28 @@ static int take_adaptive_step(
         Nrr=0, Ncc=0, Nrc=0,
         detn=0, idetn=0,
         detm=0, idetm=0,
-        idetw=0;
+        detw=0, idetw=0;
 
+    // measured moments
     detm = Irr*Icc - Irc*Irc;
     if (detm <= 1.0e-200) {
         flags=ADMOM_DET;
         goto adaptive_step_bail;
     }
 
-    idetw=1.0/wt->det;
+    detw = Wrr*Wcc - Wrc*Wrc;
+    if (detw <= 1.0e-200) {
+        flags=ADMOM_DET;
+        goto adaptive_step_bail;
+    }
+
+    idetw=1.0/detw;
     idetm=1.0/detm;
 
     // Nrr etc. are actually of the inverted covariance matrix
-    Nrr =  Icc*idetm - wt->icc*idetw;
-    Ncc =  Irr*idetm - wt->irr*idetw;
-    Nrc = -Irc*idetm + wt->irc*idetw;
+    Nrr =  Icc*idetm - Wcc*idetw;
+    Ncc =  Irr*idetm - Wrr*idetw;
+    Nrc = -Irc*idetm + Wrc*idetw;
     detn = Nrr*Ncc - Nrc*Nrc;
 
     if (detn <= 1.0e-200) {
@@ -3273,15 +3281,35 @@ static int take_adaptive_step(
 
     // now set from the inverted matrix
     idetn=1./detn;
-    wt->irr =  Ncc*idetn;
-    wt->icc =  Nrr*idetn;
-    wt->irc = -Nrc*idetn;
-
-    wt->det = wt->irr*wt->icc - wt->irc*wt->irc;
+    *NewIrr =  Ncc*idetn;
+    *NewIcc =  Nrr*idetn;
+    *NewIrc = -Nrc*idetn;
 
 adaptive_step_bail:
     return flags;
 }
+
+
+
+static int take_adaptive_step_wt(
+          struct PyGMix_Gauss2D *wt,
+          double Irr, double Irc, double Icc)
+{
+
+    int flags=0;
+    flags=take_adaptive_step(
+        wt->irr, wt->irc, wt->icc,
+        Irr, Irc, Icc,
+        &wt->irr, &wt->irc, &wt->icc
+    );
+
+    wt->det = wt->irr*wt->icc - wt->irc*wt->irc;
+
+    return flags;
+}
+
+
+
 static void admom(
 
           const struct Admom *self,
@@ -3373,12 +3401,19 @@ static void admom(
                 ( fabs(T/Told-1.) < self->Ttol)
            )  {
 
-             break;
+            res->pars[0] = wt.row;
+            res->pars[1] = wt.col;
+            res->pars[2] = wt.icc - wt.irr;
+            res->pars[3] = 2.0*wt.irc;
+            res->pars[4] = wt.icc + wt.irr;
+            res->pars[5] = res->sums[5]/res->wsum;
+
+            break;
 
         } else {
             // take the adaptive step
 
-            res->flags |= take_adaptive_step(&wt, Irr, Irc, Icc);
+            res->flags |= take_adaptive_step_wt(&wt, Irr, Irc, Icc);
             if (res->flags != 0) {
                 goto admom_bail;
             }
@@ -3393,10 +3428,252 @@ static void admom(
 
 admom_bail:
 
-    res->numiter = i+1;
+    res->numiter = i;
+
+    if (res->numiter==self->maxit) {
+        res->flags |= ADMOM_MAXIT;
+    }
 
     return;
 }
+
+
+/*
+ these only do the covariance matrix, still need
+ to call gauss2d_set_norm to finalize
+ */
+static inline void admom_convolve(
+          struct PyGMix_Gauss2D *self,
+          const struct PyGMix_Gauss2D *psf)
+{
+    self->irr += psf->irr;
+    self->irc += psf->irc;
+    self->icc += psf->icc;
+
+    self->det = self->irr*self->icc - self->irc*self->irc;
+}
+
+static inline void admom_deconvolve(
+          struct PyGMix_Gauss2D *self,
+          const struct PyGMix_Gauss2D *psf)
+{
+    self->irr -= psf->irr;
+    self->irc -= psf->irc;
+    self->icc -= psf->icc;
+
+    self->det = self->irr*self->icc - self->irc*self->irc;
+}
+
+static inline int
+admom_get_deconvolved_moments(
+          const struct PyGMix_Gauss2D *wt,  // should already be psf convolved
+          const struct PyGMix_Gauss2D *psf,
+          double Irr, double Irc, double Icc, // measured values
+          double *Irr0, double *Irc0, double *Icc0)
+{
+    int flags=0;
+
+    flags=take_adaptive_step(
+        wt->irr, wt->irc, wt->icc,
+        Irr, Irc, Icc,
+        Irr0, Irc0, Icc0
+    );
+
+    (*Irr0) -= psf->irr;
+    (*Irc0) -= psf->irc;
+    (*Icc0) -= psf->icc;
+
+    return flags;
+}
+
+static void admom_multi(
+
+          const struct Admom *self,
+
+          // eventually will be lists of images, jacobians, and psfs
+          const PyObject* image,
+          const PyObject* ivarim,
+          const struct PyGMix_Gauss2D *psfs,
+          const struct PyGMix_Jacobian *jacob,
+
+          // weight should initially hold the guess
+          const struct PyGMix_Gauss2D *wtin,
+
+          struct AdmomResult *res
+	)
+
+{
+
+    struct PyGMix_Gauss2D wt={0};
+    double 
+        roworig=0, colorig=0,
+        e1old=-9999, e2old=-9999, Told=-9999.0,
+        Irr=0, Irc=0, Icc, M1=0, M2=0, T=0, e1=0, e2=0,
+        Irrsum=0, Ircsum=0, Iccsum=0,
+        Irrsum0=0, Ircsum0=0, Iccsum0=0;
+
+    int i=0, j=0, nimage=1;
+
+    wt = *wtin;
+
+    res->flags=0;
+
+    roworig=wt.row;
+    colorig=wt.col;
+
+    for (i=0; i<self->maxit; i++) {
+
+
+        // First the center, using overall sums to get the center in sky coords
+
+        admom_clear_result(res);
+
+        for (j=0; j<nimage; j++) {
+            admom_convolve(&wt, &psfs[j]);
+
+            // we won't need to test these again during this iteration
+            if (!gauss2d_set_norm(&wt) ) {
+                res->flags |= ADMOM_DET;
+                goto admom_bail;
+            }
+
+            admom_censums(self, image, jacob, &wt, res);
+            admom_deconvolve(&wt, &psfs[j]);
+        }
+
+        if (res->sums[5] <= 0.0) {
+            res->flags |= ADMOM_FAINT;
+            goto admom_bail;
+        }
+
+        wt.row = res->sums[0]/res->sums[5];
+        wt.col = res->sums[1]/res->sums[5];
+
+        // bail if the center shifted too far
+        if ( ( fabs(wt.row-roworig) > self->shiftmax)
+             ||
+             ( fabs(wt.col-colorig) > self->shiftmax)
+             ) {
+            res->flags |= ADMOM_SHIFT;
+            goto admom_bail;
+        }
+
+        // now the rest of the moment sums. This will require
+        // some intermediate values for each image to be
+        // calculated and averaged
+
+        Irrsum=Ircsum=Iccsum=0;
+        Irrsum0=Ircsum0=Iccsum0=0;
+        for (j=0; j<nimage; j++) {
+            admom_clear_result(res);
+
+            admom_convolve(&wt, &psfs[j]);
+            gauss2d_set_norm(&wt);
+
+            admom_momsums(self, image, ivarim, jacob, &wt, res);
+
+            if (res->sums[5] <= 0.0) {
+                res->flags |= ADMOM_FAINT;
+                goto admom_bail;
+            }
+
+            M1 = res->sums[2]/res->sums[5];
+            M2 = res->sums[3]/res->sums[5];
+            T  = res->sums[4]/res->sums[5];
+
+            Irr = 0.5*(T - M1);
+            Icc = 0.5*(T + M1);
+            Irc = 0.5*M2;
+
+            // we will look at average convolved ellipticity later, to
+            // test convergence
+
+            Irrsum += Irr;
+            Ircsum += Irc;
+            Iccsum += Icc;
+
+            // now deconvolved covar, which we will average over
+            // the exposures, for the adaptive step
+            res->flags=admom_get_deconvolved_moments(
+                &wt, &psfs[j],
+                Irr, Irc, Icc,
+                &Irr, &Irc, &Icc
+            );
+            if (res->flags != 0) {
+                goto admom_bail;
+            }
+            Irrsum0 += Irr;
+            Ircsum0 += Irc;
+            Iccsum0 += Icc;
+
+            admom_deconvolve(&wt, &psfs[j]);
+        }
+
+
+        // look for convergence in mean of the convolved
+        // moments, since T could be zero for the deconvolved
+        // moments
+        Irr = Irrsum/nimage;
+        Irc = Ircsum/nimage;
+        Icc = Iccsum/nimage;
+        T = Irr+Icc;
+
+        if (T <= 0.0) {
+            res->flags |= ADMOM_SMALL;
+            goto admom_bail;
+        }
+
+        e1 = (Icc - Irr)/T;
+        e2 = 2*Irc/T;
+
+        if ( 
+                ( fabs(e1-e1old) < self->etol)
+                &&
+                ( fabs(e2-e2old) < self->etol)
+                &&
+                ( fabs(T/Told-1.) < self->Ttol)
+           )  {
+
+            res->pars[0] = wt.row;
+            res->pars[1] = wt.col;
+            res->pars[2] = wt.icc - wt.irr;
+            res->pars[3] = 2.0*wt.irc;
+            res->pars[4] = wt.icc + wt.irr;
+            res->pars[5] = res->sums[5]/res->wsum;
+
+            break;
+
+        } else {
+
+            // use mean of the deconvolved, adaptive stepped moments
+            // from each image
+
+            Irr = Irrsum0/nimage;
+            Irc = Ircsum0/nimage;
+            Icc = Iccsum0/nimage;
+            gauss2d_set(&wt, 1.0, wt.row, wt.col, Irr, Irc, Icc);
+
+            e1old=e1;
+            e2old=e2;
+            Told=T;
+
+        }
+
+    }
+
+admom_bail:
+
+    res->numiter = i;
+
+    if (res->numiter==self->maxit) {
+        res->flags |= ADMOM_MAXIT;
+    }
+
+    return;
+}
+
+
+
 
 static PyObject * PyGMix_admom(PyObject* self, PyObject* args) {
 
@@ -3404,6 +3681,7 @@ static PyObject * PyGMix_admom(PyObject* self, PyObject* args) {
 
     // the weight gaussian
     PyObject* wt_obj=NULL;
+    PyObject* psfs_obj=NULL;
 
     PyObject* image_obj=NULL;
     PyObject* ivarim_obj=NULL;
@@ -3411,17 +3689,19 @@ static PyObject * PyGMix_admom(PyObject* self, PyObject* args) {
 
     PyObject* res_obj=NULL;
 
-    struct PyGMix_Gauss2D *wt=NULL;//, *gauss=NULL;
+    struct PyGMix_Gauss2D *wt=NULL;
+    struct PyGMix_Gauss2D *psfs=NULL;
 
     struct PyGMix_Jacobian *jacob=NULL;
 
     struct Admom *admom_conf =NULL;
     struct AdmomResult *res=NULL;
 
-    if (!PyArg_ParseTuple(args, (char*)"OOOOOO", 
+    if (!PyArg_ParseTuple(args, (char*)"OOOOOOO", 
                           &admom_obj,
                           &image_obj,
                           &ivarim_obj,
+                          &psfs_obj,
                           &jacob_obj,
                           &wt_obj,
                           &res_obj)) {
@@ -3433,10 +3713,27 @@ static PyObject * PyGMix_admom(PyObject* self, PyObject* args) {
     jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
     res=(struct AdmomResult* ) PyArray_DATA(res_obj);
 
-    admom(admom_conf, image_obj, ivarim_obj, jacob, wt, res);
+    if (psfs_obj != Py_None) {
+        psfs=(struct PyGMix_Gauss2D* ) PyArray_DATA(psfs_obj);
+        admom_multi(admom_conf, image_obj, ivarim_obj, psfs, jacob, wt, res);
+    } else {
+        admom(admom_conf, image_obj, ivarim_obj, jacob, wt, res);
+    }
 
     Py_RETURN_NONE;
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 /*
