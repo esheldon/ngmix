@@ -1,6 +1,8 @@
 #ifndef _PYGMIX_HEADER_GUARD
 #define _PYGMIX_HEADER_GUARD
 
+#define PYGMIX_LOW_DETVAL 1.0e-200
+
 enum PyGMix_Models {
     PyGMIX_GMIX_FULL=0,
     PyGMIX_GMIX_GAUSS=1,

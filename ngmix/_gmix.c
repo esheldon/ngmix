@@ -199,7 +199,7 @@ static int gauss2d_set_norm(struct PyGMix_Gauss2D *self)
 {
     int status=0;
     double idet=0;
-    if (self->det < 1.0e-200) {
+    if (self->det < PYGMIX_LOW_DETVAL) {
 
         // PyErr_Format doesn't format floats
         char detstr[25];
@@ -2987,9 +2987,6 @@ static PyObject * PyGMix_em_run(PyObject* self, PyObject* args) {
 */
 
 
-#define AM_TOL1 0.001
-#define AM_TOL2 0.01
-#define AM_DETTOL 1.e-7
 
 #define ADMOM_EDGE 0x1
 #define ADMOM_SHIFT 0x2
@@ -3254,13 +3251,13 @@ static int take_adaptive_step(
 
     // measured moments
     detm = Irr*Icc - Irc*Irc;
-    if (detm <= 1.0e-200) {
+    if (detm <= PYGMIX_LOW_DETVAL) {
         flags=ADMOM_DET;
         goto adaptive_step_bail;
     }
 
     detw = Wrr*Wcc - Wrc*Wrc;
-    if (detw <= 1.0e-200) {
+    if (detw <= PYGMIX_LOW_DETVAL) {
         flags=ADMOM_DET;
         goto adaptive_step_bail;
     }
@@ -3274,7 +3271,7 @@ static int take_adaptive_step(
     Nrc = -Irc*idetm + Wrc*idetw;
     detn = Nrr*Ncc - Nrc*Nrc;
 
-    if (detn <= 1.0e-200) {
+    if (detn <= PYGMIX_LOW_DETVAL) {
         flags=ADMOM_DET;
         goto adaptive_step_bail;
     }
@@ -3486,15 +3483,41 @@ admom_get_deconvolved_moments(
     return flags;
 }
 
+static int admom_set_norm(struct PyGMix_Gauss2D *self)
+{
+    int status=0;
+    double idet=0;
+
+    if (self->det < PYGMIX_LOW_DETVAL) {
+        status=0;
+    } else {
+
+        idet=1.0/self->det;
+        self->drr = self->irr*idet;
+        self->drc = self->irc*idet;
+        self->dcc = self->icc*idet;
+        self->norm = 1./(2*M_PI*sqrt(self->det));
+
+        self->pnorm = self->p*self->norm;
+
+        self->norm_set=1;
+        status=1;
+    }
+
+    return status;
+
+}
+
 static void admom_multi(
 
           const struct Admom *self,
 
           // eventually will be lists of images, jacobians, and psfs
-          const PyObject* image,
-          const PyObject* ivarim,
-          const struct PyGMix_Gauss2D *psfs,
-          const struct PyGMix_Jacobian *jacob,
+          const PyObject** im_list,
+          const PyObject** ivarim_list,
+          const struct PyGMix_Gauss2D** psf_list,
+          const struct PyGMix_Jacobian** jacob_list,
+          int nimage,
 
           // weight should initially hold the guess
           const struct PyGMix_Gauss2D *wtin,
@@ -3510,9 +3533,10 @@ static void admom_multi(
         e1old=-9999, e2old=-9999, Told=-9999.0,
         Irr=0, Irc=0, Icc, M1=0, M2=0, T=0, e1=0, e2=0,
         Irrsum=0, Ircsum=0, Iccsum=0,
-        Irrsum0=0, Ircsum0=0, Iccsum0=0;
+        Irrsum0=0, Ircsum0=0, Iccsum0=0,
+        s2n_numer=0.0, s2n_denom=0.0;
 
-    int i=0, j=0, nimage=1;
+    int i=0, j=0;
 
     wt = *wtin;
 
@@ -3529,16 +3553,16 @@ static void admom_multi(
         admom_clear_result(res);
 
         for (j=0; j<nimage; j++) {
-            admom_convolve(&wt, &psfs[j]);
+            admom_convolve(&wt, psf_list[j]);
 
             // we won't need to test these again during this iteration
-            if (!gauss2d_set_norm(&wt) ) {
+            if (!admom_set_norm(&wt) ) {
                 res->flags |= ADMOM_DET;
                 goto admom_bail;
             }
 
-            admom_censums(self, image, jacob, &wt, res);
-            admom_deconvolve(&wt, &psfs[j]);
+            admom_censums(self, im_list[j], jacob_list[j], &wt, res);
+            admom_deconvolve(&wt, psf_list[j]);
         }
 
         if (res->sums[5] <= 0.0) {
@@ -3562,15 +3586,18 @@ static void admom_multi(
         // some intermediate values for each image to be
         // calculated and averaged
 
+        s2n_numer=s2n_denom=0;
         Irrsum=Ircsum=Iccsum=0;
         Irrsum0=Ircsum0=Iccsum0=0;
         for (j=0; j<nimage; j++) {
             admom_clear_result(res);
 
-            admom_convolve(&wt, &psfs[j]);
-            gauss2d_set_norm(&wt);
+            admom_convolve(&wt, psf_list[j]);
+            admom_set_norm(&wt);
 
-            admom_momsums(self, image, ivarim, jacob, &wt, res);
+            admom_momsums(self,
+                          im_list[j], ivarim_list[j], jacob_list[j],
+                          &wt, res);
 
             if (res->sums[5] <= 0.0) {
                 res->flags |= ADMOM_FAINT;
@@ -3595,7 +3622,7 @@ static void admom_multi(
             // now deconvolved covar, which we will average over
             // the exposures, for the adaptive step
             res->flags=admom_get_deconvolved_moments(
-                &wt, &psfs[j],
+                &wt, psf_list[j],
                 Irr, Irc, Icc,
                 &Irr, &Irc, &Icc
             );
@@ -3606,7 +3633,11 @@ static void admom_multi(
             Ircsum0 += Irc;
             Iccsum0 += Icc;
 
-            admom_deconvolve(&wt, &psfs[j]);
+            // sums over all images
+            s2n_numer += res->s2n_numer;
+            s2n_denom += res->s2n_denom;
+
+            admom_deconvolve(&wt, psf_list[j]);
         }
 
 
@@ -3640,6 +3671,9 @@ static void admom_multi(
             res->pars[3] = 2.0*wt.irc;
             res->pars[4] = wt.icc + wt.irr;
             res->pars[5] = res->sums[5]/res->wsum;
+
+            res->s2n_numer=s2n_numer;
+            res->s2n_denom=s2n_denom;
 
             break;
 
@@ -3681,6 +3715,46 @@ static PyObject * PyGMix_admom(PyObject* self, PyObject* args) {
 
     // the weight gaussian
     PyObject* wt_obj=NULL;
+
+    PyObject* image_obj=NULL;
+    PyObject* ivarim_obj=NULL;
+    PyObject* jacob_obj=NULL;
+
+    PyObject* res_obj=NULL;
+
+    struct PyGMix_Gauss2D *wt=NULL;
+
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    struct Admom *admom_conf =NULL;
+    struct AdmomResult *res=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOOOO", 
+                          &admom_obj,
+                          &image_obj,
+                          &ivarim_obj,
+                          &jacob_obj,
+                          &wt_obj,
+                          &res_obj)) {
+        return NULL;
+    }
+
+    admom_conf=(struct Admom* ) PyArray_DATA(admom_obj);
+    wt=(struct PyGMix_Gauss2D* ) PyArray_DATA(wt_obj);
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    res=(struct AdmomResult* ) PyArray_DATA(res_obj);
+
+    admom(admom_conf, image_obj, ivarim_obj, jacob, wt, res);
+
+    Py_RETURN_NONE;
+}
+
+static PyObject * PyGMix_admom_multi(PyObject* self, PyObject* args) {
+
+    PyObject* admom_obj=NULL;
+
+    // the weight gaussian
+    PyObject* wt_obj=NULL;
     PyObject* psfs_obj=NULL;
 
     PyObject* image_obj=NULL;
@@ -3690,12 +3764,21 @@ static PyObject * PyGMix_admom(PyObject* self, PyObject* args) {
     PyObject* res_obj=NULL;
 
     struct PyGMix_Gauss2D *wt=NULL;
-    struct PyGMix_Gauss2D *psfs=NULL;
-
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct PyGMix_Jacobian *tjacob=NULL;
 
     struct Admom *admom_conf =NULL;
     struct AdmomResult *res=NULL;
+
+    // just for packing in pointers from the python lists
+    PyObject* tmp=NULL;
+    struct PyGMix_Gauss2D *tgauss=NULL;
+
+    const PyObject* im_list[1000]={0};
+    const PyObject* ivarim_list[1000]={0};
+    const struct PyGMix_Gauss2D* psf_list[1000]={0};
+    const struct PyGMix_Jacobian* jacob_list[1000]={0};
+
+    Py_ssize_t nimage=0, i=0;
 
     if (!PyArg_ParseTuple(args, (char*)"OOOOOOO", 
                           &admom_obj,
@@ -3708,20 +3791,44 @@ static PyObject * PyGMix_admom(PyObject* self, PyObject* args) {
         return NULL;
     }
 
+    nimage = PyList_Size(image_obj);
+
     admom_conf=(struct Admom* ) PyArray_DATA(admom_obj);
     wt=(struct PyGMix_Gauss2D* ) PyArray_DATA(wt_obj);
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
     res=(struct AdmomResult* ) PyArray_DATA(res_obj);
 
-    if (psfs_obj != Py_None) {
-        psfs=(struct PyGMix_Gauss2D* ) PyArray_DATA(psfs_obj);
-        admom_multi(admom_conf, image_obj, ivarim_obj, psfs, jacob, wt, res);
-    } else {
-        admom(admom_conf, image_obj, ivarim_obj, jacob, wt, res);
+    for (i=0; i<nimage; i++) {
+        tmp = PyList_GetItem(image_obj, i);
+        im_list[i] = tmp;
+
+        tmp = PyList_GetItem(ivarim_obj, i);
+        ivarim_list[i] = tmp;
+
+        tmp = PyList_GetItem(psfs_obj, i);
+        tgauss=(struct PyGMix_Gauss2D* ) PyArray_DATA(tmp);
+        psf_list[i] = tgauss;
+
+        tmp = PyList_GetItem(jacob_obj, i);
+        tjacob = (struct PyGMix_Jacobian* ) PyArray_DATA(tmp);
+        jacob_list[i] = tjacob;
     }
+
+
+    admom_multi(
+        admom_conf,
+        im_list,
+        ivarim_list,
+        psf_list,
+        jacob_list,
+        (int)nimage,
+        wt,
+        res
+   );
 
     Py_RETURN_NONE;
 }
+
+
 
 
 
@@ -4759,6 +4866,7 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"em_run",(PyCFunction)PyGMix_em_run, METH_VARARGS,  "run the em algorithm\n"},
 
     {"admom",(PyCFunction)PyGMix_admom, METH_VARARGS,  "get adaptive moments\n"},
+    {"admom_multi",(PyCFunction)PyGMix_admom_multi, METH_VARARGS,  "get adaptive moments\n"},
 
 
     {"get_cm_Tfactor",        (PyCFunction)PyGMix_get_cm_Tfactor,         METH_VARARGS,  "get T factor for composite model\n"},

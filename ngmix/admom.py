@@ -2,6 +2,7 @@ from __future__ import print_function
 import numpy
 
 from .gmix import GMix, GMixModel
+from .observation import Observation, ObsList, MultiBandObsList
 from . import _gmix
 
 class Admom(object):
@@ -22,7 +23,7 @@ class Admom(object):
     """
 
     def __init__(self, obs, maxiter=200, shiftmax=5.0, etol=0.001, Ttol=0.01):
-        self.obs=obs
+        self._set_obs(obs)
         self._set_conf(maxiter, shiftmax, etol, Ttol)
         self._set_am_result()
 
@@ -60,24 +61,28 @@ class Admom(object):
             raise ValueError("guess should be GMix, but got "
                              "type %s" % type(guess_gmix))
 
-        obs=self.obs
 
         gdata = guess_gmix._data
 
-        if obs.has_psf_gmix():
-            psf_gmix_data=obs.psf.gmix._data
+        if len(self._psflist) == 0:
+            _gmix.admom(
+                self.conf,
+                self._imlist[0],
+                self._wtlist[0],
+                self._jlist[0],
+                guess_gmix._data,
+                self.am_result,
+            )
         else:
-            psf_gmix_data=None
-
-        _gmix.admom(
-            self.conf,
-            obs.image,
-            obs.weight,
-            psf_gmix_data,
-            obs.jacobian._data,
-            guess_gmix._data,
-            self.am_result,
-        )
+            _gmix.admom_multi(
+                self.conf,
+                self._imlist,
+                self._wtlist,
+                self._psflist,
+                self._jlist,
+                guess_gmix._data,
+                self.am_result,
+            )
 
         self._copy_result()
 
@@ -124,6 +129,57 @@ class Admom(object):
 
 
         self.result=res
+
+    def _set_obs(self, obs):
+        imlist=[]
+        wtlist=[]
+        jlist=[]
+        psflist=[]
+
+        if isinstance(obs,MultiBandObsList):
+            mbobs=obs
+            for oblist in mbobs:
+                for obs in obslist:
+                    imlist.append(obs.image)
+                    wtlist.append(obs.weight)
+                    jlist.append(obs.jacobian._data)
+                    if obs.has_psf_gmix():
+                        psflist.append(obs.psf.gmix._data)
+
+        elif isinstance(obs, ObsList):
+            obslist=obs
+            for obs in obslist:
+                imlist.append(obs.image)
+                wtlist.append(obs.weight)
+                jlist.append(obs.jacobian._data)
+                if obs.has_psf_gmix():
+                    psflist.append(obs.psf.gmix._data)
+
+        elif isinstance(obs, Observation):
+            imlist.append(obs.image)
+            wtlist.append(obs.weight)
+            jlist.append(obs.jacobian._data)
+            if obs.has_psf_gmix():
+                psflist.append(obs.psf.gmix._data)
+        else:
+            raise ValueError("obs is type '%s' but should be "
+                             "Observation, ObsList, or MultiBandObsList")
+
+        if len(psflist) > 0 and len(psflist) != len(imlist):
+                raise ValueError("only some of obs had psf set")
+
+        if len(psflist) == 0 and len(imlist) > 1:
+            raise ValueError("fitting multiple images only supported if "
+                             "you set the psf gmix")
+
+        if len(imlist) > 1000:
+            raise ValueError("currently limited to 1000 "
+                             "images, got %d" % len(imlist))
+
+        self._imlist=imlist
+        self._wtlist=wtlist
+        self._jlist=jlist
+        self._psflist=psflist
 
     def _set_conf(self, maxiter, shiftmax, etol, Ttol):
         dt=numpy.dtype(_admom_conf_dtype, align=True)
