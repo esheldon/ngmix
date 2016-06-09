@@ -1781,7 +1781,7 @@ static PyObject * PyGMix_get_weighted_gmix_moments(PyObject* self, PyObject* arg
     // local variables
     int i=0, row=0, col=0;
     double u=0, v=0, umod=0, vmod=0;
-    double model_val=0, wmodel, weight=0, w2=0, wsum=0;
+    double model_val=0, wmodel, weight=0, wsum=0;
     double wt_ucen=0, wt_vcen=0, wt_psum=0;
     double F[6];
 
@@ -1833,7 +1833,6 @@ static PyObject * PyGMix_get_weighted_gmix_moments(PyObject* self, PyObject* arg
             umod = u-wt_ucen;
 
             wmodel = weight*model_val;
-            w2 = weight*weight;
             wsum += weight;
 
             F[0] = vmod;
@@ -3029,7 +3028,6 @@ struct AdmomResult {
     int numiter;
 
     int nimage;
-    int nimage_use;
 
     double wsum;
     double s2n_numer;
@@ -3542,7 +3540,7 @@ static void admom_multi(
         Irrsum0=0, Ircsum0=0, Iccsum0=0,
         s2n_numer=0.0, s2n_denom=0.0;
 
-    int i=0, j=0, nimage_use=0;
+    int i=0, j=0;
 
     wt = *wtin;
 
@@ -3595,7 +3593,6 @@ static void admom_multi(
         s2n_numer=s2n_denom=0;
         Irrsum=Ircsum=Iccsum=0;
         Irrsum0=Ircsum0=Iccsum0=0;
-        nimage_use=0;
         for (j=0; j<nimage; j++) {
             admom_clear_result(res);
 
@@ -3631,19 +3628,13 @@ static void admom_multi(
                 &Irr, &Irc, &Icc
             );
 
-            if (res->flags==0) {
-                nimage_use += 1;
-
-                Irrsum0 += Irr;
-                Ircsum0 += Irc;
-                Iccsum0 += Icc;
-
-            } else {
-                // could not invert covariance, substitute the weights
-                Irrsum0 += wt.irr;
-                Ircsum0 += wt.irc;
-                Iccsum0 += wt.icc;
+            if (res->flags!=0) {
+                goto admom_bail;
             }
+
+            Irrsum0 += Irr;
+            Ircsum0 += Irc;
+            Iccsum0 += Icc;
 
             s2n_numer += res->s2n_numer;
             s2n_denom += res->s2n_denom;
@@ -3652,18 +3643,13 @@ static void admom_multi(
 
         }
 
-        if (nimage_use == 0) {
-            res->flags = ADMOM_DET;
-            goto admom_bail;
-        }
-
 
         // look for convergence in mean of the convolved
         // moments, since T could be zero for the deconvolved
         // moments
-        Irr = Irrsum/nimage_use;
-        Irc = Ircsum/nimage_use;
-        Icc = Iccsum/nimage_use;
+        Irr = Irrsum/nimage;
+        Irc = Ircsum/nimage;
+        Icc = Iccsum/nimage;
         T = Irr+Icc;
 
         if (T <= 0.0) {
@@ -3692,7 +3678,6 @@ static void admom_multi(
             res->s2n_numer=s2n_numer;
             res->s2n_denom=s2n_denom;
 
-            res->nimage_use=nimage_use;
             break;
 
         } else {
@@ -3700,9 +3685,9 @@ static void admom_multi(
             // use mean of the deconvolved, adaptive stepped moments
             // from each image
 
-            Irr = Irrsum0/nimage_use;
-            Irc = Ircsum0/nimage_use;
-            Icc = Iccsum0/nimage_use;
+            Irr = Irrsum0/nimage;
+            Irc = Ircsum0/nimage;
+            Icc = Iccsum0/nimage;
             gauss2d_set(&wt, 1.0, wt.row, wt.col, Irr, Irc, Icc);
 
             e1old=e1;

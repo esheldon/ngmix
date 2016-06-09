@@ -210,7 +210,6 @@ _admom_result_dtype=[
     ('numiter','i4'),
 
     ('nimage','i4'),
-    ('nimage_use','i4'),
 
     ('wsum','f8'),
     ('s2n_numer','f8'),
