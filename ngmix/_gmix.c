@@ -3028,6 +3028,9 @@ struct AdmomResult {
 
     int numiter;
 
+    int nimage;
+    int nimage_use;
+
     double wsum;
     double s2n_numer;
     double s2n_denom;
@@ -3252,12 +3255,14 @@ static int take_adaptive_step(
     // measured moments
     detm = Irr*Icc - Irc*Irc;
     if (detm <= PYGMIX_LOW_DETVAL) {
+        printf("detm too small: %g\n", detm);
         flags=ADMOM_DET;
         goto adaptive_step_bail;
     }
 
     detw = Wrr*Wcc - Wrc*Wrc;
     if (detw <= PYGMIX_LOW_DETVAL) {
+        printf("detw too small: %g\n", detw);
         flags=ADMOM_DET;
         goto adaptive_step_bail;
     }
@@ -3272,6 +3277,7 @@ static int take_adaptive_step(
     detn = Nrr*Ncc - Nrc*Nrc;
 
     if (detn <= PYGMIX_LOW_DETVAL) {
+        printf("detn too small: %g\n", detn);
         flags=ADMOM_DET;
         goto adaptive_step_bail;
     }
@@ -3536,7 +3542,7 @@ static void admom_multi(
         Irrsum0=0, Ircsum0=0, Iccsum0=0,
         s2n_numer=0.0, s2n_denom=0.0;
 
-    int i=0, j=0;
+    int i=0, j=0, nimage_use=0;
 
     wt = *wtin;
 
@@ -3589,6 +3595,7 @@ static void admom_multi(
         s2n_numer=s2n_denom=0;
         Irrsum=Ircsum=Iccsum=0;
         Irrsum0=Ircsum0=Iccsum0=0;
+        nimage_use=0;
         for (j=0; j<nimage; j++) {
             admom_clear_result(res);
 
@@ -3600,7 +3607,7 @@ static void admom_multi(
                           &wt, res);
 
             if (res->sums[5] <= 0.0) {
-                res->flags |= ADMOM_FAINT;
+                res->flags = ADMOM_FAINT;
                 goto admom_bail;
             }
 
@@ -3612,45 +3619,55 @@ static void admom_multi(
             Icc = 0.5*(T + M1);
             Irc = 0.5*M2;
 
-            // we will look at average convolved ellipticity later, to
-            // test convergence
-
             Irrsum += Irr;
             Ircsum += Irc;
             Iccsum += Icc;
 
             // now deconvolved covar, which we will average over
             // the exposures, for the adaptive step
-            res->flags=admom_get_deconvolved_moments(
+            res->flags = admom_get_deconvolved_moments(
                 &wt, psf_list[j],
                 Irr, Irc, Icc,
                 &Irr, &Irc, &Icc
             );
-            if (res->flags != 0) {
-                goto admom_bail;
-            }
-            Irrsum0 += Irr;
-            Ircsum0 += Irc;
-            Iccsum0 += Icc;
 
-            // sums over all images
+            if (res->flags==0) {
+                nimage_use += 1;
+
+                Irrsum0 += Irr;
+                Ircsum0 += Irc;
+                Iccsum0 += Icc;
+
+            } else {
+                // could not invert covariance, substitute the weights
+                Irrsum0 += wt.irr;
+                Ircsum0 += wt.irc;
+                Iccsum0 += wt.icc;
+            }
+
             s2n_numer += res->s2n_numer;
             s2n_denom += res->s2n_denom;
 
             admom_deconvolve(&wt, psf_list[j]);
+
+        }
+
+        if (nimage_use == 0) {
+            res->flags = ADMOM_DET;
+            goto admom_bail;
         }
 
 
         // look for convergence in mean of the convolved
         // moments, since T could be zero for the deconvolved
         // moments
-        Irr = Irrsum/nimage;
-        Irc = Ircsum/nimage;
-        Icc = Iccsum/nimage;
+        Irr = Irrsum/nimage_use;
+        Irc = Ircsum/nimage_use;
+        Icc = Iccsum/nimage_use;
         T = Irr+Icc;
 
         if (T <= 0.0) {
-            res->flags |= ADMOM_SMALL;
+            res->flags = ADMOM_SMALL;
             goto admom_bail;
         }
 
@@ -3675,6 +3692,7 @@ static void admom_multi(
             res->s2n_numer=s2n_numer;
             res->s2n_denom=s2n_denom;
 
+            res->nimage_use=nimage_use;
             break;
 
         } else {
@@ -3682,9 +3700,9 @@ static void admom_multi(
             // use mean of the deconvolved, adaptive stepped moments
             // from each image
 
-            Irr = Irrsum0/nimage;
-            Irc = Ircsum0/nimage;
-            Icc = Iccsum0/nimage;
+            Irr = Irrsum0/nimage_use;
+            Irc = Ircsum0/nimage_use;
+            Icc = Iccsum0/nimage_use;
             gauss2d_set(&wt, 1.0, wt.row, wt.col, Irr, Irc, Icc);
 
             e1old=e1;
@@ -3697,10 +3715,16 @@ static void admom_multi(
 
 admom_bail:
 
+    res->nimage=nimage;
+
     res->numiter = i;
+    if (res->flags != 0) {
+        // we exited with a goto
+        res->numiter+=1;
+    }
 
     if (res->numiter==self->maxit) {
-        res->flags |= ADMOM_MAXIT;
+        res->flags = ADMOM_MAXIT;
     }
 
     return;

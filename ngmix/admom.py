@@ -22,7 +22,7 @@ class Admom(object):
         relative tolerance in T to determine convergence
     """
 
-    def __init__(self, obs, maxiter=200, shiftmax=5.0, etol=0.001, Ttol=0.01):
+    def __init__(self, obs, maxiter=100, shiftmax=5.0, etol=0.001, Ttol=0.01):
         self._set_obs(obs)
         self._set_conf(maxiter, shiftmax, etol, Ttol)
         self._set_am_result()
@@ -103,6 +103,7 @@ class Admom(object):
         res['e'] = [-9999.0, -9999.0]
         res['e_cov'] = numpy.diag( [9999.0]*2 )
 
+        res['flagstr'] = _admom_flagmap[res['flags']]
         if res['flags']==0:
             # now want pars and cov for [cen1,cen2,e1,e2,T,flux]
             sums=res['sums']
@@ -208,6 +209,9 @@ _admom_result_dtype=[
 
     ('numiter','i4'),
 
+    ('nimage','i4'),
+    ('nimage_use','i4'),
+
     ('wsum','f8'),
     ('s2n_numer','f8'),
     ('s2n_denom','f8'),
@@ -217,3 +221,13 @@ _admom_result_dtype=[
 
     ('pars','f8',6),
 ]
+
+_admom_flagmap={
+    0:'ok',
+    0x1:'edge hit', # not currently used
+    0x2:'center shifted too far',
+    0x4:'flux < 0',
+    0x8:'T < 0',
+    0x10:'determinant near zero',
+    0x20:'maxit reached',
+}
