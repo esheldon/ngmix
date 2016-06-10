@@ -22,7 +22,8 @@ class Admom(object):
         relative tolerance in T to determine convergence
     """
 
-    def __init__(self, obs, maxiter=100, shiftmax=5.0, etol=0.001, Ttol=0.01):
+    def __init__(self, obs, maxiter=100, shiftmax=5.0,
+                 etol=1.0e-5, Ttol=0.001):
         self._set_obs(obs)
         self._set_conf(maxiter, shiftmax, etol, Ttol)
         self._set_am_result()
