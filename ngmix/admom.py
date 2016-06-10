@@ -2,6 +2,7 @@ from __future__ import print_function
 import numpy
 
 from .gmix import GMix, GMixModel
+from .shape import e1e2_to_g1g2
 from .observation import Observation, ObsList, MultiBandObsList
 from . import _gmix
 
@@ -45,6 +46,13 @@ class Admom(object):
 
         pars=self.result['pars'].copy()
         pars[5]=1.0
+
+        e1 = pars[2]/pars[4]
+        e2 = pars[3]/pars[4]
+
+        g1,g2 = e1e2_to_g1g2(e1, e2)
+        pars[2] = g1
+        pars[3] = g2
 
         return GMixModel(pars, "gauss")
 
