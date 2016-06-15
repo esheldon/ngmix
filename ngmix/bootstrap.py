@@ -426,53 +426,88 @@ class Bootstrapper(object):
         return pars, pars_lin
 
 
-    def _find_cen(self, ntry=10):
+    def _find_cen(self, ntry=10, Tguess=4.0):
         """
         run a single-gaussian em fit, just to find the center
 
         Modify the jacobian of our version of the observations accordingly.
 
-        If it fails, don't modify anything
+        apply a wide prior on the center, just for stability.  Apply an 
+        informative prior on T and g, uninformative on flux.
         """
+        from . import priors, joint_priors, guessers
 
-        if len(self.mb_obs_list) > 1 or len(self.mb_obs_list[0]) > 1:
-            raise RuntimeError("adapt to multiple observations")
+        # T prior. I think it's ok if this is too restrictive
+        max_pars={'maxfev':2000}
+
+        Twidth=Tguess*0.5
+
+        # width of cen prior in pixels, should be broad
+        cen_width=3 # 1-sigma range for prior on center
 
         obs_orig = self.mb_obs_list[0][0]
         jacob=obs_orig.jacobian
+        scale=jacob.get_scale()
 
-        row0,col0=jacob.get_cen()
+        nband=len(self.mb_obs_list)
+        fluxes=zeros(nband)
+        for i,obslist in enumerate(self.mb_obs_list):
+            fsum=0.0
+            N=0
+            for obs in obslist:
+                fsum += obs.image.sum()
+                N+=1
 
-        T0=8.0
+            flux = fsum/N
+            if flux < 0.0:
+                flux=10.0
+            fluxes[i] = flux
 
-        for i in xrange(ntry):
-            guess=[1.0*(1.0 + 0.01*srandu()),
-                   row0*(1.0+0.5*srandu()),
-                   col0*(1.0+0.5*srandu()),
-                   T0/2.0*(1.0 + 0.1*srandu()),
-                   0.1*srandu(),
-                   T0/2.0*(1.0 + 0.1*srandu())]
+        gprior=priors.GPriorBA(0.2)
+        cen_prior=priors.CenPrior(
+            0.0,
+            0.0,
+            scale*cen_width,
+            scale*cen_width,
+        )
 
-            gm_guess = GMix(pars=guess)
+        Tprior=priors.LogNormal(Tguess, Twidth)
 
-            im,sky = prep_image(obs_orig.image)
+        # flux is the only uninformative prior
+        Fprior=[]
+        for i in xrange(len(fluxes)):
+            Fprior.append( priors.FlatPrior(-10.0, 1.e10) )
 
-            obs = Observation(im)
+        prior=joint_priors.PriorSimpleSep(
+            cen_prior,
+            gprior,
+            Tprior,
+            Fprior,
+        )
+        guesser=guessers.TFluxGuesser(
+            Tguess,
+            fluxes,
+        )
+        #guesser=guessers.TFluxAndPriorGuesser(
+        #    Tprior.mean,
+        #    fluxes,
+        #    prior,
+        #)
+        runner=MaxRunner(
+            'gauss',
+            max_pars,
+            guesser,
+            prior=prior,
+        )
+        runner.go(ntry=ntry)
 
-            fitter=GMixEM(obs)
-            fitter.go(gm_guess, sky, maxiter=4000) 
-
-            res=fitter.get_result()
-
-            if res['flags']==0:
-                break
+        fitter=runner.get_fitter()
+        res=fitter.get_result()
 
         if res['flags']==0:
-            gm=fitter.get_gmix()
-            row,col=gm.get_cen()
-            if self.verbose:
-                print("        setting jacobian cen to:",row,col,
-                      "numiter:",res['numiter'])
+            row,col=res['pars'][2],res['pars'][3]
+            print("        setting jacobian cen to:",row,col,
+                  "numiter:",res['numiter'])
             jacob.set_cen(row=row,col=col)
         else:
             print("        failed to find cen")
@@ -2659,6 +2694,9 @@ class MaxRunner(object):
         self.use_logpars=use_logpars
 
         self.guesser=guesser
+
+    def get_fitter(self):
+        return self.fitter
 
     def go(self, ntry=1):
         if self.method=='lm':
