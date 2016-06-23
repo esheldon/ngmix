@@ -1782,6 +1782,120 @@ class LMSimple(FitterBase):
 
         return nprior
 
+class GalsimPSF(LMSimple):
+    """
+    a class to fit galsim models to PSF images
+
+    currently the jacobian is ignored and all fits are done in pixel coords.
+    The center is in pixel units, relative to the canonical center
+    """
+    def __init__(self, obs, model, **keys):
+        self.keys=keys
+
+        lm_pars=keys.get('lm_pars',None)
+        if lm_pars is None:
+            lm_pars=_default_lm_pars
+        self.lm_pars=lm_pars
+
+        if not isinstance(obs,Observation):
+            raise RuntimeError("A PSF fitter only works on a single image")
+
+        self.obs=obs
+        sqrt_ivar=obs.weight*0
+        w=numpy.where(obs.weight > 0)
+        if w[0].size > 0:
+            sqrt_ivar[w] = numpy.sqrt(obs.weight[w])
+        self.sqrt_ivar=sqrt_ivar.ravel()
+
+        self._set_gs_model(model)
+
+        self._set_totpix()
+
+        self.fdiff_size=self.totpix
+
+    def _make_model_image(self, pars, dims):
+        m, offrow, offcol=self._make_gs_model(pars)
+
+        gsim = m.drawImage(
+            ny=dims[0],
+            nx=dims[1],
+            method='no_pixel',
+            offset=(offcol,offrow),
+        )
+
+        return gsim.array
+
+    def _make_gs_model(self, pars):
+        if model=="moffat":
+            offrow,offcol=pars[0],pars[1]
+            g1,g2=pars[2],pars[3]
+            beta=pars[4]
+            hlr=pars[5]
+            flux=pars[6]
+            m=self.gs_model(
+                beta,
+                half_light_radius=hlr,
+                flux=flux,
+            )
+        else:
+            offrow,offcol=pars[0],pars[1]
+            g1,g2=pars[2],pars[3]
+            hlr=pars[4]
+            flux=pars[5]
+            m=self.gs_model(
+                half_light_radius=hlr,
+                flux=flux,
+            )
+
+        m = m.shear(g1=g1, g2=g2)
+
+        return m, offrow, offcol
+
+    def _set_gs_model(self, model):
+        import galsim
+        if model=="gauss":
+            # [cen1,cen2,g1,g2,hlr,flux]
+            gs_model = galsim.Gaussian
+            npars=6
+        elif model=="moffat":
+            # [cen1,cen2,g1,g2,beta,hlr,flux]
+            gs_model = galsim.Moffat
+            npars=7
+        else:
+            raise ValueError("unsupported galsim model: '%s'" % model)
+
+        self.gs_model = gs_model
+        self.npars=npars
+
+    def _calc_fdiff(self, pars, more=False):
+        """
+        vector with (model-data)/error.
+        """
+
+        im=self.obs.image
+        model_image=self.make_model_image(pars, im.shape)
+
+        fdiff = model_image.ravel().copy()
+        fdiff -= im.ravel()
+        fdiff *= self.obs.sqrt_ivar
+
+        if more:
+            ivar = self.obs.weight
+            s2n_numer = (im*model_image*weight).sum()
+            s2n_denom = (model_image*model_image*weight).sum()
+            npix=im.size
+
+            return {'fdiff':fdiff,
+                    's2n_numer':s2n_numer,
+                    's2n_denom':s2n_denom,
+                    'npix':npix}
+        else:
+            return fdiff
+
+
+    def _setup_data(self, guess):
+        pass
+
 class LMMetaMomSimple(LMSimple):
     def __init__(self, obs, model, wt_gmix, **keys):
         super(LMSimple,self).__init__(obs, model, **keys)
