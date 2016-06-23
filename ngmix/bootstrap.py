@@ -1877,8 +1877,9 @@ class MaxMetacalBootstrapper(Bootstrapper):
             tres['T_r'] = rres['T_r']
             tres['psf_T_r'] = rres['psf_T_r']
 
-            gpsf_sum = zeros(2)
+            wsum     = 0.0
             Tpsf_sum = 0.0
+            gpsf_sum = zeros(2)
             npsf=0
             for obslist in boot.mb_obs_list:
                 for obs in obslist:
@@ -1887,13 +1888,18 @@ class MaxMetacalBootstrapper(Bootstrapper):
                         g1,g2,T=obs.psf_nopix.gmix.get_g1g2T()
                     else:
                         g1,g2,T=obs.psf.gmix.get_g1g2T()
-                    gpsf_sum[0] += g1
-                    gpsf_sum[1] += g2
-                    Tpsf_sum += T
+
+                    # TODO we sometimes use other weights
+                    twsum = obs.weight.sum()
+
+                    wsum += twsum
+                    gpsf_sum[0] += g1*twsum
+                    gpsf_sum[1] += g2*twsum
+                    Tpsf_sum += T*twsum
                     npsf+=1
 
-            tres['gpsf'] = gpsf_sum/npsf
-            tres['Tpsf'] = Tpsf_sum/npsf
+            tres['gpsf'] = gpsf_sum/wsum
+            tres['Tpsf'] = Tpsf_sum/wsum
 
             res[key] = tres
 
