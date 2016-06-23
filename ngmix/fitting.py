@@ -1790,6 +1790,8 @@ class GalsimPSF(LMSimple):
     The center is in pixel units, relative to the canonical center
     """
     def __init__(self, obs, model, **keys):
+        self.model=model
+        self.model_name=model
         self.keys=keys
 
         lm_pars=keys.get('lm_pars',None)
@@ -1809,16 +1811,17 @@ class GalsimPSF(LMSimple):
 
         self._set_gs_model(model)
 
-        self._set_totpix()
+        self.fdiff_size=obs.image.size
+        self.n_prior_pars=0
 
-        self.fdiff_size=self.totpix
-
-    def _make_model_image(self, pars, dims):
+    def make_model_image(self, pars):
         m, offrow, offcol=self._make_gs_model(pars)
 
+        dims=self.obs.image.shape
         gsim = m.drawImage(
             ny=dims[0],
             nx=dims[1],
+            scale=1.0,
             method='no_pixel',
             offset=(offcol,offrow),
         )
@@ -1826,12 +1829,19 @@ class GalsimPSF(LMSimple):
         return gsim.array
 
     def _make_gs_model(self, pars):
+        model=self.model
         if model=="moffat":
             offrow,offcol=pars[0],pars[1]
             g1,g2=pars[2],pars[3]
             beta=pars[4]
             hlr=pars[5]
             flux=pars[6]
+
+            if beta <= 1.1:
+                raise GMixRangeError("beta < 1.1")
+            if g1**2 + g2**2 > 0.99999:
+                raise GMixRangeError("g >= 1.0")
+
             m=self.gs_model(
                 beta,
                 half_light_radius=hlr,
@@ -1853,6 +1863,8 @@ class GalsimPSF(LMSimple):
 
     def _set_gs_model(self, model):
         import galsim
+        model=self.model
+
         if model=="gauss":
             # [cen1,cen2,g1,g2,hlr,flux]
             gs_model = galsim.Gaussian
@@ -1873,24 +1885,59 @@ class GalsimPSF(LMSimple):
         """
 
         im=self.obs.image
-        model_image=self.make_model_image(pars, im.shape)
 
-        fdiff = model_image.ravel().copy()
-        fdiff -= im.ravel()
-        fdiff *= self.obs.sqrt_ivar
+        try:
+            model_image=self.make_model_image(pars)
+            if False:
+                import images
+                images.multiview(model_image,file='/astro/u/esheldon/www/tmp/plots/tmp.png')
+                stop
+
+            fdiff = model_image.ravel().copy()
+            fdiff -= im.ravel()
+            fdiff *= self.sqrt_ivar
+
+            if more:
+                ivar = self.obs.weight
+                s2n_numer = (im*model_image*ivar).sum()
+                s2n_denom = (model_image*model_image*ivar).sum()
+                npix=im.size
+
+        except GMixRangeError:
+            fdiff = im.ravel().copy()
+            fdiff[:] = LOWVAL
+            s2n_numer=0.0
+            s2n_denom=BIGVAL
+
 
         if more:
-            ivar = self.obs.weight
-            s2n_numer = (im*model_image*weight).sum()
-            s2n_denom = (model_image*model_image*weight).sum()
-            npix=im.size
-
             return {'fdiff':fdiff,
                     's2n_numer':s2n_numer,
                     's2n_denom':s2n_denom,
                     'npix':npix}
         else:
+            #print(type(fdiff))
+            #print(fdiff)
             return fdiff
+
+    def get_fit_stats(self, pars):
+        """
+        Get some fit statistics for the input pars.
+
+        pars must be in the log scaling!
+        """
+        npars=self.npars
+
+        res=self._calc_fdiff(pars, more=True)
+
+        if res['s2n_denom'] > 0:
+            s2n=res['s2n_numer']/sqrt(res['s2n_denom'])
+        else:
+            s2n=0.0
+
+
+        res['s2n_w']   = s2n
+        return res
 
 
     def _setup_data(self, guess):
