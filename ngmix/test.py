@@ -11,7 +11,7 @@ from .priors import srandu
 from . import joint_prior
 from .fitting import *
 from .gexceptions import *
-from .jacobian import Jacobian
+from .jacobian import Jacobian, UnitJacobian
 
 from . import stats
 
@@ -100,7 +100,7 @@ def make_test_observations(model,
     dims=[2.*5.*sigma]*2
     cen=[dims[0]/2., dims[1]/2.]
 
-    j=UnitJacobian(cen[0],cen[1])
+    j=UnitJacobian(row=cen[0],col=cen[1])
 
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
     gm_psf=gmix.GMixModel(pars_psf, psf_model)
@@ -141,25 +141,25 @@ def make_test_observations(model,
     else:
         return psf_obs, obs
 
-def test_model(model,
-               g1_obj=0.1,
-               g2_obj=0.05,
-               T=16.0,
-               counts=100.0,
-               g1_psf=0.0,
-               g2_psf=0.0,
-               T_psf=4.0,
-               noise=0.001,
-               nimages=1,
-               nwalkers=80,
-               burnin=800,
-               nstep=800,
-               thin=2,
-               g_prior=None,
-               do_triangle=False,
-               bins=25,
-               seed=None,
-               show=False):
+def test_model_emcee(model,
+                     g1_obj=0.1,
+                     g2_obj=0.05,
+                     T=16.0,
+                     counts=100.0,
+                     g1_psf=0.0,
+                     g2_psf=0.0,
+                     T_psf=4.0,
+                     noise=0.001,
+                     nimages=1,
+                     nwalkers=80,
+                     burnin=800,
+                     nstep=800,
+                     thin=2,
+                     g_prior=None,
+                     do_triangle=False,
+                     bins=25,
+                     seed=None,
+                     show=False):
     """
     Test fitting the specified model.
 
@@ -180,9 +180,9 @@ def test_model(model,
     noise_psf=0.001
 
     sigma=sqrt( (T + T_psf)/2. )
-    dims=[2.*5.*sigma]*2
+    dims=[int(round(2.*5.*sigma))]*2
     cen=[dims[0]/2., dims[1]/2.]
-    j=UnitJacobian(cen[0],cen[1])
+    j=UnitJacobian(row=cen[0],col=cen[1])
 
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
     gm_psf=gmix.GMixModel(pars_psf, "gauss")
@@ -478,7 +478,7 @@ def test_model_margsky(model,
     dims=[dim]*2
     cen=array([(dims[0]-1)/2.]*2)
 
-    j=UnitJacobian(cen[0],cen[1])
+    j=UnitJacobian(row=cen[0],col=cen[1])
 
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
     gm_psf=gmix.GMixModel(pars_psf, "gauss")
@@ -490,7 +490,7 @@ def test_model_margsky(model,
     gm=gm_obj0.convolve(gm_psf)
     
     pcen=(dim-1)/2.
-    pj=UnitJacobian(pcen,pcen)
+    pj=UnitJacobian(row=pcen,col=pcen)
     #pj=j
     im_psf=gm_psf.make_image(dims, jacobian=pj)
     im_psf[:,:] += noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
@@ -636,7 +636,7 @@ def test_model_mh(model,
     dims=[25,25]
     cen=[dims[0]/2., dims[1]/2.]
 
-    jacob=UnitJacobian(cen[0],cen[1])
+    jacob=UnitJacobian(row=cen[0],col=cen[1])
 
     #
     # simulation
@@ -1073,10 +1073,10 @@ def test_sersic(model,
     im, wt, im_psf=make_sersic_images(model, hlr, counts, n, noise, g1, g2)
 
     cen=(im.shape[0]-1)/2.
-    jacob=UnitJacobian(cen,cen)
+    jacob=UnitJacobian(row=cen,col=cen)
 
     psf_cen=(im_psf.shape[0]-1)/2.
-    psf_jacob=UnitJacobian(psf_cen,psf_cen)
+    psf_jacob=UnitJacobian(row=psf_cen,col=psf_cen)
 
     obs=Observation(im, weight=wt, jacobian=jacob)
 
@@ -1903,7 +1903,7 @@ def test_lm_metacal(model,
     print("dims:",dims)
     npix=dims[0]*dims[1]
     cen=[dims[0]/2., dims[1]/2.]
-    jacob=UnitJacobian(cen[0],cen[1])
+    jacob=UnitJacobian(row=cen[0],col=cen[1])
     wt_obj = zeros(dims) + 1.0/noise_obj**2
 
 
@@ -2645,7 +2645,7 @@ def test_model_logpars(model, T=16.0, counts=100.0, noise=0.001, nimages=1,
     sigma=sqrt( (T + T_psf)/2. )
     dims=[2.*5.*sigma]*2
     cen=[dims[0]/2., dims[1]/2.]
-    j=UnitJacobian(cen[0],cen[1])
+    j=UnitJacobian(row=cen[0],col=cen[1])
 
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
     gm_psf=gmix.GMixModel(pars_psf, "gauss")
@@ -2804,7 +2804,7 @@ def test_covsample_log(model,
     sigma=sqrt( (T + T_psf)/2. )
     dims=[2.*5.*sigma]*2
     cen=[dims[0]/2., dims[1]/2.]
-    j=UnitJacobian(cen[0],cen[1])
+    j=UnitJacobian(row=cen[0],col=cen[1])
 
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
     gm_psf=gmix.GMixModel(pars_psf, "gauss")
@@ -3079,7 +3079,7 @@ def test_isample(model,
     sigma=sqrt( (T + T_psf)/2. )
     dims=[int(ceil(2.*5.*sigma))]*2
     cen=[dims[0]/2., dims[1]/2.]
-    j=UnitJacobian(cen[0],cen[1])
+    j=UnitJacobian(row=cen[0],col=cen[1])
 
     pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
     gm_psf=gmix.GMixModel(pars_psf, "gauss")
@@ -3328,7 +3328,7 @@ def test_fracdev(fracdev=0.3,
     cen=[(dim-1)/2.]*2
     dims=[dim]*2
 
-    jacobian=UnitJacobian(cen[0],cen[0])
+    jacobian=UnitJacobian(row=cen[0],col=cen[0])
     epars=array([0.0, 0.0, g1, g2, Texp, (1-fracdev)*Flux] )
     dpars=array([0.0, 0.0, g1, g2, Tdev,     fracdev*Flux])
     gme0 = gmix.GMixModel(epars,'exp')
@@ -3837,7 +3837,7 @@ def test_fit_gauss1(model='gauss',
 
     cen=(dim-1.)/2.
 
-    jacobian=UnitJacobian(cen,cen)
+    jacobian=UnitJacobian(row=cen,col=cen)
     pars=array([0.0,0.0,g1,g2,T,flux],dtype='f8')
     gm=gmix.GMixModel(pars, model)
     if dopsf:
@@ -4746,7 +4746,7 @@ def test_moms(model='gauss',
 
     cen=(dim-1.)/2.
 
-    jacobian=UnitJacobian(cen,cen)
+    jacobian=UnitJacobian(row=cen,col=cen)
     pars=array([0.0,0.0,g1,g2,T,flux],dtype='f8')
 
     gm=gmix.GMixModel(pars, model)
@@ -5252,7 +5252,7 @@ class MoffatFitter(object):
 
         row=(dim-1.0)/2.0
         col=(dim-1.0)/2.0
-        jacobian = UnitJacobian(row,col)
+        jacobian = UnitJacobian(row=row,col=col)
         self.obs = Observation(self.image, weight=weight, jacobian=jacobian)
 
     def _set_prior(self):

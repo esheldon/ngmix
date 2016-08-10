@@ -2384,7 +2384,7 @@ class MCMCBase(FitterBase):
         pos, prob, state = sampler.run_mcmc(pos0, nstep, thin=thin, **kw)
 
         trials  = sampler.flatchain
-        lnprobs = sampler.lnprobability.reshape(self.nwalkers*nstep/thin)
+        lnprobs = sampler.lnprobability.reshape(self.nwalkers*nstep//thin)
 
         self._trials=trials
         self._lnprobs=lnprobs
@@ -2497,24 +2497,22 @@ class MCMCBase(FitterBase):
         """
         import emcee
 
+
         trials=self.get_trials()
 
-        # actually 2*tau
-        tau2 = emcee.autocorr.integrated_time(trials,window=100)
-        tau2 = tau2.max()
-        self._tau=tau2
+        self._tau = 1.0e9
 
-        """
-        if hasattr(emcee.ensemble,'acor'):
-            if emcee.ensemble.acor is not None:
-                acor=self.sampler.acor
-                tau = acor.max()
-        elif hasattr(emcee.ensemble,'autocorr'):
-            if emcee.ensemble.autocorr is not None:
-                acor=self.sampler.acor
-                tau = acor.max()
-        self._tau=tau
-        """
+        # need to figure out how to make this work.
+        # could not find good examples on line
+        #tau2 = emcee.autocorr.integrated_time(trials,low=10,high=200,step=10)
+        #try:
+        #    tau2 = emcee.autocorr.integrated_time(trials,window=100)
+        #except TypeError as err:
+        #    tau2 = emcee.autocorr.integrated_time(trials,low=10,high=200,step=10)
+
+        #tau2 = tau2.max()
+        #self._tau=tau2
+
 
     def _make_sampler(self):
         """
@@ -3160,12 +3158,17 @@ class MHSimple(MCMCSimple):
         """
         import emcee
 
-        trials=self.get_trials()
+        # need to figure out how to make this work.
+        # could not find good examples on line
+
+        self._tau = 1.0e9
+
+        #trials=self.get_trials()
 
         # actually 2*tau
-        tau2 = emcee.autocorr.integrated_time(trials,window=100)
-        tau2 = tau2.max()
-        self._tau=tau2
+        #tau2 = emcee.autocorr.integrated_time(trials,low=10,high=200,step=10)
+        #tau2 = tau2.max()
+        #self._tau=tau2
 
 
 class MHTempSimple(MHSimple):
