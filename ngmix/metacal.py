@@ -30,6 +30,11 @@ METACAL_REQUIRED_TYPES = [
     '1p','1m','2p','2m',
 ]
 
+try:
+    xrange=xrange
+except:
+    xrange=range
+
 def get_all_metacal(obs, step=0.01, fixnoise=True, **kw):
     """
     Get all combinations of metacal images in a dict

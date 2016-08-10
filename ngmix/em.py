@@ -17,6 +17,11 @@ from .jacobian import Jacobian
 
 from .observation import Observation
 
+try:
+    xrange=xrange
+except:
+    xrange=range
+
 EM_RANGE_ERROR = 2**0
 EM_MAXITER = 2**1
 

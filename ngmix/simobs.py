@@ -7,6 +7,11 @@ from .gmix import GMix
 
 from copy import deepcopy
 
+try:
+    xrange=xrange
+except:
+    xrange=range
+
 def simulate_obs(gmix, obs, **kw):
     """
     Simulate the observation(s) using the input gaussian mixture

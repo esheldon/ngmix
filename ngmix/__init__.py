@@ -28,7 +28,6 @@ from .fitting import print_pars
 from . import simplex
 
 from . import bootstrap
-from . import btest
 from .bootstrap import Bootstrapper, CompositeBootstrapper
 
 from . import em

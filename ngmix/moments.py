@@ -3,6 +3,11 @@ import numpy
 from ._gmix import GMixRangeError
 from . import shape
 
+try:
+    xrange=xrange
+except:
+    xrange=range
+
 def sigma_to_fwhm(sigma):
     """
     convert sigma to fwhm for a gaussian

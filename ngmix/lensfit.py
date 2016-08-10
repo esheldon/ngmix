@@ -8,6 +8,11 @@ import numpy
 from numpy import where, zeros, ones, array, isfinite, newaxis
 from .gexceptions import GMixRangeError, GMixFatalError
 
+try:
+    xrange=xrange
+except:
+    xrange=range
+
 _default_h=1.0e-6
 
 def calc_sensitivity(g, g_prior, remove_prior=False, h=_default_h):
