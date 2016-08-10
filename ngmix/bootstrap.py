@@ -29,6 +29,11 @@ from . import metacal
 
 from copy import deepcopy
 
+try:
+    xrange=xrange
+except:
+    xrange=range
+
 BOOT_S2N_LOW = 2**0
 BOOT_R2_LOW = 2**1
 BOOT_R4_LOW = 2**2
