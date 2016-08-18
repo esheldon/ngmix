@@ -399,11 +399,27 @@ class GMix(object):
 
         gm = self.copy()
 
-        g1,g2,T=gm.get_g1g2T()
 
         if preserve_size:
-            factor=1.0
+            # make sure the psf is isotropically at least as big as the largest
+            # extent
+
+            e1,e2,T = gm.get_e1e2T()
+
+            irr, irc, icc = moments.e2mom(e1,e2,T)
+
+            mat=numpy.zeros( (2,2) )
+            mat[0,0]=irr
+            mat[0,1]=irc
+            mat[1,0]=irc
+            mat[1,1]=icc
+
+            eigs=numpy.linalg.eigvals(mat)
+
+            factor = eigs.max()/(T/2.)
+
         else:
+            g1,g2,T=gm.get_g1g2T()
             factor = shape.get_round_factor(g1,g2)
 
         gdata=gm._get_gmix_data()
