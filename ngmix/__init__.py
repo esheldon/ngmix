@@ -2,6 +2,9 @@
 todo:
     - add ability to have priors
 """
+
+__version__="0.9.0"
+
 from . import gmix
 from .gmix import GMix
 from .gmix import GMixModel
@@ -28,7 +31,6 @@ from .fitting import print_pars
 from . import simplex
 
 from . import bootstrap
-from . import btest
 from .bootstrap import Bootstrapper, CompositeBootstrapper
 
 from . import em

@@ -97,7 +97,7 @@ def _calc_weighted_stats(data, weights):
     wsum = weights.sum()
 
     if wsum <= 0.0:
-        for i in xrange(data.shape[0]/100):
+        for i in xrange(data.shape[0]//100):
             print(i,data[i,:])
         raise ValueError("wsum <= 0: %s" % wsum)
 

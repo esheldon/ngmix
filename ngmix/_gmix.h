@@ -244,18 +244,20 @@ static double _exp3_lookup[] = {  5.10908903e-12,   1.38879439e-11,   3.77513454
 
 #define PYGMIX_PACK_RESULT3(s2n_numer, s2n_denom, npix) do {      \
     retval=PyTuple_New(3);                                        \
+    long _npix = (npix);                                          \
     PyTuple_SetItem(retval,0,PyFloat_FromDouble( (s2n_numer) ));  \
     PyTuple_SetItem(retval,1,PyFloat_FromDouble( (s2n_denom) ));  \
-    PyTuple_SetItem(retval,2,PyInt_FromLong( (npix) ));           \
+    PyTuple_SetItem(retval,2,PyLong_FromLong(_npix));             \
 } while(0)
 
 
 #define PYGMIX_PACK_RESULT4(loglike, s2n_numer, s2n_denom, npix) do { \
     retval=PyTuple_New(4);                                        \
+    long _npix = (npix);                                          \
     PyTuple_SetItem(retval,0,PyFloat_FromDouble( (loglike) ));    \
     PyTuple_SetItem(retval,1,PyFloat_FromDouble( (s2n_numer) ));  \
     PyTuple_SetItem(retval,2,PyFloat_FromDouble( (s2n_denom) ));  \
-    PyTuple_SetItem(retval,3,PyInt_FromLong( (npix) ));           \
+    PyTuple_SetItem(retval,3,PyLong_FromLong( _npix ));           \
 } while(0)
 
 #endif

@@ -8,6 +8,11 @@ import numpy
 from numpy import where, zeros, ones, array, isfinite, newaxis
 from .gexceptions import GMixRangeError, GMixFatalError
 
+try:
+    xrange=xrange
+except:
+    xrange=range
+
 _default_h=1.0e-6
 
 def calc_sensitivity(g, g_prior, remove_prior=False, h=_default_h):
@@ -385,7 +390,7 @@ def _lensfit_jackknife(g, gsens,
     ntot = g.shape[0]
 
     # some may not get used
-    nchunks = ntot/chunksize
+    nchunks = ntot//chunksize
 
     wsum = weights.sum()
     wa=weights[:,newaxis]
@@ -477,10 +482,10 @@ def _lensfit_jackknife_ring(g, gsens,
     ntot = g.shape[0]
     if ( (ntot % 2) != 0 ):
         raise  ValueError("expected factor of two, got %d" % ntot)
-    npair = ntot/2
+    npair = ntot//2
 
     # some may not get used
-    nchunks = npair/chunksize
+    nchunks = npair//chunksize
 
     wsum = weights.sum()
     wa=weights[:,newaxis]

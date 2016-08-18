@@ -30,6 +30,11 @@ METACAL_REQUIRED_TYPES = [
     '1p','1m','2p','2m',
 ]
 
+try:
+    xrange=xrange
+except:
+    xrange=range
+
 def get_all_metacal(obs, step=0.01, fixnoise=True, **kw):
     """
     Get all combinations of metacal images in a dict
@@ -177,61 +182,6 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
 
     return obsdict
 
-'''
-def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
-    """
-    internal routine
-
-    Add a sheared noise field to cancel the correlated noise
-    """
-
-    obsdict = _get_all_metacal(obs, step=step, **kw)
-
-    nrand=kw.pop('nrand',1)
-    for i in xrange(nrand):
-        print("        irand:",i+1)
-        # Using None for the model means we get just noise
-        noise_obs = simobs.simulate_obs(None, obs, **kw)
-
-        # rotate by 90
-        _rotate_obs_image(noise_obs, k=1)
-
-        # always returns a dictionary of MultiBandObsLists
-        tdict = _get_all_metacal(noise_obs, step=step, **kw)
-
-        if i==0:
-            noise_obsdict = tdict
-        else:
-            for type in obsdict:
-                _add_obs_images(noise_obsdict[type], tdict[type])
-
-    for type in obsdict:
-
-        imbobs = obsdict[type]
-        nmbobs = noise_obsdict[type]
-
-        # rotate back, which is 3 more rotations
-        _rotate_obs_image(nmbobs, k=3)
-
-        for imb in xrange(len(imbobs)):
-            iolist=imbobs[imb]
-            nolist=nmbobs[imb]
-
-            for iobs in xrange(len(iolist)):
-
-                obs  = iolist[iobs]
-                nobs = nolist[iobs]
-
-                im  = obs.image
-                nim = nobs.image
-                if nrand > 1:
-                    nim *= (1.0/nrand)
-
-                obs.image = im + nim
-                obs.weight = 0.5*obs.weight
-
-    return obsdict
-'''
 
 class Metacal(object):
     """
@@ -878,7 +828,7 @@ def jackknife_shear(g, gpsf, R, Rpsf, chunksize=1):
 
     ntot = g.shape[0]
 
-    nchunks = ntot/chunksize
+    nchunks = ntot//chunksize
 
     g_sum = g.sum(axis=0)
     R_sum = R.sum(axis=0)
@@ -952,7 +902,7 @@ def jackknife_shear_weighted(g, gsens, weights, chunksize=1):
 
     ntot = g.shape[0]
 
-    nchunks = ntot/chunksize
+    nchunks = ntot//chunksize
 
     wsum = weights.sum()
     wa=weights[:,newaxis]
@@ -1209,16 +1159,6 @@ def test():
                 obs_mcal = m.get_obs_galshear(shear)
             else:
                 obs_mcal = m.get_obs_psfshear(shear)
-
-            '''
-            s, us, tpsf = mchuff.metaCalibrate(galsim.Image(obs.image, scale=1.0),
-                                               galsim.Image(obs.psf.image,scale=1.0),
-                                               g1=shear.g1, g2=shear.g2,
-                                               gal_shear=type=='gal')
-
-            print("psf:",numpy.abs(tpsf.array - obs_mcal.psf.image).max()/obs_mcal.psf.image.max())
-            print("im:",numpy.abs(s.array - obs_mcal.image).max()/obs_mcal.image.max())
-            '''
 
             images.compare_images(obs_sheared_dilated.image,
                                   obs_mcal.image,

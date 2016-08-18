@@ -79,7 +79,7 @@ class GMix(object):
             if (npars % 6) != 0:
                 raise GMixFatalError("len(pars) must be mutiple of 6 "
                                      "got %s" % npars)
-            self._ngauss=npars/6
+            self._ngauss=npars//6
             self.reset()
             self.fill(pars)
         else:
@@ -375,6 +375,11 @@ class GMix(object):
         fast_exp: bool, optional
             use fast, approximate exp function
         """
+
+        dims=numpy.array(dims, ndmin=1, dtype='i8')
+        if dims.size != 2:
+            raise ValueError("images must have two dimensions, "
+                             "got %s" % str(dims))
 
         image=numpy.zeros(dims, dtype='f8')
         self._fill_image(image, nsub=nsub, npoints=npoints, jacobian=jacobian, fast_exp=fast_exp)
@@ -1257,7 +1262,7 @@ def get_coellip_npars(ngauss):
     return 4 + 2*ngauss
 
 def get_coellip_ngauss(npars):
-    return (npars-4)/2
+    return (npars-4)//2
 
 class GMixCoellip(GMixModel):
     """
@@ -1286,7 +1291,7 @@ class GMixCoellip(GMixModel):
             raise ValueError("coellip must have len(pars)==4+2*ngauss, got %s" % npars)
 
         self._pars=pars
-        self._ngauss = ncheck/2
+        self._ngauss = ncheck//2
         self._npars = npars
 
         self.reset()
