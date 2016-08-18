@@ -368,10 +368,10 @@ def pqr_jackknife(P, Q, R,
     ntot = P.size
     if ( (ntot % 2) != 0 ):
         raise  ValueError("expected factor of two, got %d" % ntot)
-    npair = ntot/2
+    npair = ntot//2
 
     # some may not get used
-    nchunks = npair/chunksize
+    nchunks = npair//chunksize
 
     print('getting overall sums')
     P_sum, Q_sum, Cinv_sum = calc_pqr_sums(P,Q,R)
@@ -433,10 +433,10 @@ def pqr_in_chunks(P, Q, R, chunksize):
     ntot = P.size
     if ( (ntot % 2) != 0 ):
         raise  ValueError("expected factor of two, got %d" % ntot)
-    npair = ntot/2
+    npair = ntot//2
 
     # some may not get used
-    nchunks = npair/chunksize
+    nchunks = npair//chunksize
 
     shears = numpy.zeros( (nchunks, 2) )
     covs = numpy.zeros( (nchunks, 2, 2) )
@@ -473,7 +473,7 @@ def pqr_bootstrap(P, Q, R, nsamples, verbose=False, show=False, eps=None, png=No
     if ( (ntot % 2) != 0 ):
         raise  ValueError("expected factor of two, got %d" % ntot)
 
-    npair = ntot/2
+    npair = ntot//2
 
     Pboot = P.copy()
     Qboot = Q.copy()

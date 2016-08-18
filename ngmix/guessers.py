@@ -6,6 +6,11 @@ from .gexceptions import GMixRangeError
 from .priors import srandu, LOWVAL
 from .shape import Shape
 
+try:
+    xrange=xrange
+except:
+    xrange=range
+
 class GuesserBase(object):
     def _fix_guess(self, guess, prior, ntry=4):
         """
