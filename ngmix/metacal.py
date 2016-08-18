@@ -745,16 +745,15 @@ class Metacal(object):
 class MetacalAnalyticPSF(Metacal):
     """
     The user inputs a galsim object (e.g. galsim.Gaussian)
-    and the size of the requested postage stamp
 
-    The psf galsim object should have the pixelization in it
+    this is just for the reconvolution
     """
     def __init__(self, obs, psf_obj, **kw):
 
         self.psf_obj = psf_obj
 
         self.psf_noise_image=numpy.random.normal(
-            scale=0.001,
+            scale=0.0001,
             size=obs.psf.image.shape,
         )
         super(MetacalAnalyticPSF,self).__init__(obs, **kw)
