@@ -559,8 +559,8 @@ class Bootstrapper(object):
 
                     # this is a metacal thing
                     if hasattr(obs,'psf_nopix'):
-                        #print("    fitting psf nopix")
                         if skip_already_done and obs.psf_nopix.has_gmix():
+                            #print("skipping nopix psf fit")
                             # pass but don't continue, since we may still need
                             # to fit some images below
                             pass
@@ -572,6 +572,7 @@ class Bootstrapper(object):
                     if skip_already_done:
                         # if have a gmix, skip it
                         if psf_obs.has_gmix():
+                            #print("skipping psf fit")
                             new_obslist.append(obs)
                             ntot += 1
                             continue
@@ -1911,7 +1912,8 @@ class MetacalAnalyticPSFBootstrapper(MaxMetacalBootstrapper):
         metacal_pars=self._extract_metacal_pars(metacal_pars)
 
         # noshear gets added in automatically when doing 1p
-        types=[ '1p','1m','2p','2m' ]
+        if 'types' not in metacal_pars:
+            metacal_pars['types'] = kw.get('types', [ '1p','1m','2p','2m' ])
 
         # the psf ot use for metacal
         psf=kw.pop('psf',None)
@@ -1921,7 +1923,6 @@ class MetacalAnalyticPSFBootstrapper(MaxMetacalBootstrapper):
         odict=metacal.get_all_metacal(
             self.mb_obs_list,
             psf=psf,
-            types=types,
             **metacal_pars
         )
         return odict
