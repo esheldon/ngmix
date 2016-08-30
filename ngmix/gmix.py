@@ -684,7 +684,7 @@ class GMix(object):
         return s2n, r2_mean, r4_mean, Tvar
 
 
-    def get_weighted_moments(self, obs):
+    def get_weighted_moments(self, obs, rmax=1.e20):
         """
         Get the raw weighted moments of the image, using the input
         gaussian mixture as the weight function.  The moments are *not*
@@ -742,6 +742,7 @@ class GMix(object):
 
             pars, # these get modified internally
             pcov,
+            rmax,
         )
 
         flagstr=_moms_flagmap[flags]

@@ -1662,6 +1662,7 @@ static PyObject * PyGMix_get_weighted_moments(PyObject* self, PyObject* args) {
 
     PyObject* pars_obj=NULL;
     PyObject* pcov_obj=NULL;
+    double rmax=0, rmaxsq=0;
 
     npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
 
@@ -1670,20 +1671,22 @@ static PyObject * PyGMix_get_weighted_moments(PyObject* self, PyObject* args) {
     double *pars=NULL, *pcov=NULL;
     double F[6];
 
-    double u=0, v=0, umod=0, vmod=0;
-    double wdata=0, data=0, weight=0, w2=0, wsum=0;
-    double s2n_numer=0, s2n_denom=0;
-    double ivar=0, var=0;
-    double ucen=0, vcen=0, psum=0;
+    double
+        u=0, v=0, umod=0, vmod=0,
+        wdata=0, data=0, weight=0, w2=0, wsum=0,
+        s2n_numer=0, s2n_denom=0,
+        ivar=0, var=0,
+        ucen=0, vcen=0, psum=0, rsq=0;
     int flags=0, i=0, j=0;
 
-    if (!PyArg_ParseTuple(args, (char*)"OOOOOO", 
+    if (!PyArg_ParseTuple(args, (char*)"OOOOOOd", 
                           &image_obj,
                           &weight_obj,
                           &jacob_obj,
                           &gmix_obj,
                           &pars_obj,
-                          &pcov_obj)) {
+                          &pcov_obj,
+                          &rmax)) {
         return NULL;
     }
 
@@ -1699,6 +1702,8 @@ static PyObject * PyGMix_get_weighted_moments(PyObject* self, PyObject* args) {
     n_row=PyArray_DIM(image_obj, 0);
     n_col=PyArray_DIM(image_obj, 1);
 
+    rmaxsq=rmax*rmax;
+
     jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
 
     pars=PyArray_DATA(pars_obj); // pars[6]
@@ -1710,6 +1715,12 @@ static PyObject * PyGMix_get_weighted_moments(PyObject* self, PyObject* args) {
             // sky coordinates relative to the jacobian center
             v=PYGMIX_JACOB_GETV(jacob, row, col);
             u=PYGMIX_JACOB_GETU(jacob, row, col);
+
+            rsq = u*u + v*v;
+
+            if (rsq > rmaxsq) {
+                continue;
+            }
 
             data = *( (double*)PyArray_GETPTR2(image_obj,row,col) );
             ivar = *( (double*)PyArray_GETPTR2(weight_obj,row,col) );
@@ -1850,6 +1861,133 @@ static PyObject * PyGMix_get_weighted_gmix_moments(PyObject* self, PyObject* arg
     }
 
     return Py_BuildValue("d", wsum);
+}
+
+
+
+/*
+   get k-space moments
+
+   sigma is in real space
+
+   note the weight goes to zero beyond kmax=sqrt(2*N)/sigma.
+   We also allow sending a kmax argument, designed to let the
+   user force a circular aperture in case the weight is larger
+   than the image
+
+*/
+static PyObject * PyGMix_get_ksigma_weighted_moments(PyObject* self, PyObject* args) {
+
+    PyObject* image_obj=NULL;
+    PyObject* weight_obj=NULL;
+    PyObject* jacob_obj=NULL;
+
+    PyObject* pars_obj=NULL;
+    PyObject* pcov_obj=NULL;
+    double
+        sigma=0, sigmasq=0,
+        kmaxsq=0,
+        N=4.0;
+
+    npy_intp n_row=0, n_col=0, row=0, col=0;
+
+    struct PyGMix_Jacobian *jacob=NULL;
+    double *pars=NULL, *pcov=NULL;
+    double F[6];
+
+    double
+        u=0, v=0,
+        wdata=0, data=0, weight=0, w2=0, wsum=0,
+        s2n_numer=0, s2n_denom=0,
+        ivar=0, var=0,
+        ksq=0;
+
+    int flags=0, i=0, j=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOOOd", 
+                          &image_obj,
+                          &weight_obj,
+                          &jacob_obj,
+                          &pars_obj,
+                          &pcov_obj,
+                          &sigma)) {
+        return NULL;
+    }
+
+    sigmasq = sigma*sigma;
+
+    // weight goes to zero beyond here
+    kmaxsq = 2.0*N/sigmasq;
+
+    // can also have a 
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    pars=PyArray_DATA(pars_obj); // pars[6]
+    pcov=PyArray_DATA(pcov_obj); // pcov[6,6]
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+
+            // sky coordinates relative to the jacobian center
+            v=PYGMIX_JACOB_GETV(jacob, row, col);
+            u=PYGMIX_JACOB_GETU(jacob, row, col);
+
+            ksq = u*u + v*v;
+
+            if (ksq > kmaxsq) {
+                continue;
+            }
+
+            data = *( (double*)PyArray_GETPTR2(image_obj,row,col) );
+            ivar = *( (double*)PyArray_GETPTR2(weight_obj,row,col) );
+
+            // no zero weight pixels allowed for weighted moments!
+            if (ivar <= 0.0) {
+                flags = 1;
+                goto _getmom_bail;
+            }
+
+            var=1.0/ivar;
+
+            // evaluate the gaussian mixture at the specified location
+            weight = 1.0 - ksq * sigmasq/(2*N);
+            // note N=4, so unroll this
+            weight = weight*weight*weight*weight;
+
+            // sky coordinates relative to the gaussian mixture center
+
+            wdata = weight*data;
+            w2 = weight*weight;
+            wsum += weight;
+
+            // for the s/n sums
+            s2n_numer += wdata*ivar;
+            s2n_denom += w2*ivar;
+
+            F[0] = v;
+            F[1] = u;
+            F[2] = u*u - v*v;
+            F[3] = 2*v*u;
+            F[4] = u*u + v*v;
+            F[5] = 1.0;
+
+            for (i=0; i<6; i++) {
+                pars[i] += wdata*F[i];
+                for (j=0; j<6; j++) {
+                    pcov[i + 6*j] += w2*var*F[i]*F[j];
+                }
+            }
+
+        }
+    }
+
+_getmom_bail:
+
+    return Py_BuildValue("iddd", flags, wsum, s2n_numer, s2n_denom);
 }
 
 
@@ -4844,6 +4982,8 @@ static PyMethodDef pygauss2d_funcs[] = {
 
     {"get_weighted_moments", (PyCFunction)PyGMix_get_weighted_moments,  METH_VARARGS,  "calculate weighted moments\n"},
     {"get_weighted_gmix_moments", (PyCFunction)PyGMix_get_weighted_gmix_moments,  METH_VARARGS,  "calculate weighted moments of one gmix with another\n"},
+
+    {"get_ksigma_weighted_moments", (PyCFunction)PyGMix_get_ksigma_weighted_moments,  METH_VARARGS,  "calculate weighted moments\n"},
 
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
     {"get_loglike_gauleg", (PyCFunction)PyGMix_get_loglike_gauleg,  METH_VARARGS,  "calculate likelihood, integrating model over the pixels\n"},
