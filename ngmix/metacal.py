@@ -437,7 +437,6 @@ class Metacal(object):
             psf_grown_nopix = psf_grown_nopix.shear(g1=shear.g1,
                                                     g2=shear.g2)
         if self.prepix:
-            print("using prepix")
             return psf_grown_nopix, psf_grown_nopix
         else:
             psf_grown = galsim.Convolve(psf_grown_nopix,self.pixel)
