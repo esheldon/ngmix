@@ -382,4 +382,162 @@ class MomGuesser(GuesserBase):
 
         return guess
 
+class R50FluxGuesser(object):
+    """
+    get full guesses from just r50 and fluxes
+
+    parameters
+    ----------
+    r50: float
+        Center for r50 (half light radius )guesses
+    fluxes: float or sequences
+        Center for flux guesses
+    prior: optional
+        If sent, "fix-up" guesses if they are not allowed by the prior
+    """
+    def __init__(self, r50, fluxes, prior=None, rng=None):
+
+        if r50 < 0.0:
+            raise GMixRangeError("r50 <= 0: %g" % r50)
+
+        self.r50=r50
+
+        if numpy.isscalar(fluxes):
+            fluxes=numpy.array(fluxes, dtype='f8', ndmin=1)
+
+        self.fluxes=fluxes
+        self.prior=prior
+
+        if prior is not None and hasattr(prior,'rng'):
+            rng=prior.rng
+
+        if rng is None:
+            rng=numpy.random.RandomState()
+
+        self.rng=rng
+
+    def __call__(self, n=1, **keys):
+        """
+        center, shape are just distributed around zero
+        """
+
+        rng=self.rng
+
+        fluxes=self.fluxes
+        nband=fluxes.size
+        np = 5+nband
+
+        guess=numpy.zeros( (n, np) )
+        guess[:,0] = 0.01*srandu(n, rng=rng)
+        guess[:,1] = 0.01*srandu(n, rng=rng)
+        guess[:,2] = 0.02*srandu(n, rng=rng)
+        guess[:,3] = 0.02*srandu(n, rng=rng)
+
+        guess[:,4] = self.r50*(1.0 + 0.1*srandu(n, rng=rng))
+
+        fluxes=self.fluxes
+        for band in xrange(nband):
+            guess[:,5+band] = fluxes[band]*(1.0 + 0.1*srandu(n, rng=rng))
+
+        if self.prior is not None:
+            self._fix_guess(guess, self.prior)
+
+        if n==1:
+            guess=guess[0,:]
+        return guess
+
+    def _fix_guess(self, guess, prior, ntry=4):
+        """
+        Fix a guess for out-of-bounds values according the the input prior
+
+        Bad guesses are replaced by a sample from the prior
+        """
+
+        n=guess.shape[0]
+        for j in xrange(n):
+            for itry in xrange(ntry):
+                try:
+                    lnp=prior.get_lnprob_scalar(guess[j,:])
+
+                    if lnp <= LOWVAL:
+                        dosample=True
+                    else:
+                        dosample=False
+                except GMixRangeError as err:
+                    dosample=True
+
+                if dosample:
+                    print_pars(guess[j,:], front="bad guess:")
+                    guess[j,:] = prior.sample()
+                else:
+                    break
+
+
+class R50NuFluxGuesser(R50FluxGuesser):
+    """
+    get full guesses from just r50 spergel nu and fluxes
+
+    parameters
+    ----------
+    r50: float
+        Center for r50 (half light radius )guesses
+    nu: float
+        Index for the spergel function
+    fluxes: float or sequences
+        Center for flux guesses
+    prior: optional
+        If sent, "fix-up" guesses if they are not allowed by the prior
+    """
+
+    def __init__(self, r50, nu, fluxes, prior=None, rng=None):
+        super(R50NuFluxGuesser,self).__init__(
+            r50,
+            fluxes,
+            prior=prior,
+            rng=rng,
+        )
+
+        if nu < -0.85:
+            nu = -0.6
+        elif nu > 4:
+            nu = 3.0
+
+        self.nu=nu
+
+    def __call__(self, n=1, **keys):
+        """
+        center, shape are just distributed around zero
+        """
+
+        rng=self.rng
+
+        fluxes=self.fluxes
+        nband=fluxes.size
+        np = 6+nband
+
+        guess=numpy.zeros( (n, np) )
+        guess[:,0] = 0.01*srandu(n, rng=rng)
+        guess[:,1] = 0.01*srandu(n, rng=rng)
+        guess[:,2] = 0.02*srandu(n, rng=rng)
+        guess[:,3] = 0.02*srandu(n, rng=rng)
+
+        guess[:,4] = self.r50*(1.0 + 0.1*srandu(n, rng=rng))
+
+        for i in xrange(n):
+            while True:
+                nuguess = self.nu*(1.0 + 0.1*srandu(rng=rng))
+                if nuguess > -0.85 and nuguess < 4:
+                    break
+            guess[i,5] = nuguess
+
+        fluxes=self.fluxes
+        for band in xrange(nband):
+            guess[:,6+band] = fluxes[band]*(1.0 + 0.1*srandu(n, rng=rng))
+
+        if self.prior is not None:
+            self._fix_guess(guess, self.prior)
+
+        if n==1:
+            guess=guess[0,:]
+        return guess
 
