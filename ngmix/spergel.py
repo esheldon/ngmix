@@ -1,9 +1,19 @@
+"""
+todo:
+
+    errors and s/n calculations.
+    note everything is for round pars
+
+"""
 from __future__ import print_function
+
+import numpy
 
 from .fitting import LMSimple, run_leastsq
 from .observation import Observation, ObsList, MultiBandObsList, get_mb_obs
 from .priors import LOWVAL,BIGVAL
 from .gexceptions import GMixRangeError
+from .jacobian import DiagonalJacobian
 
 
 try:
@@ -118,7 +128,7 @@ class LMSpergel(LMSimple):
         """
 
         # we cannot keep sending existing array into leastsq, don't know why
-        fdiff=zeros(self.fdiff_size)
+        fdiff=numpy.zeros(self.fdiff_size)
 
         s2n_numer=0.0
         s2n_denom=0.0
@@ -392,7 +402,7 @@ class LMSpergel(LMSimple):
         this is the array we fill with pars for a specific band
         """
         self._set_npars()
-        self._band_pars=zeros(7)
+        self._band_pars=numpy.zeros(7)
 
     def get_fit_stats(self, pars):
         """
@@ -410,6 +420,7 @@ class LMSpergel(LMSimple):
             s2n=0.0
 
         res['s2n_w']   = s2n
+        res['s2n_r']   = s2n
 
         return res
 
@@ -475,7 +486,7 @@ class LMSpergelPS(LMSpergel):
         """
 
         # we cannot keep sending existing array into leastsq, don't know why
-        fdiff=zeros(self.fdiff_size)
+        fdiff=numpy.zeros(self.fdiff_size)
 
         s2n_numer=0.0
         s2n_denom=0.0
@@ -736,7 +747,7 @@ class KObservation(object):
         else:
             cen = (numpy.array(dims)-1.0)/2.0
 
-        self.jacobian = ngmix.DiagonalJacobian(
+        self.jacobian = DiagonalJacobian(
             scale=scale,
             row=cen[0],
             col=cen[1],
