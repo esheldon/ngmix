@@ -140,7 +140,6 @@ class LMSpergel(LMSimple):
             self._fill_models(pars)
 
             start=self._fill_priors(pars, fdiff)
-            #print_pars(fdiff[0:start+3], front='    fdiff after pars: ')
 
             for band in xrange(self.nband):
 
@@ -177,15 +176,27 @@ class LMSpergel(LMSimple):
                     npix += imsize
                     start += imsize
 
+                    if more:
+                        s2n_numer += (kobs.kr*meta['krmult']*kobs.weight).array.sum()
+                        s2n_numer += (kobs.ki*meta['kimult']*kobs.weight).array.sum()
+
+                        s2n_denom += (meta['krmult']**2 *kobs.weight).array.sum()
+                        s2n_denom += (meta['kimult']**2 *kobs.weight).array.sum()
+
+            n=self.n_prior_pars
+            #print_pars(fdiff[0:n], front='    fdiff prior: ')
+            #print_pars(fdiff[n:n+5], front='    fdiff rest: ')
+
         except GMixRangeError as err:
             fdiff[:] = LOWVAL
             s2n_numer=0.0
             s2n_denom=BIGVAL
 
         if more:
+
             # we need to calculate these
-            s2n_numer = 1.0
-            s2n_denom = 1.0
+            #s2n_numer = 1.0
+            #s2n_denom = 1.0
             return {'fdiff':fdiff,
                     's2n_numer':s2n_numer,
                     's2n_denom':s2n_denom,
@@ -421,14 +432,64 @@ class LMSpergel(LMSimple):
         res=self._calc_fdiff(pars, more=True)
 
         if res['s2n_denom'] > 0:
-            s2n=res['s2n_numer']/numpy.sqrt(res['s2n_denom'])
+            s2n_w=res['s2n_numer']/numpy.sqrt(res['s2n_denom'])
         else:
-            s2n=0.0
+            s2n_w=0.0
 
-        res['s2n_w']   = s2n
-        res['s2n_r']   = s2n
+        s2n_r_sum = self._calc_s2n_r_sum(pars)
+        if s2n_r_sum > 0.0:
+            s2n_r = numpy.sqrt(s2n_r_sum)
+        else:
+            s2n_r = 0.0
+
+        res['s2n_w']   = s2n_w
+        res['s2n_r']   = s2n_r
 
         return res
+
+    def _calc_s2n_r_sum(self, pars):
+        """
+        we already have the round r50, so just create the
+        models and don't shear them
+        """
+
+        s2n_sum=0.0
+        for band,kobs_list in enumerate(self.mb_kobs):
+            # pars for this band, in linear space
+            band_pars=self.get_band_pars(pars, band)
+
+            for i,kobs in enumerate(kobs_list):
+
+                round_pars=band_pars.copy()
+                round_pars[2:2+2] = 0.0
+                gal = self.make_model(round_pars)
+
+                meta=kobs.meta
+
+                kr=meta['krmodel']
+                ki=meta['kimodel']
+
+                gal.drawKImage(
+                    re=kr,
+                    im=ki,
+                )
+
+                scratch=meta['scratch']
+                krmult=meta['krmult']
+                kimult=meta['kimult']
+
+                _complex_multiply(
+                    kr.array, ki.array,
+                    kobs.psf.kr.array, kobs.psf.ki.array,
+                    scratch.array,
+                    krmult.array, 
+                    kimult.array, 
+                )
+
+                s2n_sum += (krmult**2*kobs.weight).array.sum()
+                s2n_sum += (kimult**2*kobs.weight).array.sum()
+
+        return s2n_sum
 
 
 class LMSpergelExp(LMSpergel):
@@ -971,6 +1032,9 @@ def make_kobs(mb_obs, interp=DEFAULT_XINTERP, ps=False, rng=None):
             weight = kr.copy()
             medweight = numpy.median(iidict['weight'])
             weight.array[:,:] = 0.5*medweight
+
+            # parseval's theorem
+            weight *= (1.0/weight.array.size)
 
             psf_medweight = numpy.median(iidict['psf_weight'])
             psf_weight = psf_kr.copy()
