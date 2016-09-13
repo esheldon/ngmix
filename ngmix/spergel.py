@@ -9,7 +9,7 @@ from __future__ import print_function
 
 import numpy
 
-from .fitting import LMSimple, run_leastsq
+from .fitting import LMSimple, run_leastsq, print_pars
 from .observation import Observation, ObsList, MultiBandObsList, get_mb_obs
 from .priors import LOWVAL,BIGVAL
 from .gexceptions import GMixRangeError
@@ -140,6 +140,7 @@ class LMSpergel(LMSimple):
             self._fill_models(pars)
 
             start=self._fill_priors(pars, fdiff)
+            #print_pars(fdiff[0:start+3], front='    fdiff after pars: ')
 
             for band in xrange(self.nband):
 
@@ -148,10 +149,13 @@ class LMSpergel(LMSimple):
 
                     meta =kobs.meta
                     ierr = meta['ierr']
-                    imsize = ierr.array.size
+
+                    tmp_fdiff = meta['scratch']
+                    imsize = tmp_fdiff.array.size
 
                     # the real part
-                    tmp_fdiff = meta['krmult'].copy()
+                    #tmp_fdiff = meta['krmult'].copy()
+                    tmp_fdiff.array[:,:] = meta['krmult'].array[:,:]
                     tmp_fdiff -= kobs.kr
 
                     tmp_fdiff *= ierr
@@ -162,7 +166,8 @@ class LMSpergel(LMSimple):
                     start += imsize
 
                     # the imaginary part
-                    tmp_fdiff = meta['kimult'].copy()
+                    #tmp_fdiff = meta['kimult'].copy()
+                    tmp_fdiff.array[:,:] = meta['kimult'].array[:,:]
                     tmp_fdiff -= kobs.ki
 
                     tmp_fdiff *= ierr
@@ -297,6 +302,7 @@ class LMSpergel(LMSimple):
     def _convert2kobs(self, obs):
         interp=self.keys.get('interp',DEFAULT_XINTERP)
         kobs = make_kobs(obs, interp=interp)
+
         return kobs
 
     def _set_kobs(self, obs_in, **keys):
@@ -465,8 +471,8 @@ class LMSpergelExp(LMSpergel):
         if self.prior is None:
             self.n_prior_pars=0
         else:
-            #                 c1  c2  e1e2  r50  nu   fluxes
-            self.n_prior_pars=1 + 1 + 1   + 1  + 1  + self.nband
+            #                 c1  c2  e1e2  r50  fluxes
+            self.n_prior_pars=1 + 1 + 1   + 1  + self.nband
 
 
 class LMSpergelPS(LMSpergel):
@@ -871,8 +877,9 @@ def make_iilist(obs, interp=DEFAULT_XINTERP):
                 wcs=obs.jacobian.get_galsim_wcs(),
             )
 
+            # normalized
             psf_gsimage = galsim.Image(
-                obs.psf.image,
+                obs.psf.image/obs.psf.image.sum(),
                 wcs=obs.psf.jacobian.get_galsim_wcs(),
             )
 
