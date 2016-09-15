@@ -296,7 +296,7 @@ class GMix(object):
         """
         Get a new GMix with the same parameters
         """
-        gmix = GMix(self._ngauss)
+        gmix = GMix(ngauss=self._ngauss)
         gmix._data[:] = self._data[:]
         return gmix
 
@@ -429,6 +429,9 @@ class GMix(object):
 
         gdata=gm._get_gmix_data()
 
+        # make sure the determinant gets reset
+        gdata['norm_set']=0
+
         ngauss=len(gm)
         for i in xrange(ngauss):
             Ti = gdata['irr'][i] + gdata['icc'][i]
@@ -436,8 +439,6 @@ class GMix(object):
             gdata['irr'][i] = 0.5*Ti*factor
             gdata['icc'][i] = 0.5*Ti*factor
 
-        row,col=gm.get_cen()
-        gm.set_cen(row, col)
 
         return gm
 
@@ -1114,12 +1115,12 @@ class GMixModel(GMix):
         self.reset()
         self.fill(pars)
 
-    def copy(self):
-        """
-        Get a new GMix with the same parameters
-        """
-        gmix = GMixModel(self._pars, self._model_name)
-        return gmix
+    #def copy(self):
+    #    """
+    #    Get a new GMix with the same parameters
+    #    """
+    #    gmix = GMixModel(self._pars, self._model_name)
+    #    return gmix
 
     def set_cen(self, row, col):
         """
