@@ -400,6 +400,7 @@ class GMix(object):
         -------
         New round gmix
         """
+        raise RuntimeError("fix round")
         from . import shape
 
         gm = self.copy()
@@ -1115,12 +1116,12 @@ class GMixModel(GMix):
         self.reset()
         self.fill(pars)
 
-    #def copy(self):
-    #    """
-    #    Get a new GMix with the same parameters
-    #    """
-    #    gmix = GMixModel(self._pars, self._model_name)
-    #    return gmix
+    def copy(self):
+        """
+        Get a new GMix with the same parameters
+        """
+        gmix = GMixModel(self._pars, self._model_name)
+        return gmix
 
     def set_cen(self, row, col):
         """

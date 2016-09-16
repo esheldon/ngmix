@@ -1865,11 +1865,304 @@ static PyObject * PyGMix_get_weighted_gmix_moments(PyObject* self, PyObject* arg
     return Py_BuildValue("d", wsum);
 }
 
+static PyObject * PyGMix_get_unweighted_moments(PyObject* self, PyObject* args) {
 
+    PyObject
+        *im_obj=NULL,
+        *jacob_obj=NULL,
+
+        *pars_obj=NULL;
+
+    double
+        u=0, v=0,
+        data=0,
+        F[6]={0},
+        *pars=NULL;
+
+    npy_intp n_row=0, n_col=0, row=0, col=0;
+
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    int i=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOO", 
+                          &im_obj,
+                          &jacob_obj,
+                          &pars_obj)) {
+        return NULL;
+    }
+
+    n_row=PyArray_DIM(im_obj, 0);
+    n_col=PyArray_DIM(im_obj, 1);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    pars=PyArray_DATA(pars_obj); // [6]
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+
+            // sky coordinates relative to the jacobian center
+            v=PYGMIX_JACOB_GETV(jacob, row, col);
+            u=PYGMIX_JACOB_GETU(jacob, row, col);
+
+            data = *( (double*)PyArray_GETPTR2(im_obj,row,col) );
+
+            F[0] = v;
+            F[1] = u;
+            F[2] = u*u - v*v;
+            F[3] = 2*v*u;
+            F[4] = u*u + v*v;
+            F[5] = 1.0;
+
+            for (i=0; i<6; i++) {
+                pars[i] += data*F[i];
+            }
+
+        }
+    }
+
+    Py_RETURN_NONE;
+}
+
+#define printfc(c) printf("%g%c%gi",creal(c),(cimag(c)>=0.0f)? '+':'\0',cimag(c))
 
 /*
    get k-space moments
 
+*/
+
+static PyObject * PyGMix_get_kunweighted_moments(PyObject* self, PyObject* args) {
+
+    PyObject
+        *kr_obj=NULL,
+        *ki_obj=NULL,
+        *jacob_obj=NULL,
+
+        *pars_real_obj=NULL,
+        *pars_imag_obj=NULL;
+
+    double
+        u=0, v=0,
+        rdata=0,idata=0,
+        *pars_real=NULL, *pars_imag=NULL;
+
+    double complex
+        data=0,
+        F[6]={0},
+        pars[6]={0};
+
+    npy_intp n_row=0, n_col=0, row=0, col=0;
+
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    int i=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOOO", 
+                          &kr_obj,
+                          &ki_obj,
+                          &jacob_obj,
+                          &pars_real_obj,
+                          &pars_imag_obj)) {
+        return NULL;
+    }
+
+    n_row=PyArray_DIM(kr_obj, 0);
+    n_col=PyArray_DIM(kr_obj, 1);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    pars_real=PyArray_DATA(pars_real_obj); // [6]
+    pars_imag=PyArray_DATA(pars_imag_obj); // [6]
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+
+            // sky coordinates relative to the jacobian center
+            v=PYGMIX_JACOB_GETV(jacob, row, col);
+            u=PYGMIX_JACOB_GETU(jacob, row, col);
+
+            rdata = *( (double*)PyArray_GETPTR2(kr_obj,row,col) );
+            idata = *( (double*)PyArray_GETPTR2(ki_obj,row,col) );
+
+            data = rdata + I * idata;
+
+            F[0] = v*I;
+            F[1] = u*I;
+            F[2] = u*u - v*v;
+            F[3] = 2*v*u;
+            F[4] = u*u + v*v;
+            F[5] = 1.0;
+
+            for (i=0; i<6; i++) {
+                pars[i] += data*F[i];
+            }
+
+        }
+    }
+
+    for (i=0; i<6; i++) {
+        pars_real[i] = creal(pars[i]);
+        pars_imag[i] = cimag(pars[i]);
+    }
+    Py_RETURN_NONE;
+}
+
+
+
+/*
+
+   weight is product of two gaussians
+*/
+
+static PyObject * PyGMix_get_kweighted_moments_2gauss(PyObject* self, PyObject* args) {
+
+    PyObject
+        *kr_obj=NULL,
+        *ki_obj=NULL,
+        *var_obj=NULL,
+        *jacob_obj=NULL,
+
+        *pars_real_obj=NULL,
+        *pars_imag_obj=NULL,
+        *pcov_obj=NULL;
+
+    double
+        rowshift=0, colshift=0,
+        sigma1=0, sigmasq1=0,
+        sigma2=0, sigmasq2=0,
+        arg=0;
+
+    double complex
+        shift=0, data=0, weight=0, wdata=0,
+        F[6]={0},
+        pars[6]={0};
+
+    npy_intp n_row=0, n_col=0, row=0, col=0;
+
+    struct PyGMix_Jacobian *jacob=NULL;
+    double
+        *pars_real=NULL,
+        *pars_imag=NULL,
+        *pcov=NULL;
+
+    double
+        rdata=0, idata=0,
+        u=0, v=0,
+        w2=0,
+        var=0;
+
+
+    struct PyGMix_Gauss2D gauss1={0};
+    struct PyGMix_Gauss2D gauss2={0};
+
+    int i=0, j=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOOOOOdddd", 
+                          &kr_obj,
+                          &ki_obj,
+                          &var_obj,
+                          &jacob_obj,
+                          &pars_real_obj,
+                          &pars_imag_obj,
+                          &pcov_obj,
+                          &sigma1,
+                          &sigma2,
+                          &rowshift,
+                          &colshift)) {
+        return NULL;
+    }
+
+
+    sigmasq1 = sigma1*sigma1;
+    sigmasq2 = sigma2*sigma2;
+
+    n_row=PyArray_DIM(kr_obj, 0);
+    n_col=PyArray_DIM(kr_obj, 1);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    pars_real=PyArray_DATA(pars_real_obj); // [6]
+    pars_imag=PyArray_DATA(pars_imag_obj); // [6]
+    pcov=PyArray_DATA(pcov_obj); // [6,6]
+
+    gauss2d_set(&gauss1, 1.0, 0.0, 0.0, sigmasq1, 0.0, sigmasq1);
+    gauss2d_set(&gauss2, 1.0, 0.0, 0.0, sigmasq2, 0.0, sigmasq2);
+
+    if (!gauss2d_set_norm(&gauss1)) {
+        return NULL;
+    }
+    if (!gauss2d_set_norm(&gauss2)) {
+        return NULL;
+    }
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+
+
+            // sky coordinates relative to the jacobian center
+            v=PYGMIX_JACOB_GETV(jacob, row, col);
+            u=PYGMIX_JACOB_GETU(jacob, row, col);
+
+            // this is the power spectrum of the noise
+            var = *( (double*)PyArray_GETPTR2(var_obj,row,col) );
+
+            rdata = *( (double*)PyArray_GETPTR2(kr_obj,row,col) );
+            idata = *( (double*)PyArray_GETPTR2(ki_obj,row,col) );
+
+            data = rdata + I*idata;
+
+            // roll the phase of the weight according to the real space shift
+            arg = v*rowshift + u*colshift;
+            shift = cos(arg) - I*sin(arg);
+
+            // weight is real, but we will shift it
+            weight = PYGMIX_GMIX_EVAL_FAST(&gauss1, 1, v, u);
+            weight *= PYGMIX_GMIX_EVAL_FAST(&gauss2, 1, v, u);
+
+            w2 = weight*weight;
+
+            weight = weight*shift;
+            wdata = weight*data;
+
+            F[0] = v*I;
+            F[1] = u*I;
+            F[2] = u*u - v*v;
+            F[3] = 2*v*u;
+            F[4] = u*u + v*v;
+            F[5] = 1.0;
+
+            for (i=0; i<6; i++) {
+                pars[i] += wdata*F[i];
+
+                for (j=0; j<6; j++) {
+
+                    double val=creal(w2*var*F[i]*conj(F[j]));
+
+                    if (isnan(val)) {
+                        val = 0;
+                    }
+                    pcov[i + 6*j] += val;
+
+                }
+            }
+
+        }
+    }
+
+    for (i=0; i<6; i++) {
+        pars_real[i] = creal(pars[i]);
+        pars_imag[i] = cimag(pars[i]);
+    }
+
+    Py_RETURN_NONE;
+}
+
+
+
+
+
+/*
    sigma is in real space
 
    note the weight goes to zero beyond kmax=sqrt(2*N)/sigma.
@@ -1878,6 +2171,9 @@ static PyObject * PyGMix_get_weighted_gmix_moments(PyObject* self, PyObject* arg
    than the image
 
 */
+
+
+
 static PyObject * PyGMix_get_ksigma_weighted_moments(PyObject* self, PyObject* args) {
 
     PyObject
@@ -1899,7 +2195,8 @@ static PyObject * PyGMix_get_ksigma_weighted_moments(PyObject* self, PyObject* a
 
     double complex
         shift=0, data=0, weight=0, wdata=0,
-        F[6]={0}, pars[6]={0};
+        F[6]={0},
+        pars[6]={0};
 
     npy_intp n_row=0, n_col=0, row=0, col=0;
 
@@ -1940,7 +2237,7 @@ static PyObject * PyGMix_get_ksigma_weighted_moments(PyObject* self, PyObject* a
     // can also have a 
 
     n_row=PyArray_DIM(kr_obj, 0);
-    n_col=PyArray_DIM(ki_obj, 1);
+    n_col=PyArray_DIM(kr_obj, 1);
 
     jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
 
@@ -1963,6 +2260,9 @@ static PyObject * PyGMix_get_ksigma_weighted_moments(PyObject* self, PyObject* a
                 continue;
             }
 
+            // this is the power spectrum of the noise
+            var = *( (double*)PyArray_GETPTR2(var_obj,row,col) );
+
             rdata = *( (double*)PyArray_GETPTR2(kr_obj,row,col) );
             idata = *( (double*)PyArray_GETPTR2(ki_obj,row,col) );
 
@@ -1970,22 +2270,18 @@ static PyObject * PyGMix_get_ksigma_weighted_moments(PyObject* self, PyObject* a
 
             // roll the phase of the weight according to the real space shift
             arg = v*rowshift + u*colshift;
-            shift = cos(arg) + I*sin(arg);
-
-            // this is the power spectrum of the noise
-            var = *( (double*)PyArray_GETPTR2(var_obj,row,col) );
+            shift = cos(arg) - I*sin(arg);
 
             // weight is real, but we will shift it
             weight = 1.0 - ksq * sigmasq/(2*N);
 
             // note N=4, so unroll this
             weight = weight*weight*weight*weight;
+            w2 = weight*weight;
 
             weight = weight*shift;
-
             wdata = weight*data;
 
-            w2 = weight*weight;
 
             F[0] = v*I;
             F[1] = u*I;
@@ -1998,7 +2294,14 @@ static PyObject * PyGMix_get_ksigma_weighted_moments(PyObject* self, PyObject* a
                 pars[i] += wdata*F[i];
 
                 for (j=0; j<6; j++) {
-                    pcov[i + 6*j] += w2*var*F[i]*conj(F[j]);
+
+                    double val=creal(w2*var*F[i]*conj(F[j]));
+
+                    if (isnan(val)) {
+                        val = 0;
+                    }
+                    pcov[i + 6*j] += val;
+
                 }
             }
 
@@ -5006,6 +5309,11 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"get_weighted_moments", (PyCFunction)PyGMix_get_weighted_moments,  METH_VARARGS,  "calculate weighted moments\n"},
     {"get_weighted_gmix_moments", (PyCFunction)PyGMix_get_weighted_gmix_moments,  METH_VARARGS,  "calculate weighted moments of one gmix with another\n"},
 
+    {"get_unweighted_moments", (PyCFunction)PyGMix_get_unweighted_moments,  METH_VARARGS,  "calculate unweighted moments\n"},
+
+    {"get_kunweighted_moments", (PyCFunction)PyGMix_get_kunweighted_moments,  METH_VARARGS,  "calculate unweighted moments in k space\n"},
+
+    {"get_kweighted_moments_2gauss", (PyCFunction)PyGMix_get_kweighted_moments_2gauss,  METH_VARARGS,  "calculate weighted moments\n"},
     {"get_ksigma_weighted_moments", (PyCFunction)PyGMix_get_ksigma_weighted_moments,  METH_VARARGS,  "calculate weighted moments\n"},
 
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
