@@ -400,7 +400,7 @@ class GMix(object):
         -------
         New round gmix
         """
-        raise RuntimeError("fix round")
+        #raise RuntimeError("fix round")
         from . import shape
 
         gm = self.copy()
