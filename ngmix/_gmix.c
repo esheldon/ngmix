@@ -2488,6 +2488,125 @@ static PyObject * PyGMix_get_ksigma_weighted_moments(PyObject* self, PyObject* a
 }
 
 
+static PyObject * PyGMix_get_ksigma_weighted_moments_ps(PyObject* self, PyObject* args) {
+
+    PyObject
+        *amp_obj=NULL,
+        *var_obj=NULL,
+        *jacob_obj=NULL,
+
+        *pars_obj=NULL,
+        *pcov_obj=NULL;
+
+    double
+        sigmasq=0,
+        kmax=0, kmaxsq=0,
+        N=4.0,
+        data=0, weight=0, wdata=0,
+        F[6]={0};
+
+    npy_intp n_row=0, n_col=0, row=0, col=0;
+
+    struct PyGMix_Jacobian *jacob=NULL;
+    double
+        *pars=NULL,
+        *pcov=NULL,
+        u=0, v=0,
+        w2=0,
+        var=0,
+        ksq=0;
+
+    int i=0, j=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOOOd", 
+                          &amp_obj,
+                          &var_obj,
+                          &jacob_obj,
+                          &pars_obj,
+                          &pcov_obj,
+                          &kmax)) {
+        return NULL;
+    }
+
+    //sigmasq = sigma*sigma;
+    // weight goes to zero beyond here
+    //kmaxsq = 2.0*N/sigmasq;
+
+    kmaxsq = kmax*kmax;
+
+    sigmasq = 2.0*N/kmaxsq;
+
+    n_row=PyArray_DIM(amp_obj, 0);
+    n_col=PyArray_DIM(amp_obj, 1);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    pars=PyArray_DATA(pars_obj); // [6]
+    pcov=PyArray_DATA(pcov_obj); // [6,6]
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+
+
+            // sky coordinates relative to the jacobian center
+            v=PYGMIX_JACOB_GETV(jacob, row, col);
+            u=PYGMIX_JACOB_GETU(jacob, row, col);
+
+
+            ksq = u*u + v*v;
+
+            if (ksq > kmaxsq) {
+                continue;
+            }
+
+            // this is the power spectrum of the noise
+            var = *( (double*)PyArray_GETPTR2(var_obj,row,col) );
+
+            data = *( (double*)PyArray_GETPTR2(amp_obj,row,col) );
+
+            weight = 1.0 - ksq * sigmasq/(2*N);
+
+            // note N=4, so unroll this
+            weight = weight*weight*weight*weight;
+
+            // for PS we square it
+            weight *= weight;
+
+            w2 = weight*weight;
+
+            wdata = weight*data;
+
+            F[0] = v;
+            F[1] = u;
+            F[2] = u*u - v*v;
+            F[3] = 2*v*u;
+            F[4] = u*u + v*v;
+            F[5] = 1.0;
+
+            for (i=0; i<6; i++) {
+                pars[i] += wdata*F[i];
+
+                for (j=0; j<6; j++) {
+
+                    double val=w2*var*F[i]*F[j];
+
+                    if (isnan(val)) {
+                        val = 0;
+                    }
+                    pcov[i + 6*j] += val;
+
+                }
+            }
+
+        }
+    }
+
+
+    Py_RETURN_NONE;
+}
+
+
+
 
 /*
    Calculate the loglike between the gmix and the input image
@@ -5488,6 +5607,7 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"get_kweighted_moments_2gauss", (PyCFunction)PyGMix_get_kweighted_moments_2gauss,  METH_VARARGS,  "calculate weighted moments\n"},
 
     {"get_ksigma_weighted_moments", (PyCFunction)PyGMix_get_ksigma_weighted_moments,  METH_VARARGS,  "calculate weighted moments\n"},
+    {"get_ksigma_weighted_moments_ps", (PyCFunction)PyGMix_get_ksigma_weighted_moments_ps,  METH_VARARGS,  "calculate weighted moments\n"},
 
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
     {"get_loglike_gauleg", (PyCFunction)PyGMix_get_loglike_gauleg,  METH_VARARGS,  "calculate likelihood, integrating model over the pixels\n"},
