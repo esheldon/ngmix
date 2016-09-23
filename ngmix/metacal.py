@@ -77,9 +77,7 @@ def _get_all_metacal(obs, step=0.01, **kw):
     get all metacal
     """
     if isinstance(obs, Observation):
-        if 'psf' in kw:
-            #print("using analytic psf")
-            #print(kw['psf'])
+        if 'psf' in kw and kw['psf'] is not None:
             m=MetacalAnalyticPSF(obs, kw['psf'], **kw)
         else:
             m=Metacal(obs, **kw)
@@ -731,6 +729,7 @@ class MetacalAnalyticPSF(Metacal):
         For this version we never pixelize the input
         analytic model
         """
+        #print("doing analytic psf")
         psf_grown = _do_dilate(self.psf_obj, shear)
 
         #psf_grown = psf_grown.withFlux(1.0)

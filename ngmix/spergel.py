@@ -424,8 +424,6 @@ class LMSpergel(LMSimple):
     def get_fit_stats(self, pars):
         """
         Get some fit statistics for the input pars.
-
-        pars must be in the log scaling!
         """
         npars=self.npars
 
