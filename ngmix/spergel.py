@@ -10,19 +10,12 @@ from __future__ import print_function
 import numpy
 
 from .fitting import LMSimple, run_leastsq, print_pars
-from .observation import Observation, ObsList, MultiBandObsList, get_mb_obs
+
+from . import observation
+from .observation import Observation, ObsList, MultiBandObsList
+
 from .priors import LOWVAL,BIGVAL
 from .gexceptions import GMixRangeError
-from .jacobian import DiagonalJacobian
-
-
-try:
-    import galsim
-except ImportError:
-    pass
-
-DEFAULT_XINTERP='lanczos15'
-
 
 class SpergelRunner(object):
     """
@@ -246,6 +239,7 @@ class LMSpergel(LMSimple):
         """
         make the galsim Spergel model
         """
+        import galsim
 
         shift = pars[0:0+2]
         g1    = pars[2]
@@ -311,8 +305,7 @@ class LMSpergel(LMSimple):
 
 
     def _convert2kobs(self, obs):
-        interp=self.keys.get('interp',DEFAULT_XINTERP)
-        kobs = make_kobs(obs, interp=interp)
+        kobs = observation.make_kobs(obs, **self.keys)
 
         return kobs
 
@@ -323,10 +316,8 @@ class LMSpergel(LMSimple):
 
         if isinstance(obs_in, (Observation, ObsList, MultiBandObsList)):
             kobs=self._convert2kobs(obs_in)
-        elif isinstance(obs_in, (KObservation, KObsList, KMultiBandObsList)):
-            kobs=obs_in
         else:
-            raise ValueError("send observations or k observations")
+            kobs=observation.get_kmb_obs(obs_in)
 
         self.mb_kobs = kobs
         self.nband=len(kobs)
@@ -661,6 +652,7 @@ class LMSpergelPS(LMSpergel):
         """
         make the galsim Spergel model
         """
+        import galsim
 
         g1    = pars[0]
         g2    = pars[1]
@@ -692,8 +684,7 @@ class LMSpergelPS(LMSpergel):
         kobs.meta['psmodel'] = kobs.meta['krmodel'].copy()
 
     def _convert2kobs(self, obs):
-        interp=self.keys.get('interp',DEFAULT_XINTERP)
-        kobs = make_kobs(obs, interp=interp, ps=True)
+        kobs = observation.make_kobs(obs, ps=True, **self.keys)
         return kobs
 
     def _set_prior(self, **keys):
@@ -725,399 +716,6 @@ class LMSpergelPS(LMSpergel):
         pars[0:4] = pars_in[0:4]
         pars[4] = pars_in[4+band]
         return pars
-
-
-
-
-
-
-#
-# k space stuff
-#
-
-
-class KObservation(object):
-    def __init__(self,
-                 kr,
-                 ki,
-                 weight=None,
-                 psf=None,
-                 meta=None):
-
-        self._set_images(kr, ki)
-        self._set_weight(weight)
-        self.set_psf(psf)
-
-        self._set_jacobian()
-
-        self.meta={}
-        if meta is not None:
-            self.update_meta_data(meta)
-
-    def _set_images(self, kr, ki):
-        """
-        set the images, ensuring consistency
-        """
-        assert isinstance(kr, galsim.Image)
-        assert isinstance(ki, galsim.Image)
-        assert kr.array.shape==ki.array.shape
-
-        self.kr=kr
-        self.ki=ki
-
-    def _set_weight(self, weight):
-        """
-        set the weight, ensuring consistency with
-        the images
-        """
-
-        if weight is None:
-            weight = self.kr.copy()
-            weight.setZero()
-            weight.array[:,:] = 1.0
-
-        else:
-            assert isinstance(weight, galsim.Image)
-            assert weight.array.shape==self.ki.array.shape
-
-        self.weight=weight
-
-    def set_psf(self, psf):
-        """
-        set the psf KObservation.  can be None
-
-        Shape of psf image should match the image
-        """
-        self.psf = psf
-        if psf is None:
-            return
-
-        assert isinstance(psf, KObservation)
-
-        assert psf.kr.array.shape==self.kr.array.shape
-        assert numpy.allclose(psf.kr.scale,self.kr.scale)
-
-    def _set_jacobian(self):
-        """
-        center is always at the canonical center.
-
-        scale is always the scale of the image
-        """
-
-        scale=self.kr.scale
-
-        dims=self.kr.array.shape
-        if (dims[0] % 2) == 0:
-            cen = (numpy.array(dims)-1.0)/2.0 + 0.5
-        else:
-            cen = (numpy.array(dims)-1.0)/2.0
-
-        self.jacobian = DiagonalJacobian(
-            scale=scale,
-            row=cen[0],
-            col=cen[1],
-        )
-
-    def update_meta_data(self, meta):
-        """
-        Add some metadata
-        """
-
-        if not isinstance(meta,dict):
-            raise TypeError("meta data must be in dictionary form")
-        self.meta.update(meta)
-
-
-class KObsList(list):
-    """
-    Hold a list of Observation objects
-
-    This class provides a bit of type safety and ease of type checking
-    """
-
-    def __init__(self, meta=None):
-        super(KObsList,self).__init__()
-
-        self.meta={}
-        if meta is not None:
-            self.update_meta_data(meta)
-
-    def append(self, kobs):
-        """
-        Add a new KObservation
-
-        over-riding this for type safety
-        """
-        assert isinstance(kobs,KObservation),\
-                "kobs should be of type KObservation, got %s" % type(kobs)
-
-        super(KObsList,self).append(kobs)
-
-    def update_meta_data(self, meta):
-        """
-        Add some metadata
-        """
-
-        if not isinstance(meta,dict):
-            raise TypeError("meta data must be in dictionary form")
-        self.meta.update(meta)
-
-    def __setitem__(self, index, kobs):
-        """
-        over-riding this for type safety
-        """
-        assert isinstance(kobs,KObservation),"kobs should be of type KObservation"
-        super(KObsList,self).__setitem__(index, kobs)
-
-
-
-class KMultiBandObsList(list):
-    """
-    Hold a list of lists of ObsList objects, each representing a filter
-    band
-
-    This class provides a bit of type safety and ease of type checking
-    """
-
-    def __init__(self, meta=None):
-        super(KMultiBandObsList,self).__init__()
-
-        self.meta={}
-        if meta is not None:
-            self.update_meta_data(meta)
-
-    def append(self, kobs_list):
-        """
-        Add a new ObsList
-
-        over-riding this for type safety
-        """
-        assert isinstance(kobs_list,KObsList),\
-                "kobs_list should be of type KObsList"
-        super(KMultiBandObsList,self).append(kobs_list)
-
-    def update_meta_data(self, meta):
-        """
-        Add some metadata
-        """
-
-        if not isinstance(meta,dict):
-            raise TypeError("meta data must be in dictionary form")
-        self.meta.update(meta)
-
-    def __setitem__(self, index, kobs_list):
-        """
-        over-riding this for type safety
-        """
-        assert isinstance(kobs_list,KObsList),\
-                "kobs_list should be of type KObsList"
-        super(KMultiBandObsList,self).__setitem__(index, kobs_list)
-
-
-
-def make_iilist(obs, interp=DEFAULT_XINTERP):
-    """
-    make a multi-band interpolated image list, as well as the maximum of
-    getGoodImageSize from each psf, and corresponding dk
-    """
-
-    mb_obs = get_mb_obs(obs)
-
-    dimlist=[]
-    dklist=[]
-
-    mb_iilist=[]
-    for band,obs_list in enumerate(mb_obs):
-        iilist=[]
-        for obs in obs_list:
-
-            gsimage = galsim.Image(
-                obs.image,
-                wcs=obs.jacobian.get_galsim_wcs(),
-            )
-
-            # normalized
-            psf_gsimage = galsim.Image(
-                obs.psf.image/obs.psf.image.sum(),
-                wcs=obs.psf.jacobian.get_galsim_wcs(),
-            )
-
-            psf_ii = galsim.InterpolatedImage(
-                psf_gsimage,
-                x_interpolant=interp,
-            )
-            ii = galsim.InterpolatedImage(
-                gsimage,
-                x_interpolant=interp,
-            )
-            # make dimensions odd
-            wmult=1.0
-            dim = 1 + psf_ii.SBProfile.getGoodImageSize(
-                psf_ii.nyquistScale(),
-                wmult,
-            )
-            dk=ii.stepK()
-
-            dimlist.append( dim )
-            dklist.append(dk)
-
-            """
-            weight=galsim.Image(
-                obs.weight,
-                dtype=obs.weight.dtype,
-            )
-            psf_weight=galsim.Image(
-                obs.psf.weight,
-                dtype=obs.psf.weight.dtype,
-            )
-            """
-
-            iilist.append({
-                'wcs':obs.jacobian.get_galsim_wcs(),
-                'ii':ii,
-                'weight':obs.weight,
-                'psf_ii':psf_ii,
-                'psf_weight':obs.psf.weight,
-            })
-
-        mb_iilist.append(iilist)
-
-    dimarr = numpy.array(dimlist)
-    dkarr = numpy.array(dklist)
-
-    imax = dimarr.argmax()
-
-    dim=dimarr[imax]
-    dk=dkarr[imax]
-
-    return mb_iilist, dim, dk
-
-
-def make_kobs(mb_obs, interp=DEFAULT_XINTERP, ps=False, rng=None):
-    """
-    make the k space observations, with common dimensions
-    and dk for each band and epoch
-
-    for now, geneate the noise ps here, but we probably want
-    to either do it separately or have a noise obs sent to
-    base it on?
-
-    here rng is a base deviate
-    """
-
-    mb_iilist, dim, dk = make_iilist(mb_obs, interp=interp)
-
-    mb_kobs = KMultiBandObsList()
-
-    for iilist in mb_iilist:
-
-        kobs_list=KObsList()
-        for iidict in iilist:
-
-            kr,ki = iidict['ii'].drawKImage(
-                dtype=numpy.float64,
-                nx=dim,
-                ny=dim,
-                scale=dk,
-            )
-            psf_kr,psf_ki = iidict['psf_ii'].drawKImage(
-                dtype=numpy.float64,
-                nx=dim,
-                ny=dim,
-                scale=dk,
-            )
-
-            weight = kr.copy()
-            medweight = numpy.median(iidict['weight'])
-            weight.array[:,:] = 0.5*medweight
-
-            # parseval's theorem
-            weight *= (1.0/weight.array.size)
-
-            psf_medweight = numpy.median(iidict['psf_weight'])
-            psf_weight = psf_kr.copy()
-            psf_weight.array[:,:] = 0.5*psf_medweight
-
-            psf_kobs = KObservation(
-                psf_kr,
-                psf_ki,
-                weight=psf_weight,
-            )
-            kobs = KObservation(
-                kr,
-                ki,
-                weight=weight,
-                psf=psf_kobs,
-            )
-
-            if ps:
-                assert rng is not None
-
-
-                im_ps= kr**2 + ki**2
-                psf_ps = psf_kr**2 + psf_ki**2
-
-                kobs.meta['ps_orig'] = im_ps
-                psf_kobs.meta['ps'] = psf_ps
-
-                # subtract power spectrum of random noise
-                err = numpy.sqrt(1.0/medweight)
-                gs_rng=galsim.GaussianNoise(sigma=err, rng=rng)
-
-                nim = kr.copy()
-                nim.setZero()
-
-                nim.addNoise(gs_rng)
-
-                nim_ii = galsim.InterpolatedImage(
-                    nim,
-                    x_interpolant=interp,
-                )
-                nim_kr,nim_ki = nim_ii.drawKImage(
-                    dtype=numpy.float64,
-                    nx=dim,
-                    ny=dim,
-                    scale=dk,
-                )
-                nim_ps = nim_kr**2 + nim_ki**2
-                #kobs.meta['noise_kr'] = nim_kr
-                #kobs.meta['noise_ki'] = nim_ki
-                kobs.meta['noise_ps'] = nim_ps
-
-                kobs.meta['ps'] = (
-                    kobs.meta['ps_orig'] - kobs.meta['noise_ps']
-                )
-
-
-            kobs_list.append(kobs)
-
-        mb_kobs.append(kobs_list)
-
-    return mb_kobs
-
-
-"""
-def _make_kweight(iidict, weight, dim):
-    medweight = numpy.median(iidict['weight'])
-    
-    cen = (dim-1.0)/2.0
-    rows,cols=numpy.mgrid[
-        0:dim,
-        0:dim,
-    ]
-    rows = rows-cen
-    cols = cols-cen
-    r2 = rows**2 + cols**2
-    w=numpy.where(r2 < cen**2)
-
-    weight.array[w] = 0.5*medweight
-
-    if False:
-        import images
-        images.multiview(weight.array)
-        stop
-"""
-
 
 def _complex_multiply(a, b, c, d, scratch, real_res, imag_res):
     """
