@@ -657,9 +657,10 @@ class Metacal(object):
         """
         set the laczos interpolation configuration
         """
-        self.interp = galsim.Lanczos(LANCZOS_PARS_DEFAULT['order'],
-                                     LANCZOS_PARS_DEFAULT['conserve_dc'],
-                                     LANCZOS_PARS_DEFAULT['tol'])
+        #self.interp = galsim.Lanczos(LANCZOS_PARS_DEFAULT['order'],
+        #                             LANCZOS_PARS_DEFAULT['conserve_dc'],
+        #                             LANCZOS_PARS_DEFAULT['tol'])
+        self.interp = 'lanczos15'
 
     def _make_obs(self, im, psf_im):
         """
