@@ -1933,38 +1933,58 @@ static PyObject * PyGMix_get_unweighted_moments(PyObject* self, PyObject* args) 
 
 */
 
-static PyObject * PyGMix_get_kunweighted_moments(PyObject* self, PyObject* args) {
+// weighted moments with a weight image
+// the weight should already be applied to the input images,
+// and is only used for calculating variance
 
+static PyObject * PyGMix_get_kweighted_moments_image(PyObject* self, PyObject* args) {
+
+    // inputs
     PyObject
         *kr_obj=NULL,
         *ki_obj=NULL,
         *jacob_obj=NULL,
 
-        *pars_real_obj=NULL,
-        *pars_imag_obj=NULL;
+        *wtr_obj=NULL,
+        *wti_obj=NULL,
 
+        *pars_real_obj=NULL,
+        *pars_imag_obj=NULL,
+        *pars_cov_obj=NULL;
+    double var=0;
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    // local vars
     double
         u=0, v=0,
-        rdata=0,idata=0,
-        *pars_real=NULL, *pars_imag=NULL;
+        rdata=0, idata=0,
+        wrdata=0, widata=0,
+        w2=0,
+        *pars_real=NULL, *pars_imag=NULL,
+        *pcov=NULL;
 
     double complex
-        data=0,
+        data=0, weight=0,
         F[6]={0},
         pars[6]={0};
 
     npy_intp n_row=0, n_col=0, row=0, col=0;
 
-    struct PyGMix_Jacobian *jacob=NULL;
+    int i=0, j=0;
 
-    int i=0;
-
-    if (!PyArg_ParseTuple(args, (char*)"OOOOO", 
+    if (!PyArg_ParseTuple(args, (char*)"OOdOOOOOO", 
                           &kr_obj,
                           &ki_obj,
+                          &var,             // variance in each pixel
+
                           &jacob_obj,
+
+                          &wtr_obj,
+                          &wti_obj,
+                          
                           &pars_real_obj,
-                          &pars_imag_obj)) {
+                          &pars_imag_obj,
+                          &pars_cov_obj)) {
         return NULL;
     }
 
@@ -1975,6 +1995,7 @@ static PyObject * PyGMix_get_kunweighted_moments(PyObject* self, PyObject* args)
 
     pars_real=PyArray_DATA(pars_real_obj); // [6]
     pars_imag=PyArray_DATA(pars_imag_obj); // [6]
+    pcov=PyArray_DATA(pars_cov_obj); // [6,6]
 
     for (row=0; row < n_row; row++) {
         for (col=0; col < n_col; col++) {
@@ -1986,7 +2007,13 @@ static PyObject * PyGMix_get_kunweighted_moments(PyObject* self, PyObject* args)
             rdata = *( (double*)PyArray_GETPTR2(kr_obj,row,col) );
             idata = *( (double*)PyArray_GETPTR2(ki_obj,row,col) );
 
+            wrdata = *( (double*)PyArray_GETPTR2(wtr_obj,row,col) );
+            widata = *( (double*)PyArray_GETPTR2(wti_obj,row,col) );
+
             data = rdata + I * idata;
+            weight = wrdata + I * widata;
+
+            w2 = weight*weight*var;
 
             F[0] = v*I;
             F[1] = u*I;
@@ -1997,6 +2024,15 @@ static PyObject * PyGMix_get_kunweighted_moments(PyObject* self, PyObject* args)
 
             for (i=0; i<6; i++) {
                 pars[i] += data*F[i];
+                for (j=0; j<6; j++) {
+                    double val=creal(w2*F[i]*conj(F[j]));
+
+                    if (isnan(val)) {
+                        val = 0;
+                    }
+
+                    pcov[i + 6*j] += val;
+                }
             }
 
         }
@@ -5601,7 +5637,7 @@ static PyMethodDef pygauss2d_funcs[] = {
 
     {"get_unweighted_moments", (PyCFunction)PyGMix_get_unweighted_moments,  METH_VARARGS,  "calculate unweighted moments\n"},
 
-    {"get_kunweighted_moments", (PyCFunction)PyGMix_get_kunweighted_moments,  METH_VARARGS,  "calculate unweighted moments in k space\n"},
+    {"get_kweighted_moments_image", (PyCFunction)PyGMix_get_kweighted_moments_image,  METH_VARARGS,  "calculate unweighted moments in k space\n"},
 
     {"get_kweighted_moments_gauss", (PyCFunction)PyGMix_get_kweighted_moments_gauss,  METH_VARARGS,  "calculate weighted moments\n"},
     {"get_kweighted_moments_2gauss", (PyCFunction)PyGMix_get_kweighted_moments_2gauss,  METH_VARARGS,  "calculate weighted moments\n"},
