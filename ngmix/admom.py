@@ -118,9 +118,9 @@ class Admom(object):
             sums=res['sums']
 
             pars=res['pars']
-            T = pars[4]
-            if T > 0.0:
-                res['e'][:] = res['pars'][2:2+2]/T
+            res['T'] = pars[4]
+            if res['T'] > 0.0:
+                res['e'][:] = res['pars'][2:2+2]/res['T']
 
             if res['s2n_denom'] > 0:
                 res['s2n'] = res['s2n_numer']/numpy.sqrt(res['s2n_denom'])
