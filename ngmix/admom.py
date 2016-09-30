@@ -132,10 +132,11 @@ class Admom(object):
                 res['e_cov'][:,:] = numpy.diag( [ res['err']**2 ]*2 )
 
                 # very approximate off-diagonal terms
-                scov=res['sums_cov']
-                cross=res['err']**2 * scov[2,3]/numpy.sqrt(scov[2,2]*scov[3,3])
-                res['e_cov'][0,1] = cross
-                res['e_cov'][1,0] = cross
+                #if scov[2,2] > 0 and scov[3,3] > 0:
+                #    scov=res['sums_cov']
+                #    cross=res['err']**2 * scov[2,3]/numpy.sqrt(scov[2,2]*scov[3,3])
+                #    res['e_cov'][0,1] = cross
+                #    res['e_cov'][1,0] = cross
 
 
         self.result=res
