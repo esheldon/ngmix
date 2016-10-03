@@ -3894,7 +3894,9 @@ static void admom_get_mask(const struct Admom *self,
 */
 
 /*
-   set the center
+   get sums for the center
+
+   also set the flux sum while we are at it
 */
 
 static void admom_censums(
@@ -4255,6 +4257,62 @@ static inline void admom_deconvolve(
     self->det = self->irr*self->icc - self->irc*self->irc;
 }
 
+// only check the determinant is exactly zero
+// these are all sums, not divided by flux
+static int take_adaptive_step_nocheck(
+          double Wrr, double Wrc, double Wcc,
+          double Irr, double Irc, double Icc,
+          double *NewIrr, double *NewIrc, double *NewIcc)
+{
+    int flags=0;
+
+    double 
+        Nrr=0, Ncc=0, Nrc=0,
+        detn=0, idetn=0,
+        detm=0, idetm=0,
+        detw=0, idetw=0;
+
+    // measured moments
+    detm = Irr*Icc - Irc*Irc;
+    if (detm == 0.0) {
+        printf("detm zero\n");
+        flags=ADMOM_DET;
+        goto adaptive_step_bail;
+    }
+
+    detw = Wrr*Wcc - Wrc*Wrc;
+    if (detw == 0.0) {
+        printf("detw zero\n");
+        flags=ADMOM_DET;
+        goto adaptive_step_bail;
+    }
+
+    idetw=1.0/detw;
+    idetm=1.0/detm;
+
+    // Nrr etc. are actually of the inverted covariance matrix
+    Nrr =  Icc*idetm - Wcc*idetw;
+    Ncc =  Irr*idetm - Wrr*idetw;
+    Nrc = -Irc*idetm + Wrc*idetw;
+    detn = Nrr*Ncc - Nrc*Nrc;
+
+    if (detn == PYGMIX_LOW_DETVAL) {
+        printf("detn zero\n");
+        flags=ADMOM_DET;
+        goto adaptive_step_bail;
+    }
+
+    // now set from the inverted matrix
+    idetn=1./detn;
+    *NewIrr =  Ncc*idetn;
+    *NewIcc =  Nrr*idetn;
+    *NewIrc = -Nrc*idetn;
+
+adaptive_step_bail:
+    return flags;
+}
+
+
 static inline int
 admom_get_deconvolved_moments(
           const struct PyGMix_Gauss2D *wt,  // should already be psf convolved
@@ -4277,12 +4335,42 @@ admom_get_deconvolved_moments(
     return flags;
 }
 
+
+static inline int
+admom_get_deconvolved_moments_nocheck(
+          const struct PyGMix_Gauss2D *wt,  // should already be psf convolved
+          const struct PyGMix_Gauss2D *psf,
+          double M1sum, double M2sum, double Tsum, double Fsum, // measured values
+          double *Irrsum0, double *Ircsum0, double *Iccsum0)
+{
+    int flags=0;
+
+    double Irrsum=0, Iccsum=0, Ircsum=0;
+
+    Irrsum = 0.5*(Tsum - M1sum);
+    Iccsum = 0.5*(Tsum + M1sum);
+    Ircsum = 0.5*M2sum;
+
+    flags=take_adaptive_step_nocheck(
+        wt->irr*Fsum, wt->irc*Fsum, wt->icc*Fsum,
+        Irrsum, Ircsum, Iccsum,
+        Irrsum0, Ircsum0, Iccsum0
+    );
+
+    (*Irrsum0) -= psf->irr*Fsum;
+    (*Ircsum0) -= psf->irc*Fsum;
+    (*Iccsum0) -= psf->icc*Fsum;
+
+    return flags;
+}
+
 static int admom_set_norm(struct PyGMix_Gauss2D *self)
 {
     int status=0;
     double idet=0;
 
     if (self->det < PYGMIX_LOW_DETVAL) {
+        printf("weight det low: %g\n", self->det);
         status=0;
     } else {
 
@@ -4302,7 +4390,7 @@ static int admom_set_norm(struct PyGMix_Gauss2D *self)
 
 }
 
-static void admom_multi(
+static void admom_multi_deconv(
 
           const struct Admom *self,
 
@@ -4505,6 +4593,390 @@ admom_bail:
     return;
 }
 
+/*
+   no deconvolution
+*/
+static void admom_multi(
+
+          const struct Admom *self,
+
+          // eventually will be lists of images, jacobians
+          const PyObject** im_list,
+          const PyObject** ivarim_list,
+          const struct PyGMix_Jacobian** jacob_list,
+          int nimage,
+
+          // weight should initially hold the guess
+          const struct PyGMix_Gauss2D *wtin,
+
+          struct AdmomResult *res
+	)
+
+{
+
+    struct PyGMix_Gauss2D wt={0};
+    double 
+        roworig=0, colorig=0,
+        e1old=-9999, e2old=-9999, Told=-9999.0,
+        Irr=0, Irc=0, Icc, M1=0, M2=0, T=0, e1=0, e2=0;
+
+    int i=0, j=0;
+
+    wt = *wtin;
+
+    res->flags=0;
+
+    roworig=wt.row;
+    colorig=wt.col;
+
+    for (i=0; i<self->maxit; i++) {
+
+        if (!gauss2d_set_norm(&wt) ) {
+            res->flags |= ADMOM_DET;
+            goto admom_multi_bail;
+        }
+
+        // First the center, using overall sums to get the center in sky coords
+
+        admom_clear_result(res);
+
+        for (j=0; j<nimage; j++) {
+            admom_censums(self, im_list[j], jacob_list[j], &wt, res);
+        }
+
+        if (res->sums[5] <= 0.0) {
+            res->flags |= ADMOM_FAINT;
+            goto admom_multi_bail;
+        }
+
+        wt.row = res->sums[0]/res->sums[5];
+        wt.col = res->sums[1]/res->sums[5];
+
+        // bail if the center shifted too far
+        if ( ( fabs(wt.row-roworig) > self->shiftmax)
+             ||
+             ( fabs(wt.col-colorig) > self->shiftmax)
+             ) {
+            res->flags |= ADMOM_SHIFT;
+            goto admom_multi_bail;
+        }
+
+        // now the rest of the moment sums. This will require
+        // some intermediate values for each image to be
+        // calculated and averaged
+
+        admom_clear_result(res);
+
+        for (j=0; j<nimage; j++) {
+            admom_momsums(self,
+                          im_list[j], ivarim_list[j], jacob_list[j],
+                          &wt, res);
+        }
+
+        if (res->sums[5] <= 0.0) {
+            res->flags |= ADMOM_FAINT;
+            goto admom_multi_bail;
+        }
+
+        // look for convergence
+        T  = res->sums[4]/res->sums[5];
+
+        if (T <= 0.0) {
+            res->flags |= ADMOM_SMALL;
+            goto admom_multi_bail;
+        }
+
+        e1 = res->sums[2]/res->sums[4];
+        e2 = res->sums[3]/res->sums[4];
+
+        if ( 
+                ( fabs(e1-e1old) < self->etol)
+                &&
+                ( fabs(e2-e2old) < self->etol)
+                &&
+                ( fabs(T/Told-1.) < self->Ttol)
+           )  {
+
+            res->pars[0] = wt.row;
+            res->pars[1] = wt.col;
+            res->pars[2] = wt.icc - wt.irr;
+            res->pars[3] = 2.0*wt.irc;
+            res->pars[4] = wt.icc + wt.irr;
+            res->pars[5] = res->sums[5]/res->wsum;
+
+            break;
+
+        } else {
+            // take the adaptive step: deweight the moments
+
+            M1 = res->sums[2]/res->sums[5];
+            M2 = res->sums[3]/res->sums[5];
+            Irr = 0.5*(T - M1);
+            Icc = 0.5*(T + M1);
+            Irc = 0.5*M2;
+
+            res->flags |= take_adaptive_step_wt(&wt, Irr, Irc, Icc);
+            if (res->flags != 0) {
+                goto admom_multi_bail;
+            }
+
+            e1old=e1;
+            e2old=e2;
+            Told=T;
+
+        }
+
+    }
+
+admom_multi_bail:
+
+    res->nimage=nimage;
+
+    res->numiter = i;
+    if (res->flags != 0) {
+        // we exited with a goto
+        res->numiter+=1;
+    }
+
+    if (res->numiter==self->maxit) {
+        res->flags = ADMOM_MAXIT;
+    }
+
+    return;
+}
+
+
+
+
+static void admom_multi_nocheck(
+
+          const struct Admom *self,
+
+          // eventually will be lists of images, jacobians, and psfs
+          const PyObject** im_list,
+          const PyObject** ivarim_list,
+          const struct PyGMix_Gauss2D** psf_list,
+          const struct PyGMix_Jacobian** jacob_list,
+          int nimage,
+
+          // weight should initially hold the guess
+          const struct PyGMix_Gauss2D *wtin,
+
+          struct AdmomResult *res
+	)
+
+{
+
+    struct PyGMix_Gauss2D wt={0};
+    double 
+        roworig=0, colorig=0,
+        e1old=-9999, e2old=-9999, Told=-9999.0,
+        Irr=0, Irc=0, Icc,
+        M1=0, M2=0,
+        T=0, e1=0, e2=0,
+        M1sum=0, M2sum=0, Tsum=0, Fsum=0,
+        tIrrsum=0, tIrcsum=0, tIccsum=0,
+        Irrsum0=0, Ircsum0=0, Iccsum0=0,
+        s2n_numer=0.0, s2n_denom=0.0;
+
+    int i=0, j=0, nuse=0;
+
+    wt = *wtin;
+
+    res->flags=0;
+
+    roworig=wt.row;
+    colorig=wt.col;
+
+    for (i=0; i<self->maxit; i++) {
+
+
+        // First the center, using overall sums to get the center in sky coords
+
+        admom_clear_result(res);
+
+        for (j=0; j<nimage; j++) {
+            admom_convolve(&wt, psf_list[j]);
+
+            // we won't need to test these again during this iteration
+            if (!admom_set_norm(&wt) ) {
+                res->flags |= ADMOM_DET;
+                goto admom_bail;
+            }
+
+            admom_censums(self, im_list[j], jacob_list[j], &wt, res);
+            admom_deconvolve(&wt, psf_list[j]);
+        }
+
+        if (res->sums[5] <= 0.0) {
+            res->flags |= ADMOM_FAINT;
+            goto admom_bail;
+        }
+
+        wt.row = res->sums[0]/res->sums[5];
+        wt.col = res->sums[1]/res->sums[5];
+
+        // bail if the center shifted too far
+        if ( ( fabs(wt.row-roworig) > self->shiftmax)
+             ||
+             ( fabs(wt.col-colorig) > self->shiftmax)
+             ) {
+            res->flags |= ADMOM_SHIFT;
+            goto admom_bail;
+        }
+
+        // now the rest of the moment sums. This will require
+        // some intermediate values for each image to be
+        // calculated and averaged
+
+        s2n_numer=s2n_denom=0;
+        Irrsum0=Ircsum0=Iccsum0=0;
+        M1sum=M2sum=Tsum=Fsum=0;
+        nuse=0;
+
+        for (j=0; j<nimage; j++) {
+            admom_clear_result(res);
+
+            admom_convolve(&wt, psf_list[j]);
+            admom_set_norm(&wt);
+
+            admom_momsums(self,
+                          im_list[j], ivarim_list[j], jacob_list[j],
+                          &wt, res);
+
+            /*
+            if (res->sums[5] < 0.0) {
+                printf("Fsum: %g\n", res->sums[5]);
+                continue;
+            }
+            */
+
+            // we need normalized moments to psf correct
+            if (res->sums[5] <= 0.0) {
+                continue;
+                //res->flags = ADMOM_FAINT;
+                //goto admom_bail;
+            }
+
+            M1sum += res->sums[2];
+            M2sum += res->sums[3];
+            Tsum  += res->sums[4];
+            Fsum  += res->sums[5];
+
+            // now deconvolved covar, which we will average over
+            // the exposures, for the adaptive step
+
+            M1 = res->sums[2]/res->sums[5];
+            M2 = res->sums[3]/res->sums[5];
+            T  = res->sums[4]/res->sums[5];
+            /*
+            res->flags = admom_get_deconvolved_moments_nocheck(
+                &wt, psf_list[j],
+                M1, M2, T,
+                &Irr, &Irc, &Icc
+            );
+            */
+            res->flags = admom_get_deconvolved_moments_nocheck(
+                &wt, psf_list[j],
+                //res->sums[2], res->sums[3], res->sums[4],
+                M1, M2, T,
+                1.0,
+                //res->sums[5],
+                &tIrrsum, &tIrcsum, &tIccsum
+            );
+
+            if (res->flags!=0) {
+                goto admom_bail;
+            }
+
+            Irrsum0 += tIrrsum;
+            Ircsum0 += tIrcsum;
+            Iccsum0 += tIccsum;
+
+            s2n_numer += res->s2n_numer;
+            s2n_denom += res->s2n_denom;
+
+            admom_deconvolve(&wt, psf_list[j]);
+
+            nuse +=1;
+        }
+
+        if (Fsum <= 0.0) {
+            res->flags = ADMOM_FAINT;
+            goto admom_bail;
+        }
+        if (Tsum <= 0.0) {
+            res->flags = ADMOM_SMALL;
+            goto admom_bail;
+        }
+
+        // look for convergence in mean of the convolved
+        // moments, since T could be zero for the deconvolved
+        // moments
+
+        e1 = M1sum/Tsum;
+        e2 = M2sum/Tsum;
+        T  = Tsum/Fsum;
+
+        if ( 
+                ( fabs(e1-e1old) < self->etol)
+                &&
+                ( fabs(e2-e2old) < self->etol)
+                &&
+                ( fabs(T/Told-1.) < self->Ttol)
+           )  {
+
+            // deconvolved weight
+            res->pars[0] = wt.row;
+            res->pars[1] = wt.col;
+            res->pars[2] = wt.icc - wt.irr;
+            res->pars[3] = 2.0*wt.irc;
+            res->pars[4] = wt.icc + wt.irr;
+            res->pars[5] = res->sums[5]/res->wsum;
+
+            res->s2n_numer=s2n_numer;
+            res->s2n_denom=s2n_denom;
+
+            break;
+
+        } else {
+
+            // use mean of the deconvolved, adaptive stepped moments
+            // from each image
+
+            //Irr = Irrsum0/Fsum;
+            //Irc = Ircsum0/Fsum;
+            //Icc = Iccsum0/Fsum;
+            Irr = Irrsum0/nuse;
+            Irc = Ircsum0/nuse;
+            Icc = Iccsum0/nuse;
+            gauss2d_set(&wt, 1.0, wt.row, wt.col, Irr, Irc, Icc);
+
+            e1old=e1;
+            e2old=e2;
+            Told=T;
+
+        }
+
+    }
+
+admom_bail:
+
+    res->nimage=nimage;
+
+    res->numiter = i;
+    if (res->flags != 0) {
+        // we exited with a goto
+        res->numiter+=1;
+    }
+
+    if (res->numiter==self->maxit) {
+        res->flags = ADMOM_MAXIT;
+    }
+
+    return;
+}
+
 
 
 
@@ -4548,7 +5020,7 @@ static PyObject * PyGMix_admom(PyObject* self, PyObject* args) {
     Py_RETURN_NONE;
 }
 
-static PyObject * PyGMix_admom_multi(PyObject* self, PyObject* args) {
+static PyObject * PyGMix_admom_multi_deconv(PyObject* self, PyObject* args) {
 
     PyObject* admom_obj=NULL;
 
@@ -4613,7 +5085,7 @@ static PyObject * PyGMix_admom_multi(PyObject* self, PyObject* args) {
     }
 
 
-    admom_multi(
+    admom_multi_deconv(
         admom_conf,
         im_list,
         ivarim_list,
@@ -4630,6 +5102,76 @@ static PyObject * PyGMix_admom_multi(PyObject* self, PyObject* args) {
 
 
 
+
+static PyObject * PyGMix_admom_multi(PyObject* self, PyObject* args) {
+
+    PyObject* admom_obj=NULL;
+
+    // the weight gaussian
+    PyObject* wt_obj=NULL;
+
+    PyObject* image_obj=NULL;
+    PyObject* ivarim_obj=NULL;
+    PyObject* jacob_obj=NULL;
+
+    PyObject* res_obj=NULL;
+
+    struct PyGMix_Gauss2D *wt=NULL;
+    struct PyGMix_Jacobian *tjacob=NULL;
+
+    struct Admom *admom_conf =NULL;
+    struct AdmomResult *res=NULL;
+
+    // just for packing in pointers from the python lists
+    PyObject* tmp=NULL;
+
+    const PyObject* im_list[1000]={0};
+    const PyObject* ivarim_list[1000]={0};
+    const struct PyGMix_Jacobian* jacob_list[1000]={0};
+
+    Py_ssize_t nimage=0, i=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOOOO", 
+                          &admom_obj,
+                          &image_obj,
+                          &ivarim_obj,
+                          &jacob_obj,
+                          &wt_obj,
+                          &res_obj)) {
+        return NULL;
+    }
+
+    nimage = PyList_Size(image_obj);
+
+    admom_conf=(struct Admom* ) PyArray_DATA(admom_obj);
+    wt=(struct PyGMix_Gauss2D* ) PyArray_DATA(wt_obj);
+    res=(struct AdmomResult* ) PyArray_DATA(res_obj);
+
+    for (i=0; i<nimage; i++) {
+        tmp = PyList_GetItem(image_obj, i);
+        im_list[i] = tmp;
+
+        tmp = PyList_GetItem(ivarim_obj, i);
+        ivarim_list[i] = tmp;
+
+        tmp = PyList_GetItem(jacob_obj, i);
+        tjacob = (struct PyGMix_Jacobian* ) PyArray_DATA(tmp);
+        jacob_list[i] = tjacob;
+    }
+
+
+    admom_multi(
+        admom_conf,
+        im_list,
+        ivarim_list,
+        jacob_list,
+        (int)nimage,
+        wt,
+        res
+   );
+
+    Py_RETURN_NONE;
+}
 
 
 
@@ -5676,6 +6218,7 @@ static PyMethodDef pygauss2d_funcs[] = {
 
     {"admom",(PyCFunction)PyGMix_admom, METH_VARARGS,  "get adaptive moments\n"},
     {"admom_multi",(PyCFunction)PyGMix_admom_multi, METH_VARARGS,  "get adaptive moments\n"},
+    {"admom_multi_deconv",(PyCFunction)PyGMix_admom_multi_deconv, METH_VARARGS,  "get adaptive moments\n"},
 
 
     {"get_cm_Tfactor",        (PyCFunction)PyGMix_get_cm_Tfactor,         METH_VARARGS,  "get T factor for composite model\n"},
