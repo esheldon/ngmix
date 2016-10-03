@@ -24,8 +24,8 @@ class Admom(object):
     """
 
     def __init__(self, obs, maxiter=100, shiftmax=5.0,
-                 etol=1.0e-5, Ttol=0.001):
-        self._set_obs(obs)
+                 etol=1.0e-5, Ttol=0.001, deconv=False):
+        self._set_obs(obs, deconv=deconv)
         self._set_conf(maxiter, shiftmax, etol, Ttol)
         self._set_am_result()
 
@@ -73,17 +73,9 @@ class Admom(object):
 
         gdata = guess_gmix._data
 
-        if len(self._psflist) == 0:
-            _gmix.admom(
-                self.conf,
-                self._imlist[0],
-                self._wtlist[0],
-                self._jlist[0],
-                guess_gmix._data,
-                self.am_result,
-            )
-        else:
-            _gmix.admom_multi(
+
+        if self._deconv:
+            _gmix.admom_multi_deconv(
                 self.conf,
                 self._imlist,
                 self._wtlist,
@@ -92,6 +84,25 @@ class Admom(object):
                 guess_gmix._data,
                 self.am_result,
             )
+        else:
+            if len(self._imlist) > 1:
+                _gmix.admom_multi(
+                    self.conf,
+                    self._imlist,
+                    self._wtlist,
+                    self._jlist,
+                    guess_gmix._data,
+                    self.am_result,
+                )
+            else:
+                _gmix.admom(
+                    self.conf,
+                    self._imlist[0],
+                    self._wtlist[0],
+                    self._jlist[0],
+                    guess_gmix._data,
+                    self.am_result,
+                )
 
         self._copy_result()
 
@@ -121,6 +132,8 @@ class Admom(object):
             res['T'] = pars[4]
             if res['T'] > 0.0:
                 res['e'][:] = res['pars'][2:2+2]/res['T']
+            else:
+                res['flags'] = 0x8
 
             if res['s2n_denom'] > 0:
                 res['s2n'] = res['s2n_numer']/numpy.sqrt(res['s2n_denom'])
@@ -137,15 +150,21 @@ class Admom(object):
                 #    cross=res['err']**2 * scov[2,3]/numpy.sqrt(scov[2,2]*scov[3,3])
                 #    res['e_cov'][0,1] = cross
                 #    res['e_cov'][1,0] = cross
-
+            else:
+                res['flags'] = 0x40
 
         self.result=res
 
-    def _set_obs(self, obs):
+    def _set_obs(self, obs, deconv):
+
+        self._deconv=deconv
+
         imlist=[]
         wtlist=[]
         jlist=[]
-        psflist=[]
+
+        if deconv:
+            psflist=[]
 
         if isinstance(obs,MultiBandObsList):
             mbobs=obs
@@ -154,7 +173,7 @@ class Admom(object):
                     imlist.append(obs.image)
                     wtlist.append(obs.weight)
                     jlist.append(obs.jacobian._data)
-                    if obs.has_psf_gmix():
+                    if deconv and obs.has_psf_gmix():
                         psflist.append(obs.psf.gmix._data)
 
         elif isinstance(obs, ObsList):
@@ -163,25 +182,23 @@ class Admom(object):
                 imlist.append(obs.image)
                 wtlist.append(obs.weight)
                 jlist.append(obs.jacobian._data)
-                if obs.has_psf_gmix():
+                if deconv and obs.has_psf_gmix():
                     psflist.append(obs.psf.gmix._data)
 
         elif isinstance(obs, Observation):
             imlist.append(obs.image)
             wtlist.append(obs.weight)
             jlist.append(obs.jacobian._data)
-            if obs.has_psf_gmix():
+            if deconv and obs.has_psf_gmix():
                 psflist.append(obs.psf.gmix._data)
         else:
             raise ValueError("obs is type '%s' but should be "
                              "Observation, ObsList, or MultiBandObsList")
 
-        if len(psflist) > 0 and len(psflist) != len(imlist):
+        if deconv:
+            if len(psflist) > 0 and len(psflist) != len(imlist):
                 raise ValueError("only some of obs had psf set")
-
-        if len(psflist) == 0 and len(imlist) > 1:
-            raise ValueError("fitting multiple images only supported if "
-                             "you set the psf gmix")
+            self._psflist=psflist
 
         if len(imlist) > 1000:
             raise ValueError("currently limited to 1000 "
@@ -190,7 +207,7 @@ class Admom(object):
         self._imlist=imlist
         self._wtlist=wtlist
         self._jlist=jlist
-        self._psflist=psflist
+
 
     def _set_conf(self, maxiter, shiftmax, etol, Ttol):
         dt=numpy.dtype(_admom_conf_dtype, align=True)
@@ -239,4 +256,5 @@ _admom_flagmap={
     0x8:'T < 0',
     0x10:'determinant near zero',
     0x20:'maxit reached',
+    0x40:'zero var',
 }
