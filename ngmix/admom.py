@@ -27,7 +27,6 @@ class Admom(object):
                  etol=1.0e-5, Ttol=0.001, deconv=False):
         self._set_obs(obs, deconv=deconv)
         self._set_conf(maxiter, shiftmax, etol, Ttol)
-        self._set_am_result()
 
     def get_result(self):
         """
@@ -71,8 +70,7 @@ class Admom(object):
                              "type %s" % type(guess_gmix))
 
 
-        gdata = guess_gmix._data
-
+        am_result=self._get_am_result()
 
         if self._deconv:
             _gmix.admom_multi_deconv(
@@ -82,32 +80,35 @@ class Admom(object):
                 self._psflist,
                 self._jlist,
                 guess_gmix._data,
-                self.am_result,
+                am_result,
             )
         else:
-            if len(self._imlist) > 1:
+            #if len(self._imlist) > 1:
+            if True:
+                #print("using multi")
                 _gmix.admom_multi(
                     self.conf,
                     self._imlist,
                     self._wtlist,
                     self._jlist,
                     guess_gmix._data,
-                    self.am_result,
+                    am_result,
                 )
             else:
+                #print("using single")
                 _gmix.admom(
                     self.conf,
                     self._imlist[0],
                     self._wtlist[0],
                     self._jlist[0],
                     guess_gmix._data,
-                    self.am_result,
+                    am_result,
                 )
 
-        self._copy_result()
+        self._copy_result(am_result)
 
-    def _copy_result(self):
-        ares=self.am_result[0]
+    def _copy_result(self, ares):
+        ares=ares[0]
 
         res={}
         for n in ares.dtype.names:
@@ -220,9 +221,9 @@ class Admom(object):
 
         self.conf=conf
 
-    def _set_am_result(self):
+    def _get_am_result(self):
         dt=numpy.dtype(_admom_result_dtype, align=True)
-        self.am_result=numpy.zeros(1, dtype=dt)
+        return numpy.zeros(1, dtype=dt)
 
 
 _admom_conf_dtype=[
