@@ -25,7 +25,7 @@ class Admom(object):
 
     def __init__(self, obs, maxiter=100, shiftmax=5.0,
                  etol=1.0e-5, Ttol=0.001, deconv=False):
-        self._set_obs(obs, deconv=deconv)
+        self._set_obs(obs, deconv)
         self._set_conf(maxiter, shiftmax, etol, Ttol)
 
     def get_result(self):
@@ -83,8 +83,7 @@ class Admom(object):
                 am_result,
             )
         else:
-            #if len(self._imlist) > 1:
-            if True:
+            if len(self._imlist) > 1:
                 #print("using multi")
                 _gmix.admom_multi(
                     self.conf,
@@ -158,6 +157,7 @@ class Admom(object):
 
     def _set_obs(self, obs, deconv):
 
+        assert deconv==False,"deconv doesn't work yet"
         self._deconv=deconv
 
         imlist=[]
@@ -165,7 +165,7 @@ class Admom(object):
         jlist=[]
 
         if deconv:
-            psflist=[]
+            self._psflist=[]
 
         if isinstance(obs,MultiBandObsList):
             mbobs=obs
@@ -175,7 +175,7 @@ class Admom(object):
                     wtlist.append(obs.weight)
                     jlist.append(obs.jacobian._data)
                     if deconv and obs.has_psf_gmix():
-                        psflist.append(obs.psf.gmix._data)
+                        self._psflist.append(obs.psf.gmix._data)
 
         elif isinstance(obs, ObsList):
             obslist=obs
@@ -184,22 +184,24 @@ class Admom(object):
                 wtlist.append(obs.weight)
                 jlist.append(obs.jacobian._data)
                 if deconv and obs.has_psf_gmix():
-                    psflist.append(obs.psf.gmix._data)
+                    self._psflist.append(obs.psf.gmix._data)
 
         elif isinstance(obs, Observation):
             imlist.append(obs.image)
             wtlist.append(obs.weight)
             jlist.append(obs.jacobian._data)
             if deconv and obs.has_psf_gmix():
-                psflist.append(obs.psf.gmix._data)
+                self._psflist.append(obs.psf.gmix._data)
         else:
             raise ValueError("obs is type '%s' but should be "
                              "Observation, ObsList, or MultiBandObsList")
 
         if deconv:
-            if len(psflist) > 0 and len(psflist) != len(imlist):
-                raise ValueError("only some of obs had psf set")
-            self._psflist=psflist
+            np=len(self._psflist)
+            ni=len(imlist)
+
+            if np != ni:
+                raise ValueError("only some of obs had psf set: %d/%d" % (np,ni))
 
         if len(imlist) > 1000:
             raise ValueError("currently limited to 1000 "

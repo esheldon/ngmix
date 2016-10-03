@@ -4748,7 +4748,7 @@ admom_multi_bail:
 
 
 
-static void admom_multi_nocheck(
+static void admom_multi_deconv_nocheck(
 
           const struct Admom *self,
 
@@ -4844,19 +4844,18 @@ static void admom_multi_nocheck(
                           im_list[j], ivarim_list[j], jacob_list[j],
                           &wt, res);
 
-            /*
             if (res->sums[5] < 0.0) {
                 printf("Fsum: %g\n", res->sums[5]);
                 continue;
             }
-            */
 
             // we need normalized moments to psf correct
+            /*
             if (res->sums[5] <= 0.0) {
-                continue;
-                //res->flags = ADMOM_FAINT;
-                //goto admom_bail;
+                res->flags = ADMOM_FAINT;
+                goto admom_bail;
             }
+            */
 
             M1sum += res->sums[2];
             M2sum += res->sums[3];
@@ -4866,10 +4865,10 @@ static void admom_multi_nocheck(
             // now deconvolved covar, which we will average over
             // the exposures, for the adaptive step
 
+            /*
             M1 = res->sums[2]/res->sums[5];
             M2 = res->sums[3]/res->sums[5];
             T  = res->sums[4]/res->sums[5];
-            /*
             res->flags = admom_get_deconvolved_moments_nocheck(
                 &wt, psf_list[j],
                 M1, M2, T,
@@ -4878,10 +4877,10 @@ static void admom_multi_nocheck(
             */
             res->flags = admom_get_deconvolved_moments_nocheck(
                 &wt, psf_list[j],
-                //res->sums[2], res->sums[3], res->sums[4],
-                M1, M2, T,
-                1.0,
-                //res->sums[5],
+                res->sums[2], res->sums[3], res->sums[4],
+                //M1, M2, T,
+                //1.0,
+                res->sums[5],
                 &tIrrsum, &tIrcsum, &tIccsum
             );
 
@@ -4944,12 +4943,12 @@ static void admom_multi_nocheck(
             // use mean of the deconvolved, adaptive stepped moments
             // from each image
 
-            //Irr = Irrsum0/Fsum;
-            //Irc = Ircsum0/Fsum;
-            //Icc = Iccsum0/Fsum;
-            Irr = Irrsum0/nuse;
-            Irc = Ircsum0/nuse;
-            Icc = Iccsum0/nuse;
+            Irr = Irrsum0/Fsum;
+            Irc = Ircsum0/Fsum;
+            Icc = Iccsum0/Fsum;
+            //Irr = Irrsum0/nuse;
+            //Irc = Ircsum0/nuse;
+            //Icc = Iccsum0/nuse;
             gauss2d_set(&wt, 1.0, wt.row, wt.col, Irr, Irc, Icc);
 
             e1old=e1;
@@ -5085,7 +5084,8 @@ static PyObject * PyGMix_admom_multi_deconv(PyObject* self, PyObject* args) {
     }
 
 
-    admom_multi_deconv(
+    //admom_multi_deconv(
+    admom_multi_deconv_nocheck(
         admom_conf,
         im_list,
         ivarim_list,
