@@ -3818,10 +3818,9 @@ struct AdmomResult {
     int numiter;
 
     int nimage;
+    int npix;
 
     double wsum;
-    double s2n_numer;
-    double s2n_denom;
 
     double sums[6];
 
@@ -3928,6 +3927,7 @@ static void admom_censums(
 
             wdata=weight*data;
 
+            res->npix += 1;
             res->sums[0] += wdata*v;
             res->sums[1] += wdata*u;
             res->sums[5] += wdata;
@@ -3998,11 +3998,8 @@ static void admom_momsums(
             F[4] = umod*umod + vmod*vmod;
             F[5] = 1.0;
 
-
-            // for the s/n sums
-            res->wsum      += weight;
-            res->s2n_numer += wdata*ivar;
-            res->s2n_denom += w2*ivar;
+            res->wsum += weight;
+            res->npix += 1;
 
             for (i=0; i<6; i++) {
                 sums[i] += wdata*F[i];
@@ -4221,6 +4218,7 @@ static void admom(
 
 admom_bail:
 
+    res->nimage=1;
     res->numiter = i;
 
     if (res->numiter==self->maxit) {
@@ -4415,8 +4413,7 @@ static void admom_multi_deconv(
         e1old=-9999, e2old=-9999, Told=-9999.0,
         Irr=0, Irc=0, Icc, M1=0, M2=0, T=0, e1=0, e2=0,
         Irrsum=0, Ircsum=0, Iccsum=0,
-        Irrsum0=0, Ircsum0=0, Iccsum0=0,
-        s2n_numer=0.0, s2n_denom=0.0;
+        Irrsum0=0, Ircsum0=0, Iccsum0=0;
 
     int i=0, j=0;
 
@@ -4468,7 +4465,6 @@ static void admom_multi_deconv(
         // some intermediate values for each image to be
         // calculated and averaged
 
-        s2n_numer=s2n_denom=0;
         Irrsum=Ircsum=Iccsum=0;
         Irrsum0=Ircsum0=Iccsum0=0;
         for (j=0; j<nimage; j++) {
@@ -4514,9 +4510,6 @@ static void admom_multi_deconv(
             Ircsum0 += Irc;
             Iccsum0 += Icc;
 
-            s2n_numer += res->s2n_numer;
-            s2n_denom += res->s2n_denom;
-
             admom_deconvolve(&wt, psf_list[j]);
 
         }
@@ -4552,9 +4545,6 @@ static void admom_multi_deconv(
             res->pars[3] = 2.0*wt.irc;
             res->pars[4] = wt.icc + wt.irr;
             res->pars[5] = res->sums[5]/res->wsum;
-
-            res->s2n_numer=s2n_numer;
-            res->s2n_denom=s2n_denom;
 
             break;
 
@@ -4772,12 +4762,11 @@ static void admom_multi_deconv_nocheck(
         roworig=0, colorig=0,
         e1old=-9999, e2old=-9999, Told=-9999.0,
         Irr=0, Irc=0, Icc,
-        M1=0, M2=0,
+        //M1=0, M2=0,
         T=0, e1=0, e2=0,
         M1sum=0, M2sum=0, Tsum=0, Fsum=0,
         tIrrsum=0, tIrcsum=0, tIccsum=0,
-        Irrsum0=0, Ircsum0=0, Iccsum0=0,
-        s2n_numer=0.0, s2n_denom=0.0;
+        Irrsum0=0, Ircsum0=0, Iccsum0=0;
 
     int i=0, j=0, nuse=0;
 
@@ -4829,7 +4818,6 @@ static void admom_multi_deconv_nocheck(
         // some intermediate values for each image to be
         // calculated and averaged
 
-        s2n_numer=s2n_denom=0;
         Irrsum0=Ircsum0=Iccsum0=0;
         M1sum=M2sum=Tsum=Fsum=0;
         nuse=0;
@@ -4892,9 +4880,6 @@ static void admom_multi_deconv_nocheck(
             Ircsum0 += tIrcsum;
             Iccsum0 += tIccsum;
 
-            s2n_numer += res->s2n_numer;
-            s2n_denom += res->s2n_denom;
-
             admom_deconvolve(&wt, psf_list[j]);
 
             nuse +=1;
@@ -4932,9 +4917,6 @@ static void admom_multi_deconv_nocheck(
             res->pars[3] = 2.0*wt.irc;
             res->pars[4] = wt.icc + wt.irr;
             res->pars[5] = res->sums[5]/res->wsum;
-
-            res->s2n_numer=s2n_numer;
-            res->s2n_denom=s2n_denom;
 
             break;
 

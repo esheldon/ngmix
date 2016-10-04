@@ -118,13 +118,19 @@ class Admom(object):
             else:
                 res[n] = ares[n]
 
-        res['s2n'] = -9999.0
-        res['err'] = 9999.0
-        res['e'] = [-9999.0, -9999.0]
-        res['e_cov'] = numpy.diag( [9999.0]*2 )
+
+        res['flux']  = -9999.0
+        res['s2n']   = -9999.0
+        res['e']     = numpy.array([-9999.0, -9999.0])
+        res['e_err'] = 9999.0
 
         res['flagstr'] = _admom_flagmap[res['flags']]
         if res['flags']==0:
+
+            mean_weight = res['wsum']/res['npix']
+            flux_sum=res['sums'][5]
+            res['flux'] = flux_sum/mean_weight
+
             # now want pars and cov for [cen1,cen2,e1,e2,T,flux]
             sums=res['sums']
 
@@ -135,21 +141,17 @@ class Admom(object):
             else:
                 res['flags'] = 0x8
 
-            if res['s2n_denom'] > 0:
-                res['s2n'] = res['s2n_numer']/numpy.sqrt(res['s2n_denom'])
+            fvar_sum=res['sums_cov'][5,5]
+
+            if fvar_sum > 0.0:
+
+                flux_err = numpy.sqrt(fvar_sum)
+                res['s2n'] = flux_sum/flux_err
 
                 # error on each shape component from BJ02 for gaussians
                 # assumes round
 
-                res['err'] = 2.0/res['s2n']
-                res['e_cov'][:,:] = numpy.diag( [ res['err']**2 ]*2 )
-
-                # very approximate off-diagonal terms
-                #if scov[2,2] > 0 and scov[3,3] > 0:
-                #    scov=res['sums_cov']
-                #    cross=res['err']**2 * scov[2,3]/numpy.sqrt(scov[2,2]*scov[3,3])
-                #    res['e_cov'][0,1] = cross
-                #    res['e_cov'][1,0] = cross
+                res['e_err'] = 2.0/res['s2n']
             else:
                 res['flags'] = 0x40
 
@@ -240,10 +242,9 @@ _admom_result_dtype=[
     ('numiter','i4'),
 
     ('nimage','i4'),
+    ('npix','i4'),
 
     ('wsum','f8'),
-    ('s2n_numer','f8'),
-    ('s2n_denom','f8'),
 
     ('sums','f8',6),
     ('sums_cov','f8', 36),
