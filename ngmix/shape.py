@@ -238,34 +238,6 @@ def e1e2_to_g1g2(e1, e2):
     return g1,g2
 
 
-def g1g2_to_eta1eta2_array(g1, g2):
-    """
-    convert reduced shear g1,g2 to eta
-    """
-    n=g1.size
-
-    g=numpy.sqrt(g1*g1 + g2*g2)
-
-    eta1=numpy.zeros(n) -9999.0
-    eta2=eta1.copy()
-    good = numpy.zeros(n, dtype='i1')
-
-    w,=numpy.where(g < 1.0)
-
-    if w.size > 0:
-
-        eta_w = 2*numpy.arctanh(g[w])
-
-        fac = eta_w/g[w]
-
-        eta1[w] = fac*g1[w]
-        eta2[w] = fac*g2[w]
-
-        good[w] = 1
-
-    return eta1,eta2, good
-
-
 def g1g2_to_eta1eta2(g1, g2):
     """
     convert reduced shear g1,g2 to eta style ellipticity
@@ -281,44 +253,96 @@ def g1g2_to_eta1eta2(g1, g2):
         eta space shapes
     """
 
-    g=numpy.sqrt(g1*g1 + g2*g2)
 
-    if g >= 1.:
-        raise GMixRangeError("g out of bounds: %s converting to eta" % g)
-    if g == 0.0:
-        return (0.0, 0.0)
+    if isinstance(g1, numpy.ndarray):
+        n=g1.size
 
-    eta = 2*numpy.arctanh(g)
+        g=numpy.sqrt(g1*g1 + g2*g2)
+        w,=numpy.where(g >= 1.0)
+        if w.size != 0:
+            raise GMixRangeError("some g were out of bounds")
 
-    fac = eta/g
+        eta1=numpy.zeros(g.size)
+        eta2=eta1.copy()
 
-    eta1 = fac*g1
-    eta2 = fac*g2
-    
+        w,=numpy.where(g > 0.0)
+        if w.size > 0:
+
+            eta = 2*numpy.arctanh(g[w])
+            fac = eta[w]/g[w]
+
+            eta1[w] = fac*g1[w]
+            eta2[w] = fac*g2[w]
+
+    else:
+        g=numpy.sqrt(g1*g1 + g2*g2)
+
+        if g >= 1.:
+            raise GMixRangeError("g out of bounds: %s converting to eta" % g)
+
+        if g == 0.0:
+            eta1, eta2=0.0, 0.0
+        else:
+
+            eta = 2*numpy.arctanh(g)
+
+            fac = eta/g
+
+            eta1 = fac*g1
+            eta2 = fac*g2
+            
     return eta1,eta2
 
-def eta1eta2_to_g1g2_array(eta1,eta2):
+
+def e1e2_to_eta1eta2(e1, e2):
     """
-    Perform the conversion for all elements in an array
+    convert reduced shear e1,e2 to eta style ellipticity
+
+    parameters
+    ----------
+    e1,e2: scalars
+        Reduced shear space shapes
+
+    outputs
+    -------
+    eta1,eta2: tuple of scalars
+        eta space shapes
     """
-    n=eta1.size
-    g1=numpy.zeros(n) - 9999
-    g2=numpy.zeros(n) - 9999
-    good = numpy.zeros(n, dtype='i1')
 
-    eta=numpy.sqrt(eta1*eta1 + eta2*eta2)
 
-    g = numpy.tanh(0.5*eta)
+    if not isinstance(e1, numpy.ndarray):
+        e1=numpy.array(e1, ndim=1, copy=False)
+        e2=numpy.array(e2, ndim=1, copy=False)
+        is_scalar=True
+    else:
+        is_scalar=False
 
-    w,=numpy.where( g < 1.0 )
+    e=numpy.sqrt(e1*e1 + e2*e2)
+    w,=numpy.where(e >= 1.0)
+    if w.size != 0:
+        raise GMixRangeError("some e were out of bounds")
+
+    eta1=numpy.zeros(e.size)
+    eta2=eta1.copy()
+
+    w,=numpy.where(e > 0.0)
     if w.size > 0:
-        fac = g[w]/eta[w]
 
-        g1 = fac*eta1[w]
-        g2 = fac*eta2[w]
-        good[w] = 1
+        eta=numpy.arctanh(e)
+        fac = eta[w]/e[w]
 
-    return g1,g2,good
+        eta1[w] = fac*e1[w]
+        eta2[w] = fac*e2[w]
+
+    if is_scalar:
+        eta1=eta1[0]
+        eta2=eta2[0]
+
+    return eta1,eta2
+
+
+
+
 
 def eta1eta2_to_g1g2(eta1,eta2):
     """
@@ -335,24 +359,32 @@ def eta1eta2_to_g1g2(eta1,eta2):
         Reduced shear space shapes
     """
 
+    if not isinstance(eta1,numpy.ndarray):
+        eta1=numpy.array(eta1, ndmin=1, copy=False)
+        eta2=numpy.array(eta2, ndmin=1, copy=False)
+        is_scalar=True
+    else:
+        is_scalar=False
+
+    g1=numpy.zeros(eta1.size)
+    g2=g1.copy()
+
     eta=numpy.sqrt(eta1*eta1 + eta2*eta2)
 
     g = numpy.tanh(0.5*eta)
 
-    if g >= 1.:
-        raise GMixRangeError("g out of bounds: %s converting "
-                             "from eta1,eta2: %s,%s" % (g,eta1,eta2))
-    if g == 0.0:
-        return (0.0, 0.0)
+    w,=numpy.where( g >= 1.0 )
+    if w.size != 0:
+        raise GMixRangeError("some g were out of bounds")
 
-    fac = g/eta
+    w,=numpy.where( eta != 0.0)
+    if w.size > 0:
+        fac = g[w]/eta[w]
 
-    g1 = fac*eta1
-    g2 = fac*eta2
+        g1[w] = fac*eta1[w]
+        g2[w] = fac*eta2[w]
 
     return g1,g2
-
-
 
 def dgs_by_dgo_jacob(g1, g2, s1, s2):
     """
