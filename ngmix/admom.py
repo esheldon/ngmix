@@ -1,5 +1,6 @@
 from __future__ import print_function
 import numpy
+from numpy import array, diag
 
 from .gmix import GMix, GMixModel
 from .shape import e1e2_to_g1g2
@@ -138,6 +139,25 @@ class Admom(object):
             res['T'] = pars[4]
             if res['T'] > 0.0:
                 res['e'][:] = res['pars'][2:2+2]/res['T']
+
+                sums=res['sums']
+                cov=res['sums_cov']
+                res['e1err'] = 2*get_ratio_error(
+                    sums[2],
+                    sums[4],
+                    cov[2,2],
+                    cov[4,4],
+                    cov[2,4],
+                )
+                res['e2err'] = 2*get_ratio_error(
+                    sums[3],
+                    sums[4],
+                    cov[3,3],
+                    cov[4,4],
+                    cov[3,4],
+                )
+                res['e_cov'] = array(diag([res['e1err']**2, res['e2err']**2]))
+
             else:
                 res['flags'] = 0x8
 
@@ -151,7 +171,7 @@ class Admom(object):
                 # error on each shape component from BJ02 for gaussians
                 # assumes round
 
-                res['e_err'] = 2.0/res['s2n']
+                res['e_err_r'] = 2.0/res['s2n']
             else:
                 res['flags'] = 0x40
 
@@ -228,6 +248,31 @@ class Admom(object):
     def _get_am_result(self):
         dt=numpy.dtype(_admom_result_dtype, align=True)
         return numpy.zeros(1, dtype=dt)
+
+
+def get_ratio_error(a, b, var_a, var_b, cov_ab):
+    """
+    get a/b and error on a/b
+    """
+    from math import sqrt
+
+    var = get_ratio_var(a, b, var_a, var_b, cov_ab)
+
+    error = sqrt(var)
+    return error
+
+def get_ratio_var(a, b, var_a, var_b, cov_ab):
+    """
+    get (a/b)**2 and variance in mean of (a/b)
+    """
+
+    if b==0:
+        raise ValueError("zero in denominator")
+
+    rsq = (a/b)**2
+
+    var = rsq * (  var_a/a**2 + var_b/b**2 - 2*cov_ab/(a*b) )
+    return var
 
 
 _admom_conf_dtype=[
