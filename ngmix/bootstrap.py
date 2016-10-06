@@ -605,8 +605,8 @@ class Bootstrapper(object):
                     if not skip_failed:
                         raise
                     else:
-                        mess=("    failed psf fit band %d obs %d, "
-                              "skipping observation" % (band,i))
+                        mess=("    failed psf fit band %d obs %d: %s.  "
+                              "skipping observation" % (band,i,str(err)))
                         print(mess)
                         continue
 
@@ -654,7 +654,7 @@ class Bootstrapper(object):
             psf_obs.set_gmix(gmix)
 
         else:
-            raise BootPSFFailure("failed to fit psfs")
+            raise BootPSFFailure("failed to fit psfs: %s" % str(res))
 
     def _fit_one_psf_em(self, psf_obs, psf_model, Tguess, ntry, fit_pars):
 

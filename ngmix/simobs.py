@@ -172,9 +172,16 @@ def get_noise_image(weight, **kw):
     """
     add_all=kw.get('add_all',True)
 
-    noise_image = numpy.random.normal(loc=0.0,
-                                      scale=1.0,
-                                      size=weight.shape)
+    if 'rng' in kw:
+        randn=kw['rng'].normal
+    else:
+        randn=numpy.random.normal
+
+    noise_image = randn(
+        loc=0.0,
+        scale=1.0,
+        size=weight.shape,
+    )
 
     err = zeros(weight.shape)
     w=where(weight > 0)

@@ -4524,11 +4524,11 @@ def srandu(num=None, rng=None):
     """
 
     if rng is None:
-        r = numpy.random.random(size=num)
+        randu = numpy.random.uniform
     else:
-        r = rng.uniform(size=num)
-    return 2*(r-0.5)
+        randu = rng.uniform
 
+    return randu(low=-1.0, high=1.0, size=num)
 
 
 class GPriorCosmosSersicSpline(GPriorMErf):

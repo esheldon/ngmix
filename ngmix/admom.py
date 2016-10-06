@@ -1,5 +1,6 @@
 from __future__ import print_function
 import numpy
+from numpy import array, diag
 
 from .gmix import GMix, GMixModel
 from .shape import e1e2_to_g1g2
@@ -24,10 +25,9 @@ class Admom(object):
     """
 
     def __init__(self, obs, maxiter=100, shiftmax=5.0,
-                 etol=1.0e-5, Ttol=0.001):
-        self._set_obs(obs)
+                 etol=1.0e-5, Ttol=0.001, deconv=False):
+        self._set_obs(obs, deconv)
         self._set_conf(maxiter, shiftmax, etol, Ttol)
-        self._set_am_result()
 
     def get_result(self):
         """
@@ -71,32 +71,44 @@ class Admom(object):
                              "type %s" % type(guess_gmix))
 
 
-        gdata = guess_gmix._data
+        am_result=self._get_am_result()
 
-        if len(self._psflist) == 0:
-            _gmix.admom(
-                self.conf,
-                self._imlist[0],
-                self._wtlist[0],
-                self._jlist[0],
-                guess_gmix._data,
-                self.am_result,
-            )
-        else:
-            _gmix.admom_multi(
+        if self._deconv:
+            _gmix.admom_multi_deconv(
                 self.conf,
                 self._imlist,
                 self._wtlist,
                 self._psflist,
                 self._jlist,
                 guess_gmix._data,
-                self.am_result,
+                am_result,
             )
+        else:
+            if len(self._imlist) > 1:
+                #print("using multi")
+                _gmix.admom_multi(
+                    self.conf,
+                    self._imlist,
+                    self._wtlist,
+                    self._jlist,
+                    guess_gmix._data,
+                    am_result,
+                )
+            else:
+                #print("using single")
+                _gmix.admom(
+                    self.conf,
+                    self._imlist[0],
+                    self._wtlist[0],
+                    self._jlist[0],
+                    guess_gmix._data,
+                    am_result,
+                )
 
-        self._copy_result()
+        self._copy_result(am_result)
 
-    def _copy_result(self):
-        ares=self.am_result[0]
+    def _copy_result(self, ares):
+        ares=ares[0]
 
         res={}
         for n in ares.dtype.names:
@@ -107,44 +119,75 @@ class Admom(object):
             else:
                 res[n] = ares[n]
 
-        res['s2n'] = -9999.0
-        res['err'] = 9999.0
-        res['e'] = [-9999.0, -9999.0]
-        res['e_cov'] = numpy.diag( [9999.0]*2 )
+
+        res['flux']  = -9999.0
+        res['s2n']   = -9999.0
+        res['e']     = numpy.array([-9999.0, -9999.0])
+        res['e_err'] = 9999.0
 
         res['flagstr'] = _admom_flagmap[res['flags']]
         if res['flags']==0:
+
+            mean_weight = res['wsum']/res['npix']
+            flux_sum=res['sums'][5]
+            res['flux'] = flux_sum/mean_weight
+
             # now want pars and cov for [cen1,cen2,e1,e2,T,flux]
             sums=res['sums']
 
             pars=res['pars']
-            T = pars[4]
-            if T > 0.0:
-                res['e'][:] = res['pars'][2:2+2]/T
+            res['T'] = pars[4]
+            if res['T'] > 0.0:
+                res['e'][:] = res['pars'][2:2+2]/res['T']
 
-            if res['s2n_denom'] > 0:
-                res['s2n'] = res['s2n_numer']/numpy.sqrt(res['s2n_denom'])
+                sums=res['sums']
+                cov=res['sums_cov']
+                res['e1err'] = 2*get_ratio_error(
+                    sums[2],
+                    sums[4],
+                    cov[2,2],
+                    cov[4,4],
+                    cov[2,4],
+                )
+                res['e2err'] = 2*get_ratio_error(
+                    sums[3],
+                    sums[4],
+                    cov[3,3],
+                    cov[4,4],
+                    cov[3,4],
+                )
+                res['e_cov'] = array(diag([res['e1err']**2, res['e2err']**2]))
+
+            else:
+                res['flags'] = 0x8
+
+            fvar_sum=res['sums_cov'][5,5]
+
+            if fvar_sum > 0.0:
+
+                flux_err = numpy.sqrt(fvar_sum)
+                res['s2n'] = flux_sum/flux_err
 
                 # error on each shape component from BJ02 for gaussians
                 # assumes round
 
-                res['err'] = 2.0/res['s2n']
-                res['e_cov'][:,:] = numpy.diag( [ res['err']**2 ]*2 )
-
-                # very approximate off-diagonal terms
-                scov=res['sums_cov']
-                cross=res['err']**2 * scov[2,3]/numpy.sqrt(scov[2,2]*scov[3,3])
-                res['e_cov'][0,1] = cross
-                res['e_cov'][1,0] = cross
-
+                res['e_err_r'] = 2.0/res['s2n']
+            else:
+                res['flags'] = 0x40
 
         self.result=res
 
-    def _set_obs(self, obs):
+    def _set_obs(self, obs, deconv):
+
+        assert deconv==False,"deconv doesn't work yet"
+        self._deconv=deconv
+
         imlist=[]
         wtlist=[]
         jlist=[]
-        psflist=[]
+
+        if deconv:
+            self._psflist=[]
 
         if isinstance(obs,MultiBandObsList):
             mbobs=obs
@@ -153,8 +196,8 @@ class Admom(object):
                     imlist.append(obs.image)
                     wtlist.append(obs.weight)
                     jlist.append(obs.jacobian._data)
-                    if obs.has_psf_gmix():
-                        psflist.append(obs.psf.gmix._data)
+                    if deconv and obs.has_psf_gmix():
+                        self._psflist.append(obs.psf.gmix._data)
 
         elif isinstance(obs, ObsList):
             obslist=obs
@@ -162,25 +205,25 @@ class Admom(object):
                 imlist.append(obs.image)
                 wtlist.append(obs.weight)
                 jlist.append(obs.jacobian._data)
-                if obs.has_psf_gmix():
-                    psflist.append(obs.psf.gmix._data)
+                if deconv and obs.has_psf_gmix():
+                    self._psflist.append(obs.psf.gmix._data)
 
         elif isinstance(obs, Observation):
             imlist.append(obs.image)
             wtlist.append(obs.weight)
             jlist.append(obs.jacobian._data)
-            if obs.has_psf_gmix():
-                psflist.append(obs.psf.gmix._data)
+            if deconv and obs.has_psf_gmix():
+                self._psflist.append(obs.psf.gmix._data)
         else:
             raise ValueError("obs is type '%s' but should be "
                              "Observation, ObsList, or MultiBandObsList")
 
-        if len(psflist) > 0 and len(psflist) != len(imlist):
-                raise ValueError("only some of obs had psf set")
+        if deconv:
+            np=len(self._psflist)
+            ni=len(imlist)
 
-        if len(psflist) == 0 and len(imlist) > 1:
-            raise ValueError("fitting multiple images only supported if "
-                             "you set the psf gmix")
+            if np != ni:
+                raise ValueError("only some of obs had psf set: %d/%d" % (np,ni))
 
         if len(imlist) > 1000:
             raise ValueError("currently limited to 1000 "
@@ -189,7 +232,7 @@ class Admom(object):
         self._imlist=imlist
         self._wtlist=wtlist
         self._jlist=jlist
-        self._psflist=psflist
+
 
     def _set_conf(self, maxiter, shiftmax, etol, Ttol):
         dt=numpy.dtype(_admom_conf_dtype, align=True)
@@ -202,9 +245,34 @@ class Admom(object):
 
         self.conf=conf
 
-    def _set_am_result(self):
+    def _get_am_result(self):
         dt=numpy.dtype(_admom_result_dtype, align=True)
-        self.am_result=numpy.zeros(1, dtype=dt)
+        return numpy.zeros(1, dtype=dt)
+
+
+def get_ratio_error(a, b, var_a, var_b, cov_ab):
+    """
+    get a/b and error on a/b
+    """
+    from math import sqrt
+
+    var = get_ratio_var(a, b, var_a, var_b, cov_ab)
+
+    error = sqrt(var)
+    return error
+
+def get_ratio_var(a, b, var_a, var_b, cov_ab):
+    """
+    get (a/b)**2 and variance in mean of (a/b)
+    """
+
+    if b==0:
+        raise ValueError("zero in denominator")
+
+    rsq = (a/b)**2
+
+    var = rsq * (  var_a/a**2 + var_b/b**2 - 2*cov_ab/(a*b) )
+    return var
 
 
 _admom_conf_dtype=[
@@ -219,10 +287,9 @@ _admom_result_dtype=[
     ('numiter','i4'),
 
     ('nimage','i4'),
+    ('npix','i4'),
 
     ('wsum','f8'),
-    ('s2n_numer','f8'),
-    ('s2n_denom','f8'),
 
     ('sums','f8',6),
     ('sums_cov','f8', 36),
@@ -238,4 +305,5 @@ _admom_flagmap={
     0x8:'T < 0',
     0x10:'determinant near zero',
     0x20:'maxit reached',
+    0x40:'zero var',
 }
