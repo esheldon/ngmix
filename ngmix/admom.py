@@ -258,6 +258,8 @@ def get_ratio_error(a, b, var_a, var_b, cov_ab):
 
     var = get_ratio_var(a, b, var_a, var_b, cov_ab)
 
+    if var < 0:
+        var=0
     error = sqrt(var)
     return error
 
