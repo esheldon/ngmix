@@ -7,24 +7,36 @@ from .shape import e1e2_to_g1g2
 from .observation import Observation, ObsList, MultiBandObsList
 from . import _gmix
 
+def run_admom(obs, guess, **kw):
+    am=Admom(obs, **kw)
+
+    am.go(guess)
+
+    return am
+
 class Admom(object):
     """
-    for now use default tolerances set to
-    that of the fortran code, for comparison
+    Measure adaptive moments for the input observation
 
     parameters
     ----------
     obs: Observation
         ngmix.Observation
     maxiter: integer, optional
-        Maximum number of iterations
+        Maximum number of iterations, default 200
     etol: float, optional
-        absolute tolerance in e1 or e2 to determine convergence
+        absolute tolerance in e1 or e2 to determine convergence,
+        default 1.0e-5
     Ttol: float, optional
-        relative tolerance in T to determine convergence
+        relative tolerance in T <x^2> + <y^2> to determine
+        convergence, default 1.0e-3
+    shiftmax: float, optional
+        Largest allowed shift in the centroid, relative to
+        the initial guess.  Default 5.0 (5 pixels if the jacobian
+        scale is 1)
     """
 
-    def __init__(self, obs, maxiter=100, shiftmax=5.0,
+    def __init__(self, obs, maxiter=200, shiftmax=5.0,
                  etol=1.0e-5, Ttol=0.001, deconv=False):
         self._set_obs(obs, deconv)
         self._set_conf(maxiter, shiftmax, etol, Ttol)
@@ -56,19 +68,24 @@ class Admom(object):
 
         return GMixModel(pars, "gauss")
 
-    def go(self, guess_gmix):
+    def go(self, guess):
         """
         run the adpative moments
 
         parameters
         ----------
-        guess_gmix: ngmix.GMix
-            A guess for the fitter.
+        guess_gmix: ngmix.GMix or a float
+            A guess for the fitter.  Can be a full gaussian
+            mixture or a single value for T, in which case
+            the rest of the parameters are random numbers
+            about the jacobian center and zero ellipticity
         """
 
-        if not isinstance(guess_gmix,GMix):
-            raise ValueError("guess should be GMix, but got "
-                             "type %s" % type(guess_gmix))
+        if isinstance(guess,GMix):
+            guess_gmix=guess
+        else:
+            Tguess = guess
+            guess_gmix = self._generate_guess(Tguess)
 
 
         am_result=self._get_am_result()
@@ -249,6 +266,20 @@ class Admom(object):
         dt=numpy.dtype(_admom_result_dtype, align=True)
         return numpy.zeros(1, dtype=dt)
 
+    def _generate_guess(self, Tguess):
+        from numpy.random import uniform as urand
+        from .gmix import GMixModel
+
+        scale=self._jlist[0]['sdet'][0]
+        pars=[
+            urand(low=-0.1*scale, high=0.1*scale), 
+            urand(low=-0.1*scale, high=0.1*scale), 
+            urand(low=-0.1, high=0.1),
+            urand(low=-0.1, high=0.1),
+            Tguess*(1.0 + urand(low=-0.1, high=0.1) ),
+            1.0,
+        ]
+        return GMixModel(pars, "gauss")
 
 def get_ratio_error(a, b, var_a, var_b, cov_ab):
     """

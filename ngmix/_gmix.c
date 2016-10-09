@@ -4042,14 +4042,14 @@ static int take_adaptive_step(
     // measured moments
     detm = Irr*Icc - Irc*Irc;
     if (detm <= PYGMIX_LOW_DETVAL) {
-        printf("detm too small: %g\n", detm);
+        //printf("detm too small: %g\n", detm);
         flags=ADMOM_DET;
         goto adaptive_step_bail;
     }
 
     detw = Wrr*Wcc - Wrc*Wrc;
     if (detw <= PYGMIX_LOW_DETVAL) {
-        printf("detw too small: %g\n", detw);
+        //printf("detw too small: %g\n", detw);
         flags=ADMOM_DET;
         goto adaptive_step_bail;
     }
@@ -4064,7 +4064,7 @@ static int take_adaptive_step(
     detn = Nrr*Ncc - Nrc*Nrc;
 
     if (detn <= PYGMIX_LOW_DETVAL) {
-        printf("detn too small: %g\n", detn);
+        //printf("detn too small: %g\n", detn);
         flags=ADMOM_DET;
         goto adaptive_step_bail;
     }
