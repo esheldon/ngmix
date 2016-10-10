@@ -4197,7 +4197,8 @@ static void admom(
             res->pars[2] = wt.icc - wt.irr;
             res->pars[3] = 2.0*wt.irc;
             res->pars[4] = wt.icc + wt.irr;
-            res->pars[5] = res->sums[5]/res->wsum;
+            //res->pars[5] = res->sums[5]/res->wsum;
+            res->pars[5] = 1.0;
 
             break;
 
@@ -4545,7 +4546,8 @@ static void admom_multi_deconv(
             res->pars[2] = wt.icc - wt.irr;
             res->pars[3] = 2.0*wt.irc;
             res->pars[4] = wt.icc + wt.irr;
-            res->pars[5] = res->sums[5]/res->wsum;
+            //res->pars[5] = res->sums[5]/res->wsum;
+            res->pars[5] = 1.0;
 
             break;
 
