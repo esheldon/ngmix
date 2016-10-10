@@ -191,7 +191,7 @@ class Admom(object):
                         not numpy.isfinite(res['e2err'])):
                     res['e1err']=9999.0
                     res['e2err']=9999.0
-                    res['e_cov']=array(diag(9999.0,9999.0))
+                    res['e_cov']=array(diag( [9999.0,9999.0] ))
                 else:
                     res['e_cov'] = array(diag([res['e1err']**2, res['e2err']**2]))
 
