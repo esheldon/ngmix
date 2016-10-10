@@ -311,9 +311,9 @@ def copy_result(ares):
                     not numpy.isfinite(res['e2err'])):
                 res['e1err']=9999.0
                 res['e2err']=9999.0
-                res['e_cov']=array(diag(9999.0,9999.0))
+                res['e_cov']=diag( [9999.0,9999.0] )
             else:
-                res['e_cov'] = array(diag([res['e1err']**2, res['e2err']**2]))
+                res['e_cov'] = diag([res['e1err']**2, res['e2err']**2])
 
         else:
             res['flags'] = 0x8
