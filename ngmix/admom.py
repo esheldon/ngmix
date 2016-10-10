@@ -6,6 +6,7 @@ from .gmix import GMix, GMixModel
 from .shape import e1e2_to_g1g2
 from .observation import Observation, ObsList, MultiBandObsList
 from . import _gmix
+from .gexceptions import GMixRangeError
 
 def run_admom(obs, guess, **kw):
     am=Admom(obs, **kw)
@@ -87,44 +88,56 @@ class Admom(object):
             Tguess = guess
             guess_gmix = self._generate_guess(Tguess)
 
+        res=self._go(guess_gmix)
 
-        am_result=self._get_am_result()
 
-        if self._deconv:
-            _gmix.admom_multi_deconv(
-                self.conf,
-                self._imlist,
-                self._wtlist,
-                self._psflist,
-                self._jlist,
-                guess_gmix._data,
-                am_result,
-            )
-        else:
-            if len(self._imlist) > 1:
-                #print("using multi")
-                _gmix.admom_multi(
+    def _go(self, guess_gmix):
+
+        ares=self._get_am_result()
+
+        try:
+            if self._deconv:
+                _gmix.admom_multi_deconv(
                     self.conf,
                     self._imlist,
                     self._wtlist,
+                    self._psflist,
                     self._jlist,
                     guess_gmix._data,
-                    am_result,
+                    ares,
                 )
             else:
-                #print("using single")
-                _gmix.admom(
-                    self.conf,
-                    self._imlist[0],
-                    self._wtlist[0],
-                    self._jlist[0],
-                    guess_gmix._data,
-                    am_result,
-                )
+                if len(self._imlist) > 1:
+                    #print("using multi")
+                    _gmix.admom_multi(
+                        self.conf,
+                        self._imlist,
+                        self._wtlist,
+                        self._jlist,
+                        guess_gmix._data,
+                        ares,
+                    )
+                else:
+                    #print("using single")
+                    _gmix.admom(
+                        self.conf,
+                        self._imlist[0],
+                        self._wtlist[0],
+                        self._jlist[0],
+                        guess_gmix._data,
+                        ares,
+                    )
 
-        self._copy_result(am_result)
+        except GMixRangeError:
+            pass
+
+        self._copy_result(ares)
 
     def _copy_result(self, ares):
+        """
+        copy the result structure to a dict, and
+        calculate a few more things
+        """
         ares=ares[0]
 
         res={}
@@ -173,7 +186,14 @@ class Admom(object):
                     cov[4,4],
                     cov[3,4],
                 )
-                res['e_cov'] = array(diag([res['e1err']**2, res['e2err']**2]))
+
+                if (not numpy.isfinite(res['e1err']) or
+                        not numpy.isfinite(res['e2err'])):
+                    res['e1err']=9999.0
+                    res['e2err']=9999.0
+                    res['e_cov']=array(diag(9999.0,9999.0))
+                else:
+                    res['e_cov'] = array(diag([res['e1err']**2, res['e2err']**2]))
 
             else:
                 res['flags'] = 0x8
