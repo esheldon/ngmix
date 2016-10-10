@@ -131,88 +131,7 @@ class Admom(object):
         except GMixRangeError:
             pass
 
-        self._copy_result(ares)
-
-    def _copy_result(self, ares):
-        """
-        copy the result structure to a dict, and
-        calculate a few more things
-        """
-        ares=ares[0]
-
-        res={}
-        for n in ares.dtype.names:
-            if n == 'sums':
-                res[n] = ares[n].copy()
-            elif n=='sums_cov':
-                res[n] = ares[n].reshape( (6,6)).copy()
-            else:
-                res[n] = ares[n]
-
-
-        res['flux']  = -9999.0
-        res['s2n']   = -9999.0
-        res['e']     = numpy.array([-9999.0, -9999.0])
-        res['e_err'] = 9999.0
-
-        res['flagstr'] = _admom_flagmap[res['flags']]
-        if res['flags']==0:
-
-            mean_weight = res['wsum']/res['npix']
-            flux_sum=res['sums'][5]
-            res['flux'] = flux_sum/mean_weight
-
-            # now want pars and cov for [cen1,cen2,e1,e2,T,flux]
-            sums=res['sums']
-
-            pars=res['pars']
-            res['T'] = pars[4]
-            if res['T'] > 0.0:
-                res['e'][:] = res['pars'][2:2+2]/res['T']
-
-                sums=res['sums']
-                cov=res['sums_cov']
-                res['e1err'] = 2*get_ratio_error(
-                    sums[2],
-                    sums[4],
-                    cov[2,2],
-                    cov[4,4],
-                    cov[2,4],
-                )
-                res['e2err'] = 2*get_ratio_error(
-                    sums[3],
-                    sums[4],
-                    cov[3,3],
-                    cov[4,4],
-                    cov[3,4],
-                )
-
-                if (not numpy.isfinite(res['e1err']) or
-                        not numpy.isfinite(res['e2err'])):
-                    res['e1err']=9999.0
-                    res['e2err']=9999.0
-                    res['e_cov']=array(diag(9999.0,9999.0))
-                else:
-                    res['e_cov'] = array(diag([res['e1err']**2, res['e2err']**2]))
-
-            else:
-                res['flags'] = 0x8
-
-            fvar_sum=res['sums_cov'][5,5]
-
-            if fvar_sum > 0.0:
-
-                flux_err = numpy.sqrt(fvar_sum)
-                res['s2n'] = flux_sum/flux_err
-
-                # error on each shape component from BJ02 for gaussians
-                # assumes round
-
-                res['e_err_r'] = 2.0/res['s2n']
-            else:
-                res['flags'] = 0x40
-
-        self.result=res
+        self.result = copy_result(ares)
 
     def _set_obs(self, obs, deconv):
 
@@ -327,6 +246,93 @@ def get_ratio_var(a, b, var_a, var_b, cov_ab):
     var = rsq * (  var_a/a**2 + var_b/b**2 - 2*cov_ab/(a*b) )
     return var
 
+
+def copy_result(ares):
+    """
+    copy the result structure to a dict, and
+    calculate a few more things
+    """
+
+    if isinstance(ares, numpy.ndarray):
+        ares=ares[0]
+        names = ares.dtype.names
+    else:
+        names = list(ares.keys())
+
+    res={}
+    for n in names:
+        if n == 'sums':
+            res[n] = ares[n].copy()
+        elif n=='sums_cov':
+            res[n] = ares[n].reshape( (6,6)).copy()
+        else:
+            res[n] = ares[n]
+
+
+    res['flux']  = -9999.0
+    res['s2n']   = -9999.0
+    res['e']     = numpy.array([-9999.0, -9999.0])
+    res['e_err'] = 9999.0
+
+    res['flagstr'] = _admom_flagmap[res['flags']]
+    if res['flags']==0:
+
+        mean_weight = res['wsum']/res['npix']
+        flux_sum=res['sums'][5]
+        res['flux'] = flux_sum/mean_weight
+        res['pars'][5] = res['flux']
+
+        # now want pars and cov for [cen1,cen2,e1,e2,T,flux]
+        sums=res['sums']
+
+        pars=res['pars']
+        res['T'] = pars[4]
+        if res['T'] > 0.0:
+            res['e'][:] = res['pars'][2:2+2]/res['T']
+
+            sums=res['sums']
+            cov=res['sums_cov']
+            res['e1err'] = 2*get_ratio_error(
+                sums[2],
+                sums[4],
+                cov[2,2],
+                cov[4,4],
+                cov[2,4],
+            )
+            res['e2err'] = 2*get_ratio_error(
+                sums[3],
+                sums[4],
+                cov[3,3],
+                cov[4,4],
+                cov[3,4],
+            )
+
+            if (not numpy.isfinite(res['e1err']) or
+                    not numpy.isfinite(res['e2err'])):
+                res['e1err']=9999.0
+                res['e2err']=9999.0
+                res['e_cov']=array(diag(9999.0,9999.0))
+            else:
+                res['e_cov'] = array(diag([res['e1err']**2, res['e2err']**2]))
+
+        else:
+            res['flags'] = 0x8
+
+        fvar_sum=res['sums_cov'][5,5]
+
+        if fvar_sum > 0.0:
+
+            flux_err = numpy.sqrt(fvar_sum)
+            res['s2n'] = flux_sum/flux_err
+
+            # error on each shape component from BJ02 for gaussians
+            # assumes round
+
+            res['e_err_r'] = 2.0/res['s2n']
+        else:
+            res['flags'] = 0x40
+
+    return res
 
 _admom_conf_dtype=[
     ('maxit','i4'),
