@@ -756,6 +756,7 @@ class GMix(object):
             'pars_cov':pcov,
 
             'wsum':wsum,
+            'npix':obs.image.size,
 
             's2n_numer_sum':s2n_numer,
             's2n_denom_sum':s2n_denom,
