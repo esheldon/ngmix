@@ -111,6 +111,9 @@ def _add_obs_images(obs1, obs2):
 
 
 def _doadd_single_obs(obs, nobs):
+    obs.image_orig = obs.image.copy()
+    obs.weight_orig = obs.weight.copy()
+
     im  = obs.image
     nim = nobs.image
 
