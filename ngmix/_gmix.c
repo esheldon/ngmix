@@ -197,16 +197,18 @@ static int gmix_get_e1e2T(struct PyGMix_Gauss2D *gmix,
    not care that det < 0, so we don't always evaluate
 */
 
-static int gauss2d_set_norm(struct PyGMix_Gauss2D *self)
+static int gauss2d_set_norm(struct PyGMix_Gauss2D *self, int dothrow)
 {
     int status=0;
     double idet=0;
     if (self->det < PYGMIX_LOW_DETVAL) {
 
         // PyErr_Format doesn't format floats
-        char detstr[25];
-        snprintf(detstr,24,"%g", self->det);
-        PyErr_Format(GMixRangeError, "gauss2d det too low: %s", detstr);
+        if (dothrow) {
+            char detstr[25];
+            snprintf(detstr,24,"%g", self->det);
+            PyErr_Format(GMixRangeError, "gauss2d det too low: %s", detstr);
+        }
         status=0;
 
     } else {
@@ -226,6 +228,12 @@ static int gauss2d_set_norm(struct PyGMix_Gauss2D *self)
     return status;
 
 }
+
+static int gauss2d_set_norm_throw(struct PyGMix_Gauss2D *self)
+{
+    return gauss2d_set_norm(self, 1);
+}
+
 static int gauss2d_set(struct PyGMix_Gauss2D *self,
                        double p,
                        double row,
@@ -400,7 +408,7 @@ static int gmix_set_norms(struct PyGMix_Gauss2D *self,
 
     for (i=0; i<n_gauss; i++) {
 
-        status=gauss2d_set_norm(&self[i]);
+        status=gauss2d_set_norm_throw(&self[i]);
 
         // an exception will be set
         if (!status) {
@@ -2127,10 +2135,10 @@ static PyObject * PyGMix_get_kweighted_moments_2gauss(PyObject* self, PyObject* 
     gauss2d_set(&gauss1, 1.0, 0.0, 0.0, sigmasq1, 0.0, sigmasq1);
     gauss2d_set(&gauss2, 1.0, 0.0, 0.0, sigmasq2, 0.0, sigmasq2);
 
-    if (!gauss2d_set_norm(&gauss1)) {
+    if (!gauss2d_set_norm_throw(&gauss1)) {
         return NULL;
     }
-    if (!gauss2d_set_norm(&gauss2)) {
+    if (!gauss2d_set_norm_throw(&gauss2)) {
         return NULL;
     }
 
@@ -2280,20 +2288,9 @@ static PyObject * PyGMix_get_kweighted_moments_gauss(PyObject* self, PyObject* a
     pcov=PyArray_DATA(pcov_obj); // [6,6]
 
     gauss2d_set(&gauss, 1.0, 0.0, 0.0, sigma_sq, 0.0, sigma_sq);
-    if (!gauss2d_set_norm(&gauss)) {
+    if (!gauss2d_set_norm_throw(&gauss)) {
         return NULL;
     }
-    /*
-    gauss2d_set(&gauss1, 1.0, 0.0, 0.0, sigmasq1, 0.0, sigmasq1);
-    gauss2d_set(&gauss2, 1.0, 0.0, 0.0, sigmasq2, 0.0, sigmasq2);
-
-    if (!gauss2d_set_norm(&gauss1)) {
-        return NULL;
-    }
-    if (!gauss2d_set_norm(&gauss2)) {
-        return NULL;
-    }
-    */
 
     for (row=0; row < n_row; row++) {
         for (col=0; col < n_col; col++) {
@@ -3529,7 +3526,7 @@ int em_set_gmix_from_sums(struct PyGMix_Gauss2D *gmix,
                            sum->uvsum*pinv,
                            sum->u2sum*pinv);
 
-        status=gauss2d_set_norm(gauss);
+        status=gauss2d_set_norm_throw(gauss);
 
         // an exception will be set
         if (!status) {
@@ -4133,7 +4130,8 @@ static void admom(
 
     for (i=0; i<self->maxit; i++) {
 
-        if (!gauss2d_set_norm(&wt) ) {
+        // not throwing an exception
+        if (!gauss2d_set_norm(&wt,0) ) {
             res->flags |= ADMOM_DET;
             goto admom_bail;
         }
@@ -4390,6 +4388,7 @@ static int admom_set_norm(struct PyGMix_Gauss2D *self)
 
 }
 
+/*
 static void admom_multi_deconv(
 
           const struct Admom *self,
@@ -4585,10 +4584,8 @@ admom_bail:
 
     return;
 }
-
-/*
-   no deconvolution
 */
+
 static void admom_multi(
 
           const struct Admom *self,
@@ -4624,7 +4621,7 @@ static void admom_multi(
 
     for (i=0; i<self->maxit; i++) {
 
-        if (!gauss2d_set_norm(&wt) ) {
+        if (!gauss2d_set_norm(&wt,0) ) {
             res->flags |= ADMOM_DET;
             goto admom_multi_bail;
         }
