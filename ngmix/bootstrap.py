@@ -1764,11 +1764,13 @@ class PSFRunner(object):
     I never use "round_T"
     """
     def __init__(self, obs, model, Tguess, lm_pars,
+                 prior=None,
                  intpars=None, use_round_T=False):
 
         self.obs=obs
         self.intpars=intpars
         self.use_round_T=use_round_T
+        self.prior=prior
 
         mess="psf model should be turb or gauss,got '%s'" % model
         assert model in ['turb','gauss'],mess
@@ -1793,6 +1795,7 @@ class PSFRunner(object):
 
             fitter=LMSimple(self.obs,self.model,lm_pars=self.lm_pars,
                             use_round_T=self.use_round_T,
+                            prior=self.prior,
                             npoints=npoints)
             fitter.go(guess)
 
