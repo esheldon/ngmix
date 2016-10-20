@@ -30,6 +30,7 @@ from .priors import LOWVAL, BIGVAL
 
 from .gexceptions import GMixRangeError, GMixFatalError
 
+from . import observation
 from .observation import Observation,ObsList,MultiBandObsList,get_mb_obs
 
 from . import stats
@@ -1601,6 +1602,7 @@ _default_lm_pars={'maxfev':4000,
                   'ftol': 1.0e-5,
                   'xtol': 1.0e-5}
 
+
 class LMSimple(FitterBase):
     """
     A class for doing a fit using levenberg marquardt
@@ -1625,10 +1627,12 @@ class LMSimple(FitterBase):
         else:
             self.n_prior_pars=1 + 1 + 1 + 1 + self.nband
 
-        self.fdiff_size=self.totpix + self.n_prior_pars
+        self._set_fdiff_size()
 
         self._band_pars=zeros(6)
 
+    def _set_fdiff_size(self):
+        self.fdiff_size=self.totpix + self.n_prior_pars
 
     def run_lm(self, guess):
         """
@@ -1781,6 +1785,211 @@ class LMSimple(FitterBase):
             nprior=self.prior.fill_fdiff(pars, fdiff)
 
         return nprior
+
+
+class LMGaussK(LMSimple):
+    """
+    LM fitter in k space, just a gaussian for now, no deconvolution
+    """
+    def __init__(self, obs,  **keys):
+        model="gauss"
+        super(LMGaussK,self).__init__(obs, model, **keys)
+
+    def set_obs(self, obs_in, **keys):
+        """
+        Input should be an Observation, ObsList, or MultiBandObsList
+        """
+
+        if isinstance(obs_in, (Observation, ObsList, MultiBandObsList)):
+            kobs = observation.make_kobs(obs_in, **self.keys)
+        else:
+            kobs = observation.get_kmb_obs(obs_in)
+
+        self.mb_kobs = kobs
+        self.nband=len(kobs)
+
+    def _set_fdiff_size(self):
+        # we have 2*totpix, since we use both real and imaginary 
+        # parts
+        self.fdiff_size = self.n_prior_pars + 2*self.totpix
+
+    def _init_gmix_all(self, pars):
+        """
+        input pars are in linear space
+
+        initialize the list of lists of gaussian mixtures
+        """
+
+        gmix_all  = MultiBandGMixList()
+
+        for band,kobs_list in enumerate(self.mb_kobs):
+            gmix_list=GMixList()
+
+            # pars for this band, in linear space
+            band_pars=self.get_band_pars(pars, band)
+
+            for i in xrange(len(kobs_list)):
+                gm = self._make_model(band_pars)
+
+                gmix_list.append(gm)
+
+            gmix_all.append(gmix_list)
+
+        self._gmix_all  = gmix_all
+
+    def _fill_gmix_all(self, pars):
+        """
+        Fill the list of lists of gmix objects for the given parameters
+        """
+
+        for band,kobs_list in enumerate(self.mb_kobs):
+            gmix_list=self._gmix_all[band]
+
+            # pars for this band, in linear space
+            band_pars=self.get_band_pars(pars, band)
+
+            for i in xrange(len(kobs_list)):
+
+                gm=gmix_list[i]
+
+                try:
+                    _gmix.gmix_fill(gm._data, band_pars, gm._model)
+                except ZeroDivisionError:
+                    raise GMixRangeError("zero division")
+
+    def _calc_fdiff(self, pars_in, more=False):
+        """
+
+        vector with (model-data)/error.
+
+        The npars elements contain -ln(prior)
+        """
+
+        # we cannot keep sending existing array into leastsq, don't know why
+        fdiff=zeros(self.fdiff_size)
+
+        try:
+
+            s2n_sum=0.0
+            npix = 0
+
+            T = pars_in[4]
+            if T <= 0.0:
+                raise GMixRangeError("T too small: %g" % T)
+            
+            # we do centering in k space as phase shifts
+            # also, convert T and flux to k space
+            pars=pars_in.copy()
+            rowshift=pars_in[0]
+            colshift=pars_in[1]
+
+            scale=self.mb_kobs[0][0].kr.scale
+
+            pars[0] = 0.0
+            pars[1] = 0.0
+            pars[4] = 4.0/T
+
+            # parseval's theorem, plus scale
+            # all get same scale
+            #print("scale:",scale)
+
+            fac = T*sqrt(self.totpix)*scale**2
+            pars[5:] *= fac
+            #1.0/(2*numpy.pi*sqrt(self.totpix))#*scale
+
+            self._fill_gmix_all(pars)
+
+            start=self._fill_priors(pars, fdiff)
+
+            for band in xrange(self.nband):
+
+                kobs_list=self.mb_kobs[band]
+                gmix_list=self._gmix_all[band]
+
+                for kobs,gm in zip(kobs_list, gmix_list):
+
+                    gmdata=gm._get_gmix_data()
+                    ts2n_sum, tnpix = _gmix.fill_fdiffk(
+                        gmdata,
+                        kobs.kr.array,
+                        kobs.ki.array,
+                        kobs.weight.array,
+                        kobs.jacobian._data,
+                        fdiff,
+                        rowshift,
+                        colshift,
+                        start,
+                    )
+
+                    s2n_sum += ts2n_sum
+                    npix += tnpix
+
+                    # skip 2*image size since we account for both
+                    # real and imaginary
+                    start += 2*kobs.kr.array.size
+
+        except GMixRangeError as err:
+            fdiff[:] = LOWVAL
+            s2n_sum=0.0
+
+        if more:
+            return {'fdiff':fdiff,
+                    's2n_sum':s2n_sum,
+                    'npix':npix}
+        else:
+            return fdiff
+
+    def get_fit_stats(self, pars):
+        """
+        Get some fit statistics for the input pars.
+
+        pars must be in the log scaling!
+        """
+        npars=self.npars
+
+        res=self._calc_fdiff(pars, more=True)
+
+        if res['s2n_sum'] > 0:
+            s2n=sqrt(res['s2n_sum'])
+        else:
+            s2n=0.0
+
+        res['s2n_w']   = s2n
+
+        return res
+
+    def _set_totpix(self):
+        """
+        Make sure the data are consistent.
+        """
+
+        totpix=0
+        for kobs_list in self.mb_kobs:
+            for kobs in kobs_list:
+                shape=kobs.kr.array.shape
+                totpix += shape[0]*shape[1]
+
+        self.totpix=totpix
+
+    def get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+        """
+        from . import moments
+
+        pars=self._band_pars
+
+        if self.use_logpars:
+            _gmix.convert_simple_double_logpars_band(pars_in, pars, band)
+        else:
+            pars[0:5] = pars_in[0:5]
+            pars[5] = pars_in[5+band]
+
+        pars[4] = moments.get_T(pars[4], pars[2], pars[3])
+
+        return pars
+
+
 
 class GalsimPSF(LMSimple):
     """
