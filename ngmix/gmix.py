@@ -544,51 +544,6 @@ class GMix(object):
                 's2n_denom':s2n_denom,
                 'npix':npix}
 
-
-    def fill_fdiffk(self, kobs, fdiff, start=0):
-        """
-        Fill fdiff=(model-data)/err given the input Observation
-
-        parameters
-        ----------
-        obs: Observation
-            The Observation to compare with. See ngmix.observation.Observation
-            The Observation must have a weight map set
-        fdiff: 1-d array
-            The fdiff to fill
-        start: int, optional
-            Where to start in the array, default 0
-        """
-
-        if obs.jacobian is not None:
-            assert isinstance(obs.jacobian,Jacobian)
-
-        if not nocheck:
-            fdiff = numpy.ascontiguousarray(fdiff, dtype='f8')
-
-        nuse=fdiff.size-start
-
-        image=obs.image
-        if nuse < image.size:
-            raise ValueError("fdiff from start must have "
-                             "len >= %d, got %d" % (image.size,nuse))
-        assert nsub >= 1,"nsub must be >= 1"
-
-        gm=self._get_gmix_data()
-
-        s2n_numer,s2n_denom,npix=_gmix.fill_fdiff(gm,
-                                                  image,
-                                                  obs.weight,
-                                                  obs.jacobian._data,
-                                                  fdiff,
-                                                  start)
-
-        return {'s2n_numer':s2n_numer,
-                's2n_denom':s2n_denom,
-                'npix':npix}
-
-
-
     def __call__(self, row, col, jacobian=None):
         """
         evaluate the mixture at the specified location
