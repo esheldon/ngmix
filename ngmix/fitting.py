@@ -20,6 +20,7 @@ from numpy.linalg import LinAlgError
 import time
 from pprint import pprint, pformat
 
+from . import shape
 from . import gmix
 from .gmix import GMix, GMixList, MultiBandGMixList
 
@@ -1848,6 +1849,54 @@ class LMGaussK(LMSimple):
             # pars for this band, in linear space
             band_pars=self.get_band_pars(pars, band)
 
+            g1 = band_pars[2]
+            g2 = band_pars[3]
+            T = band_pars[4]
+            e1,e2 = shape.g1g2_to_e1e2(g1, g2)
+
+            Thalf = 0.5*T
+            irr = Thalf*(1-e1)
+            irc = Thalf*e2
+            icc = Thalf*(1+e1)
+            det = irr*icc - irc**2
+
+            if det <= 0.0:
+                raise GMixRangeError("det is <= 0: %g" % det)
+            idet =1.0/det
+
+            # get inverse of covariance matrix for k space
+            nirr =  icc*idet
+            nicc =  irr*idet
+            nirc = -irc*idet
+            ndet = nirr*nicc - nirc**2
+
+            flux = band_pars[5]/sqrt(det)*2*numpy.pi
+
+            for i in xrange(len(kobs_list)):
+
+                gm=gmix_list[i]
+                gmdata=gm._data
+                gmdata['p'][0] = flux
+                gmdata['row'][0] = 0.0
+                gmdata['col'][0] = 0.0
+                gmdata['irr'][0] = nirr
+                gmdata['irc'][0] = nirc
+                gmdata['icc'][0] = nicc
+                gmdata['det'][0] = ndet
+                gmdata['norm_set'][0] = 0
+
+
+    def _fill_gmix_all_old(self, pars):
+        """
+        Fill the list of lists of gmix objects for the given parameters
+        """
+
+        for band,kobs_list in enumerate(self.mb_kobs):
+            gmix_list=self._gmix_all[band]
+
+            # pars for this band, in linear space
+            band_pars=self.get_band_pars(pars, band)
+
             for i in xrange(len(kobs_list)):
 
                 gm=gmix_list[i]
@@ -1858,6 +1907,77 @@ class LMGaussK(LMSimple):
                     raise GMixRangeError("zero division")
 
     def _calc_fdiff(self, pars_in, more=False):
+        """
+
+        vector with (model-data)/error.
+
+        The npars elements contain -ln(prior)
+        """
+
+        # we cannot keep sending existing array into leastsq, don't know why
+        fdiff=zeros(self.fdiff_size)
+
+        try:
+
+            s2n_sum=0.0
+            npix = 0
+
+            # we deal with center by shifting phase in k space
+            pars=pars_in.copy()
+            rowshift=pars_in[0]
+            colshift=pars_in[1]
+            pars[0:0+2] = 0.0
+
+            #fac = T*sqrt(self.totpix)*scale**2
+            #fac = self.totpix
+            #fac = pars[4]
+            #pars[5:] *= fac
+
+            self._fill_gmix_all(pars)
+
+            start=self._fill_priors(pars, fdiff)
+
+            for band in xrange(self.nband):
+
+                kobs_list=self.mb_kobs[band]
+                gmix_list=self._gmix_all[band]
+
+                for kobs,gm in zip(kobs_list, gmix_list):
+
+                    gmdata=gm._get_gmix_data()
+                    ts2n_sum, tnpix = _gmix.fill_fdiffk(
+                        gmdata,
+                        kobs.kr.array,
+                        kobs.ki.array,
+                        kobs.weight.array,
+                        kobs.jacobian._data,
+                        fdiff,
+                        rowshift,
+                        colshift,
+                        start,
+                    )
+
+                    s2n_sum += ts2n_sum
+                    npix += tnpix
+
+                    # skip 2*image size since we account for both
+                    # real and imaginary
+                    start += 2*kobs.kr.array.size
+
+        except GMixRangeError as err:
+            fdiff[:] = LOWVAL
+            s2n_sum=0.0
+
+        if more:
+            return {'fdiff':fdiff,
+                    's2n_sum':s2n_sum,
+                    'npix':npix}
+        else:
+            return fdiff
+
+
+
+    def _calc_fdiff_old(self, pars_in, more=False):
         """
 
         vector with (model-data)/error.
@@ -1985,7 +2105,7 @@ class LMGaussK(LMSimple):
             pars[0:5] = pars_in[0:5]
             pars[5] = pars_in[5+band]
 
-        pars[4] = moments.get_T(pars[4], pars[2], pars[3])
+        #pars[4] = moments.get_T(pars[4], pars[2], pars[3])
 
         return pars
 

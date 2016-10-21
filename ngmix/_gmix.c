@@ -3552,6 +3552,8 @@ static PyObject * PyGMix_fill_fdiffk(PyObject* self, PyObject* args) {
                 // roll the phase of the model according to the real space shift
                 arg = v*rowshift + u*colshift;
                 shift = cos(arg) - I*sin(arg);
+                // this would gain us 20%
+                //shift = (1.0 - 0.5*arg*arg) - I*(arg  - (1.0/6.0)*arg*arg*arg);
 
                 model_val = model_val * shift;
 
