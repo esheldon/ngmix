@@ -525,6 +525,8 @@ class KObservation(object):
         assert isinstance(kr, galsim.Image)
         assert isinstance(ki, galsim.Image)
         assert kr.array.shape==ki.array.shape
+        assert kr.array.dtype==numpy.float64
+        assert ki.array.dtype==numpy.float64
 
         self.kr=kr
         self.ki=ki

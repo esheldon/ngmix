@@ -3547,7 +3547,7 @@ static PyObject * PyGMix_fill_fdiffk(PyObject* self, PyObject* args) {
                 // we want a scalar, but data is inherently complex, so just
                 // do the model based one
 
-                s2n_sum += 2*creal(model_val)*creal(model_val)*ivar;
+                s2n_sum += creal(model_val)*creal(model_val)*2*ivar;
 
                 // roll the phase of the model according to the real space shift
                 arg = v*rowshift + u*colshift;

@@ -460,12 +460,8 @@ class Metacal(object):
         -------
         galsim image object
         """
-        if shear is not None:
-            shim_nopsf = self.get_sheared_image_nopsf(shear)
-        else:
-            shim_nopsf = self.image_int_nopsf
 
-        imconv = galsim.Convolve([shim_nopsf, psf_obj])
+        imconv = self._get_target_gal_obj(psf_obj,shear=shear)
 
         # this should carry over the wcs
         newim = self.image.copy()
@@ -475,6 +471,16 @@ class Metacal(object):
         )
 
         return newim
+
+    def _get_target_gal_obj(self, psf_obj, shear=None):
+        if shear is not None:
+            shim_nopsf = self.get_sheared_image_nopsf(shear)
+        else:
+            shim_nopsf = self.image_int_nopsf
+
+        imconv = galsim.Convolve([shim_nopsf, psf_obj])
+
+        return imconv
 
     def get_sheared_image_nopsf(self, shear):
         """
