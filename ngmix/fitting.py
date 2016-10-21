@@ -1906,6 +1906,70 @@ class LMGaussK(LMSimple):
                 except ZeroDivisionError:
                     raise GMixRangeError("zero division")
 
+    def calc_lnprob(self, pars_in, more=False):
+
+        # we cannot keep sending existing array into leastsq, don't know why
+        fdiff=zeros(self.fdiff_size)
+
+        try:
+
+
+            lnprob = 0.0
+            s2n_sum=0.0
+            npix = 0
+
+            # we deal with center by shifting phase in k space
+            pars=pars_in.copy()
+            rowshift=pars_in[0]
+            colshift=pars_in[1]
+            pars[0:0+2] = 0.0
+
+            # these are the log pars (if working in log space)
+            ln_priors = self._get_priors(pars)
+
+            self._fill_gmix_all(pars)
+
+
+            for band in xrange(self.nband):
+
+                kobs_list=self.mb_kobs[band]
+                gmix_list=self._gmix_all[band]
+
+                for kobs,gm in zip(kobs_list, gmix_list):
+
+                    gmdata=gm._get_gmix_data()
+                    tloglike, ts2n_sum, tnpix = _gmix.get_loglikek(
+                        gmdata,
+                        kobs.kr.array,
+                        kobs.ki.array,
+                        kobs.weight.array,
+                        kobs.jacobian._data,
+                        rowshift,
+                        colshift,
+                    )
+
+                    lnprob  += tloglike
+                    s2n_sum += ts2n_sum
+                    npix    += tnpix
+
+            # total over all bands
+            lnprob += ln_priors
+
+        except GMixRangeError as err:
+            lnprob  = LOWVAL
+            s2n_sum = 0.0
+            npix    = 0
+
+
+        if more:
+            return {'lnprob':lnprob,
+                    's2n_sum':s2n_sum,
+                    'npix':npix}
+        else:
+            return lnprob
+
+
+
     def _calc_fdiff(self, pars_in, more=False):
         """
 
@@ -1927,11 +1991,6 @@ class LMGaussK(LMSimple):
             rowshift=pars_in[0]
             colshift=pars_in[1]
             pars[0:0+2] = 0.0
-
-            #fac = T*sqrt(self.totpix)*scale**2
-            #fac = self.totpix
-            #fac = pars[4]
-            #pars[5:] *= fac
 
             self._fill_gmix_all(pars)
 
