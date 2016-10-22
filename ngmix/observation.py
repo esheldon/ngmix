@@ -525,6 +525,8 @@ class KObservation(object):
         assert isinstance(kr, galsim.Image)
         assert isinstance(ki, galsim.Image)
         assert kr.array.shape==ki.array.shape
+        assert kr.array.dtype==numpy.float64
+        assert ki.array.dtype==numpy.float64
 
         self.kr=kr
         self.ki=ki
@@ -694,6 +696,8 @@ def make_iilist(obs, **kw):
     """
     import galsim
 
+    wmult=1.0
+
     interp=kw.get('interp',DEFAULT_XINTERP)
     mb_obs = get_mb_obs(obs)
 
@@ -709,49 +713,50 @@ def make_iilist(obs, **kw):
                 obs.image,
                 wcs=obs.jacobian.get_galsim_wcs(),
             )
-
-            # normalized
-            psf_gsimage = galsim.Image(
-                obs.psf.image/obs.psf.image.sum(),
-                wcs=obs.psf.jacobian.get_galsim_wcs(),
-            )
-
-            psf_ii = galsim.InterpolatedImage(
-                psf_gsimage,
-                x_interpolant=interp,
-            )
             ii = galsim.InterpolatedImage(
                 gsimage,
                 x_interpolant=interp,
             )
-            # make dimensions odd
-            wmult=1.0
-            dim = 1 + psf_ii.SBProfile.getGoodImageSize(
-                psf_ii.nyquistScale(),
-                wmult,
-            )
+
+            if obs.has_psf():
+                psf_weight = obs.psf.weight,
+
+                # normalized
+                psf_gsimage = galsim.Image(
+                    obs.psf.image/obs.psf.image.sum(),
+                    wcs=obs.psf.jacobian.get_galsim_wcs(),
+                )
+
+                psf_ii = galsim.InterpolatedImage(
+                    psf_gsimage,
+                    x_interpolant=interp,
+                )
+                # make dimensions odd
+                dim = 1 + psf_ii.SBProfile.getGoodImageSize(
+                    psf_ii.nyquistScale(),
+                    wmult,
+                )
+
+            else:
+                # make dimensions odd
+                dim = 1 + ii.SBProfile.getGoodImageSize(
+                    ii.nyquistScale(),
+                    wmult,
+                )
+                psf_ii=None
+                psf_weight=None
+
             dk=ii.stepK()
 
             dimlist.append( dim )
             dklist.append(dk)
-
-            """
-            weight=galsim.Image(
-                obs.weight,
-                dtype=obs.weight.dtype,
-            )
-            psf_weight=galsim.Image(
-                obs.psf.weight,
-                dtype=obs.psf.weight.dtype,
-            )
-            """
 
             iilist.append({
                 'wcs':obs.jacobian.get_galsim_wcs(),
                 'ii':ii,
                 'weight':obs.weight,
                 'psf_ii':psf_ii,
-                'psf_weight':obs.psf.weight,
+                'psf_weight':psf_weight,
             })
 
         mb_iilist.append(iilist)
@@ -778,15 +783,8 @@ def make_kobs(mb_obs, **kw):
         Either Observation, ObsList or MultiBandObsList
     interp: string, optional
         The x interpolant, default 'lanczos15'
-    ps: bool, optional
-        Generate the power spectrum and a noise power spectrum
-    rng: galsim base deviate
-        For generating a power spectrum
     """
     import galsim
-
-    ps=kw.get('ps',False)
-    rng=kw.get('rng',None)
 
     mb_iilist, dim, dk = make_iilist(mb_obs, **kw)
 
@@ -803,12 +801,6 @@ def make_kobs(mb_obs, **kw):
                 ny=dim,
                 scale=dk,
             )
-            psf_kr,psf_ki = iidict['psf_ii'].drawKImage(
-                dtype=numpy.float64,
-                nx=dim,
-                ny=dim,
-                scale=dk,
-            )
 
             weight = kr.copy()
             medweight = numpy.median(iidict['weight'])
@@ -817,60 +809,32 @@ def make_kobs(mb_obs, **kw):
             # parseval's theorem
             weight *= (1.0/weight.array.size)
 
-            psf_medweight = numpy.median(iidict['psf_weight'])
-            psf_weight = psf_kr.copy()
-            psf_weight.array[:,:] = 0.5*psf_medweight
+            if iidict['psf_ii'] is not None:
+                psf_kr,psf_ki = iidict['psf_ii'].drawKImage(
+                    dtype=numpy.float64,
+                    nx=dim,
+                    ny=dim,
+                    scale=dk,
+                )
 
-            psf_kobs = KObservation(
-                psf_kr,
-                psf_ki,
-                weight=psf_weight,
-            )
+                psf_medweight = numpy.median(iidict['psf_weight'])
+                psf_weight = psf_kr.copy()
+                psf_weight.array[:,:] = 0.5*psf_medweight
+
+                psf_kobs = KObservation(
+                    psf_kr,
+                    psf_ki,
+                    weight=psf_weight,
+                )
+            else:
+                psf_kobs=None
+
             kobs = KObservation(
                 kr,
                 ki,
                 weight=weight,
                 psf=psf_kobs,
             )
-
-            if ps:
-                assert rng is not None
-
-
-                im_ps= kr**2 + ki**2
-                psf_ps = psf_kr**2 + psf_ki**2
-
-                kobs.meta['ps_orig'] = im_ps
-                psf_kobs.meta['ps'] = psf_ps
-
-                # subtract power spectrum of random noise
-                err = numpy.sqrt(1.0/medweight)
-                gs_rng=galsim.GaussianNoise(sigma=err, rng=rng)
-
-                nim = kr.copy()
-                nim.setZero()
-
-                nim.addNoise(gs_rng)
-
-                nim_ii = galsim.InterpolatedImage(
-                    nim,
-                    x_interpolant=interp,
-                )
-                nim_kr,nim_ki = nim_ii.drawKImage(
-                    dtype=numpy.float64,
-                    nx=dim,
-                    ny=dim,
-                    scale=dk,
-                )
-                nim_ps = nim_kr**2 + nim_ki**2
-                #kobs.meta['noise_kr'] = nim_kr
-                #kobs.meta['noise_ki'] = nim_ki
-                kobs.meta['noise_ps'] = nim_ps
-
-                kobs.meta['ps'] = (
-                    kobs.meta['ps_orig'] - kobs.meta['noise_ps']
-                )
-
 
             kobs_list.append(kobs)
 

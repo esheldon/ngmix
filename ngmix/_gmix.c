@@ -3459,6 +3459,228 @@ static PyObject * PyGMix_fill_fdiff_sub(PyObject* self, PyObject* args) {
 }
 
 
+
+
+/*
+   k-space
+
+   Fill the input fdiff=(model-data)/err, return s2n_numer, s2n_denom
+
+   Error checking should be done in python.
+*/
+static PyObject * PyGMix_fill_fdiffk(PyObject* self, PyObject* args) {
+
+    PyObject
+        *gmix_obj=NULL,
+        *kr_obj=NULL,
+        *ki_obj=NULL,
+        *weight_obj=NULL,
+        *jacob_obj=NULL,
+        *fdiff_obj=NULL; // size 2*image size
+
+    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+    int start=0;
+
+    long npix=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    double
+        rdata=0, idata=0,
+        rowshift=0, colshift=0,
+        arg,
+        *fdiff_ptr=NULL,
+        ivar=0, u=0, v=0,
+        s2n_sum=0.0;
+
+    double complex
+        shift=0, data=0, model_val=0, fdiff=0;
+
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOOOOddi", 
+                          &gmix_obj,
+                          &kr_obj,
+                          &ki_obj,
+                          &weight_obj,
+                          &jacob_obj,
+                          &fdiff_obj,
+                          &rowshift,
+                          &colshift,
+                          &start)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        return NULL;
+    }
+
+    n_row=PyArray_DIM(kr_obj, 0);
+    n_col=PyArray_DIM(kr_obj, 1);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    // we might start somewhere after the priors
+    // note fdiff is 1-d
+    fdiff_ptr=(double *)PyArray_GETPTR1(fdiff_obj,start);
+
+    for (row=0; row < n_row; row++) {
+
+        for (col=0; col < n_col; col++) {
+
+
+            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
+            if ( ivar > 0.0) {
+
+                rdata=*( (double*)PyArray_GETPTR2(kr_obj,row,col) );
+                idata=*( (double*)PyArray_GETPTR2(ki_obj,row,col) );
+
+                data = rdata + I*idata;
+
+                u=PYGMIX_JACOB_GETU(jacob, row, col);
+                v=PYGMIX_JACOB_GETV(jacob, row, col);
+                model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
+
+                // we want a scalar, but data is inherently complex, so just
+                // do the model based one
+
+                s2n_sum += creal(model_val)*creal(model_val)*2*ivar;
+
+                // roll the phase of the model according to the real space shift
+                arg = v*rowshift + u*colshift;
+                shift = cos(arg) - I*sin(arg);
+                // this would gain us 20%
+                //shift = (1.0 - 0.5*arg*arg) - I*(arg  - (1.0/6.0)*arg*arg*arg);
+
+                model_val = model_val * shift;
+
+                // complex fdiff
+                fdiff = (model_val-data)*sqrt(ivar);
+
+                // fill the output fdiff with both real and image components.  Just
+                // put them next to one another
+                fdiff_ptr[0] = creal(fdiff);
+                fdiff_ptr[1] = cimag(fdiff);
+
+                npix += 1;
+            } else {
+                fdiff_ptr[0] = 0.0;
+                fdiff_ptr[1] = 0.0;
+            }
+
+            fdiff_ptr += 2;
+
+        }
+    }
+
+    return Py_BuildValue("di", s2n_sum, npix);
+}
+
+static PyObject * PyGMix_get_loglikek(PyObject* self, PyObject* args) {
+
+    PyObject
+        *gmix_obj=NULL,
+        *kr_obj=NULL,
+        *ki_obj=NULL,
+        *weight_obj=NULL,
+        *jacob_obj=NULL;
+
+    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+
+    long npix=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+
+    double
+        loglike=0,
+        rdata=0, idata=0,
+        rowshift=0, colshift=0,
+        arg,
+        ivar=0, u=0, v=0,
+        s2n_sum=0.0,
+        absdiffsq=0;
+
+    double complex
+        shift=0, data=0, model_val=0, diff=0;
+
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOOOdd", 
+                          &gmix_obj,
+                          &kr_obj,
+                          &ki_obj,
+                          &weight_obj,
+                          &jacob_obj,
+                          &rowshift,
+                          &colshift)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        return NULL;
+    }
+
+    n_row=PyArray_DIM(kr_obj, 0);
+    n_col=PyArray_DIM(kr_obj, 1);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    for (row=0; row < n_row; row++) {
+
+        for (col=0; col < n_col; col++) {
+
+
+            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
+            if ( ivar > 0.0) {
+
+                rdata=*( (double*)PyArray_GETPTR2(kr_obj,row,col) );
+                idata=*( (double*)PyArray_GETPTR2(ki_obj,row,col) );
+
+                data = rdata + I*idata;
+
+                u=PYGMIX_JACOB_GETU(jacob, row, col);
+                v=PYGMIX_JACOB_GETV(jacob, row, col);
+                model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
+
+                // we want a scalar, but data is inherently complex, so just
+                // do the model based one
+
+                s2n_sum += creal(model_val)*creal(model_val)*2*ivar;
+
+                // roll the phase of the model according to the real space shift
+                arg = v*rowshift + u*colshift;
+                shift = cos(arg) - I*sin(arg);
+
+                model_val = model_val * shift;
+
+                // complex diff
+                diff = model_val-data;
+
+                // for the loglike, we want the square of the absolute diff
+                absdiffsq = cabs(diff);
+                absdiffsq *= absdiffsq;
+                loglike += absdiffsq*2*ivar;
+
+                npix += 1;
+            }
+
+        }
+    }
+
+    loglike *= (-0.5);
+
+    return Py_BuildValue("ddi", loglike, s2n_sum, npix);
+}
+
+
+
+
 /*
  *
    Expectation maximization image fitting
@@ -6182,6 +6404,11 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"fill_fdiff",  (PyCFunction)PyGMix_fill_fdiff,  METH_VARARGS,  "fill fdiff for LM\n"},
     {"fill_fdiff_gauleg",  (PyCFunction)PyGMix_fill_fdiff_gauleg,  METH_VARARGS,  "fill fdiff for LM, integrating over pixels\n"},
     {"fill_fdiff_sub",  (PyCFunction)PyGMix_fill_fdiff_sub,  METH_VARARGS,  "fill fdiff for LM with sub-pixel integration\n"},
+
+    {"fill_fdiffk",  (PyCFunction)PyGMix_fill_fdiffk,  METH_VARARGS,  "fill fdiff for LM\n"},
+    {"get_loglikek",  (PyCFunction)PyGMix_get_loglikek,  METH_VARARGS,  "get log likelihood in k space\n"},
+
+
     {"render",      (PyCFunction)PyGMix_render, METH_VARARGS,  "render without jacobian\n"},
     {"render_gauleg",      (PyCFunction)PyGMix_render_gauleg, METH_VARARGS,  "render without jacobian and using gauss-legendre integration\n"},
     {"render_jacob_gauleg",      (PyCFunction)PyGMix_render_jacob_gauleg, METH_VARARGS,  "render with jacobian and using gauss-legendre integration\n"},
