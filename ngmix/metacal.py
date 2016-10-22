@@ -434,14 +434,23 @@ class Metacal(object):
         If doshear, also shear it
         """
         psf_grown_nopix = _do_dilate(self.psf_int_nopix, shear)
-        if doshear:
+        if doshear and not self.shear_pixelized_psf:
+            #print('shearing prepix psf')
             psf_grown_nopix = psf_grown_nopix.shear(g1=shear.g1,
                                                     g2=shear.g2)
+
         if self.prepix:
-            return psf_grown_nopix, psf_grown_nopix
+            p1, p2 = psf_grown_nopix, psf_grown_nopix
         else:
             psf_grown = galsim.Convolve(psf_grown_nopix,self.pixel)
-            return psf_grown, psf_grown_nopix
+            p1,p2 = psf_grown, psf_grown_nopix
+
+        if doshear and self.shear_pixelized_psf:
+            #print('shearing pixelized psf')
+            p1 = p1.shear(g1=shear.g1, g2=shear.g2)
+            p2 = p2.shear(g1=shear.g1, g2=shear.g2)
+
+        return p1, p2
 
     def get_target_image(self, psf_obj, shear=None):
         """
@@ -505,6 +514,8 @@ class Metacal(object):
 
         self.prepix=kw.get('prepix',False)
         self.symmetrize_psf=kw.get('symmetrize_psf',False)
+
+        self.shear_pixelized_psf=kw.get('shear_pixelized_psf',False)
 
         obs=self.obs
         if not obs.has_psf():
