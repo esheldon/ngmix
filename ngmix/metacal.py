@@ -600,6 +600,13 @@ class Metacal(object):
         dilation = eigs.max()/(T/2.)
         dilation=sqrt(dilation)
 
+        dilation = 1.0 + 2*(dilation-1.0)
+        if dilation > 1.1:
+            dilation=1.1
+
+        g1,g2,T = psf_gmix.get_g1g2T()
+        print("dilation: %g  g: %g %g e: %g %g" % (dilation,g1,g2,e1,e2))
+
         return dilation
 
 
