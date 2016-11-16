@@ -605,7 +605,7 @@ class Metacal(object):
             dilation=1.1
 
         g1,g2,T = psf_gmix.get_g1g2T()
-        print("dilation: %g  g: %g %g e: %g %g" % (dilation,g1,g2,e1,e2))
+        #print("dilation: %g  g: %g %g e: %g %g" % (dilation,g1,g2,e1,e2))
 
         return dilation
 
@@ -714,14 +714,27 @@ class MetacalAnalyticPSF(Metacal):
     """
     def __init__(self, obs, psf_obj, **kw):
 
-        self.psf_obj = psf_obj
+        self._set_psf(obs, psf_obj)
 
-        self.psf_noise_image=numpy.random.normal(
-            scale=0.0001,
-            size=obs.psf.image.shape,
-        )
+
+        #self.psf_noise_image=numpy.random.normal(
+        #    scale=0.0001,
+        #    size=obs.psf.image.shape,
+        #)
         super(MetacalAnalyticPSF,self).__init__(obs, **kw)
 
+    def _set_psf(self,obs,psf_in):
+        if isinstance(psf_in, dict):
+            assert psf_in['model']=='moffat'
+            pars=psf_in['pars']
+
+            flux = obs.psf.gmix.get_flux()
+            psf_obj = galsim.Moffat(flux=flux, **pars)
+        else:
+            psf_obj = psf_in
+
+        self.psf_obj = psf_obj
+    """
     def get_target_psf(self, shear, type, get_nopix=False):
         res=super(MetacalAnalyticPSF,self).get_target_psf(
             shear,
@@ -740,6 +753,7 @@ class MetacalAnalyticPSF(Metacal):
             arr += self.psf_noise_image
 
         return res
+    """
 
     def _get_dilated_psf(self, shear, doshear=False):
         """

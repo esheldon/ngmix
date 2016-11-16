@@ -1300,13 +1300,15 @@ class MetacalAnalyticPSFBootstrapper(MaxMetacalBootstrapper):
         metacal_pars=self._extract_metacal_pars(metacal_pars)
 
         # noshear gets added in automatically when doing 1p
-        if 'types' not in metacal_pars:
-            metacal_pars['types'] = kw.get('types', [ '1p','1m','2p','2m' ])
+        #if 'types' not in metacal_pars:
+        #    metacal_pars['types'] = kw.get('types', [ '1p','1m','2p','2m' ])
 
-        # the psf ot use for metacal
+        # the psf to use for metacal, currently structurally same for all
         psf=kw.pop('psf',None)
         if psf is None:
-            raise ValueError('expected psf= for analytic psf')
+            # we will create it internally
+            psf = metacal_pars['analytic_psf']
+            #raise ValueError('expected psf= for analytic psf')
 
         odict=metacal.get_all_metacal(
             self.mb_obs_list,
