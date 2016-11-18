@@ -464,12 +464,37 @@ class Metacal(object):
         imconv = self._get_target_gal_obj(psf_obj,shear=shear)
 
         # this should carry over the wcs
-        newim = self.image.copy()
-        imconv.drawImage(
-            image=newim,
-            method='no_pixel' # pixel is in the PSF
+        #newim = self.image.copy()
+        #imconv.drawImage(
+        #    image=newim,
+        #    method='no_pixel' # pixel is in the PSF
+        #)
+        ny,nx=self.image.array.shape
+        newim=imconv.drawImage(
+            nx=nx,
+            ny=ny,
+            #scale=0.263,
+            wcs=self.image.wcs,
+            dtype=numpy.float64,
         )
 
+        if True:
+            import images
+            print()
+            print("imconv:",imconv)
+            print()
+            print(newim.array.shape,newim.array.dtype)
+            print("imsum:",newim.array.sum())
+            print()
+            images.compare_images(
+                self.image.array,
+                newim.array,
+                label1='image',
+                label2='reconvolved',
+                file='/u/ki/esheldon/public_html/tmp/plots/tmp.png',
+            )
+            if 'q'==raw_input('hit a key: '):
+                stop
         return newim
 
     def _get_target_gal_obj(self, psf_obj, shear=None):
@@ -477,6 +502,12 @@ class Metacal(object):
             shim_nopsf = self.get_sheared_image_nopsf(shear)
         else:
             shim_nopsf = self.image_int_nopsf
+
+        print()
+        print("shim nopsf:",shim_nopsf)
+        print()
+        print("psf_obj:",psf_obj)
+        print()
 
         imconv = galsim.Convolve([shim_nopsf, psf_obj])
 
@@ -531,7 +562,15 @@ class Metacal(object):
         #
         self.image = galsim.Image(obs.image.copy(),
                                   wcs=self.get_wcs())
-        self.psf_image = galsim.Image(obs.psf.image.copy(),
+
+        psfnorm = obs.psf.image.copy()
+        psfnorm /= psfnorm.sum()
+
+        import fitsio
+        fitsio.write('im.fits',self.obs.image,clobber=True)
+        fitsio.write('psf.fits',self.obs.psf.image,clobber=True)
+        stop
+        self.psf_image = galsim.Image(psfnorm,
                                       wcs=self.get_psf_wcs())
 
         # interpolated psf image
@@ -541,12 +580,12 @@ class Metacal(object):
         # this can be used to deconvolve the psf from the galaxy image
         psf_int_inv = galsim.Deconvolve(psf_int)
 
-        image_int = galsim.InterpolatedImage(self.image,
-                                             x_interpolant=self.interp)
+        self.image_int = galsim.InterpolatedImage(self.image,
+                                                  x_interpolant=self.interp)
 
 
         # deconvolved galaxy image, psf+pixel removed
-        self.image_int_nopsf = galsim.Convolve(image_int,
+        self.image_int_nopsf = galsim.Convolve(self.image_int,
                                                psf_int_inv)
 
         # interpolated psf deconvolved from pixel.  This is what
@@ -704,6 +743,18 @@ class Metacal(object):
                            jacobian=obs.jacobian.copy(),
                            weight=obs.weight.copy(),
                            psf=psf_obs)
+        if True:
+            import images
+            print("orig psf im sum:",self.obs.psf.image.sum())
+            print("new psf im sum:",psf_im.array.sum())
+            images.multiview(
+                psf_im.array,
+                title='psf',
+                file='/u/ki/esheldon/public_html/tmp/plots/tmp.png',
+            )
+            if 'q'==raw_input('hit a key: '):
+                stop
+
         return newobs
 
 class MetacalAnalyticPSF(Metacal):
@@ -718,7 +769,7 @@ class MetacalAnalyticPSF(Metacal):
 
 
         #self.psf_noise_image=numpy.random.normal(
-        #    scale=0.0001,
+        #    scale=1.0e-6*obs.psf.image.max(),
         #    size=obs.psf.image.shape,
         #)
         super(MetacalAnalyticPSF,self).__init__(obs, **kw)
@@ -728,12 +779,20 @@ class MetacalAnalyticPSF(Metacal):
             assert psf_in['model']=='moffat'
             pars=psf_in['pars']
 
-            flux = obs.psf.gmix.get_flux()
-            psf_obj = galsim.Moffat(flux=flux, **pars)
+            #flux = obs.psf.gmix.get_flux()
+            #print("psf gmix:",obs.psf.gmix)
+            #flux = obs.psf.image.sum()
+            #print("flux:",flux)
+            psf_obj = galsim.Moffat(
+                beta=pars['beta'],
+                fwhm=pars['fwhm'],
+                #flux=float(flux),
+            )
         else:
             psf_obj = psf_in
 
         self.psf_obj = psf_obj
+
     """
     def get_target_psf(self, shear, type, get_nopix=False):
         res=super(MetacalAnalyticPSF,self).get_target_psf(
@@ -760,6 +819,8 @@ class MetacalAnalyticPSF(Metacal):
         For this version we never pixelize the input
         analytic model
         """
+        #return self.psf_obj.copy(), self.psf_obj.copy()
+
         #print("doing analytic psf")
         psf_grown = _do_dilate(self.psf_obj, shear)
 
