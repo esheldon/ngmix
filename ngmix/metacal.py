@@ -46,8 +46,8 @@ def get_all_metacal(obs, step=0.01, fixnoise=True, **kw):
     step: float
         The shear step value to use for metacal
     fixnoise: bool
-        If True, add a compensating noise field to cancel the correlated noise
-        component.  Default True
+        If set to True, add a compensating noise field to cancel the correlated
+        noise component.  Default True
     **kw:
         other keywords for metacal and simobs.
 
@@ -335,11 +335,7 @@ class Metacal(object):
 
             uobs = self._make_obs(unsheared_image, newpsf_image)
 
-            psf_nopix_obs = Observation(
-                newpsf_nopix_image.array,
-                weight=self.obs.psf.weight.copy(),
-                jacobian=self.obs.psf.jacobian.copy(),
-            )
+            psf_nopix_obs = self._make_psf_obs(newpsf_nopix_image)
             uobs.psf_nopix=psf_nopix_obs
 
             return newobs, uobs
@@ -473,12 +469,37 @@ class Metacal(object):
         imconv = self._get_target_gal_obj(psf_obj,shear=shear)
 
         # this should carry over the wcs
-        newim = self.image.copy()
-        imconv.drawImage(
-            image=newim,
-            method='no_pixel' # pixel is in the PSF
+        #newim = self.image.copy()
+        #imconv.drawImage(
+        #    image=newim,
+        #    method='no_pixel' # pixel is in the PSF
+        #)
+        ny,nx=self.image.array.shape
+        newim=imconv.drawImage(
+            nx=nx,
+            ny=ny,
+            #scale=0.263,
+            wcs=self.image.wcs,
+            dtype=numpy.float64,
         )
 
+        if False:
+            import images
+            print()
+            print("imconv:",imconv)
+            print()
+            print(newim.array.shape,newim.array.dtype)
+            print("imsum:",newim.array.sum())
+            print()
+            images.compare_images(
+                self.image.array,
+                newim.array,
+                label1='image',
+                label2='reconvolved',
+                file='/u/ki/esheldon/public_html/tmp/plots/tmp.png',
+            )
+            if 'q'==raw_input('hit a key: '):
+                stop
         return newim
 
     def _get_target_gal_obj(self, psf_obj, shear=None):
@@ -542,7 +563,11 @@ class Metacal(object):
         #
         self.image = galsim.Image(obs.image.copy(),
                                   wcs=self.get_wcs())
-        self.psf_image = galsim.Image(obs.psf.image.copy(),
+
+        psfnorm = obs.psf.image.copy()
+        psfnorm /= psfnorm.sum()
+
+        self.psf_image = galsim.Image(psfnorm,
                                       wcs=self.get_psf_wcs())
 
         # interpolated psf image
@@ -552,12 +577,12 @@ class Metacal(object):
         # this can be used to deconvolve the psf from the galaxy image
         psf_int_inv = galsim.Deconvolve(psf_int)
 
-        image_int = galsim.InterpolatedImage(self.image,
-                                             x_interpolant=self.interp)
+        self.image_int = galsim.InterpolatedImage(self.image,
+                                                  x_interpolant=self.interp)
 
 
         # deconvolved galaxy image, psf+pixel removed
-        self.image_int_nopsf = galsim.Convolve(image_int,
+        self.image_int_nopsf = galsim.Convolve(self.image_int,
                                                psf_int_inv)
 
         # interpolated psf deconvolved from pixel.  This is what
@@ -568,7 +593,6 @@ class Metacal(object):
             self.psf_int_nopix = galsim.Convolve([psf_int, self.pixel_inv])
 
     def _get_symmetrized_psf_nopix(self):
-        #print("    Getting symmetrized psf")
         sym_psf_int = _make_symmetrized_gsimage_int(
             self.obs.psf.image,
             self.get_psf_wcs(),
@@ -578,7 +602,6 @@ class Metacal(object):
         psf_int_nopix = galsim.Convolve([sym_psf_int, self.pixel_inv])
 
         dilation=self._get_symmetrize_dilation()
-        #print("    dilating by:",dilation)
 
         psf_int_nopix = psf_int_nopix.dilate(dilation)
         return psf_int_nopix
@@ -610,6 +633,12 @@ class Metacal(object):
 
         dilation = eigs.max()/(T/2.)
         dilation=sqrt(dilation)
+
+        dilation = 1.0 + 2*(dilation-1.0)
+        if dilation > 1.1:
+            dilation=1.1
+
+        g1,g2,T = psf_gmix.get_g1g2T()
 
         return dilation
 
@@ -682,6 +711,14 @@ class Metacal(object):
         #                             LANCZOS_PARS_DEFAULT['tol'])
         self.interp = 'lanczos15'
 
+    def _make_psf_obs(self, psf_im):
+
+        obs=self.obs
+        psf_obs = Observation(psf_im.array,
+                              weight=obs.psf.weight.copy(),
+                              jacobian=obs.psf.jacobian.copy())
+        return psf_obs
+
     def _make_obs(self, im, psf_im):
         """
         Make new Observation objects for the image and psf.
@@ -700,15 +737,12 @@ class Metacal(object):
 
         obs=self.obs
 
-        psf_obs = Observation(psf_im.array,
-                              weight=obs.psf.weight.copy(),
-                              jacobian=obs.psf.jacobian.copy())
+        psf_obs = self._make_psf_obs(psf_im)
 
         newobs=Observation(im.array,
                            jacobian=obs.jacobian.copy(),
                            weight=obs.weight.copy(),
                            psf=psf_obs)
-        return newobs
 
 class MetacalAnalyticPSF(Metacal):
     """
@@ -718,14 +752,31 @@ class MetacalAnalyticPSF(Metacal):
     """
     def __init__(self, obs, psf_obj, **kw):
 
-        self.psf_obj = psf_obj
+        self._set_psf(obs, psf_obj)
 
-        self.psf_noise_image=numpy.random.normal(
-            scale=0.0001,
-            size=obs.psf.image.shape,
-        )
+
+        #self.psf_noise_image=numpy.random.normal(
+        #    scale=1.0e-6*obs.psf.image.max(),
+        #    size=obs.psf.image.shape,
+        #)
         super(MetacalAnalyticPSF,self).__init__(obs, **kw)
 
+    def _set_psf(self,obs,psf_in):
+        if isinstance(psf_in, dict):
+            assert psf_in['model']=='moffat'
+            pars=psf_in['pars']
+
+            psf_obj = galsim.Moffat(
+                beta=pars['beta'],
+                fwhm=pars['fwhm'],
+                #flux=float(flux),
+            )
+        else:
+            psf_obj = psf_in
+
+        self.psf_obj = psf_obj
+
+    """
     def get_target_psf(self, shear, type, get_nopix=False):
         res=super(MetacalAnalyticPSF,self).get_target_psf(
             shear,
@@ -744,20 +795,126 @@ class MetacalAnalyticPSF(Metacal):
             arr += self.psf_noise_image
 
         return res
+    """
+
+    def get_target_psf(self, shear, type, get_nopix=False):
+        """
+        get galsim object for the dilated, possibly sheared, psf
+
+        parameters
+        ----------
+        shear: ngmix.Shape
+            The applied shear
+        type: string
+            Type of psf target.  For type='gal_shear', the psf is just dilated to
+            deal with noise amplification.  For type='psf_shear' the psf is also
+            sheared for calculating Rpsf
+
+        returns
+        -------
+        galsim object
+        """
+
+        _check_shape(shear)
+
+        if type=='psf_shear':
+            doshear=True
+        else:
+            doshear=False
+
+        psf_grown = self._get_dilated_psf(shear, doshear=doshear)
+
+        # this should carry over the wcs
+        psf_grown_image = self.psf_image.copy()
+
+
+        psf_grown_image = psf_grown.drawImage(
+            wcs=self.psf_image.wcs,
+            method='no_pixel' # pixel is in the psf
+        )
+
+        if get_nopix:
+            # there is no pixel for analytic psf, just return
+            # a copy
+            return psf_grown_image, psf_grown_image.copy(), psf_grown
+        else:
+            return psf_grown_image, psf_grown
+
 
     def _get_dilated_psf(self, shear, doshear=False):
         """
         For this version we never pixelize the input
         analytic model
         """
-        #print("doing analytic psf")
+
         psf_grown = _do_dilate(self.psf_obj, shear)
 
-        #psf_grown = psf_grown.withFlux(1.0)
         if doshear:
             psf_grown = psf_grown.shear(g1=shear.g1,
                                         g2=shear.g2)
-        return psf_grown, psf_grown.copy()
+        return psf_grown
+
+
+    def _make_psf_obs(self, psf_im):
+        obs=self.obs
+        wtval=numpy.median(obs.psf.weight)
+
+        wtim = numpy.zeros(psf_im.array.shape) + wtval
+
+        jacob = obs.psf.jacobian.copy()
+        cen=( numpy.array(wtim.shape) - 1.0)/ 2.0
+        jacob.set_cen(row=cen[0],col=cen[1])
+
+        psf_obs = Observation(
+            psf_im.array,
+            weight=wtim,
+            jacobian=jacob,
+        )
+
+        return psf_obs
+
+    def _make_obs(self, im, psf_im):
+        """
+        Make new Observation objects for the image and psf.
+        Copy out the weight maps and jacobians from the original
+        Observation.
+
+        parameters
+        ----------
+        im: Galsim Image
+        psf_im: Galsim Image
+
+        returns
+        -------
+        A new Observation
+        """
+
+        obs=self.obs
+
+        psf_obs = self._make_psf_obs(psf_im)
+
+        newobs=Observation(
+            im.array,
+            jacobian=obs.jacobian.copy(),
+            weight=obs.weight.copy(),
+            psf=psf_obs,
+        )
+        if False:
+            import images
+            print("orig psf im sum:",self.obs.psf.image.sum())
+            print("new psf im sum:",psf_im.array.sum())
+            images.multiview(
+                psf_im.array,
+                title='psf',
+                file='/u/ki/esheldon/public_html/tmp/plots/tmp.png',
+            )
+            if 'q'==raw_input('hit a key: '):
+                stop
+
+        return newobs
+
+
+
 
 def _do_dilate(obj, shear):
     """
