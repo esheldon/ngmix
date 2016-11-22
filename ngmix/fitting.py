@@ -341,6 +341,7 @@ class FitterBase(object):
         res['chi2per'] = chi2per
         res['dof']     = dof
         res['s2n_w']   = s2n
+        res['s2n']     = s2n
 
         return res
 
