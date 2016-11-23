@@ -400,7 +400,10 @@ class Metacal(object):
         else:
             doshear=False
 
-        psf_grown, psf_grown_nopix = self._get_dilated_psf(shear, doshear=doshear)
+        psf_grown, psf_grown_nopix = self._get_dilated_psf(
+            shear,
+            doshear=doshear,
+        )
 
         # this should carry over the wcs
         psf_grown_image = self.psf_image.copy()
@@ -743,6 +746,7 @@ class Metacal(object):
                            jacobian=obs.jacobian.copy(),
                            weight=obs.weight.copy(),
                            psf=psf_obs)
+        return newobs
 
 class MetacalAnalyticPSF(Metacal):
     """
