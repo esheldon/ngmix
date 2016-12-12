@@ -13,6 +13,8 @@ from .observation import Observation, ObsList, MultiBandObsList
 from .shape import Shape
 from . import simobs
 
+from .gexceptions import GMixRangeError
+
 try:
     import galsim
 except ImportError:
@@ -409,21 +411,25 @@ class Metacal(object):
         psf_grown_image = self.psf_image.copy()
 
 
-        psf_grown.drawImage(
-            image=psf_grown_image,
-            method='no_pixel' # pixel is in the psf
-        )
-
-        if get_nopix:
-            psf_grown_nopix_image = self.psf_image.copy()
-            psf_grown_nopix.drawImage(
-                image=psf_grown_nopix_image,
+        try:
+            psf_grown.drawImage(
+                image=psf_grown_image,
                 method='no_pixel' # pixel is in the psf
             )
 
-            return psf_grown_image, psf_grown_nopix_image, psf_grown
-        else:
-            return psf_grown_image, psf_grown
+            if get_nopix:
+                psf_grown_nopix_image = self.psf_image.copy()
+                psf_grown_nopix.drawImage(
+                    image=psf_grown_nopix_image,
+                    method='no_pixel' # pixel is in the psf
+                )
+
+                return psf_grown_image, psf_grown_nopix_image, psf_grown
+            else:
+                return psf_grown_image, psf_grown
+        except RuntimeError as err:
+            # argh, galsim uses generic exceptions
+            raise GMixRangeError("galsim error: '%s'" % str(err))
 
     def _get_dilated_psf(self, shear, doshear=False):
         """
@@ -478,13 +484,19 @@ class Metacal(object):
         #    method='no_pixel' # pixel is in the PSF
         #)
         ny,nx=self.image.array.shape
-        newim=imconv.drawImage(
-            nx=nx,
-            ny=ny,
-            #scale=0.263,
-            wcs=self.image.wcs,
-            dtype=numpy.float64,
-        )
+
+        try:
+            newim=imconv.drawImage(
+                nx=nx,
+                ny=ny,
+                #scale=0.263,
+                wcs=self.image.wcs,
+                dtype=numpy.float64,
+            )
+        except RuntimeError as err:
+            # argh, galsim uses generic exceptions
+            raise GMixRangeError("galsim error: '%s'" % str(err))
+
 
         if False:
             import images
@@ -831,11 +843,14 @@ class MetacalAnalyticPSF(Metacal):
         # this should carry over the wcs
         psf_grown_image = self.psf_image.copy()
 
-
-        psf_grown_image = psf_grown.drawImage(
-            wcs=self.psf_image.wcs,
-            method='no_pixel' # pixel is in the psf
-        )
+        try:
+            psf_grown_image = psf_grown.drawImage(
+                wcs=self.psf_image.wcs,
+                method='no_pixel' # pixel is in the psf
+            )
+        except RuntimeError as err:
+            # argh, galsim uses generic exceptions
+            raise GMixRangeError("galsim error: '%s'" % str(err))
 
         if get_nopix:
             # there is no pixel for analytic psf, just return
