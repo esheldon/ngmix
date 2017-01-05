@@ -87,6 +87,7 @@ class Admom(object):
         else:
             Tguess = guess
             guess_gmix = self._generate_guess(Tguess)
+            #print("guess gmix:",guess_gmix)
 
         res=self._go(guess_gmix)
 
@@ -128,7 +129,8 @@ class Admom(object):
                         ares,
                     )
 
-        except GMixRangeError:
+        except GMixRangeError as err:
+            print("caught admom exception: '%s'" % str(err))
             pass
 
         self.result = copy_result(ares)
@@ -147,8 +149,8 @@ class Admom(object):
 
         if isinstance(obs,MultiBandObsList):
             mbobs=obs
-            for oblist in mbobs:
-                for obs in obslist:
+            for obs_list in mbobs:
+                for obs in obs_list:
                     imlist.append(obs.image)
                     wtlist.append(obs.weight)
                     jlist.append(obs.jacobian._data)
@@ -210,14 +212,12 @@ class Admom(object):
         from .gmix import GMixModel
 
         scale=self._jlist[0]['sdet'][0]
-        pars=[
-            urand(low=-0.1*scale, high=0.1*scale), 
-            urand(low=-0.1*scale, high=0.1*scale), 
-            urand(low=-0.1, high=0.1),
-            urand(low=-0.1, high=0.1),
-            Tguess*(1.0 + urand(low=-0.1, high=0.1) ),
-            1.0,
-        ]
+        pars=numpy.zeros(6)
+        pars[0:0+2] = numpy.random.uniform(low=-0.5*scale, high=0.5*scale, size=2)
+        pars[2:2+2] = numpy.random.uniform(low=-0.3, high=0.3, size=2)
+        pars[4]     = Tguess*(1.0 + numpy.random.uniform(low=-0.1, high=0.1))
+        pars[5]     = 1.0
+
         return GMixModel(pars, "gauss")
 
 def get_ratio_error(a, b, var_a, var_b, cov_ab):

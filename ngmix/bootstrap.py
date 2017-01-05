@@ -103,6 +103,7 @@ class Bootstrapper(object):
         if not hasattr(self,'max_fitter'):
             raise RuntimeError("you need to run fit_max successfully first")
         return self.max_fitter
+    get_fitter=get_max_fitter
 
     def get_psf_flux_result(self):
         """
@@ -141,6 +142,7 @@ class Bootstrapper(object):
         return self.round_res
 
 
+    '''
     def get_fitter(self, fitter_type):
         """
         get fitter by name
@@ -156,6 +158,7 @@ class Bootstrapper(object):
         else:
             raise ValueError("bad fitter_type: '%s'" % fitter_type)
         return fitter
+    '''
 
     def set_round_s2n(self, fitter_type='max'):
         """
@@ -1150,6 +1153,291 @@ class BootstrapperGaussMom(Bootstrapper):
 
         guesser=MomGuesser(guess, prior=prior)
         return guesser
+
+class AdmomBootstrapper(Bootstrapper):
+    _default_admom_pars = {
+        'ntry':4,      # number of times to retry fit with a new guess
+        'maxiter':200, # max number of iterations in a fit
+    }
+
+    def __init__(self, obs, admom_pars=None, verbose=False, **kw):
+        """
+        The data can be mutated: If a PSF fit is performed, the gmix will be
+        set for the input PSF observation
+
+        parameters
+        ----------
+        obs: observation(s)
+            Either an Observation, ObsList, or MultiBandObsList The
+            Observations must have a psf set.
+            
+            If the psf observations already have gmix objects set, there is no
+            need to run fit_psfs()
+        """
+
+        self.verbose=verbose
+        self._set_admom_pars(admom_pars)
+
+        # this never gets modified in any way
+        self.mb_obs_list_orig = get_mb_obs(obs)
+
+        # this will get replaced if fit_psfs is run
+        self.mb_obs_list=self.mb_obs_list_orig
+
+        self.model_fits={}
+
+    def _set_admom_pars(self, admom_pars):
+        if admom_pars is None:
+            admom_pars={}
+            admom_pars.update(AdmomBootstrapper._default_admom_pars)
+
+        self._admom_pars=admom_pars
+
+    def get_fitter(self):
+        """
+        get the adaptive moments fitter
+        """
+        if not hasattr(self,'fitter'):
+            raise RuntimeError("you need to run fit() successfully first")
+        return self.fitter
+
+    def fit(self, Tguess=None):
+        """
+        pars controlling the adaptive moment fit are given on construction
+        """
+        if Tguess is None:
+            Tguess = self._get_Tguess()
+
+        fitter = self._fit_one(self.mb_obs_list, Tguess, doround=True)
+        res=fitter.get_result()
+
+        if res['flags'] != 0:
+            f=res['flags']
+            fs=res['flagstr']
+            raise BootGalFailure(
+                "admom gal fit failed: %d '%s'" % (f,fs)
+            )
+
+        self.fitter=fitter
+
+    def fit_psfs(self,
+                 Tguess=None,
+                 Tguess_key=None,
+                 skip_failed=True,
+                 skip_already_done=True):
+        """
+        Fit all psfs.  If the psf observations already have a gmix
+        then this step is not necessary
+
+        pars controlling the adaptive moment fit are given on construction
+
+        parameters
+        ----------
+        Tguess: optional, float
+            Guess for T
+        Tguess_key: optional, string
+            Get the T guess from the given key in the metadata
+        skip_failed: bool
+            If True, failures are just skipped when fitting the galaxy;
+            in other words those observations will be ignored.  If False
+            then an exception is raised
+        skip_already_done: bool
+            Skip psfs with a gmix already set
+        """
+
+        ntot=0
+        new_mb_obslist=MultiBandObsList()
+
+        mb_obs_list = self.mb_obs_list
+        for band,obslist in enumerate(mb_obs_list):
+            new_obslist=ObsList()
+
+            for i,obs in enumerate(obslist):
+                if not obs.has_psf():
+                    raise RuntimeError("observation does not have a psf set")
+
+                try:
+
+                    psf_obs = obs.get_psf()
+                    if skip_already_done:
+                        if psf_obs.has_gmix():
+                            # if have a gmix, skip it
+                            new_obslist.append(obs)
+                            ntot += 1
+                            continue
+
+                    if Tguess_key is not None:
+                        Tguess_i = psf_obs.meta[Tguess_key]
+                    else:
+                        if Tguess is not None:
+                            Tguess_i = Tguess
+                        else:
+                            Tguess_i = self._get_psf_Tguess(psf_obs)
+
+                    self._fit_one_psf(psf_obs, Tguess_i)
+                    new_obslist.append(obs)
+                    ntot += 1
+
+                except BootPSFFailure as err:
+                    if not skip_failed:
+                        raise
+                    else:
+                        mess=("    failed psf fit band %d obs %d: '%s'.  "
+                              "skipping observation" % (band,i,str(err)))
+                        print(mess)
+                        continue
+
+
+            new_mb_obslist.append(new_obslist)
+
+        if ntot == 0:
+            raise BootPSFFailure("no psf fits succeeded")
+
+        self.mb_obs_list=new_mb_obslist
+
+    def _fit_one_psf(self, obs, Tguess):
+        """
+        Fit the image and set the gmix attribute
+
+        parameters
+        ----------
+        obs: Observation
+            Single psf observation
+        Tguess: float
+            Initial guess; random guesses are generated based on this
+        """
+        fitter = self._fit_one(obs, Tguess)
+
+        res=fitter.get_result()
+        if res['flags'] != 0:
+            f=res['flags']
+            fs=res['flagstr']
+            raise BootPSFFailure(
+                "admom psf fit failed: %d '%s'" % (f,fs)
+            )
+
+        gmix=fitter.get_gmix()
+        obs.set_gmix(gmix)
+
+    def _fit_one(self, obs, Tguess, doround=False):
+        """
+        Fit the observation(s) using adaptive moments
+
+        parameters
+        ----------
+        obs: observation
+            A Observation, ObsList, or MultiBandObsList
+        Tguess: float
+            Initial guess; random guesses are generated based on this
+        doround: bool, optional
+            Optionally set round parameters
+        """
+        from . import admom
+        pars=self._admom_pars
+
+        fitter=admom.Admom(obs, maxiter=pars['maxiter'])
+
+        for i in xrange(pars['ntry']):
+            # this generates a gaussian mixture guess based on Tguess
+            fitter.go(Tguess)
+
+            res=fitter.get_result()
+
+            if doround:
+                if res['flags'] != 0:
+                    continue
+                self._set_flux(obs,fitter)
+
+            if res['flags'] == 0:
+                break
+
+        if res['flags'] != 0:
+            return fitter
+
+        # for consistency
+        res['g']     = res['e']
+        res['g_cov'] = res['e_cov']
+
+        if doround:
+            self._set_round_s2n(obs,fitter)
+        return fitter
+
+    def _set_flux(self, obs, fitter):
+        """
+        not yet implemented
+        """
+        res=fitter.get_result()
+        res['flux'] = -9999.0
+        res['flux_err'] = 9999.0
+        res['flux_s2n'] = -9999.0
+        """
+        try:
+            gmix=fitter.get_gmix()
+
+            obs.set_gmix(gmix)
+
+            fitter=ngmix.fitting.TemplateFluxFitter(obs)
+            fitter.go()
+
+            fres=fitter.get_result()
+            if fres['flags'] != 0:
+                res['flags'] = fres
+                raise BootPSFFailure("could not get flux")
+
+            res=fitter.get_result()
+            res['flux']=fres['flux']
+            res['flux_err']=fres['flux_err']
+            res['flux_s2n']=fres['flux']/fres['flux_err']
+
+        except GMixRangeError as err:
+            raise BootPSFFailure(str(err))
+        """
+    def _set_round_s2n(self, obs, fitter):
+        """
+        not yet implemented
+        for now just copy the regular values
+        """
+        res=fitter.get_result()
+        res['s2n_r'] = res['s2n']
+        res['T_r']   = res['T']
+
+        """
+        try:
+            gm  = fitter.get_gmix()
+            gmr = gm.make_round()
+
+            e1r,e2r,T_r=gmr.get_e1e2T()
+
+            res=fitter.get_result()
+            flux=res['flux']
+            gmr.set_flux(flux)
+
+            res['s2n_r']=gmr.get_model_s2n(obs)
+            res['T_r'] = T_r
+
+        except GMixRangeError as err:
+            raise BootPSFFailure(str(err))
+        """
+
+    def _get_psf_Tguess(self, obs):
+        scale=obs.jacobian.get_scale()
+        return 4.0*scale
+
+    def _get_Tguess(self):
+
+        ntot=0
+        Tsum=0.0
+
+        for obs_list in self.mb_obs_list:
+            for obs in obs_list:
+                psf_gmix = obs.get_psf_gmix()
+                Tsum += psf_gmix.get_T()
+                ntot += 1
+
+        T = Tsum/ntot
+        
+        return 2.0*T
+
 
 class MaxMetacalBootstrapper(Bootstrapper):
 
