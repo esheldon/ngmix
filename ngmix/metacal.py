@@ -652,8 +652,9 @@ class Metacal(object):
         dilation = 1.0 + 2*(dilation-1.0)
         if dilation > 1.1:
             dilation=1.1
-
         g1,g2,T = psf_gmix.get_g1g2T()
+        #print("dilation:",dilation)
+        #print("g:",sqrt(g1**2 + g2**2),"e:",sqrt(e1**2 + e2**2))
 
         return dilation
 
@@ -753,6 +754,7 @@ class Metacal(object):
         obs=self.obs
 
         psf_obs = self._make_psf_obs(psf_im)
+        psf_obs.meta.update(obs.psf.meta) 
 
         newobs=Observation(im.array,
                            jacobian=obs.jacobian.copy(),

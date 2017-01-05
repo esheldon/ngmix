@@ -1308,6 +1308,8 @@ class AdmomBootstrapper(Bootstrapper):
         """
         fitter = self._fit_one(obs, Tguess)
 
+        obs.update_meta_data( {'fitter':fitter} )
+
         res=fitter.get_result()
         if res['flags'] != 0:
             f=res['flags']
@@ -1437,6 +1439,115 @@ class AdmomBootstrapper(Bootstrapper):
         T = Tsum/ntot
         
         return 2.0*T
+
+class AdmomMetacalBootstrapper(AdmomBootstrapper):
+    # when symmetrizing psf, no need for psf response.
+    _default_metacal_pars={
+        'symmetrize_psf':True,
+        'types': ['noshear','1p','1m','2p','2m'],
+    }
+
+    def __init__(self, obs, metacal_pars=None, **kw):
+        super(AdmomMetacalBootstrapper,self).__init__(obs, **kw)
+        self._set_metacal_pars(metacal_pars)
+
+    def get_metacal_pars(self):
+        p={}
+        p.update(self._metacal_pars)
+        return p
+
+    def _set_metacal_pars(self, parsin):
+        metacal_pars={}
+        metacal_pars.update(
+            AdmomMetacalBootstrapper._default_metacal_pars,
+        )
+        if parsin is not None:
+            metacal_pars.update(parsin)
+
+        self._metacal_pars=metacal_pars
+
+    def get_metacal_result(self):
+        """
+        get result of metacal
+        """
+        if not hasattr(self, 'metacal_res'):
+            raise RuntimeError("you need to run fit_metacal first")
+        return self.metacal_res
+
+    def fit_metacal(self, Tguess=None, psf_Tguess=None, psf_Tguess_key=None):
+        """
+        pars controlling the adaptive moment fit are given on construction
+        """
+
+        obs_dict = metacal.get_all_metacal(
+            self.mb_obs_list,
+            **self._metacal_pars
+        )
+
+        # always process noshear first
+        keys = list(obs_dict.keys())
+        try:
+            index = keys.index('noshear')
+            keys.pop(index)
+            keys = ['noshear'] + keys
+        except ValueError:
+            pass
+
+
+        # overall flags, or'ed from each bootstrapper
+        res={'mcal_flags':0}
+        for key in keys:
+            # run a regular Bootstrapper on these observations
+            boot = AdmomBootstrapper(
+                obs_dict[key],
+                admom_pars=self._admom_pars,
+                verbose=self.verbose
+            )
+
+            if key=='noshear':
+                boot.fit_psfs(
+                    Tguess=psf_Tguess,
+                    Tguess_key=psf_Tguess_key,
+                    skip_failed=True,
+                    skip_already_done=False, # just in case we have a bookkeeping problem
+                )
+
+                wsum     = 0.0
+                Tpsf_sum = 0.0
+                gpsf_sum = zeros(2)
+                npsf=0
+                for obslist in boot.mb_obs_list:
+                    for obs in obslist:
+                        g1,g2,T=obs.psf.gmix.get_g1g2T()
+
+                        # TODO we sometimes use other weights
+                        twsum = obs.weight.sum()
+
+                        wsum += twsum
+                        gpsf_sum[0] += g1*twsum
+                        gpsf_sum[1] += g2*twsum
+                        Tpsf_sum += T*twsum
+                        npsf+=1
+
+                gpsf = gpsf_sum/wsum
+                Tpsf = Tpsf_sum/wsum
+
+                if Tguess is None:
+                    Tguess = 2*Tpsf
+
+            boot.fit(Tguess=Tguess)
+
+            tres=boot.get_fitter().get_result()
+
+            res['mcal_flags'] |= tres['flags']
+
+            if key=='noshear':
+                tres['gpsf'] = gpsf
+                tres['Tpsf'] = Tpsf
+
+            res[key] = tres
+
+        self.metacal_res = res
 
 
 class MaxMetacalBootstrapper(Bootstrapper):

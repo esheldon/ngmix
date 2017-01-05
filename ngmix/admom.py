@@ -246,6 +246,17 @@ def get_ratio_var(a, b, var_a, var_b, cov_ab):
     var = rsq * (  var_a/a**2 + var_b/b**2 - 2*cov_ab/(a*b) )
     return var
 
+def get_sum_err(var_a, var_b, cov_ab):
+    from math import sqrt
+    var = get_sum_var(var_a, var_b, cov_ab)
+    if var < 0:
+        var=0
+
+    error = sqrt(var)
+    return error
+
+def get_sum_var(var_a, var_b, cov_ab):
+    return var_a + var_b - 2*cov_ab
 
 def copy_result(ares):
     """
@@ -286,25 +297,37 @@ def copy_result(ares):
         sums=res['sums']
 
         pars=res['pars']
+        sums_cov=res['sums_cov']
+
         res['T'] = pars[4]
+
+        if sums[5] > 0.0:
+            # the sums include the weight, so need factor of two to correct
+            res['T_err'] = 2*get_ratio_error(
+                sums[4],
+                sums[5],
+                sums_cov[4,4],
+                sums_cov[5,5],
+                sums_cov[4,5],
+            )
+
         if res['T'] > 0.0:
             res['e'][:] = res['pars'][2:2+2]/res['T']
 
             sums=res['sums']
-            cov=res['sums_cov']
             res['e1err'] = 2*get_ratio_error(
                 sums[2],
                 sums[4],
-                cov[2,2],
-                cov[4,4],
-                cov[2,4],
+                sums_cov[2,2],
+                sums_cov[4,4],
+                sums_cov[2,4],
             )
             res['e2err'] = 2*get_ratio_error(
                 sums[3],
                 sums[4],
-                cov[3,3],
-                cov[4,4],
-                cov[3,4],
+                sums_cov[3,3],
+                sums_cov[4,4],
+                sums_cov[3,4],
             )
 
             if (not numpy.isfinite(res['e1err']) or
@@ -318,7 +341,7 @@ def copy_result(ares):
         else:
             res['flags'] = 0x8
 
-        fvar_sum=res['sums_cov'][5,5]
+        fvar_sum=sums_cov[5,5]
 
         if fvar_sum > 0.0:
 
