@@ -160,12 +160,12 @@ class Bootstrapper(object):
         return fitter
     '''
 
-    def set_round_s2n(self, fitter_type='max'):
+    def set_round_s2n(self):
         """
         set the s/n and (s/n)_T for the round model
         """
 
-        fitter=self.get_fitter(fitter_type)
+        fitter=self.get_max_fitter()
 
         res=fitter.get_result()
 
@@ -1366,8 +1366,11 @@ class AdmomBootstrapper(Bootstrapper):
 
     def _set_flux(self, obs, fitter):
         """
-        not yet implemented
+        do flux in each band separately
         """
+
+        # for each band
+        nband = len(obs)
         res=fitter.get_result()
         res['flux'] = -9999.0
         res['flux_err'] = 9999.0
