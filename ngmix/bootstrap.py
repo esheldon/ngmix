@@ -1364,39 +1364,42 @@ class AdmomBootstrapper(Bootstrapper):
             self._set_round_s2n(obs,fitter)
         return fitter
 
-    def _set_flux(self, obs, fitter):
+    def _set_flux(self, mb_obs_list, fitter):
         """
         do flux in each band separately
         """
 
         # for each band
-        nband = len(obs)
+        nband = len(mb_obs_list)
         res=fitter.get_result()
-        res['flux'] = -9999.0
-        res['flux_err'] = 9999.0
-        res['flux_s2n'] = -9999.0
-        """
+        res['flux'] = zeros(nband) - 9999
+        res['flux_err'] = zeros(nband) + 9999
+        res['flux_s2n'] = zeros(nband) - 9999
+
         try:
             gmix=fitter.get_gmix()
 
-            obs.set_gmix(gmix)
+            for band,obs_list in enumerate(mb_obs_list):
+                for obs in obs_list:
+                    obs.set_gmix(gmix)
 
-            fitter=ngmix.fitting.TemplateFluxFitter(obs)
-            fitter.go()
+                flux_fitter=fitting.TemplateFluxFitter(obs_list)
+                flux_fitter.go()
 
-            fres=fitter.get_result()
-            if fres['flags'] != 0:
-                res['flags'] = fres
-                raise BootPSFFailure("could not get flux")
+                fres=flux_fitter.get_result()
+                if fres['flags'] != 0:
+                    res['flags'] = fres
+                    raise BootPSFFailure("could not get flux")
 
-            res=fitter.get_result()
-            res['flux']=fres['flux']
-            res['flux_err']=fres['flux_err']
-            res['flux_s2n']=fres['flux']/fres['flux_err']
+                res['flux'][band]=fres['flux']
+                res['flux_err'][band]=fres['flux_err']
+
+                if fres['flux_err'] > 0:
+                    res['flux_s2n'][band]=fres['flux']/fres['flux_err']
 
         except GMixRangeError as err:
             raise BootPSFFailure(str(err))
-        """
+
     def _set_round_s2n(self, obs, fitter):
         """
         not yet implemented
