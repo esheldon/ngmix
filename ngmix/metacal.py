@@ -579,10 +579,7 @@ class Metacal(object):
         self.image = galsim.Image(obs.image.copy(),
                                   wcs=self.get_wcs())
 
-        psfnorm = obs.psf.image.copy()
-        psfnorm /= psfnorm.sum()
-
-        self.psf_image = galsim.Image(psfnorm,
+        self.psf_image = galsim.Image(obs.psf.image.copy(),
                                       wcs=self.get_psf_wcs())
 
         # interpolated psf image
@@ -770,6 +767,7 @@ class MetacalAnalyticPSF(Metacal):
     """
     def __init__(self, obs, psf_obj, **kw):
 
+        raise RuntimeError("make sure this all works")
         self._set_psf(obs, psf_obj)
 
 
