@@ -11,7 +11,11 @@ dependencies
 ------------
 
 * numpy
+
+optional dependencies
+---------------------
 * scipy: optional needed for Levenberg-Marquardt fitter
 * emcee: optional for doing MCMC fitting: http://dan.iel.fm/emcee/current/ Affine invariant MCMC sampler.
+* galsim: optional for doign metacalibration operations.
 * statsmodels: optional for importance sampling (multivariate student
     T distribution)
