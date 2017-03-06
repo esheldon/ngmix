@@ -438,7 +438,9 @@ class Metacal(object):
 
         If doshear, also shear it
         """
-        psf_grown_nopix = _do_dilate(self.psf_int_nopix, shear)
+
+        psf_grown_nopix = self._do_dilate(self.psf_int_nopix, shear)
+
         if doshear and not self.shear_pixelized_psf:
             #print('shearing prepix psf')
             psf_grown_nopix = psf_grown_nopix.shear(g1=shear.g1,
@@ -456,6 +458,9 @@ class Metacal(object):
             p2 = p2.shear(g1=shear.g1, g2=shear.g2)
 
         return p1, p2
+
+    def _do_dilate(self, psf, shear):
+        return _do_dilate(psf, shear)
 
     def get_target_image(self, psf_obj, shear=None):
         """
@@ -759,6 +764,20 @@ class Metacal(object):
                            psf=psf_obs)
         return newobs
 
+class MetacalMinGaussPSF(Metacal):
+    def __init__(self, *args, **kw):
+        super(MetacalMinGaussPSF,self).__init__(*args, **kw)
+
+        self.psf_flux = self.obs.psf.image.sum()
+
+        assert self.symmetrize_psf==False,"no symmetrize for MinGaussPSF"
+        assert self.shear_pixelized_psf==False,"no shear pixelized psf for MinGaussPSF"
+
+
+    def _do_dilate(self, psf, shear):
+        newpsf = _get_mingauss_target_psf(psf, flux=self.psf_flux)
+        return _do_dilate(newpsf, shear)
+
 class MetacalAnalyticPSF(Metacal):
     """
     The user inputs a galsim object (e.g. galsim.Gaussian)
@@ -1003,6 +1022,34 @@ def _check_shape(shape):
     """
     if not isinstance(shape, Shape):
         raise TypeError("shape must be of type ngmix.Shape")
+
+
+
+def _get_mingauss_target_psf(psf, flux):
+    """
+    taken from galsim/tests/test_metacal.py
+    """
+    from numpy import meshgrid, arange, min, sqrt, log
+    dk = 0.1              # The resolution in k space for the KImage
+    small_kval = 1.e-2    # Find the k where the given psf hits this kvalue
+    smaller_kval = 3.e-3  # Target PSF will have this kvalue at the same k
+
+    kim = psf.drawKImage(scale=dk)
+    karr_r = kim.real.array
+    # Find the smallest r where the kval < small_kval
+    nk = karr_r.shape[0]
+    kx, ky = meshgrid(arange(-nk/2,nk/2), arange(-nk/2,nk/2))
+    ksq = (kx**2 + ky**2) * dk**2
+    ksq_max = min(ksq[karr_r < small_kval * psf.flux])
+
+    # We take our target PSF to be the (round) Gaussian that is even smaller at this ksq
+    # exp(-0.5 * ksq_max * sigma_sq) = smaller_kval
+    sigma_sq = -2. * log(smaller_kval) / ksq_max
+
+    return galsim.Gaussian(sigma = sqrt(sigma_sq), flux=flux)
+
+
+
 
 def jackknife_shear(g, gpsf, R, Rpsf, chunksize=1):
     """
