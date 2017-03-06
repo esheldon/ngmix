@@ -414,3 +414,23 @@ def get_round_factor(g1, g2):
     f = (1-gsq) / (1+gsq)
     return f
 
+def rotate_shape(g1, g2, theta):
+    """
+    rotate the shapes by the input angle
+
+    g1: scalar or array
+        Shape to be rotated
+    g2: scalar or array
+        Shape to be rotated
+    theta: scalar or array
+        Angle in radians
+    """
+
+    twotheta = 2.0*theta
+
+    cos2angle = numpy.cos(twotheta)
+    sin2angle = numpy.sin(twotheta)
+    g1rot =  g1*cos2angle + g2*sin2angle
+    g2rot = -g1*sin2angle + g2*cos2angle
+
+    return g1rot, g2rot
