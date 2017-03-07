@@ -79,10 +79,18 @@ def _get_all_metacal(obs, step=0.01, **kw):
     get all metacal
     """
     if isinstance(obs, Observation):
-        if 'psf' in kw and kw['psf'] is not None:
-            m=MetacalAnalyticPSF(obs, kw['psf'], **kw)
+
+        psf=kw.get('psf',None)
+        if psf is not None:
+
+            if psf=='mingauss':
+                m=MetacalMinGaussPSF(obs, **kw)
+            else:
+                psf = kw.pop('psf')
+                m=MetacalAnalyticPSF(obs, psf, **kw)
         else:
             m=Metacal(obs, **kw)
+
         odict=m.get_all(step, **kw)
     elif isinstance(obs, MultiBandObsList):
         odict=_make_metacal_mb_obs_list_dict(obs, step, **kw)
@@ -772,6 +780,8 @@ class MetacalMinGaussPSF(Metacal):
 
         assert self.symmetrize_psf==False,"no symmetrize for MinGaussPSF"
         assert self.shear_pixelized_psf==False,"no shear pixelized psf for MinGaussPSF"
+
+        #print("using mingauss psf")
 
 
     def _do_dilate(self, psf, shear):
