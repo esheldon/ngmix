@@ -83,8 +83,8 @@ def _get_all_metacal(obs, step=0.01, **kw):
         psf=kw.get('psf',None)
         if psf is not None:
 
-            if psf=='mingauss':
-                m=MetacalMinGaussPSF(obs, **kw)
+            if psf=='gauss':
+                m=MetacalGaussPSF(obs, **kw)
             else:
                 psf = kw.pop('psf')
                 m=MetacalAnalyticPSF(obs, psf, **kw)
@@ -772,20 +772,20 @@ class Metacal(object):
                            psf=psf_obs)
         return newobs
 
-class MetacalMinGaussPSF(Metacal):
+class MetacalGaussPSF(Metacal):
     def __init__(self, *args, **kw):
-        super(MetacalMinGaussPSF,self).__init__(*args, **kw)
+        super(MetacalGaussPSF,self).__init__(*args, **kw)
 
         self.psf_flux = self.obs.psf.image.sum()
 
-        assert self.symmetrize_psf==False,"no symmetrize for MinGaussPSF"
-        assert self.shear_pixelized_psf==False,"no shear pixelized psf for MinGaussPSF"
-
-        #print("using mingauss psf")
+        assert self.symmetrize_psf==False,\
+                "no symmetrize for GaussPSF"
+        assert self.shear_pixelized_psf==False,\
+                "no shear pixelized psf for GaussPSF"
 
 
     def _do_dilate(self, psf, shear):
-        newpsf = _get_mingauss_target_psf(psf, flux=self.psf_flux)
+        newpsf = _get_gauss_target_psf(psf, flux=self.psf_flux)
         return _do_dilate(newpsf, shear)
 
 class MetacalAnalyticPSF(Metacal):
@@ -1035,12 +1035,15 @@ def _check_shape(shape):
 
 
 
-def _get_mingauss_target_psf(psf, flux):
+def _get_gauss_target_psf(psf, flux):
     """
     taken from galsim/tests/test_metacal.py
     """
     from numpy import meshgrid, arange, min, sqrt, log
-    dk = 0.1              # The resolution in k space for the KImage
+    #dk = 0.1              # The resolution in k space for the KImage
+
+    dk = psf.stepK()/4.0
+
     small_kval = 1.e-2    # Find the k where the given psf hits this kvalue
     smaller_kval = 3.e-3  # Target PSF will have this kvalue at the same k
 
