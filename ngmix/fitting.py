@@ -2567,6 +2567,7 @@ def run_leastsq(func, guess, n_prior_pars, **keys):
     from scipy.optimize import leastsq
 
     npars=guess.size
+    k_space=keys.pop('k_space',False)
 
     res={}
     try:
@@ -2598,7 +2599,10 @@ def run_leastsq(func, guess, n_prior_pars, **keys):
 
             # npars: to remove priors
 
-            dof = fdiff.size - n_prior_pars - npars
+            if k_space:
+                dof = (fdiff.size - n_prior_pars)//2 - npars
+            else:
+                dof = fdiff.size - n_prior_pars - npars
 
             if dof==0:
                 junk,pcov,perr=_get_def_stuff(npars)

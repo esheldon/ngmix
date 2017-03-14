@@ -734,14 +734,14 @@ def make_iilist(obs, **kw):
                 # make dimensions odd
                 dim = 1 + psf_ii.SBProfile.getGoodImageSize(
                     psf_ii.nyquistScale(),
-                    wmult,
+                    #wmult,
                 )
 
             else:
                 # make dimensions odd
                 dim = 1 + ii.SBProfile.getGoodImageSize(
                     ii.nyquistScale(),
-                    wmult,
+                    #wmult,
                 )
                 psf_ii=None
                 psf_weight=None

@@ -101,6 +101,7 @@ class LMSpergel(LMSimple):
         result = run_leastsq(self._calc_fdiff,
                              guess,
                              self.n_prior_pars,
+                             k_space=True,
                              **self.lm_pars)
 
         result['model'] = self.model_name
@@ -146,7 +147,6 @@ class LMSpergel(LMSimple):
                     imsize = tmp_fdiff.array.size
 
                     # the real part
-                    #tmp_fdiff = meta['krmult'].copy()
                     tmp_fdiff.array[:,:] = meta['krmult'].array[:,:]
                     tmp_fdiff -= kobs.kr
 
@@ -158,7 +158,6 @@ class LMSpergel(LMSimple):
                     start += imsize
 
                     # the imaginary part
-                    #tmp_fdiff = meta['kimult'].copy()
                     tmp_fdiff.array[:,:] = meta['kimult'].array[:,:]
                     tmp_fdiff -= kobs.ki
 
