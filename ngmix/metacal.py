@@ -79,10 +79,18 @@ def _get_all_metacal(obs, step=0.01, **kw):
     get all metacal
     """
     if isinstance(obs, Observation):
-        if 'psf' in kw and kw['psf'] is not None:
-            m=MetacalAnalyticPSF(obs, kw['psf'], **kw)
+
+        psf=kw.get('psf',None)
+        if psf is not None:
+
+            if psf=='gauss':
+                m=MetacalGaussPSF(obs, **kw)
+            else:
+                psf = kw.pop('psf')
+                m=MetacalAnalyticPSF(obs, psf, **kw)
         else:
             m=Metacal(obs, **kw)
+
         odict=m.get_all(step, **kw)
     elif isinstance(obs, MultiBandObsList):
         odict=_make_metacal_mb_obs_list_dict(obs, step, **kw)
@@ -438,7 +446,9 @@ class Metacal(object):
 
         If doshear, also shear it
         """
-        psf_grown_nopix = _do_dilate(self.psf_int_nopix, shear)
+
+        psf_grown_nopix = self._do_dilate(self.psf_int_nopix, shear)
+
         if doshear and not self.shear_pixelized_psf:
             #print('shearing prepix psf')
             psf_grown_nopix = psf_grown_nopix.shear(g1=shear.g1,
@@ -456,6 +466,9 @@ class Metacal(object):
             p2 = p2.shear(g1=shear.g1, g2=shear.g2)
 
         return p1, p2
+
+    def _do_dilate(self, psf, shear):
+        return _do_dilate(psf, shear)
 
     def get_target_image(self, psf_obj, shear=None):
         """
@@ -759,6 +772,22 @@ class Metacal(object):
                            psf=psf_obs)
         return newobs
 
+class MetacalGaussPSF(Metacal):
+    def __init__(self, *args, **kw):
+        super(MetacalGaussPSF,self).__init__(*args, **kw)
+
+        self.psf_flux = self.obs.psf.image.sum()
+
+        assert self.symmetrize_psf==False,\
+                "no symmetrize for GaussPSF"
+        assert self.shear_pixelized_psf==False,\
+                "no shear pixelized psf for GaussPSF"
+
+
+    def _do_dilate(self, psf, shear):
+        newpsf = _get_gauss_target_psf(psf, flux=self.psf_flux)
+        return _do_dilate(newpsf, shear)
+
 class MetacalAnalyticPSF(Metacal):
     """
     The user inputs a galsim object (e.g. galsim.Gaussian)
@@ -1004,7 +1033,38 @@ def _check_shape(shape):
     if not isinstance(shape, Shape):
         raise TypeError("shape must be of type ngmix.Shape")
 
-def jackknife_shear(g, gpsf, R, Rpsf, chunksize=1):
+
+
+def _get_gauss_target_psf(psf, flux):
+    """
+    taken from galsim/tests/test_metacal.py
+    """
+    from numpy import meshgrid, arange, min, sqrt, log
+    #dk = 0.1              # The resolution in k space for the KImage
+
+    dk = psf.stepK()/4.0
+
+    small_kval = 1.e-2    # Find the k where the given psf hits this kvalue
+    smaller_kval = 3.e-3  # Target PSF will have this kvalue at the same k
+
+    kim = psf.drawKImage(scale=dk)
+    karr_r = kim.real.array
+    # Find the smallest r where the kval < small_kval
+    nk = karr_r.shape[0]
+    kx, ky = meshgrid(arange(-nk/2,nk/2), arange(-nk/2,nk/2))
+    ksq = (kx**2 + ky**2) * dk**2
+    ksq_max = min(ksq[karr_r < small_kval * psf.flux])
+
+    # We take our target PSF to be the (round) Gaussian that is even smaller at this ksq
+    # exp(-0.5 * ksq_max * sigma_sq) = smaller_kval
+    sigma_sq = -2. * log(smaller_kval) / ksq_max
+
+    return galsim.Gaussian(sigma = sqrt(sigma_sq), flux=flux)
+
+
+
+
+def jackknife_shear(data, chunksize=1, dgamma=0.02):
     """
     get the shear metacalibration style
 
@@ -1013,27 +1073,26 @@ def jackknife_shear(g, gpsf, R, Rpsf, chunksize=1):
     g: array
         [N,2] shape measurements
     R: array
-        [N,2,2] shape response measurements
-    Rpsf: array, optional
-        [N,2] psf response
+        [N,2] shape response measurements
     chunksize: int, optional
         chunksize for jackknifing
     """
 
+    g = data['mcal_g']
 
-    ntot = g.shape[0]
+    R = numpy.zeros( (data.size, 2) )
+
+    R[:,0] = (data['mcal_g_1p'][:,0] - data['mcal_g_1m'][:,0])/dgamma
+    R[:,1] = (data['mcal_g_2p'][:,1] - data['mcal_g_2m'][:,1])/dgamma
+
+    ntot = data.size
 
     nchunks = ntot//chunksize
 
     g_sum = g.sum(axis=0)
     R_sum = R.sum(axis=0)
 
-    psf_corr = (Rpsf*gpsf).sum(axis=0)
-    g_sum -= psf_corr
-
-    R_sum_inv = numpy.linalg.inv(R_sum)
-    shear = numpy.dot(R_sum_inv, g_sum)
-
+    shear = g_sum/R_sum
 
     shears = zeros( (nchunks, 2) )
     for i in xrange(nchunks):
@@ -1041,18 +1100,13 @@ def jackknife_shear(g, gpsf, R, Rpsf, chunksize=1):
         beg = i*chunksize
         end = (i+1)*chunksize
 
-        tgsum = g[beg:end,:].sum(axis=0)
-        tR_sum = R[beg:end,:,:].sum(axis=0)
-
-        tpsfcorr_sum = (Rpsf[beg:end,:]*gpsf[beg:end,:]).sum(axis=0)
-        tgsum -= tRpsf_sum
+        tgsum  = g[beg:end,:].sum(axis=0)
+        tR_sum = R[beg:end,:].sum(axis=0)
 
         j_g_sum = g_sum - tgsum
         j_R_sum = R_sum - tR_sum
 
-        j_R_inv = numpy.linalg.inv(j_R_sum)
-
-        shears[i, :] = numpy.dot(j_R_inv, j_g_sum)
+        shears[i, :] = j_g_sum/j_R_sum
 
     shear_cov = zeros( (2,2) )
     fac = (nchunks-1)/float(nchunks)
@@ -1062,211 +1116,18 @@ def jackknife_shear(g, gpsf, R, Rpsf, chunksize=1):
     shear_cov[1,0] = shear_cov[0,1]
     shear_cov[1,1] = fac*( ((shear[1]-shears[:,1])**2).sum() )
 
-    out={'shear':shear,
-         'shear_cov':shear_cov,
-         'g_sum':g_sum,
-         'R_sum':R_sum,
-         'gsens_sum':R_sum, # another name
-         'R_sum_inv':R_sum_inv,
-         'nuse':g.shape[0],
-         'shears':shears}
-    if Rpsf is not None:
-        out['Rpsf_sum'] = Rpsf_sum
+    out={
+        'shear':shear,
+        'shear_cov':shear_cov,
+        'shear_err':sqrt(diag(shear_cov)),
+        'g_sum':g_sum,
+        'R_sum':R_sum,
+        'R':R_sum/ntot,
+        'shears':shears,
+    }
+
     return out
 
-
-
-def jackknife_shear_weighted(g, gsens, weights, chunksize=1):
-    """
-    get the shear metacal style
-
-    parameters
-    ----------
-    g: array
-        [N,2] shape measurements
-    gsens: array
-        [N,2,2] shape sensitivity measurements
-    weights: array, optional
-        Weights to apply
-    chunksize: int, optional
-        chunksize for jackknifing
-    """
-
-    if weights is None:
-        weights=ones(g.shape[0])
-
-    ntot = g.shape[0]
-
-    nchunks = ntot//chunksize
-
-    wsum = weights.sum()
-    wa=weights[:,newaxis]
-    waa=weights[:,newaxis,newaxis]
-
-    g_sum = (g*wa).sum(axis=0)
-    gsens_sum = (gsens*waa).sum(axis=0)
-
-    gsens_sum_inv = numpy.linalg.inv(gsens_sum)
-    shear = numpy.dot(gsens_sum_inv, g_sum)
-
-    shears = zeros( (nchunks, 2) )
-    for i in xrange(nchunks):
-
-        beg = i*chunksize
-        end = (i+1)*chunksize
-
-        wtsa = (weights[beg:end])[:,newaxis]
-        wtsaa = (weights[beg:end])[:,newaxis,newaxis]
-
-        tgsum = (g[beg:end,:]*wtsa).sum(axis=0)
-        tgsens_sum = (gsens[beg:end,:,:]*wtsaa).sum(axis=0)
-
-
-        j_g_sum     = g_sum     - tgsum
-        j_gsens_sum = gsens_sum - tgsens_sum
-
-        j_gsens_inv = numpy.linalg.inv(j_gsens_sum)
-
-        shears[i, :] = numpy.dot(j_gsens_inv, j_g_sum)
-
-    shear_cov = zeros( (2,2) )
-    fac = (nchunks-1)/float(nchunks)
-
-    shear_cov[0,0] = fac*( ((shear[0]-shears[:,0])**2).sum() )
-    shear_cov[0,1] = fac*( ((shear[0]-shears[:,0]) * (shear[1]-shears[:,1])).sum() )
-    shear_cov[1,0] = shear_cov[0,1]
-    shear_cov[1,1] = fac*( ((shear[1]-shears[:,1])**2).sum() )
-
-    return {'shear':shear,
-            'shear_cov':shear_cov,
-            'g_sum':g_sum,
-            'gsens_sum':gsens_sum,
-            'gsens_sum_inv':gsens_sum_inv,
-            'shears':shears,
-            'weights':weights,
-            'wsum':wsum,
-            'nuse':g.shape[0]}
-
-
-def bootstrap_shear(g, gpsf, R, Rpsf, nboot, verbose=False):
-    """
-    get the shear metacalstyle
-
-    The responses are bootstrapped independently of the
-    shear estimators
-
-    parameters
-    ----------
-    g: array
-        [N,2] shape measurements
-    gpsf: array
-        [N,2] shape measurements
-    R: array
-        [NR,2,2] shape response measurements
-    Rpsf: array
-        [NR,2] psf response
-    nboot: int
-        number of bootstraps to do
-    """
-
-    ng = g.shape[0]
-    nR = R.shape[0]
-
-    # overall mean
-    if verbose:
-        print("    getting overall mean and naive error")
-    res = get_mean_shear(g, gpsf, R, Rpsf)
-    if verbose:
-        print("    shear:         ",res['shear'])
-        print("    shear_err:     ",res['shear_err'])
-
-    # need workspace for ng from both data and
-    # deep response data
-
-    g_scratch    = zeros( (ng, 2) )
-    gpsf_scratch = zeros( (ng, 2) )
-    R_scratch    = zeros( (nR, 2, 2) )
-    Rpsf_scratch = zeros( (nR, 2) )
-
-    shears = zeros( (nboot, 2) )
-
-    for i in xrange(nboot):
-        if verbose:
-            print("    boot %d/%d" % (i+1,nboot))
-
-        g_rind = numpy.random.randint(0, ng, ng)
-        R_rind = numpy.random.randint(0, nR, nR)
-
-        g_scratch[:, :]    = g[g_rind, :]
-        gpsf_scratch[:, :] = gpsf[g_rind, :]
-        R_scratch[:, :, :] = R[R_rind, :, :]
-        Rpsf_scratch[:, :] = Rpsf[R_rind, :]
-
-        tres = get_mean_shear(g_scratch,
-                              gpsf_scratch,
-                              R_scratch,
-                              Rpsf_scratch)
-        shears[i,:] = tres['shear']
-
-    shear_cov = zeros( (2,2) )
-
-    shear = res['shear']
-    shear_mean = shears.mean(axis=0)
-
-    fac = 1.0/(nboot-1.0)
-    shear_cov[0,0] = fac*( ((shear[0]-shears[:,0])**2).sum() )
-    shear_cov[0,1] = fac*( ((shear[0]-shears[:,0]) * (shear[1]-shears[:,1])).sum() )
-    shear_cov[1,0] = shear_cov[0,1]
-    shear_cov[1,1] = fac*( ((shear[1]-shears[:,1])**2).sum() )
-
-    res['shear_mean'] = shear_mean
-    res['shear_err'] = sqrt(diag(shear_cov))
-    res['shear_cov'] = shear_cov
-    res['shears'] = shears
-    return res
-
-def get_mean_shear(g, gpsf, R, Rpsf):
-
-    g_sum = g.sum(axis=0)
-    g_err = g.std(axis=0)/sqrt(g.shape[0])
-
-    g_mean = g_sum/g.shape[0]
-
-    R_sum = R.sum(axis=0)
-    R_mean = R_sum/R.shape[0]
-
-    Rpsf_sum = Rpsf.sum(axis=0)
-    Rpsf_mean = Rpsf_sum/Rpsf.shape[0]
-
-    psf_corr_arr = gpsf.copy()
-    psf_corr_arr[:,0] *= Rpsf_mean[0]
-    psf_corr_arr[:,1] *= Rpsf_mean[1]
-
-    psf_corr_sum = psf_corr_arr.sum(axis=0)
-    psf_corr = psf_corr_sum/g.shape[0]
-
-    Rinv = linalg.inv(R_mean)
-
-    shear = dot(Rinv, g_mean - psf_corr)
-    # naive error
-    shear_err = dot(Rinv, g_err)
-
-    return {
-            'shear':shear,
-            'shear_err':shear_err,
-            'g_mean':g_mean,
-
-            'R':R_mean,
-            'Rpsf':Rpsf_mean,
-            'psf_corr':psf_corr,
-
-            'g_sum':g_sum,
-            'R_sum':R_sum,
-            'Rpsf_sum':Rpsf_sum,
-            'psf_corr_sum':psf_corr_sum,
-            'ng': g.shape[0],
-            'nR': R.shape[0]
-           }
 
 def _make_metacal_mb_obs_list_dict(mb_obs_list, step, **kw):
 
