@@ -16,6 +16,7 @@ from .observation import Observation, ObsList, MultiBandObsList
 
 from .priors import LOWVAL,BIGVAL
 from .gexceptions import GMixRangeError
+from .gsfit import _complex_multiply
 
 class SpergelRunner(object):
     """
@@ -75,6 +76,8 @@ class LMSpergel(LMSimple):
     Fit the spergel profile to the input observations
 
     Fitting is done in k space, with the exact PSF
+
+    should now be able to inherit from the GalsimFitter stuff
     """
     def __init__(self, obs, **keys):
         self.keys=keys
@@ -715,22 +718,5 @@ class LMSpergelPS(LMSpergel):
         pars[0:4] = pars_in[0:4]
         pars[4] = pars_in[4+band]
         return pars
-
-def _complex_multiply(a, b, c, d, scratch, real_res, imag_res):
-    """
-    (a + i *b) * (c + i *d)
-    =
-    (ac-bd) + i* (ad + bc)
-    """
-
-    numpy.multiply(a, c, real_res)
-    numpy.multiply(b, d, scratch)
-
-    real_res -= scratch
-
-    numpy.multiply(a, d, imag_res)
-    numpy.multiply(b, c, scratch)
-
-    imag_res += scratch
 
 

@@ -31,6 +31,7 @@ from .fitting import print_pars
 from . import simplex
 
 from . import spergel
+from . import gsfit
 
 from . import bootstrap
 from .bootstrap import Bootstrapper, CompositeBootstrapper
