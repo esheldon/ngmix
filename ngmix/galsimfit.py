@@ -41,8 +41,9 @@ class GalsimRunner(object):
     lm_pars: dict
         parameters for the lm fitter, e.g. maxfev, ftol, xtol
     prior: ngmix prior
-        For example when fitting simple models, ngmix.PriorSimpleSep can
-        be used as a separable prior on center, g, size, flux.
+        For example when fitting simple models,
+        ngmix.priors.PriorSimpleSep can be used as a separable prior on
+        center, g, size, flux.
 
         For spergel, PriorSpergelSep can be used.
     """
@@ -98,6 +99,18 @@ class GalsimRunner(object):
 class GalsimSimple(LMSimple):
     """
     Fit using galsim 6 parameter models
+
+    parameters
+    ----------
+    obs: observation
+        An instance of Observation, ObsList, or MultiBandObsList
+    model: string
+        e.g. 'exp', 'spergel'
+    lm_pars: dict, optional
+        parameters for the lm fitter, e.g. maxfev, ftol, xtol
+    prior: ngmix prior, optional
+        For example ngmix.priors.PriorSimpleSep can
+        be used as a separable prior on center, g, size, flux.
     """
     def __init__(self, obs, model, **keys):
         self.keys=keys
