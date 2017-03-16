@@ -3,6 +3,10 @@ fitting using galsim to create the models
 """
 
 from __future__ import print_function
+try:
+    xrange
+except:
+    xrange=range
 
 import numpy
 
@@ -23,7 +27,7 @@ class GalsimRunner(object):
     """
     wrapper to generate guesses and run the fitter a few times
 
-    Can be used to run GalsimFitter and SpergelFitter
+    Can be used to run GalsimSimple and SpergelFitter fitters
 
     parameters
     ----------
@@ -37,6 +41,10 @@ class GalsimRunner(object):
     lm_pars: dict
         parameters for the lm fitter, e.g. maxfev, ftol, xtol
     prior: ngmix prior
+        For example when fitting simple models, ngmix.PriorSimpleSep can
+        be used as a separable prior on center, g, size, flux.
+
+        For spergel, PriorSpergelSep can be used.
     """
     def __init__(self,
                  obs,
@@ -80,14 +88,14 @@ class GalsimRunner(object):
                 prior=self.prior,
             )
         else:
-            return GalsimFitter(
+            return GalsimSimple(
                 self.obs,
                 self.model,
                 lm_pars=self.lm_pars,
                 prior=self.prior,
             )
 
-class GalsimFitter(LMSimple):
+class GalsimSimple(LMSimple):
     """
     Fit using galsim 6 parameter models
     """
@@ -349,8 +357,6 @@ class GalsimFitter(LMSimple):
         else:
             kobs=observation.get_kmb_obs(obs_in)
 
-        print("kobs scale:",kobs[0][0].kimage.scale)
-        print("kobs image shape:",kobs[0][0].kimage.array.shape)
         self.mb_kobs = kobs
         self.nband=len(kobs)
 
@@ -489,13 +495,9 @@ class GalsimFitter(LMSimple):
 
         return s2n
 
-class SpergelFitter(GalsimFitter):
+class SpergelFitter(GalsimSimple):
     """
     Fit the spergel profile to the input observations
-
-    Fitting is done in k space, with the exact PSF
-
-    should now be able to inherit from the GalsimFitter stuff
     """
     def __init__(self, obs, **keys):
         super(SpergelFitter,self).__init__(obs, 'spergel', **keys)
