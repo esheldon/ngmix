@@ -22,6 +22,21 @@ from .gexceptions import GMixRangeError
 class GalsimRunner(object):
     """
     wrapper to generate guesses and run the fitter a few times
+
+    Can be used to run GalsimFitter and SpergelFitter
+
+    parameters
+    ----------
+    obs: observation
+        An instance of Observation, ObsList, or MultiBandObsList
+    model: string
+        e.g. 'exp', 'spergel'
+    guesser: ngmix guesser
+        E.g. R50FluxGuesser for 6 parameter models, R50NuFluxGuesser for
+        a spergel model
+    lm_pars: dict
+        parameters for the lm fitter, e.g. maxfev, ftol, xtol
+    prior: ngmix prior
     """
     def __init__(self,
                  obs,
@@ -44,15 +59,10 @@ class GalsimRunner(object):
 
     def go(self, ntry=1):
 
-        fitcls = self._get_fitter_class()
-
+        fitter=self._create_fitter()
         for i in xrange(ntry):
-            guess=self.guesser()
-            fitter=fitcls(self.obs,
-                          self.model,
-                          lm_pars=self.lm_pars,
-                          prior=self.prior)
 
+            guess=self.guesser()
             fitter.go(guess)
 
             res=fitter.get_result()
@@ -62,15 +72,24 @@ class GalsimRunner(object):
         res['ntry'] = i+1
         self.fitter=fitter
 
-    def _get_fitter_class(self):
-        return GalsimFitter
+    def _create_fitter(self):
+        if self.model=='spergel':
+            return SpergelFitter(
+                self.obs,
+                lm_pars=self.lm_pars,
+                prior=self.prior,
+            )
+        else:
+            return GalsimFitter(
+                self.obs,
+                self.model,
+                lm_pars=self.lm_pars,
+                prior=self.prior,
+            )
 
 class GalsimFitter(LMSimple):
     """
-    Fit using galsim models
-
-    start with a concrete example first, then we can try
-    to generalize it
+    Fit using galsim 6 parameter models
     """
     def __init__(self, obs, model, **keys):
         self.keys=keys
@@ -234,30 +253,40 @@ class GalsimFitter(LMSimple):
         make the galsim model
         """
 
+        model = self.make_round_model(pars)
+
         shift = pars[0:0+2]
         g1    = pars[2]
         g2    = pars[3]
+
+        # argh another generic error
+        try:
+            model = model.shear(g1=g1, g2=g2)
+        except ValueError as err:
+            raise GMixRangeError(str(err))
+
+        model = model.shift(shift)
+        return model
+
+    def make_round_model(self, pars):
+        """
+        make the round galsim model, unshifted
+        """
+
         r50   = pars[4]
         flux  = pars[5]
 
         # argh, this throws a runtime error of all things so
         # there is no way to tell what went wrong
         try:
-            # XXX generalize
-            gal = self._model_class(
+            model = self._model_class(
                 half_light_radius=r50,
                 flux=flux,
             )
         except RuntimeError as err:
             raise GMixRangeError(str(err))
 
-        try:
-            gal = gal.shear(g1=g1, g2=g2)
-        except ValueError as err:
-            raise GMixRangeError(str(err))
-
-        gal = gal.shift(shift)
-        return gal
+        return model
 
     def _set_model_class(self):
         import galsim
@@ -272,9 +301,9 @@ class GalsimFitter(LMSimple):
 
     def get_band_pars(self, pars_in, band):
         """
-        Get linear pars for the specified band
+        Get pars for the specified band
 
-        input pars are [c1, c2, e1, e2, r50, nu, flux1, flux2, ....]
+        input pars are [c1, c2, e1, e2, r50, flux1, flux2, ....]
         """
 
         pars=self._band_pars
@@ -407,7 +436,9 @@ class GalsimFitter(LMSimple):
         this is the array we fill with pars for a specific band
         """
         self._set_npars()
-        self._band_pars=numpy.zeros(7)
+
+        npars_band = self.npars - self.nband + 1
+        self._band_pars=numpy.zeros(npars_band)
 
     def get_fit_stats(self, pars):
         """
@@ -458,21 +489,68 @@ class GalsimFitter(LMSimple):
 
         return s2n
 
-def _complex_multiply(a, b, c, d, scratch, real_res, imag_res):
+class SpergelFitter(GalsimFitter):
     """
-    (a + i *b) * (c + i *d)
-    =
-    (ac-bd) + i* (ad + bc)
+    Fit the spergel profile to the input observations
+
+    Fitting is done in k space, with the exact PSF
+
+    should now be able to inherit from the GalsimFitter stuff
     """
+    def __init__(self, obs, **keys):
+        super(SpergelFitter,self).__init__(obs, 'spergel', **keys)
 
-    numpy.multiply(a, c, real_res)
-    numpy.multiply(b, d, scratch)
+    def _set_model_class(self):
+        import galsim
+        
+        self._model_class=galsim.Spergel
 
-    real_res -= scratch
+    def make_round_model(self, pars):
+        """
+        make the galsim Spergel model
+        """
+        import galsim
 
-    numpy.multiply(a, d, imag_res)
-    numpy.multiply(b, c, scratch)
+        r50   = pars[4]
+        nu    = pars[5]
+        flux  = pars[6]
 
-    imag_res += scratch
+        # generic RuntimeError thrown
+        try:
+            gal = galsim.Spergel(
+                nu,
+                half_light_radius=r50,
+                flux=flux,
+            )
+        except RuntimeError as err:
+            raise GMixRangeError(str(err))
+
+        return gal
+
+    def get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+
+        input pars are [c1, c2, e1, e2, r50, nu, flux1, flux2, ....]
+        """
+
+        pars=self._band_pars
+
+        pars[0:6] = pars_in[0:6]
+        pars[6] = pars_in[6+band]
+        return pars
+
+    def _set_prior(self, **keys):
+        self.prior = keys.get('prior',None)
+        if self.prior is None:
+            self.n_prior_pars=0
+        else:
+            #                 c1  c2  e1e2  r50  nu   fluxes
+            self.n_prior_pars=1 + 1 + 1   + 1  + 1  + self.nband
 
 
+    def _set_npars(self):
+        """
+        nband should be set in set_lists, called before this
+        """
+        self.npars=6 + self.nband
