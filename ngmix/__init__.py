@@ -30,7 +30,7 @@ from . import fitting
 from .fitting import print_pars
 from . import simplex
 
-from . import spergel
+from . import galsimfit
 
 from . import bootstrap
 from .bootstrap import Bootstrapper, CompositeBootstrapper

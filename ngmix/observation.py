@@ -500,13 +500,12 @@ def get_mb_obs(obs_in):
 
 class KObservation(object):
     def __init__(self,
-                 kr,
-                 ki,
+                 kimage,
                  weight=None,
                  psf=None,
                  meta=None):
 
-        self._set_images(kr, ki)
+        self._set_image(kimage)
         self._set_weight(weight)
         self.set_psf(psf)
 
@@ -516,20 +515,18 @@ class KObservation(object):
         if meta is not None:
             self.update_meta_data(meta)
 
-    def _set_images(self, kr, ki):
+    def _set_image(self, kimage):
         """
         set the images, ensuring consistency
         """
         import galsim
 
-        assert isinstance(kr, galsim.Image)
-        assert isinstance(ki, galsim.Image)
-        assert kr.array.shape==ki.array.shape
-        assert kr.array.dtype==numpy.float64
-        assert ki.array.dtype==numpy.float64
+        if not isinstance(kimage,galsim.Image):
+            raise ValueError("kimage must be a galsim.Image")
+        if kimage.array.dtype != numpy.complex128:
+            raise ValueError("kimage must be complex")
 
-        self.kr=kr
-        self.ki=ki
+        self.kimage=kimage
 
     def _set_weight(self, weight):
         """
@@ -539,13 +536,16 @@ class KObservation(object):
         import galsim
 
         if weight is None:
-            weight = self.kr.copy()
+            weight = self.kimage.real.copy()
             weight.setZero()
             weight.array[:,:] = 1.0
 
         else:
             assert isinstance(weight, galsim.Image)
-            assert weight.array.shape==self.ki.array.shape
+
+            if weight.array.shape!=self.kimage.array.shape:
+                raise ValueError("weight kimage must have "
+                                 "same shape as kimage")
 
         self.weight=weight
 
@@ -561,8 +561,10 @@ class KObservation(object):
 
         assert isinstance(psf, KObservation)
 
-        assert psf.kr.array.shape==self.kr.array.shape
-        assert numpy.allclose(psf.kr.scale,self.kr.scale)
+        if psf.kimage.array.shape!=self.kimage.array.shape:
+            raise ValueError("psf kimage must have "
+                             "same shape as kimage")
+        assert numpy.allclose(psf.kimage.scale,self.kimage.scale)
 
     def _set_jacobian(self):
         """
@@ -571,9 +573,9 @@ class KObservation(object):
         scale is always the scale of the image
         """
 
-        scale=self.kr.scale
+        scale=self.kimage.scale
 
-        dims=self.kr.array.shape
+        dims=self.kimage.array.shape
         if (dims[0] % 2) == 0:
             cen = (numpy.array(dims)-1.0)/2.0 + 0.5
         else:
@@ -795,14 +797,14 @@ def make_kobs(mb_obs, **kw):
         kobs_list=KObsList()
         for iidict in iilist:
 
-            kr,ki = iidict['ii'].drawKImage(
-                dtype=numpy.float64,
+            kimage = iidict['ii'].drawKImage(
                 nx=dim,
                 ny=dim,
                 scale=dk,
             )
 
-            weight = kr.copy()
+            # need a better way to deal with weights, chi^2 etc.
+            weight = kimage.real.copy()
             medweight = numpy.median(iidict['weight'])
             weight.array[:,:] = 0.5*medweight
 
@@ -810,28 +812,25 @@ def make_kobs(mb_obs, **kw):
             weight *= (1.0/weight.array.size)
 
             if iidict['psf_ii'] is not None:
-                psf_kr,psf_ki = iidict['psf_ii'].drawKImage(
-                    dtype=numpy.float64,
+                psf_kimage = iidict['psf_ii'].drawKImage(
                     nx=dim,
                     ny=dim,
                     scale=dk,
                 )
 
                 psf_medweight = numpy.median(iidict['psf_weight'])
-                psf_weight = psf_kr.copy()
+                psf_weight = psf_kimage.real.copy()
                 psf_weight.array[:,:] = 0.5*psf_medweight
 
                 psf_kobs = KObservation(
-                    psf_kr,
-                    psf_ki,
+                    psf_kimage,
                     weight=psf_weight,
                 )
             else:
                 psf_kobs=None
 
             kobs = KObservation(
-                kr,
-                ki,
+                kimage,
                 weight=weight,
                 psf=psf_kobs,
             )
