@@ -264,6 +264,9 @@ class GalsimSimple(LMSimple):
         r50   = pars[4]
         flux  = pars[5]
 
+        if r50 < 0.0001:
+            raise GMixRangeError("low r50: %g" % r50)
+
         # this throws a generic runtime error so there is no way to tell what
         # went wrong
 

@@ -1918,6 +1918,8 @@ class PriorSpergelSep(object):
         r50=self.r50_prior.sample(n)
         nu=self.nu_prior.sample(n)
 
+        print("r50:",r50)
+
         samples[:,0] = cen1
         samples[:,1] = cen2
         samples[:,2] = g1

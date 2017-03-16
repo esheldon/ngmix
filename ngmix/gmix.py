@@ -1640,9 +1640,20 @@ class GMixND(object):
         # copy all to avoid it getting changed under us and to
         # make sure native byte order
 
-        self.weights = numpy.array(weights, dtype='f8', copy=True)
-        self.means=numpy.array(means, dtype='f8', copy=True)
-        self.covars=numpy.array(covars, dtype='f8', copy=True)
+        weights = numpy.array(weights, dtype='f8', copy=True)
+        means=numpy.array(means, dtype='f8', copy=True)
+        covars=numpy.array(covars, dtype='f8', copy=True)
+
+        if len(means.shape) == 1:
+            means = means.reshape( (means.size, 1) )
+        if len(covars.shape) == 1:
+            covars = covars.reshape( (covars.size, 1, 1) )
+
+        self.weights = weights
+        self.means=means
+        self.covars=covars
+
+
 
         self.ngauss = self.weights.size
 
@@ -1661,7 +1672,7 @@ class GMixND(object):
         data is shape
             [npoints, ndim]
         """
-        from sklearn.mixture import GMM
+        from sklearn.mixture import GaussianMixture
 
         if len(data.shape) == 1:
             data = data[:,numpy.newaxis]
@@ -1670,10 +1681,12 @@ class GMixND(object):
         print("n_iter:   ",n_iter)
         print("min_covar:",min_covar)
 
-        gmm=GMM(n_components=ngauss,
-                n_iter=n_iter,
-                min_covar=min_covar,
-                covariance_type='full')
+        gmm=GaussianMixture(
+            n_components=ngauss,
+            max_iter=n_iter,
+            reg_covar=min_covar,
+            covariance_type='full',
+        )
 
         gmm.fit(data)
 
@@ -1681,7 +1694,7 @@ class GMixND(object):
             print("DID NOT CONVERGE")
 
         self._gmm=gmm
-        self.set_mixture(gmm.weights_, gmm.means_, gmm.covars_)
+        self.set_mixture(gmm.weights_, gmm.means_, gmm.covariances_)
 
     def save_mixture(self, fname):
         """
@@ -1769,42 +1782,59 @@ class GMixND(object):
         sample from the gaussian mixture
         """
         if not hasattr(self, '_gmm'):
-            self._make_gmm()
+            self._set_gmm()
 
         if n is None:
             is_one=True
             n=1
-            if self.ndim==1:
-                is_scalar=1
         else:
             is_one=False
 
-        samples=self._gmm.sample(n)
+        samples,labels = self._gmm.sample(n)
+
+        if self.ndim==1:
+            samples = samples[:,0]
 
         if is_one:
-            samples = samples[0,:]
-            if is_one:
-                samples = samples[0]
+            samples = samples[0]
+
         return samples
 
-
-
-    def _make_gmm(self):
+    def _make_gmm(self, ngauss):
         """
         Make a GMM object for sampling
         """
-        from sklearn.mixture import GMM
+        from sklearn.mixture import GaussianMixture
+
+        gmm=GaussianMixture(
+            n_components=ngauss,
+            max_iter=10000,
+            reg_covar=1.0e-12,
+            covariance_type='full',
+            random_state=self.rng,
+        )
+
+        return gmm
+
+
+    def _set_gmm(self):
+        """
+        Make a GMM object for sampling
+        """
+        import sklearn.mixture
 
         # these numbers are not used because we set the means, etc by hand
         ngauss=self.weights.size
-        gmm=GMM(n_components=self.ngauss,
-                n_iter=10000,
-                min_covar=1.0e-12,
-                covariance_type='full',
-                random_state=self.rng)
+
+        gmm = self._make_gmm(ngauss)
         gmm.means_ = self.means.copy()
-        gmm.covars_ = self.covars.copy()
+        #gmm.covars_ = self.covars.copy()
+        gmm.covariances_ = self.covars.copy()
         gmm.weights_ = self.weights.copy()
+
+        gmm.precisions_cholesky_ = sklearn.mixture.gaussian_mixture._compute_precision_cholesky(
+            self.covars, 'full',
+        )
 
         self._gmm=gmm 
 
