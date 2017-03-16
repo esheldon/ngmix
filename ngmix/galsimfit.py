@@ -203,37 +203,6 @@ class GalsimSimple(LMSimple):
 
         return fdiff
 
-    """
-                    if more:
-                        weight=kobs.weight
-
-                        # numerator
-                        scratch.array[:,:] = kobs.kimage.array[:,:]
-                        krmodel=kmodel.real
-                        kimodel=kmodel.imag
-
-                        # don't want a complex multiply here
-                        scratch.real.array[:,:] *= krmodel.array[:,:]
-                        scratch.imag.array[:,:] *= kimodel.array[:,:]
-
-                        scratch.real.array[:,:] *= weight.array[:,:]
-                        scratch.imag.array[:,:] *= weight.array[:,:]
-
-                        s2n_numer += scratch.real.array.sum()
-                        s2n_numer += scratch.imag.array.sum()
-
-                        # denominator
-                        scratch.array[:,:] = kmodel.array[:,:]
-                        scratch.real.array[:,:] *= scratch.real.array[:,:]
-                        scratch.imag.array[:,:] *= scratch.imag.array[:,:]
-                        scratch.real.array[:,:] *= weight.array[:,:]
-                        scratch.imag.array[:,:] *= weight.array[:,:]
-
-
-                        s2n_denom += scratch.real.array.sum()
-                        s2n_denom += scratch.imag.array.sum()
-    """
-
     def _fill_models(self, pars):
         """
         input pars are in linear space
@@ -263,8 +232,6 @@ class GalsimSimple(LMSimple):
                 )
                 kmodel.setCenter(0,0)
                 gal.SBProfile.drawK(kmodel.image.view(), dk)
-
-                #gal.drawKImage(image=kmodel)
 
                 kmodel *= kobs.psf.kimage
 
@@ -297,8 +264,9 @@ class GalsimSimple(LMSimple):
         r50   = pars[4]
         flux  = pars[5]
 
-        # argh, this throws a runtime error of all things so
-        # there is no way to tell what went wrong
+        # this throws a generic runtime error so there is no way to tell what
+        # went wrong
+
         try:
             model = self._model_class(
                 half_light_radius=r50,
