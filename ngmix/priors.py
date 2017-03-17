@@ -2957,12 +2957,13 @@ class LogNormal(PriorBase):
         Get the probability of x.  x can be an array
     """
 
-    def __init__(self, mean, sigma, rng=None):
+    def __init__(self, mean, sigma, shift=None, rng=None):
         PriorBase.__init__(self, rng=rng)
 
         if mean <= 0:
             raise ValueError("mean %s is < 0" % mean)
 
+        self.shift=shift
         self.mean=mean
         self.sigma=sigma
 
@@ -2982,6 +2983,10 @@ class LogNormal(PriorBase):
         """
         This one has error checking
         """
+
+        if self.shift is not None:
+            x = x - shift
+
         if x <= 0:
             raise GMixRangeError("values of x must be > 0")
 
@@ -2999,6 +3004,8 @@ class LogNormal(PriorBase):
         """
 
         x=numpy.array(x, dtype='f8', copy=False)
+        if self.shift is not None:
+            x = x - self.shift
 
         w,=where(x <= 0)
         if w.size > 0:
@@ -3041,7 +3048,12 @@ class LogNormal(PriorBase):
         #    z=self.rng.randn()
         #else:
         #    z=self.rng.randn(nrand)
-        return numpy.exp(self.logmean + self.logsigma*z)
+        r = numpy.exp(self.logmean + self.logsigma*z)
+
+        if self.shift is not None:
+            r += self.shift
+
+        return r
 
     def sample_brute(self, nrand=None, maxval=None):
         """
@@ -3084,6 +3096,9 @@ class LogNormal(PriorBase):
  
         if is_scalar:
             samples=samples[0]
+
+        if self.shift is not None:
+            samples += self.shift
 
         return samples
 
