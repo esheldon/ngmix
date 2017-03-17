@@ -2985,7 +2985,7 @@ class LogNormal(PriorBase):
         """
 
         if self.shift is not None:
-            x = x - shift
+            x = x - self.shift
 
         if x <= 0:
             raise GMixRangeError("values of x must be > 0")
