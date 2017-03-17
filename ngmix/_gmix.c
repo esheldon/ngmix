@@ -5566,7 +5566,10 @@ PyObject * PyGMix_gmixnd_get_prob_scalar(PyObject* self, PyObject* args) {
     PyObject* icovars=NULL;
     PyObject* tmp_lnprob=NULL;
     PyObject* pars=NULL;
+    PyObject* use=NULL; // which components to include
+
     double* tmp_lnprob_ptr=NULL;
+    npy_int32* use_ptr=NULL;
 
     // up to 10 dims allowed
     double xdiff[10];
@@ -5577,12 +5580,13 @@ PyObject * PyGMix_gmixnd_get_prob_scalar(PyObject* self, PyObject* args) {
     int n_dim=0, idim1=0, idim2=0;
 
     // weight object is currently ignored
-    if (!PyArg_ParseTuple(args, (char*)"OOOOOi", 
+    if (!PyArg_ParseTuple(args, (char*)"OOOOOOi", 
                           &log_pnorms,
                           &means,
                           &icovars,
                           &tmp_lnprob,
                           &pars,
+                          &use,
                           &dolog)) {
         return NULL;
     }
@@ -5599,6 +5603,10 @@ PyObject * PyGMix_gmixnd_get_prob_scalar(PyObject* self, PyObject* args) {
     }
 
     tmp_lnprob_ptr = (double *) PyArray_DATA(tmp_lnprob);
+
+    if (use != Py_None) {
+        use_ptr = (npy_int32 *) PyArray_DATA(use);
+    }
 
     for (i=0; i<n_gauss; i++) {
 
@@ -5629,7 +5637,10 @@ PyObject * PyGMix_gmixnd_get_prob_scalar(PyObject* self, PyObject* args) {
 
     p=0;
     for (i=0; i<n_gauss; i++) {
-        p += exp(tmp_lnprob_ptr[i] - lnpmax);
+
+        if (use == Py_None || use_ptr[i]) {
+            p += exp(tmp_lnprob_ptr[i] - lnpmax);
+        }
     }
 
     if (dolog) {
