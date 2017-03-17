@@ -166,7 +166,10 @@ class GalsimSimple(LMSimple):
 
             self._fill_models(pars)
 
+            #print_pars(fdiff[0:5],front="befor fill:")
             start=self._fill_priors(pars, fdiff)
+            print_pars(pars,front="      pars:")
+            print_pars(fdiff[0:start],front="after fill:")
 
             for band in xrange(self.nband):
 
