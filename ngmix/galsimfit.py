@@ -168,8 +168,8 @@ class GalsimSimple(LMSimple):
 
             #print_pars(fdiff[0:5],front="befor fill:")
             start=self._fill_priors(pars, fdiff)
-            print_pars(pars,front="      pars:")
-            print_pars(fdiff[0:start],front="after fill:")
+            #print_pars(pars,front="      pars:")
+            #print_pars(fdiff[0:start],front="after fill:")
 
             for band in xrange(self.nband):
 

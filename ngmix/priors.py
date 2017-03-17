@@ -2977,7 +2977,13 @@ class LogNormal(PriorBase):
         self.logsigma = logsigma
         self.logivar  = logivar
 
-        self.mode = numpy.exp(self.logmean - self.logvar)
+        log_mode = self.logmean - self.logvar
+        #self.mode = numpy.exp(log_mode)
+        chi2   = self.logivar*(log_mode-self.logmean)**2
+
+        # subtract mode to make max 0.0
+        self.lnprob_max = -0.5*chi2 - log_mode
+
 
     def get_lnprob_scalar(self, x):
         """
@@ -2994,7 +3000,7 @@ class LogNormal(PriorBase):
         chi2   = self.logivar*(logx-self.logmean)**2
 
         # subtract mode to make max 0.0
-        lnprob = -0.5*chi2 - logx
+        lnprob = -0.5*chi2 - logx - self.lnprob_max
 
         return lnprob
 
@@ -3015,7 +3021,7 @@ class LogNormal(PriorBase):
         chi2   = self.logivar*(logx-self.logmean)**2
 
         # subtract mode to make max 0.0
-        lnprob = -0.5*chi2 - logx
+        lnprob = -0.5*chi2 - logx - self.lnprob_max
 
         return lnprob
 
