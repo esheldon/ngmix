@@ -473,6 +473,13 @@ class R50FluxGuesser(object):
                     break
 
 
+class PriorGuesser(object):
+    def __init__(self, prior):
+        self.prior=prior
+
+    def __call__(self, n=None):
+        return self.prior.sample(n)
+
 class R50NuFluxGuesser(R50FluxGuesser):
     """
     get full guesses from just r50 spergel nu and fluxes
@@ -489,6 +496,9 @@ class R50NuFluxGuesser(R50FluxGuesser):
         If sent, "fix-up" guesses if they are not allowed by the prior
     """
 
+    NUMIN=-0.99
+    NUMAX=3.5
+
     def __init__(self, r50, nu, fluxes, prior=None, rng=None):
         super(R50NuFluxGuesser,self).__init__(
             r50,
@@ -497,10 +507,10 @@ class R50NuFluxGuesser(R50FluxGuesser):
             rng=rng,
         )
 
-        if nu < -0.85:
-            nu = -0.6
-        elif nu > 4:
-            nu = 3.0
+        if nu < self.NUMIN:
+            nu = self.NUMIN
+        elif nu > self.NUMAX:
+            nu = self.NUMAX
 
         self.nu=nu
 
@@ -526,7 +536,7 @@ class R50NuFluxGuesser(R50FluxGuesser):
         for i in xrange(n):
             while True:
                 nuguess = self.nu*(1.0 + 0.1*srandu(rng=rng))
-                if nuguess > -0.85 and nuguess < 4:
+                if nuguess > self.NUMIN and nuguess < self.NUMAX:
                     break
             guess[i,5] = nuguess
 
