@@ -84,6 +84,8 @@ def _get_all_metacal(obs, step=0.01, **kw):
         if psf is not None:
 
             if psf=='gauss':
+                # we default to only shear terms, not psf shear terms
+                kw['types']=kw.get('types',METACAL_REQUIRED_TYPES)
                 m=MetacalGaussPSF(obs, **kw)
             else:
                 psf = kw.pop('psf')
