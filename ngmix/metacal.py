@@ -342,10 +342,15 @@ class Metacal(object):
 
         newobs = self._make_obs(sheared_image, newpsf_image)
 
+        # this is the pixel-convolved psf object, used to draw the
+        # psf image
+        newobs.psf.galsim_obj = newpsf_obj
+
         if get_unsheared:
             unsheared_image = self.get_target_image(newpsf_obj, shear=None)
 
             uobs = self._make_obs(unsheared_image, newpsf_image)
+            uobs.psf.galsim_obj = newpsf_obj
 
             psf_nopix_obs = self._make_psf_obs(newpsf_nopix_image)
             uobs.psf_nopix=psf_nopix_obs
