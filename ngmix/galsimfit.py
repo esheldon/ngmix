@@ -710,12 +710,17 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
             wcs = obs.jacobian.get_galsim_wcs()
 
             nrow,ncol=obs.image.shape
-            gim = obj.drawImage(
-                nx=ncol,
-                ny=nrow,
-                wcs=wcs,
-                method='no_pixel', # pixel is assumed to be in psf
-            )
+
+            try:
+                gim = obj.drawImage(
+                    nx=ncol,
+                    ny=nrow,
+                    wcs=wcs,
+                    method='no_pixel', # pixel is assumed to be in psf
+                )
+            except RuntimeError as err:
+                # argh another generic exception
+                raise GMixRangeError(str(err))
 
             image_list.append( gim.array )
 
