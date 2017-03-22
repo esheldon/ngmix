@@ -280,7 +280,7 @@ def copy_result(ares):
             res[n] = ares[n]
 
 
-    res['flux']  = -9999.0
+    res['flux_mean']  = -9999.0
     res['s2n']   = -9999.0
     res['e']     = numpy.array([-9999.0, -9999.0])
     res['e_err'] = 9999.0
@@ -288,10 +288,9 @@ def copy_result(ares):
     res['flagstr'] = _admom_flagmap[res['flags']]
     if res['flags']==0:
 
-        mean_weight = res['wsum']/res['npix']
         flux_sum=res['sums'][5]
-        res['flux'] = flux_sum/mean_weight
-        res['pars'][5] = res['flux']
+        res['flux_mean'] = flux_sum/res['wsum']
+        res['pars'][5] = res['flux_mean']
 
         # now want pars and cov for [cen1,cen2,e1,e2,T,flux]
         sums=res['sums']
