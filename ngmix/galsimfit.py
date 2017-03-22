@@ -240,20 +240,27 @@ class GalsimSimple(LMSimple):
 
                 kmodel=meta['kmodel']
 
-                dk = kmodel.scale
-                dx = numpy.pi/( max(kmodel.array.shape) // 2 * dk )
-
-                real_prof = galsim.PixelScale(dx).toImage(gal)
-                kmodel = real_prof._setup_image(
-                    kmodel, None, None, None, False, numpy.complex128,
-                    odd=True,wmult=1.0,
-                )
-                kmodel.setCenter(0,0)
-                gal.SBProfile.drawK(kmodel.image.view(), dk)
+                gal._drawKImage(kmodel)
 
                 kmodel *= kobs.psf.kimage
 
+    """
+                if False:
+                    #print("kmodel before",kmodel)
 
+                    dk = kmodel.scale
+                    dx = numpy.pi/( max(kmodel.array.shape) // 2 * dk )
+
+                    real_prof = galsim.PixelScale(dx).toImage(gal)
+                    kmodel = real_prof._setup_image(
+                        kmodel, None, None, None, False, numpy.complex128,
+                        odd=True,wmult=1.0,
+                    )
+                    kmodel.setCenter(0,0)
+                    #print("kmodel after",kmodel)
+                    gal.SBProfile.drawK(kmodel.image.view(), dk)
+                else:
+    """
     def make_model(self, pars):
         """
         make the galsim model
@@ -580,15 +587,16 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
         self.model=model
         self.psf_models=psf_models
 
-        self.simulate_s2n=keys.get('simulate_s2n',False)
 
         self.keys=keys
         self.normalize_psf = keys.get('normalize_psf',True)
 
-        rng=keys.get("rng",None)
-        if rng is None:
-            rng = numpy.random.RandomState()
-        self.rng=rng
+        self.simulate_err=keys.get('simulate_err',False)
+        if self.simulate_err:
+            rng=keys.get("rng",None)
+            if rng is None:
+                rng = numpy.random.RandomState()
+            self.rng=rng
 
         self.set_obs(obs)
 
@@ -604,7 +612,6 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
         """
 
         flags=0
-        rng=self.rng
 
         xcorr_sum=0.0
         msq_sum=0.0
@@ -631,12 +638,12 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
                 else:
                     model *= (flux/model.sum())
 
-                    if self.simulate_s2n:
+                    if self.simulate_err:
                         err = numpy.zeros(model.shape)
                         w=numpy.where(wt > 0)
                         err[w] = numpy.sqrt(1.0/wt[w])
                         noisy_model = model.copy()
-                        noisy_model += rng.normal(size=model.shape)*err
+                        noisy_model += self.rng.normal(size=model.shape)*err
                         chi2 +=( (model-noisy_model)**2 *wt ).sum()
                     else:
                         chi2 +=( (model-im)**2 *wt ).sum()
@@ -705,7 +712,6 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
                 psf_model = psf_model.withFlux(1.0)
 
             obj = galsim.Convolve(model, psf_model)
-            obj = obj.withFlux(1.0)
 
             wcs = obs.jacobian.get_galsim_wcs()
 
