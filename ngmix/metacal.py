@@ -1163,6 +1163,9 @@ def _check_shape(shape):
 def _get_gauss_target_psf(psf, flux):
     """
     taken from galsim/tests/test_metacal.py
+
+
+    assumes the psf is centered
     """
     from numpy import meshgrid, arange, min, sqrt, log
     #dk = 0.1              # The resolution in k space for the KImage
