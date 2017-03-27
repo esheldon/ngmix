@@ -38,9 +38,13 @@ class Admom(object):
     """
 
     def __init__(self, obs, maxiter=200, shiftmax=5.0,
-                 etol=1.0e-5, Ttol=0.001, deconv=False):
+                 etol=1.0e-5, Ttol=0.001,
+                 rng=None,
+                 deconv=False):
         self._set_obs(obs, deconv)
         self._set_conf(maxiter, shiftmax, etol, Ttol)
+
+        self.rng=rng
 
     def get_result(self):
         """
@@ -87,7 +91,6 @@ class Admom(object):
         else:
             Tguess = guess
             guess_gmix = self._generate_guess(Tguess)
-            #print("guess gmix:",guess_gmix)
 
         res=self._go(guess_gmix)
 
@@ -207,15 +210,22 @@ class Admom(object):
         dt=numpy.dtype(_admom_result_dtype, align=True)
         return numpy.zeros(1, dtype=dt)
 
+    def _get_rng(self):
+        if self.rng is None:
+            self.rng = numpy.random.RandomState()
+
+        return self.rng
+
     def _generate_guess(self, Tguess):
-        from numpy.random import uniform as urand
         from .gmix import GMixModel
+
+        rng=self._get_rng()
 
         scale=self._jlist[0]['sdet'][0]
         pars=numpy.zeros(6)
-        pars[0:0+2] = numpy.random.uniform(low=-0.5*scale, high=0.5*scale, size=2)
-        pars[2:2+2] = numpy.random.uniform(low=-0.3, high=0.3, size=2)
-        pars[4]     = Tguess*(1.0 + numpy.random.uniform(low=-0.1, high=0.1))
+        pars[0:0+2] = rng.uniform(low=-0.5*scale, high=0.5*scale, size=2)
+        pars[2:2+2] = rng.uniform(low=-0.3, high=0.3, size=2)
+        pars[4]     = Tguess*(1.0 + rng.uniform(low=-0.1, high=0.1))
         pars[5]     = 1.0
 
         return GMixModel(pars, "gauss")
