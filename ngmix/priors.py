@@ -4697,6 +4697,52 @@ class ZDisk2D(_gmix.ZDisk2D):
         super(ZDisk2D,self).get_prob_array2d(x,y,out)
         return out
 
+class ZAnnulus(ZDisk2D):
+    """
+    uniform over an annulus
+
+    Note get_lnprob_scalar1d and get_prob_scalar1d and 2d are already
+    part of base class
+    """
+    def __init__(self, rmin, rmax, rng=None):
+
+        assert rmin < rmax
+
+        self.rmin=rmin
+        super(ZAnnulus,self).__init__(
+            rmax,
+            rng=rng,
+        )
+
+    def sample1d(self, n=None):
+        if n is None:
+            n=1
+            is_scalar=True
+        else:
+            is_scalar=False
+
+        r = numpy.zeros(n)
+        ngood = 0
+        nleft = n
+
+        while True:
+            rtmp = super(ZAnnulus,self).sample1d(nleft)
+
+            w, = numpy.where(rtmp > self.rmin)
+            if w.size > 0:
+                r[ngood:ngood+w.size] = rtmp[w]
+                ngood += w.size
+                nleft -= w.size
+
+            if ngood == n:
+                break
+
+        if is_scalar:
+            r=r[0]
+
+        return r
+
+
 
 class ZDisk2DErf(object):
     """
