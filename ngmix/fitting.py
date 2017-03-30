@@ -664,6 +664,14 @@ class TemplateFluxFitter(FitterBase):
         self.cen=keys.get('cen',None)
 
         self.normalize_psf = keys.get('normalize_psf',True)
+        self.simulate_err=keys.get('simulate_err',False)
+
+        if self.simulate_err:
+            rng=keys.get("rng",None)
+            if rng is None:
+                rng = numpy.random.RandomState()
+            self.rng=rng
+
 
         if self.cen is None:
             self.cen_was_sent=False
@@ -705,18 +713,30 @@ class TemplateFluxFitter(FitterBase):
                 j=obs.jacobian
 
                 if ipass==1:
-                    if self.normalize_psf:
-                        gm.set_psum(1.0)
-                        psf_norm = 1.0
-                    else:
-                        psf_norm = gm.get_psum()
+                    norm = 1.0
+                    if self.do_psf:
+                        if self.normalize_psf:
+                            gm.set_flux(1.0)
+                        else:
+                            norm = gm.get_flux()
+
                     model=gm.make_image(im.shape, jacobian=j)
                     xcorr_sum += (model*im*wt).sum()
                     msq_sum += (model*model*wt).sum()
                 else:
-                    gm.set_psum(flux*psf_norm)
+                    gm.set_flux(flux*norm)
                     model=gm.make_image(im.shape, jacobian=j)
-                    chi2 +=( (model-im)**2 *wt ).sum()
+
+                    if self.simulate_err:
+                        err = numpy.zeros(model.shape)
+                        w=numpy.where(wt > 0)
+                        err[w] = numpy.sqrt(1.0/wt[w])
+                        noisy_model = model.copy()
+                        noisy_model += self.rng.normal(size=model.shape)*err
+                        chi2 +=( (model-noisy_model)**2 *wt ).sum()
+                    else:
+                        chi2 +=( (model-im)**2 *wt ).sum()
+
             if ipass==1:
                 if msq_sum==0:
                     break
@@ -779,8 +799,11 @@ class TemplateFluxFitter(FitterBase):
             # these return copies, ok to modify
             if self.do_psf:
                 gmix=obs.get_psf_gmix()
+                if self.normalize_psf:
+                    gmix.set_flux(1.0)
             else:
                 gmix=obs.get_gmix()
+                gmix.set_flux(1.0)
 
             if self.cen_was_sent:
                 gmix.set_cen(cen[0], cen[1])

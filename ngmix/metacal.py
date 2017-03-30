@@ -84,6 +84,8 @@ def _get_all_metacal(obs, step=0.01, **kw):
         if psf is not None:
 
             if psf=='gauss':
+                # we default to only shear terms, not psf shear terms
+                kw['types']=kw.get('types',METACAL_REQUIRED_TYPES)
                 m=MetacalGaussPSF(obs, **kw)
             else:
                 psf = kw.pop('psf')
@@ -340,10 +342,15 @@ class Metacal(object):
 
         newobs = self._make_obs(sheared_image, newpsf_image)
 
+        # this is the pixel-convolved psf object, used to draw the
+        # psf image
+        newobs.psf.galsim_obj = newpsf_obj
+
         if get_unsheared:
             unsheared_image = self.get_target_image(newpsf_obj, shear=None)
 
             uobs = self._make_obs(unsheared_image, newpsf_image)
+            uobs.psf.galsim_obj = newpsf_obj
 
             psf_nopix_obs = self._make_psf_obs(newpsf_nopix_image)
             uobs.psf_nopix=psf_nopix_obs
@@ -770,7 +777,47 @@ class Metacal(object):
                            jacobian=obs.jacobian.copy(),
                            weight=obs.weight.copy(),
                            psf=psf_obs)
+
+        #_compare_psfs(self.obs.psf, psf_obs)
         return newobs
+
+def _compare_psfs(orig, gpsf):
+    import images
+    from . import admom
+
+    Tguess=4.0
+    amorig=admom.run_admom(
+        orig,
+        Tguess,
+    )
+    amgauss=admom.run_admom(
+        gpsf,
+        Tguess,
+    )
+
+    res_orig=amorig.get_result()
+    res_gauss=amgauss.get_result()
+
+    print("T orig: ",res_orig['T'])
+    print("T gauss:",res_gauss['T'])
+    print("orig  jacobian cen:",orig.jacobian.get_cen())
+    print("gauss jacobian cen:",gpsf.jacobian.get_cen())
+    print("cen orig: ",res_orig['pars'][0:0+2])
+    print("cen gauss:",res_gauss['pars'][0:0+2])
+
+
+    '''
+    images.compare_images(
+        orig.image,
+        gpsf.image,
+        label1='original',
+        label2='gauss',
+        width=1200,
+        height=1200,
+    )
+    '''
+    if 'q'==input('hit a key: '):
+        stop
 
 class MetacalGaussPSF(Metacal):
     def __init__(self, *args, **kw):
@@ -787,6 +834,84 @@ class MetacalGaussPSF(Metacal):
     def _do_dilate(self, psf, shear):
         newpsf = _get_gauss_target_psf(psf, flux=self.psf_flux)
         return _do_dilate(newpsf, shear)
+
+    def get_target_psf(self, shear, type, get_nopix=False):
+        """
+        get galsim object for the dilated, possibly sheared, psf
+
+        parameters
+        ----------
+        shear: ngmix.Shape
+            The applied shear
+        type: string
+            Type of psf target.  For type='gal_shear', the psf is just dilated to
+            deal with noise amplification.  For type='psf_shear' the psf is also
+            sheared for calculating Rpsf
+
+        returns
+        -------
+        galsim object
+        """
+
+        _check_shape(shear)
+
+        if type=='psf_shear':
+            doshear=True
+        else:
+            doshear=False
+
+        psf_grown, psf_grown_nopix = self._get_dilated_psf(
+            shear,
+            doshear=doshear,
+        )
+
+        # this should carry over the wcs
+        psf_grown_image = self.psf_image.copy()
+
+
+
+        try:
+            psf_grown_image = psf_grown.drawImage(
+                wcs=self.psf_image.wcs,
+            )
+            #psf_grown.drawImage(
+            #    image=psf_grown_image,
+            #    method='no_pixel' # pixel is in the psf
+            #)
+
+            if get_nopix:
+                psf_grown_nopix_image = self.psf_image.copy()
+                psf_grown_nopix.drawImage(
+                    image=psf_grown_nopix_image,
+                    method='no_pixel' # pixel is in the psf
+                )
+
+                return psf_grown_image, psf_grown_nopix_image, psf_grown
+            else:
+                return psf_grown_image, psf_grown
+        except RuntimeError as err:
+            # argh, galsim uses generic exceptions
+            raise GMixRangeError("galsim error: '%s'" % str(err))
+
+    def _make_psf_obs(self, psf_im):
+
+        obs=self.obs
+
+        cen = (numpy.array(psf_im.array.shape)-1.0)/2.0
+        j = obs.psf.jacobian.copy()
+        j.set_cen(
+            row=cen[0],
+            col=cen[1],
+        )
+
+        weight = psf_im.array*0 + numpy.median(obs.psf.weight)
+        psf_obs = Observation(
+            psf_im.array,
+            weight=weight,
+            jacobian=j,
+        )
+        return psf_obs
+
 
 class MetacalAnalyticPSF(Metacal):
     """
@@ -1038,6 +1163,9 @@ def _check_shape(shape):
 def _get_gauss_target_psf(psf, flux):
     """
     taken from galsim/tests/test_metacal.py
+
+
+    assumes the psf is centered
     """
     from numpy import meshgrid, arange, min, sqrt, log
     #dk = 0.1              # The resolution in k space for the KImage
