@@ -541,3 +541,9 @@ class R50NuFluxGuesser(R50FluxGuesser):
             guess=guess[0,:]
         return guess
 
+class PriorGuesser(object):
+    def __init__(self, prior):
+        self.prior=prior
+
+    def __call__(self):
+        return self.prior.sample()
