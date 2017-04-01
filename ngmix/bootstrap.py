@@ -1875,17 +1875,31 @@ class CompositeBootstrapper(Bootstrapper):
             dev_guess = None
             
         print("    fitting exp")
-        exp_fitter=self._fit_one_model_max('exp',pars,guess=exp_guess,
-                                           prior=exp_prior,ntry=ntry,guess_widths=guess_widths)
+        exp_fitter=self._fit_one_model_max(
+            'exp',
+            pars,
+            guess=exp_guess,
+            prior=exp_prior,
+            ntry=ntry,
+            guess_widths=guess_widths,
+        )
         fitting.print_pars(exp_fitter.get_result()['pars'], front='        gal_pars:')
         fitting.print_pars(exp_fitter.get_result()['pars_err'], front='        gal_perr:')
         print('        lnprob: %e' % exp_fitter.get_result()['lnprob'])
         
         print("    fitting dev")
-        dev_fitter=self._fit_one_model_max('dev',pars,guess=dev_guess,
-                                           prior=dev_prior,ntry=ntry,guess_widths=guess_widths)
-        fitting.print_pars(dev_fitter.get_result()['pars'], front='        gal_pars:')
-        fitting.print_pars(dev_fitter.get_result()['pars_err'], front='        gal_perr:')
+        dev_fitter=self._fit_one_model_max(
+            'dev',
+            pars,
+            guess=dev_guess,
+            prior=dev_prior,
+            ntry=ntry,
+            guess_widths=guess_widths,
+        )
+        fitting.print_pars(dev_fitter.get_result()['pars'],
+                           front='        gal_pars:')
+        fitting.print_pars(dev_fitter.get_result()['pars_err'],
+                           front='        gal_perr:')
         print('        lnprob: %e' % dev_fitter.get_result()['lnprob'])           
             
         print("    fitting fracdev")
@@ -1903,19 +1917,25 @@ class CompositeBootstrapper(Bootstrapper):
         TdByTe = numpy.clip(TdByTe_raw,TdByTe_range[0],TdByTe_range[1])
         print('        Td/Te: %.3f clipped: %.3f' % (TdByTe_raw,TdByTe))
         
-        guesser=self._get_max_guesser(guess=guess, prior=prior, widths=guess_widths)
+        guesser=self._get_max_guesser(
+            guess=guess,
+            prior=prior,
+            widths=guess_widths,
+        )
 
         print("    fitting composite")
         ok=False
         for i in range(1,5):
             try:
-                runner=CompositeMaxRunner(self.mb_obs_list,
-                                          pars,
-                                          guesser,
-                                          fracdev_clipped,
-                                          TdByTe,
-                                          prior=prior,
-                                          use_logpars=self.use_logpars)
+                runner=CompositeMaxRunner(
+                    self.mb_obs_list,
+                    pars,
+                    guesser,
+                    fracdev_clipped,
+                    TdByTe,
+                    prior=prior,
+                    use_logpars=self.use_logpars,
+                )
                 runner.go(ntry=ntry)
                 ok=True
                 break
@@ -2476,9 +2496,15 @@ class MaxRunner(object):
     """
     wrapper to generate guesses and run the fitter a few times
     """
-    def __init__(self, obs, model, max_pars, guesser, prior=None,
+    def __init__(self,
+                 obs,
+                 model,
+                 max_pars,
+                 guesser,
+                 prior=None,
                  intpars=None,
-                 use_logpars=False, use_round_T=False):
+                 use_logpars=False,
+                 use_round_T=False):
 
         self.obs=obs
         self.intpars=intpars
@@ -2729,8 +2755,14 @@ class CompositeMaxRunner(MaxRunner):
     """
     wrapper to generate guesses and run the psf fitter a few times
     """
-    def __init__(self, obs, max_pars, guesser, fracdev, TdByTe,
-                 prior=None, use_logpars=False):
+    def __init__(self,
+                 obs,
+                 max_pars,
+                 guesser,
+                 fracdev,
+                 TdByTe,
+                 prior=None,
+                 use_logpars=False):
         self.obs=obs
 
         self.max_pars=max_pars
