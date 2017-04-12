@@ -37,7 +37,11 @@ try:
 except:
     xrange=range
 
-def get_all_metacal(obs, step=0.01, fixnoise=True, **kw):
+def get_all_metacal(obs,
+                    step=0.01,
+                    fixnoise=True,
+                    cheatnoise=None,
+                    **kw):
     """
     Get all combinations of metacal images in a dict
 
@@ -69,6 +73,16 @@ def get_all_metacal(obs, step=0.01, fixnoise=True, **kw):
         odict= _get_all_metacal_fixnoise(obs, step=step, **kw)
     else:
         odict= _get_all_metacal(obs, step=step, **kw)
+
+        if cheatnoise is not None:
+            print("    cheatnoise:",cheatnoise)
+            # add the noise *after* the metacal process,
+            # cheating the correlated noise effect.  This is
+            # useful for testing the increase in noise
+            #
+            # only works if the images are all the same size, and
+            # noise is all the same
+            _add_noise_odict(odict, cheatnoise)
 
     return odict
 
@@ -1311,6 +1325,65 @@ def _rotate_obs_image(obs, k=1):
     elif isinstance(obs, MultiBandObsList):
         for obslist in obs:
             _rotate_obs_image(obslist, k=k)
+    else:
+        raise ValueError("obs must be Observation, ObsList, "
+                         "or MultiBandObsList")
+
+
+def _add_noise_odict(odict, noise):
+    """
+    ony
+    """
+
+    noise_image = None
+
+    for key in odict:
+        tobs = odict[key]
+
+        if noise_image is None:
+            if isinstance(tobs, Observation):
+                shape = tobs.weight.shape
+            elif isinstance(tobs, ObsList):
+                shape = tobs[0].weight.shape
+            elif isinstance(tobs, MultiBandObsList):
+                shape = tobs[0][0].weight.shape
+
+            noise_image = numpy.random.normal(
+                scale=noise,
+                size=shape,
+            )
+
+        _add_noise_obs(tobs, noise, noise_image)
+
+def _add_noise_obs(obs, noise, noise_image):
+    """
+    add extra noise and modify the weight map
+    """
+
+    if isinstance(obs, Observation):
+
+        weight=obs.weight
+
+        err2 = numpy.zeros(weight.shape) + noise**2
+
+        w=numpy.where(weight > 0)
+        if w[0].size > 0:
+            err2[w] += 1.0/weight[w]
+
+            # zeros stay zero
+            obs.weight[w] = 1.0/err2[w]
+
+        obs.image += noise_image
+
+    elif isinstance(obs, ObsList):
+        for tobs in obs:
+            _add_noise_obs(tobs, noise, noise_image)
+
+    elif isinstance(obs, MultiBandObsList):
+        for tobslist in obs:
+            _add_noise_obs(tobslist, noise, noise_image)
+
+
     else:
         raise ValueError("obs must be Observation, ObsList, "
                          "or MultiBandObsList")
