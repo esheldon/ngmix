@@ -295,7 +295,6 @@ def copy_result(ares):
     res['e']     = numpy.array([-9999.0, -9999.0])
     res['e_err'] = 9999.0
 
-    res['flagstr'] = _admom_flagmap[res['flags']]
     if res['flags']==0:
 
         flux_sum=res['sums'][5]
@@ -363,6 +362,8 @@ def copy_result(ares):
             res['e_err_r'] = 2.0/res['s2n']
         else:
             res['flags'] = 0x40
+
+    res['flagstr'] = _admom_flagmap[res['flags']]
 
     return res
 
