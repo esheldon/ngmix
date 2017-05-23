@@ -40,7 +40,9 @@ class Admom(object):
     def __init__(self, obs, maxiter=200, shiftmax=5.0,
                  etol=1.0e-5, Ttol=0.001,
                  rng=None,
-                 deconv=False):
+                 deconv=False,
+                 **unused_keys):
+
         self._set_obs(obs, deconv)
         self._set_conf(maxiter, shiftmax, etol, Ttol)
 
