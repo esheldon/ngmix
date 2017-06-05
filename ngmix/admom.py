@@ -196,6 +196,11 @@ class Admom(object):
         self._wtlist=wtlist
         self._jlist=jlist
 
+        for wt in wtlist:
+            wbad=numpy.where(wt <= 0.0)
+            if wbad[0].size > 0:
+                raise ValueError("admom found wt <= 0.0")
+
 
     def _set_conf(self, maxiter, shiftmax, etol, Ttol):
         dt=numpy.dtype(_admom_conf_dtype, align=True)
