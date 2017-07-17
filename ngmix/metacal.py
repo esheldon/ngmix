@@ -5,6 +5,7 @@ Originally based off reading through Eric Huffs code; it has departed
 significantly.
 """
 from __future__ import print_function
+import copy
 import numpy
 from numpy import zeros, ones, newaxis, sqrt, diag, dot, linalg, array
 from numpy import median, where
@@ -135,6 +136,25 @@ def _add_obs_images(obs1, obs2):
         raise ValueError("obs must be Observation, ObsList, "
                          "or MultiBandObsList")
 
+def _replace_image_with_noise(obs):
+    """
+    copy the observation and copy the .noise parameter
+    into the image position
+    """
+
+    noise_obs = copy.deepcopy(obs)
+
+    if isinstance(noise_obs, Observation):
+        noise_obs.image = noise_image.noise
+    elif isinstance(noise_obs, ObsList):
+        for nobs in noise_obs:
+            nobs.image = nobs.noise
+    else:
+        for obslist in noise_obs:
+            for nobs in noise_obs:
+                nobs.image = nobs.noise
+
+    return noise_obs
 
 def _doadd_single_obs(obs, nobs):
     obs.image_orig = obs.image.copy()
@@ -165,7 +185,11 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     """
 
     # Using None for the model means we get just noise
-    noise_obs = simobs.simulate_obs(None, obs, **kw)
+    use_noise_image = kw.get('use_noise_image',False)
+    if use_noise_image:
+        noise_obs =  _replace_image_with_noise(obs)
+    else:
+        noise_obs = simobs.simulate_obs(None, obs, **kw)
 
     #print("    Doing rotnoise")
 
