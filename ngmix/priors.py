@@ -4931,3 +4931,93 @@ class KDE(object):
 
         return r
 
+
+class LimitPDF(object):
+    """
+    wrapper class to limit the sampled range of a PDF
+
+    parameters
+    ----------
+    pdf: a pdf
+        A PDF with the sample(nrand=) method
+    limits: sequence
+        2-element sequence [min, max]
+    """
+    def __init__(self, pdf, limits):
+        self.pdf=pdf
+
+        self.set_limits(limits)
+
+    def sample(self, nrand=None):
+        """
+        sample from the distribution, limiting to the specified range
+        """
+
+        if nrand is None:
+            return self._sample_one()
+        else:
+            return self._sample_many(nrand)
+
+    def _sample_one(self):
+        """
+        sample a single value
+        """
+
+        limits=self.limits
+        pdf=self.pdf
+
+        while True:
+            val = pdf.sample()
+
+            if limits[0] < val < limits[1]:
+                break
+
+        return val
+    
+    def _sample_many(self, nrand):
+        """
+        sample an array of values
+        """
+
+        limits=self.limits
+        pdf=self.pdf
+
+        samples = numpy.zeros(nrand)
+
+        ngood=0
+        nleft=nrand
+
+        while ngood < nrand:
+            
+            rvals = pdf.sample(nleft)
+
+            w,=numpy.where( (rvals > limits[0]) & (rvals < limits[1]) )
+            if w.size > 0:
+                samples[ngood:ngood+w.size] = rvals[w]
+                ngood += w.size
+                nleft -= w.size
+ 
+        return samples
+ 
+    def set_limits(self, limits):
+        """
+        set the limits
+        """
+
+        ok=False
+        try:
+            n=len(limits)
+            if n == 2:
+                ok=True
+        except:
+            pass
+
+        if ok==False:
+            raise ValueError("expected limits to be 2-element sequence, "
+                             "got %s" % limits)
+
+        if limits[0] >= limits[1]:
+            raise ValueError("limits[0] must be less than "
+                             "limits[1], got: %s" % limits)
+        self.limits=limits
+
