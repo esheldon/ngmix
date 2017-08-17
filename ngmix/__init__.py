@@ -3,7 +3,7 @@ todo:
     - add ability to have priors
 """
 
-__version__="v0.9.1"
+__version__="v0.9.3"
 
 from . import gmix
 from .gmix import GMix
