@@ -15,6 +15,7 @@ from .shape import Shape
 from . import simobs
 
 from .gexceptions import GMixRangeError
+import logging
 
 try:
     import galsim
@@ -32,6 +33,8 @@ METACAL_REQUIRED_TYPES = [
     'noshear',
     '1p','1m','2p','2m',
 ]
+
+logger = logging.getLogger(__name__)
 
 try:
     xrange=xrange
@@ -70,13 +73,13 @@ def get_all_metacal(obs,
     """
 
     if fixnoise:
-        print("    Doing fixnoise")
+        logger.debug("    Doing fixnoise")
         odict= _get_all_metacal_fixnoise(obs, step=step, **kw)
     else:
         odict= _get_all_metacal(obs, step=step, **kw)
 
         if cheatnoise is not None:
-            print("    cheatnoise:",cheatnoise)
+            logger.debug("    cheatnoise:",cheatnoise)
             # add the noise *after* the metacal process,
             # cheating the correlated noise effect.  This is
             # useful for testing the increase in noise
@@ -190,8 +193,6 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
         noise_obs =  _replace_image_with_noise(obs)
     else:
         noise_obs = simobs.simulate_obs(None, obs, **kw)
-
-    #print("    Doing rotnoise")
 
     # rotate by 90
     _rotate_obs_image(noise_obs, k=1)
@@ -495,7 +496,6 @@ class Metacal(object):
         psf_grown_nopix = self._do_dilate(self.psf_int_nopix, shear)
 
         if doshear and not self.shear_pixelized_psf:
-            #print('shearing prepix psf')
             psf_grown_nopix = psf_grown_nopix.shear(g1=shear.g1,
                                                     g2=shear.g2)
 
@@ -506,7 +506,6 @@ class Metacal(object):
             p1,p2 = psf_grown, psf_grown_nopix
 
         if doshear and self.shear_pixelized_psf:
-            #print('shearing pixelized psf')
             p1 = p1.shear(g1=shear.g1, g2=shear.g2)
             p2 = p2.shear(g1=shear.g1, g2=shear.g2)
 
@@ -556,23 +555,6 @@ class Metacal(object):
             raise GMixRangeError("galsim error: '%s'" % str(err))
 
 
-        if False:
-            import images
-            print()
-            print("imconv:",imconv)
-            print()
-            print(newim.array.shape,newim.array.dtype)
-            print("imsum:",newim.array.sum())
-            print()
-            images.compare_images(
-                self.image.array,
-                newim.array,
-                label1='image',
-                label2='reconvolved',
-                file='/u/ki/esheldon/public_html/tmp/plots/tmp.png',
-            )
-            if 'q'==raw_input('hit a key: '):
-                stop
         return newim
 
     def _get_target_gal_obj(self, psf_obj, shear=None):
@@ -708,8 +690,6 @@ class Metacal(object):
         if dilation > 1.1:
             dilation=1.1
         g1,g2,T = psf_gmix.get_g1g2T()
-        #print("dilation:",dilation)
-        #print("g:",sqrt(g1**2 + g2**2),"e:",sqrt(e1**2 + e2**2))
 
         return dilation
 
@@ -737,7 +717,7 @@ class Metacal(object):
 
         self.jacobian=jacobian
         wcs_convention=kw.get("wcs_convention",None)
-        print("        wcs convention:",wcs_convention)
+        logger.debug("        wcs convention: %s" % wcs_convention)
 
         if wcs_convention==1:
             self.gs_wcs = galsim.JacobianWCS(jacobian.dudrow,
