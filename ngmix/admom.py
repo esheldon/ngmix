@@ -114,7 +114,6 @@ class Admom(object):
                 )
             else:
                 if len(self._imlist) > 1:
-                    #print("using multi")
                     _gmix.admom_multi(
                         self.conf,
                         self._imlist,
@@ -124,7 +123,6 @@ class Admom(object):
                         ares,
                     )
                 else:
-                    #print("using single")
                     _gmix.admom(
                         self.conf,
                         self._imlist[0],
