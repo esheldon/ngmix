@@ -28,6 +28,12 @@ struct pixel {
     double ierr;
 };
 
+struct coord {
+    double u;
+    double v;
+};
+
+
 //struct PyGMix_Gauss2D {
 struct __attribute__((__packed__)) PyGMix_Gauss2D {
     double p;

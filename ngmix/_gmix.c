@@ -984,73 +984,6 @@ static PyObject * PyGMix_gmix_set_norms(PyObject* self, PyObject* args) {
     }
 }
 
-/*
-   Render the gmix in the input image, without jacobian
-
-   Error checking should be done in python.
-*/
-static PyObject * PyGMix_render(PyObject* self, PyObject* args) {
-
-    PyObject* gmix_obj=NULL;
-    PyObject* image_obj=NULL;
-    int nsub=0;
-    int fast_exp=0;
-    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
-    npy_intp rowsub=0, colsub=0;
-
-    struct PyGMix_Gauss2D *gmix=NULL;
-    double *ptr=NULL, stepsize=0, offset=0, areafac=0, tval=0, trow=0, tcol=0;
-
-    if (!PyArg_ParseTuple(args, (char*)"OOii", &gmix_obj, &image_obj, &nsub, &fast_exp)) {
-        return NULL;
-    }
-
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
-    n_gauss=PyArray_SIZE(gmix_obj);
-
-    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
-        return NULL;
-    }
-
-    stepsize = 1./nsub;
-    offset = (nsub-1)*stepsize/2.;
-    areafac = 1./(nsub*nsub);
-
-    n_row=PyArray_DIM(image_obj, 0);
-    n_col=PyArray_DIM(image_obj, 1);
-
-    for (row=0; row < n_row; row++) {
-        for (col=0; col < n_col; col++) {
-
-            tval = 0.0;
-            trow = row-offset;
-
-            for (rowsub=0; rowsub<nsub; rowsub++) {
-                tcol = col-offset;
-                for (colsub=0; colsub<nsub; colsub++) {
-		  
-                    if (fast_exp) {
-                        tval += PYGMIX_GMIX_EVAL_FAST(gmix, n_gauss, trow, tcol);
-                    } else {
-                        tval += PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, trow, tcol);
-                    }
-
-                    tcol += stepsize;
-                } // colsub
-
-                trow += stepsize;
-            } // rowsub
-
-            // add to existing values
-            ptr=(double*)PyArray_GETPTR2(image_obj,row,col);
-            tval *= areafac;
-            (*ptr) += tval;
-        } // cols
-    } // rows
-
-    Py_INCREF(Py_None);
-    return Py_None;
-}
 
 static PyObject * PyGMix_eval(PyObject* self, PyObject* args) {
 
@@ -1111,101 +1044,8 @@ static PyObject * PyGMix_eval_jacob(PyObject* self, PyObject* args) {
 
 
 
-/*
-   use approximate integral over pixels, good to fractional error
-   of a part in a thousand
-*/
 
 static PyObject * PyGMix_render_gauleg(PyObject* self, PyObject* args) {
-
-    PyObject* gmix_obj=NULL;
-    PyObject* image_obj=NULL;
-    struct PyGMix_Gauss2D *gmix=NULL;
-    int fast_exp=0;
-    int npoints=0;
-
-    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
-    npy_intp rowsub=0, colsub=0;
-
-    double *ptr=NULL, tval=0;
-    // gauleg parameters
-    double
-           trow=0,rowmin=0,rowmax=0,frow1=0,frow2=0,wrow=0,
-           tcol=0,colmin=0,colmax=0,fcol1=0,fcol2=0,wcol=0,
-           wsum=0;
-    const double *xxi=NULL, *wwi=NULL;
-
-    if (!PyArg_ParseTuple(args, (char*)"OOii", 
-                          &gmix_obj, &image_obj, &npoints, &fast_exp)) {
-        return NULL;
-    }
-
-    if (!set_gauleg_data(npoints, &xxi, &wwi)) {
-        return NULL;
-    }
-
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
-    n_gauss=PyArray_SIZE(gmix_obj);
-
-    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
-        return NULL;
-    }
-
-    n_row=PyArray_DIM(image_obj, 0);
-    n_col=PyArray_DIM(image_obj, 1);
-
-    for (row=0; row < n_row; row++) {
-        for (col=0; col < n_col; col++) {
-
-            // integrate over the pixel
-
-            rowmax = row + 0.5;
-            rowmin = row - 0.5;
-            colmax = col + 0.5;
-            colmin = col - 0.5;
-
-            frow1 = (rowmax-rowmin)*0.5; // always 0.5.
-            frow2 = (rowmax+rowmin)*0.5; // always row
-            fcol1 = (colmax-colmin)*0.5; // always 0.5
-            fcol2 = (colmax+colmin)*0.5; // always col
-
-            wsum = 0.0;
-            tval = 0.0;
-
-            for (rowsub=0; rowsub<npoints; rowsub++) {
-                trow = frow1*xxi[rowsub] + frow2;
-                wrow = wwi[rowsub];
-                for (colsub=0; colsub<npoints; colsub++) {
-                    tcol = fcol1*xxi[colsub] + fcol2;
-                    wcol = wwi[colsub];
-		    
-                    if (fast_exp) {
-                        tval += wrow*wcol*PYGMIX_GMIX_EVAL_FAST(gmix, n_gauss, trow, tcol);
-                    } else {
-                        tval += wrow*wcol*PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, trow, tcol);
-                    }
-
-                    wsum += wrow*wcol;
-
-                } // colsub
-            } // rowsub
-
-            // add to existing values
-            ptr=(double*)PyArray_GETPTR2(image_obj,row,col);
-
-            // since we are averaging, we don't multiply by frow1*fcol1
-            tval /= wsum;
-
-            (*ptr) += tval;
-
-        } // cols
-    } // rows
-
-    Py_INCREF(Py_None);
-    return Py_None;
-}
-
-static PyObject * PyGMix_render_jacob_gauleg(PyObject* self, PyObject* args) {
 
     PyObject* gmix_obj=NULL;
     PyObject* image_obj=NULL;
@@ -1313,24 +1153,21 @@ static PyObject * PyGMix_render_jacob_gauleg(PyObject* self, PyObject* args) {
 
    Error checking should be done in python.
 */
-static PyObject * PyGMix_render_jacob(PyObject* self, PyObject* args) {
+static PyObject * PyGMix_render(PyObject* self, PyObject* args) {
 
     PyObject* gmix_obj=NULL;
     PyObject* image_obj=NULL;
     PyObject* jacob_obj=NULL;
-    int nsub=0;
     int fast_exp=0;
     npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
-    npy_intp rowsub=0, colsub=0;
 
     struct PyGMix_Gauss2D *gmix=NULL;
     struct PyGMix_Jacobian *jacob=NULL;
 
-    double *ptr=NULL, u=0, v=0, stepsize=0, ustepsize=0, vstepsize=0,
-           offset=0, areafac=0, tval=0,trow=0, lowcol=0;
+    double *ptr=NULL, u=0, v=0, model_val=0;
 
-    if (!PyArg_ParseTuple(args, (char*)"OOiOi", 
-                          &gmix_obj, &image_obj, &nsub, &jacob_obj, &fast_exp)) {
+    if (!PyArg_ParseTuple(args, (char*)"OOOi", 
+                          &gmix_obj, &image_obj, &jacob_obj, &fast_exp)) {
         return NULL;
     }
 
@@ -1343,52 +1180,117 @@ static PyObject * PyGMix_render_jacob(PyObject* self, PyObject* args) {
 
     jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
 
-    stepsize = 1./nsub;
-    offset = (nsub-1)*stepsize/2.;
-    areafac = 1./(nsub*nsub);
-    // sub-steps while moving along column direction
-    ustepsize = stepsize*jacob->dudcol;
-    vstepsize = stepsize*jacob->dvdcol;
-
     n_row=PyArray_DIM(image_obj, 0);
     n_col=PyArray_DIM(image_obj, 1);
 
     for (row=0; row < n_row; row++) {
         for (col=0; col < n_col; col++) {
 
-            tval = 0.0;
-            trow = row-offset;
-            lowcol = col-offset;
+            u=PYGMIX_JACOB_GETU(jacob, row, col);
+            v=PYGMIX_JACOB_GETV(jacob, row, col);
 
-            for (rowsub=0; rowsub<nsub; rowsub++) {
-                u=PYGMIX_JACOB_GETU(jacob, trow, lowcol);
-                v=PYGMIX_JACOB_GETV(jacob, trow, lowcol);
-
-                for (colsub=0; colsub<nsub; colsub++) {
-		  
-                    if (fast_exp) {
-                        tval += PYGMIX_GMIX_EVAL_FAST(gmix, n_gauss, v, u);
-                    } else {
-                        tval += PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, v, u);
-                    }
-
-                    u += ustepsize;
-                    v += vstepsize;
-                } // colsub
-
-                trow += stepsize;
-            } // rowsub
+            if (fast_exp) {
+                model_val = PYGMIX_GMIX_EVAL_FAST(gmix, n_gauss, v, u);
+            } else {
+                model_val = PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, v, u);
+            }
 
             // add to existing values
             ptr=(double*)PyArray_GETPTR2(image_obj,row,col);
-            tval *= areafac;
-            (*ptr) += tval;
+            (*ptr) += model_val;
+
         } // cols
     } // rows
 
     Py_INCREF(Py_None);
     return Py_None;
 }
+
+static PyObject * PyGMix_render_pixels(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    PyObject* image_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    int fast_exp=0;
+    npy_intp
+        n_gauss=0, igauss=0,
+        n_row=0, n_col=0, n_pixels=0, row=0, col=0,
+        ipixel=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL, *gauss=NULL;
+    struct PyGMix_Jacobian *jacob=NULL;
+    struct coord *coords=NULL, *coord=NULL;
+
+    double
+        *image=NULL,
+        udiff=0, vdiff=0, model_val=0, chi2=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOi", 
+                          &gmix_obj, &image_obj, &jacob_obj, &fast_exp)) {
+        return NULL;
+    }
+
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        return NULL;
+    }
+
+    image = (double *) PyArray_DATA(image_obj);
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    n_pixels=n_row*n_col;
+
+    coords=calloc(n_pixels,sizeof(struct coord));
+
+    ipixel=0;
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+            coord=&coords[ipixel];
+            coord->u=PYGMIX_JACOB_GETU(jacob, row, col);
+            coord->v=PYGMIX_JACOB_GETV(jacob, row, col);
+
+            ipixel++;
+        }
+    }
+
+#pragma omp parallel for \
+        default(none) \
+        shared(gmix,coords,n_pixels,n_gauss,image) \
+        private(ipixel,coord,igauss,gauss,vdiff,udiff,chi2,model_val)
+    for (ipixel=0; ipixel < n_pixels; ipixel++) {
+        coord = &coords[ipixel];
+
+        model_val=0;
+        for (igauss=0; igauss < n_gauss; igauss++) {
+            gauss = &gmix[igauss];
+
+            // v->row, u->col in gauss
+            vdiff = coord->v - gauss->row;
+            udiff = coord->u - gauss->col;
+
+            chi2 =      gauss->dcc*vdiff*vdiff
+                  +     gauss->drr*udiff*udiff
+                  - 2.0*gauss->drc*vdiff*udiff;
+
+            if (chi2 < PYGMIX_MAX_CHI2_FAST && chi2 >= 0.0) {
+                model_val += gauss->pnorm*expd( -0.5*chi2 );
+            }
+        }
+
+        image[ipixel] += model_val;
+
+    }
+
+    free(coords);
+    Py_RETURN_NONE;
+}
+
 
 
 /*
@@ -6626,10 +6528,10 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"get_loglikek",  (PyCFunction)PyGMix_get_loglikek,  METH_VARARGS,  "get log likelihood in k space\n"},
 
 
-    {"render",      (PyCFunction)PyGMix_render, METH_VARARGS,  "render without jacobian\n"},
-    {"render_gauleg",      (PyCFunction)PyGMix_render_gauleg, METH_VARARGS,  "render without jacobian and using gauss-legendre integration\n"},
-    {"render_jacob_gauleg",      (PyCFunction)PyGMix_render_jacob_gauleg, METH_VARARGS,  "render with jacobian and using gauss-legendre integration\n"},
-    {"render_jacob",(PyCFunction)PyGMix_render_jacob, METH_VARARGS,  "render with jacobian\n"},
+    {"render_gauleg",      (PyCFunction)PyGMix_render_gauleg, METH_VARARGS,  "render with jacobian and using gauss-legendre integration\n"},
+    {"render",(PyCFunction)PyGMix_render, METH_VARARGS,  "render with jacobian\n"},
+
+    {"render_pixels",(PyCFunction)PyGMix_render_pixels, METH_VARARGS,  "render with jacobian\n"},
 
     {"eval",      (PyCFunction)PyGMix_eval, METH_VARARGS,  "eval without jacobian\n"},
     {"eval_jacob",      (PyCFunction)PyGMix_eval_jacob, METH_VARARGS,  "eval with a jacobian\n"},

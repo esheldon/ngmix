@@ -362,7 +362,7 @@ class GMix(object):
         _gmix.convolve_fill(output._data, gm, psf._data)
         return output
 
-    def make_image(self, dims, nsub=1, npoints=None, jacobian=None, fast_exp=False):
+    def make_image(self, dims, npoints=None, jacobian=None, fast_exp=False, pixels=False):
         """
         Render the mixture into a new image
 
@@ -370,8 +370,6 @@ class GMix(object):
         ----------
         dims: 2-element sequence
             dimensions [nrows, ncols]
-        nsub: integer, optional
-            Defines a grid for sub-pixel integration
         fast_exp: bool, optional
             use fast, approximate exp function
         """
@@ -382,7 +380,7 @@ class GMix(object):
                              "got %s" % str(dims))
 
         image=numpy.zeros(dims, dtype='f8')
-        self._fill_image(image, nsub=nsub, npoints=npoints, jacobian=jacobian, fast_exp=fast_exp)
+        self._fill_image(image, npoints=npoints, jacobian=jacobian, fast_exp=fast_exp, pixels=pixels)
         return image
 
     def make_round(self, preserve_size=False):
@@ -444,7 +442,7 @@ class GMix(object):
         return gm
 
 
-    def _fill_image(self, image, npoints=None, nsub=1, jacobian=None, fast_exp=False):
+    def _fill_image(self, image, npoints=None, jacobian=None, fast_exp=False, pixels=False):
         """
         Internal routine.  Render the mixture into a new image.  No error
         checking on the image!
@@ -453,11 +451,15 @@ class GMix(object):
         ----------
         image: 2-d double array
             image to render into
-        nsub: integer, optional
-            Defines a grid for sub-pixel integration
         fast_exp: bool, optional
             use fast, approximate exp function
         """
+
+        if jacobian is None:
+            cen=(numpy.array(image.shape)-1.0)/2.0
+            jacobian=UnitJacobian(row=cen[0], col=cen[1])
+        else:
+            assert isinstance(jacobian,Jacobian)
 
         if fast_exp:
             fexp = 1
@@ -465,28 +467,32 @@ class GMix(object):
             fexp = 0
 
         gm=self._get_gmix_data()
-        if jacobian is not None:
-            assert isinstance(jacobian,Jacobian)
-            if npoints is not None:
-                _gmix.render_jacob_gauleg(gm,
-                                          image,
-                                          npoints,
-                                          jacobian._data,
-                                          fexp)
-            else:
-                _gmix.render_jacob(gm,
-                                   image,
-                                   nsub,
-                                   jacobian._data,
-                                   fexp)
+        if npoints is not None:
+            _gmix.render_gauleg(
+                gm,
+                image,
+                npoints,
+                jacobian._data,
+                fexp,
+            )
         else:
-            if npoints is not None:
-                _gmix.render_gauleg(gm, image, npoints, fexp)
+            if pixels:
+                _gmix.render_pixels(
+                    gm,
+                    image,
+                    jacobian._data,
+                    fexp,
+                )
             else:
-                _gmix.render(gm, image, nsub, fexp)
+                _gmix.render(
+                    gm,
+                    image,
+                    jacobian._data,
+                    fexp,
+                )
 
 
-    def fill_fdiff(self, obs, fdiff, start=0, nsub=1, npoints=None, nocheck=False):
+    def fill_fdiff(self, obs, fdiff, start=0, npoints=None, nocheck=False):
         """
         Fill fdiff=(model-data)/err given the input Observation
 
@@ -513,7 +519,6 @@ class GMix(object):
         if nuse < image.size:
             raise ValueError("fdiff from start must have "
                              "len >= %d, got %d" % (image.size,nuse))
-        assert nsub >= 1,"nsub must be >= 1"
 
         gm=self._get_gmix_data()
         if npoints is not None:
@@ -524,14 +529,6 @@ class GMix(object):
                                                              fdiff,
                                                              start,
                                                              npoints)
-        elif nsub > 1:
-            s2n_numer,s2n_denom,npix=_gmix.fill_fdiff_sub(gm,
-                                                          image,
-                                                          obs.weight,
-                                                          obs.jacobian._data,
-                                                          fdiff,
-                                                          start,
-                                                          nsub)
         else:
             if hasattr(obs, '_pixels'):
                 s2n_numer=0.0
@@ -845,7 +842,7 @@ class GMix(object):
         }
 
 
-    def get_loglike(self, obs, nsub=1, npoints=None, more=False):
+    def get_loglike(self, obs, npoints=None, more=False):
         """
         Calculate the log likelihood given the input Observation
 
@@ -855,8 +852,6 @@ class GMix(object):
         obs: Observation
             The Observation to compare with. See ngmix.observation.Observation
             The Observation must have a weight map set
-        nsub: int, optional
-            Integrate the model over each pixel using a nsubxnsub grid
         more:
             if True, return a dict with more informatioin
         """
@@ -871,14 +866,6 @@ class GMix(object):
                                                                       obs.weight,
                                                                       obs.jacobian._data,
                                                                       npoints)
-
-        elif nsub > 1:
-            #print("doing nsub")
-            loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike_sub(gm,
-                                                                   obs.image,
-                                                                   obs.weight,
-                                                                   obs.jacobian._data,
-                                                                   nsub)
 
         else:
             if obs.has_aperture():
@@ -909,7 +896,7 @@ class GMix(object):
         else:
             return loglike
 
-    def get_loglike_robust(self, obs, nu, nsub=1, more=False):
+    def get_loglike_robust(self, obs, nu, more=False):
         """
         Calculate the log likelihood given the input Observation
         using robust likelihood
@@ -921,8 +908,6 @@ class GMix(object):
             The Observation must have a weight map set
         nu: parameter for robust likelihood - nu > 2, nu -> \infty is a Gaussian (or chi^2)
         """
-        #print("using robust")
-        assert nsub==1,"nsub must be 1 for robust"
 
 
         if obs.jacobian is not None:
@@ -943,7 +928,7 @@ class GMix(object):
         else:
             return loglike
 
-    def get_loglike_margsky(self, obs, model_image, nsub=1, more=False):
+    def get_loglike_margsky(self, obs, model_image, more=False):
         """
         Calculate the log likelihood given the input Observation, subtracting
         the mean of the image and model.  The model is first rendered into the
@@ -958,8 +943,6 @@ class GMix(object):
             The Observation must have image_mean set
         model_image: 2-d double array
             image to render model into
-        nsub: integer, optional
-            Defines a grid for sub-pixel integration 
         """
 
         #print("using margsky")
@@ -974,7 +957,7 @@ class GMix(object):
         assert model_image.shape==image.shape,"image and model must be same shape"
 
         model_image[:,:]=0
-        self._fill_image(model_image, nsub=nsub, jacobian=obs.jacobian)
+        self._fill_image(model_image, jacobian=obs.jacobian)
 
         model_mean=_gmix.get_image_mean(model_image, obs.weight)
 
