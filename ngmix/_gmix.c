@@ -10,6 +10,7 @@
 
  */
 
+#include <omp.h>
 #include <complex.h>
 #include <Python.h>
 #include <numpy/arrayobject.h> 
@@ -3202,6 +3203,79 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
 
     return retval;
 }
+
+
+
+
+static PyObject * PyGMix_get_loglike_pixels(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    PyObject* pixels_obj=NULL;
+
+    npy_intp n_gauss=0, n_pixels=0, ipixel=0, igauss=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL, *gauss=NULL;
+    struct pixel *pixels=NULL, *pixel=NULL;
+
+    double
+        model_val=0, diff=0,
+        chi2=0, udiff=0, vdiff=0,
+        loglike=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OO", 
+                          &gmix_obj, &pixels_obj)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    pixels=(struct pixel* ) PyArray_DATA(pixels_obj);
+    n_pixels=PyArray_SIZE(pixels_obj);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        return NULL;
+    }
+
+#pragma omp parallel for \
+        default(none) \
+        shared(gmix,pixels,n_pixels,n_gauss) \
+        private(ipixel,pixel,igauss,gauss,vdiff,udiff,chi2,model_val,diff) \
+		reduction(+:loglike)
+    for (ipixel=0; ipixel < n_pixels; ipixel++) {
+        pixel = &pixels[ipixel];
+
+        model_val=0;
+        for (igauss=0; igauss < n_gauss; igauss++) {
+            gauss = &gmix[igauss];
+
+            // v->row, u->col in gauss
+            vdiff = pixel->v - gauss->row;
+            udiff = pixel->u - gauss->col;
+
+            chi2 =       gauss->dcc*vdiff*vdiff
+                   +     gauss->drr*udiff*udiff
+                   - 2.0*gauss->drc*vdiff*udiff;
+
+            if (chi2 < PYGMIX_MAX_CHI2 && chi2 >= 0.0) {
+                model_val += gauss->pnorm*expd( -0.5*chi2 );
+            }
+
+        }
+
+        diff = model_val-pixel->val;
+        loglike += diff*diff*pixel->ierr*pixel->ierr;
+
+    }
+
+    loglike *= (-0.5);
+
+    return Py_BuildValue("d", loglike);
+}
+
+
+
+
 
 /*
    Fill the input fdiff=(model-data)/err, return s2n_numer, s2n_denom
@@ -6468,6 +6542,8 @@ static PyMethodDef pygauss2d_funcs[] = {
 
     {"get_loglike_sub", (PyCFunction)PyGMix_get_loglike_sub,  METH_VARARGS,  "calculate likelihood\n"},
     {"get_loglike_robust", (PyCFunction)PyGMix_get_loglike_robust,  METH_VARARGS,  "calculate likelihood with robust metric\n"},
+
+    {"get_loglike_pixels", (PyCFunction)PyGMix_get_loglike_pixels,  METH_VARARGS,  "calculate likelihood\n"},
 
     {"fill_fdiff",  (PyCFunction)PyGMix_fill_fdiff,  METH_VARARGS,  "fill fdiff for LM\n"},
     {"fill_fdiff_gauleg",  (PyCFunction)PyGMix_fill_fdiff_gauleg,  METH_VARARGS,  "fill fdiff for LM, integrating over pixels\n"},

@@ -879,10 +879,14 @@ class GMix(object):
 
 
             else:
-                loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike(gm,
-                                                                   obs.image,
-                                                                   obs.weight,
-                                                                   obs.jacobian._data)
+                if hasattr(obs, '_pixels'):
+                    loglike=_gmix.get_loglike_pixels(gm, obs._pixels)
+
+                else:
+                    loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike(gm,
+                                                                       obs.image,
+                                                                       obs.weight,
+                                                                       obs.jacobian._data)
 
         if more:
             return {'loglike':loglike,
