@@ -3380,115 +3380,6 @@ static PyObject * PyGMix_fill_fdiff_gauleg(PyObject* self, PyObject* args) {
 }
 
 
-/*
-   Fill the input fdiff=(model-data)/err, return s2n_numer, s2n_denom
-   with sub-pixel integration
-
-   Error checking should be done in python.
-*/
-static PyObject * PyGMix_fill_fdiff_sub(PyObject* self, PyObject* args) {
-
-    PyObject* gmix_obj=NULL;
-    PyObject* image_obj=NULL;
-    PyObject* weight_obj=NULL;
-    PyObject* jacob_obj=NULL;
-    PyObject* fdiff_obj=NULL;
-    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
-    int start=0, nsub=0;
-
-    long npix=0;
-
-    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
-    struct PyGMix_Jacobian *jacob=NULL;
-
-    double data=0, ivar=0, ierr=0, u=0, v=0, *fdiff_ptr=NULL;
-    double model_val=0;
-    double s2n_numer=0.0, s2n_denom=0.0;
-    double stepsize=0, ustepsize=0, vstepsize=0, 
-           offset=0, areafac=0, trow=0, lowcol=0;
-    npy_intp rowsub=0, colsub=0;
-
-    PyObject* retval=NULL;
-
-    if (!PyArg_ParseTuple(args, (char*)"OOOOOii", 
-                          &gmix_obj, &image_obj, &weight_obj, &jacob_obj,
-                          &fdiff_obj, &start, &nsub)) {
-        return NULL;
-    }
-
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
-    n_gauss=PyArray_SIZE(gmix_obj);
-
-    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
-        return NULL;
-    }
-
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
-
-    stepsize = 1./nsub;
-    offset = (nsub-1)*stepsize/2.;
-    areafac = 1./(nsub*nsub);
-    ustepsize = stepsize*jacob->dudcol;
-    vstepsize = stepsize*jacob->dvdcol;
-
-    n_row=PyArray_DIM(image_obj, 0);
-    n_col=PyArray_DIM(image_obj, 1);
-
-
-    // we might start somewhere after the priors
-    // note fdiff is 1-d
-    fdiff_ptr=(double *)PyArray_GETPTR1(fdiff_obj,start);
-
-    for (row=0; row < n_row; row++) {
-        for (col=0; col < n_col; col++) {
-
-            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
-            if ( ivar > 0.0) {
-
-                npix += 1;
-
-                trow = row-offset;
-                lowcol = col-offset;
-
-                model_val=0.;
-                for (rowsub=0; rowsub<nsub; rowsub++) {
-                    u=PYGMIX_JACOB_GETU(jacob, trow, lowcol);
-                    v=PYGMIX_JACOB_GETV(jacob, trow, lowcol);
-
-                    for (colsub=0; colsub<nsub; colsub++) {
-
-                        model_val += PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
-
-                        u += ustepsize;
-                        v += vstepsize;
-                    } // colsub
-
-                    trow += stepsize;
-                } // rowsub
-
-                model_val *= areafac;
-
-                ierr=sqrt(ivar);
-                data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
-
-                (*fdiff_ptr) = (model_val-data)*ierr;
-                s2n_numer += data*model_val*ivar;
-                s2n_denom += model_val*model_val*ivar;
-            } else {
-                (*fdiff_ptr) = 0.0;
-            }
-
-            fdiff_ptr++;
-
-        }
-    }
-
-    // fill in the retval
-    PYGMIX_PACK_RESULT3(s2n_numer, s2n_denom, npix);
-    return retval;
-}
-
-
 static PyObject * PyGMix_fill_fdiff_pixels(PyObject* self, PyObject* args) {
 
     PyObject* gmix_obj=NULL;
@@ -6520,11 +6411,11 @@ static PyMethodDef pygauss2d_funcs[] = {
 
     {"fill_fdiff",  (PyCFunction)PyGMix_fill_fdiff,  METH_VARARGS,  "fill fdiff for LM\n"},
     {"fill_fdiff_gauleg",  (PyCFunction)PyGMix_fill_fdiff_gauleg,  METH_VARARGS,  "fill fdiff for LM, integrating over pixels\n"},
-    {"fill_fdiff_sub",  (PyCFunction)PyGMix_fill_fdiff_sub,  METH_VARARGS,  "fill fdiff for LM with sub-pixel integration\n"},
 
     {"fill_fdiff_pixels",  (PyCFunction)PyGMix_fill_fdiff_pixels,  METH_VARARGS,  "fill fdiff for LM\n"},
 
     {"fill_fdiffk",  (PyCFunction)PyGMix_fill_fdiffk,  METH_VARARGS,  "fill fdiff for LM\n"},
+
     {"get_loglikek",  (PyCFunction)PyGMix_get_loglikek,  METH_VARARGS,  "get log likelihood in k space\n"},
 
 
