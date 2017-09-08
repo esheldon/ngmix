@@ -3587,6 +3587,77 @@ static PyObject * PyGMix_fill_fdiff_sub(PyObject* self, PyObject* args) {
 }
 
 
+static PyObject * PyGMix_fill_fdiff_pixels(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    PyObject* pixels_obj=NULL;
+    PyObject* fdiff_obj=NULL;
+
+    npy_intp n_gauss=0, n_pixels=0, ipixel=0, igauss=0;
+    int start=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL, *gauss=NULL;
+    struct pixel *pixels=NULL, *pixel=NULL;
+    double *fdiff=NULL;
+
+    double
+        model_val=0, diff,
+        chi2=0, udiff=0, vdiff=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOi", 
+                          &gmix_obj,
+						  &pixels_obj,
+						  &fdiff_obj,
+                          &start)) {
+        return NULL;
+    }
+
+    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    pixels=(struct pixel* ) PyArray_DATA(pixels_obj);
+    n_pixels=PyArray_SIZE(pixels_obj);
+
+    fdiff=(double *)PyArray_GETPTR1(fdiff_obj,start);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        return NULL;
+    }
+
+#pragma omp parallel for \
+        default(none) \
+        shared(gmix,pixels,n_pixels,n_gauss,fdiff) \
+        private(ipixel,pixel,igauss,gauss,vdiff,udiff,chi2,model_val,diff)
+    for (ipixel=0; ipixel < n_pixels; ipixel++) {
+        pixel = &pixels[ipixel];
+
+        model_val=0;
+        for (igauss=0; igauss < n_gauss; igauss++) {
+            gauss = &gmix[igauss];
+
+            // v->row, u->col in gauss
+            vdiff = pixel->v - gauss->row;
+            udiff = pixel->u - gauss->col;
+
+            chi2 =       gauss->dcc*vdiff*vdiff
+                   +     gauss->drr*udiff*udiff
+                   - 2.0*gauss->drc*vdiff*udiff;
+
+            if (chi2 < PYGMIX_MAX_CHI2 && chi2 >= 0.0) {
+                model_val += gauss->pnorm*expd( -0.5*chi2 );
+            }
+
+        }
+
+        diff = model_val-pixel->val;
+        diff *= pixel->ierr;
+        fdiff[ipixel] = diff;
+
+    }
+
+    Py_RETURN_NONE;
+}
+
 
 
 /*
@@ -6548,6 +6619,8 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"fill_fdiff",  (PyCFunction)PyGMix_fill_fdiff,  METH_VARARGS,  "fill fdiff for LM\n"},
     {"fill_fdiff_gauleg",  (PyCFunction)PyGMix_fill_fdiff_gauleg,  METH_VARARGS,  "fill fdiff for LM, integrating over pixels\n"},
     {"fill_fdiff_sub",  (PyCFunction)PyGMix_fill_fdiff_sub,  METH_VARARGS,  "fill fdiff for LM with sub-pixel integration\n"},
+
+    {"fill_fdiff_pixels",  (PyCFunction)PyGMix_fill_fdiff_pixels,  METH_VARARGS,  "fill fdiff for LM\n"},
 
     {"fill_fdiffk",  (PyCFunction)PyGMix_fill_fdiffk,  METH_VARARGS,  "fill fdiff for LM\n"},
     {"get_loglikek",  (PyCFunction)PyGMix_get_loglikek,  METH_VARARGS,  "get log likelihood in k space\n"},

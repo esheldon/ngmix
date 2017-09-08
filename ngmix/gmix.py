@@ -533,12 +533,25 @@ class GMix(object):
                                                           start,
                                                           nsub)
         else:
-            s2n_numer,s2n_denom,npix=_gmix.fill_fdiff(gm,
-                                                      image,
-                                                      obs.weight,
-                                                      obs.jacobian._data,
-                                                      fdiff,
-                                                      start)
+            if hasattr(obs, '_pixels'):
+                s2n_numer=0.0
+                s2n_denom=0.0
+                npix=obs.image.size
+                _gmix.fill_fdiff_pixels(
+                    gm,
+                    obs._pixels,
+                    fdiff,
+                    start,
+                )
+            else:
+                s2n_numer,s2n_denom,npix=_gmix.fill_fdiff(
+                    gm,
+                    image,
+                    obs.weight,
+                    obs.jacobian._data,
+                    fdiff,
+                    start,
+                )
 
         return {'s2n_numer':s2n_numer,
                 's2n_denom':s2n_denom,
