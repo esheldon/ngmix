@@ -2639,6 +2639,60 @@ static PyObject * PyGMix_get_ksigma_weighted_moments_ps(PyObject* self, PyObject
     Py_RETURN_NONE;
 }
 
+/*
+   fill pixel struct array
+*/
+static PyObject * PyGMix_fill_pixels(PyObject* self, PyObject* args) {
+
+    PyObject* pixels_obj=NULL;
+    PyObject* image_obj=NULL;
+    PyObject* weight_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    npy_intp n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+
+    struct PyGMix_Jacobian *jacob=NULL;
+    struct pixel* pixel=NULL;
+
+    double ivar=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOO", 
+                          &pixels_obj,
+                          &image_obj,
+                          &weight_obj,
+                          &jacob_obj)) {
+        return NULL;
+    }
+
+    pixel = (struct pixel* ) PyArray_DATA(pixels_obj);
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+
+            pixel->u = PYGMIX_JACOB_GETU(jacob, row, col);
+            pixel->v = PYGMIX_JACOB_GETV(jacob, row, col);
+
+            pixel->val = *( (double*)PyArray_GETPTR2(image_obj,row,col) );
+            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
+
+            if (ivar < 0.0) {
+                ivar = 0.0;
+            }
+            pixel->ierr=sqrt(ivar);
+
+            pixel++;
+        }
+    }
+
+    // fill in the retval
+    Py_RETURN_NONE;
+}
+
 
 
 
@@ -6401,6 +6455,9 @@ static PyMethodDef pygauss2d_funcs[] = {
 
     {"get_ksigma_weighted_moments", (PyCFunction)PyGMix_get_ksigma_weighted_moments,  METH_VARARGS,  "calculate weighted moments\n"},
     {"get_ksigma_weighted_moments_ps", (PyCFunction)PyGMix_get_ksigma_weighted_moments_ps,  METH_VARARGS,  "calculate weighted moments\n"},
+
+
+    {"fill_pixels",  (PyCFunction)PyGMix_fill_pixels,  METH_VARARGS,  "fill pixel struct array\n"},
 
     {"get_loglike", (PyCFunction)PyGMix_get_loglike,  METH_VARARGS,  "calculate likelihood\n"},
     {"get_loglike_gauleg", (PyCFunction)PyGMix_get_loglike_gauleg,  METH_VARARGS,  "calculate likelihood, integrating model over the pixels\n"},

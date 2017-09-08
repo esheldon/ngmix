@@ -19,6 +19,15 @@ enum PyGMix_Models {
     PyGMIX_GMIX_COELLIP4=100
 };
 
+struct pixel {
+    double u;
+    double v;
+
+    double val;
+
+    double ierr;
+};
+
 //struct PyGMix_Gauss2D {
 struct __attribute__((__packed__)) PyGMix_Gauss2D {
     double p;

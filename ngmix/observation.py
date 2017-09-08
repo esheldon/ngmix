@@ -1,6 +1,7 @@
 import numpy
 from .jacobian import Jacobian, UnitJacobian, DiagonalJacobian
 from .gmix import GMix
+from . import _gmix
 import copy
 
 DEFAULT_XINTERP='lanczos15'
@@ -106,6 +107,7 @@ class Observation(object):
             weight = numpy.zeros(self.image.shape) + 1.0
 
         self.weight=weight
+
 
     def set_bmask(self, bmask):
         """
@@ -288,6 +290,19 @@ class Observation(object):
         if not isinstance(meta,dict):
             raise TypeError("meta data must be in dictionary form")
         self.meta.update(meta)
+
+
+    def _set_pixels(self):
+        pixels = numpy.zeros(self.image.size, dtype=_pixels_dtype)
+
+        _gmix.fill_pixels(
+            pixels,
+            self.image,
+            self.weight,
+            self.jacobian._data,
+        )
+
+        self._pixels=pixels
 
 class ObsList(list):
     """
@@ -866,3 +881,9 @@ def get_kmb_obs(obs_in):
     return obs
 
 
+_pixels_dtype=[
+    ('u','f8'),
+    ('v','f8'),
+    ('val','f8'),
+    ('ierr','f8'),
+]
