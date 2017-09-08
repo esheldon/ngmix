@@ -1263,6 +1263,7 @@ static PyObject * PyGMix_render_pixels(PyObject* self, PyObject* args) {
         default(none) \
         shared(gmix,coords,n_pixels,n_gauss,image) \
         private(ipixel,coord,igauss,gauss,vdiff,udiff,chi2,model_val)
+
     for (ipixel=0; ipixel < n_pixels; ipixel++) {
         coord = &coords[ipixel];
 
@@ -3052,6 +3053,7 @@ static PyObject * PyGMix_get_loglike_pixels(PyObject* self, PyObject* args) {
         shared(gmix,pixels,n_pixels,n_gauss) \
         private(ipixel,pixel,igauss,gauss,vdiff,udiff,chi2,model_val,diff) \
 		reduction(+:loglike)
+
     for (ipixel=0; ipixel < n_pixels; ipixel++) {
         pixel = &pixels[ipixel];
 
@@ -3329,6 +3331,7 @@ static PyObject * PyGMix_fill_fdiff_pixels(PyObject* self, PyObject* args) {
         default(none) \
         shared(gmix,pixels,n_pixels,n_gauss,fdiff) \
         private(ipixel,pixel,igauss,gauss,vdiff,udiff,chi2,model_val,diff)
+
     for (ipixel=0; ipixel < n_pixels; ipixel++) {
         pixel = &pixels[ipixel];
 
