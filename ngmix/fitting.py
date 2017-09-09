@@ -88,7 +88,6 @@ class FitterBase(object):
         self.use_round_T=keys.get('use_round_T',False)
 
         # psf fitters might not have this set to 1
-        self.nsub=keys.get('nsub',1)
         self.npoints=keys.get('npoints',None)
 
         self.set_obs(obs)
@@ -261,8 +260,6 @@ class FitterBase(object):
         """
 
         npoints=self.npoints
-        nsub=self.nsub
-
 
         try:
 
@@ -284,13 +281,12 @@ class FitterBase(object):
                 for obs,gm in zip(obs_list, gmix_list):
 
                     if self.nu > 2.0:
-                        res = gm.get_loglike_robust(obs, self.nu, nsub=nsub, more=True)
+                        res = gm.get_loglike_robust(obs, self.nu, more=True)
                     elif self.margsky:
                         res = gm.get_loglike_margsky(obs, obs.model_image,
-                                                     nsub=nsub, more=True)
+                                                     more=True)
                     else:
                         res = gm.get_loglike(obs,
-                                             nsub=nsub,
                                              npoints=npoints,
                                              more=True)
 
@@ -499,7 +495,7 @@ class FitterBase(object):
                 wt=obs.weight
                 j=obs.jacobian
 
-                model=gm.make_image(im.shape,jacobian=j, nsub=self.nsub)
+                model=gm.make_image(im.shape,jacobian=j)
 
                 showim = im*wt
                 showmod = model*wt
@@ -1771,7 +1767,7 @@ class LMSimple(FitterBase):
                 for obs,gm in zip(obs_list, gmix_list):
 
                     res = gm.fill_fdiff(obs, fdiff, start=start,
-                                        nsub=self.nsub, npoints=self.npoints)
+                                        npoints=self.npoints)
 
                     s2n_numer += res['s2n_numer']
                     s2n_denom += res['s2n_denom']

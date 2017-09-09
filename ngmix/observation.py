@@ -29,7 +29,8 @@ class Observation(object):
         Optional dictionary
     """
 
-    def __init__(self, image,
+    def __init__(self,
+                 image,
                  weight=None,
                  bmask=None,
                  jacobian=None,
@@ -38,32 +39,164 @@ class Observation(object):
                  psf=None,
                  meta=None):
 
-        self.image=None
+        # pixels depends on both image and weight, so
+        # delay until both are set
+
+        self.set_image(image, update_pixels=False)
+
+        # these are always present.  If None, they
+        # get default values
+
+        self.set_weight(weight, update_pixels=False)
+        self.set_jacobian(jacobian)
+        self.set_meta(meta)
+
+        # now that both image and weight are set, create
+        # the pixel array
+        self._update_pixels()
+
+        # optional, if None nothing is set
+        self.set_bmask(bmask)
+        self.set_gmix(gmix)
+        self.set_aperture(aperture)
+        self.set_psf(psf)
+
+    @property
+    def image(self):
+        """
+        getter for image
+
+        currently this simply returns a reference
+        """
+        return self._image
+
+    @image.setter
+    def image(self, image):
+        """
+        set the image
+
+        this does consistency checks and can trigger an update
+        of the pixels array
+        """
         self.set_image(image)
 
-        self.meta={}
+    @property
+    def weight(self):
+        """
+        getter for weight
 
-        if meta is not None:
-            self.update_meta_data(meta)
+        currently this simply returns a reference
+        """
+        return self._weight
 
-        # If jacobian is None, set UnitJacobian
-        self.set_jacobian(jacobian)
+    @weight.setter
+    def weight(self, weight):
+        """
+        set the weight
 
-        # if weight is None, set unity weights
+        this does consistency checks and can trigger an update
+        of the pixels array
+        """
         self.set_weight(weight)
 
+    @property
+    def bmask(self):
+        """
+        getter for bmask
+
+        currently this simply returns a reference
+        """
+        return self._bmask
+
+    @bmask.setter
+    def bmask(self, bmask):
+        """
+        set the bmask
+
+        this does consistency checks and can trigger an update
+        of the pixels array
+        """
         self.set_bmask(bmask)
 
-        if gmix is not None:
-            self.set_gmix(gmix)
+    @property
+    def jacobian(self):
+        """
+        getter for jacobian
 
-        if aperture is not None:
-            self.set_aperture(aperture)
+        currently this simply returns a reference
+        """
+        return self.get_jacobian()
 
-        if psf is not None:
-            self.set_psf(psf)
+    @jacobian.setter
+    def jacobian(self, jacobian):
+        """
+        set the jacobian
 
-    def set_image(self, image):
+        this does consistency checks and can trigger an update
+        of the pixels array
+        """
+        self.set_jacobian(jacobian)
+
+    @property
+    def meta(self):
+        """
+        getter for meta
+
+        currently this simply returns a reference
+        """
+        return self._meta
+
+    @meta.setter
+    def meta(self, meta):
+        """
+        set the meta
+
+        this does consistency checks and can trigger an update
+        of the pixels array
+        """
+        self.set_meta(meta)
+
+    @property
+    def gmix(self):
+        """
+        getter for gmix, gets a reference
+
+        currently this simply returns a reference
+        """
+        return self._gmix
+
+    @gmix.setter
+    def gmix(self, gmix):
+        """
+        set the gmix
+
+        this does consistency checks and can trigger an update
+        of the pixels array
+        """
+        self.set_gmix(gmix)
+
+    @property
+    def psf(self):
+        """
+        getter for psf
+
+        currently this simply returns a reference
+        """
+        return self.get_psf()
+
+    @psf.setter
+    def psf(self, psf):
+        """
+        set the psf
+
+        this does consistency checks and can trigger an update
+        of the pixels array
+        """
+        self.set_psf(psf)
+
+
+
+    def set_image(self, image, update_pixels=True):
         """
         Set the image.  If the image is being reset, must be
         same shape as previous incarnation in order to remain
@@ -74,19 +207,27 @@ class Observation(object):
         image: ndarray (or None)
         """
 
-        image_old=self.image
+        if hasattr(self,'_image'):
+            image_old=self._image
+        else:
+            image_old=None
 
         # force f8 with native byte ordering, contiguous C layout
-        self.image=numpy.ascontiguousarray(image,dtype='f8')
+        image=numpy.ascontiguousarray(image,dtype='f8')
 
-        assert len(self.image.shape)==2,"image must be 2d"
+        assert len(image.shape)==2,"image must be 2d"
 
         if image_old is not None:
             mess=("old and new image must have same shape, to "
                   "maintain consistency")
-            assert self.image.shape == image_old.shape,mess
+            assert image.shape == image_old.shape,mess
 
-    def set_weight(self, weight):
+        self._image=image
+
+        if update_pixels:
+            self._update_pixels()
+
+    def set_weight(self, weight, update_pixels=True):
         """
         Set the weight map.
 
@@ -95,19 +236,21 @@ class Observation(object):
         weight: ndarray (or None)
         """
 
+        image=self.image
         if weight is not None:
             # force f8 with native byte ordering, contiguous C layout
             weight=numpy.ascontiguousarray(weight, dtype='f8')
             assert len(weight.shape)==2,"weight must be 2d"
 
             mess="image and weight must be same shape"
-            assert (weight.shape==self.image.shape),mess
+            assert (weight.shape==image.shape),mess
 
         else:
-            weight = numpy.zeros(self.image.shape) + 1.0
+            weight = numpy.zeros(image.shape) + 1.0
 
-        self.weight=weight
-
+        self._weight=weight
+        if update_pixels:
+            self._update_pixels()
 
     def set_bmask(self, bmask):
         """
@@ -117,16 +260,30 @@ class Observation(object):
         ----------
         bmask: ndarray (or None)
         """
+        if bmask is None:
+            if self.has_bmask():
+                del self._bmask
+        else:
 
-        if bmask is not None:
+            image=self.image
+
             # force contiguous C, but we don't know what dtype to expect
             bmask=numpy.ascontiguousarray(bmask)
             assert len(bmask.shape)==2,"bmask must be 2d"
 
-            assert (bmask.shape==self.image.shape),"image and bmask must be same shape"
+            assert (bmask.shape==image.shape),\
+                    "image and bmask must be same shape"
 
-        self.bmask=bmask
+            self._bmask=bmask
 
+    def has_bmask(self):
+        """
+        returns True if a bitmask is set
+        """
+        if hasattr(self,'_bmask'):
+            return True
+        else:
+            return False
 
     def set_jacobian(self, jacobian):
         """
@@ -137,24 +294,32 @@ class Observation(object):
         jacobian: Jacobian (or None)
         """
         if jacobian is None:
-            jacobian=UnitJacobian(row=0.0, col=0.0)
-        assert isinstance(jacobian,Jacobian),"jacobian must be of type Jacobian"
-        self.jacobian=jacobian
+            cen=(numpy.array(self.image.shape)-1.0)/2.0
+            jacobian=UnitJacobian(row=cen[0], col=cen[1])
+        else:
+            mess=("jacobian must be of "
+                  "type Jacobian, got %s" % type(jacobian))
+            assert isinstance(jacobian,Jacobian),mess
+
+        self._jacobian=jacobian
 
     def get_jacobian(self):
         """
         get a copy of the jacobian
         """
-        return self.jacobian.copy()
+        return self._jacobian.copy()
 
     def set_psf(self,psf):
         """
         Set a psf Observation
         """
+        if self.has_psf():
+            del self._psf
 
-        mess="psf must be of Observation, got %s" % type(psf)
-        assert isinstance(psf,Observation),mess
-        self.psf=psf
+        if psf is not None:
+            mess="psf must be of Observation, got %s" % type(psf)
+            assert isinstance(psf,Observation),mess
+            self._psf=psf
 
     def get_psf(self):
         """
@@ -162,13 +327,13 @@ class Observation(object):
         """
         if not self.has_psf():
             raise RuntimeError("this obs has no psf set")
-        return self.psf
+        return self._psf
 
     def has_psf(self):
         """
         does this object have a psf set?
         """
-        return hasattr(self,'psf')
+        return hasattr(self,'_psf')
 
     def get_psf_gmix(self):
         """
@@ -193,9 +358,14 @@ class Observation(object):
         """
         Set a psf gmix.
         """
-        mess="gmix must be of type GMix, got %s" % type(gmix)
-        assert isinstance(gmix,GMix),mess
-        self.gmix=gmix.copy()
+
+        if self.has_gmix():
+            del self._gmix
+
+        if gmix is not None:
+            mess="gmix must be of type GMix, got %s" % type(gmix)
+            assert isinstance(gmix,GMix),mess
+            self._gmix=gmix.copy()
 
     def get_gmix(self):
         """
@@ -203,23 +373,23 @@ class Observation(object):
         """
         if not self.has_gmix():
             raise RuntimeError("this obs has not gmix set")
-        return self.gmix.copy()
+        return self._gmix.copy()
 
     def has_gmix(self):
         """
         does this object have a gmix set?
         """
-        return hasattr(self, 'gmix')
+        return hasattr(self, '_gmix')
 
     def set_aperture(self,aperture):
         """
         Set an aperture.
         """
         if self.has_aperture():
-            del self.aperture
+            del self._aperture
 
         if aperture is not None:
-            self.aperture=float(aperture)
+            self._aperture=float(aperture)
 
     def get_aperture(self):
         """
@@ -227,13 +397,13 @@ class Observation(object):
         """
         if not self.has_aperture():
             raise RuntimeError("this obs has no aperture set")
-        return copy.copy(self.aperture)
+        return copy.copy(self._aperture)
 
     def has_aperture(self):
         """
         returns True if the aperture is not None
         """
-        return hasattr(self,'aperture')
+        return hasattr(self,'_aperture')
 
     def get_s2n(self):
         """
@@ -282,24 +452,45 @@ class Observation(object):
 
         return Isum, Vsum, Npix
 
+    def set_meta(self, meta):
+        """
+        Add some metadata
+        """
+
+        if meta is None:
+            meta={}
+
+        if not isinstance(meta,dict):
+            raise TypeError("meta data must be in "
+                            "dictionary form, got %s" % type(meta))
+
+        self._meta = meta
+
     def update_meta_data(self, meta):
         """
         Add some metadata
         """
 
         if not isinstance(meta,dict):
-            raise TypeError("meta data must be in dictionary form")
-        self.meta.update(meta)
+            raise TypeError("meta data must be in "
+                            "dictionary form, got %s" % type(meta))
+        self._meta.update(meta)
 
 
-    def _set_pixels(self):
-        pixels = numpy.zeros(self.image.size, dtype=_pixels_dtype)
+    def _update_pixels(self):
+        """
+        create the pixel struct array, for efficient cache
+        usage at the C level
+        """
+        image  = self.image
+        weight = self.weight
+        pixels = numpy.zeros(image.size, dtype=_pixels_dtype)
 
         _gmix.fill_pixels(
             pixels,
-            self.image,
-            self.weight,
-            self.jacobian._data,
+            image,
+            weight,
+            self._jacobian._data,
         )
 
         self._pixels=pixels
@@ -314,9 +505,7 @@ class ObsList(list):
     def __init__(self, meta=None):
         super(ObsList,self).__init__()
 
-        self.meta={}
-        if meta is not None:
-            self.update_meta_data(meta)
+        self.set_meta(meta)
 
     def append(self, obs):
         """
@@ -324,8 +513,51 @@ class ObsList(list):
 
         over-riding this for type safety
         """
-        assert isinstance(obs,Observation),"obs should be of type Observation, got %s" % type(obs)
+        mess="obs should be of type Observation, got %s" % type(obs)
+        assert isinstance(obs,Observation),mess
         super(ObsList,self).append(obs)
+
+    @property
+    def meta(self):
+        """
+        getter for meta
+
+        currently this simply returns a reference
+        """
+        return self._meta
+
+    @meta.setter
+    def meta(self, meta):
+        """
+        set the meta
+
+        this does consistency checks and can trigger an update
+        of the pixels array
+        """
+        self.set_meta(meta)
+
+    def set_meta(self, meta):
+        """
+        Add some metadata
+        """
+
+        if meta is None:
+            meta={}
+
+        if not isinstance(meta,dict):
+            raise TypeError("meta data must be in "
+                            "dictionary form, got %s" % type(meta))
+
+        self._meta = meta
+
+    def update_meta_data(self, meta):
+        """
+        Add some metadata
+        """
+
+        if not isinstance(meta,dict):
+            raise TypeError("meta data must be in dictionary form")
+        self.meta.update(meta)
 
     def set_aperture(self, aper):
         """
@@ -377,15 +609,6 @@ class ObsList(list):
 
         return Isum, Vsum, Npix
 
-    def update_meta_data(self, meta):
-        """
-        Add some metadata
-        """
-
-        if not isinstance(meta,dict):
-            raise TypeError("meta data must be in dictionary form")
-        self.meta.update(meta)
-
     def __setitem__(self, index, obs):
         """
         over-riding this for type safety
@@ -405,9 +628,7 @@ class MultiBandObsList(list):
     def __init__(self, meta=None):
         super(MultiBandObsList,self).__init__()
 
-        self.meta={}
-        if meta is not None:
-            self.update_meta_data(meta)
+        self.set_meta(meta)
 
     def append(self, obs_list):
         """
@@ -417,6 +638,49 @@ class MultiBandObsList(list):
         """
         assert isinstance(obs_list,ObsList),"obs_list should be of type ObsList"
         super(MultiBandObsList,self).append(obs_list)
+
+    @property
+    def meta(self):
+        """
+        getter for meta
+
+        currently this simply returns a reference
+        """
+        return self._meta
+
+    @meta.setter
+    def meta(self, meta):
+        """
+        set the meta
+
+        this does consistency checks and can trigger an update
+        of the pixels array
+        """
+        self.set_meta(meta)
+
+    def set_meta(self, meta):
+        """
+        Add some metadata
+        """
+
+        if meta is None:
+            meta={}
+
+        if not isinstance(meta,dict):
+            raise TypeError("meta data must be in "
+                            "dictionary form, got %s" % type(meta))
+
+        self._meta = meta
+
+    def update_meta_data(self, meta):
+        """
+        Add some metadata
+        """
+
+        if not isinstance(meta,dict):
+            raise TypeError("meta data must be in dictionary form")
+        self._meta.update(meta)
+
 
     def set_aperture(self, aper):
         """
@@ -466,16 +730,6 @@ class MultiBandObsList(list):
             Npix += tNpix
 
         return Isum, Vsum, Npix
-
-
-    def update_meta_data(self, meta):
-        """
-        Add some metadata
-        """
-
-        if not isinstance(meta,dict):
-            raise TypeError("meta data must be in dictionary form")
-        self.meta.update(meta)
 
     def __setitem__(self, index, obs_list):
         """
