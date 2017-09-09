@@ -125,7 +125,7 @@ class Observation(object):
 
         currently this simply returns a reference
         """
-        return self.get_jacobian()
+        return self._jacobian
 
     @jacobian.setter
     def jacobian(self, jacobian):
@@ -182,7 +182,8 @@ class Observation(object):
 
         currently this simply returns a reference
         """
-        return self.get_psf()
+        #return self.get_psf()
+        return self._psf
 
     @psf.setter
     def psf(self, psf):
