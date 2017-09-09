@@ -522,18 +522,17 @@ class GMix(object):
 
         gm=self._get_gmix_data()
         if npoints is not None:
-            s2n_numer,s2n_denom,npix=_gmix.fill_fdiff_gauleg(gm,
-                                                             image,
-                                                             obs.weight,
-                                                             obs.jacobian._data,
-                                                             fdiff,
-                                                             start,
-                                                             npoints)
+            s2n_numer,s2n_denom,npix=_gmix.fill_fdiff_gauleg(
+                gm,
+                image,
+                obs.weight,
+                obs.jacobian._data,
+                fdiff,
+                start,
+                npoints,
+            )
         else:
             if hasattr(obs, '_pixels'):
-                s2n_numer=0.0
-                s2n_denom=0.0
-                npix=obs.image.size
                 _gmix.fill_fdiff_pixels(
                     gm,
                     obs._pixels,
@@ -549,10 +548,6 @@ class GMix(object):
                     fdiff,
                     start,
                 )
-
-        return {'s2n_numer':s2n_numer,
-                's2n_denom':s2n_denom,
-                'npix':npix}
 
     def __call__(self, row, col, jacobian=None):
         """
@@ -871,22 +866,28 @@ class GMix(object):
             if obs.has_aperture():
                 aperture=obs.get_aperture()
                 #print("using aper:",aperture)
-                loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike_aper(gm,
-                                                                        obs.image,
-                                                                        obs.weight,
-                                                                        obs.jacobian._data,
-                                                                        aperture)
-
+                loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike_aper(
+                    gm,
+                    obs.image,
+                    obs.weight,
+                    obs.jacobian._data,
+                    aperture,
+                )
 
             else:
-                if hasattr(obs, '_pixels'):
-                    loglike=_gmix.get_loglike_pixels(gm, obs._pixels)
-
+                # TODO: need pixels version getting summary stats
+                if not hasattr(obs, '_pixels') or more:
+                    loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike(
+                        gm,
+                        obs.image,
+                        obs.weight,
+                        obs.jacobian._data,
+                    )
                 else:
-                    loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike(gm,
-                                                                       obs.image,
-                                                                       obs.weight,
-                                                                       obs.jacobian._data)
+                    loglike=_gmix.get_loglike_pixels(
+                        gm,
+                        obs._pixels,
+                    )
 
         if more:
             return {'loglike':loglike,

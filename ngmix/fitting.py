@@ -1655,7 +1655,7 @@ class LMSimple(FitterBase):
     def _set_fdiff_size(self):
         self.fdiff_size=self.totpix + self.n_prior_pars
 
-    def run_lm(self, guess):
+    def go(self, guess):
         """
         Run leastsq and set the result
         """
@@ -1676,8 +1676,8 @@ class LMSimple(FitterBase):
             result.update(stat_dict)
 
         self._result=result
-    run_max=run_lm
-    go=run_lm
+    run_max=go
+    run_lm=go
 
     def _setup_data(self, guess):
         """
@@ -1737,7 +1737,43 @@ class LMSimple(FitterBase):
         return T_s2n
 
 
-    def _calc_fdiff(self, pars, more=False):
+    def _calc_fdiff(self, pars):
+        """
+
+        vector with (model-data)/error.
+
+        The npars elements contain -ln(prior)
+        """
+
+        # we cannot keep sending existing array into leastsq, don't know why
+        fdiff=zeros(self.fdiff_size)
+
+        try:
+
+
+            self._fill_gmix_all(pars)
+
+            start=self._fill_priors(pars, fdiff)
+
+            for band in xrange(self.nband):
+
+                obs_list=self.obs[band]
+                gmix_list=self._gmix_all[band]
+
+                for obs,gm in zip(obs_list, gmix_list):
+
+                    gm.fill_fdiff(obs, fdiff, start=start,
+                                  npoints=self.npoints)
+
+                    start += obs.image.size
+
+        except GMixRangeError as err:
+            fdiff[:] = LOWVAL
+
+        return fdiff
+
+    '''
+    def _calc_fdiff_old(self, pars, more=False):
         """
 
         vector with (model-data)/error.
@@ -1787,6 +1823,7 @@ class LMSimple(FitterBase):
                     'npix':npix}
         else:
             return fdiff
+    '''
 
     def _fill_priors(self, pars, fdiff):
         """
@@ -2011,90 +2048,6 @@ class LMGaussK(LMSimple):
             rowshift=pars_in[0]
             colshift=pars_in[1]
             pars[0:0+2] = 0.0
-
-            self._fill_gmix_all(pars)
-
-            start=self._fill_priors(pars, fdiff)
-
-            for band in xrange(self.nband):
-
-                kobs_list=self.mb_kobs[band]
-                gmix_list=self._gmix_all[band]
-
-                for kobs,gm in zip(kobs_list, gmix_list):
-
-                    gmdata=gm._get_gmix_data()
-                    ts2n_sum, tnpix = _gmix.fill_fdiffk(
-                        gmdata,
-                        kobs.kr.array,
-                        kobs.ki.array,
-                        kobs.weight.array,
-                        kobs.jacobian._data,
-                        fdiff,
-                        rowshift,
-                        colshift,
-                        start,
-                    )
-
-                    s2n_sum += ts2n_sum
-                    npix += tnpix
-
-                    # skip 2*image size since we account for both
-                    # real and imaginary
-                    start += 2*kobs.kr.array.size
-
-        except GMixRangeError as err:
-            fdiff[:] = LOWVAL
-            s2n_sum=0.0
-
-        if more:
-            return {'fdiff':fdiff,
-                    's2n_sum':s2n_sum,
-                    'npix':npix}
-        else:
-            return fdiff
-
-
-
-    def _calc_fdiff_old(self, pars_in, more=False):
-        """
-
-        vector with (model-data)/error.
-
-        The npars elements contain -ln(prior)
-        """
-
-        # we cannot keep sending existing array into leastsq, don't know why
-        fdiff=zeros(self.fdiff_size)
-
-        try:
-
-            s2n_sum=0.0
-            npix = 0
-
-            T = pars_in[4]
-            if T <= 0.0:
-                raise GMixRangeError("T too small: %g" % T)
-            
-            # we do centering in k space as phase shifts
-            # also, convert T and flux to k space
-            pars=pars_in.copy()
-            rowshift=pars_in[0]
-            colshift=pars_in[1]
-
-            scale=self.mb_kobs[0][0].kr.scale
-
-            pars[0] = 0.0
-            pars[1] = 0.0
-            pars[4] = 4.0/T
-
-            # parseval's theorem, plus scale
-            # all get same scale
-            #print("scale:",scale)
-
-            fac = T*sqrt(self.totpix)*scale**2
-            pars[5:] *= fac
-            #1.0/(2*numpy.pi*sqrt(self.totpix))#*scale
 
             self._fill_gmix_all(pars)
 
