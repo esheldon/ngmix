@@ -362,7 +362,7 @@ class GMix(object):
         _gmix.convolve_fill(output._data, gm, psf._data)
         return output
 
-    def make_image(self, dims, npoints=None, jacobian=None, fast_exp=False, pixels=False):
+    def make_image(self, dims, npoints=None, jacobian=None, fast_exp=False):
         """
         Render the mixture into a new image
 
@@ -380,7 +380,7 @@ class GMix(object):
                              "got %s" % str(dims))
 
         image=numpy.zeros(dims, dtype='f8')
-        self._fill_image(image, npoints=npoints, jacobian=jacobian, fast_exp=fast_exp, pixels=pixels)
+        self._fill_image(image, npoints=npoints, jacobian=jacobian, fast_exp=fast_exp)
         return image
 
     def make_round(self, preserve_size=False):
@@ -442,7 +442,7 @@ class GMix(object):
         return gm
 
 
-    def _fill_image(self, image, npoints=None, jacobian=None, fast_exp=False, pixels=False):
+    def _fill_image(self, image, npoints=None, jacobian=None, fast_exp=False):
         """
         Internal routine.  Render the mixture into a new image.  No error
         checking on the image!
@@ -476,20 +476,18 @@ class GMix(object):
                 fexp,
             )
         else:
-            if pixels:
-                _gmix.render_pixels(
-                    gm,
-                    image,
-                    jacobian._data,
-                    fexp,
-                )
-            else:
-                _gmix.render(
-                    gm,
-                    image,
-                    jacobian._data,
-                    fexp,
-                )
+            _gmix.render_pixels(
+                gm,
+                image,
+                jacobian._data,
+                fexp,
+            )
+            #_gmix.render(
+            #    gm,
+            #    image,
+            #    jacobian._data,
+            #    fexp,
+            #)
 
 
     def fill_fdiff(self, obs, fdiff, start=0, npoints=None, nocheck=False):
