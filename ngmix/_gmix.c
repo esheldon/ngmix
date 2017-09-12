@@ -10,6 +10,7 @@
 
  */
 
+#include <time.h>
 #include <omp.h>
 #include <complex.h>
 #include <Python.h>
@@ -3291,93 +3292,19 @@ static PyObject * PyGMix_fill_fdiff_gauleg(PyObject* self, PyObject* args) {
 }
 
 
-static PyObject * PyGMix_fill_fdiff_pixels(PyObject* self, PyObject* args) {
-
-    PyObject* gmix_obj=NULL;
-    PyObject* pixels_obj=NULL;
-    PyObject* fdiff_obj=NULL;
-
-    npy_intp n_gauss=0, n_pixels=0, ipixel=0, igauss=0;
-    int start=0;
-
-    struct PyGMix_Gauss2D *gmix=NULL, *gauss=NULL;
-    struct pixel *pixels=NULL, *pixel=NULL;
-    double *fdiff=NULL;
-
-    double
-        model_val=0, diff,
-        chi2=0, udiff=0, vdiff=0;
-
-    if (!PyArg_ParseTuple(args, (char*)"OOOi", 
-                          &gmix_obj,
-						  &pixels_obj,
-						  &fdiff_obj,
-                          &start)) {
-        return NULL;
-    }
-
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
-    n_gauss=PyArray_SIZE(gmix_obj);
-
-    pixels=(struct pixel* ) PyArray_DATA(pixels_obj);
-    n_pixels=PyArray_SIZE(pixels_obj);
-
-    fdiff=(double *)PyArray_GETPTR1(fdiff_obj,start);
-
-    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
-        return NULL;
-    }
-
-#pragma omp parallel for \
-        default(none) \
-        shared(gmix,pixels,n_pixels,n_gauss,fdiff) \
-        private(ipixel,pixel,igauss,gauss,vdiff,udiff,chi2,model_val,diff)
-
-    for (ipixel=0; ipixel < n_pixels; ipixel++) {
-        pixel = &pixels[ipixel];
-
-        model_val=0;
-        for (igauss=0; igauss < n_gauss; igauss++) {
-            gauss = &gmix[igauss];
-
-            // v->row, u->col in gauss
-            vdiff = pixel->v - gauss->row;
-            udiff = pixel->u - gauss->col;
-
-            chi2 =       gauss->dcc*vdiff*vdiff
-                   +     gauss->drr*udiff*udiff
-                   - 2.0*gauss->drc*vdiff*udiff;
-
-            if (chi2 < PYGMIX_MAX_CHI2 && chi2 >= 0.0) {
-                model_val += gauss->pnorm*expd( -0.5*chi2 );
-            }
-
-        }
-
-        diff = model_val-pixel->val;
-        diff *= pixel->ierr;
-        fdiff[ipixel] = diff;
-
-    }
-
-    Py_RETURN_NONE;
-}
-
 static void fill_fdiff(
-    const struct pixel* pixels,        // array of pixels
+    struct pixel* pixels,        // array of pixels
     npy_intp n_pixels,                 // number of pixels in array
-    double *fdiff,                     // same size as pixels
     const struct PyGMix_Gauss2D* gmix, // the gaussian mixture
     npy_intp n_gauss)                  // number of gaussians
 
 {
 
-    const struct pixel* pixel=NULL;
+    struct pixel* pixel=NULL;
     const struct PyGMix_Gauss2D* gauss=NULL;
 
     double
-        model_val=0, vdiff=0, udiff=0, chi2=0,
-        diff=0;
+        model_val=0, vdiff=0, udiff=0, chi2=0;
     
     npy_intp ipixel=0, igauss=0;
 
@@ -3402,12 +3329,11 @@ static void fill_fdiff(
 
         }
 
-        diff = model_val-pixel->val;
-        diff *= pixel->ierr;
-        fdiff[ipixel] = diff;
+        pixel->fdiff = (model_val-pixel->val)*pixel->ierr;
     }
 
 }
+
 
 
 /*
@@ -3460,151 +3386,123 @@ static void fill_fdiff_exp3(
 }
 */
 
-/*
-static PyObject * PyGMix_fill_fdiff_parallel_new(PyObject* self, PyObject* args) {
-
-    PyObject* pixels_list=NULL;
-    PyObject* fdiff_list=NULL;
-    PyObject* gmix_list=NULL;
-
-    npy_intp n_obs=0, n_pixels=0, n_gauss=0, i=0;
-
-    struct PyGMix_Gauss2D *gmix=NULL;
-    struct pixel *pixels=NULL;
-    double *fdiff=NULL;
-
-    struct PyGMix_Gauss2D **gmixes=NULL;
-    struct pixel **pixelss=NULL;
-    double **fdiffs=NULL;
-
-    npy_intp *n_pixelss=NULL, *n_gausss=NULL;
-
-    PyObject* tmp=NULL;
-
-    if (!PyArg_ParseTuple(args, (char*)"OOO", 
-						  &pixels_list,
-						  &fdiff_list,
-                          &gmix_list)) {
-        return NULL;
-    }
-
-    n_obs = (npy_intp) PyList_Size(pixels_list);
-
-    gmixes=calloc(n_obs, sizeof(struct PyGMix_Gauss2D*));
-    pixelss=calloc(n_obs, sizeof(struct pixel*));
-    fdiffs=calloc(n_obs, sizeof(double *));
-
-    n_pixelss = calloc(n_obs, sizeof(npy_intp));
-    n_gausss = calloc(n_obs, sizeof(npy_intp));
-
-    // in the serial region, will bail if it fails
-    for (i=0; i < n_obs; i++) {
-
-        tmp          = PyList_GetItem(pixels_list, i);
-        pixelss[i]   = (struct pixel* ) PyArray_DATA(tmp);
-        n_pixelss[i] = PyArray_SIZE(tmp);
-
-        tmp          = PyList_GetItem(fdiff_list, i);
-        fdiffs[i]    = (double *) PyArray_DATA(tmp);
-
-        tmp          = PyList_GetItem(gmix_list, i);
-        gmixes[i]    = (struct PyGMix_Gauss2D *) PyArray_DATA(tmp);
-        n_gausss[i]  = PyArray_SIZE(tmp);
-
-        if (!gmix_set_norms_if_needed(gmixes[i], n_gausss[i])) {
-            return NULL;
-        }
-    }
-
-#pragma omp parallel for \
-        default(none) \
-        shared(n_obs,pixelss,n_pixelss,fdiffs,gmixes,n_gausss) \
-        private(i,pixels,n_pixels,fdiff,gmix,n_gauss)
-
-    for (i=0; i < n_obs; i++) {
-        pixels   = pixelss[i];
-        n_pixels = n_pixelss[i];
-
-        fdiff    = fdiffs[i];
-
-        gmix     = gmixes[i];
-        n_gauss  = n_gausss[i];
-
-        fill_fdiff(pixels, n_pixels,
-                   fdiff,
-                   gmix, n_gauss);
-
-    }
-
-    free(gmixes);
-    free(pixelss);
-    free(fdiffs);
-    free(n_pixelss);
-    free(n_gausss);
-    Py_RETURN_NONE;
-
-}
-*/
-
 
 static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
 
+    /*
+    struct timeval t1,t2;
+    long elapsed;
+    */
+
+    int status=1;
     PyObject* pixels_list=NULL;
-    PyObject* fdiff_list=NULL;
+    PyObject* fdiff_obj=NULL;
+    int start=0;
     PyObject* gmix_list=NULL;
 
-    npy_intp n_obs=0, n_pixels=0, n_gauss=0, i=0;
+    npy_intp n_obs=0, n_pixels=0, n_gauss=0, i=0, j=0;
 
     struct PyGMix_Gauss2D *gmix=NULL;
     struct pixel *pixels=NULL;
     double *fdiff=NULL;
 
+    npy_intp *offsets=NULL, offset=0;
+
     PyObject* tmp=NULL;
 
-    if (!PyArg_ParseTuple(args, (char*)"OOO", 
+    if (!PyArg_ParseTuple(args, (char*)"OOOi", 
 						  &pixels_list,
-						  &fdiff_list,
-                          &gmix_list)) {
+                          &gmix_list,
+						  &fdiff_obj,
+                          &start)) {
         return NULL;
     }
 
+    fdiff=(double *)PyArray_DATA(fdiff_obj);
     n_obs = (npy_intp) PyList_Size(pixels_list);
 
-    // set norms in the serial region, will bail if it fails
+
+    // set norms and offsets. this takes negligible time
+
+    offsets=malloc(n_obs*sizeof(npy_intp));
+    if (!offsets) {
+        status=0;
+        goto _bail;
+    }
+
+    offsets[0] = start;
+
+    //gettimeofday(&t1, 0);
     for (i=0; i < n_obs; i++) {
         tmp = PyList_GetItem(gmix_list, i);
         gmix = (struct PyGMix_Gauss2D *) PyArray_DATA(tmp);
         n_gauss=PyArray_SIZE(tmp);
 
         if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
-            return NULL;
+            status=0;
+            goto _bail;
         }
-    }
 
-#pragma omp parallel for \
-        default(none) \
-        shared(n_obs,pixels_list,fdiff_list,gmix_list,PyArray_API) \
-        private(i,tmp,pixels,n_pixels,fdiff,gmix,n_gauss)
-
-    for (i=0; i < n_obs; i++) {
         tmp      = PyList_GetItem(pixels_list, i);
         pixels   = (struct pixel* ) PyArray_DATA(tmp);
         n_pixels = PyArray_SIZE(tmp);
 
-        tmp      = PyList_GetItem(fdiff_list, i);
-        fdiff    = (double *) PyArray_DATA(tmp);
+        if (i > 0) {
+            offsets[i] = offsets[i-1] + n_pixels;
+        }
+    }
 
+    /*
+    gettimeofday(&t2, 0);
+    elapsed = (t2.tv_sec-t1.tv_sec)*1000000 + t2.tv_usec-t1.tv_usec;
+    //elapsed = t2.tv_usec-t1.tv_usec;
+    printf("elapsed serial prep: %ld\n", elapsed);
+    */
+
+    //gettimeofday(&t1, 0);
+
+#pragma omp parallel for \
+        default(none) \
+        shared(n_obs,pixels_list,gmix_list,PyArray_API,offsets,fdiff) \
+        private(i,j,tmp,pixels,n_pixels,gmix,n_gauss,offset)
+
+    for (i=0; i < n_obs; i++) {
+        // get the pixel array
+        tmp      = PyList_GetItem(pixels_list, i);
+        pixels   = (struct pixel* ) PyArray_DATA(tmp);
+        n_pixels = PyArray_SIZE(tmp);
+
+        // get the gaussian mixture array
         tmp      = PyList_GetItem(gmix_list, i);
         gmix     = (struct PyGMix_Gauss2D *) PyArray_DATA(tmp);
         n_gauss  = PyArray_SIZE(tmp);
 
-        fill_fdiff(pixels, n_pixels,
-                   fdiff,
-                   gmix, n_gauss);
+        // fill fdiff field in the pixels
+        fill_fdiff(pixels, n_pixels, gmix, n_gauss);
+
+        // copy into the output
+        offset=offsets[i];
+        for (j=0; j < n_pixels; j++) {
+            fdiff[offset+j] = pixels[j].fdiff;
+        }
 
     }
 
-    Py_RETURN_NONE;
+    /*
+    gettimeofday(&t2, 0);
+    //elapsed = (t2.tv_sec-t1.tv_sec)*1000000 + t2.tv_usec-t1.tv_usec;
+    elapsed = t2.tv_usec-t1.tv_usec;
+    printf("elapsed parallel: %ld\n", elapsed);
+    */
+
+_bail:
+    free(offsets);
+
+    if (!status) {
+        return NULL;
+    } else {
+        Py_RETURN_NONE;
+    }
 
 }
 
@@ -6567,7 +6465,6 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"fill_fdiff",  (PyCFunction)PyGMix_fill_fdiff,  METH_VARARGS,  "fill fdiff for LM\n"},
     {"fill_fdiff_gauleg",  (PyCFunction)PyGMix_fill_fdiff_gauleg,  METH_VARARGS,  "fill fdiff for LM, integrating over pixels\n"},
 
-    {"fill_fdiff_pixels",  (PyCFunction)PyGMix_fill_fdiff_pixels,  METH_VARARGS,  "fill fdiff for LM\n"},
     {"fill_fdiff_parallel",  (PyCFunction)PyGMix_fill_fdiff_parallel,  METH_VARARGS,  "fill fdiff for LM\n"},
 
     {"fill_fdiffk",  (PyCFunction)PyGMix_fill_fdiffk,  METH_VARARGS,  "fill fdiff for LM\n"},

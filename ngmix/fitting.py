@@ -1663,18 +1663,6 @@ class LMSimple(FitterBase):
         guess=array(guess,dtype='f8',copy=False)
         self._setup_data(guess)
 
-        '''
-        if self.nimage == 1:
-            func = self._calc_fdiff
-        else:
-            func = self._calc_fdiff_parallel
-        result = run_leastsq(func,
-        #result = run_leastsq(self._calc_fdiff_parallel,
-        #result = run_leastsq(self._calc_fdiff,
-                             guess,
-                             self.n_prior_pars,
-                             **self.lm_pars)
-        '''
         result = run_leastsq(self._calc_fdiff_parallel,
                              guess,
                              self.n_prior_pars,
@@ -1823,56 +1811,19 @@ class LMSimple(FitterBase):
         # we cannot keep sending existing array into leastsq, don't know why
         fdiff=zeros(self.fdiff_size)
 
-        #pixels_list      = []
-        #fdiff_list       = []
-        #gmix_data_list   = []
         try:
 
             self._fill_gmix_all(pars)
 
             start=self._fill_priors(pars, fdiff)
 
-            '''
-            for band in xrange(self.nband):
-
-                obs_list=self.obs[band]
-                gmix_list=self._gmix_all[band]
-
-                for obs,gm in zip(obs_list, gmix_list):
-
-                    # we will persist the fdiff for each observation
-                    if not hasattr(obs,'_fdiff'):
-                        obs._fdiff = zeros(obs.image.size)
-
-                    gmdata=gm._get_gmix_data()
-                    pixels_list.append(obs._pixels)
-                    fdiff_list.append(obs._fdiff)
-                    gmix_data_list.append(gmdata)
-
-            '''
             _gmix.fill_fdiff_parallel(
                 self._pixels_list,
-                self._fdiff_list,
                 self._gmix_data_list,
+                fdiff,
+                start,
             )
 
-
-            for tfdiff in self._fdiff_list:
-                npix = tfdiff.size
-                fdiff[start:start+npix] = tfdiff
-                start += npix
-            '''
-            for band in xrange(self.nband):
-                obs_list=self.obs[band]
-                for obs in obs_list:
-
-                    tfdiff=obs._fdiff
-                    npix = tfdiff.size
-
-                    fdiff[start:start+npix] = tfdiff
-
-                    start += npix
-            '''
         except GMixRangeError as err:
             fdiff[:] = LOWVAL
 

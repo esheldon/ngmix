@@ -26,6 +26,8 @@ struct pixel {
     double val;
 
     double ierr;
+
+    double fdiff;
 };
 
 struct coord {
@@ -35,7 +37,7 @@ struct coord {
 
 
 //struct PyGMix_Gauss2D {
-struct __attribute__((__packed__)) PyGMix_Gauss2D {
+struct PyGMix_Gauss2D {
     double p;
     double row;
     double col;
@@ -46,7 +48,7 @@ struct __attribute__((__packed__)) PyGMix_Gauss2D {
 
     double det;
 
-    int32_t norm_set;
+    int64_t norm_set;
 
     double drr;
     double drc;
@@ -56,7 +58,7 @@ struct __attribute__((__packed__)) PyGMix_Gauss2D {
     double pnorm;
 };
 
-struct __attribute__((__packed__)) PyGMixCM {
+struct PyGMixCM {
     double fracdev;
     double TdByTe; // ratio Tdev/Texp
     double Tfactor;
@@ -64,7 +66,7 @@ struct __attribute__((__packed__)) PyGMixCM {
 };
 
 //struct PyGMix_Jacobian {
-struct __attribute__((__packed__)) PyGMix_Jacobian {
+struct PyGMix_Jacobian {
     double row0;
     double col0;
 
@@ -77,7 +79,7 @@ struct __attribute__((__packed__)) PyGMix_Jacobian {
     double sdet;
 };
 
-struct __attribute__((__packed__)) PyGMix_EM_Sums {
+struct PyGMix_EM_Sums {
     double gi;
 
     // scratch on a given pixel
