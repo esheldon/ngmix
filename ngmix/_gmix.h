@@ -135,6 +135,7 @@ static inline double expd(double x)
 //                            -20, -19, -18, -17, -16, -15, -14,
 //                            -13, -12, -11, -10,  -9,  -8,  -7,
 //                            -6,  -5,  -4,  -3,  -2,  -1,   0};
+
 /*
 static int _exp3_i0=-26;
 static double _exp3_lookup[] = {  5.10908903e-12,   1.38879439e-11,   3.77513454e-11,
@@ -146,6 +147,17 @@ static double _exp3_lookup[] = {  5.10908903e-12,   1.38879439e-11,   3.77513454
                                   3.35462628e-04,   9.11881966e-04,   2.47875218e-03,
                                   6.73794700e-03,   1.83156389e-02,   4.97870684e-02,
                                   1.35335283e-01,   3.67879441e-01,   1.00000000e+00};
+
+static inline double pygmix_exp3(double x) {
+
+    int ival = (int)(x-0.5);
+    double f = x - ival;
+    int index = ival-_exp3_i0;
+    double expval = _exp3_lookup[index];
+    expval *= (6+f*(6+f*(3+f)))*0.16666666;
+
+    return expval;
+}
 */
 
 

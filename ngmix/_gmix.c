@@ -24,6 +24,7 @@ static PyObject* GMixFatalError;
 #define PYGMIX_MAXDIMS 10
 #define PYGMIX_DOFFSET 2
 
+
 // for gauss legendre integration
 static const double pygmix_gl_xxi5[5] = {-0.906179845938664,  -0.5384693101056831,  0,  0.5384693101056831,  0.906179845938664};
 static const double pygmix_gl_wwi5[5] = {0.05613434886242515,  0.1133999999968999,  0.1347850723875167,  0.1133999999968999,  0.05613434886242515};
@@ -3362,17 +3363,17 @@ static PyObject * PyGMix_fill_fdiff_pixels(PyObject* self, PyObject* args) {
     Py_RETURN_NONE;
 }
 
-
-static void fill_fdiff(struct pixel* pixels,         // array of pixels
-                       npy_intp n_pixels,            // number of pixels in array
-                       double *fdiff,                // same size as pixels
-                       struct PyGMix_Gauss2D* gmix,  // the gaussian mixture
-                       npy_intp n_gauss)             // number of gaussians
+static void fill_fdiff(
+    const struct pixel* pixels,        // array of pixels
+    npy_intp n_pixels,                 // number of pixels in array
+    double *fdiff,                     // same size as pixels
+    const struct PyGMix_Gauss2D* gmix, // the gaussian mixture
+    npy_intp n_gauss)                  // number of gaussians
 
 {
 
-    struct pixel* pixel=NULL;
-    struct PyGMix_Gauss2D* gauss=NULL;
+    const struct pixel* pixel=NULL;
+    const struct PyGMix_Gauss2D* gauss=NULL;
 
     double
         model_val=0, vdiff=0, udiff=0, chi2=0,
@@ -3408,6 +3409,58 @@ static void fill_fdiff(struct pixel* pixels,         // array of pixels
 
 }
 
+
+/*
+static void fill_fdiff_exp3(
+    const struct pixel* pixels,        // array of pixels
+    npy_intp n_pixels,                 // number of pixels in array
+    double *fdiff,                     // same size as pixels
+    const struct PyGMix_Gauss2D* gmix, // the gaussian mixture
+    npy_intp n_gauss)                  // number of gaussians
+
+{
+
+    const struct pixel* pixel=NULL;
+    const struct PyGMix_Gauss2D* gauss=NULL;
+
+    //int ival, index;
+    double
+        model_val=0, vdiff=0, udiff=0, chi2=0,
+        diff=0;
+//        x, f, expval;
+    
+    npy_intp ipixel=0, igauss=0;
+
+    for (ipixel=0; ipixel < n_pixels; ipixel++) {
+        pixel = &pixels[ipixel];
+
+        model_val=0;
+        for (igauss=0; igauss < n_gauss; igauss++) {
+            gauss = &gmix[igauss];
+
+            // v->row, u->col in gauss
+            vdiff = pixel->v - gauss->row;
+            udiff = pixel->u - gauss->col;
+
+            chi2 =       gauss->dcc*vdiff*vdiff
+                   +     gauss->drr*udiff*udiff
+                   - 2.0*gauss->drc*vdiff*udiff;
+
+            if (chi2 < PYGMIX_MAX_CHI2 && chi2 >= 0.0) {
+                model_val += gauss->pnorm*pygmix_exp3( -0.5*chi2 );
+            }
+
+        }
+
+        diff = model_val-pixel->val;
+        diff *= pixel->ierr;
+        fdiff[ipixel] = diff;
+    }
+
+}
+*/
+
+/*
 static PyObject * PyGMix_fill_fdiff_parallel_new(PyObject* self, PyObject* args) {
 
     PyObject* pixels_list=NULL;
@@ -3491,6 +3544,8 @@ static PyObject * PyGMix_fill_fdiff_parallel_new(PyObject* self, PyObject* args)
     Py_RETURN_NONE;
 
 }
+*/
+
 
 static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
 
