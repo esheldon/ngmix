@@ -1776,7 +1776,7 @@ class LMSimple(FitterBase):
         lists of references.
         """
         pixels_list      = []
-        fdiff_list       = []
+        #fdiff_list       = []
         gmix_data_list   = []
 
         for band in xrange(self.nband):
@@ -1790,12 +1790,12 @@ class LMSimple(FitterBase):
                 gmdata=gm._get_gmix_data()
 
                 pixels_list.append(obs._pixels)
-                fdiff_list.append(fdiff)
+                #fdiff_list.append(fdiff)
                 gmix_data_list.append(gmdata)
 
 
         self._pixels_list=pixels_list
-        self._fdiff_list=fdiff_list
+        #self._fdiff_list=fdiff_list
         self._gmix_data_list=gmix_data_list
 
     def _calc_fdiff_parallel(self, pars):

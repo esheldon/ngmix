@@ -3386,6 +3386,10 @@ static void fill_fdiff_exp3(
 }
 */
 
+/*
+   had to move the fill of fdiff outside the loop, looks like
+   maybe a bug in the gcc 4.4.7 compiler
+*/
 
 static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
 
@@ -3396,9 +3400,9 @@ static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
 
     int status=1;
     PyObject* pixels_list=NULL;
+    PyObject* gmix_list=NULL;
     PyObject* fdiff_obj=NULL;
     int start=0;
-    PyObject* gmix_list=NULL;
 
     npy_intp n_obs=0, n_pixels=0, n_gauss=0, i=0, j=0;
 
@@ -3406,7 +3410,11 @@ static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
     struct pixel *pixels=NULL;
     double *fdiff=NULL;
 
-    npy_intp *offsets=NULL, offset=0;
+    /*
+    npy_intp
+        *offsets=NULL,
+        offset=0;
+    */
 
     PyObject* tmp=NULL;
 
@@ -3419,18 +3427,20 @@ static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
     }
 
     fdiff=(double *)PyArray_DATA(fdiff_obj);
-    n_obs = (npy_intp) PyList_Size(pixels_list);
 
+    n_obs = (npy_intp) PyList_Size(pixels_list);
 
     // set norms and offsets. this takes negligible time
 
-    offsets=malloc(n_obs*sizeof(npy_intp));
-    if (!offsets) {
+    /*
+    offsets=calloc(n_obs,sizeof(npy_intp));
+    if (offsets==NULL) {
         status=0;
         goto _bail;
     }
-
     offsets[0] = start;
+    */
+
 
     //gettimeofday(&t1, 0);
     for (i=0; i < n_obs; i++) {
@@ -3443,13 +3453,14 @@ static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
             goto _bail;
         }
 
+        /*
         tmp      = PyList_GetItem(pixels_list, i);
-        pixels   = (struct pixel* ) PyArray_DATA(tmp);
         n_pixels = PyArray_SIZE(tmp);
 
         if (i > 0) {
             offsets[i] = offsets[i-1] + n_pixels;
         }
+        */
     }
 
     /*
@@ -3461,10 +3472,17 @@ static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
 
     //gettimeofday(&t1, 0);
 
+/*
 #pragma omp parallel for \
         default(none) \
-        shared(n_obs,pixels_list,gmix_list,PyArray_API,offsets,fdiff) \
+        shared(n_obs,pixels_list,fdiff,gmix_list,PyArray_API,offsets) \
         private(i,j,tmp,pixels,n_pixels,gmix,n_gauss,offset)
+*/
+
+#pragma omp parallel for \
+        default(none) \
+        shared(n_obs,pixels_list,gmix_list,PyArray_API) \
+        private(i,tmp,pixels,n_pixels,gmix,n_gauss)
 
     for (i=0; i < n_obs; i++) {
         // get the pixel array
@@ -3481,10 +3499,12 @@ static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
         fill_fdiff(pixels, n_pixels, gmix, n_gauss);
 
         // copy into the output
+        /*
         offset=offsets[i];
         for (j=0; j < n_pixels; j++) {
             fdiff[offset+j] = pixels[j].fdiff;
         }
+        */
 
     }
 
@@ -3495,10 +3515,25 @@ static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
     printf("elapsed parallel: %ld\n", elapsed);
     */
 
-_bail:
-    free(offsets);
+    fdiff += start;
+    for (i=0; i < n_obs; i++) {
+        tmp      = PyList_GetItem(pixels_list, i);
+        pixels   = (struct pixel* ) PyArray_DATA(tmp);
+        n_pixels = PyArray_SIZE(tmp);
 
-    if (!status) {
+        for (j=0; j < n_pixels; j++) {
+            (*fdiff) = pixels[j].fdiff;
+            fdiff++;
+        }
+    }
+
+_bail:
+/*
+    if (offsets != NULL) {
+        free(offsets);
+    }
+*/
+    if (status==0) {
         return NULL;
     } else {
         Py_RETURN_NONE;
