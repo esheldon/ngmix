@@ -1839,7 +1839,7 @@ class LMSimple(FitterBase):
         The npars elements contain -ln(prior)
         """
 
-        from .nbtools import fill_fdiff
+        from .nbtools import fill_fdiff, gmix_set_norms
 
         if not hasattr(self,'_pixels_list'):
             self._make_lists()
@@ -1857,6 +1857,10 @@ class LMSimple(FitterBase):
                 gmix_data = self._gmix_data_list[i]
                 n_pixels = pixels.size
 
+                status=gmix_set_norms(gmix_data)
+                if status != 1:
+                    raise GMixRangeError("bad det")
+
                 tfdiff = fdiff[start:start+n_pixels]
                 status=fill_fdiff(
                     gmix_data,
@@ -1864,8 +1868,8 @@ class LMSimple(FitterBase):
                     tfdiff,
                 )
 
-                if status != 1:
-                    raise GMixRangeError("bad det")
+                #if status != 1:
+                #    raise GMixRangeError("bad det")
 
                 start += n_pixels
 

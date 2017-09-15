@@ -2,8 +2,9 @@ from __future__ import print_function
 import numpy
 import time
 import numba
+from numba import njit, prange
 
-parallel=False
+parallel=True
 
 try:
     xrange
@@ -11,8 +12,10 @@ except:
     xrange=range
 
 if parallel:
-    rng = numba.prange
+    cache=False
+    rng = prange
 else:
+    cache=True
     rng = xrange
 
 
@@ -38,7 +41,7 @@ _exp3_lookup = numpy.array([
     1.35335283e-01,   3.67879441e-01,   1.00000000e+00,
 ])
 
-@numba.jit(nopython=True,cache=True)
+@njit(cache=True)
 def exp3(x):
     """
     fast exponential
@@ -54,7 +57,7 @@ def exp3(x):
 
     return expval
 
-@numba.jit(nopython=True,cache=True)
+@njit(cache=True)
 def jacobian_get_vu(jacob, row, col):
     """
     convert row,col to v,u using the input jacobian
@@ -68,7 +71,7 @@ def jacobian_get_vu(jacob, row, col):
 
     return v,u
  
-@numba.jit(nopython=True,cache=True)
+@njit(cache=True)
 def fill_pixels(pixels, image, weight, jacob):
     """
     store v,u image value, and 1/err for each pixel
@@ -109,36 +112,7 @@ def fill_pixels(pixels, image, weight, jacob):
 
             ipixel += 1
 
-
-
-@numba.jit(nopython=True,cache=True)
-def gauss2d_eval(gauss, v, u):
-    """
-    evaluate a 2-d gaussian at the specified location
-
-    parameters
-    ----------
-    gauss2d: gauss2d structure
-        row,col,dcc,drr,drc,pnorm... See gmix.py
-    v,u: numbers
-        location in v,u plane (row,col for simple transforms)
-    """
-    model_val=0.0
-
-    # v->row, u->col in gauss
-    vdiff = v - gauss['row']
-    udiff = u - gauss['col']
-
-    chi2 = (      gauss['dcc']*vdiff*vdiff
-            +     gauss['drr']*udiff*udiff
-            - 2.0*gauss['drc']*vdiff*udiff )
-
-    if chi2 < 25.0 and chi2 >= 0.0:
-        model_val = gauss['pnorm']*exp3( -0.5*chi2 )
-
-    return model_val
-
-@numba.jit(nopython=True,cache=True)
+@njit(cache=True)
 def gauss2d_set_norm(gauss2d):
     """
     set the normalization, and nromalized variances
@@ -165,7 +139,7 @@ def gauss2d_set_norm(gauss2d):
 
     return status
 
-@numba.jit(nopython=True,cache=True)
+@njit(cache=True)
 def gmix_set_norms(gmix):
     """
     set all norms for gaussians in the input gaussian mixture
@@ -182,8 +156,49 @@ def gmix_set_norms(gmix):
     return status
 
 
-#@numba.jit(nopython=True,parallel=True)
-@numba.jit(nopython=True,cache=True)
+
+@njit(cache=True)
+def gauss2d_eval(gauss, v, u):
+    """
+    evaluate a 2-d gaussian at the specified location
+
+    parameters
+    ----------
+    gauss2d: gauss2d structure
+        row,col,dcc,drr,drc,pnorm... See gmix.py
+    v,u: numbers
+        location in v,u plane (row,col for simple transforms)
+    """
+    model_val=0.0
+
+    # v->row, u->col in gauss
+    vdiff = v - gauss['row']
+    udiff = u - gauss['col']
+
+    chi2 = (      gauss['dcc']*vdiff*vdiff
+            +     gauss['drr']*udiff*udiff
+            - 2.0*gauss['drc']*vdiff*udiff )
+
+    if chi2 < 25.0 and chi2 >= 0.0:
+        model_val = gauss['pnorm']*exp3( -0.5*chi2 )
+
+    return model_val
+
+@njit(cache=True)
+def gmix_eval(gmix, pixel):
+    model_val=0.0
+    for igauss in xrange(gmix.shape[0]):
+
+        model_val += gauss2d_eval(
+            gmix[igauss],
+            pixel['v'],
+            pixel['u'],
+        )
+
+
+    return model_val
+
+@njit(cache=cache,parallel=parallel)
 def fill_fdiff(gmix, pixels, fdiff):
     """
     fill fdiff array (model-data)/err
@@ -198,34 +213,12 @@ def fill_fdiff(gmix, pixels, fdiff):
         Array to fill, should be same length as pixels
     """
     status=1
-    if gmix['norm_set'][0] != 1:
-        status=gmix_set_norms(gmix)
-
-        if status != 1:
-            return status
-
 
     n_pixels = pixels.shape[0]
-    n_gauss = gmix.shape[0]
-
-    #for ipixel in numba.prange(n_pixels):
-    for ipixel in xrange(n_pixels):
+    for ipixel in rng(n_pixels):
         pixel = pixels[ipixel]
 
-        model_val=0.0
-        for igauss in xrange(n_gauss):
-
-            model_val += gauss2d_eval(
-                gmix[igauss],
-                pixel['v'],
-                pixel['u'],
-            )
-
-        #pixel['fdiff'] = (model_val-pixel['val'])*pixel['ierr']
+        model_val = gmix_eval(gmix, pixel)
         fdiff[ipixel] = (model_val-pixel['val'])*pixel['ierr']
-
-
-    #for ipixel in xrange(n_pixels):
-    #    fdiff[ipixel] = pixels['fdiff'][ipixel]
 
     return status

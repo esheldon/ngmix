@@ -484,6 +484,7 @@ class Observation(object):
         usage at the C level
         """
         from .nbtools import fill_pixels
+        #from ._gmix import fill_pixels
 
         image  = self.image
         weight = self.weight
