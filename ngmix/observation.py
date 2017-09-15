@@ -483,11 +483,14 @@ class Observation(object):
         create the pixel struct array, for efficient cache
         usage at the C level
         """
+        from .nbtools import fill_pixels
+
         image  = self.image
         weight = self.weight
         pixels = numpy.zeros(image.size, dtype=_pixels_dtype)
 
-        _gmix.fill_pixels(
+        #_gmix.fill_pixels(
+        fill_pixels(
             pixels,
             image,
             weight,
@@ -1141,5 +1144,5 @@ _pixels_dtype=[
     ('v','f8'),
     ('val','f8'),
     ('ierr','f8'),
-    ('fdiff','f8'),
+    #('fdiff','f8'),
 ]
