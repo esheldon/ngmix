@@ -4,7 +4,7 @@ import time
 import numba
 from numba import njit, prange
 
-parallel=True
+parallel=False
 
 try:
     xrange
