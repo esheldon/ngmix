@@ -240,7 +240,6 @@ def fill_fdiff(gmix, pixels, fdiff):
     fdiff: array
         Array to fill, should be same length as pixels
     """
-    status=1
 
     n_pixels = pixels.shape[0]
     for ipixel in rng(n_pixels):
@@ -248,5 +247,3 @@ def fill_fdiff(gmix, pixels, fdiff):
 
         model_val = gmix_eval(gmix, pixel)
         fdiff[ipixel] = (model_val-pixel['val'])*pixel['ierr']
-
-    return status

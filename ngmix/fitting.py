@@ -1862,14 +1862,11 @@ class LMSimple(FitterBase):
                     raise GMixRangeError("bad det")
 
                 tfdiff = fdiff[start:start+n_pixels]
-                status=fill_fdiff(
+                fill_fdiff(
                     gmix_data,
                     pixels,
                     tfdiff,
                 )
-
-                #if status != 1:
-                #    raise GMixRangeError("bad det")
 
                 start += n_pixels
 
