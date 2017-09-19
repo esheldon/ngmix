@@ -62,7 +62,7 @@ def jacobian_get_vu(jacob, row, col):
 
     return v,u
  
-@njit(cache=True,)
+@njit(cache=True)
 def fill_pixels(pixels, image, weight, jacob):
     """
     store v,u image value, and 1/err for each pixel
@@ -221,7 +221,7 @@ def get_loglike(gmix, pixels):
     return loglike
 
 @njit(cache=True)
-def fill_fdiff(gmix, pixels, fdiff):
+def fill_fdiff(gmix, pixels, fdiff, start):
     """
     fill fdiff array (model-data)/err
 
@@ -246,7 +246,7 @@ def fill_fdiff(gmix, pixels, fdiff):
             pixel = pixels[ipixel]
 
             model_val = gmix_eval(gmix, pixel)
-            fdiff[ipixel] = (model_val-pixel['val'])*pixel['ierr']
+            fdiff[start+ipixel] = (model_val-pixel['val'])*pixel['ierr']
 
     return status
 

@@ -37,6 +37,7 @@ from .observation import Observation,ObsList,MultiBandObsList,get_mb_obs
 
 from . import stats
 
+from .nbtools import fill_fdiff
 
 MAX_TAU=0.1
 MIN_ARATE=0.2
@@ -1664,12 +1665,12 @@ class LMSimple(FitterBase):
         guess=array(guess,dtype='f8',copy=False)
         self._setup_data(guess)
 
-        nthreads=int(os.environ['OMP_NUM_THREADS'])
-        if nthreads > 1 and self.nimage > 1:
-            func=self._calc_fdiff_parallel
-        else:
-            func=self._calc_fdiff
-        #func = self._calc_fdiff_numba
+        #nthreads=int(os.environ['OMP_NUM_THREADS'])
+        #if nthreads > 1 and self.nimage > 1:
+        #    func=self._calc_fdiff_parallel
+        #else:
+        #    func=self._calc_fdiff
+        func = self._calc_fdiff_numba
 
         result = run_leastsq(
             func,
@@ -1773,7 +1774,6 @@ class LMSimple(FitterBase):
 
     def _calc_fdiff(self, pars):
         """
-
         vector with (model-data)/error.
 
         The npars elements contain -ln(prior)
@@ -1788,7 +1788,6 @@ class LMSimple(FitterBase):
         try:
 
             self._fill_gmix_all(pars)
-
             start=self._fill_priors(pars, fdiff)
 
             for pixels,gmix in zip(self._pixels_list,self._gmix_data_list):
@@ -1844,7 +1843,6 @@ class LMSimple(FitterBase):
         The npars elements contain -ln(prior)
         """
 
-        from .nbtools import fill_fdiff
 
         if not hasattr(self,'_pixels_list'):
             self._make_lists()
@@ -1857,20 +1855,17 @@ class LMSimple(FitterBase):
             self._fill_gmix_all(pars)
             start=self._fill_priors(pars, fdiff)
 
-            for i,pixels in enumerate(self._pixels_list):
-                gmix_data = self._gmix_data_list[i]
-                n_pixels = pixels.size
-
-                tfdiff = fdiff[start:start+n_pixels]
+            for pixels,gmix in zip(self._pixels_list,self._gmix_data_list):
                 status=fill_fdiff(
-                    gmix_data,
+                    gmix,
                     pixels,
-                    tfdiff,
+                    fdiff,
+                    start,
                 )
                 if status != 1:
                     raise GMixRangeError("bad det")
 
-                start += n_pixels
+                start += pixels.size
 
         except GMixRangeError as err:
             fdiff[:] = LOWVAL
