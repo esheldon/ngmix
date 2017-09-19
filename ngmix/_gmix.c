@@ -3293,7 +3293,7 @@ static PyObject * PyGMix_fill_fdiff_gauleg(PyObject* self, PyObject* args) {
 
 
 static void fill_fdiff(
-    struct pixel* pixels,        // array of pixels
+    struct pixel* pixels,              // array of pixels
     npy_intp n_pixels,                 // number of pixels in array
     const struct PyGMix_Gauss2D* gmix, // the gaussian mixture
     npy_intp n_gauss)                  // number of gaussians
@@ -3387,9 +3387,61 @@ static void fill_fdiff_exp3(
 */
 
 /*
-   had to move the fill of fdiff outside the loop, looks like
-   maybe a bug in the gcc 4.4.7 compiler
+   single threaded version
 */
+
+static PyObject * PyGMix_fill_fdiff_pixels(PyObject* self, PyObject* args) {
+
+
+    int status=1;
+    PyObject* pixels_obj=NULL;
+    PyObject* gmix_obj=NULL;
+    PyObject* fdiff_obj=NULL;
+    int start=0;
+
+    npy_intp n_pixels=0, n_gauss=0, i=0;
+
+    struct PyGMix_Gauss2D *gmix=NULL;
+    struct pixel *pixels=NULL;
+    double *fdiff=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOi", 
+						  &pixels_obj,
+                          &gmix_obj,
+						  &fdiff_obj,
+                          &start)) {
+        return NULL;
+    }
+
+    fdiff=(double *)PyArray_GETPTR1(fdiff_obj,start);
+
+    pixels   = (struct pixel* ) PyArray_DATA(pixels_obj);
+    n_pixels = PyArray_SIZE(pixels_obj);
+
+    gmix = (struct PyGMix_Gauss2D *) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        status=0;
+        goto _bail;
+    }
+
+    fill_fdiff(pixels, n_pixels, gmix, n_gauss);
+
+    for (i=0; i < n_pixels; i++) {
+        fdiff[i] = pixels[i].fdiff;
+    }
+
+_bail:
+    if (status==0) {
+        return NULL;
+    } else {
+        Py_RETURN_NONE;
+    }
+
+}
+
+
 
 static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
 
@@ -3432,17 +3484,6 @@ static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
 
     // set norms and offsets. this takes negligible time
 
-    /*
-    offsets=calloc(n_obs,sizeof(npy_intp));
-    if (offsets==NULL) {
-        status=0;
-        goto _bail;
-    }
-    offsets[0] = start;
-    */
-
-
-    //gettimeofday(&t1, 0);
     for (i=0; i < n_obs; i++) {
         tmp = PyList_GetItem(gmix_list, i);
         gmix = (struct PyGMix_Gauss2D *) PyArray_DATA(tmp);
@@ -3452,23 +3493,8 @@ static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
             status=0;
             goto _bail;
         }
-
-        /*
-        tmp      = PyList_GetItem(pixels_list, i);
-        n_pixels = PyArray_SIZE(tmp);
-
-        if (i > 0) {
-            offsets[i] = offsets[i-1] + n_pixels;
-        }
-        */
     }
 
-    /*
-    gettimeofday(&t2, 0);
-    elapsed = (t2.tv_sec-t1.tv_sec)*1000000 + t2.tv_usec-t1.tv_usec;
-    //elapsed = t2.tv_usec-t1.tv_usec;
-    printf("elapsed serial prep: %ld\n", elapsed);
-    */
 
     //gettimeofday(&t1, 0);
 
@@ -3498,14 +3524,6 @@ static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
         // fill fdiff field in the pixels
         fill_fdiff(pixels, n_pixels, gmix, n_gauss);
 
-        // copy into the output
-        /*
-        offset=offsets[i];
-        for (j=0; j < n_pixels; j++) {
-            fdiff[offset+j] = pixels[j].fdiff;
-        }
-        */
-
     }
 
     /*
@@ -3528,11 +3546,6 @@ static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
     }
 
 _bail:
-/*
-    if (offsets != NULL) {
-        free(offsets);
-    }
-*/
     if (status==0) {
         return NULL;
     } else {
@@ -6500,6 +6513,7 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"fill_fdiff",  (PyCFunction)PyGMix_fill_fdiff,  METH_VARARGS,  "fill fdiff for LM\n"},
     {"fill_fdiff_gauleg",  (PyCFunction)PyGMix_fill_fdiff_gauleg,  METH_VARARGS,  "fill fdiff for LM, integrating over pixels\n"},
 
+    {"fill_fdiff_pixels",  (PyCFunction)PyGMix_fill_fdiff_pixels,  METH_VARARGS,  "fill fdiff for LM\n"},
     {"fill_fdiff_parallel",  (PyCFunction)PyGMix_fill_fdiff_parallel,  METH_VARARGS,  "fill fdiff for LM\n"},
 
     {"fill_fdiffk",  (PyCFunction)PyGMix_fill_fdiffk,  METH_VARARGS,  "fill fdiff for LM\n"},

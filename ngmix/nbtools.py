@@ -1,23 +1,14 @@
 from __future__ import print_function
+import os
 import numpy
 import time
 import numba
 from numba import njit, prange
 
-parallel=False
-
 try:
     xrange
 except:
     xrange=range
-
-if parallel:
-    cache=False
-    rng = prange
-else:
-    cache=True
-    rng = xrange
-
 
 # will check > -26 and < 0.0 so these are not actually necessary
 _exp3_ivals = numpy.array([
@@ -71,7 +62,7 @@ def jacobian_get_vu(jacob, row, col):
 
     return v,u
  
-@njit(cache=True)
+@njit(cache=True,)
 def fill_pixels(pixels, image, weight, jacob):
     """
     store v,u image value, and 1/err for each pixel
@@ -113,7 +104,7 @@ def fill_pixels(pixels, image, weight, jacob):
             ipixel += 1
 
 @njit(cache=True)
-def gauss2d_set_norm(gauss2d):
+def gauss2d_set_norm(gauss2d,):
     """
     set the normalization, and nromalized variances
 
@@ -140,7 +131,7 @@ def gauss2d_set_norm(gauss2d):
     return status
 
 @njit(cache=True)
-def gmix_set_norms(gmix):
+def gmix_set_norms(gmix,):
     """
     set all norms for gaussians in the input gaussian mixture
     """
@@ -158,7 +149,7 @@ def gmix_set_norms(gmix):
 
 
 @njit(cache=True)
-def gauss2d_eval(gauss, v, u):
+def gauss2d_eval(gauss, v, u,):
     """
     evaluate a 2-d gaussian at the specified location
 
@@ -186,6 +177,9 @@ def gauss2d_eval(gauss, v, u):
 
 @njit(cache=True)
 def gmix_eval(gmix, pixel):
+    """
+    evaluate a single gaussian mixture
+    """
     model_val=0.0
     for igauss in xrange(gmix.shape[0]):
 
@@ -198,7 +192,7 @@ def gmix_eval(gmix, pixel):
 
     return model_val
 
-@njit(cache=cache,parallel=parallel)
+@njit(cache=True)
 def get_loglike(gmix, pixels):
     """
     get the log likelihood
@@ -214,7 +208,7 @@ def get_loglike(gmix, pixels):
     loglike = 0.0
 
     n_pixels = pixels.shape[0]
-    for ipixel in rng(n_pixels):
+    for ipixel in xrange(n_pixels):
         pixel = pixels[ipixel]
 
         model_val = gmix_eval(gmix, pixel)
@@ -226,7 +220,7 @@ def get_loglike(gmix, pixels):
 
     return loglike
 
-@njit(cache=cache,parallel=parallel)
+@njit(cache=True)
 def fill_fdiff(gmix, pixels, fdiff):
     """
     fill fdiff array (model-data)/err
@@ -241,9 +235,18 @@ def fill_fdiff(gmix, pixels, fdiff):
         Array to fill, should be same length as pixels
     """
 
-    n_pixels = pixels.shape[0]
-    for ipixel in rng(n_pixels):
-        pixel = pixels[ipixel]
+    if gmix['norm_set'][0] != 1:
+        status=gmix_set_norms(gmix)
+    else:
+        status=1
 
-        model_val = gmix_eval(gmix, pixel)
-        fdiff[ipixel] = (model_val-pixel['val'])*pixel['ierr']
+    if status != 0:
+        n_pixels = pixels.shape[0]
+        for ipixel in xrange(n_pixels):
+            pixel = pixels[ipixel]
+
+            model_val = gmix_eval(gmix, pixel)
+            fdiff[ipixel] = (model_val-pixel['val'])*pixel['ierr']
+
+    return status
+

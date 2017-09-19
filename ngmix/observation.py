@@ -1145,5 +1145,5 @@ _pixels_dtype=[
     ('v','f8'),
     ('val','f8'),
     ('ierr','f8'),
-    #('fdiff','f8'),
+    ('fdiff','f8'),
 ]

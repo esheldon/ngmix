@@ -8,6 +8,8 @@ __version__="v0.9.3"
 
 if 'OMP_NUM_THREADS' not in os.environ:
     os.environ['OMP_NUM_THREADS']='1'
+if 'NUMBA_NUM_THREADS' not in os.environ:
+    os.environ['NUMBA_NUM_THREADS']='1'
 
 from . import gmix
 from .gmix import GMix

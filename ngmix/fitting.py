@@ -11,6 +11,7 @@ except:
     xrange = range
     # We have Python 3
 
+import os
 from sys import stdout
 import numpy
 from numpy import array, zeros, ones, diag
@@ -1663,14 +1664,19 @@ class LMSimple(FitterBase):
         guess=array(guess,dtype='f8',copy=False)
         self._setup_data(guess)
 
-        #func=self._calc_fdiff_parallel
-        #func=self._calc_fdiff
-        func=self._calc_fdiff_numba
+        nthreads=int(os.environ['OMP_NUM_THREADS'])
+        if nthreads > 1 and self.nimage > 1:
+            func=self._calc_fdiff_parallel
+        else:
+            func=self._calc_fdiff
+        #func = self._calc_fdiff_numba
 
-        result = run_leastsq(func,
-                             guess,
-                             self.n_prior_pars,
-                             **self.lm_pars)
+        result = run_leastsq(
+            func,
+            guess,
+            self.n_prior_pars,
+            **self.lm_pars
+        )
 
         result['model'] = self.model_name
         if result['flags']==0:
@@ -1680,6 +1686,8 @@ class LMSimple(FitterBase):
             result.update(stat_dict)
 
         self._result=result
+
+
     run_max=go
     run_lm=go
 
@@ -1740,41 +1748,6 @@ class LMSimple(FitterBase):
 
         return T_s2n
 
-
-    def _calc_fdiff(self, pars):
-        """
-
-        vector with (model-data)/error.
-
-        The npars elements contain -ln(prior)
-        """
-
-        # we cannot keep sending existing array into leastsq, don't know why
-        fdiff=zeros(self.fdiff_size)
-
-        try:
-
-            self._fill_gmix_all(pars)
-
-            start=self._fill_priors(pars, fdiff)
-
-            for band in xrange(self.nband):
-
-                obs_list=self.obs[band]
-                gmix_list=self._gmix_all[band]
-
-                for obs,gm in zip(obs_list, gmix_list):
-
-                    gm.fill_fdiff(obs, fdiff, start=start,
-                                  npoints=self.npoints)
-
-                    start += obs.image.size
-
-        except GMixRangeError as err:
-            fdiff[:] = LOWVAL
-
-        return fdiff
-
     def _make_lists(self):
         """
         lists of references.
@@ -1797,6 +1770,41 @@ class LMSimple(FitterBase):
 
         self._pixels_list=pixels_list
         self._gmix_data_list=gmix_data_list
+
+    def _calc_fdiff(self, pars):
+        """
+
+        vector with (model-data)/error.
+
+        The npars elements contain -ln(prior)
+        """
+
+        if not hasattr(self,'_pixels_list'):
+            self._make_lists()
+
+        # we cannot keep sending existing array into leastsq, don't know why
+        fdiff=zeros(self.fdiff_size)
+
+        try:
+
+            self._fill_gmix_all(pars)
+
+            start=self._fill_priors(pars, fdiff)
+
+            for pixels,gmix in zip(self._pixels_list,self._gmix_data_list):
+                _gmix.fill_fdiff_pixels(
+                    pixels,
+                    gmix,
+                    fdiff,
+                    start,
+                )
+                start += pixels.size
+
+        except GMixRangeError as err:
+            fdiff[:] = LOWVAL
+
+        return fdiff
+
 
     def _calc_fdiff_parallel(self, pars):
         """
@@ -1827,9 +1835,6 @@ class LMSimple(FitterBase):
         except GMixRangeError as err:
             fdiff[:] = LOWVAL
 
-        #for i,val in enumerate(fdiff):
-        #    print(i,val)
-
         return fdiff
 
     def _calc_fdiff_numba(self, pars):
@@ -1839,7 +1844,7 @@ class LMSimple(FitterBase):
         The npars elements contain -ln(prior)
         """
 
-        from .nbtools import fill_fdiff, gmix_set_norms
+        from .nbtools import fill_fdiff
 
         if not hasattr(self,'_pixels_list'):
             self._make_lists()
@@ -1850,34 +1855,27 @@ class LMSimple(FitterBase):
         try:
 
             self._fill_gmix_all(pars)
-
             start=self._fill_priors(pars, fdiff)
 
             for i,pixels in enumerate(self._pixels_list):
                 gmix_data = self._gmix_data_list[i]
                 n_pixels = pixels.size
 
-                status=gmix_set_norms(gmix_data)
-                if status != 1:
-                    raise GMixRangeError("bad det")
-
                 tfdiff = fdiff[start:start+n_pixels]
-                fill_fdiff(
+                status=fill_fdiff(
                     gmix_data,
                     pixels,
                     tfdiff,
                 )
+                if status != 1:
+                    raise GMixRangeError("bad det")
 
                 start += n_pixels
 
         except GMixRangeError as err:
             fdiff[:] = LOWVAL
 
-        #for i,val in enumerate(fdiff):
-        #    print(i,val)
-
         return fdiff
-
 
     '''
     def _calc_fdiff_old(self, pars, more=False):
@@ -2050,25 +2048,6 @@ class LMGaussK(LMSimple):
                 gmdata['norm_set'][0] = 0
 
 
-    def _fill_gmix_all_old(self, pars):
-        """
-        Fill the list of lists of gmix objects for the given parameters
-        """
-
-        for band,kobs_list in enumerate(self.mb_kobs):
-            gmix_list=self._gmix_all[band]
-
-            # pars for this band, in linear space
-            band_pars=self.get_band_pars(pars, band)
-
-            for i in xrange(len(kobs_list)):
-
-                gm=gmix_list[i]
-
-                try:
-                    _gmix.gmix_fill(gm._data, band_pars, gm._model)
-                except ZeroDivisionError:
-                    raise GMixRangeError("zero division")
 
     def calc_lnprob(self, pars_in, more=False):
 
