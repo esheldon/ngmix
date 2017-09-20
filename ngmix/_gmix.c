@@ -1329,9 +1329,6 @@ static PyObject * PyGMix_get_weighted_moments(PyObject* self, PyObject* args) {
 
             var=1.0/ivar;
 
-            // evaluate the gaussian mixture at the specified location
-            //weight=PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, v, u);
-            //weight=PYGMIX_GMIX_EVAL_FAST(gmix, n_gauss, v, u);
             weight=PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
 
             // sky coordinates relative to the gaussian mixture center
@@ -2445,12 +2442,6 @@ static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
     struct pixel *pixels=NULL;
     double *fdiff=NULL;
 
-    /*
-    npy_intp
-        *offsets=NULL,
-        offset=0;
-    */
-
     PyObject* tmp=NULL;
 
     if (!PyArg_ParseTuple(args, (char*)"OOOi", 
@@ -2481,12 +2472,6 @@ static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
 
     //gettimeofday(&t1, 0);
 
-/*
-#pragma omp parallel for \
-        default(none) \
-        shared(n_obs,pixels_list,fdiff,gmix_list,PyArray_API,offsets) \
-        private(i,j,tmp,pixels,n_pixels,gmix,n_gauss,offset)
-*/
 
 #pragma omp parallel for \
         default(none) \
@@ -2773,32 +2758,6 @@ static void em_clear_sums(struct PyGMix_EM_Sums *sums, npy_intp n_gauss)
     memset(sums, 0, n_gauss*sizeof(struct PyGMix_EM_Sums));
 }
 
-/*
-static void em_sums_print(const struct PyGMix_EM_Sums *sums, npy_intp n_gauss)
-{
-    npy_intp i=0;
-    for (i=0; i<n_gauss; i++) {
-        const struct PyGMix_EM_Sums *sum=&sums[i];
-
-        fprintf(stderr,"%ld: %g %g %g %g %g %g %g %g %g %g %g %g\n",
-                i+1,
-                sum->gi,
-                sum->trowsum,
-                sum->tcolsum,
-                sum->tu2sum,
-                sum->tuvsum,
-                sum->tv2sum,
-
-                sum->pnew,
-                sum->rowsum,
-                sum->colsum,
-                sum->u2sum,
-                sum->uvsum,
-                sum->v2sum);
-
-    }
-}
-*/
 
 /*
 
@@ -4299,106 +4258,6 @@ PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
     //Py_RETURN_NONE;
     return Py_BuildValue("ld", nuse, neff);
 }
-
-/*
-static int get_pvals(const PyObject* mean_obj,
-                     const PyObject* icovar_obj,
-                     const PyObject* templates_obj,
-                     const PyObject* sheared_p0,
-                     const PyObject* sheared_m0,
-                     const PyObject* sheared_0p,
-                     const PyObject* sheared_0m,
-                     const PyObject* sheared_pp,
-                     const PyObject* sheared_mm,
-                     double norm,
-                     double *xdiff,
-                     npy_intp ndim,
-                     npy_intp i,
-                     double nsigma2,
-                     double *prob,
-                     double *P,
-                     double *P_p0,
-                     double *P_m0,
-                     double *P_0p,
-                     double *P_0m,
-                     double *P_pp,
-                     double *P_mm)
-{
-
-    int used=0;
-    double chi2=0;
-    double tP, tP_p0, tP_m0, tP_0p, tP_0m, tP_pp, tP_mm;
-
-    get_mom_xdiff(mean_obj,templates_obj,i,xdiff,ndim);
-
-    chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
-
-    if (chi2 > nsigma2) {
-        goto _bail;
-    }
-
-    tP = norm*exp(-0.5*chi2);
-    *prob = tP;
-
-    // update the pars that respond to shear
-
-    get_mom_xdiff_sheared(mean_obj,sheared_p0,i,xdiff);
-    chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
-    if (chi2 > nsigma2 || !isfinite(chi2)) {
-        goto _bail;
-    }
-    tP_p0 = norm*exp(-0.5*chi2);
-
-    get_mom_xdiff_sheared(mean_obj,sheared_m0,i,xdiff);
-    chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
-    if (chi2 > nsigma2 || !isfinite(chi2)) {
-        goto _bail;
-    }
-    tP_m0 = norm*exp(-0.5*chi2);
-
-    get_mom_xdiff_sheared(mean_obj,sheared_0p,i,xdiff);
-    chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
-    if (chi2 > nsigma2 || !isfinite(chi2)) {
-        goto _bail;
-    }
-    tP_0p = norm*exp(-0.5*chi2);
-
-    get_mom_xdiff_sheared(mean_obj,sheared_0m,i,xdiff);
-    chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
-    if (chi2 > nsigma2 || !isfinite(chi2)) {
-        goto _bail;
-    }
-    tP_0m = norm*exp(-0.5*chi2);
-
-    get_mom_xdiff_sheared(mean_obj,sheared_pp,i,xdiff);
-    chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
-    if (chi2 > nsigma2 || !isfinite(chi2)) {
-        goto _bail;
-    }
-    tP_pp = norm*exp(-0.5*chi2);
-
-    get_mom_xdiff_sheared(mean_obj,sheared_mm,i,xdiff);
-    chi2=get_mom_chi2(icovar_obj, xdiff, ndim);
-    if (chi2 > nsigma2 || !isfinite(chi2)) {
-        goto _bail;
-    }
-    tP_mm = norm*exp(-0.5*chi2);
-
-    *P += tP;
-    *P_p0 += tP_p0;
-    *P_m0 += tP_m0;
-    *P_0p += tP_0p;
-    *P_0m += tP_0m;
-    *P_pp += tP_pp;
-    *P_mm += tP_mm;
-
-    used = 1;
-
-_bail:
-    return used;
- 
-}
-*/             
 
 static 
 PyObject * PyGMix_mvn_calc_pqr_templates_full(PyObject* self, PyObject* args) {
