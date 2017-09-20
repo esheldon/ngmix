@@ -483,8 +483,8 @@ class Observation(object):
         create the pixel struct array, for efficient cache
         usage at the C level
         """
-        from .nbtools import fill_pixels
-        #from ._gmix import fill_pixels
+        #from .nbtools import fill_pixels
+        from ._gmix import fill_pixels
 
         image  = self.image
         weight = self.weight
