@@ -127,12 +127,12 @@ def make_test_observations(model,
 
     gm=gm_obj0.convolve(gm_psf)
 
-    im_psf=gm_psf.make_image(dims, jacobian=j, nsub=16)
+    im_psf=gm_psf.make_image(dims, jacobian=j, npoints=10)
     npsf=noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
     im_psf[:,:] += npsf
     wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
 
-    im_obj=gm.make_image(dims, jacobian=j, nsub=16)
+    im_obj=gm.make_image(dims, jacobian=j, npoints=10)
     n=noise_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
     im_obj[:,:] += n
     wt_obj=zeros(im_obj.shape) + 1./noise_obj**2

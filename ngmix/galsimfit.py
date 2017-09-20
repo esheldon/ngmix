@@ -181,10 +181,7 @@ class GalsimSimple(LMSimple):
 
             self._fill_models(pars)
 
-            #print_pars(fdiff[0:5],front="befor fill:")
             start=self._fill_priors(pars, fdiff)
-            #print_pars(pars,front="      pars:")
-            #print_pars(fdiff[0:start],front="after fill:")
 
             for band in xrange(self.nband):
 
@@ -244,23 +241,6 @@ class GalsimSimple(LMSimple):
 
                 kmodel *= kobs.psf.kimage
 
-    """
-                if False:
-                    #print("kmodel before",kmodel)
-
-                    dk = kmodel.scale
-                    dx = numpy.pi/( max(kmodel.array.shape) // 2 * dk )
-
-                    real_prof = galsim.PixelScale(dx).toImage(gal)
-                    kmodel = real_prof._setup_image(
-                        kmodel, None, None, None, False, numpy.complex128,
-                        odd=True,wmult=1.0,
-                    )
-                    kmodel.setCenter(0,0)
-                    #print("kmodel after",kmodel)
-                    gal.SBProfile.drawK(kmodel.image.view(), dk)
-                else:
-    """
     def make_model(self, pars):
         """
         make the galsim model

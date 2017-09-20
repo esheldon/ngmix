@@ -40,10 +40,9 @@ class Admom(object):
     def __init__(self, obs, maxiter=200, shiftmax=5.0,
                  etol=1.0e-5, Ttol=0.001,
                  rng=None,
-                 deconv=False,
                  **unused_keys):
 
-        self._set_obs(obs, deconv)
+        self._set_obs(obs)
         self._set_conf(maxiter, shiftmax, etol, Ttol)
 
         self.rng=rng
@@ -102,35 +101,24 @@ class Admom(object):
         ares=self._get_am_result()
 
         try:
-            if self._deconv:
-                _gmix.admom_multi_deconv(
+            if len(self._imlist) > 1:
+                _gmix.admom_multi(
                     self.conf,
                     self._imlist,
                     self._wtlist,
-                    self._psflist,
                     self._jlist,
                     guess_gmix._data,
                     ares,
                 )
             else:
-                if len(self._imlist) > 1:
-                    _gmix.admom_multi(
-                        self.conf,
-                        self._imlist,
-                        self._wtlist,
-                        self._jlist,
-                        guess_gmix._data,
-                        ares,
-                    )
-                else:
-                    _gmix.admom(
-                        self.conf,
-                        self._imlist[0],
-                        self._wtlist[0],
-                        self._jlist[0],
-                        guess_gmix._data,
-                        ares,
-                    )
+                _gmix.admom(
+                    self.conf,
+                    self._imlist[0],
+                    self._wtlist[0],
+                    self._jlist[0],
+                    guess_gmix._data,
+                    ares,
+                )
 
         except GMixRangeError as err:
             print("caught admom exception: '%s'" % str(err))
@@ -138,17 +126,11 @@ class Admom(object):
 
         self.result = copy_result(ares)
 
-    def _set_obs(self, obs, deconv):
-
-        assert deconv==False,"deconv doesn't work yet"
-        self._deconv=deconv
+    def _set_obs(self, obs):
 
         imlist=[]
         wtlist=[]
         jlist=[]
-
-        if deconv:
-            self._psflist=[]
 
         if isinstance(obs,MultiBandObsList):
             mbobs=obs
@@ -157,8 +139,6 @@ class Admom(object):
                     imlist.append(obs.image)
                     wtlist.append(obs.weight)
                     jlist.append(obs.jacobian._data)
-                    if deconv and obs.has_psf_gmix():
-                        self._psflist.append(obs.psf.gmix._data)
 
         elif isinstance(obs, ObsList):
             obslist=obs
@@ -166,25 +146,14 @@ class Admom(object):
                 imlist.append(obs.image)
                 wtlist.append(obs.weight)
                 jlist.append(obs.jacobian._data)
-                if deconv and obs.has_psf_gmix():
-                    self._psflist.append(obs.psf.gmix._data)
 
         elif isinstance(obs, Observation):
             imlist.append(obs.image)
             wtlist.append(obs.weight)
             jlist.append(obs.jacobian._data)
-            if deconv and obs.has_psf_gmix():
-                self._psflist.append(obs.psf.gmix._data)
         else:
             raise ValueError("obs is type '%s' but should be "
                              "Observation, ObsList, or MultiBandObsList")
-
-        if deconv:
-            np=len(self._psflist)
-            ni=len(imlist)
-
-            if np != ni:
-                raise ValueError("only some of obs had psf set: %d/%d" % (np,ni))
 
         if len(imlist) > 1000:
             raise ValueError("currently limited to 1000 "

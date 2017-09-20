@@ -547,21 +547,6 @@ class GMix(object):
                     start,
                 )
 
-    def __call__(self, row, col, jacobian=None):
-        """
-        evaluate the mixture at the specified location
-
-        no need to send jacobian unless row,col are actually image
-        coords
-        """
-
-        gm=self._get_gmix_data()
-
-        if jacobian is not None:
-            assert isinstance(jacobian,Jacobian)
-            return _gmix.eval_jacob(gm, jacobian._data, row, col)
-        else:
-            return _gmix.eval(gm, row, col)
 
     def get_model_s2n_sum(self, obs):
         """
@@ -608,86 +593,6 @@ class GMix(object):
         s2n_sum = self.get_model_s2n_sum(obs)
         s2n = sqrt(s2n_sum)
         return s2n
-
-
-    def get_model_s2n_Tvar_sums(self, obs, altweight=None):
-        """
-
-        Get the s/n sum and weighted var(T) related sums for the model, using
-        only the weight map
-
-            s2n_sum = sum(model_i^2 * ivar_i)
-            r2sum = sum(model_i^2 * ivar_i * r^2 )
-            r4sum = sum(model_i^2 * ivar_i * r^4 )
-
-        parameters
-        ----------
-        obs: Observation
-            The Observation to compare with. See ngmix.observation.Observation
-            The Observation must have a weight map set
-        """
-
-        if obs.jacobian is not None:
-            assert isinstance(obs.jacobian,Jacobian)
-
-        gm=self._get_gmix_data()
-
-        if altweight is not None:
-            if isinstance(altweight, GMix):
-                print("using altweight")
-                wdata=altweight._get_gmix_data()
-                res =_gmix.get_model_s2n_Tvar_sums_altweight(gm,
-                                                             wdata,
-                                                             obs.weight,
-                                                             obs.jacobian._data)
-            else:
-                raise ValueError("altweight must be a GMix")
-
-        else:
-
-            res =_gmix.get_model_s2n_Tvar_sums(gm,
-                                               obs.weight,
-                                               obs.jacobian._data)
-
-        return res
-
-    def get_model_s2n_Tvar(self, obs, altweight=None):
-        """
-
-        Get the s/n for the model, and weighted error on T using only the
-        weight map
-
-        parameters
-        ----------
-        obs: Observation
-            The Observation to compare with. See ngmix.observation.Observation
-            The Observation must have a weight map set
-
-        returns
-        -------
-        s2n, r2_mean, Tvar
-
-        """
-
-        s2n_sum, r2sum, r4sum = \
-            self.get_model_s2n_Tvar_sums(obs, altweight=altweight)
-        s2n = sqrt(s2n_sum)
-
-        # weighted means
-        r2_mean = r2sum/s2n_sum
-        r4_mean = r4sum/s2n_sum
-
-        # assume gaussian: T = 2<r^2>
-        # var(T) = T^4 / nu^2 ( <r^4> )
-
-        T = 2*r2_mean
-        Tvar = T**4/( s2n**2 * r4_mean)
-
-        #T=self.get_T()
-        #Tvar = T**4 / ( s2n**2 * ( T**2 - 2*T*r2_mean + r4_mean ) )
-
-        return s2n, r2_mean, r4_mean, Tvar
-
 
     def get_weighted_moments(self, obs, rmax=1.e20):
         """
@@ -1462,128 +1367,128 @@ GMIX_FRACDEV=9
 # Composite Model
 GMIX_CM=10
 
-# moments
-GMIX_GAUSSMOM=11
+_gmix_model_dict={
+    'full':       GMIX_FULL,
+    GMIX_FULL:    GMIX_FULL,
+    'gauss':      GMIX_GAUSS,
+    GMIX_GAUSS:   GMIX_GAUSS,
+    'turb':       GMIX_TURB,
+    GMIX_TURB:    GMIX_TURB,
+    'exp':        GMIX_EXP,
+    GMIX_EXP:     GMIX_EXP,
+    'dev':        GMIX_DEV,
+    GMIX_DEV:     GMIX_DEV,
+    'bdc':        GMIX_BDC,
+    GMIX_BDC:     GMIX_BDC,
+    'bdf':        GMIX_BDF,
+    GMIX_BDF:     GMIX_BDF,
 
-_gmix_model_dict={'full':       GMIX_FULL,
-                  GMIX_FULL:    GMIX_FULL,
-                  'gauss':      GMIX_GAUSS,
-                  GMIX_GAUSS:   GMIX_GAUSS,
-                  'turb':       GMIX_TURB,
-                  GMIX_TURB:    GMIX_TURB,
-                  'exp':        GMIX_EXP,
-                  GMIX_EXP:     GMIX_EXP,
-                  'dev':        GMIX_DEV,
-                  GMIX_DEV:     GMIX_DEV,
-                  'bdc':        GMIX_BDC,
-                  GMIX_BDC:     GMIX_BDC,
-                  'bdf':        GMIX_BDF,
-                  GMIX_BDF:     GMIX_BDF,
+    GMIX_FRACDEV: GMIX_FRACDEV,
+    'fracdev': GMIX_FRACDEV,
 
-                  GMIX_FRACDEV: GMIX_FRACDEV,
-                  'fracdev': GMIX_FRACDEV,
+    GMIX_CM: GMIX_CM,
+    'cm': GMIX_CM,
 
-                  GMIX_CM: GMIX_CM,
-                  'cm': GMIX_CM,
+    'coellip':    GMIX_COELLIP,
+    GMIX_COELLIP: GMIX_COELLIP,
 
-                  'coellip':    GMIX_COELLIP,
-                  GMIX_COELLIP: GMIX_COELLIP,
+    'sersic':    GMIX_SERSIC,
+    GMIX_SERSIC: GMIX_SERSIC,
+}
 
-                  'sersic':    GMIX_SERSIC,
-                  GMIX_SERSIC: GMIX_SERSIC,
-                
-                  'gaussmom': GMIX_GAUSSMOM,
-                  GMIX_GAUSSMOM: GMIX_GAUSSMOM}
+_gmix_string_dict={
+    GMIX_FULL:'full',
+    'full':'full',
+    GMIX_GAUSS:'gauss',
+    'gauss':'gauss',
+    GMIX_TURB:'turb',
+    'turb':'turb',
+    GMIX_EXP:'exp',
+    'exp':'exp',
+    GMIX_DEV:'dev',
+    'dev':'dev',
+    GMIX_BDC:'bdc',
+    'bdc':'bdc',
+    GMIX_BDF:'bdf',
+    'bdf':'bdf',
 
-_gmix_string_dict={GMIX_FULL:'full',
-                   'full':'full',
-                   GMIX_GAUSS:'gauss',
-                   'gauss':'gauss',
-                   GMIX_TURB:'turb',
-                   'turb':'turb',
-                   GMIX_EXP:'exp',
-                   'exp':'exp',
-                   GMIX_DEV:'dev',
-                   'dev':'dev',
-                   GMIX_BDC:'bdc',
-                   'bdc':'bdc',
-                   GMIX_BDF:'bdf',
-                   'bdf':'bdf',
+    GMIX_FRACDEV:'fracdev',
+    'fracdev':'fracdev',
 
-                   GMIX_FRACDEV:'fracdev',
-                   'fracdev':'fracdev',
+    GMIX_CM:'cm',
+    'cm':'cm',
 
-                   GMIX_CM:'cm',
-                   'cm':'cm',
+    GMIX_COELLIP:'coellip',
+    'coellip':'coellip',
 
-                   GMIX_COELLIP:'coellip',
-                   'coellip':'coellip',
-
-                   GMIX_SERSIC:'sersic',
-                   'sersic':'sersic',
-                   
-                   GMIX_GAUSSMOM:'gaussmom',
-                   'gaussmom':'gaussmom',
-                  }
+    GMIX_SERSIC:'sersic',
+    'sersic':'sersic',
+}
 
 
-_gmix_npars_dict={GMIX_GAUSS:6,
-                  GMIX_TURB:6,
-                  GMIX_EXP:6,
-                  GMIX_DEV:6,
+_gmix_npars_dict={
+    GMIX_GAUSS:6,
+    GMIX_TURB:6,
+    GMIX_EXP:6,
+    GMIX_DEV:6,
 
-                  GMIX_FRACDEV:1,
-                  GMIX_CM:6,
+    GMIX_FRACDEV:1,
+    GMIX_CM:6,
 
-                  GMIX_BDC:8,
-                  GMIX_BDF:7,
-                  GMIX_SERSIC:7,
-                  GMIX_GAUSSMOM: 6}
+    GMIX_BDC:8,
+    GMIX_BDF:7,
+    GMIX_SERSIC:7,
+}
 
-_gmix_ngauss_dict={GMIX_GAUSS:1,
-                   'gauss':1,
-                   GMIX_TURB:3,
-                   'turb':3,
-                   GMIX_EXP:6,
-                   'exp':6,
-                   GMIX_DEV:10,
-                   'dev':10,
+_gmix_ngauss_dict={
+    GMIX_GAUSS:1,
+    'gauss':1,
+    GMIX_TURB:3,
+    'turb':3,
+    GMIX_EXP:6,
+    'exp':6,
+    GMIX_DEV:10,
+    'dev':10,
 
-                   GMIX_FRACDEV:16,
+    GMIX_FRACDEV:16,
 
-                   GMIX_CM:16,
+    GMIX_CM:16,
 
-                   GMIX_BDC:16,
-                   GMIX_BDF:16,
-                   GMIX_SERSIC:4,
-                   GMIX_GAUSSMOM: 1,
+    GMIX_BDC:16,
+    GMIX_BDF:16,
+    GMIX_SERSIC:4,
 
-                   'em1':1,
-                   'em2':2,
-                   'em3':3,
-                   'coellip1':1,
-                   'coellip2':2,
-                   'coellip3':3}
+    'em1':1,
+    'em2':2,
+    'em3':3,
+    'coellip1':1,
+    'coellip2':2,
+    'coellip3':3,
+}
 
 
-_gauss2d_dtype=[('p','f8'),
-                ('row','f8'),
-                ('col','f8'),
-                ('irr','f8'),
-                ('irc','f8'),
-                ('icc','f8'),
-                ('det','f8'),
-                ('norm_set','i8'),
-                ('drr','f8'),
-                ('drc','f8'),
-                ('dcc','f8'),
-                ('norm','f8'),
-                ('pnorm','f8')]
+_gauss2d_dtype=[
+    ('p','f8'),
+    ('row','f8'),
+    ('col','f8'),
+    ('irr','f8'),
+    ('irc','f8'),
+    ('icc','f8'),
+    ('det','f8'),
+    ('norm_set','i8'),
+    ('drr','f8'),
+    ('drc','f8'),
+    ('dcc','f8'),
+    ('norm','f8'),
+    ('pnorm','f8'),
+]
 
-_cm_dtype=[('fracdev','f8'),
-                  ('TdByTe','f8'), # ratio Tdev/Texp
-                  ('Tfactor','f8'),
-                  ('gmix',_gauss2d_dtype,16)]
+_cm_dtype=[
+    ('fracdev','f8'),
+    ('TdByTe','f8'), # ratio Tdev/Texp
+    ('Tfactor','f8'),
+    ('gmix',_gauss2d_dtype,16),
+]
 
 def get_model_num(model):
     """

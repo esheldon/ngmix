@@ -88,6 +88,7 @@ class FitterBase(object):
         self.use_logpars=keys.get('use_logpars',False)
 
         self.use_round_T=keys.get('use_round_T',False)
+        assert self.use_round_T==False,"no longer support round T"
 
         # psf fitters might not have this set to 1
         self.npoints=keys.get('npoints',None)
@@ -1468,17 +1469,13 @@ class MaxSimple(FitterBase):
 
         pars=self._band_pars
 
+        pars[:] = pars_in[:]
         if self.use_logpars:
-            _gmix.convert_simple_double_logpars_band(pars_in, pars, band)
-        else:
-            pars[0:5] = pars_in[0:5]
-            pars[5] = pars_in[5+band]
-
-        if self.use_round_T:
-            from .moments import get_T
-            pars[4] = get_T(pars[4], pars[2], pars[3])
+            pars[4:] = numpy.exp(pars[4:])
 
         return pars
+
+
 
     def neglnprob(self, pars):
         return -1.0*self.calc_lnprob(pars)
@@ -1611,11 +1608,12 @@ class MaxCoellip(MaxSimple):
         Get linear pars for the specified band
         """
 
+        pars=self._band_pars
+
+        pars[:] = pars_in[:]
         if self.use_logpars:
-            _gmix.convert_simple_double_logpars(pars_in, pars)
-        else:
-            pars=self._band_pars
-            pars[:] = pars_in[:]
+            pars[4:] = numpy.exp(pars[4:])
+
         return pars
 
 
@@ -1719,12 +1717,11 @@ class LMSimple(FitterBase):
 
         pars=self._band_pars
 
-        if self.use_logpars:
-            _gmix.convert_simple_double_logpars_band(pars_in, pars, band)
-        else:
-            pars[0:5] = pars_in[0:5]
-            pars[5] = pars_in[5+band]
+        pars[0:5] = pars_in[0:5]
+        pars[5] = pars_in[5+band]
 
+        if self.use_logpars:
+            pars[4:] = numpy.exp(pars[4:])
 
         return pars
 
@@ -2204,24 +2201,6 @@ class LMGaussK(LMSimple):
 
         self.totpix=totpix
 
-    def get_band_pars(self, pars_in, band):
-        """
-        Get linear pars for the specified band
-        """
-        from . import moments
-
-        pars=self._band_pars
-
-        if self.use_logpars:
-            _gmix.convert_simple_double_logpars_band(pars_in, pars, band)
-        else:
-            pars[0:5] = pars_in[0:5]
-            pars[5] = pars_in[5+band]
-
-        #pars[4] = moments.get_T(pars[4], pars[2], pars[3])
-
-        return pars
-
 
 
 class GalsimPSF(LMSimple):
@@ -2546,11 +2525,10 @@ class LMCoellip(LMSimple):
 
         pars=self._band_pars
 
+        pars[:] = pars_in[:]
         if self.use_logpars:
-            _gmix.convert_simple_double_logpars(pars_in, pars)
-        else:
-            pars=self._band_pars
-            pars[:] = pars_in[:]
+            pars[4:] = numpy.exp(pars[4:])
+
         return pars
 
 
@@ -3099,14 +3077,11 @@ class MCMCSimple(MCMCBase):
 
         pars=self._band_pars
 
+        pars[:] = pars_in[:]
         if self.use_logpars:
-            _gmix.convert_simple_double_logpars_band(pars_in, pars, band)
-        else:
-            pars[0:5] = pars_in[0:5]
-            pars[5] = pars_in[5+band]
+            pars[4:] = numpy.exp(pars[4:])
 
         return pars
-
 
     def get_par_names(self, dolog=False):
         names=['cen1','cen2', 'g1','g2', 'T']

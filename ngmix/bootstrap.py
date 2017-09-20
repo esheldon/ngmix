@@ -67,8 +67,6 @@ class Bootstrapper(object):
         self.find_cen=find_cen
         self.verbose=verbose
 
-        self.use_round_T = kw.get('use_round_T',False)
-
         # this never gets modified in any way
         self.mb_obs_list_orig = get_mb_obs(obs)
 
@@ -329,66 +327,6 @@ class Bootstrapper(object):
 
         return runner.fitter
  
-    def _get_s2n_Ts2n_r_alg(self, gm0_round):
-        """
-        get the round s2n and Ts2n
-        """
-        raise RuntimeError("this isn't multi-band")
-
-        Tround = gm0_round.get_T()
-
-        flags=0
-
-        s2n_sum=0.0
-        r4sum=0.0
-        r2sum=0.0
-
-        for obslist in self.mb_obs_list:
-            for obs in obslist:
-                psf_gm=obs.psf.gmix
-
-                # only makes sense for symmetric psf
-                psf_gm_round = psf_gm.make_round()
-
-                gm = gm0_round.convolve(psf_gm_round)
-
-                # these use only the weight maps. Use the same weight map
-                # for gal and psf
-                t_s2n_sum, t_r2sum, t_r4sum = \
-                    gm.get_model_s2n_Tvar_sums(obs)
-
-                s2n_sum += t_s2n_sum
-                r2sum += t_r2sum
-                r4sum += t_r4sum
-
-        if s2n_sum <= 0.0:
-            print("    failure: s2n_sum <= 0.0 :",s2n_sum)
-            flags |= BOOT_S2N_LOW
-            s2n=-9999.0
-            Ts2n=-9999.0
-        else:
-            s2n=sqrt(s2n_sum)
-
-            # weighted means
-            r2_mean = r2sum/s2n_sum
-            r4_mean = r4sum/s2n_sum
-
-            if r2_mean <= 0.0:
-                print("    failure: round r2 <= 0.0 :",r2_mean)
-                flags |= BOOT_R2_LOW
-                Ts2n=-9999.0
-            elif r4_mean <= 0.0:
-                print("    failure: round r2 == 0.0 :",r2_mean)
-                flags |= BOOT_R4_LOW
-                Ts2n=-9999.0
-            else:
-
-                # this one partially accounts for T-F covariance
-                r2sq = r2_mean**2
-                Ts2n = Tround * s2n * sqrt(r4_mean-r2sq) / (4. * r2sq)
-
-        return s2n, Ts2n, flags
-
 
     def _get_gmix_round(self, fitter, pars, band):
         """
@@ -413,11 +351,8 @@ class Bootstrapper(object):
 
         g1,g2,T = pars_lin[2],pars_lin[3],pars_lin[4]
 
-        if self.use_round_T:
-            Tround=T
-        else:
-            f = get_round_factor(g1, g2)
-            Tround = T*f
+        f = get_round_factor(g1, g2)
+        Tround = T*f
 
         pars[2]=0.0
         pars[3]=0.0
@@ -631,12 +566,10 @@ class Bootstrapper(object):
 
         if 'em' in psf_model:
             assert self.intpars is None,"pixel integration only for max like fitting"
-            assert self.use_round_T==False,"round_T only in simple fitters for now"
 
             runner=self._fit_one_psf_em(psf_obs, psf_model,
                                         Tguess, ntry, fit_pars)
         elif 'coellip' in psf_model:
-            assert self.use_round_T==False,"round_T only in simple fitters for now"
             runner=self._fit_one_psf_coellip(psf_obs, psf_model,
                                              Tguess, ntry, fit_pars)
         else:
@@ -1644,7 +1577,6 @@ class MaxMetacalBootstrapper(Bootstrapper):
             boot = Bootstrapper(obs_dict[key],
                                 use_logpars=self.use_logpars,
                                 intpars=self.intpars,
-                                use_round_T=self.use_round_T,
                                 find_cen=self.find_cen,
                                 verbose=self.verbose)
 
@@ -2192,11 +2124,10 @@ class PSFRunner(object):
     """
     def __init__(self, obs, model, Tguess, lm_pars,
                  prior=None,
-                 intpars=None, use_round_T=False):
+                 intpars=None):
 
         self.obs=obs
         self.intpars=intpars
-        self.use_round_T=use_round_T
         self.prior=prior
 
         mess="psf model should be turb or gauss,got '%s'" % model
@@ -2221,7 +2152,6 @@ class PSFRunner(object):
             guess=self.get_guess()
 
             fitter=LMSimple(self.obs,self.model,lm_pars=self.lm_pars,
-                            use_round_T=self.use_round_T,
                             prior=self.prior,
                             npoints=npoints)
             fitter.go(guess)
@@ -2503,12 +2433,10 @@ class MaxRunner(object):
                  guesser,
                  prior=None,
                  intpars=None,
-                 use_logpars=False,
-                 use_round_T=False):
+                 use_logpars=False):
 
         self.obs=obs
         self.intpars=intpars
-        self.use_round_T=use_round_T
 
         self.max_pars=max_pars
         self.method=max_pars['method']
@@ -2554,7 +2482,6 @@ class MaxRunner(object):
                             self.model,
                             lm_pars=self.send_pars,
                             use_logpars=self.use_logpars,
-                            use_round_T=self.use_round_T,
                             npoints=npoints,
                             prior=self.prior)
 
