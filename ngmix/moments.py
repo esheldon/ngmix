@@ -232,88 +232,36 @@ class Deriv(object):
         """
         derivative of T with respect to shear1 at zero shear
         """
-
-        #h=self.h
-        #_,_,Tp0=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
-        #_,_,Tm0=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
-
-        #return (Tp0-Tm0)*self.h2inv
-
-        # at zero shear
         return 2*self.M1
 
     def dTds2z(self):
         """
         derivative of T with respect to shear2 at zero shear
         """
-        #h=self.h
-        #_,_,T0p=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
-        #_,_,T0m=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
-
-        #return (T0p-T0m)*self.h2inv
-
-        # at zero shear
         return 2*self.M2
 
     def d2Tds1ds1z(self):
         """
         2nd derivative of T with respect to shear1 and shear1 at zero shear
         """
-
-        #h=self.h
-        #_,_,Tp0=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
-        #_,_,Tm0=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
-
-        #return (Tp0 - 2*self.T + Tm0)*self.hsqinv
-
-        # at zero shear
         return 4*self.T
 
     def d2Tds1ds2z(self):
         """
         2nd derivative of T with respect to shear1 and shear2 at zero shear
         """
-
-        #h=self.h
-        #_,_,Tp0=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
-        #_,_,Tm0=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
-        #_,_,T0p=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
-        #_,_,T0m=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
-
-        #_,_,Tpp=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, +h)
-        #_,_,Tmm=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, -h)
-
-        #return (Tpp - Tp0 - T0p + 2*self.T - Tm0 - T0m + Tmm)*self.hsqinv*0.5
-
-        # at zero shear
         return self.zero
 
     def d2Tds2ds2z(self):
         """
         2nd derivative of T with respect to shear2 and shear2 at zero shear
         """
-
-        #h=self.h
-        #_,_,T0p=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
-        #_,_,T0m=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
-
-        #return (T0p - 2*self.T + T0m)*self.hsqinv
-
-        # at zero shear
         return 4*self.T
 
     def dM1ds1z(self):
         """
         derivative of M1 with respect to shear1 at zero shear
         """
-
-        #h=self.h
-        #Mp0,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
-        #Mm0,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
-
-        #return (Mp0-Mm0)*self.h2inv
-
-        # at zero shear
         return 2*self.T
 
 
@@ -321,59 +269,24 @@ class Deriv(object):
         """
         derivative of M1 with respect to shear2 at zero shear
         """
-        #h=self.h
-        #M0p,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
-        #M0m,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
-
-        #return (M0p-M0m)*self.h2inv
-
-        # zero shear
         return self.zero
 
     def d2M1ds1ds1z(self):
         """
         2nd derivative of M1 with respect to shear1 and shear1 at zero shear
         """
-        #h=self.h
-        #Mp0,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
-        #Mm0,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
-
-        #return (Mp0 - 2*self.M1 + Mm0)*self.hsqinv
-        # for zero shear seems to always be 4*M1?
-
         return 4*self.M1
 
     def d2M1ds1ds2z(self):
         """
         2nd derivative of M1 with respect to shear1 and shear2 at zero shear
         """
-
-        #h=self.h
-        #Mp0,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
-        #Mm0,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
-        #M0p,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
-        #M0m,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
-
-        #Mpp,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, +h)
-        #Mmm,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, -h)
-
-        #return (Mpp - Mp0 - M0p + 2*self.M1 - Mm0 - M0m + Mmm)*self.hsqinv*0.5
-
-        # zero shear always 2*M2?
         return 2*self.M2
 
     def d2M1ds2ds2z(self):
         """
         2nd derivative of M1 with respect to shear2 and shear2 at zero shear
         """
-
-        #h=self.h
-        #M0p,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
-        #M0m,_,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
-
-        #return (M0p - 2*self.M1 + M0m)*self.hsqinv
-
-        # at zero shear
         return self.zero
 
 
@@ -381,59 +294,24 @@ class Deriv(object):
         """
         derivative of M2 with respect to shear1 at zero shear
         """
-        #h=self.h
-        #_,Mp0,_=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
-        #_,Mm0,_=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
-
-        #return (Mp0-Mm0)*self.h2inv
-
-        # zero shear
         return self.zero
 
     def dM2ds2z(self):
         """
         derivative of M2 with respect to shear2 at zero shear
         """
-
-        #h=self.h
-        #_,M0p,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
-        #_,M0m,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
-
-        #return (M0p-M0m)*self.h2inv
-        # zero shear 2*T
         return 2*self.T
 
     def d2M2ds1ds1z(self):
         """
         2nd derivative of M2 with respect to shear1 and shear1 at zero shear
         """
-
-        #h=self.h
-        #_,Mp0,_=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
-        #_,Mm0,_=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
-
-        # for zero shear, always nearly zero?
-        #return (Mp0 - 2*self.M2 + Mm0)*self.hsqinv
-
-        # at zero shear
         return self.zero
 
     def d2M2ds1ds2z(self):
         """
         2nd derivative of M2 with respect to shear1 and shear2 at zero shear
         """
-        #h=self.h
-        #_,Mp0,_=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, 0.0)
-        #_,Mm0,_=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, 0.0)
-        #_,M0p,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
-        #_,M0m,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
-
-        #_,Mpp,_=get_sheared_M1M2T(self.M1, self.M2, self.T, +h, +h)
-        #_,Mmm,_=get_sheared_M1M2T(self.M1, self.M2, self.T, -h, -h)
-
-        #return (Mpp - Mp0 - M0p + 2*self.M2 - Mm0 - M0m + Mmm)*self.hsqinv*0.5
-
-        # zero shear always 2*M1?
         return 2*self.M1
 
 
@@ -441,13 +319,6 @@ class Deriv(object):
         """
         2nd derivative of M2 with respect to shear2 and shear2 at zero shear
         """
-        #h=self.h
-        #_,M0p,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, +h)
-        #_,M0m,_=get_sheared_M1M2T(self.M1, self.M2, self.T, 0.0, -h)
-
-        #return (M0p - 2*self.M2 + M0m)*self.hsqinv
-
-        # zero shear 4*M2
         return 4*self.M2
 
     def set_moms(self, M1, M2, T):
@@ -468,280 +339,6 @@ class Deriv(object):
         g1,g2 = shape.e1e2_to_g1g2(e1,e2)
 
         self.zero = numpy.abs(g1)*0
-
-class OldDeriv(object):
-    """
-    class to calculate derivatives of moments with respect to shear
-    """
-    def __init__(self, M1, M2, T):
-        self.set_moms(M1, M2, T)
-
-    #
-    # derivatives at shear==0
-    #
-
-    def dTds1z(self):
-        """
-        derivative of T with respect to shear1 at zero shear
-
-        This is 2*M1 I realized
-        """
-
-        g1=self.g1
-        g2sq=self.g2sq
-        g1cub=self.g1cub
-        Tround = self.Tround
-        omgsq_inv2 = self.omgsq_inv2
-
-        #val=-((4*(g1**3 + g1*(-1 + g2**2))*Tround)/(-1 + g1**2 + g2**2)**2)
-        val=-4*Tround*(g1cub + g1*(-1 + g2sq))*omgsq_inv2
-
-        return val
-
-    def dTds2z(self):
-        """
-        derivative of T with respect to shear2 at zero shear
-        """
-
-        g2=self.g2
-        g1sq=self.g1sq
-        g2cub=self.g2cub
-        Tround = self.Tround
-        omgsq_inv2 = self.omgsq_inv2
-
-        #val=-((4*((-1 + g1**2)*g2 + g2**3)*Tround)/(-1 + g1**2 + g2**2)**2)
-        val=-4*Tround*(g2cub + g2*(-1 + g1sq))*omgsq_inv2
-
-        return val
-
-    def d2Tds1ds1z(self):
-        """
-        2nd derivative of T with respect to shear1 and shear1 at zero shear
-        """
-
-        g1sq=self.g1sq
-        g2sq=self.g2sq
-        g1q=self.g1q
-        g2q=self.g2q
-        omgsq_inv2 = self.omgsq_inv2
-        Tround = self.Tround
-
-        #val= (8*(-g1**2 + g1**4 - g2**2*(1 + g2**2))*Tround)/(-1 + g1**2 + g2**2)**2
-        #val= 8*Tround*(-g1sq + g1q - g2sq*(1 + g2sq))*omgsq_inv2
-        val= 8*Tround*(-g1sq + g1q - g2sq - g2q)*omgsq_inv2
-
-        return val
-
-    def d2Tds1ds2z(self):
-        """
-        2nd derivative of T with respect to shear1 and shear2 at zero shear
-        """
-
-        g1=self.g1
-        g2=self.g2
-        g1sq=self.g1sq
-        g2sq=self.g2sq
-        omgsq_inv2 = self.omgsq_inv2
-        Tround = self.Tround
-
-        #val=(16*g1*g2*(g1**2 + g2**2)*Tround)/(-1 + g1**2 + g2**2)**2
-
-        val= 16*Tround*g1*g2*(g1sq + g2sq)*omgsq_inv2
-
-        return val
-
-    def d2Tds2ds2z(self):
-        """
-        2nd derivative of T with respect to shear2 and shear2 at zero shear
-        """
-
-        g1sq=self.g1sq
-        g2sq=self.g2sq
-        g1q=self.g1q
-        g2q=self.g2q
-        omgsq_inv2 = self.omgsq_inv2
-        Tround = self.Tround
-
-        #val=-((8*(g1**2 + g1**4 + g2**2 - g2**4)*Tround)/(-1 + g1**2 + g2**2)**2)
-        val=-8*Tround*(g1sq + g1q + g2sq - g2q)*omgsq_inv2
-
-        return val
-
-
-    def dM1ds1z(self):
-        """
-        derivative of M1 with respect to shear1 at zero shear
-        """
-
-        #val = -((2*(1 + g1**2 + g2**2)*Tround)/(-1 + g1**2 + g2**2))
-        return 2*self.T
-
-    def dM1ds2z(self):
-        """
-        derivative of M1 with respect to shear2 at zero shear
-        """
-        return self.zero
-
-    def d2M1ds1ds1z(self):
-        """
-        2nd derivative of M1 with respect to shear1 and shear1 at zero shear
-        """
-        g1=self.g1
-
-        g1sq=self.g1sq
-        g2sq=self.g2sq
-        g1q=self.g1q
-        g2q=self.g2q
-        omgsq_inv2 = self.omgsq_inv2
-        Tround = self.Tround
- 
-        #val = (4*g1*(-1 + g1**4 - 4*g2**2 + 2*g1**2*g2**2 + g2**4)*Tround)/(-1 + g1**2 + g2**2)**2
-        val = 4*g1*Tround*(-1 + g1q - 4*g2sq + 2*g1sq*g2sq + g2q)*omgsq_inv2
-        return val
-
-    def d2M1ds1ds2z(self):
-        """
-        2nd derivative of M1 with respect to shear1 and shear2 at zero shear
-        """
-        g2=self.g2
-
-        g1sq=self.g1sq
-        g2sq=self.g2sq
-        g1q=self.g1q
-
-        Tround = self.Tround
-
-        omgsq_inv2 = self.omgsq_inv2
-
-        #val=(4*g2*(g1**4 + g2**2 * (-1 + g2**2) + g1**2 * (3 + 2*g2**2))*Tround)/(-1 + g1**2 + g2**2)**2 
-        val=4*g2*Tround*(g1q + g2sq * (-1 + g2sq) + g1sq * (3 + 2*g2sq))*omgsq_inv2
-        return val
-
-    def d2M1ds2ds2z(self):
-        """
-        2nd derivative of M1 with respect to shear2 and shear2 at zero shear
-        """
-        g1=self.g1
-
-        g1sq=self.g1sq
-        g2sq=self.g2sq
-        g1q=self.g1q
-
-        omgsq_inv2 = self.omgsq_inv2
-        Tround = self.Tround
- 
-        #val=-((4*g1*(g1**4 + (-1 + g2**2)**2 + 2*g1**2 *(1 + g2**2))*Tround)/(-1 + g1**2 + g2**2)**2)
-        val=-4*g1*Tround*(g1q + (-1 + g2sq)**2 + 2*g1sq *(1 + g2sq))*omgsq_inv2
-        return val
-
-
-
-    def dM2ds1z(self):
-        """
-        derivative of M2 with respect to shear1 at zero shear
-        """
-        return self.zero
-
-    def dM2ds2z(self):
-        """
-        derivative of M2 with respect to shear2 at zero shear
-        """
-
-        # -((2 (1 + g1^2 + g2^2) Tround)/(-1 + g1^2 + g2^2))
-        return 2*self.T
-
-    def d2M2ds1ds1z(self):
-        """
-        2nd derivative of M2 with respect to shear1 and shear1 at zero shear
-        """
-        g2=self.g2
-
-        g1sq=self.g1sq
-        g2sq=self.g2sq
-        g1q=self.g1q
-        omgsq_inv2 = self.omgsq_inv2
-        Tround = self.Tround
- 
-        #val= -((4*g2*(g1**4 + 2*g1**2 * (-1 + g2**2) + (1 + g2**2)**2) * Tround)/(-1 + g1**2 + g2**2)**2)
-        val= -4*Tround*g2*((g1q + 2*g1sq * (-1 + g2sq) + (1 + g2sq)**2) )*omgsq_inv2
-        return val
-
-    def d2M2ds1ds2z(self):
-        """
-        2nd derivative of M2 with respect to shear1 and shear2 at zero shear
-        """
-        g1=self.g1
-
-        g1sq=self.g1sq
-        g2sq=self.g2sq
-        g1q=self.g1q
- 
-        omgsq_inv2 = self.omgsq_inv2
-        Tround = self.Tround
-
-        #val=(4*g1*(g1**4 + g2**2 * (3 + g2**2) + g1**2 * (-1 + 2 * g2**2)) * Tround)/(-1 + g1**2 + g2**2)**2
-        val=4*g1*Tround*(g1q + g2sq * (3 + g2sq) + g1sq * (-1 + 2 * g2sq))*omgsq_inv2
-        return val
-
-    def d2M2ds2ds2z(self):
-        """
-        2nd derivative of M2 with respect to shear2 and shear2 at zero shear
-        """
-        g2=self.g2
-
-        g1sq=self.g1sq
-        g2sq=self.g2sq
-        g1q=self.g1q
-        g2q=self.g2q
- 
-
-        omgsq_inv2 = self.omgsq_inv2
-        Tround = self.Tround
- 
-        #val=(4*g2*(-1 + g1**4 + g2**4 + 2*g1**2 * (-2 + g2**2)) * Tround)/(-1 + g1**2 + g2**2)**2
-        val=4*g2*Tround*(-1 + g1q + g2q + 2*g1sq * (-2 + g2sq))*omgsq_inv2
-        return val
-
-
-
-    def set_moms(self, M1, M2, T):
-        """
-        set the moments and derived shape parameters
-
-        bounds checking is done here
-        """
-
-        self.M1=M1
-        self.M2=M2
-        self.T=T
-
-        # T > 0 checked here
-        e1,e2 = moms_to_e1e2(M1, M2, T)
-
-        # shape boundaries checked here
-        g1,g2 = shape.e1e2_to_g1g2(e1,e2)
-
-        self.e1=e1
-        self.e2=e2
-        self.g1=g1
-        self.g2=g2
-
-        self.g1sq=self.g1**2
-        self.g2sq=self.g2**2
-        self.g1cub=self.g1**3
-        self.g2cub=self.g2**3
-        self.g1q=self.g1**4
-        self.g2q=self.g2**4
-
-        self.gsq = g1**2 + g2**2
-        self.omgsq = 1.0-self.gsq
-        self.omgsq_inv = 1.0/self.omgsq
-        self.omgsq_inv2 = self.omgsq_inv**2
-
-        self.Tround = get_Tround(T, g1, g2)
-
-        self.zero = numpy.abs(g1)*0
-
 
 
 class PQRMomTemplatesBase(object):
