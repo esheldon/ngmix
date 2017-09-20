@@ -1,6 +1,9 @@
 #ifndef _PYGMIX_HEADER_GUARD
 #define _PYGMIX_HEADER_GUARD
 
+#include <Python.h>
+#include <numpy/arrayobject.h> 
+
 #define PYGMIX_LOW_DETVAL 1.0e-200
 
 enum PyGMix_Models {
@@ -36,8 +39,7 @@ struct coord {
 };
 
 
-//struct PyGMix_Gauss2D {
-struct PyGMix_Gauss2D {
+struct gauss {
     double p;
     double row;
     double col;
@@ -62,11 +64,10 @@ struct PyGMixCM {
     double fracdev;
     double TdByTe; // ratio Tdev/Texp
     double Tfactor;
-    struct PyGMix_Gauss2D gmix[16];
+    struct gauss gmix[16];
 };
 
-//struct PyGMix_Jacobian {
-struct PyGMix_Jacobian {
+struct jacobian {
     double row0;
     double col0;
 
@@ -168,6 +169,62 @@ static inline double pygmix_exp3(double x) {
 #define PYGMIX_MAX_CHI2 25.0
 #define PYGMIX_MAX_CHI2_FAST 300.0
 
+
+/*
+static inline double gauss_eval(const struct gauss *gauss,
+                                double row,
+                                double col)
+{
+    double v = row-gauss->row;
+    double u = col-gauss->col;
+    double val=0.0;
+
+    double chi2 =
+          gauss->dcc*v*v
+        + gauss->drr*u*u
+        - 2.0*gauss->drc*v*u;
+
+    if (chi2 < PYGMIX_MAX_CHI2 && chi2 >= 0.0) {
+        val = gauss->pnorm*expd( -0.5*chi2 );
+    }
+    return val;
+}
+
+static inline double gmix_eval(const struct gauss* gmix,
+                               npy_intp n_gauss,
+                               double row,
+                               double col)
+{
+    const struct gauss* gauss=NULL;
+    int i=0, igauss=0;
+    double vdiff=0, udiff=0, chi2=0;
+    double val=0.0;
+
+    for (i=0; i< n_gauss; i++) {
+        for (igauss=0; igauss < n_gauss; igauss++) {
+            gauss = &gmix[igauss];
+
+            vdiff = row - gauss->row;
+            udiff = col - gauss->col;
+
+            chi2 =       gauss->dcc*vdiff*vdiff
+                   +     gauss->drr*udiff*udiff
+                   - 2.0*gauss->drc*vdiff*udiff;
+
+            if (chi2 < PYGMIX_MAX_CHI2 && chi2 >= 0.0) {
+                val += gauss->pnorm*expd( -0.5*chi2 );
+            }
+
+            //val += gauss_eval(gauss, row, col);
+        }
+    }
+    return val;
+}
+*/
+
+
+
+
 #define PYGMIX_GAUSS_EVAL_FULL(gauss, rowval, colval) ({       \
     double _vtmp = (rowval)-(gauss)->row;                      \
     double _utmp = (colval)-(gauss)->col;                      \
@@ -222,22 +279,22 @@ static inline double pygmix_exp3(double x) {
 })
 
 // using full exp() function
-#define PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, rowval, colval) ({     \
-    int _i=0;                                                  \
-    double _gm_val=0.0;                                        \
-    struct PyGMix_Gauss2D* _gauss=gmix;                        \
-    for (_i=0; _i< (n_gauss); _i++) {                          \
-        _gm_val += PYGMIX_GAUSS_EVAL_FULL(_gauss, (rowval), (colval)); \
-        _gauss++;                                              \
-    }                                                          \
-    _gm_val;                                                   \
+#define PYGMIX_GMIX_EVAL_FULL(gmixin, n_gauss, rowval, colval) ({          \
+    int _i=0;                                                            \
+    double _gm_val=0.0;                                                  \
+    const struct gauss* _gauss=(gmixin);                                          \
+    for (_i=0; _i< (n_gauss); _i++) {                                    \
+        _gm_val += PYGMIX_GAUSS_EVAL_FULL(_gauss, (rowval), (colval));   \
+        _gauss++;                                                        \
+    }                                                                    \
+    _gm_val;                                                             \
 })
 
 // using approximate exp() function
-#define PYGMIX_GMIX_EVAL(gmix, n_gauss, rowval, colval) ({     \
+#define PYGMIX_GMIX_EVAL(gmixin, n_gauss, rowval, colval) ({     \
     int _i=0;                                                  \
     double _gm_val=0.0;                                        \
-    struct PyGMix_Gauss2D* _gauss=gmix;                        \
+    const struct gauss* _gauss=(gmixin);                        \
     for (_i=0; _i< (n_gauss); _i++) {                          \
         _gm_val += PYGMIX_GAUSS_EVAL(_gauss, (rowval), (colval)); \
         _gauss++;                                              \
@@ -246,10 +303,10 @@ static inline double pygmix_exp3(double x) {
 })
 
 // using approximate exp() function w/ no cut in chi2
-#define PYGMIX_GMIX_EVAL_FAST(gmix, n_gauss, rowval, colval) ({		\
+#define PYGMIX_GMIX_EVAL_FAST(gmixin, n_gauss, rowval, colval) ({		\
       int _i=0;								\
     double _gm_val=0.0;							\
-    struct PyGMix_Gauss2D* _gauss=gmix;					\
+    const struct gauss* _gauss=(gmixin);					\
     for (_i=0; _i< (n_gauss); _i++) {					\
         _gm_val += PYGMIX_GAUSS_EVAL_FAST(_gauss, (rowval), (colval));  \
         _gauss++;							\
@@ -288,5 +345,63 @@ static inline double pygmix_exp3(double x) {
     PyTuple_SetItem(retval,2,PyFloat_FromDouble( (s2n_denom) ));  \
     PyTuple_SetItem(retval,3,PyLong_FromLong( _npix ));           \
 } while(0)
+
+
+// pvals->counts
+// fvals->T
+// pvals sum to 1
+// (pvals*fvals) sum to 1
+
+static const double PyGMix_pvals_exp[] = {
+    0.00061601229677880041, 
+    0.0079461395724623237, 
+    0.053280454055540001, 
+    0.21797364640726541, 
+    0.45496740582554868, 
+    0.26521634184240478};
+
+static const double PyGMix_fvals_exp[] = {
+    0.002467115141477932, 
+    0.018147435573256168, 
+    0.07944063151366336, 
+    0.27137669897479122, 
+    0.79782256866993773, 
+    2.1623306025075739};
+
+static const double PyGMix_pvals_dev[] = {
+    6.5288960012625658e-05,
+    0.00044199216814302695, 
+    0.0020859587871659754, 
+    0.0075913681418996841, 
+    0.02260266219257237, 
+    0.056532254390212859, 
+    0.11939049233042602, 
+    0.20969545753234975, 
+    0.29254151133139222, 
+    0.28905301416582552};
+
+static const double PyGMix_fvals_dev[] = {
+    3.068330909892871e-07,
+    3.551788624668698e-06,
+    2.542810833482682e-05,
+    0.0001466508940804874,
+    0.0007457199853069548,
+    0.003544702600428794,
+    0.01648881157673708,
+    0.07893194619504579,
+    0.4203787615506401,
+    3.055782252301236};
+
+static const double PyGMix_pvals_turb[] = {
+    0.596510042804182,0.4034898268889178,1.303069003078001e-07};
+
+static const double PyGMix_fvals_turb[] = {
+    0.5793612389470884,1.621860687127999,7.019347162356363};
+
+static const double PyGMix_pvals_gauss[] = {1.0};
+static const double PyGMix_fvals_gauss[] = {1.0};
+
+#define PYGMIX_MAXDIMS 10
+#define PYGMIX_DOFFSET 2
 
 #endif

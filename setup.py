@@ -2,7 +2,14 @@ import distutils
 from distutils.core import setup, Extension, Command
 import numpy
 
-sources=["ngmix/_gmix.c"]
+sources=[
+    "ngmix/_gmix.c",
+    "ngmix/src/render.c",
+    "ngmix/src/gauleg.c",
+    "ngmix/src/shapes.c",
+    "ngmix/src/gmix.c",
+    "ngmix/src/moments.c",
+]
 include_dirs=[numpy.get_include()]
 
 ext=Extension(

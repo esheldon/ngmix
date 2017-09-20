@@ -1,40 +1,435 @@
 /*
  
    Instead of defining types here, represent them with numpy arrays with
-   fields.  These map to unpadded structs (defined in _gmix.h).  This allows us
-   to do all memory allocation in python instead of here in C.  The principle
-   is to never allocate memory in this code except for tuples of scalar return
-   values. The only incref we do should be for Py_None This should avoid the
-   dredded memory leaks or forgotten incref/decref bugs that plague C
-   extensions.
+   fields.  These map to structs (defined in _gmix.h).  This allows us to do
+   all memory allocation in python instead of here in C.  The principle is to
+   never allocate memory in this code except for tuples of scalar return
+   values. This should avoid the dredded memory leaks or forgotten
+   incref/decref bugs that plague C extensions.
 
  */
+
 
 #include <time.h>
 #include <omp.h>
 #include <complex.h>
-#include <Python.h>
-#include <numpy/arrayobject.h> 
 #include "_gmix.h"
 
-
 // exceptions
-static PyObject* GMixRangeError;
-static PyObject* GMixFatalError;
+PyObject* GMixRangeError=NULL;
+PyObject* GMixFatalError=NULL;
 
-#define PYGMIX_MAXDIMS 10
-#define PYGMIX_DOFFSET 2
+#include "src/render.h"
+
+#include "src/gauleg.h"
+#include "src/shapes.h"
+#include "src/gmix.h"
+//#include "src/fitting.c"
+#include "src/moments.h"
+
+// wrappers
+
+static PyObject * PyGMix_get_cm_Tfactor(PyObject* self, PyObject* args) {
+    double fracdev=0, TdByTe=0, Tfactor=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"dd", &fracdev, &TdByTe)) {
+        return NULL;
+    }
+
+    Tfactor = get_cm_Tfactor(fracdev, TdByTe);
+    return Py_BuildValue("d", Tfactor);
+}
+
+static PyObject * PyGMix_gmix_fill(PyObject* self, PyObject* args) {
+    PyObject* gmix_obj=NULL;
+    PyObject* pars_obj=NULL;
+    const double* pars=NULL;
+    npy_intp n_gauss=0, n_pars=0;
+    int res=0;
+
+    int model=0;
+
+    struct gauss *gmix=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOi",
+                          &gmix_obj, 
+                          &pars_obj,
+                          &model)) {
+
+        return NULL;
+    }
+
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    pars=(double *) PyArray_DATA(pars_obj);
+    n_pars = PyArray_SIZE(pars_obj);
+
+    res=gmix_fill(gmix, n_gauss, pars, n_pars, model);
+    if (!res) {
+        // raise an exception
+        return NULL;
+    } else {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+}
+
+static PyObject * PyGMix_gmix_fill_cm(PyObject* self, PyObject* args) {
+    PyObject* composite_obj=NULL;
+    PyObject* pars_obj=NULL;
+    const double* pars=NULL;
+    npy_intp n_pars=0;
+    int res=0;
+
+    struct PyGMixCM* comp=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OO",
+                          &composite_obj, 
+                          &pars_obj)) {
+
+        return NULL;
+    }
+
+    comp=(struct PyGMixCM* ) PyArray_DATA(composite_obj);
+
+    pars=(double *) PyArray_DATA(pars_obj);
+    n_pars = PyArray_SIZE(pars_obj);
+
+    res=gmix_fill_cm(comp, pars, n_pars);
+    if (!res) {
+        // raise an exception
+        return NULL;
+    } else {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+}
+
+static PyObject * PyGMix_convolve_fill(PyObject* self, PyObject* args) {
+    PyObject* self_gmix_obj=NULL;
+    PyObject* gmix_obj=NULL;
+    PyObject* psf_gmix_obj=NULL;
+
+    struct gauss *gmix=NULL;
+    struct gauss *psf_gmix=NULL;
+    struct gauss *self_gmix=NULL;
+    npy_intp self_n_gauss=0, n_gauss=0, psf_n_gauss=0;
+    int res=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOO",
+                          &self_gmix_obj,
+                          &gmix_obj, 
+                          &psf_gmix_obj)) {
+
+        return NULL;
+    }
+
+    self_gmix=(struct gauss* ) PyArray_DATA(self_gmix_obj);
+    self_n_gauss =PyArray_SIZE(self_gmix_obj);
+
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    psf_gmix=(struct gauss* ) PyArray_DATA(psf_gmix_obj);
+    psf_n_gauss =PyArray_SIZE(psf_gmix_obj);
 
 
-// for gauss legendre integration
-static const double pygmix_gl_xxi5[5] = {-0.906179845938664,  -0.5384693101056831,  0,  0.5384693101056831,  0.906179845938664};
-static const double pygmix_gl_wwi5[5] = {0.05613434886242515,  0.1133999999968999,  0.1347850723875167,  0.1133999999968999,  0.05613434886242515};
+    res=convolve_fill(self_gmix, self_n_gauss,
+                      gmix, n_gauss,
+                      psf_gmix, psf_n_gauss);
 
-static const double pygmix_gl_xxi10[10] = {-0.9739065285171717,  -0.8650633666889845,  -0.6794095682990243,  -0.4333953941292472,  -0.1488743389816312,  0.1488743389816312,  0.4333953941292472,  0.6794095682990243,  0.8650633666889845,  0.9739065285171717};
+    if (!res) {
+        // raise an exception
+        return NULL;
+    } else {
 
-static const double pygmix_gl_wwi10[10] = {0.06667134430868371,  0.1494513490843985,  0.2190863625152871,  0.2692667193099917,  0.2955242247147529,  0.2955242247147529,  0.2692667193099917,  0.2190863625152871,  0.1494513490843985,  0.06667134430868371};
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+}
+
+static PyObject * PyGMix_gmix_set_norms(PyObject* self, PyObject* args) {
+    PyObject* gmix_obj=NULL;
+    npy_intp n_gauss=0;
+    int status=0;
+
+    struct gauss *gmix=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"O", &gmix_obj)) {
+        return NULL;
+    }
+
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    status=gmix_set_norms(gmix, n_gauss);
+    if (!status) {
+        // raise an exception
+        return NULL;
+    } else {
+        Py_RETURN_NONE;
+    }
+}
+
+//   Calculate the sum needed for the model s/n
+//   This is s2n_sum = sum(model_i^2 * ivar_i)
+//   The s/n will be sqrt(s2n_sum)
+
+static PyObject * PyGMix_get_model_s2n_sum(PyObject* self, PyObject* args) {
+
+    int status=0;
+    PyObject* gmix_obj=NULL;
+    PyObject* weight_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    npy_intp n_gauss=0;
+
+    struct gauss *gmix=NULL;//, *gauss=NULL;
+    struct jacobian *jacob=NULL;
+
+    double s2n_sum=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOO", 
+                          &gmix_obj, &weight_obj, &jacob_obj)) {
+        return NULL;
+    }
+
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
+
+    s2n_sum = get_model_s2n_sum(gmix, n_gauss, weight_obj, jacob, &status);
+
+    if (status==0) {
+        return NULL;
+    } else {
+        return Py_BuildValue("d", s2n_sum);
+    }
+}
 
 
+static PyObject * PyGMix_render(PyObject* self, PyObject* args) {
+
+    int status=0;
+    PyObject* gmix_obj=NULL;
+    PyObject* image_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    int fast_exp=0;
+    npy_intp
+        n_gauss=0,
+        n_row=0, n_col=0, n_pixels=0, row=0, col=0,
+        ipixel=0;
+
+    struct gauss *gmix=NULL;
+    struct jacobian *jacob=NULL;
+    struct coord *coords=NULL, *coord=NULL;
+
+    double *image=NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOi", 
+                          &gmix_obj, &image_obj, &jacob_obj, &fast_exp)) {
+        return NULL;
+    }
+
+
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        goto _bail;
+    }
+
+    image = (double *) PyArray_DATA(image_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    n_pixels=n_row*n_col;
+
+    coords=calloc(n_pixels,sizeof(struct coord));
+    if (coords==NULL) {
+        PyErr_Format(PyExc_MemoryError, "could not allocate coords");
+        goto _bail;
+    }
+
+    ipixel=0;
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+            coord=&coords[ipixel];
+            coord->u=PYGMIX_JACOB_GETU(jacob, row, col);
+            coord->v=PYGMIX_JACOB_GETV(jacob, row, col);
+
+            ipixel++;
+        }
+    }
+
+    render(gmix,
+           n_gauss,
+           image,
+           coords,
+           n_pixels,
+           jacob,
+           fast_exp);
+
+    free(coords);
+    status=1;
+
+_bail:
+    if (status==0) {
+        return NULL;
+    } else {
+        Py_RETURN_NONE;
+    }
+
+}
+
+
+// need to convert to coord and move into render.c
+
+static PyObject * PyGMix_render_gauleg(PyObject* self, PyObject* args) {
+
+    PyObject* gmix_obj=NULL;
+    PyObject* image_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    struct gauss *gmix=NULL;
+    struct jacobian *jacob=NULL;
+    int fast_exp=0;
+    int npoints=0;
+
+    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+    npy_intp rowsub=0, colsub=0;
+
+    double *ptr=NULL, tval=0;
+
+    // gauleg parameters
+    double
+           trow=0,rowmin=0,rowmax=0,frow1=0,frow2=0,wrow=0,
+           tcol=0,colmin=0,colmax=0,fcol1=0,fcol2=0,wcol=0,
+           wsum=0;
+    const double *xxi=NULL, *wwi=NULL;
+
+    double u=0,v=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOiOi",
+                          &gmix_obj, &image_obj, &npoints, &jacob_obj, &fast_exp)) {
+        return NULL;
+    }
+
+    if (!set_gauleg_data(npoints, &xxi, &wwi)) {
+        return NULL;
+    }
+
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        return NULL;
+    }
+
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+
+            // integrate over the pixel
+
+            rowmax = row + 0.5;
+            rowmin = row - 0.5;
+            colmax = col + 0.5;
+            colmin = col - 0.5;
+
+            frow1 = (rowmax-rowmin)*0.5; // always 0.5.
+            frow2 = (rowmax+rowmin)*0.5; // always row
+            fcol1 = (colmax-colmin)*0.5; // always 0.5
+            fcol2 = (colmax+colmin)*0.5; // always col
+
+            wsum = 0.0;
+            tval = 0.0;
+
+            for (rowsub=0; rowsub<npoints; rowsub++) {
+                trow = frow1*xxi[rowsub] + frow2;
+                wrow = wwi[rowsub];
+
+                for (colsub=0; colsub<npoints; colsub++) {
+                    tcol = fcol1*xxi[colsub] + fcol2;
+                    wcol = wwi[colsub];
+
+                    u=PYGMIX_JACOB_GETU(jacob, trow, tcol);
+                    v=PYGMIX_JACOB_GETV(jacob, trow, tcol);
+
+                    if (fast_exp) {
+                        tval += wrow*wcol*PYGMIX_GMIX_EVAL_FAST(gmix, n_gauss, v, u);
+                    } else {
+                        tval += wrow*wcol*PYGMIX_GMIX_EVAL_FULL(gmix, n_gauss, v, u);
+                    }
+
+                    wsum += wrow*wcol;
+
+                } // colsub
+            } // rowsub
+
+            // add to existing values
+            ptr=(double*)PyArray_GETPTR2(image_obj,row,col);
+
+            // since we are averaging, we don't multiply by frow1*fcol1
+            tval /= wsum;
+
+            (*ptr) += tval;
+
+        } // cols
+    } // rows
+
+    Py_INCREF(Py_None);
+    return Py_None;
+}
+
+
+// decided not to make this a wrapper
+PyObject * PyGMix_get_image_mean(PyObject* self, PyObject* args) {
+
+    PyObject* image_obj=NULL;
+    PyObject* weight_obj=NULL;
+    npy_intp n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+
+    double data=0, ivar=0;
+    double wsum=0, imsum=0, wmean=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OO", &image_obj, &weight_obj)) {
+        return NULL;
+    }
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+
+            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
+            if ( ivar > 0.0) {
+                data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
+
+                wsum += ivar;
+                imsum += ivar*data;
+            }
+        }
+    }
+
+    if (wsum > 0) {
+        wmean = imsum/wsum;
+    }
+
+    return Py_BuildValue("d", wmean);
+}
+
+
+
+
+
+/*
 static int set_gauleg_data(int npoints, const double **xxi, const double **wwi)
 {
     int status=1;
@@ -52,12 +447,11 @@ static int set_gauleg_data(int npoints, const double **xxi, const double **wwi)
     return status;
 }
 
-/*
-    convert reduced shear g1,g2 to standard ellipticity
-    parameters e1,e2
+// convert reduced shear g1,g2 to standard ellipticity
+// parameters e1,e2
 
-    return 0 means out of range
-*/
+// return 0 means out of range
+
 static int g1g2_to_e1e2(double g1, double g2, double *e1, double *e2) {
     double eta=0, e=0, fac=0;
     double g=sqrt(g1*g1 + g2*g2);
@@ -90,7 +484,7 @@ static int g1g2_to_e1e2(double g1, double g2, double *e1, double *e2) {
 }
 
 
-static void gmix_get_cen(const struct PyGMix_Gauss2D *self,
+static void gmix_get_cen(const struct gauss *self,
                          npy_intp n_gauss,
                          double* row,
                          double *col,
@@ -102,7 +496,7 @@ static void gmix_get_cen(const struct PyGMix_Gauss2D *self,
     *psum=0;
 
     for (i=0; i<n_gauss; i++) {
-        const struct PyGMix_Gauss2D *gauss=&self[i];
+        const struct gauss *gauss=&self[i];
 
         double p=gauss->p;
         *row += p*gauss->row;
@@ -113,7 +507,7 @@ static void gmix_get_cen(const struct PyGMix_Gauss2D *self,
     (*col) /= (*psum);
 }
 
-static int gmix_get_e1e2T(struct PyGMix_Gauss2D *gmix,
+static int gmix_get_e1e2T(struct gauss *gmix,
                           npy_intp n_gauss,
                           double *e1, double *e2, double *T)
 {
@@ -132,7 +526,7 @@ static int gmix_get_e1e2T(struct PyGMix_Gauss2D *gmix,
     }
 
     for (i=0; i<n_gauss; i++) {
-        struct PyGMix_Gauss2D *gauss=&gmix[i];
+        struct gauss *gauss=&gmix[i];
 
         psum += gauss->p;
 
@@ -156,14 +550,12 @@ static int gmix_get_e1e2T(struct PyGMix_Gauss2D *gmix,
 
 
 
-/* 
-   zero return value means bad determinant, out of range
-   
-   note for gaussians we plan to convolve with a psf we might
-   not care that det < 0, so we don't always evaluate
-*/
+//   zero return value means bad determinant, out of range
+//   
+//   note for gaussians we plan to convolve with a psf we might
+//   not care that det < 0, so we don't always evaluate
 
-static int gauss2d_set_norm(struct PyGMix_Gauss2D *self, int dothrow)
+static int gauss2d_set_norm(struct gauss *self, int dothrow)
 {
     int status=0;
     double idet=0;
@@ -195,12 +587,12 @@ static int gauss2d_set_norm(struct PyGMix_Gauss2D *self, int dothrow)
 
 }
 
-static int gauss2d_set_norm_throw(struct PyGMix_Gauss2D *self)
+static int gauss2d_set_norm_throw(struct gauss *self)
 {
     return gauss2d_set_norm(self, 1);
 }
 
-static int gauss2d_set(struct PyGMix_Gauss2D *self,
+static int gauss2d_set(struct gauss *self,
                        double p,
                        double row,
                        double col,
@@ -210,7 +602,7 @@ static int gauss2d_set(struct PyGMix_Gauss2D *self,
 
     // this means norm_set=0 as well as the other pieces not
     // yet calculated
-    memset(self, 0, sizeof(struct PyGMix_Gauss2D));
+    memset(self, 0, sizeof(struct gauss));
 
     self->p=p;
     self->row=row;
@@ -260,65 +652,11 @@ static inline int get_n_gauss(int model, int *status) {
     return n_gauss;
 }
 
-// pvals->counts
-// fvals->T
-// pvals sum to 1
-// (pvals*fvals) sum to 1
-static const double PyGMix_pvals_exp[] = {
-    0.00061601229677880041, 
-    0.0079461395724623237, 
-    0.053280454055540001, 
-    0.21797364640726541, 
-    0.45496740582554868, 
-    0.26521634184240478};
-
-static const double PyGMix_fvals_exp[] = {
-    0.002467115141477932, 
-    0.018147435573256168, 
-    0.07944063151366336, 
-    0.27137669897479122, 
-    0.79782256866993773, 
-    2.1623306025075739};
-
-static const double PyGMix_pvals_dev[] = {
-    6.5288960012625658e-05,
-    0.00044199216814302695, 
-    0.0020859587871659754, 
-    0.0075913681418996841, 
-    0.02260266219257237, 
-    0.056532254390212859, 
-    0.11939049233042602, 
-    0.20969545753234975, 
-    0.29254151133139222, 
-    0.28905301416582552};
-
-static const double PyGMix_fvals_dev[] = {
-    3.068330909892871e-07,
-    3.551788624668698e-06,
-    2.542810833482682e-05,
-    0.0001466508940804874,
-    0.0007457199853069548,
-    0.003544702600428794,
-    0.01648881157673708,
-    0.07893194619504579,
-    0.4203787615506401,
-    3.055782252301236};
-
-static const double PyGMix_pvals_turb[] = {
-    0.596510042804182,0.4034898268889178,1.303069003078001e-07};
-
-static const double PyGMix_fvals_turb[] = {
-    0.5793612389470884,1.621860687127999,7.019347162356363};
-
-static const double PyGMix_pvals_gauss[] = {1.0};
-static const double PyGMix_fvals_gauss[] = {1.0};
 
 
-/*
-   when an error occurs and exception is set. Use goto pattern
-   for errors to simplify code.
-*/
-static int gmix_fill_full(struct PyGMix_Gauss2D *self,
+//   when an error occurs and exception is set. Use goto pattern
+//   for errors to simplify code.
+static int gmix_fill_full(struct gauss *self,
                           npy_intp n_gauss,
                           const double* pars,
                           npy_intp n_pars)
@@ -358,11 +696,10 @@ _gmix_fill_full_bail:
 }
 
 
-/*
-   when an error occurs and exception is set. Use goto pattern
-   for errors to simplify code.
-*/
-static int gmix_set_norms(struct PyGMix_Gauss2D *self,
+//   when an error occurs and exception is set. Use goto pattern
+//   for errors to simplify code.
+
+static int gmix_set_norms(struct gauss *self,
                           npy_intp n_gauss)
 {
 
@@ -387,7 +724,7 @@ _gmix_set_norms_bail:
     return status;
 }
 
-static int gmix_set_norms_if_needed(struct PyGMix_Gauss2D *self,
+static int gmix_set_norms_if_needed(struct gauss *self,
                                     npy_intp n_gauss)
 {
 
@@ -399,11 +736,11 @@ static int gmix_set_norms_if_needed(struct PyGMix_Gauss2D *self,
 }
 
 
-/*
-   when an error occurs and exception is set. Use goto pattern
-   for errors to simplify code.
-*/
-static int gmix_fill_simple(struct PyGMix_Gauss2D *self,
+
+//   when an error occurs and exception is set. Use goto pattern
+//   for errors to simplify code.
+
+static int gmix_fill_simple(struct gauss *self,
                             npy_intp n_gauss,
                             const double* pars,
                             npy_intp n_pars,
@@ -547,7 +884,7 @@ _bail:
 }
 
 
-static int gmix_fill_coellip(struct PyGMix_Gauss2D *self,
+static int gmix_fill_coellip(struct gauss *self,
                              npy_intp n_gauss,
                              const double* pars,
                              npy_intp n_pars)
@@ -594,48 +931,7 @@ _gmix_fill_coellip_bail:
     return status;
 }
 
-
-static PyObject * PyGMix_get_cm_Tfactor(PyObject* self, PyObject* args) {
-    double
-        fracdev=0,
-        TdByTe=0,
-        ifracdev=0,
-        Tfactor=0,
-        p=0,f=0;
-    long i=0;
-
-    if (!PyArg_ParseTuple(args, (char*)"dd", &fracdev, &TdByTe)) {
-        return NULL;
-    }
-
-    ifracdev = 1.0-fracdev;
-    for (i=0; i<6; i++) {
-        p=PyGMix_pvals_exp[i] * ifracdev;
-        f=PyGMix_fvals_exp[i];
-
-        Tfactor += p*f;
-    }
-
-    for (i=0; i<10; i++) {
-        p=PyGMix_pvals_dev[i] * fracdev;
-        f=PyGMix_fvals_dev[i] * TdByTe;
-
-        Tfactor += p*f;
-    }
-
-    Tfactor = 1.0/Tfactor;
-
-    return Py_BuildValue("d", Tfactor);
-}
-
-/*
-
-   Set an exception on error
-
-   Use goto pattern to simplify code
-
-*/
-static int gmix_fill(struct PyGMix_Gauss2D *self,
+static int gmix_fill(struct gauss *self,
                      npy_intp n_gauss,
                      const double* pars,
                      npy_intp n_pars,
@@ -694,78 +990,10 @@ _gmix_fill_bail:
 
 }
 
-static PyObject * PyGMix_gmix_fill(PyObject* self, PyObject* args) {
-    PyObject* gmix_obj=NULL;
-    PyObject* pars_obj=NULL;
-    const double* pars=NULL;
-    npy_intp n_gauss=0, n_pars=0;
-    int res=0;
 
-    int model=0;
-
-    struct PyGMix_Gauss2D *gmix=NULL;
-
-    if (!PyArg_ParseTuple(args, (char*)"OOi",
-                          &gmix_obj, 
-                          &pars_obj,
-                          &model)) {
-
-        return NULL;
-    }
-
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
-    n_gauss=PyArray_SIZE(gmix_obj);
-
-    pars=(double *) PyArray_DATA(pars_obj);
-    n_pars = PyArray_SIZE(pars_obj);
-
-    res=gmix_fill(gmix, n_gauss, pars, n_pars, model);
-    if (!res) {
-        // raise an exception
-        return NULL;
-    } else {
-        Py_INCREF(Py_None);
-        return Py_None;
-    }
-}
-
-/* no type checking here */
-static PyObject * PyGMix_gmix_fill_cm(PyObject* self, PyObject* args) {
-    PyObject* composite_obj=NULL;
-    PyObject* pars_obj=NULL;
-    const double* pars=NULL;
-    npy_intp n_pars=0;
-    int res=0;
-
-    struct PyGMixCM* comp=NULL;
-
-    if (!PyArg_ParseTuple(args, (char*)"OO",
-                          &composite_obj, 
-                          &pars_obj)) {
-
-        return NULL;
-    }
-
-    comp=(struct PyGMixCM* ) PyArray_DATA(composite_obj);
-
-    pars=(double *) PyArray_DATA(pars_obj);
-    n_pars = PyArray_SIZE(pars_obj);
-
-    res=gmix_fill_cm(comp, pars, n_pars);
-    if (!res) {
-        // raise an exception
-        return NULL;
-    } else {
-        Py_INCREF(Py_None);
-        return Py_None;
-    }
-}
-
-
-
-static int convolve_fill(struct PyGMix_Gauss2D *self, npy_intp self_n_gauss,
-                         const struct PyGMix_Gauss2D *gmix, npy_intp n_gauss,
-                         const struct PyGMix_Gauss2D *psf, npy_intp psf_n_gauss)
+static int convolve_fill(struct gauss *self, npy_intp self_n_gauss,
+                         const struct gauss *gmix, npy_intp n_gauss,
+                         const struct gauss *psf, npy_intp psf_n_gauss)
 {
     int status=0;
     npy_intp ntot=0, iobj=0, ipsf=0, itot=0;
@@ -784,10 +1012,10 @@ static int convolve_fill(struct PyGMix_Gauss2D *self, npy_intp self_n_gauss,
 
     itot=0;
     for (iobj=0; iobj<n_gauss; iobj++) {
-        const struct PyGMix_Gauss2D *obj_gauss=&gmix[iobj];
+        const struct gauss *obj_gauss=&gmix[iobj];
 
         for (ipsf=0; ipsf<psf_n_gauss; ipsf++) {
-            const struct PyGMix_Gauss2D *psf_gauss=&psf[ipsf];
+            const struct gauss *psf_gauss=&psf[ipsf];
 
             double p = obj_gauss->p*psf_gauss->p*psf_ipsum;
 
@@ -821,74 +1049,8 @@ _convolve_fill_bail:
     return status;
 }
 
-static PyObject * PyGMix_convolve_fill(PyObject* self, PyObject* args) {
-    PyObject* self_gmix_obj=NULL;
-    PyObject* gmix_obj=NULL;
-    PyObject* psf_gmix_obj=NULL;
-
-    struct PyGMix_Gauss2D *gmix=NULL;
-    struct PyGMix_Gauss2D *psf_gmix=NULL;
-    struct PyGMix_Gauss2D *self_gmix=NULL;
-    npy_intp self_n_gauss=0, n_gauss=0, psf_n_gauss=0;
-    int res=0;
-
-    if (!PyArg_ParseTuple(args, (char*)"OOO",
-                          &self_gmix_obj,
-                          &gmix_obj, 
-                          &psf_gmix_obj)) {
-
-        return NULL;
-    }
-
-    self_gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(self_gmix_obj);
-    self_n_gauss =PyArray_SIZE(self_gmix_obj);
-
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
-    n_gauss=PyArray_SIZE(gmix_obj);
-
-    psf_gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(psf_gmix_obj);
-    psf_n_gauss =PyArray_SIZE(psf_gmix_obj);
 
 
-    res=convolve_fill(self_gmix, self_n_gauss,
-                      gmix, n_gauss,
-                      psf_gmix, psf_n_gauss);
-
-    if (!res) {
-        // raise an exception
-        return NULL;
-    } else {
-
-        Py_INCREF(Py_None);
-        return Py_None;
-    }
-}
-
-
-
-static PyObject * PyGMix_gmix_set_norms(PyObject* self, PyObject* args) {
-    PyObject* gmix_obj=NULL;
-    npy_intp n_gauss=0;
-    int status=0;
-
-    struct PyGMix_Gauss2D *gmix=NULL;
-
-    if (!PyArg_ParseTuple(args, (char*)"O", &gmix_obj)) {
-        return NULL;
-    }
-
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
-    n_gauss=PyArray_SIZE(gmix_obj);
-
-    status=gmix_set_norms(gmix, n_gauss);
-    if (!status) {
-        // raise an exception
-        return NULL;
-    } else {
-        Py_INCREF(Py_None);
-        return Py_None;
-    }
-}
 
 
 static PyObject * PyGMix_render_gauleg(PyObject* self, PyObject* args) {
@@ -896,8 +1058,8 @@ static PyObject * PyGMix_render_gauleg(PyObject* self, PyObject* args) {
     PyObject* gmix_obj=NULL;
     PyObject* image_obj=NULL;
     PyObject* jacob_obj=NULL;
-    struct PyGMix_Gauss2D *gmix=NULL;
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct gauss *gmix=NULL;
+    struct jacobian *jacob=NULL;
     int fast_exp=0;
     int npoints=0;
 
@@ -924,14 +1086,14 @@ static PyObject * PyGMix_render_gauleg(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
     n_gauss=PyArray_SIZE(gmix_obj);
 
     if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
         return NULL;
     }
 
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
 
     n_row=PyArray_DIM(image_obj, 0);
     n_col=PyArray_DIM(image_obj, 1);
@@ -994,11 +1156,8 @@ static PyObject * PyGMix_render_gauleg(PyObject* self, PyObject* args) {
 
 
 
-/*
-   Render the gmix in the input image, with jacobian
-
-   Error checking should be done in python.
-*/
+// Render the gmix in the input image, with jacobian
+// Error checking should be done in python.
 static PyObject * PyGMix_render(PyObject* self, PyObject* args) {
 
     PyObject* gmix_obj=NULL;
@@ -1007,8 +1166,8 @@ static PyObject * PyGMix_render(PyObject* self, PyObject* args) {
     int fast_exp=0;
     npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
 
-    struct PyGMix_Gauss2D *gmix=NULL;
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct gauss *gmix=NULL;
+    struct jacobian *jacob=NULL;
 
     double *ptr=NULL, u=0, v=0, model_val=0;
 
@@ -1017,14 +1176,14 @@ static PyObject * PyGMix_render(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
     n_gauss=PyArray_SIZE(gmix_obj);
 
     if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
         return NULL;
     }
 
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
 
     n_row=PyArray_DIM(image_obj, 0);
     n_col=PyArray_DIM(image_obj, 1);
@@ -1052,97 +1211,8 @@ static PyObject * PyGMix_render(PyObject* self, PyObject* args) {
     return Py_None;
 }
 
-static PyObject * PyGMix_render_pixels(PyObject* self, PyObject* args) {
 
-    PyObject* gmix_obj=NULL;
-    PyObject* image_obj=NULL;
-    PyObject* jacob_obj=NULL;
-    int fast_exp=0;
-    npy_intp
-        n_gauss=0, igauss=0,
-        n_row=0, n_col=0, n_pixels=0, row=0, col=0,
-        ipixel=0;
-
-    struct PyGMix_Gauss2D *gmix=NULL, *gauss=NULL;
-    struct PyGMix_Jacobian *jacob=NULL;
-    struct coord *coords=NULL, *coord=NULL;
-
-    double
-        *image=NULL,
-        udiff=0, vdiff=0, model_val=0, chi2=0;
-
-    if (!PyArg_ParseTuple(args, (char*)"OOOi", 
-                          &gmix_obj, &image_obj, &jacob_obj, &fast_exp)) {
-        return NULL;
-    }
-
-
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
-    n_gauss=PyArray_SIZE(gmix_obj);
-
-    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
-        return NULL;
-    }
-
-    image = (double *) PyArray_DATA(image_obj);
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
-
-    n_row=PyArray_DIM(image_obj, 0);
-    n_col=PyArray_DIM(image_obj, 1);
-
-    n_pixels=n_row*n_col;
-
-    coords=calloc(n_pixels,sizeof(struct coord));
-
-    ipixel=0;
-    for (row=0; row < n_row; row++) {
-        for (col=0; col < n_col; col++) {
-            coord=&coords[ipixel];
-            coord->u=PYGMIX_JACOB_GETU(jacob, row, col);
-            coord->v=PYGMIX_JACOB_GETV(jacob, row, col);
-
-            ipixel++;
-        }
-    }
-
-#pragma omp parallel for \
-        default(none) \
-        shared(gmix,coords,n_pixels,n_gauss,image) \
-        private(ipixel,coord,igauss,gauss,vdiff,udiff,chi2,model_val)
-
-    for (ipixel=0; ipixel < n_pixels; ipixel++) {
-        coord = &coords[ipixel];
-
-        model_val=0;
-        for (igauss=0; igauss < n_gauss; igauss++) {
-            gauss = &gmix[igauss];
-
-            // v->row, u->col in gauss
-            vdiff = coord->v - gauss->row;
-            udiff = coord->u - gauss->col;
-
-            chi2 =      gauss->dcc*vdiff*vdiff
-                  +     gauss->drr*udiff*udiff
-                  - 2.0*gauss->drc*vdiff*udiff;
-
-            if (chi2 < PYGMIX_MAX_CHI2_FAST && chi2 >= 0.0) {
-                model_val += gauss->pnorm*expd( -0.5*chi2 );
-            }
-        }
-
-        image[ipixel] += model_val;
-
-    }
-
-    free(coords);
-    Py_RETURN_NONE;
-}
-
-
-
-/*
-   Calculate the image mean, accounting for weight function.
-*/
+//   Calculate the image mean, accounting for weight function.
 
 static PyObject * PyGMix_get_image_mean(PyObject* self, PyObject* args) {
 
@@ -1181,75 +1251,12 @@ static PyObject * PyGMix_get_image_mean(PyObject* self, PyObject* args) {
 }
 
 
-/*
-   Calculate the sum needed for the model s/n
 
-   This is s2n_sum = sum(model_i^2 * ivar_i)
+// Get the weighted moments of the image, using the input gaussian
+// mixture as the weight function.  The moments are *not* normalized
 
-   The s/n will be sqrt(s2n_sum)
-*/
-static PyObject * PyGMix_get_model_s2n_sum(PyObject* self, PyObject* args) {
+// See the get_weighted_moments method in gmix.py
 
-    PyObject* gmix_obj=NULL;
-    PyObject* weight_obj=NULL;
-    PyObject* jacob_obj=NULL;
-    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
-
-    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
-    struct PyGMix_Jacobian *jacob=NULL;
-
-    double ivar=0, u=0, v=0;
-    double model_val=0;
-    double s2n_sum=0;
-
-    if (!PyArg_ParseTuple(args, (char*)"OOO", 
-                          &gmix_obj, &weight_obj, &jacob_obj)) {
-        return NULL;
-    }
-
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
-    n_gauss=PyArray_SIZE(gmix_obj);
-
-    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
-        return NULL;
-    }
-
-    n_row=PyArray_DIM(weight_obj, 0);
-    n_col=PyArray_DIM(weight_obj, 1);
-
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
-
-    for (row=0; row < n_row; row++) {
-        u=PYGMIX_JACOB_GETU(jacob, row, 0);
-        v=PYGMIX_JACOB_GETV(jacob, row, 0);
-
-        for (col=0; col < n_col; col++) {
-
-            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
-            if ( ivar > 0.0) {
-                model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
-
-                s2n_sum += model_val*model_val*ivar;
-            }
-
-            u += jacob->dudcol;
-            v += jacob->dvdcol;
-
-        }
-    }
-
-    return Py_BuildValue("d", s2n_sum);
-}
-
-
-/*
-
-Get the weighted moments of the image, using the input gaussian
-mixture as the weight function.  The moments are *not* normalized
-
-See the get_weighted_moments method in gmix.py
-
-*/
 static PyObject * PyGMix_get_weighted_moments(PyObject* self, PyObject* args) {
 
     PyObject* image_obj=NULL;
@@ -1263,8 +1270,8 @@ static PyObject * PyGMix_get_weighted_moments(PyObject* self, PyObject* args) {
 
     npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
 
-    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct gauss *gmix=NULL;//, *gauss=NULL;
+    struct jacobian *jacob=NULL;
     double *pars=NULL, *pcov=NULL;
     double F[6];
 
@@ -1287,7 +1294,7 @@ static PyObject * PyGMix_get_weighted_moments(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
     n_gauss=PyArray_SIZE(gmix_obj);
 
     if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
@@ -1301,7 +1308,7 @@ static PyObject * PyGMix_get_weighted_moments(PyObject* self, PyObject* args) {
 
     rmaxsq=rmax*rmax;
 
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
 
     pars=PyArray_DATA(pars_obj); // pars[6]
     pcov=PyArray_DATA(pcov_obj); // pcov[6,6]
@@ -1366,9 +1373,8 @@ _getmom_bail:
 }
 
 
-/*
-   weighted moments of one gaussian mixture with another
-*/
+// weighted moments of one gaussian mixture with another
+
 static PyObject * PyGMix_get_weighted_gmix_moments(PyObject* self, PyObject* args) {
 
     // arguments
@@ -1380,9 +1386,9 @@ static PyObject * PyGMix_get_weighted_gmix_moments(PyObject* self, PyObject* arg
 
     // for unpacking input arrays
     npy_intp n_gauss=0, wt_n_gauss=0;
-    struct PyGMix_Gauss2D *gmix=NULL;
-    struct PyGMix_Gauss2D *wt_gmix=NULL;
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct gauss *gmix=NULL;
+    struct gauss *wt_gmix=NULL;
+    struct jacobian *jacob=NULL;
     double *pars=NULL;
 
     // local variables
@@ -1405,19 +1411,19 @@ static PyObject * PyGMix_get_weighted_gmix_moments(PyObject* self, PyObject* arg
     }
 
     // unpack the input and output arrays
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
     n_gauss=PyArray_SIZE(gmix_obj);
     if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
         return NULL;
     }
 
-    wt_gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(wt_gmix_obj);
+    wt_gmix=(struct gauss* ) PyArray_DATA(wt_gmix_obj);
     wt_n_gauss=PyArray_SIZE(wt_gmix_obj);
     if (!gmix_set_norms_if_needed(wt_gmix, wt_n_gauss)) {
         return NULL;
     }
 
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
 
     pars=PyArray_DATA(pars_obj); // pars[6]
 
@@ -1475,7 +1481,7 @@ static PyObject * PyGMix_get_unweighted_moments(PyObject* self, PyObject* args) 
 
     npy_intp n_row=0, n_col=0, row=0, col=0;
 
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct jacobian *jacob=NULL;
 
     int i=0;
 
@@ -1489,7 +1495,7 @@ static PyObject * PyGMix_get_unweighted_moments(PyObject* self, PyObject* args) 
     n_row=PyArray_DIM(im_obj, 0);
     n_col=PyArray_DIM(im_obj, 1);
 
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
 
     pars=PyArray_DATA(pars_obj); // [6]
 
@@ -1521,6 +1527,7 @@ static PyObject * PyGMix_get_unweighted_moments(PyObject* self, PyObject* args) 
 
 
 
+*/
 
 
 /*
@@ -1534,7 +1541,7 @@ static PyObject * PyGMix_fill_pixels(PyObject* self, PyObject* args) {
     PyObject* jacob_obj=NULL;
     npy_intp n_row=0, n_col=0, row=0, col=0;//, igauss=0;
 
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct jacobian *jacob=NULL;
     struct pixel* pixel=NULL;
 
     double ivar=0;
@@ -1552,7 +1559,7 @@ static PyObject * PyGMix_fill_pixels(PyObject* self, PyObject* args) {
     n_row=PyArray_DIM(image_obj, 0);
     n_col=PyArray_DIM(image_obj, 1);
 
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
 
 
     for (row=0; row < n_row; row++) {
@@ -1595,8 +1602,8 @@ static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
     PyObject* jacob_obj=NULL;
     npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
 
-    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct gauss *gmix=NULL;//, *gauss=NULL;
+    struct jacobian *jacob=NULL;
 
     double data=0, ivar=0, u=0, v=0;
     double model_val=0, diff=0;
@@ -1611,7 +1618,7 @@ static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
     n_gauss=PyArray_SIZE(gmix_obj);
 
     if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
@@ -1621,7 +1628,7 @@ static PyObject * PyGMix_get_loglike(PyObject* self, PyObject* args) {
     n_row=PyArray_DIM(image_obj, 0);
     n_col=PyArray_DIM(image_obj, 1);
 
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
 
     for (row=0; row < n_row; row++) {
         //u=jacob->dudrow*(row - jacob->row0) + jacob->dudcol*(0 - jacob->col0);
@@ -1666,8 +1673,8 @@ static PyObject * PyGMix_get_loglike_gauleg(PyObject* self, PyObject* args) {
     int npoints=0;
     npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
 
-    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct gauss *gmix=NULL;//, *gauss=NULL;
+    struct jacobian *jacob=NULL;
 
     double data=0, ivar=0, u=0, v=0;
     double model_val=0, diff=0;
@@ -1698,7 +1705,7 @@ static PyObject * PyGMix_get_loglike_gauleg(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
     n_gauss=PyArray_SIZE(gmix_obj);
 
     if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
@@ -1708,7 +1715,7 @@ static PyObject * PyGMix_get_loglike_gauleg(PyObject* self, PyObject* args) {
     n_row=PyArray_DIM(image_obj, 0);
     n_col=PyArray_DIM(image_obj, 1);
 
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
 
     for (row=0; row < n_row; row++) {
         for (col=0; col < n_col; col++) {
@@ -1786,8 +1793,8 @@ static PyObject * PyGMix_get_loglike_aper(PyObject* self, PyObject* args) {
     double aperture=0, ap2=0, rad2=0;
     npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
 
-    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct gauss *gmix=NULL;//, *gauss=NULL;
+    struct jacobian *jacob=NULL;
 
     double data=0, ivar=0, u=0, v=0;
     double model_val=0, diff=0;
@@ -1802,7 +1809,7 @@ static PyObject * PyGMix_get_loglike_aper(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
     n_gauss=PyArray_SIZE(gmix_obj);
 
     if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
@@ -1812,7 +1819,7 @@ static PyObject * PyGMix_get_loglike_aper(PyObject* self, PyObject* args) {
     n_row=PyArray_DIM(image_obj, 0);
     n_col=PyArray_DIM(image_obj, 1);
 
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
 
     ap2=aperture*aperture;
     for (row=0; row < n_row; row++) {
@@ -1933,8 +1940,8 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
     double nu;
     npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
 
-    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct gauss *gmix=NULL;//, *gauss=NULL;
+    struct jacobian *jacob=NULL;
 
     double data=0, ivar=0, u=0, v=0;
     double model_val=0, diff=0;
@@ -1950,7 +1957,7 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
     n_gauss=PyArray_SIZE(gmix_obj);
 
     if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
@@ -1960,7 +1967,7 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
     n_row=PyArray_DIM(image_obj, 0);
     n_col=PyArray_DIM(image_obj, 1);
 
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
     
     logfactor = lgamma((nu+1.0)/2.0) - lgamma(nu/2.0) - 0.5*log(M_PI*nu);
     nupow = -0.5*(nu+1.0);
@@ -2007,7 +2014,7 @@ static PyObject * PyGMix_get_loglike_pixels(PyObject* self, PyObject* args) {
 
     npy_intp n_gauss=0, n_pixels=0, ipixel=0, igauss=0;
 
-    struct PyGMix_Gauss2D *gmix=NULL, *gauss=NULL;
+    struct gauss *gmix=NULL, *gauss=NULL;
     struct pixel *pixels=NULL, *pixel=NULL;
 
     double
@@ -2020,7 +2027,7 @@ static PyObject * PyGMix_get_loglike_pixels(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
     n_gauss=PyArray_SIZE(gmix_obj);
 
     pixels=(struct pixel* ) PyArray_DATA(pixels_obj);
@@ -2088,8 +2095,8 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
 
     long npix=0;
 
-    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct gauss *gmix=NULL;//, *gauss=NULL;
+    struct jacobian *jacob=NULL;
 
     double data=0, ivar=0, ierr=0, u=0, v=0, *fdiff_ptr=NULL;
     double model_val=0;
@@ -2103,7 +2110,7 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
     n_gauss=PyArray_SIZE(gmix_obj);
 
     if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
@@ -2113,7 +2120,7 @@ static PyObject * PyGMix_fill_fdiff(PyObject* self, PyObject* args) {
     n_row=PyArray_DIM(image_obj, 0);
     n_col=PyArray_DIM(image_obj, 1);
 
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
 
     // we might start somewhere after the priors
     // note fdiff is 1-d
@@ -2167,8 +2174,8 @@ static PyObject * PyGMix_fill_fdiff_gauleg(PyObject* self, PyObject* args) {
 
     long npix=0;
 
-    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct gauss *gmix=NULL;//, *gauss=NULL;
+    struct jacobian *jacob=NULL;
 
     double data=0, ivar=0, ierr=0, u=0, v=0, *fdiff_ptr=NULL;
     double model_val=0;
@@ -2195,7 +2202,7 @@ static PyObject * PyGMix_fill_fdiff_gauleg(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
     n_gauss=PyArray_SIZE(gmix_obj);
 
     if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
@@ -2205,7 +2212,7 @@ static PyObject * PyGMix_fill_fdiff_gauleg(PyObject* self, PyObject* args) {
     n_row=PyArray_DIM(image_obj, 0);
     n_col=PyArray_DIM(image_obj, 1);
 
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
 
     // we might start somewhere after the priors
     // note fdiff is 1-d
@@ -2275,13 +2282,13 @@ static PyObject * PyGMix_fill_fdiff_gauleg(PyObject* self, PyObject* args) {
 static void fill_fdiff(
     struct pixel* pixels,              // array of pixels
     npy_intp n_pixels,                 // number of pixels in array
-    const struct PyGMix_Gauss2D* gmix, // the gaussian mixture
+    const struct gauss* gmix, // the gaussian mixture
     npy_intp n_gauss)                  // number of gaussians
 
 {
 
     struct pixel* pixel=NULL;
-    const struct PyGMix_Gauss2D* gauss=NULL;
+    const struct gauss* gauss=NULL;
 
     double
         model_val=0, vdiff=0, udiff=0, chi2=0;
@@ -2291,7 +2298,7 @@ static void fill_fdiff(
     for (ipixel=0; ipixel < n_pixels; ipixel++) {
         pixel = &pixels[ipixel];
 
-        model_val=0;
+        model_val=0.0;
         for (igauss=0; igauss < n_gauss; igauss++) {
             gauss = &gmix[igauss];
 
@@ -2321,13 +2328,13 @@ static void fill_fdiff_exp3(
     const struct pixel* pixels,        // array of pixels
     npy_intp n_pixels,                 // number of pixels in array
     double *fdiff,                     // same size as pixels
-    const struct PyGMix_Gauss2D* gmix, // the gaussian mixture
+    const struct gauss* gmix, // the gaussian mixture
     npy_intp n_gauss)                  // number of gaussians
 
 {
 
     const struct pixel* pixel=NULL;
-    const struct PyGMix_Gauss2D* gauss=NULL;
+    const struct gauss* gauss=NULL;
 
     //int ival, index;
     double
@@ -2381,7 +2388,7 @@ static PyObject * PyGMix_fill_fdiff_pixels(PyObject* self, PyObject* args) {
 
     npy_intp n_pixels=0, n_gauss=0, i=0;
 
-    struct PyGMix_Gauss2D *gmix=NULL;
+    struct gauss *gmix=NULL;
     struct pixel *pixels=NULL;
     double *fdiff=NULL;
 
@@ -2398,7 +2405,7 @@ static PyObject * PyGMix_fill_fdiff_pixels(PyObject* self, PyObject* args) {
     pixels   = (struct pixel* ) PyArray_DATA(pixels_obj);
     n_pixels = PyArray_SIZE(pixels_obj);
 
-    gmix = (struct PyGMix_Gauss2D *) PyArray_DATA(gmix_obj);
+    gmix = (struct gauss *) PyArray_DATA(gmix_obj);
     n_gauss=PyArray_SIZE(gmix_obj);
 
     if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
@@ -2438,7 +2445,7 @@ static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
 
     npy_intp n_obs=0, n_pixels=0, n_gauss=0, i=0, j=0;
 
-    struct PyGMix_Gauss2D *gmix=NULL;
+    struct gauss *gmix=NULL;
     struct pixel *pixels=NULL;
     double *fdiff=NULL;
 
@@ -2460,7 +2467,7 @@ static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
 
     for (i=0; i < n_obs; i++) {
         tmp = PyList_GetItem(gmix_list, i);
-        gmix = (struct PyGMix_Gauss2D *) PyArray_DATA(tmp);
+        gmix = (struct gauss *) PyArray_DATA(tmp);
         n_gauss=PyArray_SIZE(tmp);
 
         if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
@@ -2486,7 +2493,7 @@ static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
 
         // get the gaussian mixture array
         tmp      = PyList_GetItem(gmix_list, i);
-        gmix     = (struct PyGMix_Gauss2D *) PyArray_DATA(tmp);
+        gmix     = (struct gauss *) PyArray_DATA(tmp);
         n_gauss  = PyArray_SIZE(tmp);
 
         // fill fdiff field in the pixels
@@ -2538,8 +2545,8 @@ static PyObject * PyGMix_get_loglikek(PyObject* self, PyObject* args) {
 
     long npix=0;
 
-    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct gauss *gmix=NULL;//, *gauss=NULL;
+    struct jacobian *jacob=NULL;
 
     double
         loglike=0,
@@ -2565,7 +2572,7 @@ static PyObject * PyGMix_get_loglikek(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
     n_gauss=PyArray_SIZE(gmix_obj);
 
     if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
@@ -2575,7 +2582,7 @@ static PyObject * PyGMix_get_loglikek(PyObject* self, PyObject* args) {
     n_row=PyArray_DIM(kr_obj, 0);
     n_col=PyArray_DIM(kr_obj, 1);
 
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
 
     for (row=0; row < n_row; row++) {
 
@@ -2649,8 +2656,8 @@ static PyObject * PyGMix_fill_fdiffk(PyObject* self, PyObject* args) {
 
     long npix=0;
 
-    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct gauss *gmix=NULL;//, *gauss=NULL;
+    struct jacobian *jacob=NULL;
 
     double
         rdata=0, idata=0,
@@ -2677,7 +2684,7 @@ static PyObject * PyGMix_fill_fdiffk(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
     n_gauss=PyArray_SIZE(gmix_obj);
 
     if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
@@ -2687,7 +2694,7 @@ static PyObject * PyGMix_fill_fdiffk(PyObject* self, PyObject* args) {
     n_row=PyArray_DIM(kr_obj, 0);
     n_col=PyArray_DIM(kr_obj, 1);
 
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
 
     // we might start somewhere after the priors
     // note fdiff is 1-d
@@ -2766,7 +2773,7 @@ static void em_clear_sums(struct PyGMix_EM_Sums *sums, npy_intp n_gauss)
 
 */
 static 
-int em_set_gmix_from_sums(struct PyGMix_Gauss2D *gmix,
+int em_set_gmix_from_sums(struct gauss *gmix,
                            npy_intp n_gauss,
                            const struct PyGMix_EM_Sums *sums)
 {
@@ -2774,7 +2781,7 @@ int em_set_gmix_from_sums(struct PyGMix_Gauss2D *gmix,
     npy_intp i=0;
     for (i=0; i<n_gauss; i++) {
         const struct PyGMix_EM_Sums *sum=&sums[i];
-        struct PyGMix_Gauss2D *gauss=&gmix[i];
+        struct gauss *gauss=&gmix[i];
 
         double p=sum->pnew;
         double pinv=1.0/p;
@@ -2808,8 +2815,8 @@ _em_set_gmix_from_sums_bail:
 static int em_run(PyObject* image_obj,
                   double sky,
                   double counts,
-                  const struct PyGMix_Jacobian* jacob,
-                  struct PyGMix_Gauss2D *gmix, // holds the guess
+                  const struct jacobian* jacob,
+                  struct gauss *gmix, // holds the guess
                   npy_intp n_gauss,
                   struct PyGMix_EM_Sums *sums,
                   double tol,
@@ -2855,7 +2862,7 @@ static int em_run(PyObject* image_obj,
 
                 for (i=0; i<n_gauss; i++) {
                     struct PyGMix_EM_Sums *sum=&sums[i];
-                    const struct PyGMix_Gauss2D *gauss=&gmix[i];
+                    const struct gauss *gauss=&gmix[i];
 
                     double vdiff = v-gauss->row;
                     double udiff = u-gauss->col;
@@ -2967,8 +2974,8 @@ static PyObject * PyGMix_em_run(PyObject* self, PyObject* args) {
     long maxiter=0;
     npy_intp n_gauss=0;
 
-    struct PyGMix_Gauss2D *gmix=NULL;//, *gauss=NULL;
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct gauss *gmix=NULL;//, *gauss=NULL;
+    struct jacobian *jacob=NULL;
     struct PyGMix_EM_Sums* sums=NULL;
     long numiter=0;
     double frac_diff=0;
@@ -2986,14 +2993,14 @@ static PyObject * PyGMix_em_run(PyObject* self, PyObject* args) {
         return NULL;
     }
 
-    gmix=(struct PyGMix_Gauss2D* ) PyArray_DATA(gmix_obj);
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
     n_gauss=PyArray_SIZE(gmix_obj);
 
     if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
         return NULL;
     }
 
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
     sums=(struct PyGMix_EM_Sums* )  PyArray_DATA(sums_obj);
 
     status=em_run(image_obj,
@@ -3082,8 +3089,8 @@ static inline void admom_clear_result(struct AdmomResult *self)
 static void admom_censums(
           const struct Admom *self,
           const PyObject* image,
-          const struct PyGMix_Jacobian *jacob,
-          const struct PyGMix_Gauss2D *wt,
+          const struct jacobian *jacob,
+          const struct gauss *wt,
           struct AdmomResult *res)
 
 {
@@ -3122,8 +3129,8 @@ static void admom_momsums(
           const struct Admom *self,
           const PyObject* image,
           const PyObject* ivarim,
-          const struct PyGMix_Jacobian *jacob,
-          const struct PyGMix_Gauss2D *wt,
+          const struct jacobian *jacob,
+          const struct gauss *wt,
           struct AdmomResult* res)
 
 {
@@ -3263,7 +3270,7 @@ adaptive_step_bail:
 
 
 static int deweight_moments_wt(
-          struct PyGMix_Gauss2D *wt,
+          struct gauss *wt,
           double Irr, double Irc, double Icc)
 {
 
@@ -3286,17 +3293,17 @@ static void admom(
           const struct Admom *self,
           const PyObject* image,
           const PyObject* ivarim,
-          const struct PyGMix_Jacobian *jacob,
+          const struct jacobian *jacob,
 
           // weight should initially hold the guess
-          const struct PyGMix_Gauss2D *wtin,
+          const struct gauss *wtin,
 
           struct AdmomResult *res
 	)
 
 {
 
-    struct PyGMix_Gauss2D wt={0};
+    struct gauss wt={0};
     double 
         roworig=0, colorig=0,
         e1old=-9999, e2old=-9999, Told=-9999.0,
@@ -3419,18 +3426,18 @@ static void admom_multi(
           // eventually will be lists of images, jacobians
           const PyObject** im_list,
           const PyObject** ivarim_list,
-          const struct PyGMix_Jacobian** jacob_list,
+          const struct jacobian** jacob_list,
           int nimage,
 
           // weight should initially hold the guess
-          const struct PyGMix_Gauss2D *wtin,
+          const struct gauss *wtin,
 
           struct AdmomResult *res
 	)
 
 {
 
-    struct PyGMix_Gauss2D wt={0};
+    struct gauss wt={0};
     double 
         roworig=0, colorig=0,
         e1old=-9999, e2old=-9999, Told=-9999.0,
@@ -3574,9 +3581,9 @@ static PyObject * PyGMix_admom(PyObject* self, PyObject* args) {
 
     PyObject* res_obj=NULL;
 
-    struct PyGMix_Gauss2D *wt=NULL;
+    struct gauss *wt=NULL;
 
-    struct PyGMix_Jacobian *jacob=NULL;
+    struct jacobian *jacob=NULL;
 
     struct Admom *admom_conf =NULL;
     struct AdmomResult *res=NULL;
@@ -3592,8 +3599,8 @@ static PyObject * PyGMix_admom(PyObject* self, PyObject* args) {
     }
 
     admom_conf=(struct Admom* ) PyArray_DATA(admom_obj);
-    wt=(struct PyGMix_Gauss2D* ) PyArray_DATA(wt_obj);
-    jacob=(struct PyGMix_Jacobian* ) PyArray_DATA(jacob_obj);
+    wt=(struct gauss* ) PyArray_DATA(wt_obj);
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
     res=(struct AdmomResult* ) PyArray_DATA(res_obj);
 
     admom(admom_conf, image_obj, ivarim_obj, jacob, wt, res);
@@ -3615,8 +3622,8 @@ static PyObject * PyGMix_admom_multi(PyObject* self, PyObject* args) {
 
     PyObject* res_obj=NULL;
 
-    struct PyGMix_Gauss2D *wt=NULL;
-    struct PyGMix_Jacobian *tjacob=NULL;
+    struct gauss *wt=NULL;
+    struct jacobian *tjacob=NULL;
 
     struct Admom *admom_conf =NULL;
     struct AdmomResult *res=NULL;
@@ -3626,7 +3633,7 @@ static PyObject * PyGMix_admom_multi(PyObject* self, PyObject* args) {
 
     const PyObject* im_list[1000]={0};
     const PyObject* ivarim_list[1000]={0};
-    const struct PyGMix_Jacobian* jacob_list[1000]={0};
+    const struct jacobian* jacob_list[1000]={0};
 
     Py_ssize_t nimage=0, i=0;
 
@@ -3643,7 +3650,7 @@ static PyObject * PyGMix_admom_multi(PyObject* self, PyObject* args) {
     nimage = PyList_Size(image_obj);
 
     admom_conf=(struct Admom* ) PyArray_DATA(admom_obj);
-    wt=(struct PyGMix_Gauss2D* ) PyArray_DATA(wt_obj);
+    wt=(struct gauss* ) PyArray_DATA(wt_obj);
     res=(struct AdmomResult* ) PyArray_DATA(res_obj);
 
     for (i=0; i<nimage; i++) {
@@ -3654,7 +3661,7 @@ static PyObject * PyGMix_admom_multi(PyObject* self, PyObject* args) {
         ivarim_list[i] = tmp;
 
         tmp = PyList_GetItem(jacob_obj, i);
-        tjacob = (struct PyGMix_Jacobian* ) PyArray_DATA(tmp);
+        tjacob = (struct jacobian* ) PyArray_DATA(tmp);
         jacob_list[i] = tjacob;
     }
 
@@ -4474,9 +4481,6 @@ static PyMethodDef pygauss2d_funcs[] = {
         METH_VARARGS,
         "render with jacobian and using gauss-legendre integration\n"},
     {"render",(PyCFunction)PyGMix_render,
-        METH_VARARGS,  "render with jacobian\n"},
-
-    {"render_pixels",(PyCFunction)PyGMix_render_pixels,
         METH_VARARGS,  "render with jacobian\n"},
 
     // used for sky marginalization

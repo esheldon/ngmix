@@ -476,7 +476,7 @@ class GMix(object):
                 fexp,
             )
         else:
-            _gmix.render_pixels(
+            _gmix.render(
                 gm,
                 image,
                 jacobian._data,
