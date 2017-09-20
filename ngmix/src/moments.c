@@ -4,6 +4,7 @@
 // See the get_weighted_moments method in gmix.py
 
 #include "../_gmix.h"
+#include "gmix.h"
 
 PyObject * PyGMix_get_weighted_moments(PyObject* self, PyObject* args) {
 

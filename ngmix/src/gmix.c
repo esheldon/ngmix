@@ -1,4 +1,5 @@
 #include "../_gmix.h"
+#include "shapes.h"
 
 extern PyObject* GMixRangeError;
 extern PyObject* GMixFatalError;

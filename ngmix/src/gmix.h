@@ -21,7 +21,7 @@ int gauss2d_set(struct gauss *self,
                 double irc,
                 double icc);
 
-inline int get_n_gauss(int model, int *status);
+int get_n_gauss(int model, int *status);
 
 int gmix_fill_full(struct gauss *self,
                    npy_intp n_gauss,
