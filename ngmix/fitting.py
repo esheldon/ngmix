@@ -37,8 +37,6 @@ from .observation import Observation,ObsList,MultiBandObsList,get_mb_obs
 
 from . import stats
 
-from .nbtools import fill_fdiff
-
 MAX_TAU=0.1
 MIN_ARATE=0.2
 MCMC_NTRY=1
@@ -1840,6 +1838,7 @@ class LMSimple(FitterBase):
         The npars elements contain -ln(prior)
         """
 
+        from .nbtools import fill_fdiff
 
         if not hasattr(self,'_pixels_list'):
             self._make_lists()
