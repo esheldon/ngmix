@@ -25,7 +25,6 @@ PyObject* GMixFatalError=NULL;
 #include "src/shapes.h"
 #include "src/gmix.h"
 //#include "src/fitting.c"
-#include "src/moments.h"
 
 // wrappers
 
