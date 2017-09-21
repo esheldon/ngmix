@@ -1,11 +1,12 @@
 //   Calculate the image mean, accounting for weight function.
 
 #include "fitting.h"
+#include "gmix.h"
 
 extern PyObject* GMixRangeError;
 extern PyObject* GMixFatalError;
 
-double get_loglike_pixels(const struct gauss *gmix,
+double get_loglike_pixels(struct gauss *gmix,
                           npy_intp n_gauss,
                           const struct pixel *pixels,
                           npy_intp n_pixels,
@@ -15,7 +16,7 @@ double get_loglike_pixels(const struct gauss *gmix,
     npy_intp ipixel=0, igauss=0;
 
     struct gauss *gauss=NULL;
-    struct pixel *pixel=NULL;
+    const struct pixel *pixel=NULL;
 
     double
         model_val=0, diff=0,

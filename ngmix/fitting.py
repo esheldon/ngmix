@@ -82,7 +82,6 @@ class FitterBase(object):
     def __init__(self, obs, model, **keys):
         self.keys=keys
 
-        self.margsky = keys.get('margsky', False)
         self.use_logpars=keys.get('use_logpars',False)
 
         self.use_round_T=keys.get('use_round_T',False)
@@ -105,9 +104,6 @@ class FitterBase(object):
         self._set_totpix()
 
         self._gmix_all=None
-
-        #robust fitting
-        self.nu = keys.get('nu', 0.0)
 
         if 'aperture' in keys:
             self.set_aperture(keys['aperture'])
@@ -193,13 +189,6 @@ class FitterBase(object):
                 nimage += 1
         self.nimage=nimage
 
-        if self.margsky:
-            for band_obs in self.obs:
-                for tobs in band_obs:
-                    tobs.model_image=tobs.image*0
-                    tobs.image_mean=_gmix.get_image_mean(tobs.image, tobs.weight)
-
-
     def _set_totpix(self):
         """
         Make sure the data are consistent.
@@ -253,7 +242,7 @@ class FitterBase(object):
         return self.eff_npix
 
 
-    def calc_lnprob(self, pars, more=False, get_priors=False):
+    def calc_lnprob(self, pars, more=False):
         """
         This is all we use for mcmc approaches, but also used generally for the
         "get_fit_stats" method.  For the max likelihood fitter we also have a
@@ -281,20 +270,19 @@ class FitterBase(object):
 
                 for obs,gm in zip(obs_list, gmix_list):
 
-                    if self.nu > 2.0:
-                        res = gm.get_loglike_robust(obs, self.nu, more=True)
-                    elif self.margsky:
-                        res = gm.get_loglike_margsky(obs, obs.model_image,
-                                                     more=True)
-                    else:
-                        res = gm.get_loglike(obs,
-                                             npoints=npoints,
-                                             more=True)
+                    res = gm.get_loglike(
+                        obs,
+                        npoints=npoints,
+                        more=more,
+                    )
 
-                    lnprob    += res['loglike']
-                    s2n_numer += res['s2n_numer']
-                    s2n_denom += res['s2n_denom']
-                    npix      += res['npix']
+                    if more:
+                        lnprob    += res['loglike']
+                        s2n_numer += res['s2n_numer']
+                        s2n_denom += res['s2n_denom']
+                        npix      += res['npix']
+                    else:
+                        lnprob += res
 
             # total over all bands
             lnprob += ln_priors
@@ -311,10 +299,7 @@ class FitterBase(object):
                     's2n_denom':s2n_denom,
                     'npix':npix}
         else:
-            if get_priors:
-                return lnprob, ln_priors
-            else:
-                return lnprob
+            return lnprob
 
     def get_fit_stats(self, pars):
         """
@@ -868,7 +853,6 @@ class FracdevFitterMax(FitterBase):
 
         self.method=method
 
-        self.margsky=False
         self.use_logpars=keys.get('use_logpars',False)
         self.set_obs(obs)
         self._set_images(exp_pars, dev_pars)
@@ -1258,7 +1242,6 @@ class FracdevFitter(FitterBase):
         self.npars=1
         self.use_logpars=keys.get('use_logpars',False)
 
-        self.margsky=False
         self.set_obs(obs)
 
         self.model_name='fracdev'

@@ -1624,152 +1624,6 @@ static PyObject * PyGMix_get_loglike_aper(PyObject* self, PyObject* args) {
 }
 
 
-
-/*
-   Calculate the loglike between the input image and the model image,
-   subtracting off the mean in each case
-
-   Error checking should be done in python.
-*/
-static PyObject * PyGMix_get_loglike_images_margsky(PyObject* self, PyObject* args) {
-
-    PyObject* image_obj=NULL;
-    PyObject* weight_obj=NULL;
-    PyObject* model_image_obj=NULL;
-    npy_intp n_row=0, n_col=0, row=0, col=0;
-
-    double image_mean=0, model_mean=0;
-    double data=0, ivar=0, data_mod=0, model_mod=0;
-    double model_val=0, diff=0;
-    double s2n_numer=0.0, s2n_denom=0.0, loglike = 0.0;
-
-    long npix=0;
-
-    PyObject* retval=NULL;
-
-    if (!PyArg_ParseTuple(args, (char*)"OdOOd", 
-                          &image_obj, &image_mean, &weight_obj, &model_image_obj, &model_mean)) {
-        return NULL;
-    }
-
-    n_row=PyArray_DIM(image_obj, 0);
-    n_col=PyArray_DIM(image_obj, 1);
-
-    for (row=0; row < n_row; row++) {
-        for (col=0; col < n_col; col++) {
-
-            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
-            if ( ivar > 0.0) {
-                data      = *( (double*)PyArray_GETPTR2(image_obj,row,col) );
-                model_val = *( (double*)PyArray_GETPTR2(model_image_obj,row,col) );
-
-                data_mod=data-image_mean;
-                model_mod=model_val-model_mean;
-
-                diff = model_mod - data_mod;
-                loglike += diff*diff*ivar;
-                s2n_numer += data_mod*model_mod*ivar;
-                s2n_denom += model_mod*model_mod*ivar;
-
-                npix += 1;
-            }
-        }
-    }
-
-    loglike *= (-0.5);
-
-    // fill in the retval
-    PYGMIX_PACK_RESULT4(loglike, s2n_numer, s2n_denom, npix);
-    return retval;
-}
-
-
-
-/*
-   Calculate the loglike between the gmix and the input image
-
-   Error checking should be done in python.
-   
-   logfactor = log(gamma((nu+1)/2)/(gamma(nu/2)*sqrt(pi*nu)))
-*/
-static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
-
-    PyObject* gmix_obj=NULL;
-    PyObject* image_obj=NULL;
-    PyObject* weight_obj=NULL;
-    PyObject* jacob_obj=NULL;
-    double nu;
-    npy_intp n_gauss=0, n_row=0, n_col=0, row=0, col=0;//, igauss=0;
-
-    struct gauss *gmix=NULL;//, *gauss=NULL;
-    struct jacobian *jacob=NULL;
-
-    double data=0, ivar=0, u=0, v=0;
-    double model_val=0, diff=0;
-    double s2n_numer=0.0, s2n_denom=0.0, loglike=0.0, nupow=0, logfactor=0;
-
-    long npix=0;
-
-    PyObject* retval=NULL;
-
-    if (!PyArg_ParseTuple(args, (char*)"OOOOd", 
-                          &gmix_obj, &image_obj, &weight_obj, &jacob_obj, 
-                          &nu)) {
-        return NULL;
-    }
-
-    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
-    n_gauss=PyArray_SIZE(gmix_obj);
-
-    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
-        return NULL;
-    }
-
-    n_row=PyArray_DIM(image_obj, 0);
-    n_col=PyArray_DIM(image_obj, 1);
-
-    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
-    
-    logfactor = lgamma((nu+1.0)/2.0) - lgamma(nu/2.0) - 0.5*log(M_PI*nu);
-    nupow = -0.5*(nu+1.0);
-    
-    for (row=0; row < n_row; row++) {
-        u=PYGMIX_JACOB_GETU(jacob, row, 0);
-        v=PYGMIX_JACOB_GETV(jacob, row, 0);
-
-        for (col=0; col < n_col; col++) {
-
-            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
-            if ( ivar > 0.0) {
-                data=*( (double*)PyArray_GETPTR2(image_obj,row,col) );
-
-                model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
-
-                diff = model_val-data;
-                loglike += logfactor + nupow*log(1.0+diff*diff*ivar/nu);
-                s2n_numer += data*model_val*ivar;
-                s2n_denom += model_val*model_val*ivar;
-
-                npix += 1;
-            }
-
-            u += jacob->dudcol;
-            v += jacob->dvdcol;
-
-        }
-    }
-
-    // fill in the retval
-    PYGMIX_PACK_RESULT4(loglike, s2n_numer, s2n_denom, npix);
-
-    return retval;
-}
-
-
-
-
-
-
 /*
    Fill the input fdiff=(model-data)/err, return s2n_numer, s2n_denom
 
@@ -4194,15 +4048,9 @@ static PyMethodDef pygauss2d_funcs[] = {
         METH_VARARGS,
         "calculate likelihood, integrating model over the pixels\n"},
 
-    {"get_loglike_images_margsky",
-        (PyCFunction)PyGMix_get_loglike_images_margsky, METH_VARARGS,
-        "calculate likelihood between images, subtracting mean\n"},
     {"get_loglike_aper",
         (PyCFunction)PyGMix_get_loglike_aper, METH_VARARGS,
         "calculate likelihood within the specified circular aperture\n"},
-
-    {"get_loglike_robust", (PyCFunction)PyGMix_get_loglike_robust,
-        METH_VARARGS,  "calculate likelihood with robust metric\n"},
 
     {"get_loglike_pixels", (PyCFunction)PyGMix_get_loglike_pixels,
         METH_VARARGS,  "calculate likelihood\n"},

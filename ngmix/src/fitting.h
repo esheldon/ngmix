@@ -3,7 +3,7 @@
 
 #include "../_gmix.h"
 
-double get_loglike_pixels(const struct gauss *gmix,
+double get_loglike_pixels(struct gauss *gmix,
                           npy_intp n_gauss,
                           const struct pixel *pixels,
                           npy_intp n_pixels,
