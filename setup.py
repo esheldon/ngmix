@@ -9,6 +9,7 @@ sources=[
     "ngmix/src/shapes.c",
     "ngmix/src/gmix.c",
     "ngmix/src/fitting.c",
+    "ngmix/src/errors.c",
 ]
 include_dirs=[numpy.get_include()]
 
