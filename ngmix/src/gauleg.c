@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "gauleg.h"
 
 static const double pygmix_gl_xxi5[5] = {
@@ -36,8 +37,6 @@ int set_gauleg_data(int npoints, const double **xxi, const double **wwi)
         *xxi=pygmix_gl_xxi10;
         *wwi=pygmix_gl_wwi10;
     } else {
-        PyErr_Format(PyExc_ValueError,
-                     "bad npoints: %d, npoints only 5,10 for now", npoints);
         status=0;
     }
     return status;

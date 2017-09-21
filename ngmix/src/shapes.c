@@ -3,7 +3,7 @@
 
 // return 0 means out of range
 
-#include "../_gmix.h"
+#include <Python.h>
 
 extern PyObject* GMixRangeError;
 extern PyObject* GMixFatalError;

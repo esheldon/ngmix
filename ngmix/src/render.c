@@ -1,20 +1,22 @@
 #include <omp.h>
+#include <stdlib.h>
 #include "render.h"
+#include "fastexp.h"
 
 //
 // norms should be set on the gaussian mixture
 //
 
 void render(const struct gauss *gmix,
-            npy_intp n_gauss,
+            long n_gauss,
             double *image,
             const struct coord *coords,
-            npy_intp n_pixels,
+            long n_pixels,
             const struct jacobian* jacob,
             int fast_exp)
 {
 
-    npy_intp igauss=0, ipixel=0;
+    long igauss=0, ipixel=0;
 
     const struct gauss *gauss=NULL;
     const struct coord *coord=NULL;

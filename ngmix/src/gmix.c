@@ -1,16 +1,18 @@
-#include "../_gmix.h"
+#include <Python.h>
+#include "gmix.h"
 #include "shapes.h"
+
 
 extern PyObject* GMixRangeError;
 extern PyObject* GMixFatalError;
 
 void gmix_get_cen(const struct gauss *self,
-                  npy_intp n_gauss,
+                  long n_gauss,
                   double* row,
                   double *col,
                   double *psum)
 {
-    npy_intp i=0;
+    long i=0;
     *row=0;
     *col=0;
     *psum=0;
@@ -28,7 +30,7 @@ void gmix_get_cen(const struct gauss *self,
 }
 
 int gmix_get_e1e2T(struct gauss *gmix,
-                   npy_intp n_gauss,
+                   long n_gauss,
                    double *e1, double *e2, double *T)
 {
 
@@ -36,7 +38,7 @@ int gmix_get_e1e2T(struct gauss *gmix,
     double row=0, col=0, psum=0;
     double T_sum=0.0, irr_sum=0, irc_sum=0, icc_sum=0;
     double rowdiff=0, coldiff=0;
-    npy_intp i=0;
+    long i=0;
 
     gmix_get_cen(gmix, n_gauss, &row, &col, &psum);
 
@@ -175,13 +177,13 @@ int get_n_gauss(int model, int *status) {
 
 
 int gmix_fill_full(struct gauss *self,
-                   npy_intp n_gauss,
+                   long n_gauss,
                    const double* pars,
-                   npy_intp n_pars)
+                   long n_pars)
 {
 
     int status=0;
-    npy_intp i=0, beg=0;
+    long i=0, beg=0;
 
     if ( (n_pars % 6) != 0) {
         PyErr_Format(GMixFatalError, 
@@ -215,11 +217,11 @@ _gmix_fill_full_bail:
 
 
 int gmix_set_norms(struct gauss *self,
-                   npy_intp n_gauss)
+                   long n_gauss)
 {
 
     int status=0;
-    npy_intp i=0;
+    long i=0;
 
     for (i=0; i<n_gauss; i++) {
 
@@ -240,7 +242,7 @@ _gmix_set_norms_bail:
 }
 
 int gmix_set_norms_if_needed(struct gauss *self,
-                             npy_intp n_gauss)
+                             long n_gauss)
 {
 
     int status=1;
@@ -256,9 +258,9 @@ int gmix_set_norms_if_needed(struct gauss *self,
 // for errors to simplify code.
 
 int gmix_fill_simple(struct gauss *self,
-                     npy_intp n_gauss,
+                     long n_gauss,
                      const double* pars,
-                     npy_intp n_pars,
+                     long n_pars,
                      int model,
                      const double* fvals,
                      const double* pvals)
@@ -268,7 +270,7 @@ int gmix_fill_simple(struct gauss *self,
     double row=0,col=0,g1=0,g2=0,
            T=0,counts=0,e1=0,e2=0,
            T_i_2=0,counts_i=0;
-    npy_intp i=0;
+    long i=0;
 
     if (n_pars != 6) {
         PyErr_Format(GMixFatalError, 
@@ -327,7 +329,7 @@ _gmix_fill_simple_bail:
 
 int gmix_fill_cm(struct PyGMixCM*self,
                  const double* pars,
-                 npy_intp n_pars)
+                 long n_pars)
 {
 
     int status=0;
@@ -340,7 +342,7 @@ int gmix_fill_cm(struct PyGMixCM*self,
         f=0, p=0,
         ifracdev=0;
 
-    npy_intp i=0;
+    long i=0;
 
     if (n_pars != 6) {
         PyErr_Format(GMixFatalError, 
@@ -400,15 +402,15 @@ _bail:
 
 
 int gmix_fill_coellip(struct gauss *self,
-                      npy_intp n_gauss,
+                      long n_gauss,
                       const double* pars,
-                      npy_intp n_pars)
+                      long n_pars)
 {
 
     int status=0;//, n_gauss_expected=0;
     double row=0,col=0,g1=0,g2=0,
            T=0,Thalf=0,counts=0,e1=0,e2=0;
-    npy_intp i=0;
+    long i=0;
 
     row=pars[0];
     col=pars[1];
@@ -476,9 +478,9 @@ double get_cm_Tfactor(double fracdev, double TdByTe)
 }
 
 int gmix_fill(struct gauss *self,
-              npy_intp n_gauss,
+              long n_gauss,
               const double* pars,
-              npy_intp n_pars,
+              long n_pars,
               int model)
 {
 
@@ -535,12 +537,12 @@ _gmix_fill_bail:
 }
 
 
-int convolve_fill(struct gauss *self, npy_intp self_n_gauss,
-                  const struct gauss *gmix, npy_intp n_gauss,
-                  const struct gauss *psf, npy_intp psf_n_gauss)
+int convolve_fill(struct gauss *self, long self_n_gauss,
+                  const struct gauss *gmix, long n_gauss,
+                  const struct gauss *psf, long psf_n_gauss)
 {
     int status=0;
-    npy_intp ntot=0, iobj=0, ipsf=0, itot=0;
+    long ntot=0, iobj=0, ipsf=0, itot=0;
     double psf_rowcen=0, psf_colcen=0, psf_psum=0, psf_ipsum=0;
 
     ntot = n_gauss*psf_n_gauss;
@@ -594,45 +596,4 @@ _convolve_fill_bail:
 }
 
 
-//   Calculate the sum needed for the model s/n
-//   This is s2n_sum = sum(model_i^2 * ivar_i)
-//   The s/n will be sqrt(s2n_sum)
-
-double get_model_s2n_sum(struct gauss *gmix,
-                         npy_intp n_gauss,
-                         PyObject* weight,
-                         struct jacobian* jacob,
-                         int *status)
-{
-    npy_intp n_row=0, n_col=0, row=0, col=0;//, igauss=0;
-
-    double ivar=0, u=0, v=0;
-    double model_val=0;
-    double s2n_sum=0;
-
-    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
-        *status=0;
-        return -9999;
-    }
-
-    n_row=PyArray_DIM(weight, 0);
-    n_col=PyArray_DIM(weight, 1);
-
-    for (row=0; row < n_row; row++) {
-        for (col=0; col < n_col; col++) {
-            u=PYGMIX_JACOB_GETU(jacob, row, col);
-            v=PYGMIX_JACOB_GETV(jacob, row, col);
-
-            ivar=*( (double*)PyArray_GETPTR2(weight,row,col) );
-            if ( ivar > 0.0) {
-                model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
-
-                s2n_sum += model_val*model_val*ivar;
-            }
-        }
-    }
-
-    *status=1;
-    return s2n_sum;
-}
 

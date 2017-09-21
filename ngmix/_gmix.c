@@ -19,6 +19,9 @@
 PyObject* GMixRangeError=NULL;
 PyObject* GMixFatalError=NULL;
 
+#include "src/pixels.h"
+#include "src/jacobian.h"
+
 #include "src/render.h"
 
 #include "src/gauleg.h"
@@ -176,6 +179,44 @@ static PyObject * PyGMix_gmix_set_norms(PyObject* self, PyObject* args) {
 //   This is s2n_sum = sum(model_i^2 * ivar_i)
 //   The s/n will be sqrt(s2n_sum)
 
+static double get_model_s2n_sum(struct gauss *gmix,
+                                long n_gauss,
+                                PyObject* weight,
+                                struct jacobian* jacob,
+                                int *status)
+{
+    long n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+
+    double ivar=0, u=0, v=0;
+    double model_val=0;
+    double s2n_sum=0;
+
+    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
+        *status=0;
+        return -9999;
+    }
+
+    n_row=PyArray_DIM(weight, 0);
+    n_col=PyArray_DIM(weight, 1);
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+            u=PYGMIX_JACOB_GETU(jacob, row, col);
+            v=PYGMIX_JACOB_GETV(jacob, row, col);
+
+            ivar=*( (double*)PyArray_GETPTR2(weight,row,col) );
+            if ( ivar > 0.0) {
+                model_val=PYGMIX_GMIX_EVAL(gmix, n_gauss, v, u);
+
+                s2n_sum += model_val*model_val*ivar;
+            }
+        }
+    }
+
+    *status=1;
+    return s2n_sum;
+}
+
 static PyObject * PyGMix_get_model_s2n_sum(PyObject* self, PyObject* args) {
 
     int status=0;
@@ -317,6 +358,8 @@ static PyObject * PyGMix_render_gauleg(PyObject* self, PyObject* args) {
     }
 
     if (!set_gauleg_data(npoints, &xxi, &wwi)) {
+        PyErr_Format(PyExc_ValueError,
+                     "bad npoints: %d, npoints only 5,10 for now", npoints);
         return NULL;
     }
 
@@ -530,6 +573,8 @@ static PyObject * PyGMix_get_loglike_gauleg(PyObject* self, PyObject* args) {
     }
 
     if (!set_gauleg_data(npoints, &xxi, &wwi)) {
+        PyErr_Format(PyExc_ValueError,
+                     "bad npoints: %d, npoints only 5,10 for now", npoints);
         return NULL;
     }
 
@@ -790,6 +835,8 @@ static PyObject * PyGMix_fill_fdiff_gauleg(PyObject* self, PyObject* args) {
     }
 
     if (!set_gauleg_data(npoints, &xxi, &wwi)) {
+        PyErr_Format(PyExc_ValueError,
+                     "bad npoints: %d, npoints only 5,10 for now", npoints);
         return NULL;
     }
 
