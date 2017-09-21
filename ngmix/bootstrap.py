@@ -2442,8 +2442,6 @@ class MaxRunner(object):
         self.method=max_pars['method']
         if self.method == 'lm':
             self.send_pars=max_pars['lm_pars']
-        else:
-            self.send_pars=max_pars
 
         mess="model should be exp,dev,gauss, got '%s'" % model
         assert model in ['exp','dev','gauss'],mess
@@ -2461,7 +2459,7 @@ class MaxRunner(object):
         if self.method=='lm':
             method=self._go_lm
         else:
-            raise ValueError("bad method '%s'" % self.method)
+            method=self._go_max
 
         lnprob_max=-numpy.inf
         method(ntry=ntry)
@@ -2494,9 +2492,46 @@ class MaxRunner(object):
         res['ntry'] = i+1
         self.fitter=fitter
 
+    def _go_max(self, ntry=1):
+        
+        if self.intpars is not None:
+            npoints=self.intpars['npoints']
+            #print("max gal fit using npoints:",npoints)
+        else:
+            npoints=None
+
+        fitclass=self._get_max_fitter_class()
+
+        for i in xrange(ntry):
+            guess=self.guesser()
+            fitter=fitclass(
+                self.obs,
+                self.model,
+                use_logpars=self.use_logpars,
+                npoints=npoints,
+                prior=self.prior,
+
+                **self.max_pars
+            )
+
+            fitter.go(guess)
+
+            res=fitter.get_result()
+            if res['flags']==0:
+                break
+
+        res['ntry'] = i+1
+        self.fitter=fitter
+
+
     def _get_lm_fitter_class(self):
         from .fitting import LMSimple
         return LMSimple
+
+    def _get_max_fitter_class(self):
+        from .fitting import MaxSimple
+        return MaxSimple
+
 
 
 class MaxRunnerGaussMom(object):

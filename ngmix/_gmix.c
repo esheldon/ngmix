@@ -24,9 +24,9 @@ PyObject* GMixFatalError=NULL;
 #include "src/gauleg.h"
 #include "src/shapes.h"
 #include "src/gmix.h"
-//#include "src/fitting.c"
+#include "src/fitting.h"
 
-// wrappers
+// wrappers and functions that use the api directly
 
 static PyObject * PyGMix_get_cm_Tfactor(PyObject* self, PyObject* args) {
     double fracdev=0, TdByTe=0, Tfactor=0;
@@ -423,6 +423,97 @@ PyObject * PyGMix_get_image_mean(PyObject* self, PyObject* args) {
 
     return Py_BuildValue("d", wmean);
 }
+
+
+
+/*
+   fill pixel struct array
+*/
+static PyObject * PyGMix_fill_pixels(PyObject* self, PyObject* args) {
+
+    PyObject* pixels_obj=NULL;
+    PyObject* image_obj=NULL;
+    PyObject* weight_obj=NULL;
+    PyObject* jacob_obj=NULL;
+    npy_intp n_row=0, n_col=0, row=0, col=0;//, igauss=0;
+
+    struct jacobian *jacob=NULL;
+    struct pixel* pixel=NULL;
+
+    double ivar=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOOO", 
+                          &pixels_obj,
+                          &image_obj,
+                          &weight_obj,
+                          &jacob_obj)) {
+        return NULL;
+    }
+
+    pixel = (struct pixel* ) PyArray_DATA(pixels_obj);
+
+    n_row=PyArray_DIM(image_obj, 0);
+    n_col=PyArray_DIM(image_obj, 1);
+
+    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
+
+
+    for (row=0; row < n_row; row++) {
+        for (col=0; col < n_col; col++) {
+
+            pixel->u = PYGMIX_JACOB_GETU(jacob, row, col);
+            pixel->v = PYGMIX_JACOB_GETV(jacob, row, col);
+
+            pixel->val = *( (double*)PyArray_GETPTR2(image_obj,row,col) );
+            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
+
+            if (ivar < 0.0) {
+                ivar = 0.0;
+            }
+            pixel->ierr=sqrt(ivar);
+
+            pixel++;
+        }
+    }
+
+    // fill in the retval
+    Py_RETURN_NONE;
+}
+
+static PyObject * PyGMix_get_loglike_pixels(PyObject* self, PyObject* args) {
+
+    int status=0;
+    PyObject* gmix_obj=NULL;
+    PyObject* pixels_obj=NULL;
+
+    npy_intp n_gauss=0, n_pixels=0;
+
+    struct gauss *gmix=NULL;
+    struct pixel *pixels=NULL;
+
+    double loglike=0;
+
+    if (!PyArg_ParseTuple(args, (char*)"OO", 
+                          &gmix_obj, &pixels_obj)) {
+        return NULL;
+    }
+
+    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
+    n_gauss=PyArray_SIZE(gmix_obj);
+
+    pixels=(struct pixel* ) PyArray_DATA(pixels_obj);
+    n_pixels=PyArray_SIZE(pixels_obj);
+
+    loglike=get_loglike_pixels(gmix, n_gauss, pixels, n_pixels, &status);
+
+    if (status==0) {
+        return NULL;
+    } else {
+        return Py_BuildValue("d", loglike);
+    }
+}
+
+
 
 
 
@@ -1256,62 +1347,6 @@ static PyObject * PyGMix_get_image_mean(PyObject* self, PyObject* args) {
 */
 
 
-/*
-   fill pixel struct array
-*/
-static PyObject * PyGMix_fill_pixels(PyObject* self, PyObject* args) {
-
-    PyObject* pixels_obj=NULL;
-    PyObject* image_obj=NULL;
-    PyObject* weight_obj=NULL;
-    PyObject* jacob_obj=NULL;
-    npy_intp n_row=0, n_col=0, row=0, col=0;//, igauss=0;
-
-    struct jacobian *jacob=NULL;
-    struct pixel* pixel=NULL;
-
-    double ivar=0;
-
-    if (!PyArg_ParseTuple(args, (char*)"OOOO", 
-                          &pixels_obj,
-                          &image_obj,
-                          &weight_obj,
-                          &jacob_obj)) {
-        return NULL;
-    }
-
-    pixel = (struct pixel* ) PyArray_DATA(pixels_obj);
-
-    n_row=PyArray_DIM(image_obj, 0);
-    n_col=PyArray_DIM(image_obj, 1);
-
-    jacob=(struct jacobian* ) PyArray_DATA(jacob_obj);
-
-
-    for (row=0; row < n_row; row++) {
-        for (col=0; col < n_col; col++) {
-
-            pixel->u = PYGMIX_JACOB_GETU(jacob, row, col);
-            pixel->v = PYGMIX_JACOB_GETV(jacob, row, col);
-
-            pixel->val = *( (double*)PyArray_GETPTR2(image_obj,row,col) );
-            ivar=*( (double*)PyArray_GETPTR2(weight_obj,row,col) );
-
-            if (ivar < 0.0) {
-                ivar = 0.0;
-            }
-            pixel->ierr=sqrt(ivar);
-
-            pixel++;
-        }
-    }
-
-    // fill in the retval
-    Py_RETURN_NONE;
-}
-
-
-
 
 
 
@@ -1730,75 +1765,6 @@ static PyObject * PyGMix_get_loglike_robust(PyObject* self, PyObject* args) {
     return retval;
 }
 
-
-
-
-static PyObject * PyGMix_get_loglike_pixels(PyObject* self, PyObject* args) {
-
-    PyObject* gmix_obj=NULL;
-    PyObject* pixels_obj=NULL;
-
-    npy_intp n_gauss=0, n_pixels=0, ipixel=0, igauss=0;
-
-    struct gauss *gmix=NULL, *gauss=NULL;
-    struct pixel *pixels=NULL, *pixel=NULL;
-
-    double
-        model_val=0, diff=0,
-        chi2=0, udiff=0, vdiff=0,
-        loglike=0;
-
-    if (!PyArg_ParseTuple(args, (char*)"OO", 
-                          &gmix_obj, &pixels_obj)) {
-        return NULL;
-    }
-
-    gmix=(struct gauss* ) PyArray_DATA(gmix_obj);
-    n_gauss=PyArray_SIZE(gmix_obj);
-
-    pixels=(struct pixel* ) PyArray_DATA(pixels_obj);
-    n_pixels=PyArray_SIZE(pixels_obj);
-
-    if (!gmix_set_norms_if_needed(gmix, n_gauss)) {
-        return NULL;
-    }
-
-#pragma omp parallel for \
-        default(none) \
-        shared(gmix,pixels,n_pixels,n_gauss) \
-        private(ipixel,pixel,igauss,gauss,vdiff,udiff,chi2,model_val,diff) \
-		reduction(+:loglike)
-
-    for (ipixel=0; ipixel < n_pixels; ipixel++) {
-        pixel = &pixels[ipixel];
-
-        model_val=0;
-        for (igauss=0; igauss < n_gauss; igauss++) {
-            gauss = &gmix[igauss];
-
-            // v->row, u->col in gauss
-            vdiff = pixel->v - gauss->row;
-            udiff = pixel->u - gauss->col;
-
-            chi2 =       gauss->dcc*vdiff*vdiff
-                   +     gauss->drr*udiff*udiff
-                   - 2.0*gauss->drc*vdiff*udiff;
-
-            if (chi2 < PYGMIX_MAX_CHI2 && chi2 >= 0.0) {
-                model_val += gauss->pnorm*expd( -0.5*chi2 );
-            }
-
-        }
-
-        diff = model_val-pixel->val;
-        loglike += diff*diff*pixel->ierr*pixel->ierr;
-
-    }
-
-    loglike *= (-0.5);
-
-    return Py_BuildValue("d", loglike);
-}
 
 
 

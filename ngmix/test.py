@@ -59,7 +59,7 @@ class TestFitting(unittest.TestCase):
 
         return obsdata
 
-    def testMax(self):
+    def testLM(self):
 
         print('\n')
         for noise in [0.001, 0.1, 1.0]:
@@ -95,6 +95,49 @@ class TestFitting(unittest.TestCase):
             print_pars(res['pars'],     front='pars meas: ')
             print_pars(res['pars_err'], front='pars err:  ')
             print('s2n:',res['s2n_w'])
+
+    def testMax(self):
+
+        print('\n')
+        for noise in [0.001, 0.1, 1.0]:
+            print('='*10)
+            print('noise:',noise)
+            mdict=self.get_obs_data(noise)
+
+            obs=mdict['obs']
+            obs.set_psf(mdict['psf_obs'])
+
+            pars=mdict['pars'].copy()
+            pars[0] += randu(low=-0.1,high=0.1)
+            pars[1] += randu(low=-0.1,high=0.1)
+            pars[2] += randu(low=-0.1,high=0.1)
+            pars[3] += randu(low=-0.1,high=0.1)
+            pars[4] *= (1.0 + randu(low=-0.1,high=0.1))
+            pars[5] *= (1.0 + randu(low=-0.1,high=0.1))
+
+            max_pars={
+                'method':'Nelder-Mead',
+                'options':{
+                    'maxiter':2000,
+                    'maxfev':4000,
+                },
+            }
+
+            prior=joint_prior.make_uniform_simple_sep([0.0,0.0],     # cen
+                                                      [0.1,0.1],     # g
+                                                      [-10.0,3500.], # T
+                                                      [-0.97,1.0e9]) # flux
+
+            boot=Bootstrapper(obs)
+            boot.fit_psfs('gauss', 4.0)
+            boot.fit_max('exp', max_pars, pars, prior=prior)
+            res=boot.get_max_fitter().get_result()
+
+            print_pars(mdict['pars'],   front='pars true: ')
+            print_pars(res['pars'],     front='pars meas: ')
+            print_pars(res['pars_err'], front='pars err:  ')
+            print('s2n:',res['s2n_w'])
+
 
 def make_test_observations(model,
                            g1_obj=0.1,

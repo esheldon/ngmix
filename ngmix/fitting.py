@@ -1430,15 +1430,35 @@ class MaxSimple(FitterBase):
         Default is npars*200
 
     """
-    def __init__(self, obs, model, method='Nelder-Mead', **keys):
+    def __init__(self,
+                 obs,
+                 model,
+                 method='Nelder-Mead',
+                 options=None,
+                 **keys):
         super(MaxSimple,self).__init__(obs, model, **keys)
         self._obs = obs
+
         self._model = model
-        self.method = method
+
         self._band_pars = numpy.zeros(6)
 
-        self._options={}
-        self._options.update(keys)
+        self._method = method
+
+        if method=='Nelder-Mead':
+            if options is not None:
+                self._options = options
+            else:
+                self._options = {}
+        else:
+            self._options=options
+
+            self._max_keys={}
+            tocheck=['jac','hess', 'hessp', 'bounds',
+                     'constraints', 'tol', 'callback']
+            for key in tocheck:
+                if key in keys:
+                    self._max_keys[key] = keys[key]
 
     def _setup_data(self, guess):
         """
@@ -1478,38 +1498,30 @@ class MaxSimple(FitterBase):
     def neglnprob(self, pars):
         return -1.0*self.calc_lnprob(pars)
 
-    def run_max(self, guess, **keys):
+    def run_max(self, guess):
         """
         Run maximizer and set the result.
 
-        extra keywords for nm are
-        --------------------------
-        xtol: float, optional
-            Tolerance in the vertices, relative to the vertex with
-            the lowest function value.  Default 1.0e-4
-        ftol: float, optional
-            Tolerance in the function value, relative to the
-            lowest function value for all vertices.  Default 1.0e-4
-        maxiter: int, optional
-            Default is npars*200
-        maxfev:
-            Default is npars*200
+        parameters
+        ----------
+        guess: array/sequence
+            Starting guess for the fitter
         """
-        if self.method in ['nm','Nelder-Mead']:
-            self.run_max_nm(guess, **keys)
+        if self._method in ['nm','Nelder-Mead']:
+            self.run_max_nm(guess, **self._options)
         else:
             import scipy.optimize
-
-            options=self._options
-            options.update(keys)
 
             guess=numpy.array(guess,dtype='f8',copy=False)
             self._setup_data(guess)
 
-            result = scipy.optimize.minimize(self.neglnprob,
-                                             guess,
-                                             method=self.method,
-                                             options=options)
+            result = scipy.optimize.minimize(
+                self.neglnprob,
+                guess,
+                method=self._method,
+                options=self._options,
+                **self._max_keys
+            )
             self._result = result
 
             result['model'] = self.model_name
