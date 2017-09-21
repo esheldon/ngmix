@@ -105,9 +105,6 @@ class FitterBase(object):
 
         self._gmix_all=None
 
-        if 'aperture' in keys:
-            self.set_aperture(keys['aperture'])
-
     def __repr__(self):
         rep="""
     %(model)s
@@ -166,13 +163,6 @@ class FitterBase(object):
             gm = gm.convolve(obs.psf.gmix)
 
         return gm
-
-    def set_aperture(self, aper):
-        """
-        set the circular aperture for likelihood evaluations. only used by
-        calc_lnprob currently
-        """
-        self.obs.set_aperture(aper)
 
     def set_obs(self, obs_in):
         """
@@ -294,10 +284,12 @@ class FitterBase(object):
             npix = 0
 
         if more:
-            return {'lnprob':lnprob,
-                    's2n_numer':s2n_numer,
-                    's2n_denom':s2n_denom,
-                    'npix':npix}
+            return {
+                'lnprob':lnprob,
+                's2n_numer':s2n_numer,
+                's2n_denom':s2n_denom,
+                'npix':npix,
+            }
         else:
             return lnprob
 
@@ -374,6 +366,9 @@ class FitterBase(object):
         _gmix.gmix_fill(gm._data, band_pars, gm._model)
 
     def _convolve_gmix(self, gm, gm0, psf_gmix):
+        """
+        norms get set
+        """
         _gmix.convolve_fill(gm._data, gm0._data, psf_gmix._data)
 
     def _fill_gmix_all(self, pars):
@@ -427,6 +422,7 @@ class FitterBase(object):
                 try:
                     _gmix.gmix_fill(gm0._data, band_pars, gm0._model)
                     _gmix.gmix_fill(gm._data, band_pars, gm._model)
+
                 except ZeroDivisionError:
                     raise GMixRangeError("zero division")
 
@@ -860,9 +856,6 @@ class FracdevFitterMax(FitterBase):
         self.model_name='fracdev'
 
         self._set_totpix()
-
-        if 'aperture' in keys:
-            self.set_aperture(keys['aperture'])
 
         pars=keys.get('pars',None)
         if pars is None:
@@ -1781,7 +1774,7 @@ class LMSimple(FitterBase):
             start=self._fill_priors(pars, fdiff)
 
             for pixels,gmix in zip(self._pixels_list,self._gmix_data_list):
-                _gmix.fill_fdiff_pixels(
+                _gmix.fill_fdiff(
                     pixels,
                     gmix,
                     fdiff,
@@ -2425,6 +2418,9 @@ class LMComposite(LMSimple):
         _gmix.gmix_fill_cm(gm._data, band_pars)
 
     def _convolve_gmix(self, gm, gm0, psf_gmix):
+        """
+        norms get set
+        """
         _gmix.convolve_fill(gm._data,
                             gm0._data['gmix'][0],
                             psf_gmix._data)
@@ -4012,26 +4008,6 @@ class ISampler(object):
 
 # alias
 GCovSamplerT=ISampler
-
-def get_edge_aperture(dims, cen):
-    """
-    get circular aperture such that the entire aperture
-    is visible in all directions without hitting an edge
-
-    parameters
-    ----------
-    dims: 2-element sequence
-        dimensions of the array [dim1, dim2]
-    cen: 2-element sequence
-        [cen1, cen2]
-
-    returns
-    -------
-    min(min(cen[0],dims[0]-cen[0]),min(cen[1],dims[1]-cen[1]))
-    """
-    aperture=min(min(cen[0],dims[0]-cen[0]),min(cen[1],dims[1]-cen[1]))
-    return aperture
-
 
 def print_pars(pars, stream=stdout, fmt='%8.3g',front=None):
     """

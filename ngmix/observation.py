@@ -35,7 +35,6 @@ class Observation(object):
                  bmask=None,
                  jacobian=None,
                  gmix=None,
-                 aperture=None,
                  psf=None,
                  meta=None):
 
@@ -58,7 +57,6 @@ class Observation(object):
         # optional, if None nothing is set
         self.set_bmask(bmask)
         self.set_gmix(gmix)
-        self.set_aperture(aperture)
         self.set_psf(psf)
 
     @property
@@ -382,30 +380,6 @@ class Observation(object):
         """
         return hasattr(self, '_gmix')
 
-    def set_aperture(self,aperture):
-        """
-        Set an aperture.
-        """
-        if self.has_aperture():
-            del self._aperture
-
-        if aperture is not None:
-            self._aperture=float(aperture)
-
-    def get_aperture(self):
-        """
-        get a copy of the aperture
-        """
-        if not self.has_aperture():
-            raise RuntimeError("this obs has no aperture set")
-        return copy.copy(self._aperture)
-
-    def has_aperture(self):
-        """
-        returns True if the aperture is not None
-        """
-        return hasattr(self,'_aperture')
-
     def get_s2n(self):
         """
         get the the simple s/n estimator
@@ -564,13 +538,6 @@ class ObsList(list):
             raise TypeError("meta data must be in dictionary form")
         self.meta.update(meta)
 
-    def set_aperture(self, aper):
-        """
-        set aperture on all contained Observations
-        """
-        for obs in self:
-            obs.set_aperture(aper)
-
     def get_s2n(self):
         """
         get the the simple s/n estimator
@@ -685,14 +652,6 @@ class MultiBandObsList(list):
         if not isinstance(meta,dict):
             raise TypeError("meta data must be in dictionary form")
         self._meta.update(meta)
-
-
-    def set_aperture(self, aper):
-        """
-        set aperture on all contained Observations
-        """
-        for obslist in self:
-            obslist.set_aperture(aper)
 
     def get_s2n(self):
         """

@@ -530,23 +530,12 @@ class GMix(object):
                 npoints,
             )
         else:
-            if hasattr(obs, '_pixels'):
-                _gmix.fill_fdiff_pixels(
-                    gm,
-                    obs._pixels,
-                    fdiff,
-                    start,
-                )
-            else:
-                s2n_numer,s2n_denom,npix=_gmix.fill_fdiff(
-                    gm,
-                    image,
-                    obs.weight,
-                    obs.jacobian._data,
-                    fdiff,
-                    start,
-                )
-
+            _gmix.fill_fdiff(
+                gm,
+                obs._pixels,
+                fdiff,
+                start,
+            )
 
     def get_model_s2n_sum(self, obs):
         """
@@ -614,47 +603,33 @@ class GMix(object):
 
         gm=self._get_gmix_data()
         if npoints is not None:
-            loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike_gauleg(gm,
-                                                                      obs.image,
-                                                                      obs.weight,
-                                                                      obs.jacobian._data,
-                                                                      npoints)
-
+            res=_gmix.get_loglike_gauleg(
+                gm,
+                obs.image,
+                obs.weight,
+                obs.jacobian._data,
+                npoints,
+            )
+            res = pack_to_dict(res) if more else res[0]
         else:
-            if obs.has_aperture():
-                aperture=obs.get_aperture()
-                #print("using aper:",aperture)
-                loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike_aper(
+            res=_gmix.get_loglike(
+                gm,
+                obs._pixels,
+                1 if more else 0,
+            )
+            res = pack_to_dict(res) if more else res
+
+        return res
+        """
+            if False:
+                res=_gmix.get_loglike_image(
                     gm,
                     obs.image,
                     obs.weight,
                     obs.jacobian._data,
-                    aperture,
                 )
-
-            else:
-                # TODO: need pixels version getting summary stats
-                if not hasattr(obs, '_pixels') or more:
-                    loglike,s2n_numer,s2n_denom,npix=_gmix.get_loglike(
-                        gm,
-                        obs.image,
-                        obs.weight,
-                        obs.jacobian._data,
-                    )
-                else:
-                    loglike=_gmix.get_loglike_pixels(
-                        gm,
-                        obs._pixels,
-                    )
-
-        if more:
-            return {'loglike':loglike,
-                    's2n_numer':s2n_numer,
-                    's2n_denom':s2n_denom,
-                    'npix':npix}
-        else:
-            return loglike
-
+                res = pack_to_dict(res) if more else res[0]
+        """
     def _get_gmix_data(self):
         """
         same as get_data for normal models, but not all
@@ -1801,6 +1776,15 @@ class GMixND(object):
         if show:
             tab.show(**keys)
         return tab
+
+def pack_to_dict(res):
+    loglike,s2n_numer,s2n_denom,npix=res
+    return {
+        'loglike':loglike,
+        's2n_numer':s2n_numer,
+        's2n_denom':s2n_denom,
+        'npix':npix,
+    }
 
 
 
