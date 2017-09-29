@@ -1829,7 +1829,7 @@ class LMSimple(FitterBase):
         The npars elements contain -ln(prior)
         """
 
-        from .nbtools import fill_fdiff
+        from .fitting_nb import fill_fdiff
 
         if not hasattr(self,'_pixels_list'):
             self._make_lists()
