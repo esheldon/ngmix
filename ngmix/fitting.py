@@ -423,6 +423,9 @@ class FitterBase(object):
                     _gmix.gmix_fill(gm0._data, band_pars, gm0._model)
                     _gmix.gmix_fill(gm._data, band_pars, gm._model)
 
+                    _gmix.set_norms(gm0._data)
+                    _gmix.set_norms(gm._data)
+
                 except ZeroDivisionError:
                     raise GMixRangeError("zero division")
 
@@ -1836,18 +1839,18 @@ class LMSimple(FitterBase):
 
         try:
 
+            # all norms are set after fill
             self._fill_gmix_all(pars)
+
             start=self._fill_priors(pars, fdiff)
 
             for pixels,gmix in zip(self._pixels_list,self._gmix_data_list):
-                status=fill_fdiff(
+                fill_fdiff(
                     gmix,
                     pixels,
                     fdiff,
                     start,
                 )
-                if status != 1:
-                    raise GMixRangeError("bad det")
 
                 start += pixels.size
 
@@ -1855,6 +1858,7 @@ class LMSimple(FitterBase):
             fdiff[:] = LOWVAL
 
         return fdiff
+
 
     '''
     def _calc_fdiff_old(self, pars, more=False):
