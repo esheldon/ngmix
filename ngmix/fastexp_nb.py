@@ -1,6 +1,8 @@
 import numpy
 from numba import jit, njit
 
+from . import fastmath
+
 # will check > -26 and < 0.0 so these are not actually necessary
 _exp3_ivals = numpy.array([
     -26, -25, -24, -23, -22, -21, 
@@ -23,6 +25,12 @@ _exp3_lookup = numpy.array([
     1.35335283e-01,   3.67879441e-01,   1.00000000e+00,
 ])
 
+_exp3_ivals_extended, _exp3_lookup_extended = fastmath.make_exp_lookup(
+    minval=-300,
+    maxval=0,
+)
+_exp3_i0_extended = _exp3_ivals_extended[0]
+
 @njit(cache=True)
 def exp3(x):
     """
@@ -37,6 +45,25 @@ def exp3(x):
     f = x - ival
     index = ival-_exp3_i0
     expval = _exp3_lookup[index]
+    expval *= (6+f*(6+f*(3+f)))*0.16666666
+
+    return expval
+
+
+@njit(cache=True)
+def exp3_extended(x):
+    """
+    fast exponential
+
+    no range checking is done here, do it at the caller
+
+    x: number
+        any number
+    """
+    ival = int(x-0.5)
+    f = x - ival
+    index = ival-_exp3_i0_extended
+    expval = _exp3_lookup_extended[index]
     expval *= (6+f*(6+f*(3+f)))*0.16666666
 
     return expval

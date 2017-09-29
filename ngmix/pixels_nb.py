@@ -2,11 +2,13 @@ import numpy
 from numba import njit
 
 from .jacobian_nb import jacobian_get_vu
+from . import observation
 
 try:
     xrange
 except:
     xrange=range
+
 
 @njit(cache=True)
 def fill_pixels(pixels, image, weight, jacob):
@@ -48,6 +50,39 @@ def fill_pixels(pixels, image, weight, jacob):
             pixel['ierr'] = numpy.sqrt(ivar)
 
             ipixel += 1
+
+
+@njit(cache=True)
+def fill_coords(coords, nrow, ncol, jacob):
+    """
+    store v,u image value, and 1/err for each pixel
+
+    store into 1-d pixels array
+
+    parameters
+    ----------
+    pixels: array
+        1-d array of pixel structures, u,v,val,ierr
+    image: 2-d array
+        2-d image array
+    weight: 2-d array
+        2-d image array same shape as image
+    jacob: jacobian structure
+        row0,col0,dvdrow,dvdcol,dudrow,dudcol,...
+    """
+
+    icoord=0
+    for row in xrange(nrow):
+        for col in xrange(ncol):
+
+            coord = coords[icoord]
+
+            v,u = jacobian_get_vu(jacob,row,col)
+
+            coord['u'] = u
+            coord['v'] = v
+
+            icoord += 1
 
 
 

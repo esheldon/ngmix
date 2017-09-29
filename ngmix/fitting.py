@@ -1652,12 +1652,12 @@ class LMSimple(FitterBase):
         guess=array(guess,dtype='f8',copy=False)
         self._setup_data(guess)
 
-        nthreads=int(os.environ['OMP_NUM_THREADS'])
-        if nthreads > 1 and self.nimage > 1:
-            func=self._calc_fdiff_parallel
-        else:
-            func=self._calc_fdiff
-        #func = self._calc_fdiff_numba
+        #nthreads=int(os.environ['OMP_NUM_THREADS'])
+        #if nthreads > 1 and self.nimage > 1:
+        #    func=self._calc_fdiff_parallel
+        #else:
+        #    func=self._calc_fdiff
+        func = self._calc_fdiff_numba
 
         result = run_leastsq(
             func,

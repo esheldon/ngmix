@@ -1,6 +1,6 @@
 import numpy
 from numba import jit, njit
-from .fastexp_nb import exp3
+from .fastexp_nb import exp3, exp3_extended
 
 try:
     xrange
@@ -52,6 +52,52 @@ def gmix_eval_pixel(gmix, pixel):
 
 
     return model_val
+
+
+@njit(cache=True)
+def gauss2d_eval_pixel_extended(gauss, pixel):
+    """
+    evaluate a 2-d gaussian at the specified location
+
+    parameters
+    ----------
+    gauss2d: gauss2d structure
+        row,col,dcc,drr,drc,pnorm... See gmix.py
+    pixel: struct with coods
+        should have fields v,u
+    """
+    model_val=0.0
+
+    # v->row, u->col in gauss
+    vdiff = pixel['v'] - gauss['row']
+    udiff = pixel['u'] - gauss['col']
+
+    chi2 = (      gauss['dcc']*vdiff*vdiff
+            +     gauss['drr']*udiff*udiff
+            - 2.0*gauss['drc']*vdiff*udiff )
+
+    if chi2 < 25.0 and chi2 >= 0.0:
+        model_val = gauss['pnorm']*exp3_extended( -0.5*chi2 )
+
+    return model_val
+
+@njit(cache=True)
+def gmix_eval_pixel_extended(gmix, pixel):
+    """
+    evaluate a single gaussian mixture
+    """
+    model_val=0.0
+    for igauss in xrange(gmix.size):
+
+        model_val += gauss2d_eval_pixel_extended(
+            gmix[igauss],
+            pixel,
+        )
+
+
+    return model_val
+
+
 
 @njit(cache=True)
 def gmix_get_cen(gmix):

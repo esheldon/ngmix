@@ -272,6 +272,16 @@ class GMix(object):
         gm=self._get_gmix_data()
         _gmix.set_norms(gm)
 
+    def set_norms_if_needed(self):
+        """
+        Needed to actually evaluate the gaussian.  This is done internally
+        by the c code so if all goes well you don't need to call this
+        """
+        gm=self._get_gmix_data()
+        if gm['norm_set'][0] == 0:
+            _gmix.set_norms(gm)
+
+
     def fill(self, pars):
         """
         fill the gaussian mixture from a 'full' parameter array.
@@ -461,33 +471,62 @@ class GMix(object):
         else:
             assert isinstance(jacobian,Jacobian)
 
-        if fast_exp:
-            fexp = 1
-        else:
-            fexp = 0
+        do_numba=True
+
 
         gm=self._get_gmix_data()
-        if npoints is not None:
-            _gmix.render_gauleg(
+
+        if do_numba:
+            from .gmix_nb import gmix_set_norms
+            from .render_nb import render
+            from .observation import make_coords
+
+            if npoints != None:
+                raise ValueError("to integrate models over pixels, "
+                                 "use make_galsim_object() and have "
+                                 "galsim render the image")
+            assert npoints==None
+
+            if gm['norm_set'][0] == 0:
+                status = gmix_set_norms(gm)
+                if status == 0:
+                    raise GMixRangeError("gmix det too low")
+
+            coords=make_coords(image.shape, jacobian)
+            render(
                 gm,
-                image,
-                npoints,
-                jacobian._data,
-                fexp,
+                coords,
+                image.ravel(),
             )
+
+
         else:
-            _gmix.render(
-                gm,
-                image,
-                jacobian._data,
-                fexp,
-            )
-            #_gmix.render(
-            #    gm,
-            #    image,
-            #    jacobian._data,
-            #    fexp,
-            #)
+            if fast_exp:
+                fexp = 1
+            else:
+                fexp = 0
+
+            if npoints is not None:
+                _gmix.render_gauleg(
+                    gm,
+                    image,
+                    npoints,
+                    jacobian._data,
+                    fexp,
+                )
+            else:
+                _gmix.render(
+                    gm,
+                    image,
+                    jacobian._data,
+                    fexp,
+                )
+                #_gmix.render(
+                #    gm,
+                #    image,
+                #    jacobian._data,
+                #    fexp,
+                #)
 
 
     def fill_fdiff(self, obs, fdiff, start=0, npoints=None, nocheck=False):
