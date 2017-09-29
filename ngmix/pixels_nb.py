@@ -34,7 +34,7 @@ def fill_pixels(pixels, image, weight, jacob):
 
             pixel = pixels[ipixel]
 
-            u,v = jacobian_get_vu(jacob,row,col)
+            v,u = jacobian_get_vu(jacob,row,col)
 
             pixel['u'] = u
             pixel['v'] = v
