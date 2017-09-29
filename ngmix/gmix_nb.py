@@ -76,7 +76,7 @@ def gauss2d_eval_pixel_extended(gauss, pixel):
             +     gauss['drr']*udiff*udiff
             - 2.0*gauss['drc']*vdiff*udiff )
 
-    if chi2 < 25.0 and chi2 >= 0.0:
+    if chi2 < 300.0 and chi2 >= 0.0:
         model_val = gauss['pnorm']*exp3_extended( -0.5*chi2 )
 
     return model_val
