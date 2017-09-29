@@ -54,63 +54,6 @@ def gmix_eval_pixel(gmix, pixel):
     return model_val
 
 @njit(cache=True)
-def test_gmix_eval_pixel(gmix, pixel):
-    tmp=0.0
-    for i in xrange(1000):
-        tmp += gmix_eval_pixel(gmix, pixel)
- 
-
-@njit(cache=True)
-def gauss2d_eval(gauss, v, u):
-    """
-    evaluate a 2-d gaussian at the specified location
-
-    parameters
-    ----------
-    gauss2d: gauss2d structure
-        row,col,dcc,drr,drc,pnorm... See gmix.py
-    v,u: numbers
-        location in v,u plane (row,col for simple transforms)
-    """
-    model_val=0.0
-
-    # v->row, u->col in gauss
-    vdiff = v - gauss['row']
-    udiff = u - gauss['col']
-
-    chi2 = (      gauss['dcc']*vdiff*vdiff
-            +     gauss['drr']*udiff*udiff
-            - 2.0*gauss['drc']*vdiff*udiff )
-
-    if chi2 < 25.0 and chi2 >= 0.0:
-        model_val = gauss['pnorm']*exp3( -0.5*chi2 )
-
-    return model_val
-
-@njit(cache=True)
-def gmix_eval(gmix, v, u):
-    """
-    evaluate a single gaussian mixture
-    """
-    model_val=0.0
-    for igauss in xrange(gmix.size):
-
-        model_val += gauss2d_eval_pixel(
-            gmix[igauss],
-            v, u,
-        )
-
-
-    return model_val
-
-@njit(cache=True)
-def test_gmix_eval(gmix, v, u):
-    tmp=0.0
-    for i in xrange(1000):
-        tmp += gmix_eval(gmix, v, u)
- 
-
-@njit(cache=True)
 def gmix_get_cen(gmix):
     """
     get the center of the gaussian mixture, as well as
