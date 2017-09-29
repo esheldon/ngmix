@@ -1,6 +1,6 @@
 from numba import njit
 
-from .gmix_nb import gmix_eval_pixel
+from .gmix_nb import gmix_eval_pixel_fast
 
 try:
     xrange
@@ -26,7 +26,7 @@ def get_loglike(gmix, pixels):
     for ipixel in xrange(n_pixels):
         pixel = pixels[ipixel]
 
-        model_val = gmix_eval_pixel(gmix, pixel)
+        model_val = gmix_eval_pixel_fast(gmix, pixel)
 
         diff = model_val-pixel['val']
         loglike += diff*diff*pixel['ierr']*pixel['ierr']
@@ -54,5 +54,5 @@ def fill_fdiff(gmix, pixels, fdiff, start):
     for ipixel in xrange(n_pixels):
         pixel = pixels[ipixel]
 
-        model_val = gmix_eval_pixel(gmix, pixel)
+        model_val = gmix_eval_pixel_fast(gmix, pixel)
         fdiff[start+ipixel] = (model_val-pixel['val'])*pixel['ierr']

@@ -1,6 +1,6 @@
 import numpy
 from numba import jit, njit
-from .fastexp_nb import exp3, exp3_extended
+from .fastexp_nb import exp3
 
 try:
     xrange
@@ -11,9 +11,10 @@ except:
 from .gexceptions import GMixRangeError
 
 @njit(cache=True)
-def gauss2d_eval_pixel(gauss, pixel):
+def gauss2d_eval_pixel_fast(gauss, pixel, max_chi2=25.0):
     """
-    evaluate a 2-d gaussian at the specified location
+    evaluate a 2-d gaussian at the specified location, using
+    the fast exponential
 
     parameters
     ----------
@@ -32,22 +33,24 @@ def gauss2d_eval_pixel(gauss, pixel):
             +     gauss['drr']*udiff*udiff
             - 2.0*gauss['drc']*vdiff*udiff )
 
-    if chi2 < 25.0 and chi2 >= 0.0:
+    if chi2 < max_chi2 and chi2 >= 0.0:
         model_val = gauss['pnorm']*exp3( -0.5*chi2 )
 
     return model_val
 
 @njit(cache=True)
-def gmix_eval_pixel(gmix, pixel):
+def gmix_eval_pixel_fast(gmix, pixel, max_chi2=25.0):
     """
-    evaluate a single gaussian mixture
+    evaluate a single gaussian mixture, using the
+    fast exponential
     """
     model_val=0.0
     for igauss in xrange(gmix.size):
 
-        model_val += gauss2d_eval_pixel(
+        model_val += gauss2d_eval_pixel_fast(
             gmix[igauss],
             pixel,
+            max_chi2,
         )
 
 
@@ -55,7 +58,7 @@ def gmix_eval_pixel(gmix, pixel):
 
 
 @njit(cache=True)
-def gauss2d_eval_pixel_extended(gauss, pixel):
+def gauss2d_eval_pixel(gauss, pixel):
     """
     evaluate a 2-d gaussian at the specified location
 
@@ -76,24 +79,22 @@ def gauss2d_eval_pixel_extended(gauss, pixel):
             +     gauss['drr']*udiff*udiff
             - 2.0*gauss['drc']*vdiff*udiff )
 
-    if chi2 < 300.0 and chi2 >= 0.0:
-        model_val = gauss['pnorm']*exp3_extended( -0.5*chi2 )
+    model_val = gauss['pnorm']*numpy.exp( -0.5*chi2 )
 
     return model_val
 
 @njit(cache=True)
-def gmix_eval_pixel_extended(gmix, pixel):
+def gmix_eval_pixel(gmix, pixel):
     """
     evaluate a single gaussian mixture
     """
     model_val=0.0
     for igauss in xrange(gmix.size):
 
-        model_val += gauss2d_eval_pixel_extended(
+        model_val += gauss2d_eval_pixel(
             gmix[igauss],
             pixel,
         )
-
 
     return model_val
 

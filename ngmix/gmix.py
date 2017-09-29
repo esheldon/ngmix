@@ -471,11 +471,16 @@ class GMix(object):
         else:
             assert isinstance(jacobian,Jacobian)
 
-        do_numba=True
+
+        if fast_exp:
+            fexp = 1
+        else:
+            fexp = 0
 
 
         gm=self._get_gmix_data()
 
+        do_numba=True
         if do_numba:
             from .gmix_nb import gmix_set_norms
             from .render_nb import render
@@ -497,15 +502,11 @@ class GMix(object):
                 gm,
                 coords,
                 image.ravel(),
+                fast_exp,
             )
 
 
         else:
-            if fast_exp:
-                fexp = 1
-            else:
-                fexp = 0
-
             if npoints is not None:
                 _gmix.render_gauleg(
                     gm,
