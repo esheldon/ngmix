@@ -1,4 +1,5 @@
 import numpy
+from numpy import nan
 from numba import jit, njit
 from .fastexp_nb import exp3
 
@@ -218,7 +219,7 @@ def gauss2d_set_norm(gauss):
 
     return status
 
-@njit
+@njit(cache=True)
 def gauss2d_set(gauss,
                 p,
                 row, col,
@@ -227,11 +228,11 @@ def gauss2d_set(gauss,
     set the gaussian, clearing normalizations
     """
     gauss['norm_set']=0
-    gauss['drr']=0
-    gauss['drc']=0
-    gauss['dcc']=0
-    gauss['norm']=0
-    gauss['pnorm']=0
+    gauss['drr']=nan
+    gauss['drc']=nan
+    gauss['dcc']=nan
+    gauss['norm']=nan
+    gauss['pnorm']=nan
 
     gauss['p']=p
     gauss['row']=row
@@ -242,4 +243,71 @@ def gauss2d_set(gauss,
 
     gauss['det'] = irr*icc - irc*irc
 
+
+@njit(cache=True)
+def gmix_fill_simple(gmix, pars, fvals, pvals):
+    """
+    fill a simple (6 parameter) gaussian mixture model
+
+    no error checking done here
+    """
+
+    row  = pars[0]
+    col  = pars[1]
+    g1   = pars[2]
+    g2   = pars[3]
+    T    = pars[4]
+    flux = pars[5]
+
+    e1, e2, status = g1g2_to_e1e2(g1, g2)
+    if status == 0:
+        return 0
+
+    n_gauss=gmix.size
+    for i in xrange(n_gauss):
+
+        gauss = gmix[i]
+
+        T_i_2 = 0.5*T*fvals[i]
+        flux_i=flux*pvals[i]
+
+        gauss2d_set(
+            gauss,
+            flux_i,
+            row,
+            col, 
+            T_i_2*(1-e1), 
+            T_i_2*e2,
+            T_i_2*(1+e1),
+        )
+
+    return 1
+
+@njit(cache=True)
+def g1g2_to_e1e2(g1, g2):
+    """
+    convert g to e
+    """
+
+    g=numpy.sqrt(g1*g1 + g2*g2)
+
+    if g >= 1:
+        return -9999.0, -9999.0, 0
+
+    if g == 0.0:
+        e1=0
+        e2=0
+    else:
+
+        eta = 2*numpy.arctanh(g)
+        e = numpy.tanh(eta)
+        if e >= 1.:
+            e = 0.99999999
+
+        fac = e/g
+
+        e1 = fac*g1
+        e2 = fac*g2
+
+    return e1, e2, 1
 
