@@ -363,7 +363,9 @@ class FitterBase(object):
         self._gmix_all  = gmix_all
 
     def _fill_gmix(self, gm, band_pars):
-        _gmix.gmix_fill(gm._data, band_pars, gm._model)
+        from .gmix_nb import gmix_fill
+        gmix_fill(gm._data, band_pars, gm._model, gm._fvals, gm._pvals)
+        #_gmix.gmix_fill(gm._data, band_pars, gm._model)
 
     def _convolve_gmix(self, gm, gm0, psf_gmix):
         """
@@ -396,7 +398,6 @@ class FitterBase(object):
                 gm0=gmix_list0[i]
                 gm=gmix_list[i]
 
-                #gm0.fill(band_pars)
                 self._fill_gmix(gm0, band_pars)
                 #_gmix.gmix_fill(gm0._data, band_pars, gm0._model)
                 self._convolve_gmix(gm, gm0, psf_gmix)
@@ -420,11 +421,17 @@ class FitterBase(object):
                 gm=gmix_list[i]
 
                 try:
-                    _gmix.gmix_fill(gm0._data, band_pars, gm0._model)
-                    _gmix.gmix_fill(gm._data, band_pars, gm._model)
+                    self._fill_gmix(gm0, band_pars)
+                    self._fill_gmix(gm, band_pars)
+                    #_gmix.gmix_fill(gm0._data, band_pars, gm0._model)
+                    #_gmix.gmix_fill(gm._data, band_pars, gm._model)
+                    #gm0.fill(band_pars)
+                    #gm.fill(band_pars)
 
-                    _gmix.set_norms(gm0._data)
-                    _gmix.set_norms(gm._data)
+                    #_gmix.set_norms(gm0._data)
+                    #_gmix.set_norms(gm._data)
+                    gm0.set_norms()
+                    gm.set_norms()
 
                 except ZeroDivisionError:
                     raise GMixRangeError("zero division")

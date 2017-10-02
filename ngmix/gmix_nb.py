@@ -243,6 +243,13 @@ def gauss2d_set(gauss,
 
     gauss['det'] = irr*icc - irc*irc
 
+@njit(cache=True)
+def gmix_fill(gmix, pars, model, fvals, pvals):
+    if model==3 or model==4 or model==1:
+        gmix_fill_simple(gmix, pars, fvals, pvals)
+        return 1
+    else:
+        return 0
 
 @njit(cache=True)
 def gmix_fill_simple(gmix, pars, fvals, pvals):
@@ -295,8 +302,8 @@ def g1g2_to_e1e2(g1, g2):
         return -9999.0, -9999.0, 0
 
     if g == 0.0:
-        e1=0
-        e2=0
+        e1=0.0
+        e2=0.0
     else:
 
         eta = 2*numpy.arctanh(g)

@@ -269,8 +269,12 @@ class GMix(object):
         Needed to actually evaluate the gaussian.  This is done internally
         by the c code so if all goes well you don't need to call this
         """
+        from .gmix_nb import gmix_set_norms
         gm=self._get_gmix_data()
-        _gmix.set_norms(gm)
+        status=gmix_set_norms(gm)
+        if status == 0:
+            raise GMixRangeError("det too low")
+        #_gmix.set_norms(gm)
 
     def set_norms_if_needed(self):
         """
@@ -279,7 +283,8 @@ class GMix(object):
         """
         gm=self._get_gmix_data()
         if gm['norm_set'][0] == 0:
-            _gmix.set_norms(gm)
+            self.set_norms()
+            #_gmix.set_norms(gm)
 
 
     def fill(self, pars):
@@ -808,6 +813,12 @@ class GMixModel(GMix):
         self._ngauss = _gmix_ngauss_dict[self._model]
         self._npars  = _gmix_npars_dict[self._model]
 
+        fdata=_gmix_fill_dict.get(self._model,None)
+        if fdata is None:
+            raise GMixFatalError("bad model: %d" % self._model)
+        self._fvals=fdata['fvals']
+        self._pvals=fdata['pvals']
+
         self.reset()
         self.fill(pars)
 
@@ -882,16 +893,12 @@ class GMixModel(GMix):
 
         self._pars = pars
 
-        fdata=_gmix_fill_dict.get(self._model,None)
-        if fdata is None:
-            raise GMixFatalError("bad model: %d" % self._model)
-
         gm=self._get_gmix_data()
         status=gmix_fill_simple(
             gm,
             pars,
-            fdata['fvals'],
-            fdata['pvals'],
+            self._fvals,
+            self._pvals,
         )
 
         if status == 0:
