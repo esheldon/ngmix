@@ -316,7 +316,7 @@ def copy_result(ares):
 
         if sums[5] > 0.0:
             # the sums include the weight, so need factor of two to correct
-            res['T_err'] = 2*get_ratio_error(
+            res['T_err'] = 4*get_ratio_error(
                 sums[4],
                 sums[5],
                 sums_cov[4,4],
