@@ -16,7 +16,7 @@
 #include "_gmix.h"
 
 // exceptions
-PyObject* GMixRangeError=NULL;
+PyObject* GMixRangeErrorC=NULL;
 PyObject* GMixFatalError=NULL;
 
 #include "src/pixels.h"
@@ -1282,7 +1282,7 @@ static int em_run(PyObject* image_obj,
                 gtot += nsky;
 
                 if (gtot == 0) {
-                    PyErr_Format(GMixRangeError, "em gtot = 0");
+                    PyErr_Format(GMixRangeErrorC, "em gtot = 0");
                     goto _em_run_bail;
                 }
 
@@ -1323,7 +1323,7 @@ static int em_run(PyObject* image_obj,
 
         status=gmix_get_e1e2T(gmix, n_gauss, &e1, &e2, &T);
         if (!status) {
-            PyErr_Format(GMixRangeError, "em psum = 0");
+            PyErr_Format(GMixRangeErrorC, "em psum = 0");
             goto _em_run_bail;
             break;
         }
@@ -1456,6 +1456,7 @@ struct AdmomResult {
 
     double pars[6];
 
+    double F[6];
 };
 
 /*
@@ -3234,7 +3235,7 @@ static PyObject* PyGMixZDisk2D_get_lnprob_scalar1d(struct PyGMixZDisk2D* self,
     }
 
     if (r >= self->radius) {
-        PyErr_Format(GMixRangeError, "position out of bounds");
+        PyErr_Format(GMixRangeErrorC, "position out of bounds");
         return NULL;
     } else {
         return PyFloat_FromDouble(0.0);
@@ -3268,7 +3269,7 @@ static PyObject* PyGMixZDisk2D_get_lnprob_scalar2d(struct PyGMixZDisk2D* self,
 
     r2 = x*x + y*y;
     if (r2 >= self->radius_sq) {
-        PyErr_Format(GMixRangeError, "position out of bounds");
+        PyErr_Format(GMixRangeErrorC, "position out of bounds");
         return NULL;
     } else {
         return PyFloat_FromDouble(0.0);
@@ -3454,12 +3455,12 @@ init_gmix(void)
 #endif
 
     /* register exceptions */
-    if (GMixRangeError == NULL) {
+    if (GMixRangeErrorC == NULL) {
         /* NULL = baseclass will be "exception" */
-        GMixRangeError = PyErr_NewException("_gmix.GMixRangeError", NULL, NULL);
-        if (GMixRangeError) {
-            Py_INCREF(GMixRangeError);
-            PyModule_AddObject(m, "GMixRangeError", GMixRangeError);
+        GMixRangeErrorC = PyErr_NewException("_gmix.GMixRangeErrorC", NULL, NULL);
+        if (GMixRangeErrorC) {
+            Py_INCREF(GMixRangeErrorC);
+            PyModule_AddObject(m, "GMixRangeErrorC", GMixRangeErrorC);
         } else {
 #if PY_MAJOR_VERSION >= 3
             return NULL;

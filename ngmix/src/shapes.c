@@ -5,7 +5,7 @@
 
 #include <Python.h>
 
-extern PyObject* GMixRangeError;
+extern PyObject* GMixRangeErrorC;
 extern PyObject* GMixFatalError;
 
 
@@ -16,7 +16,7 @@ int g1g2_to_e1e2(double g1, double g2, double *e1, double *e2) {
     if (g >= 1) {
         char gstr[25];
         snprintf(gstr,24,"%g", g);
-        PyErr_Format(GMixRangeError, "g out of bounds: %s", gstr);
+        PyErr_Format(GMixRangeErrorC, "g out of bounds: %s", gstr);
         return 0;
     }
     if (g == 0.0) {

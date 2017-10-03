@@ -12,13 +12,15 @@ import numpy
 from numpy import array, zeros, exp, log10, log, dot, sqrt, diag
 from . import fastmath
 from .jacobian import Jacobian, UnitJacobian
-from .shape import Shape, g1g2_to_e1e2, e1e2_to_g1g2
+from .shape import Shape, e1e2_to_g1g2
 
 from . import moments
 
 from .gexceptions import GMixRangeError, GMixFatalError
 
 from . import _gmix
+
+from .gmix_nb import _gmix_fill_functions, gmix_set_norms
 
 def make_gmix_model(pars, model):
     """
@@ -270,7 +272,7 @@ class GMix(object):
         by the c code so if all goes well you don't need to call this
         """
         gm=self._get_gmix_data()
-        _gmix.set_norms(gm)
+        gmix_set_norms(gm)
 
     def set_norms_if_needed(self):
         """
@@ -279,7 +281,8 @@ class GMix(object):
         """
         gm=self._get_gmix_data()
         if gm['norm_set'][0] == 0:
-            _gmix.set_norms(gm)
+            self.set_norms()
+            #_gmix.set_norms(gm)
 
 
     def fill(self, pars):
@@ -493,9 +496,7 @@ class GMix(object):
             assert npoints==None
 
             if gm['norm_set'][0] == 0:
-                status = gmix_set_norms(gm)
-                if status == 0:
-                    raise GMixRangeError("gmix det too low")
+                gmix_set_norms(gm)
 
             coords=make_coords(image.shape, jacobian)
             render(
@@ -808,6 +809,8 @@ class GMixModel(GMix):
         self._ngauss = _gmix_ngauss_dict[self._model]
         self._npars  = _gmix_npars_dict[self._model]
 
+        self._fill_func=_gmix_fill_functions[self._model_name]
+
         self.reset()
         self.fill(pars)
 
@@ -838,7 +841,7 @@ class GMixModel(GMix):
         pars[0] = row
         pars[1] = col
 
-    def fill(self, pars):
+    def fill_c(self, pars):
         """
         Fill in the gaussian mixture with new parameters
 
@@ -861,6 +864,32 @@ class GMixModel(GMix):
         gm=self._get_gmix_data()
         _gmix.gmix_fill(gm, pars, self._model)
 
+
+    def fill(self, pars):
+        """
+        Fill in the gaussian mixture with new parameters
+
+        parameters
+        ----------
+        pars: ndarray or sequence
+            The parameters
+        """
+
+        pars = array(pars, dtype='f8', copy=True) 
+
+        if pars.size != self._npars:
+            err="model '%s' requires %s pars, got %s"
+            err =err % (self._model_name,self._npars, pars.size)
+            raise GMixFatalError(err)
+
+        self._pars = pars
+
+        gm=self._get_gmix_data()
+        self._fill_func(
+            gm,
+            pars,
+            0, # don't set norms
+        )
 
 class GMixCM(GMix):
     """
@@ -1142,7 +1171,6 @@ _sersic_data_10gauss=array([
 ])
 
 
-
 GMIX_FULL=0
 GMIX_GAUSS=1
 GMIX_TURB=2
@@ -1279,6 +1307,7 @@ _cm_dtype=[
     ('Tfactor','f8'),
     ('gmix',_gauss2d_dtype,16),
 ]
+
 
 def get_model_num(model):
     """
