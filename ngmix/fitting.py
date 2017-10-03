@@ -37,6 +37,10 @@ from .observation import Observation,ObsList,MultiBandObsList,get_mb_obs
 
 from . import stats
 
+
+from .gmix_nb import gmix_convolve_fill
+from .fitting_nb import fill_fdiff
+
 MAX_TAU=0.1
 MIN_ARATE=0.2
 MCMC_NTRY=1
@@ -362,16 +366,21 @@ class FitterBase(object):
         self._gmix_all0 = gmix_all0
         self._gmix_all  = gmix_all
 
-    def _fill_gmix(self, gm, band_pars):
-        from .gmix_nb import gmix_fill
-        gmix_fill(gm._data, band_pars, gm._model, gm._fvals, gm._pvals)
-        #_gmix.gmix_fill(gm._data, band_pars, gm._model)
-
     def _convolve_gmix(self, gm, gm0, psf_gmix):
         """
         norms get set
         """
-        _gmix.convolve_fill(gm._data, gm0._data, psf_gmix._data)
+        #_gmix.convolve_fill(gm._data, gm0._data, psf_gmix._data)
+        status=gmix_convolve_fill(gm._data, gm0._data, psf_gmix._data)
+        if status==0:
+            raise GMixRangeError("det too low")
+
+    def _fill_gmix(self, gm, pars, set_norms):
+        status=gm._fill_func(gm._data, pars, set_norms)
+
+        if status == 0:
+            raise GMixRangeError("det too low")
+
 
     def _fill_gmix_all(self, pars):
         """
@@ -379,6 +388,8 @@ class FitterBase(object):
 
         Fill the list of lists of gmix objects for the given parameters
         """
+
+        dont_set_norms=0
 
         if not self.dopsf:
             self._fill_gmix_all_nopsf(pars)
@@ -388,7 +399,6 @@ class FitterBase(object):
             gmix_list0=self._gmix_all0[band]
             gmix_list=self._gmix_all[band]
 
-            # pars for this band, in linear space
             band_pars=self.get_band_pars(pars, band)
 
             for i,obs in enumerate(obs_list):
@@ -398,44 +408,26 @@ class FitterBase(object):
                 gm0=gmix_list0[i]
                 gm=gmix_list[i]
 
-                self._fill_gmix(gm0, band_pars)
-                #_gmix.gmix_fill(gm0._data, band_pars, gm0._model)
+                self._fill_gmix(gm0, band_pars, dont_set_norms)
                 self._convolve_gmix(gm, gm0, psf_gmix)
-                #_gmix.convolve_fill(gm._data, gm0._data, psf_gmix._data)
+
 
     def _fill_gmix_all_nopsf(self, pars):
         """
         Fill the list of lists of gmix objects for the given parameters
         """
 
+        do_set_norms=1
         for band,obs_list in enumerate(self.obs):
-            gmix_list0=self._gmix_all0[band]
             gmix_list=self._gmix_all[band]
 
-            # pars for this band, in linear space
             band_pars=self.get_band_pars(pars, band)
 
             for i,obs in enumerate(obs_list):
 
-                gm0=gmix_list0[i]
                 gm=gmix_list[i]
 
-                try:
-                    self._fill_gmix(gm0, band_pars)
-                    self._fill_gmix(gm, band_pars)
-                    #_gmix.gmix_fill(gm0._data, band_pars, gm0._model)
-                    #_gmix.gmix_fill(gm._data, band_pars, gm._model)
-                    #gm0.fill(band_pars)
-                    #gm.fill(band_pars)
-
-                    #_gmix.set_norms(gm0._data)
-                    #_gmix.set_norms(gm._data)
-                    gm0.set_norms()
-                    gm.set_norms()
-
-                except ZeroDivisionError:
-                    raise GMixRangeError("zero division")
-
+                self._fill_gmix(gm, band_pars, do_set_norms)
 
     def _get_priors(self, pars):
         """
@@ -1665,6 +1657,7 @@ class LMSimple(FitterBase):
         #else:
         #    func=self._calc_fdiff
         func = self._calc_fdiff_numba
+        self._make_lists()
 
         result = run_leastsq(
             func,
@@ -1772,9 +1765,6 @@ class LMSimple(FitterBase):
         The npars elements contain -ln(prior)
         """
 
-        if not hasattr(self,'_pixels_list'):
-            self._make_lists()
-
         # we cannot keep sending existing array into leastsq, don't know why
         fdiff=zeros(self.fdiff_size)
 
@@ -1805,9 +1795,6 @@ class LMSimple(FitterBase):
         The npars elements contain -ln(prior)
         """
 
-        if not hasattr(self,'_pixels_list'):
-            self._make_lists()
-
         # we cannot keep sending existing array into leastsq, don't know why
         fdiff=zeros(self.fdiff_size)
 
@@ -1835,11 +1822,6 @@ class LMSimple(FitterBase):
 
         The npars elements contain -ln(prior)
         """
-
-        from .fitting_nb import fill_fdiff
-
-        if not hasattr(self,'_pixels_list'):
-            self._make_lists()
 
         # we cannot keep sending existing array into leastsq, don't know why
         fdiff=zeros(self.fdiff_size)
@@ -2404,6 +2386,7 @@ class LMComposite(LMSimple):
     exp+dev model with pre-determined fracdev and ratio Tdev/Texp
     """
     def __init__(self, obs, fracdev, TdByTe, **keys):
+        raise NotImplementedError("get working with nb")
         super(LMComposite,self).__init__(obs, 'cm', **keys)
 
         self.fracdev=fracdev

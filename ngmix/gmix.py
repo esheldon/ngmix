@@ -20,6 +20,8 @@ from .gexceptions import GMixRangeError, GMixFatalError
 
 from . import _gmix
 
+from .gmix_nb import _gmix_fill_functions
+
 def make_gmix_model(pars, model):
     """
     get a gaussian mixture model for the given model
@@ -813,11 +815,7 @@ class GMixModel(GMix):
         self._ngauss = _gmix_ngauss_dict[self._model]
         self._npars  = _gmix_npars_dict[self._model]
 
-        fdata=_gmix_fill_dict.get(self._model,None)
-        if fdata is None:
-            raise GMixFatalError("bad model: %d" % self._model)
-        self._fvals=fdata['fvals']
-        self._pvals=fdata['pvals']
+        self._fill_func=_gmix_fill_functions[self._model_name]
 
         self.reset()
         self.fill(pars)
@@ -882,7 +880,6 @@ class GMixModel(GMix):
         pars: ndarray or sequence
             The parameters
         """
-        from .gmix_nb import gmix_fill_simple
 
         pars = array(pars, dtype='f8', copy=True) 
 
@@ -894,11 +891,10 @@ class GMixModel(GMix):
         self._pars = pars
 
         gm=self._get_gmix_data()
-        status=gmix_fill_simple(
+        status=self._fill_func(
             gm,
             pars,
-            self._fvals,
-            self._pvals,
+            0, # don't set norms
         )
 
         if status == 0:
@@ -1322,86 +1318,6 @@ _cm_dtype=[
     ('gmix',_gauss2d_dtype,16),
 ]
 
-
-_pvals_exp = array([
-    0.00061601229677880041, 
-    0.0079461395724623237, 
-    0.053280454055540001, 
-    0.21797364640726541, 
-    0.45496740582554868, 
-    0.26521634184240478,
-])
-
-_fvals_exp = array([
-    0.002467115141477932, 
-    0.018147435573256168, 
-    0.07944063151366336, 
-    0.27137669897479122, 
-    0.79782256866993773, 
-    2.1623306025075739,
-])
-
-_pvals_dev = array([
-    6.5288960012625658e-05,
-    0.00044199216814302695, 
-    0.0020859587871659754, 
-    0.0075913681418996841, 
-    0.02260266219257237, 
-    0.056532254390212859, 
-    0.11939049233042602, 
-    0.20969545753234975, 
-    0.29254151133139222, 
-    0.28905301416582552,
-])
-
-_fvals_dev = array([
-    3.068330909892871e-07,
-    3.551788624668698e-06,
-    2.542810833482682e-05,
-    0.0001466508940804874,
-    0.0007457199853069548,
-    0.003544702600428794,
-    0.01648881157673708,
-    0.07893194619504579,
-    0.4203787615506401,
-    3.055782252301236,
-])
-
-_pvals_turb = array([
-    0.596510042804182,
-    0.4034898268889178,
-    1.303069003078001e-07,
-])
-
-_fvals_turb = array([
-    0.5793612389470884,
-    1.621860687127999,
-    7.019347162356363,
-])
-
-_pvals_gauss = array([1.0])
-_fvals_gauss = array([1.0])
-
-
-
-_gmix_fill_dict={
-    GMIX_EXP: {
-        'pvals':_pvals_exp,
-        'fvals':_fvals_exp,
-    },
-    GMIX_DEV: {
-        'pvals':_pvals_dev,
-        'fvals':_fvals_dev,
-    },
-    GMIX_TURB: {
-        'pvals':_pvals_turb,
-        'fvals':_fvals_turb,
-    },
-    GMIX_GAUSS: {
-        'pvals':_pvals_gauss,
-        'fvals':_fvals_gauss,
-    },
-}
 
 def get_model_num(model):
     """

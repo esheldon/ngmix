@@ -1,5 +1,5 @@
 import numpy
-from numpy import nan
+from numpy import array, nan
 from numba import jit, njit
 from .fastexp_nb import exp3
 
@@ -243,21 +243,75 @@ def gauss2d_set(gauss,
 
     gauss['det'] = irr*icc - irc*irc
 
-@njit(cache=True)
-def gmix_fill(gmix, pars, model, fvals, pvals):
-    if model==3 or model==4 or model==1:
-        gmix_fill_simple(gmix, pars, fvals, pvals)
-        return 1
-    else:
-        return 0
+_pvals_exp = array([
+    0.00061601229677880041, 
+    0.0079461395724623237, 
+    0.053280454055540001, 
+    0.21797364640726541, 
+    0.45496740582554868, 
+    0.26521634184240478,
+])
+
+_fvals_exp = array([
+    0.002467115141477932, 
+    0.018147435573256168, 
+    0.07944063151366336, 
+    0.27137669897479122, 
+    0.79782256866993773, 
+    2.1623306025075739,
+])
+
+_pvals_dev = array([
+    6.5288960012625658e-05,
+    0.00044199216814302695, 
+    0.0020859587871659754, 
+    0.0075913681418996841, 
+    0.02260266219257237, 
+    0.056532254390212859, 
+    0.11939049233042602, 
+    0.20969545753234975, 
+    0.29254151133139222, 
+    0.28905301416582552,
+])
+
+_fvals_dev = array([
+    3.068330909892871e-07,
+    3.551788624668698e-06,
+    2.542810833482682e-05,
+    0.0001466508940804874,
+    0.0007457199853069548,
+    0.003544702600428794,
+    0.01648881157673708,
+    0.07893194619504579,
+    0.4203787615506401,
+    3.055782252301236,
+])
+
+_pvals_turb = array([
+    0.596510042804182,
+    0.4034898268889178,
+    1.303069003078001e-07,
+])
+
+_fvals_turb = array([
+    0.5793612389470884,
+    1.621860687127999,
+    7.019347162356363,
+])
+
+_pvals_gauss = array([1.0])
+_fvals_gauss = array([1.0])
+
 
 @njit(cache=True)
-def gmix_fill_simple(gmix, pars, fvals, pvals):
+def gmix_fill_simple(gmix, pars, fvals, pvals, set_norms):
     """
     fill a simple (6 parameter) gaussian mixture model
 
     no error checking done here
     """
+
+    status=0
 
     row  = pars[0]
     col  = pars[1]
@@ -268,7 +322,7 @@ def gmix_fill_simple(gmix, pars, fvals, pvals):
 
     e1, e2, status = g1g2_to_e1e2(g1, g2)
     if status == 0:
-        return 0
+        return status
 
     n_gauss=gmix.size
     for i in xrange(n_gauss):
@@ -288,7 +342,92 @@ def gmix_fill_simple(gmix, pars, fvals, pvals):
             T_i_2*(1+e1),
         )
 
-    return 1
+    if set_norms==1:
+        status=gmix_set_norms(gmix)
+
+    return status
+
+@njit(cache=True)
+def gmix_fill_exp(gmix, pars, set_norms):
+    """
+    fill an exponential model
+    """
+    return gmix_fill_simple(gmix, pars, _fvals_exp, _pvals_exp, set_norms)
+
+@njit(cache=True)
+def gmix_fill_dev(gmix, pars, set_norms):
+    """
+    fill a dev model
+    """
+    return gmix_fill_simple(gmix, pars, _fvals_dev, _pvals_dev, set_norms)
+
+@njit(cache=True)
+def gmix_fill_turb(gmix, pars, set_norms):
+    """
+    fill a turbulent psf model
+    """
+    return gmix_fill_simple(gmix, pars, _fvals_turb, _pvals_turb, set_norms)
+
+@njit(cache=True)
+def gmix_fill_gauss(gmix, pars, set_norms):
+    """
+    fill a gaussian model
+    """
+    return gmix_fill_simple(gmix, pars, _fvals_gauss, _pvals_gauss, set_norms)
+
+_gmix_fill_functions={
+    'exp': gmix_fill_exp,
+    'dev': gmix_fill_dev,
+    'turb': gmix_fill_turb,
+    'gauss': gmix_fill_gauss,
+}
+
+@njit(cache=True)
+def gmix_convolve_fill(self, gmix, psf):
+    """
+    fill the gaussian mixture with the convolution of gmix0,
+    the unconvolved mixture, and the psf
+
+    parameters
+    ----------
+    self: gaussian mixture
+        The convolved mixture, to be filled
+    gmix: gaussian mixture
+        The unconvolved mixture
+    psf: gaussian mixture
+        The psf with which to convolve
+    """
+
+    psf_rowcen, psf_colcen, psf_psum = gmix_get_cen(psf)
+
+    psf_ipsum   = 1.0/psf_psum
+    n_gauss     = gmix.size
+    psf_n_gauss = psf.size
+
+    itot=0
+    for iobj in xrange(n_gauss):
+        obj_gauss = gmix[iobj]
+
+        for ipsf in xrange(psf_n_gauss):
+            psf_gauss=psf[ipsf]
+
+            p = obj_gauss['p']*psf_gauss['p']*psf_ipsum
+
+            row = obj_gauss['row'] + (psf_gauss['row']-psf_rowcen)
+            col = obj_gauss['col'] + (psf_gauss['col']-psf_colcen)
+
+            irr = obj_gauss['irr'] + psf_gauss['irr']
+            irc = obj_gauss['irc'] + psf_gauss['irc']
+            icc = obj_gauss['icc'] + psf_gauss['icc']
+
+            gauss2d_set(self[itot],
+                        p, row, col, irr, irc, icc)
+
+            itot += 1
+
+    status=gmix_set_norms(self)
+
+    return status
 
 @njit(cache=True)
 def g1g2_to_e1e2(g1, g2):
