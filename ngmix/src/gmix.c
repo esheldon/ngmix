@@ -3,7 +3,7 @@
 #include "shapes.h"
 
 
-extern PyObject* GMixRangeError;
+extern PyObject* GMixRangeErrorC;
 extern PyObject* GMixFatalError;
 
 void gmix_get_cen(const struct gauss *self,
@@ -88,7 +88,7 @@ int gauss2d_set_norm(struct gauss *self, int dothrow)
         if (dothrow) {
             char detstr[25];
             snprintf(detstr,24,"%g", self->det);
-            PyErr_Format(GMixRangeError, "gauss2d det too low: %s", detstr);
+            PyErr_Format(GMixRangeErrorC, "gauss2d det too low: %s", detstr);
         }
         status=0;
 

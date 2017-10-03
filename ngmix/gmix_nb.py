@@ -215,6 +215,7 @@ def gauss2d_set_norm(gauss):
         gauss['norm_set']=1
         status=1
     else:
+        #raise GMixRangeError("det too low")
         status=0
 
     return status

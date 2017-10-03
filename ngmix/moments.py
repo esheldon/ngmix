@@ -1,6 +1,6 @@
 from __future__ import print_function
 import numpy
-from ._gmix import GMixRangeError
+from .gexceptions import GMixRangeError
 from . import shape
 
 try:
