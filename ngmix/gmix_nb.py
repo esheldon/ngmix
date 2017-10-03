@@ -174,17 +174,9 @@ def gmix_set_norms(gmix):
     ----------
     gmix:
        gaussian mixture
-
-    returns
-    -------
-    status. 0 for failure
     """
     for gauss in gmix:
-        status=gauss2d_set_norm(gauss)
-        if status != 1:
-            break
-
-    return status
+        gauss2d_set_norm(gauss)
 
 @njit(cache=True)
 def gauss2d_set_norm(gauss):
@@ -197,28 +189,20 @@ def gauss2d_set_norm(gauss):
     ----------
     gauss: a 2-d gaussian structure
         See gmix.py
-    returns
-    -------
-    status. 0 for failure
     """
 
-    if gauss['det'] > 1.0e-200:
+    if gauss['det'] < 1.0e-200:
+        raise GMixRangeError("det too low")
 
-        idet=1.0/gauss['det']
-        gauss['drr'] = gauss['irr']*idet
-        gauss['drc'] = gauss['irc']*idet
-        gauss['dcc'] = gauss['icc']*idet
-        gauss['norm'] = 1./(2*numpy.pi*numpy.sqrt(gauss['det']))
+    idet=1.0/gauss['det']
+    gauss['drr'] = gauss['irr']*idet
+    gauss['drc'] = gauss['irc']*idet
+    gauss['dcc'] = gauss['icc']*idet
+    gauss['norm'] = 1./(2*numpy.pi*numpy.sqrt(gauss['det']))
 
-        gauss['pnorm'] = gauss['p']*gauss['norm']
+    gauss['pnorm'] = gauss['p']*gauss['norm']
 
-        gauss['norm_set']=1
-        status=1
-    else:
-        #raise GMixRangeError("det too low")
-        status=0
-
-    return status
+    gauss['norm_set']=1
 
 @njit(cache=True)
 def gauss2d_set(gauss,
@@ -312,8 +296,6 @@ def gmix_fill_simple(gmix, pars, fvals, pvals, set_norms):
     no error checking done here
     """
 
-    status=0
-
     row  = pars[0]
     col  = pars[1]
     g1   = pars[2]
@@ -321,9 +303,7 @@ def gmix_fill_simple(gmix, pars, fvals, pvals, set_norms):
     T    = pars[4]
     flux = pars[5]
 
-    e1, e2, status = g1g2_to_e1e2(g1, g2)
-    if status == 0:
-        return status
+    e1, e2 = g1g2_to_e1e2(g1, g2)
 
     n_gauss=gmix.size
     for i in xrange(n_gauss):
@@ -343,38 +323,35 @@ def gmix_fill_simple(gmix, pars, fvals, pvals, set_norms):
             T_i_2*(1+e1),
         )
 
-    if set_norms==1:
-        status=gmix_set_norms(gmix)
-
-    return status
+    gmix_set_norms(gmix)
 
 @njit(cache=True)
 def gmix_fill_exp(gmix, pars, set_norms):
     """
     fill an exponential model
     """
-    return gmix_fill_simple(gmix, pars, _fvals_exp, _pvals_exp, set_norms)
+    gmix_fill_simple(gmix, pars, _fvals_exp, _pvals_exp, set_norms)
 
 @njit(cache=True)
 def gmix_fill_dev(gmix, pars, set_norms):
     """
     fill a dev model
     """
-    return gmix_fill_simple(gmix, pars, _fvals_dev, _pvals_dev, set_norms)
+    gmix_fill_simple(gmix, pars, _fvals_dev, _pvals_dev, set_norms)
 
 @njit(cache=True)
 def gmix_fill_turb(gmix, pars, set_norms):
     """
     fill a turbulent psf model
     """
-    return gmix_fill_simple(gmix, pars, _fvals_turb, _pvals_turb, set_norms)
+    gmix_fill_simple(gmix, pars, _fvals_turb, _pvals_turb, set_norms)
 
 @njit(cache=True)
 def gmix_fill_gauss(gmix, pars, set_norms):
     """
     fill a gaussian model
     """
-    return gmix_fill_simple(gmix, pars, _fvals_gauss, _pvals_gauss, set_norms)
+    gmix_fill_simple(gmix, pars, _fvals_gauss, _pvals_gauss, set_norms)
 
 _gmix_fill_functions={
     'exp': gmix_fill_exp,
@@ -426,9 +403,7 @@ def gmix_convolve_fill(self, gmix, psf):
 
             itot += 1
 
-    status=gmix_set_norms(self)
-
-    return status
+    gmix_set_norms(self)
 
 @njit(cache=True)
 def g1g2_to_e1e2(g1, g2):
@@ -439,7 +414,7 @@ def g1g2_to_e1e2(g1, g2):
     g=numpy.sqrt(g1*g1 + g2*g2)
 
     if g >= 1:
-        return -9999.0, -9999.0, 0
+        raise GMixRangeError("g >= 1")
 
     if g == 0.0:
         e1=0.0
@@ -456,5 +431,4 @@ def g1g2_to_e1e2(g1, g2):
         e1 = fac*g1
         e2 = fac*g2
 
-    return e1, e2, 1
-
+    return e1, e2

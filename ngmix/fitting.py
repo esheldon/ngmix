@@ -371,9 +371,7 @@ class FitterBase(object):
         norms get set
         """
         #_gmix.convolve_fill(gm._data, gm0._data, psf_gmix._data)
-        status=gmix_convolve_fill(gm._data, gm0._data, psf_gmix._data)
-        if status==0:
-            raise GMixRangeError("det too low")
+        gmix_convolve_fill(gm._data, gm0._data, psf_gmix._data)
 
     def _fill_gmix(self, gm, pars, set_norms):
         status=gm._fill_func(gm._data, pars, set_norms)

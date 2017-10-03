@@ -12,7 +12,7 @@ import numpy
 from numpy import array, zeros, exp, log10, log, dot, sqrt, diag
 from . import fastmath
 from .jacobian import Jacobian, UnitJacobian
-from .shape import Shape, g1g2_to_e1e2, e1e2_to_g1g2
+from .shape import Shape, e1e2_to_g1g2
 
 from . import moments
 
@@ -20,7 +20,7 @@ from .gexceptions import GMixRangeError, GMixFatalError
 
 from . import _gmix
 
-from .gmix_nb import _gmix_fill_functions
+from .gmix_nb import _gmix_fill_functions, gmix_set_norms
 
 def make_gmix_model(pars, model):
     """
@@ -271,12 +271,8 @@ class GMix(object):
         Needed to actually evaluate the gaussian.  This is done internally
         by the c code so if all goes well you don't need to call this
         """
-        from .gmix_nb import gmix_set_norms
         gm=self._get_gmix_data()
-        status=gmix_set_norms(gm)
-        if status == 0:
-            raise GMixRangeError("det too low")
-        #_gmix.set_norms(gm)
+        gmix_set_norms(gm)
 
     def set_norms_if_needed(self):
         """
@@ -500,9 +496,7 @@ class GMix(object):
             assert npoints==None
 
             if gm['norm_set'][0] == 0:
-                status = gmix_set_norms(gm)
-                if status == 0:
-                    raise GMixRangeError("gmix det too low")
+                gmix_set_norms(gm)
 
             coords=make_coords(image.shape, jacobian)
             render(
@@ -891,15 +885,11 @@ class GMixModel(GMix):
         self._pars = pars
 
         gm=self._get_gmix_data()
-        status=self._fill_func(
+        self._fill_func(
             gm,
             pars,
             0, # don't set norms
         )
-
-        if status == 0:
-            raise GMixRangeError("ellipticity out of bounds")
-
 
 class GMixCM(GMix):
     """
