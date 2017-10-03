@@ -6,7 +6,7 @@ try:
 except:
     xrange=range
 
-from .gmix_nb import gmix_eval_pixel_fast
+from .gmix_nb import gmix_eval_pixel_fast, GMIX_LOW_DETVAL
 
 ADMOM_EDGE   = 0x1
 ADMOM_SHIFT  = 0x2
@@ -32,12 +32,18 @@ def admom(confarray, wt, pixels, resarray):
     roworig=wt['row'][0]
     colorig=wt['col'][0]
 
-    # this throws an excepion, the C code sets a flag ADMOM_DET
-    gmix_set_norms(wt_gmix)
     for i in xrange(conf['maxit']):
-        clear_result(res)
 
+        if wt['det'][0] < GMIX_LOW_DETVAL:
+            res['flags'] = ADMOM_DET
+            break
+
+        # due to check above, this should not raise an exception
+        gmix_set_norms(wt)
+
+        clear_result(res)
         admom_censums(wt, pixels, res)
+
         if res['sums'][5] <= 0.0:
             res['flags'] = ADMOM_FAINT
             break
@@ -88,12 +94,12 @@ def admom(confarray, wt, pixels, resarray):
             res['pars'][4] = wt['icc'][0] + wt['irr'][0]
             res['pars'][5] = 1.0
 
-            break;
+            break
 
         else:
             # deweight moments and go to the next iteration
 
-            res['flags'] = deweight_moments_wt(&wt, Irr, Irc, Icc);
+            deweight_moments(wt, Irr, Irc, Icc, res)
             if res['flags'] != 0:
                 break
 
@@ -167,6 +173,46 @@ def admom_momsums(wt, pixels, res):
             res['sums'][i] += wdata*F[i]
             for j in xrange(6):
                 res['sums_cov'][i,j] += w2*var*F[i]*F[j]
+
+
+@njit(cache=True)
+def deweight_moments(wt, Irr, Irc, Icc, res):
+
+    # measured moments
+    detm = Irr*Icc - Irc*Irc
+    if detm <= GMIX_LOW_DETVAL:
+        res['flags'] = ADMOM_DET
+        return
+
+    Wrr = wt['irr'][0]
+    Wrc = wt['irc'][0]
+    Wcc = wt['icc'][0]
+    detw = Wrr*Wcc - Wrc*Wrc
+    if detw <= GMIX_LOW_DETVAL:
+        res['flags']=ADMOM_DET
+        return
+
+    idetw=1.0/detw
+    idetm=1.0/detm
+
+    # Nrr etc. are actually of the inverted covariance matrix
+    Nrr =  Icc*idetm - Wcc*idetw
+    Ncc =  Irr*idetm - Wrr*idetw
+    Nrc = -Irc*idetm + Wrc*idetw
+    detn = Nrr*Ncc - Nrc*Nrc
+
+    if detn <= GMIX_LOW_DETVAL:
+        res['flags']=ADMOM_DET
+        return
+
+    # now set from the inverted matrix
+    idetn=1./detn
+    wt['irr'][0] =  Ncc*idetn
+    wt['icc'][0] =  Nrr*idetn
+    wt['irc'][0] = -Nrc*idetn
+    wt['det'][0] = (
+        wt['irr'][0]*wt['icc'][0] - wt['irc'][0]*wt['irc'][0]
+    )
 
 
 @njit(cache=True)

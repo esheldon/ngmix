@@ -11,6 +11,8 @@ except:
 # need to make this a pure python exception
 from .gexceptions import GMixRangeError
 
+GMIX_LOW_DETVAL=1.0e-200
+
 @njit(cache=True)
 def gmix_eval_pixel_fast(gmix, pixel, max_chi2=25.0):
     """
@@ -190,7 +192,7 @@ def gauss2d_set_norm(gauss):
         See gmix.py
     """
 
-    if gauss['det'] < 1.0e-200:
+    if gauss['det'] < GMIX_LOW_DETVAL:
         raise GMixRangeError("det too low")
 
     idet=1.0/gauss['det']
