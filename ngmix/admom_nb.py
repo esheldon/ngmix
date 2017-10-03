@@ -135,7 +135,7 @@ def admom_censums(wt, pixels, res):
 @njit(cache=True)
 def admom_momsums(wt, pixels, res):
     """
-    do sums for determining the center
+    do sums for calculating the weighted moments
     """
 
     vcen = wt['row'][0]
@@ -177,7 +177,18 @@ def admom_momsums(wt, pixels, res):
 
 @njit(cache=True)
 def deweight_moments(wt, Irr, Irc, Icc, res):
+    """
+    deweight a set of weighted moments
 
+    parameters
+    ----------
+    wt: gaussian mixture
+        The weight used to measure the moments
+    Irr, Irc, Icc:
+        The weighted moments
+    res: admom result struct
+        the flags field will be set on error
+    """
     # measured moments
     detm = Irr*Icc - Irc*Irc
     if detm <= GMIX_LOW_DETVAL:
@@ -217,8 +228,11 @@ def deweight_moments(wt, Irr, Irc, Icc, res):
 
 @njit(cache=True)
 def clear_result(res):
+    """
+    clear some fields in the result structure
+    """
     res['npix']=0
     res['wsum']=0.0
     res['sums'][:] = 0.0
     res['sums_cov'][:,:] = 0.0
-    res['pars'][:] = 0.0
+    res['pars'][:] = -9999.0
