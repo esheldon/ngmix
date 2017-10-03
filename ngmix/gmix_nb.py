@@ -12,6 +12,24 @@ except:
 from .gexceptions import GMixRangeError
 
 @njit(cache=True)
+def gmix_eval_pixel_fast(gmix, pixel, max_chi2=25.0):
+    """
+    evaluate a single gaussian mixture, using the
+    fast exponential
+    """
+    model_val=0.0
+    for igauss in xrange(gmix.size):
+
+        model_val += gauss2d_eval_pixel_fast(
+            gmix[igauss],
+            pixel,
+            max_chi2,
+        )
+
+
+    return model_val
+
+@njit(cache=True)
 def gauss2d_eval_pixel_fast(gauss, pixel, max_chi2=25.0):
     """
     evaluate a 2-d gaussian at the specified location, using
@@ -38,25 +56,6 @@ def gauss2d_eval_pixel_fast(gauss, pixel, max_chi2=25.0):
         model_val = gauss['pnorm']*exp3( -0.5*chi2 )
 
     return model_val
-
-@njit(cache=True)
-def gmix_eval_pixel_fast(gmix, pixel, max_chi2=25.0):
-    """
-    evaluate a single gaussian mixture, using the
-    fast exponential
-    """
-    model_val=0.0
-    for igauss in xrange(gmix.size):
-
-        model_val += gauss2d_eval_pixel_fast(
-            gmix[igauss],
-            pixel,
-            max_chi2,
-        )
-
-
-    return model_val
-
 
 @njit(cache=True)
 def gauss2d_eval_pixel(gauss, pixel):
@@ -323,7 +322,8 @@ def gmix_fill_simple(gmix, pars, fvals, pvals, set_norms):
             T_i_2*(1+e1),
         )
 
-    gmix_set_norms(gmix)
+    if set_norms:
+        gmix_set_norms(gmix)
 
 @njit(cache=True)
 def gmix_fill_exp(gmix, pars, set_norms):

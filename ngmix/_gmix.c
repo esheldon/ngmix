@@ -1456,6 +1456,7 @@ struct AdmomResult {
 
     double pars[6];
 
+    double F[6];
 };
 
 /*

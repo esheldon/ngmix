@@ -361,6 +361,9 @@ _admom_result_dtype=[
     ('sums_cov','f8', 36),
 
     ('pars','f8',6),
+
+    # temporary
+    ('F','f8',6),
 ]
 
 _admom_flagmap={
