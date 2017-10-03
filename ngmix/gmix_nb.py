@@ -218,7 +218,7 @@ def gauss2d_set_norm(gauss):
 
     return status
 
-@njit
+@njit(cache=True)
 def gauss2d_set(gauss,
                 p,
                 row, col,

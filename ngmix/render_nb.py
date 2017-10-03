@@ -20,9 +20,9 @@ def render(gmix, coords, image, fast_exp=0, max_chi2=300.0):
         The coords, holding location information
     image:
         the image to fill, should be unraveled
-    fast_exp: integer
+    fast_exp: integer, optional
         1 for fast
-    max_chi2: float
+    max_chi2: float, optional
         If fast_exp is 1, this is the maximum chi^2 to
         be evaluated
     """
