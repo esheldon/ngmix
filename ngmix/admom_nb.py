@@ -109,7 +109,7 @@ def admom(confarray, wt, pixels, resarray):
 
     res['numiter'] = i
 
-    if res['numiter'] = conf['maxit']:
+    if res['numiter'] == conf['maxit']:
         res['flags'] = ADMOM_MAXIT
 
 
