@@ -98,6 +98,17 @@ class Observation(object):
         self.set_weight(weight)
 
     @property
+    def pixels(self):
+        """
+        getter for pixels
+
+        currently this simply returns a reference.  Do not modify
+        the pixels array!
+        """
+        return self._pixels
+
+
+    @property
     def bmask(self):
         """
         getter for bmask
@@ -110,9 +121,6 @@ class Observation(object):
     def bmask(self, bmask):
         """
         set the bmask
-
-        this does consistency checks and can trigger an update
-        of the pixels array
         """
         self.set_bmask(bmask)
 
@@ -129,9 +137,6 @@ class Observation(object):
     def jacobian(self, jacobian):
         """
         set the jacobian
-
-        this does consistency checks and can trigger an update
-        of the pixels array
         """
         self.set_jacobian(jacobian)
 
@@ -148,9 +153,6 @@ class Observation(object):
     def meta(self, meta):
         """
         set the meta
-
-        this does consistency checks and can trigger an update
-        of the pixels array
         """
         self.set_meta(meta)
 
@@ -167,9 +169,6 @@ class Observation(object):
     def gmix(self, gmix):
         """
         set the gmix
-
-        this does consistency checks and can trigger an update
-        of the pixels array
         """
         self.set_gmix(gmix)
 
@@ -187,9 +186,6 @@ class Observation(object):
     def psf(self, psf):
         """
         set the psf
-
-        this does consistency checks and can trigger an update
-        of the pixels array
         """
         self.set_psf(psf)
 

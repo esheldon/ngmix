@@ -42,6 +42,138 @@ class Admom(object):
                  rng=None,
                  **unused_keys):
 
+        self._obs=obs
+        self._set_conf(maxiter, shiftmax, etol, Ttol)
+
+        self.rng=rng
+
+    def go(self, guess):
+        """
+        run the adpative moments
+
+        parameters
+        ----------
+        guess_gmix: ngmix.GMix or a float
+            A guess for the fitter.  Can be a full gaussian
+            mixture or a single value for T, in which case
+            the rest of the parameters are random numbers
+            about the jacobian center and zero ellipticity
+        """
+        from .admom_nb import admom
+
+        guess_gmix=self._get_guess(guess)
+
+        ares=self._get_am_result()
+
+        wt_gmix = guess_gmix._data
+        admom(
+            self.conf,
+            wt_gmix,
+            self._obs.pixels,
+            ares,
+        )
+
+        self.result = copy_result(ares)
+
+    def get_result(self):
+        """
+        get the result
+        """
+
+        if not hasattr(self,'result'):
+            raise RuntimeError("run go() first")
+
+        return self.result
+
+    def get_gmix(self):
+        """
+        get a gmix representing the best fit, normalized
+        """
+
+        pars=self.result['pars'].copy()
+        pars[5]=1.0
+
+        e1 = pars[2]/pars[4]
+        e2 = pars[3]/pars[4]
+
+        g1,g2 = e1e2_to_g1g2(e1, e2)
+        pars[2] = g1
+        pars[3] = g2
+
+        return GMixModel(pars, "gauss")
+
+
+    def _get_guess(self, guess):
+        if isinstance(guess,GMix):
+            guess_gmix=guess
+        else:
+            Tguess = guess
+            guess_gmix = self._generate_guess(Tguess)
+        return guess_gmix
+
+    def _set_conf(self, maxiter, shiftmax, etol, Ttol):
+        dt=numpy.dtype(_admom_conf_dtype, align=True)
+        conf=numpy.zeros(1, dtype=dt)
+
+        conf['maxit']=maxiter
+        conf['shiftmax']=shiftmax
+        conf['etol']=etol
+        conf['Ttol']=Ttol
+
+        self.conf=conf
+
+    def _get_am_result(self):
+        dt=numpy.dtype(_admom_result_dtype, align=True)
+        return numpy.zeros(1, dtype=dt)
+
+    def _get_rng(self):
+        if self.rng is None:
+            self.rng = numpy.random.RandomState()
+
+        return self.rng
+
+    def _generate_guess(self, Tguess):
+        from .gmix import GMixModel
+
+        rng=self._get_rng()
+
+        scale=self._obs.jacobian.get_scale()
+        pars=numpy.zeros(6)
+        pars[0:0+2] = rng.uniform(low=-0.5*scale, high=0.5*scale, size=2)
+        pars[2:2+2] = rng.uniform(low=-0.3, high=0.3, size=2)
+        pars[4]     = Tguess*(1.0 + rng.uniform(low=-0.1, high=0.1))
+        pars[5]     = 1.0
+
+        return GMixModel(pars, "gauss")
+
+
+class AdmomC(object):
+    """
+    Measure adaptive moments for the input observation
+
+    parameters
+    ----------
+    obs: Observation
+        ngmix.Observation
+    maxiter: integer, optional
+        Maximum number of iterations, default 200
+    etol: float, optional
+        absolute tolerance in e1 or e2 to determine convergence,
+        default 1.0e-5
+    Ttol: float, optional
+        relative tolerance in T <x^2> + <y^2> to determine
+        convergence, default 1.0e-3
+    shiftmax: float, optional
+        Largest allowed shift in the centroid, relative to
+        the initial guess.  Default 5.0 (5 pixels if the jacobian
+        scale is 1)
+    """
+
+    def __init__(self, obs, maxiter=200, shiftmax=5.0,
+                 etol=1.0e-5, Ttol=0.001,
+                 rng=None,
+                 **unused_keys):
+
         self._set_obs(obs)
         self._set_conf(maxiter, shiftmax, etol, Ttol)
 
@@ -204,6 +336,9 @@ class Admom(object):
 
         return GMixModel(pars, "gauss")
 
+
+
+
 def get_ratio_error(a, b, var_a, var_b, cov_ab):
     """
     get a/b and error on a/b
@@ -358,7 +493,8 @@ _admom_result_dtype=[
     ('wsum','f8'),
 
     ('sums','f8',6),
-    ('sums_cov','f8', 36),
+    #('sums_cov','f8', 36),
+    ('sums_cov','f8', (6,6)),
 
     ('pars','f8',6),
 

@@ -6,7 +6,11 @@ try:
 except:
     xrange=range
 
-from .gmix_nb import gmix_eval_pixel_fast, GMIX_LOW_DETVAL
+from .gmix_nb import (
+    gmix_set_norms,
+    gmix_eval_pixel_fast,
+    GMIX_LOW_DETVAL,
+)
 
 ADMOM_EDGE   = 0x1
 ADMOM_SHIFT  = 0x2
@@ -32,6 +36,7 @@ def admom(confarray, wt, pixels, resarray):
     roworig=wt['row'][0]
     colorig=wt['col'][0]
 
+    e1old=e2old=Told=-9999.0
     for i in xrange(conf['maxit']):
 
         if wt['det'][0] < GMIX_LOW_DETVAL:
@@ -81,11 +86,11 @@ def admom(confarray, wt, pixels, resarray):
         e2 = 2*Irc/T
 
         if ( 
-                ( abs(e1-e1old) < self['etol'])
+                ( abs(e1-e1old) < conf['etol'])
               and
-                ( abs(e2-e2old) < self['etol'])
+                ( abs(e2-e2old) < conf['etol'])
               and
-                ( abs(T/Told-1.) < self['Ttol'])  ):
+                ( abs(T/Told-1.) < conf['Ttol'])  ):
 
             res['pars'][0] = wt['row'][0]
             res['pars'][1] = wt['col'][0]
@@ -150,17 +155,12 @@ def admom_momsums(wt, pixels, res):
 
         var = 1.0/(pixel['ierr']*pixel['ierr'])
 
+        vmod = pixel['v']-vcen
+        umod = pixel['u']-ucen
+
         wdata = weight*pixel['val']
         w2 = weight*weight
 
-        res['npix'] += 1
-        res['sums'][0] += wdata*pixel['v']
-        res['sums'][1] += wdata*pixel['u']
-        res['sums'][5] += wdata
-        res['wsum']    += weight
-
-        vmod = pixel['v']-vcen
-        umod = pixel['u']-ucen
 
         F[0] = pixel['v']
         F[1] = pixel['u']
@@ -168,6 +168,9 @@ def admom_momsums(wt, pixels, res):
         F[3] = 2*vmod*umod
         F[4] = umod*umod + vmod*vmod
         F[5] = 1.0
+
+        res['wsum'] += weight
+        res['npix'] += 1
 
         for i in xrange(6):
             res['sums'][i] += wdata*F[i]
@@ -236,3 +239,8 @@ def clear_result(res):
     res['sums'][:] = 0.0
     res['sums_cov'][:,:] = 0.0
     res['pars'][:] = -9999.0
+
+    #res['flags']=0
+    #res['numiter']=0
+    #res['nimage']=0
+    #res['F'][:]=0.0

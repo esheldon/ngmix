@@ -20,7 +20,8 @@ def get_loglike(gmix, pixels):
         u,v,val,ierr
     """
 
-    loglike = 0.0
+    npix = 0
+    loglike = s2n_numer = s2n_denom = 0.0
 
     n_pixels = pixels.shape[0]
     for ipixel in xrange(n_pixels):
@@ -28,12 +29,19 @@ def get_loglike(gmix, pixels):
 
         model_val = gmix_eval_pixel_fast(gmix, pixel)
 
-        diff = model_val-pixel['val']
-        loglike += diff*diff*pixel['ierr']*pixel['ierr']
+        ivar = pixel['ierr']*pixel['ierr']
+        val  = pixel['val']
+        diff = model_val-val
 
-    loglike *= (-0.5);
+        loglike += diff*diff*ivar
 
-    return loglike
+        s2n_numer += val * model_val * ivar
+        s2n_denom += model_val * model_val * ivar
+        npix += 1
+
+    loglike *= (-0.5)
+
+    return loglike, s2n_numer, s2n_denom, npix
 
 @njit(cache=True)
 def fill_fdiff(gmix, pixels, fdiff, start):

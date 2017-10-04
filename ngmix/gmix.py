@@ -20,7 +20,11 @@ from .gexceptions import GMixRangeError, GMixFatalError
 
 from . import _gmix
 
-from .gmix_nb import _gmix_fill_functions, gmix_set_norms
+from .gmix_nb import (
+    _gmix_fill_functions,
+    gmix_set_norms,
+)
+from .fitting_nb import get_loglike
 
 def make_gmix_model(pars, model):
     """
@@ -485,7 +489,6 @@ class GMix(object):
 
         do_numba=True
         if do_numba:
-            from .gmix_nb import gmix_set_norms
             from .render_nb import render
             from .observation import make_coords
 
@@ -494,9 +497,6 @@ class GMix(object):
                                  "use make_galsim_object() and have "
                                  "galsim render the image")
             assert npoints==None
-
-            if gm['norm_set'][0] == 0:
-                gmix_set_norms(gm)
 
             coords=make_coords(image.shape, jacobian)
             render(
@@ -651,26 +651,13 @@ class GMix(object):
                 obs.jacobian._data,
                 npoints,
             )
-            res = pack_to_dict(res) if more else res[0]
         else:
-            res=_gmix.get_loglike(
-                gm,
-                obs._pixels,
-                1 if more else 0,
-            )
-            res = pack_to_dict(res) if more else res
+            res = get_loglike(gm, obs._pixels)
+
+        res = pack_to_dict(res) if more else res
 
         return res
-        """
-            if False:
-                res=_gmix.get_loglike_image(
-                    gm,
-                    obs.image,
-                    obs.weight,
-                    obs.jacobian._data,
-                )
-                res = pack_to_dict(res) if more else res[0]
-        """
+
     def _get_gmix_data(self):
         """
         same as get_data for normal models, but not all
