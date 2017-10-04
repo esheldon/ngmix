@@ -21,6 +21,8 @@ def get_loglike(gmix, pixels):
 
     returns
     -------
+    a tuple of
+
     loglike: float
         log likelihood
     s2n_numer: float
