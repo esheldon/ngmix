@@ -18,6 +18,17 @@ def get_loglike(gmix, pixels):
         See gmix.py
     pixels: array if pixel structs
         u,v,val,ierr
+
+    returns
+    -------
+    loglike: float
+        log likelihood
+    s2n_numer: float
+        numerator for s/n
+    s2n_demon: float
+        will use sqrt(s2n_denom) for denominator for s/n
+    npix: int
+        number of pixels used
     """
 
     npix = 0
