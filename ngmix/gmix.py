@@ -23,6 +23,7 @@ from . import _gmix
 from .gmix_nb import (
     _gmix_fill_functions,
     gmix_set_norms,
+    get_cm_Tfactor,
 )
 from .fitting_nb import get_loglike
 
@@ -91,12 +92,6 @@ class GMix(object):
         else:
             self._ngauss=ngauss
             self.reset()
-        
-        self._set_f8_type()
-
-    def _set_f8_type(self):
-        tmp=numpy.zeros(1)
-        self._f8_type=tmp.dtype.descr[0][1]
 
     def get_data(self):
         """
@@ -114,7 +109,7 @@ class GMix(object):
 
         """
 
-        gm=self._get_gmix_data()
+        gm=self.get_data()
 
         n=self._ngauss
         pars=numpy.zeros(n*6)
@@ -135,7 +130,7 @@ class GMix(object):
         get the center position (row,col)
         """
 
-        gm=self._get_gmix_data()
+        gm=self.get_data()
         psum=gm['p'].sum()
         rowsum=(gm['row']*gm['p']).sum()
         colsum=(gm['col']*gm['p']).sum()
@@ -149,7 +144,7 @@ class GMix(object):
         """
         Move the mixture to a new center
         """
-        gm=self._get_gmix_data()
+        gm=self.get_data()
 
         row0,col0 = self.get_cen()
         row_shift = row - row0
@@ -163,7 +158,7 @@ class GMix(object):
         get weighted average T sum(p*T)/sum(p)
         """
 
-        gm=self._get_gmix_data()
+        gm=self.get_data()
 
         row,col=self.get_cen()
 
@@ -193,7 +188,7 @@ class GMix(object):
         Get e1,e2 and T for the total gaussian mixture.
         """
 
-        gm=self._get_gmix_data()
+        gm=self.get_data()
 
         row,col=self.get_cen()
 
@@ -248,7 +243,7 @@ class GMix(object):
         """
         get sum(p)
         """
-        gm=self._get_gmix_data()
+        gm=self.get_data()
         return gm['p'].sum()
     # alias
     get_psum=get_flux
@@ -257,7 +252,7 @@ class GMix(object):
         """
         set a new value for sum(p)
         """
-        gm=self._get_gmix_data()
+        gm=self.get_data()
 
         psum0 = gm['p'].sum()
         rat = psum/psum0
@@ -275,7 +270,7 @@ class GMix(object):
         Needed to actually evaluate the gaussian.  This is done internally
         by the c code so if all goes well you don't need to call this
         """
-        gm=self._get_gmix_data()
+        gm=self.get_data()
         gmix_set_norms(gm)
 
     def set_norms_if_needed(self):
@@ -283,7 +278,7 @@ class GMix(object):
         Needed to actually evaluate the gaussian.  This is done internally
         by the c code so if all goes well you don't need to call this
         """
-        gm=self._get_gmix_data()
+        gm=self.get_data()
         if gm['norm_set'][0] == 0:
             self.set_norms()
             #_gmix.set_norms(gm)
@@ -305,7 +300,7 @@ class GMix(object):
              Should have length 6*ngauss
         """
 
-        gm=self._get_gmix_data()
+        gm=self.get_data()
         pars=array(pars, dtype='f8', copy=False) 
         _gmix.gmix_fill(gm, pars, self._model)
 
@@ -338,7 +333,7 @@ class GMix(object):
         new_gmix = self.copy()
 
 
-        ndata = new_gmix._get_gmix_data()
+        ndata = new_gmix.get_data()
         ndata['norm_set']=0
 
         for i in xrange(len(self)):
@@ -375,7 +370,7 @@ class GMix(object):
         ng=len(self)*len(psf)
         output = GMix(ngauss=ng)
 
-        gm=self._get_gmix_data()
+        gm=self.get_data()
         _gmix.convolve_fill(output._data, gm, psf._data)
         return output
 
@@ -443,7 +438,7 @@ class GMix(object):
             g1,g2,T=gm.get_g1g2T()
             factor = shape.get_round_factor(g1,g2)
 
-        gdata=gm._get_gmix_data()
+        gdata=gm.get_data()
 
         # make sure the determinant gets reset
         gdata['norm_set']=0
@@ -485,7 +480,7 @@ class GMix(object):
             fexp = 0
 
 
-        gm=self._get_gmix_data()
+        gm=self.get_data()
 
         do_numba=True
         if do_numba:
@@ -559,7 +554,7 @@ class GMix(object):
             raise ValueError("fdiff from start must have "
                              "len >= %d, got %d" % (image.size,nuse))
 
-        gm=self._get_gmix_data()
+        gm=self.get_data()
         if npoints is not None:
             s2n_numer,s2n_denom,npix=_gmix.fill_fdiff_gauleg(
                 gm,
@@ -598,7 +593,7 @@ class GMix(object):
         if obs.jacobian is not None:
             assert isinstance(obs.jacobian,Jacobian)
 
-        gm=self._get_gmix_data()
+        gm=self.get_data()
 
         s2n_sum =_gmix.get_model_s2n_sum(gm,
                                          obs.weight,
@@ -642,7 +637,7 @@ class GMix(object):
         if obs.jacobian is not None:
             assert isinstance(obs.jacobian,Jacobian)
 
-        gm=self._get_gmix_data()
+        gm=self.get_data()
         if npoints is not None:
             res=_gmix.get_loglike_gauleg(
                 gm,
@@ -658,7 +653,7 @@ class GMix(object):
 
         return res
 
-    def _get_gmix_data(self):
+    def get_data(self):
         """
         same as get_data for normal models, but not all
         """
@@ -676,7 +671,7 @@ class GMix(object):
         """
         import galsim
 
-        data = self._get_gmix_data()
+        data = self.get_data()
 
         row,col = self.get_cen()
 
@@ -789,7 +784,6 @@ class GMixModel(GMix):
     """
     def __init__(self, pars, model):
 
-        self._set_f8_type()
         self._model      = _gmix_model_dict[model]
         self._model_name = _gmix_string_dict[self._model]
 
@@ -800,6 +794,13 @@ class GMixModel(GMix):
 
         self.reset()
         self.fill(pars)
+
+    def reset(self):
+        """
+        Replace the data array with a zeroed one.
+        """
+        self._data = zeros(self._ngauss, dtype=_gauss2d_dtype)
+        self._pars = zeros(self._npars)
 
     def copy(self):
         """
@@ -814,7 +815,7 @@ class GMixModel(GMix):
 
         set pars as well
         """
-        gm=self._get_gmix_data()
+        gm=self.get_data()
 
         pars=self._pars
         row0,col0=self.get_cen()
@@ -828,7 +829,7 @@ class GMixModel(GMix):
         pars[0] = row
         pars[1] = col
 
-    def fill_c(self, pars):
+    def fill(self, pars_in):
         """
         Fill in the gaussian mixture with new parameters
 
@@ -838,47 +839,22 @@ class GMixModel(GMix):
             The parameters
         """
 
-
-        pars = array(pars, dtype='f8', copy=True) 
-
-        if pars.size != self._npars:
+        npars=len(pars_in)
+        if npars != self._npars:
             err="model '%s' requires %s pars, got %s"
-            err =err % (self._model_name,self._npars, pars.size)
+            err =err % (self._model_name,self._npars, npars)
             raise GMixFatalError(err)
 
-        self._pars = pars
+        self._pars[:] = pars_in
 
-        gm=self._get_gmix_data()
-        _gmix.gmix_fill(gm, pars, self._model)
-
-
-    def fill(self, pars):
-        """
-        Fill in the gaussian mixture with new parameters
-
-        parameters
-        ----------
-        pars: ndarray or sequence
-            The parameters
-        """
-
-        pars = array(pars, dtype='f8', copy=True) 
-
-        if pars.size != self._npars:
-            err="model '%s' requires %s pars, got %s"
-            err =err % (self._model_name,self._npars, pars.size)
-            raise GMixFatalError(err)
-
-        self._pars = pars
-
-        gm=self._get_gmix_data()
+        gm=self.get_data()
         self._fill_func(
             gm,
-            pars,
+            self._pars,
             0, # don't set norms
         )
 
-class GMixCM(GMix):
+class GMixCM(GMixModel):
     """
     Composite Model exp and dev using just fracdev
 
@@ -886,50 +862,31 @@ class GMixCM(GMix):
 
     parameters
     ----------
+    fracdev: float
+        fraction of flux in the dev component
+    TdByTe: float
+        T_{dev}/T_{exp}
     pars: array-like
-        Parameter array. The number of elements will depend
-        on the model type.
-    model: string or gmix type
-        e.g. 'exp' or GMIX_EXP
+        6-parameters, same as simple models
     """
     def __init__(self, fracdev, TdByTe, pars):
 
         self._fracdev = fracdev
         self._TdByTe = TdByTe
-        self._Tfactor = _gmix.get_cm_Tfactor(fracdev, TdByTe)
-
-        self._model      = _gmix_model_dict['fracdev']
-        self._model_name = _gmix_string_dict[self._model]
-
-        self._ngauss = _gmix_ngauss_dict[self._model]
-        self._npars  = _gmix_npars_dict[self._model]
-
-        self.reset()
-
-        self.fill(pars)
-
+        self._Tfactor = get_cm_Tfactor(fracdev, TdByTe)
+        super(GMixCM,self).__init__(pars,'cm')
 
     def copy(self):
         """
         Get a new GMix with the same parameters
         """
-        #gmix = GMixCM(self._exp_pars, self._dev_pars, self._fracdev)
-        gmix = GMixCM(self._fracdev,
-                      self._TdByTe,
-                      self._pars)
-        return gmix
+        return GMixCM(
+            self._fracdev,
+            self._TdByTe,
+            self._pars,
+        )
 
-    def reset(self):
-        """
-        Replace the data array with a zeroed one.
-        """
-        self._data = zeros(self._ngauss, dtype=_cm_dtype)
-        self._data['fracdev'][0] = self._fracdev
-        self._data['TdByTe'][0] = self._TdByTe
-        self._data['Tfactor'][0] = self._Tfactor
-
-
-    def fill(self, pars):
+    def fill(self, pars_in):
         """
         Fill in the gaussian mixture with new parameters
 
@@ -939,37 +896,32 @@ class GMixCM(GMix):
             The parameters
         """
 
-        pars = array(pars, dtype='f8', copy=True) 
+        npars=len(pars_in)
+        if npars != self._npars:
+            err="model '%s' requires %s pars, got %s"
+            err =err % (self._model_name,self._npars, npars)
+            raise GMixFatalError(err)
 
-        if pars.size != 6:
-            raise GMixFatalError("must have 6 pars")
+        self._pars[:] = pars_in
 
-        self._pars = pars
-
-        data=self.get_data()
-        _gmix.gmix_fill_cm(data, pars)
-
-    def _get_gmix_data(self):
-        """
-        same as get_data for normal models, but not all
-        """
-        return self._data['gmix'][0]
-
+        gm=self.get_data()
+        self._fill_func(
+            gm,
+            self._fracdev,
+            self._TdByTe,
+            self._Tfactor,
+            self._pars,
+            0, # don't set norms
+        )
 
     def __repr__(self):
-        rep=[]
-        #fmt="p: %-10.5g row: %-10.5g col: %-10.5g irr: %-10.5g irc: %-10.5g icc: %-10.5g"
-        fmt="p: %.4g row: %.4g col: %.4g irr: %.4g irc: %.4g icc: %.4g"
-
-        gm=self._get_gmix_data()
-        for i in xrange(self._ngauss):
-            t=gm[i]
-            s=fmt % (t['p'],t['row'],t['col'],t['irr'],t['irc'],t['icc'])
-            rep.append(s)
-
-        rep='\n'.join(rep)
-        return rep
-
+        rep=super(GMixCM,self).__repr__()
+        rep = [
+            'fracdev: %g' % self._fracdev,
+            'TdByTe:  %g' % self._TdByTe,
+            rep,
+        ]
+        return '\n'.join(rep)
 
 
 def get_coellip_npars(ngauss):
@@ -1009,7 +961,7 @@ class GMixCoellip(GMixModel):
         self._npars = npars
 
         self.reset()
-        gm=self._get_gmix_data()
+        gm=self.get_data()
         _gmix.gmix_fill(gm, pars, self._model)
 
     def fill(self, pars):
@@ -1025,7 +977,7 @@ class GMixCoellip(GMixModel):
 
         self._pars[:]=pars[:]
 
-        gm=self._get_gmix_data()
+        gm=self.get_data()
         _gmix.gmix_fill(self._data, pars, self._model)
 
     def copy(self):
@@ -1167,10 +1119,7 @@ GMIX_BDC=5
 GMIX_BDF=6
 GMIX_COELLIP=7
 GMIX_SERSIC=8
-GMIX_FRACDEV=9
-
-# Composite Model
-GMIX_CM=10
+GMIX_CM=9
 
 _gmix_model_dict={
     'full':       GMIX_FULL,
@@ -1187,9 +1136,6 @@ _gmix_model_dict={
     GMIX_BDC:     GMIX_BDC,
     'bdf':        GMIX_BDF,
     GMIX_BDF:     GMIX_BDF,
-
-    GMIX_FRACDEV: GMIX_FRACDEV,
-    'fracdev': GMIX_FRACDEV,
 
     GMIX_CM: GMIX_CM,
     'cm': GMIX_CM,
@@ -1217,9 +1163,6 @@ _gmix_string_dict={
     GMIX_BDF:'bdf',
     'bdf':'bdf',
 
-    GMIX_FRACDEV:'fracdev',
-    'fracdev':'fracdev',
-
     GMIX_CM:'cm',
     'cm':'cm',
 
@@ -1237,7 +1180,6 @@ _gmix_npars_dict={
     GMIX_EXP:6,
     GMIX_DEV:6,
 
-    GMIX_FRACDEV:1,
     GMIX_CM:6,
 
     GMIX_BDC:8,
@@ -1254,8 +1196,6 @@ _gmix_ngauss_dict={
     'exp':6,
     GMIX_DEV:10,
     'dev':10,
-
-    GMIX_FRACDEV:16,
 
     GMIX_CM:16,
 
@@ -1286,13 +1226,6 @@ _gauss2d_dtype=[
     ('dcc','f8'),
     ('norm','f8'),
     ('pnorm','f8'),
-]
-
-_cm_dtype=[
-    ('fracdev','f8'),
-    ('TdByTe','f8'), # ratio Tdev/Texp
-    ('Tfactor','f8'),
-    ('gmix',_gauss2d_dtype,16),
 ]
 
 

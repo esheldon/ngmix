@@ -355,11 +355,89 @@ def gmix_fill_gauss(gmix, pars, set_norms):
     """
     gmix_fill_simple(gmix, pars, _fvals_gauss, _pvals_gauss, set_norms)
 
+@njit(cache=True)
+def gmix_fill_cm(gmix, fracdev, TdByTe, Tfactor, pars, set_norms):
+    """
+    fill a composite model
+    """
+
+    row  = pars[0]
+    col  = pars[1]
+    g1   = pars[2]
+    g2   = pars[3]
+    T    = pars[4] * Tfactor
+    flux = pars[5]
+
+
+    ifracdev = 1.0-fracdev
+
+    e1, e2 = g1g2_to_e1e2(g1, g2)
+
+    for i in xrange(16):
+        if i < 6:
+            p = _pvals_exp[i] * ifracdev
+            f = _fvals_exp[i]
+        else:
+            p = _pvals_dev[i-6] * fracdev
+            f = _fvals_dev[i-6] * TdByTe
+
+        T_i_2  = 0.5*T*f
+        flux_i = flux*p
+
+        gauss2d_set(
+            gmix[i],
+            flux_i,
+            row,
+            col, 
+            T_i_2*(1-e1), 
+            T_i_2*e2,
+            T_i_2*(1+e1),
+        )
+
+    if set_norms:
+        gmix_set_norms(gmix)
+
+@njit(cache=True)
+def get_cm_Tfactor(fracdev, TdByTe):
+    """
+    get the factor needed to convert T to the T needed
+    for using in filling a cmodel gaussian mixture
+
+    parameters
+    ----------
+    fracdev: float
+        fraction of flux in the dev component
+    TdByTe: float
+        T_{dev}/T_{exp}
+    """
+
+    ifracdev = 1.0-fracdev
+
+    Tfactor = 0.0
+
+    for i in xrange(6):
+        p = _pvals_exp[i] * ifracdev
+        f = _fvals_exp[i]
+
+        Tfactor += p*f
+
+    for i in xrange(10):
+        p = _pvals_dev[i] * fracdev
+        f = _fvals_dev[i] * TdByTe
+
+        Tfactor += p*f
+
+    Tfactor = 1.0/Tfactor
+
+    return Tfactor
+
+
 _gmix_fill_functions={
     'exp': gmix_fill_exp,
     'dev': gmix_fill_dev,
     'turb': gmix_fill_turb,
     'gauss': gmix_fill_gauss,
+    'cm': gmix_fill_cm,
 }
 
 @njit(cache=True)
