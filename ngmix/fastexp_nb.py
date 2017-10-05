@@ -2,21 +2,13 @@ from __future__ import print_function
 import numpy
 from numba import jit, njit
 
-from . import fastmath
+from .fastexp import make_exp_lookup
 
-_exp3_ivals, _exp3_lookup= fastmath.make_exp_lookup(
+_exp3_ivals, _exp3_lookup = make_exp_lookup(
     minval=-300,
     maxval=0,
 )
 _exp3_i0 = _exp3_ivals[0]
-
-"""
-_exp3_ivals, _exp3_lookup= fastmath.make_exp_lookup(
-    minval=-26,
-    maxval=0,
-)
-_exp3_i0 = _exp3_ivals[0]
-"""
 
 @njit(cache=True)
 def exp3(x):

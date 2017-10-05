@@ -18,7 +18,7 @@ from .gmix import GMixCoellip
 
 from . import jacobian
 from .jacobian import Jacobian, UnitJacobian, DiagonalJacobian
-from . import fastmath
+from . import fastexp
 
 from . import priors
 from .priors import srandu
