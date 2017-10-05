@@ -2,7 +2,6 @@ import numpy
 from numba import njit
 
 from .jacobian_nb import jacobian_get_vu
-from . import observation
 
 try:
     xrange

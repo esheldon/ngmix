@@ -27,6 +27,7 @@ from .gmix_nb import (
 )
 from .fitting_nb import get_loglike, fill_fdiff
 from .render_nb import render
+from .pixels import make_coords
 
 def make_gmix_model(pars, model):
     """
@@ -1616,30 +1617,6 @@ class GMixND(object):
         if show:
             tab.show(**keys)
         return tab
-
-def make_coords(dims, jacob):
-    """
-    make a coords array
-    """
-    from .pixels_nb import fill_coords
-
-    nrow, ncol = dims
-
-    coords = numpy.zeros(nrow*ncol, dtype=_coords_dtype)
-
-    fill_coords(
-        coords,
-        nrow,
-        ncol,
-        jacob._data,
-    )
-
-    return coords
-
-_coords_dtype=[
-    ('u','f8'),
-    ('v','f8'),
-]
 
 def pack_to_dict(res):
     loglike,s2n_numer,s2n_denom,npix=res

@@ -3,6 +3,8 @@ from .jacobian import Jacobian, UnitJacobian, DiagonalJacobian
 from .gmix import GMix
 import copy
 
+from .pixels import make_pixels
+
 DEFAULT_XINTERP='lanczos15'
 
 class Observation(object):
@@ -1082,29 +1084,3 @@ def get_kmb_obs(obs_in):
                          "KObsList, or KMultiBandObsList")
 
     return obs
-
-def make_pixels(image, weight, jacob):
-    """
-    make a pixel array from the image and weight
-    """
-    from .pixels_nb import fill_pixels
-
-    pixels = numpy.zeros(image.size, dtype=_pixels_dtype)
-
-    fill_pixels(
-        pixels,
-        image,
-        weight,
-        jacob._data,
-    )
-
-    return pixels
-
-_pixels_dtype=[
-    ('u','f8'),
-    ('v','f8'),
-    ('val','f8'),
-    ('ierr','f8'),
-    ('fdiff','f8'),
-]
-
