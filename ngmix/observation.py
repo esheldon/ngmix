@@ -1,7 +1,6 @@
 import numpy
 from .jacobian import Jacobian, UnitJacobian, DiagonalJacobian
 from .gmix import GMix
-from . import _gmix
 import copy
 
 DEFAULT_XINTERP='lanczos15'
@@ -1089,7 +1088,6 @@ def make_pixels(image, weight, jacob):
     make a pixel array from the image and weight
     """
     from .pixels_nb import fill_pixels
-    #from ._gmix import fill_pixels
 
     pixels = numpy.zeros(image.size, dtype=_pixels_dtype)
 
@@ -1102,26 +1100,6 @@ def make_pixels(image, weight, jacob):
 
     return pixels
 
-def make_coords(dims, jacob):
-    """
-    make a coords array
-    """
-    from .pixels_nb import fill_coords
-
-    nrow, ncol = dims
-
-    coords = numpy.zeros(nrow*ncol, dtype=_coords_dtype)
-
-    fill_coords(
-        coords,
-        nrow,
-        ncol,
-        jacob._data,
-    )
-
-    return coords
-
-
 _pixels_dtype=[
     ('u','f8'),
     ('v','f8'),
@@ -1129,7 +1107,4 @@ _pixels_dtype=[
     ('ierr','f8'),
     ('fdiff','f8'),
 ]
-_coords_dtype=[
-    ('u','f8'),
-    ('v','f8'),
-]
+

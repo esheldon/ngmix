@@ -10,7 +10,6 @@ except:
 import copy
 import numpy
 from numpy import array, zeros, exp, log10, log, dot, sqrt, diag
-from . import fastmath
 from .jacobian import Jacobian, UnitJacobian
 from .shape import Shape, e1e2_to_g1g2
 
@@ -23,9 +22,11 @@ from . import _gmix
 from .gmix_nb import (
     _gmix_fill_functions,
     gmix_set_norms,
+    gmix_convolve_fill,
     get_cm_Tfactor,
 )
-from .fitting_nb import get_loglike
+from .fitting_nb import get_loglike, fill_fdiff
+from .render_nb import render
 
 def make_gmix_model(pars, model):
     """
@@ -264,7 +265,6 @@ class GMix(object):
     # alias
     set_psum=set_flux
 
-
     def set_norms(self):
         """
         Needed to actually evaluate the gaussian.  This is done internally
@@ -280,9 +280,7 @@ class GMix(object):
         """
         gm=self.get_data()
         if gm['norm_set'][0] == 0:
-            self.set_norms()
-            #_gmix.set_norms(gm)
-
+            gmix_set_norms(gm)
 
     def fill(self, pars):
         """
@@ -370,11 +368,15 @@ class GMix(object):
         ng=len(self)*len(psf)
         output = GMix(ngauss=ng)
 
-        gm=self.get_data()
-        _gmix.convolve_fill(output._data, gm, psf._data)
+        odata = output.get_data()
+        gm    = self.get_data()
+        gmpsf = psf.get_data()
+
+        gmix_convolve_fill(odata, gm, gmpsf)
+
         return output
 
-    def make_image(self, dims, npoints=None, jacobian=None, fast_exp=False):
+    def make_image(self, dims, jacobian=None, fast_exp=False):
         """
         Render the mixture into a new image
 
@@ -392,7 +394,7 @@ class GMix(object):
                              "got %s" % str(dims))
 
         image=numpy.zeros(dims, dtype='f8')
-        self._fill_image(image, npoints=npoints, jacobian=jacobian, fast_exp=fast_exp)
+        self._fill_image(image, jacobian=jacobian, fast_exp=fast_exp)
         return image
 
     def make_round(self, preserve_size=False):
@@ -454,7 +456,7 @@ class GMix(object):
         return gm
 
 
-    def _fill_image(self, image, npoints=None, jacobian=None, fast_exp=False):
+    def _fill_image(self, image, jacobian=None, fast_exp=False):
         """
         Internal routine.  Render the mixture into a new image.  No error
         checking on the image!
@@ -473,60 +475,22 @@ class GMix(object):
         else:
             assert isinstance(jacobian,Jacobian)
 
-
         if fast_exp:
             fexp = 1
         else:
             fexp = 0
 
-
         gm=self.get_data()
 
-        do_numba=True
-        if do_numba:
-            from .render_nb import render
-            from .observation import make_coords
+        coords=make_coords(image.shape, jacobian)
+        render(
+            gm,
+            coords,
+            image.ravel(),
+            fast_exp,
+        )
 
-            if npoints != None:
-                raise ValueError("to integrate models over pixels, "
-                                 "use make_galsim_object() and have "
-                                 "galsim render the image")
-            assert npoints==None
-
-            coords=make_coords(image.shape, jacobian)
-            render(
-                gm,
-                coords,
-                image.ravel(),
-                fast_exp,
-            )
-
-
-        else:
-            if npoints is not None:
-                _gmix.render_gauleg(
-                    gm,
-                    image,
-                    npoints,
-                    jacobian._data,
-                    fexp,
-                )
-            else:
-                _gmix.render(
-                    gm,
-                    image,
-                    jacobian._data,
-                    fexp,
-                )
-                #_gmix.render(
-                #    gm,
-                #    image,
-                #    jacobian._data,
-                #    fexp,
-                #)
-
-
-    def fill_fdiff(self, obs, fdiff, start=0, npoints=None, nocheck=False):
+    def fill_fdiff(self, obs, fdiff, start=0):
         """
         Fill fdiff=(model-data)/err given the input Observation
 
@@ -544,8 +508,6 @@ class GMix(object):
         if obs.jacobian is not None:
             assert isinstance(obs.jacobian,Jacobian)
 
-        if not nocheck:
-            fdiff = numpy.ascontiguousarray(fdiff, dtype='f8')
 
         nuse=fdiff.size-start
 
@@ -555,23 +517,12 @@ class GMix(object):
                              "len >= %d, got %d" % (image.size,nuse))
 
         gm=self.get_data()
-        if npoints is not None:
-            s2n_numer,s2n_denom,npix=_gmix.fill_fdiff_gauleg(
-                gm,
-                image,
-                obs.weight,
-                obs.jacobian._data,
-                fdiff,
-                start,
-                npoints,
-            )
-        else:
-            _gmix.fill_fdiff(
-                gm,
-                obs._pixels,
-                fdiff,
-                start,
-            )
+        fill_fdiff(
+            gm,
+            obs._pixels,
+            fdiff,
+            start,
+        )
 
     def get_model_s2n_sum(self, obs):
         """
@@ -620,7 +571,7 @@ class GMix(object):
         return s2n
 
 
-    def get_loglike(self, obs, npoints=None, more=False):
+    def get_loglike(self, obs, more=False):
         """
         Calculate the log likelihood given the input Observation
 
@@ -637,17 +588,8 @@ class GMix(object):
         if obs.jacobian is not None:
             assert isinstance(obs.jacobian,Jacobian)
 
-        gm=self.get_data()
-        if npoints is not None:
-            res=_gmix.get_loglike_gauleg(
-                gm,
-                obs.image,
-                obs.weight,
-                obs.jacobian._data,
-                npoints,
-            )
-        else:
-            res = get_loglike(gm, obs._pixels)
+        gm  = self.get_data()
+        res = get_loglike(gm, obs._pixels)
 
         res = pack_to_dict(res) if more else res
 
@@ -829,7 +771,7 @@ class GMixModel(GMix):
         pars[0] = row
         pars[1] = col
 
-    def fill(self, pars_in):
+    def fill(self, pars):
         """
         Fill in the gaussian mixture with new parameters
 
@@ -839,19 +781,31 @@ class GMixModel(GMix):
             The parameters
         """
 
-        npars=len(pars_in)
+        npars=len(pars)
         if npars != self._npars:
             err="model '%s' requires %s pars, got %s"
             err =err % (self._model_name,self._npars, npars)
             raise GMixFatalError(err)
 
-        self._pars[:] = pars_in
+        self._fill(pars)
+
+    def _fill(self, pars):
+        """
+        Fill in the gaussian mixture with new parameters, without
+        error checking
+
+        parameters
+        ----------
+        pars: ndarray or sequence
+            The parameters
+        """
+
+        self._pars[:] = pars
 
         gm=self.get_data()
         self._fill_func(
             gm,
             self._pars,
-            0, # don't set norms
         )
 
 class GMixCM(GMixModel):
@@ -886,9 +840,10 @@ class GMixCM(GMixModel):
             self._pars,
         )
 
-    def fill(self, pars_in):
+    def _fill(self, pars):
         """
-        Fill in the gaussian mixture with new parameters
+        Fill in the gaussian mixture with new parameters, with
+        no error checking
 
         parameters
         ----------
@@ -896,13 +851,7 @@ class GMixCM(GMixModel):
             The parameters
         """
 
-        npars=len(pars_in)
-        if npars != self._npars:
-            err="model '%s' requires %s pars, got %s"
-            err =err % (self._model_name,self._npars, npars)
-            raise GMixFatalError(err)
-
-        self._pars[:] = pars_in
+        self._pars[:] = pars
 
         gm=self.get_data()
         self._fill_func(
@@ -911,8 +860,8 @@ class GMixCM(GMixModel):
             self._TdByTe,
             self._Tfactor,
             self._pars,
-            0, # don't set norms
         )
+
 
     def __repr__(self):
         rep=super(GMixCM,self).__repr__()
@@ -986,104 +935,6 @@ class GMixCoellip(GMixModel):
         """
         gmix = GMixCoellip(self._pars)
         return gmix
-
-
-def cbinary_search(a, x):
-    """
-    use weave inline for speed
-    """
-    import scipy.weave
-    from scipy.weave import inline
-    from scipy.weave.converters import blitz
-
-    size=a.size
-
-    code="""
-    long up=size;
-    long down=-1;
-
-    for (;;) {
-        if ( x < a(0) ) {
-            return_val =  0;
-            break;
-        }
-        if (x > a(up-1)) {
-            return_val =  up-1;
-            break;
-        }
-
-        long mid=0;
-        double val=0;
-        while ( (up-down) > 1 ) {
-            mid = down + (up-down)/2;
-            val=a(mid);
-
-            if (x >= val) {
-                down=mid;
-            } else {
-                up=mid;
-            }
-     
-        }
-        return_val = down;
-    }
-    """
-    down=inline(code, ['a','x','size'],
-                type_converters=blitz,
-                compiler='gcc')
-
-    return down
-
-
-
-def cinterp_multi_scalar(xref, yref, xinterp, output):
-    import scipy.weave
-    from scipy.weave import inline
-    from scipy.weave.converters import blitz
-
-    npoints=xref.size
-    ndim=yref.shape[1]
-
-    ilo = cbinary_search(xref, xinterp)
-
-    code="""
-    double x=xinterp;
-
-    if (ilo < 0) {
-        ilo=0;
-    }
-    if (ilo >= (npoints-1)) {
-        ilo=npoints-2;
-    }
-
-    int ihi = ilo+1;
-
-    double xlo=xref(ilo);
-    double xhi=xref(ihi);
-    double xdiff = xhi-xlo;
-    double xmxlo = x-xlo;
-
-    for (int i=0; i<ndim; i++) {
-
-        double ylo = yref(ilo, i);
-        double yhi = yref(ihi, i);
-        double ydiff = yhi - ylo;
-
-        double slope = ydiff/xdiff;
-
-        output(i) = xmxlo*slope + ylo;
-
-    }
-
-    return_val=1;
-    """
-
-    inline(code, ['xref','yref','xinterp','ilo','npoints','ndim','output'],
-           type_converters=blitz)#, compiler='gcc')
-
-
-
-
 
 
 MIN_SERSIC_N=0.751
@@ -1766,6 +1617,30 @@ class GMixND(object):
             tab.show(**keys)
         return tab
 
+def make_coords(dims, jacob):
+    """
+    make a coords array
+    """
+    from .pixels_nb import fill_coords
+
+    nrow, ncol = dims
+
+    coords = numpy.zeros(nrow*ncol, dtype=_coords_dtype)
+
+    fill_coords(
+        coords,
+        nrow,
+        ncol,
+        jacob._data,
+    )
+
+    return coords
+
+_coords_dtype=[
+    ('u','f8'),
+    ('v','f8'),
+]
+
 def pack_to_dict(res):
     loglike,s2n_numer,s2n_denom,npix=res
     return {
@@ -1774,8 +1649,6 @@ def pack_to_dict(res):
         's2n_denom':s2n_denom,
         'npix':npix,
     }
-
-
 
 _moms_flagmap={
     0:'ok',

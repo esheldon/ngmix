@@ -91,9 +91,6 @@ class FitterBase(object):
         self.use_round_T=keys.get('use_round_T',False)
         assert self.use_round_T==False,"no longer support round T"
 
-        # psf fitters might not have this set to 1
-        self.npoints=keys.get('npoints',None)
-
         self.set_obs(obs)
 
         self.prior = keys.get('prior',None)
@@ -243,8 +240,6 @@ class FitterBase(object):
         _get_ydiff method
         """
 
-        npoints=self.npoints
-
         try:
 
             # these are the log pars (if working in log space)
@@ -266,7 +261,6 @@ class FitterBase(object):
 
                     res = gm.get_loglike(
                         obs,
-                        npoints=npoints,
                         more=more,
                     )
 
@@ -370,11 +364,7 @@ class FitterBase(object):
         """
         norms get set
         """
-        #_gmix.convolve_fill(gm._data, gm0._data, psf_gmix._data)
         gmix_convolve_fill(gm._data, gm0._data, psf_gmix._data)
-
-    def _fill_gmix(self, gm, pars, set_norms):
-        gm._fill_func(gm._data, pars, set_norms)
 
     def _fill_gmix_all(self, pars):
         """
@@ -382,8 +372,6 @@ class FitterBase(object):
 
         Fill the list of lists of gmix objects for the given parameters
         """
-
-        dont_set_norms=0
 
         if not self.dopsf:
             self._fill_gmix_all_nopsf(pars)
@@ -402,7 +390,7 @@ class FitterBase(object):
                 gm0=gmix_list0[i]
                 gm=gmix_list[i]
 
-                self._fill_gmix(gm0, band_pars, dont_set_norms)
+                gm0._fill(band_pars)
                 self._convolve_gmix(gm, gm0, psf_gmix)
 
 
@@ -411,7 +399,6 @@ class FitterBase(object):
         Fill the list of lists of gmix objects for the given parameters
         """
 
-        do_set_norms=1
         for band,obs_list in enumerate(self.obs):
             gmix_list=self._gmix_all[band]
 
@@ -421,7 +408,7 @@ class FitterBase(object):
 
                 gm=gmix_list[i]
 
-                self._fill_gmix(gm, band_pars, do_set_norms)
+                gm._fill(band_pars)
 
     def _get_priors(self, pars):
         """
@@ -1645,16 +1632,10 @@ class LMSimple(FitterBase):
         guess=array(guess,dtype='f8',copy=False)
         self._setup_data(guess)
 
-        #nthreads=int(os.environ['OMP_NUM_THREADS'])
-        #if nthreads > 1 and self.nimage > 1:
-        #    func=self._calc_fdiff_parallel
-        #else:
-        #    func=self._calc_fdiff
-        func = self._calc_fdiff_numba
         self._make_lists()
 
         result = run_leastsq(
-            func,
+            self._calc_fdiff,
             guess,
             self.n_prior_pars,
             **self.lm_pars
@@ -1743,7 +1724,7 @@ class LMSimple(FitterBase):
 
             for obs,gm in zip(obs_list, gmix_list):
 
-                gmdata=gm._get_gmix_data()
+                gmdata=gm.get_data()
 
                 pixels_list.append(obs._pixels)
                 gmix_data_list.append(gmdata)
@@ -1753,64 +1734,6 @@ class LMSimple(FitterBase):
         self._gmix_data_list=gmix_data_list
 
     def _calc_fdiff(self, pars):
-        """
-        vector with (model-data)/error.
-
-        The npars elements contain -ln(prior)
-        """
-
-        # we cannot keep sending existing array into leastsq, don't know why
-        fdiff=zeros(self.fdiff_size)
-
-        try:
-
-            self._fill_gmix_all(pars)
-            start=self._fill_priors(pars, fdiff)
-
-            for pixels,gmix in zip(self._pixels_list,self._gmix_data_list):
-                _gmix.fill_fdiff(
-                    pixels,
-                    gmix,
-                    fdiff,
-                    start,
-                )
-                start += pixels.size
-
-        except GMixRangeError as err:
-            fdiff[:] = LOWVAL
-
-        return fdiff
-
-
-    def _calc_fdiff_parallel(self, pars):
-        """
-        vector with (model-data)/error.
-
-        The npars elements contain -ln(prior)
-        """
-
-        # we cannot keep sending existing array into leastsq, don't know why
-        fdiff=zeros(self.fdiff_size)
-
-        try:
-
-            self._fill_gmix_all(pars)
-
-            start=self._fill_priors(pars, fdiff)
-
-            _gmix.fill_fdiff_parallel(
-                self._pixels_list,
-                self._gmix_data_list,
-                fdiff,
-                start,
-            )
-
-        except GMixRangeError as err:
-            fdiff[:] = LOWVAL
-
-        return fdiff
-
-    def _calc_fdiff_numba(self, pars):
         """
         vector with (model-data)/error.
 
@@ -1841,60 +1764,6 @@ class LMSimple(FitterBase):
             fdiff[:] = LOWVAL
 
         return fdiff
-
-
-    '''
-    def _calc_fdiff_old(self, pars, more=False):
-        """
-
-        vector with (model-data)/error.
-
-        The npars elements contain -ln(prior)
-        """
-
-        # we cannot keep sending existing array into leastsq, don't know why
-        fdiff=zeros(self.fdiff_size)
-
-        s2n_numer=0.0
-        s2n_denom=0.0
-        npix = 0
-
-        try:
-
-
-            self._fill_gmix_all(pars)
-
-            start=self._fill_priors(pars, fdiff)
-
-            for band in xrange(self.nband):
-
-                obs_list=self.obs[band]
-                gmix_list=self._gmix_all[band]
-
-                for obs,gm in zip(obs_list, gmix_list):
-
-                    res = gm.fill_fdiff(obs, fdiff, start=start,
-                                        npoints=self.npoints)
-
-                    s2n_numer += res['s2n_numer']
-                    s2n_denom += res['s2n_denom']
-                    npix += res['npix']
-
-                    start += obs.image.size
-
-        except GMixRangeError as err:
-            fdiff[:] = LOWVAL
-            s2n_numer=0.0
-            s2n_denom=BIGVAL
-
-        if more:
-            return {'fdiff':fdiff,
-                    's2n_numer':s2n_numer,
-                    's2n_denom':s2n_denom,
-                    'npix':npix}
-        else:
-            return fdiff
-    '''
 
     def _fill_priors(self, pars, fdiff):
         """
@@ -2046,7 +1915,7 @@ class LMGaussK(LMSimple):
 
                 for kobs,gm in zip(kobs_list, gmix_list):
 
-                    gmdata=gm._get_gmix_data()
+                    gmdata=gm.get_data()
                     tloglike, ts2n_sum, tnpix = _gmix.get_loglikek(
                         gmdata,
                         kobs.kr.array,
@@ -2112,7 +1981,7 @@ class LMGaussK(LMSimple):
 
                 for kobs,gm in zip(kobs_list, gmix_list):
 
-                    gmdata=gm._get_gmix_data()
+                    gmdata=gm.get_data()
                     ts2n_sum, tnpix = _gmix.fill_fdiffk(
                         gmdata,
                         kobs.kr.array,
@@ -2340,6 +2209,9 @@ class GalsimPSF(LMSimple):
 
 
 class LMCoellip(LMSimple):
+    """
+    class to run the LM leastsq code for the coelliptical model
+    """
     def __init__(self, obs, ngauss, **keys):
         self._ngauss=ngauss
         super(LMCoellip,self).__init__(obs, 'coellip', **keys)
@@ -2380,7 +2252,6 @@ class LMComposite(LMSimple):
     exp+dev model with pre-determined fracdev and ratio Tdev/Texp
     """
     def __init__(self, obs, fracdev, TdByTe, **keys):
-        raise NotImplementedError("get working with nb")
         super(LMComposite,self).__init__(obs, 'cm', **keys)
 
         self.fracdev=fracdev
@@ -2394,25 +2265,13 @@ class LMComposite(LMSimple):
         res=self.get_result()
         pars=self.get_band_pars(res['pars'], band)
         return gmix.GMixCM(self.fracdev,
-                                  self.TdByTe,
-                                  pars)
+                           self.TdByTe,
+                           pars)
 
 
     def _make_model(self, band_pars):
         gm0=gmix.GMixCM(self.fracdev, self.TdByTe, band_pars)
         return gm0
-
-    def _fill_gmix(self, gm, band_pars):
-        _gmix.gmix_fill_cm(gm._data, band_pars)
-
-    def _convolve_gmix(self, gm, gm0, psf_gmix):
-        """
-        norms get set
-        """
-        _gmix.convolve_fill(gm._data,
-                            gm0._data['gmix'][0],
-                            psf_gmix._data)
-
 
 NOTFINITE_BIT=11
 def run_leastsq(func, guess, n_prior_pars, **keys):

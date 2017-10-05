@@ -290,7 +290,7 @@ _fvals_gauss = array([1.0])
 
 
 @njit(cache=True)
-def gmix_fill_simple(gmix, pars, fvals, pvals, set_norms):
+def gmix_fill_simple(gmix, pars, fvals, pvals):
     """
     fill a simple (6 parameter) gaussian mixture model
 
@@ -324,39 +324,36 @@ def gmix_fill_simple(gmix, pars, fvals, pvals, set_norms):
             T_i_2*(1+e1),
         )
 
-    if set_norms:
-        gmix_set_norms(gmix)
-
 @njit(cache=True)
-def gmix_fill_exp(gmix, pars, set_norms):
+def gmix_fill_exp(gmix, pars):
     """
     fill an exponential model
     """
-    gmix_fill_simple(gmix, pars, _fvals_exp, _pvals_exp, set_norms)
+    gmix_fill_simple(gmix, pars, _fvals_exp, _pvals_exp)
 
 @njit(cache=True)
-def gmix_fill_dev(gmix, pars, set_norms):
+def gmix_fill_dev(gmix, pars):
     """
     fill a dev model
     """
-    gmix_fill_simple(gmix, pars, _fvals_dev, _pvals_dev, set_norms)
+    gmix_fill_simple(gmix, pars, _fvals_dev, _pvals_dev)
 
 @njit(cache=True)
-def gmix_fill_turb(gmix, pars, set_norms):
+def gmix_fill_turb(gmix, pars):
     """
     fill a turbulent psf model
     """
-    gmix_fill_simple(gmix, pars, _fvals_turb, _pvals_turb, set_norms)
+    gmix_fill_simple(gmix, pars, _fvals_turb, _pvals_turb)
 
 @njit(cache=True)
-def gmix_fill_gauss(gmix, pars, set_norms):
+def gmix_fill_gauss(gmix, pars):
     """
     fill a gaussian model
     """
-    gmix_fill_simple(gmix, pars, _fvals_gauss, _pvals_gauss, set_norms)
+    gmix_fill_simple(gmix, pars, _fvals_gauss, _pvals_gauss)
 
 @njit(cache=True)
-def gmix_fill_cm(gmix, fracdev, TdByTe, Tfactor, pars, set_norms):
+def gmix_fill_cm(gmix, fracdev, TdByTe, Tfactor, pars):
     """
     fill a composite model
     """
@@ -393,9 +390,6 @@ def gmix_fill_cm(gmix, fracdev, TdByTe, Tfactor, pars, set_norms):
             T_i_2*e2,
             T_i_2*(1+e1),
         )
-
-    if set_norms:
-        gmix_set_norms(gmix)
 
 @njit(cache=True)
 def get_cm_Tfactor(fracdev, TdByTe):
@@ -482,8 +476,6 @@ def gmix_convolve_fill(self, gmix, psf):
                         p, row, col, irr, irc, icc)
 
             itot += 1
-
-    gmix_set_norms(self)
 
 @njit(cache=True)
 def g1g2_to_e1e2(g1, g2):

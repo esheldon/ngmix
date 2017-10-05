@@ -1,6 +1,9 @@
 from numba import njit
 
-from .gmix_nb import gmix_eval_pixel_fast
+from .gmix_nb import (
+    gmix_eval_pixel_fast,
+    gmix_set_norms,
+)
 
 try:
     xrange
@@ -32,6 +35,9 @@ def get_loglike(gmix, pixels):
     npix: int
         number of pixels used
     """
+
+    if gmix['norm_set'][0] == 0:
+        gmix_set_norms(gmix)
 
     npix = 0
     loglike = s2n_numer = s2n_denom = 0.0
@@ -70,6 +76,9 @@ def fill_fdiff(gmix, pixels, fdiff, start):
     fdiff: array
         Array to fill, should be same length as pixels
     """
+
+    if gmix['norm_set'][0] == 0:
+        gmix_set_norms(gmix)
 
     n_pixels = pixels.shape[0]
     for ipixel in xrange(n_pixels):
