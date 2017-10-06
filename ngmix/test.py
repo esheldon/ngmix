@@ -28,7 +28,7 @@ class TestFitting(unittest.TestCase):
         self.T=4.0
         self.counts=100.0
         self.g1=0.1
-        self.g2=0.1
+        self.g2=-0.05
 
         self.psf_model='gauss'
         self.g1psf = 0.03
@@ -37,7 +37,7 @@ class TestFitting(unittest.TestCase):
         self.countspsf=1.0
         self.noisepsf=0.001
 
-        self.seed=1000
+        self.seed=100
         numpy.random.seed(self.seed)
 
     def get_obs_data(self, model, noise):
@@ -161,7 +161,7 @@ class TestFitting(unittest.TestCase):
                 #                                          [-0.97,1.0e9]) # flux
                 prior=None
 
-                boot=bootstrap.CompositeBootstrapper(obs)
+                boot=bootstrap.CompositeBootstrapper(obs,verbose=True)
                 boot.fit_psfs('gauss', 4.0)
                 boot.fit_max('cm', max_pars, prior=prior)
                 res=boot.get_max_fitter().get_result()
