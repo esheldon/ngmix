@@ -592,7 +592,7 @@ class GMix(object):
         gm  = self.get_data()
         res = get_loglike(gm, obs._pixels)
 
-        res = pack_to_dict(res) if more else res
+        res = pack_to_dict(res) if more else res[0]
 
         return res
 
