@@ -14,7 +14,7 @@ from . import joint_prior
 from .fitting import *
 from .gexceptions import *
 from .jacobian import Jacobian, UnitJacobian
-from .bootstrap import Bootstrapper
+from . import bootstrap
 
 from . import em
 
@@ -25,7 +25,6 @@ def test():
 class TestFitting(unittest.TestCase):
 
     def setUp(self):
-        self.model='exp'
         self.T=4.0
         self.counts=100.0
         self.g1=0.1
@@ -38,12 +37,12 @@ class TestFitting(unittest.TestCase):
         self.countspsf=1.0
         self.noisepsf=0.001
 
-        self.seed=100
+        self.seed=1000
         numpy.random.seed(self.seed)
 
-    def get_obs_data(self, noise):
+    def get_obs_data(self, model, noise):
         obsdata=make_test_observations(
-            self.model,
+            model,
             g1_obj=self.g1,
             g2_obj=self.g2,
             T_obj=self.T,
@@ -65,7 +64,7 @@ class TestFitting(unittest.TestCase):
         for noise in [0.001, 0.1, 1.0]:
             print('='*10)
             print('noise:',noise)
-            mdict=self.get_obs_data(noise)
+            mdict=self.get_obs_data('exp',noise)
 
             obs=mdict['obs']
             obs.set_psf(mdict['psf_obs'])
@@ -86,7 +85,7 @@ class TestFitting(unittest.TestCase):
                                                       [-10.0,3500.], # T
                                                       [-0.97,1.0e9]) # flux
 
-            boot=Bootstrapper(obs)
+            boot=bootstrap.Bootstrapper(obs)
             boot.fit_psfs('gauss', 4.0)
             boot.fit_max('exp', max_pars, pars, prior=prior)
             res=boot.get_max_fitter().get_result()
@@ -102,7 +101,7 @@ class TestFitting(unittest.TestCase):
         for noise in [0.001, 0.1, 1.0]:
             print('='*10)
             print('noise:',noise)
-            mdict=self.get_obs_data(noise)
+            mdict=self.get_obs_data('exp',noise)
 
             obs=mdict['obs']
             obs.set_psf(mdict['psf_obs'])
@@ -128,7 +127,7 @@ class TestFitting(unittest.TestCase):
                                                       [-10.0,3500.], # T
                                                       [-0.97,1.0e9]) # flux
 
-            boot=Bootstrapper(obs)
+            boot=bootstrap.Bootstrapper(obs)
             boot.fit_psfs('gauss', 4.0)
             boot.fit_max('exp', max_pars, pars, prior=prior)
             res=boot.get_max_fitter().get_result()
@@ -139,21 +138,84 @@ class TestFitting(unittest.TestCase):
             print('s2n:',res['s2n_w'])
 
 
-def make_test_observations(model,
-                           g1_obj=0.1,
-                           g2_obj=0.05,
-                           T_obj=16.0,
-                           counts_obj=100.0,
-                           noise_obj=0.001,
-                           psf_model="gauss",
-                           g1_psf=0.0,
-                           g2_psf=0.0,
-                           T_psf=4.0,
-                           counts_psf=100.0,
-                           noise_psf=0.001,
-                           more=True):
+    def testCM(self):
 
-    from . import em
+        print('\n')
+        for model in ['exp','dev','cm']:
+            print("model:",model)
+            for noise in [0.001]:
+            #for noise in [0.001, 0.1, 1.0]:
+                print('='*10)
+                print('    noise:',noise)
+                mdict=self.get_obs_data(model,noise)
+
+                obs=mdict['obs']
+                obs.set_psf(mdict['psf_obs'])
+
+                max_pars={'method':'lm',
+                          'lm_pars':{'maxfev':4000}}
+
+                #prior=joint_prior.make_uniform_simple_sep([0.0,0.0],     # cen
+                #                                          [0.1,0.1],     # g
+                #                                          [-10.0,3500.], # T
+                #                                          [-0.97,1.0e9]) # flux
+                prior=None
+
+                boot=bootstrap.CompositeBootstrapper(obs)
+                boot.fit_psfs('gauss', 4.0)
+                boot.fit_max('cm', max_pars, prior=prior)
+                res=boot.get_max_fitter().get_result()
+
+                print_pars(mdict['pars'],   front='    pars true: ')
+                print_pars(res['pars'],     front='    pars meas: ')
+                print_pars(res['pars_err'], front='    pars err:  ')
+                print("    fracdev:",res['fracdev'], "TdByTe:",res['TdByTe'],"TdByTe_noclip:",res['TdByTe_noclip'])
+                print('    s2n:',res['s2n_w'])
+
+
+def make_test_observations(model, **kw):
+
+    if model=='cm':
+        imdata_dev=make_test_images('dev', **kw)
+        imdata_exp=make_test_images('exp', **kw)
+
+        imdata={}
+        imdata.update(imdata_dev)
+        imdata['im'] = (imdata_dev['im'] + imdata_exp['im'])*0.5
+        imdata['wt'] = 1.0/(1.0/imdata_dev['wt'] + 1.0/imdata_exp['wt'])
+    else:
+        imdata=make_test_images(model, **kw)
+
+    psf_obs = Observation(
+        imdata['psf'],
+        jacobian=imdata['jacobian'],
+    )
+
+    obs=Observation(
+        imdata['im'],
+        weight=imdata['wt'],
+        jacobian=imdata['jacobian'],
+    )
+
+    return {
+        'psf_obs':psf_obs,
+        'obs':obs,
+        'pars':imdata['pars'],
+    }
+
+def make_test_images(model,
+                     g1_obj=0.1,
+                     g2_obj=0.05,
+                     T_obj=16.0,
+                     counts_obj=100.0,
+                     noise_obj=0.001,
+                     psf_model="gauss",
+                     g1_psf=0.0,
+                     g2_psf=0.0,
+                     T_psf=4.0,
+                     counts_psf=100.0,
+                     noise_psf=0.001):
+
 
     sigma=sqrt( (T_obj + T_psf)/2. )
     dims=[2.*5.*sigma]*2
@@ -170,34 +232,21 @@ def make_test_observations(model,
 
     gm=gm_obj0.convolve(gm_psf)
 
-    im_psf=gm_psf.make_image(dims, jacobian=j, npoints=10)
+    im_psf=gm_psf.make_image(dims, jacobian=j)
     npsf=noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
     im_psf[:,:] += npsf
     wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
 
-    im_obj=gm.make_image(dims, jacobian=j, npoints=10)
+    im_obj=gm.make_image(dims, jacobian=j)
     n=noise_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
     im_obj[:,:] += n
     wt_obj=zeros(im_obj.shape) + 1./noise_obj**2
 
-    #
-    # fitting
-    #
-
-
-    # psf using EM
-    psf_obs = Observation(im_psf, jacobian=j)
-
-    obs=Observation(im_obj, weight=wt_obj, jacobian=j)
-
-    if more:
-        return {'psf_obs':psf_obs,
-                'obs':obs,
-                'pars':pars_obj,
-                'gm_obj0':gm_obj0,
-                'gm_obj':gm,
-                'gm_psf':gm_psf}
-    else:
-        return psf_obs, obs
-
+    return {
+        'pars':pars_obj,
+        'psf':im_psf,
+        'im':im_obj,
+        'wt':wt_obj,
+        'jacobian':j,
+    }
 
