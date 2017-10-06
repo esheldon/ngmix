@@ -1850,7 +1850,7 @@ class CompositeBootstrapper(Bootstrapper):
 
 
         TdByTe_raw = self._get_TdByTe(exp_fitter, dev_fitter)
-        TdByTe_range = pars.get('TdByTe_range',[-1.0e9,1.0e-9])
+        TdByTe_range = pars.get('TdByTe_range',[-1.0e9,1.0e9])
         TdByTe = numpy.clip(TdByTe_raw,TdByTe_range[0],TdByTe_range[1])
 
         if self.verbose:
