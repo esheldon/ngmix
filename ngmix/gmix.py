@@ -898,37 +898,21 @@ class GMixCoellip(GMixModel):
 
         self._model      = GMIX_COELLIP
         self._model_name = 'coellip'
-        pars = array(pars, dtype='f8', copy=True) 
+        self._fill_func  = _gmix_fill_functions[self._model_name]
 
-        npars=pars.size
+        npars=len(pars)
 
         ncheck=npars-4
         if ( ncheck % 2 ) != 0:
             raise ValueError("coellip must have len(pars)==4+2*ngauss, got %s" % npars)
 
-        self._pars=pars
+        self._pars   =zeros(npars)
         self._ngauss = ncheck//2
-        self._npars = npars
+        self._npars  = npars
 
         self.reset()
-        gm=self.get_data()
-        _gmix.gmix_fill(gm, pars, self._model)
 
-    def fill(self, pars):
-        """
-        Fill in the gaussian mixture with new parameters
-        """
-
-        pars = array(pars, dtype='f8', copy=True) 
-
-        if pars.size != self._npars:
-            raise ValueError("input pars have size %d, "
-                             "expected %d" % (pars.size, self._npars))
-
-        self._pars[:]=pars[:]
-
-        gm=self.get_data()
-        _gmix.gmix_fill(self._data, pars, self._model)
+        self._fill(pars)
 
     def copy(self):
         """

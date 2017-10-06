@@ -352,6 +352,40 @@ def gmix_fill_gauss(gmix, pars):
     """
     gmix_fill_simple(gmix, pars, _fvals_gauss, _pvals_gauss)
 
+
+@njit(cache=True)
+def gmix_fill_coellip(gmix, pars):
+    """
+    fill a coelliptical model
+
+    [cen1,cen2,g1,g2,T1,T2,...,F1,F2...]
+    """
+
+    row=pars[0]
+    col=pars[1]
+    g1=pars[2]
+    g2=pars[3]
+
+    e1,e2 = g1g2_to_e1e2(g1, g2)
+
+    n_gauss=gmix.size
+
+    for i in xrange(n_gauss):
+        T = pars[4+i]
+        Thalf=0.5*T
+        flux=pars[4+n_gauss+i]
+
+        gauss2d_set(
+            gmix[i],
+            flux,
+            row,
+            col, 
+            Thalf*(1-e1), 
+            Thalf*e2,
+            Thalf*(1+e1),
+        )
+
+
 @njit(cache=True)
 def gmix_fill_cm(gmix, fracdev, TdByTe, Tfactor, pars):
     """
@@ -425,13 +459,13 @@ def get_cm_Tfactor(fracdev, TdByTe):
 
     return Tfactor
 
-
 _gmix_fill_functions={
     'exp': gmix_fill_exp,
     'dev': gmix_fill_dev,
     'turb': gmix_fill_turb,
     'gauss': gmix_fill_gauss,
     'cm': gmix_fill_cm,
+    'coellip': gmix_fill_coellip,
 }
 
 @njit(cache=True)
