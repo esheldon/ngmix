@@ -86,8 +86,6 @@ class FitterBase(object):
     def __init__(self, obs, model, **keys):
         self.keys=keys
 
-        self.use_logpars=keys.get('use_logpars',False)
-
         self.use_round_T=keys.get('use_round_T',False)
         assert self.use_round_T==False,"no longer support round T"
 
@@ -832,7 +830,6 @@ class FracdevFitterMax(FitterBase):
 
         self.method=method
 
-        self.use_logpars=keys.get('use_logpars',False)
         self.set_obs(obs)
         self._set_images(exp_pars, dev_pars)
 
@@ -1075,13 +1072,7 @@ class FracdevFitterMax(FitterBase):
                 F = Fe + Fd
 
                 bad=False
-                if self.use_logpars:
-                    if F <= 0:
-                        bad=True
-                    else:
-                        allpars=numpy.array( [log(F), fracdev] )
-                else:
-                    allpars=numpy.array( [F, fracdev] )
+                allpars=numpy.array( [F, fracdev] )
 
                 if bad:
                     lnprob = -numpy.inf
@@ -1098,13 +1089,7 @@ class FracdevFitterMax(FitterBase):
                 T = (Fe*self.lin_exp_T + Fd*self.lin_dev_T)/F
 
                 bad=False
-                if self.use_logpars:
-                    if T <= 0 or F <= 0:
-                        bad=True
-                    else:
-                        allpars=numpy.array( [log(T), log(F), fracdev] )
-                else:
-                    allpars=numpy.array( [T, F, fracdev] )
+                allpars=numpy.array( [T, F, fracdev] )
 
                 if bad:
                     lnprob = -numpy.inf
@@ -1120,9 +1105,6 @@ class FracdevFitterMax(FitterBase):
         exp_pars=array(exp_pars,dtype='f8',ndmin=1,copy=True)
         dev_pars=array(dev_pars,dtype='f8',ndmin=1,copy=True)
 
-        if self.use_logpars:
-            exp_pars[4:] = exp(exp_pars[4:])
-            dev_pars[4:] = exp(dev_pars[4:])
         self.lin_exp_T = exp_pars[4]
         self.lin_dev_T = dev_pars[4]
         self.lin_exp_F = exp_pars[5:].copy()
@@ -1216,7 +1198,6 @@ class FracdevFitter(FitterBase):
         """
 
         self.npars=1
-        self.use_logpars=keys.get('use_logpars',False)
 
         self.set_obs(obs)
 
@@ -1305,10 +1286,6 @@ class FracdevFitter(FitterBase):
 
         exp_pars=array(exp_pars,dtype='f8',ndmin=1,copy=True)
         dev_pars=array(dev_pars,dtype='f8',ndmin=1,copy=True)
-
-        if self.use_logpars:
-            exp_pars[4:] = exp(exp_pars[4:])
-            dev_pars[4:] = exp(dev_pars[4:])
 
         nb=self.nband
 
@@ -1447,9 +1424,6 @@ class MaxSimple(FitterBase):
         pars=self._band_pars
 
         pars[:] = pars_in[:]
-        if self.use_logpars:
-            pars[4:] = numpy.exp(pars[4:])
-
         return pars
 
 
@@ -1580,9 +1554,6 @@ class MaxCoellip(MaxSimple):
         pars=self._band_pars
 
         pars[:] = pars_in[:]
-        if self.use_logpars:
-            pars[4:] = numpy.exp(pars[4:])
-
         return pars
 
 
@@ -1684,9 +1655,6 @@ class LMSimple(FitterBase):
         pars[0:5] = pars_in[0:5]
         pars[5] = pars_in[5+band]
 
-        if self.use_logpars:
-            pars[4:] = numpy.exp(pars[4:])
-
         return pars
 
     def get_T_s2n(self):
@@ -1698,15 +1666,10 @@ class LMSimple(FitterBase):
         T=res['pars'][4]
         Terr=res['pars_err'][4]
 
-        if self.use_logpars:
-            # sigma(logT) = dT/T
-            # => s2n(T) = 1.0/Terr
-            T_s2n = 1.0/Terr
+        if T==0.0 or Terr==0.0:
+            T_s2n=0.0
         else:
-            if T==0.0 or Terr==0.0:
-                T_s2n=0.0
-            else:
-                T_s2n = T/Terr
+            T_s2n = T/Terr
 
         return T_s2n
 
@@ -2241,9 +2204,6 @@ class LMCoellip(LMSimple):
         pars=self._band_pars
 
         pars[:] = pars_in[:]
-        if self.use_logpars:
-            pars[4:] = numpy.exp(pars[4:])
-
         return pars
 
 
@@ -2784,9 +2744,6 @@ class MCMCSimple(MCMCBase):
         pars=self._band_pars
 
         pars[:] = pars_in[:]
-        if self.use_logpars:
-            pars[4:] = numpy.exp(pars[4:])
-
         return pars
 
     def get_par_names(self, dolog=False):

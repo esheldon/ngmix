@@ -45,7 +45,7 @@ BOOT_WEIGHTS_LOW= 2**5
 
 class Bootstrapper(object):
     def __init__(self, obs,
-                 use_logpars=False, intpars=None, find_cen=False,
+                 intpars=None, find_cen=False,
                  verbose=False,
                  **kw):
         """
@@ -62,7 +62,6 @@ class Bootstrapper(object):
             need to run fit_psfs()
         """
 
-        self.use_logpars=use_logpars
         self.intpars=intpars
         self.find_cen=find_cen
         self.verbose=verbose
@@ -302,10 +301,7 @@ class Bootstrapper(object):
                         print("    replace cov failed, using LM cov")
                         cov=res['pars_cov']
 
-                    if self.use_logpars:
-                        Ts2n = sqrt(1.0/cov[2,2])
-                    else:
-                        Ts2n = res['pars'][2]/sqrt(cov[2,2])
+                    Ts2n = res['pars'][2]/sqrt(cov[2,2])
             except GMixRangeError as err:
                 print(str(err))
                 flags |= BOOT_TS2N_ROUND_FAIL 
@@ -320,8 +316,7 @@ class Bootstrapper(object):
                               mb_obs_list,
                               res['model'],
                               max_pars,
-                              prior=round_prior,
-                              use_logpars=self.use_logpars)
+                              prior=round_prior)
 
         runner.go(ntry=ntry)
 
@@ -346,9 +341,6 @@ class Bootstrapper(object):
         pars=pars_in.copy()
         pars_lin=pars.copy()
 
-        if self.use_logpars:
-            pars_lin[4:4+2] = exp(pars[4:4+2])
-
         g1,g2,T = pars_lin[2],pars_lin[3],pars_lin[4]
 
         f = get_round_factor(g1, g2)
@@ -361,10 +353,7 @@ class Bootstrapper(object):
 
         pars_lin[4]=Tround
 
-        if self.use_logpars:
-            pars[4] = log(pars_lin[4])
-        else:
-            pars[4] = pars_lin[4]
+        pars[4] = pars_lin[4]
 
         return pars, pars_lin
 
@@ -741,8 +730,7 @@ class Bootstrapper(object):
         guesser=self._get_max_guesser(guess=guess, prior=prior)
 
         runner=MaxRunnerFixT(self.mb_obs_list, gal_model, pars, guesser, T,
-                             prior=prior,
-                             use_logpars=self.use_logpars)
+                             prior=prior)
 
         runner.go(ntry=ntry)
 
@@ -774,8 +762,7 @@ class Bootstrapper(object):
             guesser=self._get_max_guesser(guess=guess, prior=prior)
 
         runner=MaxRunnerGOnly(self.mb_obs_list, gal_model, max_pars, guesser, pars_in,
-                              prior=prior,
-                              use_logpars=self.use_logpars)
+                              prior=prior)
 
         runner.go(ntry=ntry)
 
@@ -813,7 +800,6 @@ class Bootstrapper(object):
             obs, gal_model, pars, guesser,
             prior=prior,
             intpars=self.intpars,
-            use_logpars=self.use_logpars,
         )
 
         runner.go(ntry=ntry)
@@ -892,8 +878,7 @@ class Bootstrapper(object):
 
         model=res['model']
         tfitter=MaxSimple(self.mb_obs_list,
-                          model,
-                          use_logpars=self.use_logpars)
+                          model)
         tfitter._setup_data(res['pars'])
  
         sampler=PSampler(res['pars'],
@@ -959,10 +944,7 @@ class Bootstrapper(object):
         generate a guess, drawing from priors on the other parameters
         """
 
-        if self.use_logpars:
-            scaling='log'
-        else:
-            scaling='linear'
+        scaling='linear'
 
         if guess is not None:
             guesser=ParsGuesser(guess, scaling=scaling, widths=widths)
@@ -1033,8 +1015,7 @@ class BootstrapperGaussMom(Bootstrapper):
         guesser=self._get_max_guesser(guess=guess, prior=prior)
 
         runner=MaxRunnerGaussMom(self.mb_obs_list, pars, guesser,
-                                 prior=prior,
-                                 use_logpars=self.use_logpars)
+                                 prior=prior)
 
         runner.go(ntry=ntry)
 
@@ -1575,7 +1556,6 @@ class MaxMetacalBootstrapper(Bootstrapper):
         for key in sorted(obs_dict):
             # run a regular Bootstrapper on these observations
             boot = Bootstrapper(obs_dict[key],
-                                use_logpars=self.use_logpars,
                                 intpars=self.intpars,
                                 find_cen=self.find_cen,
                                 verbose=self.verbose)
@@ -1759,12 +1739,10 @@ class DeconvMetacalBootstrapper(MaxMetacalBootstrapper):
 
 class CompositeBootstrapper(Bootstrapper):
     def __init__(self, obs,
-                 use_logpars=False,
                  fracdev_prior=None,
                  fracdev_grid=None, **kw):
 
-        super(CompositeBootstrapper,self).__init__(obs,
-                                                   use_logpars=use_logpars, **kw)
+        super(CompositeBootstrapper,self).__init__(obs, **kw)
 
         self.fracdev_prior=fracdev_prior
         if fracdev_grid is not None:
@@ -1876,7 +1854,6 @@ class CompositeBootstrapper(Bootstrapper):
                     fracdev_clipped,
                     TdByTe,
                     prior=prior,
-                    use_logpars=self.use_logpars,
                 )
                 runner.go(ntry=ntry)
                 ok=True
@@ -1964,8 +1941,7 @@ class CompositeBootstrapper(Bootstrapper):
                                        max_pars,
                                        res['fracdev'],
                                        res['TdByTe'],
-                                       prior=round_prior,
-                                       use_logpars=self.use_logpars)
+                                       prior=round_prior)
 
         runner.go(ntry=ntry)
 
@@ -1992,13 +1968,11 @@ class CompositeBootstrapper(Bootstrapper):
 
         fprior=self.fracdev_prior
         if fprior is None:
-            ffitter = FracdevFitter(self.mb_obs_list, epars, dpars,
-                                    use_logpars=self.use_logpars)
+            ffitter = FracdevFitter(self.mb_obs_list, epars, dpars)
             res=ffitter.get_result()
         else:
 
             ffitter = FracdevFitterMax(self.mb_obs_list, epars, dpars,
-                                       use_logpars=self.use_logpars,
                                        prior=fprior)
             if use_grid:
                 res=self._fit_fracdev_grid(ffitter)
@@ -2063,12 +2037,8 @@ class CompositeBootstrapper(Bootstrapper):
         epars=exp_fitter.get_result()['pars']
         dpars=dev_fitter.get_result()['pars']
 
-        if self.use_logpars:
-            Te = exp(epars[4])
-            Td = exp(dpars[4])
-        else:
-            Te = epars[4]
-            Td = dpars[4]
+        Te = epars[4]
+        Td = dpars[4]
         TdByTe = Td/Te
 
         return TdByTe
@@ -2076,10 +2046,8 @@ class CompositeBootstrapper(Bootstrapper):
 
 class BestBootstrapper(Bootstrapper):
     def __init__(self, obs,
-                 use_logpars=False,
                  fracdev_prior=None, **kw):
-        super(BestBootstrapper,self).__init__(obs,
-                                              use_logpars=use_logpars, **kw)
+        super(BestBootstrapper,self).__init__(obs, **kw)
 
     def fit_max(self, exp_prior, dev_prior, exp_rate, pars, ntry=1):
         """
@@ -2437,8 +2405,7 @@ class MaxRunner(object):
                  max_pars,
                  guesser,
                  prior=None,
-                 intpars=None,
-                 use_logpars=False):
+                 intpars=None):
 
         self.obs=obs
         self.intpars=intpars
@@ -2453,7 +2420,6 @@ class MaxRunner(object):
 
         self.model=model
         self.prior=prior
-        self.use_logpars=use_logpars
 
         self.guesser=guesser
 
@@ -2484,7 +2450,6 @@ class MaxRunner(object):
             fitter=fitclass(self.obs,
                             self.model,
                             lm_pars=self.send_pars,
-                            use_logpars=self.use_logpars,
                             npoints=npoints,
                             prior=self.prior)
 
@@ -2512,7 +2477,6 @@ class MaxRunner(object):
             fitter=fitclass(
                 self.obs,
                 self.model,
-                use_logpars=self.use_logpars,
                 npoints=npoints,
                 prior=self.prior,
 
@@ -2543,7 +2507,7 @@ class MaxRunnerGaussMom(object):
     """
     wrapper to generate guesses and run the fitter a few times
     """
-    def __init__(self, obs, max_pars, guesser, prior=None, use_logpars=False):
+    def __init__(self, obs, max_pars, guesser, prior=None):
         self.obs=obs
 
         self.max_pars=max_pars
@@ -2554,7 +2518,6 @@ class MaxRunnerGaussMom(object):
             self.send_pars=max_pars
 
         self.prior=prior
-        self.use_logpars=use_logpars
 
         self.guesser=guesser
 
@@ -2575,7 +2538,6 @@ class MaxRunnerGaussMom(object):
             guess=self.guesser()
             fitter=fitclass(self.obs,
                             lm_pars=self.send_pars,
-                            use_logpars=self.use_logpars,
                             prior=self.prior)
 
             fitter.go(guess)
@@ -2593,7 +2555,7 @@ class MaxRunnerGaussMom(object):
 
 
 class MaxRunnerFixT(MaxRunner):
-    def __init__(self, obs, model, max_pars, guesser, T, prior=None, use_logpars=False):
+    def __init__(self, obs, model, max_pars, guesser, T, prior=None):
         self.obs=obs
 
         self.max_pars=max_pars
@@ -2606,7 +2568,6 @@ class MaxRunnerFixT(MaxRunner):
 
         self.model=model
         self.prior=prior
-        self.use_logpars=use_logpars
         self.T=T
 
         self.guesser=guesser
@@ -2620,7 +2581,6 @@ class MaxRunnerFixT(MaxRunner):
                                 self.model,
                                 T=self.T,
                                 lm_pars=self.send_pars,
-                                use_logpars=self.use_logpars,
                                 prior=self.prior)
 
             guess0=self.guesser()
@@ -2637,7 +2597,7 @@ class MaxRunnerFixT(MaxRunner):
         self.fitter=fitter
 
 class MaxRunnerGOnly(MaxRunner):
-    def __init__(self, obs, model, max_pars, guesser, pars_in, prior=None, use_logpars=False):
+    def __init__(self, obs, model, max_pars, guesser, pars_in, prior=None):
         self.obs=obs
 
         self.max_pars=max_pars
@@ -2650,7 +2610,6 @@ class MaxRunnerGOnly(MaxRunner):
 
         self.model=model
         self.prior=prior
-        self.use_logpars=use_logpars
         self.pars_in=pars_in
 
         self.guesser=guesser
@@ -2664,7 +2623,6 @@ class MaxRunnerGOnly(MaxRunner):
                                  self.model,
                                  pars=self.pars_in,
                                  lm_pars=self.send_pars,
-                                 use_logpars=self.use_logpars,
                                  prior=self.prior)
 
             guess0=self.guesser()
@@ -2687,11 +2645,7 @@ class MaxRunnerGOnly(MaxRunner):
 class RoundRunnerBase(object):
     def _get_round_guesser(self, **kw):
 
-        use_logpars=kw.get('use_logpars',False)
-        if use_logpars:
-            scaling='log'
-        else:
-            scaling='linear'
+        scaling='linear'
 
         prior=kw.get('prior',None)
         guesser=RoundParsGuesser(self.pars_sub,
@@ -2728,8 +2682,7 @@ class CompositeMaxRunner(MaxRunner):
                  guesser,
                  fracdev,
                  TdByTe,
-                 prior=None,
-                 use_logpars=False):
+                 prior=None):
         self.obs=obs
 
         self.max_pars=max_pars
@@ -2743,7 +2696,6 @@ class CompositeMaxRunner(MaxRunner):
             self.send_pars=max_pars
 
         self.prior=prior
-        self.use_logpars=use_logpars
 
         self.guesser=guesser
 
@@ -2758,7 +2710,6 @@ class CompositeMaxRunner(MaxRunner):
                             self.fracdev,
                             self.TdByTe,
                             lm_pars=self.send_pars,
-                            use_logpars=self.use_logpars,
                             prior=self.prior)
 
             fitter.go(guess)
