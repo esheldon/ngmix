@@ -1,6 +1,6 @@
 import numpy
 from numpy import array, nan
-from numba import jit, njit
+from numba import njit
 from .fastexp_nb import exp3
 
 try:
@@ -126,7 +126,7 @@ def gmix_get_cen(gmix):
 
     return row, col, psum
 
-@jit(cache=True)
+@njit(cache=True)
 def gmix_get_e1e2T(gmix):
     """
     get e1,e2,T for the gaussian mixture
