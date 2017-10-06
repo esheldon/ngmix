@@ -3,7 +3,12 @@ from numpy import nan
 from numba import njit
 
 from .gexceptions import GMixRangeError
-from .gmix_nb import gauss2d_set_norm, gmix_get_e1e2T
+from .gmix_nb import (
+    gauss2d_set,
+    gmix_set_norms,
+    gauss2d_set_norm,
+    gmix_get_e1e2T,
+)
 from .fastexp_nb import exp3
 
 try:
@@ -33,18 +38,24 @@ def em_run(conf, pixels, sums, gmix):
         Initialized to the starting guess
     """
 
+    gmix_set_norms(gmix)
+    tol=conf['tol']
+    counts=conf['counts']
+
     area = pixels.size*conf['pixel_scale']*conf['pixel_scale']
 
-    nsky = conf['sky_guess']/conf['counts']
-    psky = conf['sky_guess']/(conf['counts']/area)
+    nsky = conf['sky_guess']/counts
+    psky = conf['sky_guess']/(counts/area)
 
     T_last = e1_last = e2_last = -9999.0
+
     for i in xrange(conf['maxiter']):
         skysum=0.0
         clear_sums(sums)
 
         for pixel in pixels:
 
+            # this fills some fields of sums, as well as return
             gtot = do_scratch_sums(pixel, gmix, sums)
 
             gtot += nsky
@@ -53,8 +64,9 @@ def em_run(conf, pixels, sums, gmix):
 
             imnorm = pixel['val']/counts
             skysum += nsky*imnorm/gtot
-
             igrat = imnorm/gtot
+
+            # multiply sums by igrat, among other things
             do_sums(sums, igrat)
 
         gmix_set_from_sums(gmix, sums)
@@ -82,15 +94,19 @@ def do_scratch_sums(pixel, gmix, sums):
     do the basic sums for this pixel, using
     scratch space in the sums struct
     """
-    n_gauss = gmix.size
 
     gtot = 0.0
-    for igauss in xrange(n_gauss):
-        gauss = gmix[igauss]
-        tsums = sums[igauss]
 
-        vdiff = pixel['v']-gauss['row']
-        udiff = pixel['u']-gauss['col']
+    n_gauss = gmix.size
+    for i in xrange(n_gauss):
+        gauss = gmix[i]
+        tsums = sums[i]
+
+        v = pixel['v']
+        u = pixel['u']
+
+        vdiff = v-gauss['row']
+        udiff = u-gauss['col']
 
         u2 = udiff*udiff
         v2 = vdiff*vdiff
@@ -101,8 +117,11 @@ def do_scratch_sums(pixel, gmix, sums):
 
         if chi2 < 25.0 and chi2 >= 0.0:
             tsums['gi'] = gauss['pnorm']*exp3( -0.5*chi2 )
+        else:
+            tsums['gi'] = 0.0
 
         gtot += tsums['gi']
+
         tsums['trowsum'] = v*tsums['gi']
         tsums['tcolsum'] = u*tsums['gi']
         tsums['tv2sum']  = v2*tsums['gi']
@@ -118,8 +137,8 @@ def do_sums(sums, igrat):
     """
 
     n_gauss=sums.size
-    for igauss in xrange(n_gauss):
-        tsums = sums[igauss]
+    for i in xrange(n_gauss):
+        tsums = sums[i]
 
         # wtau is gi[pix]/gtot[pix]*imnorm[pix]
         # which is Dave's tau*imnorm = wtau
@@ -147,7 +166,7 @@ def gmix_set_from_sums(gmix, sums):
         tsums = sums[i]
         gauss = gmix[i]
 
-        p = tsum['pnew']
+        p = tsums['pnew']
         pinv=1.0/p
 
         gauss2d_set(
@@ -167,4 +186,19 @@ def clear_sums(sums):
     """
     set all sums to zero
     """
-    sums.fill(0)
+    sums['gi'][:] = 0.0
+
+    sums['trowsum'][:] = 0.0
+    sums['tcolsum'][:] = 0.0
+    sums['tu2sum'][:] = 0.0
+    sums['tuvsum'][:] = 0.0
+    sums['tv2sum'][:] = 0.0
+
+    # sums over all pixels
+    sums['pnew'][:] = 0.0
+    sums['rowsum'][:] = 0.0
+    sums['colsum'][:] = 0.0
+    sums['u2sum'][:] = 0.0
+    sums['uvsum'][:] = 0.0
+    sums['v2sum'][:] = 0.0
+
