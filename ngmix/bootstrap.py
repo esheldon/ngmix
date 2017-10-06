@@ -1806,7 +1806,8 @@ class CompositeBootstrapper(Bootstrapper):
             exp_guess = None
             dev_guess = None
             
-        print("    fitting exp")
+        if self.verbose:
+            print("    fitting exp")
         exp_fitter=self._fit_one_model_max(
             'exp',
             pars,
@@ -1815,11 +1816,14 @@ class CompositeBootstrapper(Bootstrapper):
             ntry=ntry,
             guess_widths=guess_widths,
         )
-        fitting.print_pars(exp_fitter.get_result()['pars'], front='        gal_pars:')
-        fitting.print_pars(exp_fitter.get_result()['pars_err'], front='        gal_perr:')
-        print('        lnprob: %e' % exp_fitter.get_result()['lnprob'])
-        
-        print("    fitting dev")
+
+        if self.verbose:
+            fitting.print_pars(exp_fitter.get_result()['pars'], front='        gal_pars:')
+            fitting.print_pars(exp_fitter.get_result()['pars_err'], front='        gal_perr:')
+            print('        lnprob: %e' % exp_fitter.get_result()['lnprob'])
+            
+            print("    fitting dev")
+
         dev_fitter=self._fit_one_model_max(
             'dev',
             pars,
@@ -1828,26 +1832,31 @@ class CompositeBootstrapper(Bootstrapper):
             ntry=ntry,
             guess_widths=guess_widths,
         )
-        fitting.print_pars(dev_fitter.get_result()['pars'],
-                           front='        gal_pars:')
-        fitting.print_pars(dev_fitter.get_result()['pars_err'],
-                           front='        gal_perr:')
-        print('        lnprob: %e' % dev_fitter.get_result()['lnprob'])           
-            
-        print("    fitting fracdev")
+
+        if self.verbose:
+            fitting.print_pars(dev_fitter.get_result()['pars'],
+                               front='        gal_pars:')
+            fitting.print_pars(dev_fitter.get_result()['pars_err'],
+                               front='        gal_perr:')
+            print('        lnprob: %e' % dev_fitter.get_result()['lnprob'])           
+                
+            print("    fitting fracdev")
+
         use_grid=pars.get('use_fracdev_grid',False)
         fres=self._fit_fracdev(exp_fitter, dev_fitter, use_grid=use_grid)
 
         fracdev = fres['fracdev']
         fracdev_clipped = self._clip_fracdev(fracdev,pars)
 
-        mess='        nfev: %d fracdev: %.3f +/- %.3f clipped: %.3f'
-        print(mess % (fres['nfev'],fracdev,fres['fracdev_err'],fracdev_clipped))
 
         TdByTe_raw = self._get_TdByTe(exp_fitter, dev_fitter)
         TdByTe_range = pars.get('TdByTe_range',[-1.0e9,1.0e-9])
         TdByTe = numpy.clip(TdByTe_raw,TdByTe_range[0],TdByTe_range[1])
-        print('        Td/Te: %.3f clipped: %.3f' % (TdByTe_raw,TdByTe))
+
+        if self.verbose:
+            mess='        nfev: %d fracdev: %.3f +/- %.3f clipped: %.3f'
+            print(mess % (fres['nfev'],fracdev,fres['fracdev_err'],fracdev_clipped))
+            print('        Td/Te: %.3f clipped: %.3f' % (TdByTe_raw,TdByTe))
         
         guesser=self._get_max_guesser(
             guess=guess,
@@ -1855,7 +1864,8 @@ class CompositeBootstrapper(Bootstrapper):
             widths=guess_widths,
         )
 
-        print("    fitting composite")
+        if self.verbose:
+            print("    fitting composite")
         ok=False
         for i in range(1,5):
             try:
@@ -1872,12 +1882,6 @@ class CompositeBootstrapper(Bootstrapper):
                 ok=True
                 break
             except GMixRangeError:
-                #if i==1:
-                #    print("caught GMixRange, clipping [-1.0,1.5]")
-                #    fracdev_clipped = fracdev_clipped.clip(min=-1.0, max=1.5)
-                #elif i==2:
-                #    print("caught GMixRange, clipping [ 0.0,1.0]")
-                #    fracdev_clipped = fracdev_clipped.clip(min=0.0, max=1.0)
                 print("caught GMixRange, clipping [ 0.0,1.0]")
                 fracdev_clipped = fracdev_clipped.clip(min=0.0, max=1.0)
 
@@ -1897,10 +1901,11 @@ class CompositeBootstrapper(Bootstrapper):
             pprint(res)
             raise BootGalFailure("weird error with lnprob missing")
 
-        fitting.print_pars(res['pars'], front='        gal_pars:')
-        fitting.print_pars(res['pars_err'], front='        gal_perr:')
-        print('        lnprob: %e' % res['lnprob'])
-        
+        if self.verbose:
+            fitting.print_pars(res['pars'], front='        gal_pars:')
+            fitting.print_pars(res['pars_err'], front='        gal_perr:')
+            print('        lnprob: %e' % res['lnprob'])
+            
 
         res['TdByTe'] = TdByTe
         res['TdByTe_noclip'] = TdByTe_raw
