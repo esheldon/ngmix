@@ -1,4 +1,4 @@
-#include <omp.h>
+//#include <omp.h>
 #include <stdlib.h>
 #include "render.h"
 #include "fastexp.h"
@@ -23,10 +23,12 @@ void render(const struct gauss *gmix,
 
     double udiff=0, vdiff=0, model_val=0, chi2=0;
 
+/*
 #pragma omp parallel for \
         default(none) \
         shared(gmix,coords,n_pixels,n_gauss,image) \
         private(ipixel,coord,igauss,gauss,vdiff,udiff,chi2,model_val)
+*/
 
     for (ipixel=0; ipixel < n_pixels; ipixel++) {
         coord = &coords[ipixel];

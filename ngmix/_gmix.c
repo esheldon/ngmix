@@ -11,7 +11,7 @@
 
 
 #include <time.h>
-#include <omp.h>
+//#include <omp.h>
 #include <complex.h>
 #include "_gmix.h"
 
@@ -710,6 +710,7 @@ _bail:
 // multi-threaded version
 //
 
+/*
 static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
 
     int status=1;
@@ -793,6 +794,7 @@ _bail:
 
 }
 
+*/
 
 //
 // 2-d integration, so will probably remain here
@@ -2896,8 +2898,8 @@ static PyMethodDef pygauss2d_funcs[] = {
     // filling fdiff = (model-data)/err for LM fitters
     {"fill_fdiff",  (PyCFunction)PyGMix_fill_fdiff,
         METH_VARARGS,  "fill fdiff for LM\n"},
-    {"fill_fdiff_parallel",  (PyCFunction)PyGMix_fill_fdiff_parallel,
-        METH_VARARGS,  "fill fdiff for LM\n"},
+    //{"fill_fdiff_parallel",  (PyCFunction)PyGMix_fill_fdiff_parallel,
+    //    METH_VARARGS,  "fill fdiff for LM\n"},
 
     {"fill_fdiff_gauleg",  (PyCFunction)PyGMix_fill_fdiff_gauleg,
         METH_VARARGS,  "fill fdiff for LM, integrating over pixels\n"},
