@@ -2899,187 +2899,6 @@ static PyMethodDef pygauss2d_funcs[] = {
 };
 
 
-/* class representing a 2-d disk with max radius */
-
-struct PyGMixZDisk2D {
-    PyObject_HEAD
-    double radius;
-    double radius_sq;
-};
-
-static int
-PyGMixZDisk2D_init(struct PyGMixZDisk2D* self, PyObject *args)
-{
-    if (!PyArg_ParseTuple(args, (char*)"d", 
-                          &self->radius)) {
-        return -1;
-    }
-
-    self->radius_sq = self->radius*self->radius;
-    return 0;
-}
-
-static PyObject* PyGMixZDisk2D_get_lnprob_scalar1d(struct PyGMixZDisk2D* self,
-                                                   PyObject *args)
-{
-    double r=0;
-    if (!PyArg_ParseTuple(args, (char*)"d", &r)) {
-        return NULL;
-    }
-
-    if (r >= self->radius) {
-        PyErr_Format(GMixRangeErrorC, "position out of bounds");
-        return NULL;
-    } else {
-        return PyFloat_FromDouble(0.0);
-    }
-
-}
-static PyObject* PyGMixZDisk2D_get_prob_scalar1d(struct PyGMixZDisk2D* self,
-                                                 PyObject *args)
-{
-    double r=0, retval=0;
-    if (!PyArg_ParseTuple(args, (char*)"d", &r)) {
-        return NULL;
-    }
-
-    if (r >= self->radius) {
-        retval=0.0; 
-    } else {
-        retval=1.0;
-    }
-    return PyFloat_FromDouble(retval);
-}
-
-
-static PyObject* PyGMixZDisk2D_get_lnprob_scalar2d(struct PyGMixZDisk2D* self,
-                                                   PyObject *args)
-{
-    double x=0, y=0, r2=0;
-    if (!PyArg_ParseTuple(args, (char*)"dd", &x, &y)) {
-        return NULL;
-    }
-
-    r2 = x*x + y*y;
-    if (r2 >= self->radius_sq) {
-        PyErr_Format(GMixRangeErrorC, "position out of bounds");
-        return NULL;
-    } else {
-        return PyFloat_FromDouble(0.0);
-    }
-
-}
-
-static PyObject* PyGMixZDisk2D_get_prob_scalar2d(struct PyGMixZDisk2D* self,
-                                                 PyObject *args)
-{
-    double x=0, y=0, r2=0, retval=0;
-    if (!PyArg_ParseTuple(args, (char*)"dd", &x, &y)) {
-        return NULL;
-    }
-
-    r2 = x*x + y*y;
-
-    if (r2 >= self->radius_sq) {
-        retval=0.0; 
-    } else {
-        retval=1.0;
-    }
-    return PyFloat_FromDouble(retval);
-}
-
-static PyObject* PyGMixZDisk2D_get_prob_array2d(struct PyGMixZDisk2D* self,
-                                                PyObject *args)
-{
-    PyObject *xobj=NULL, *yobj=NULL, *probobj=NULL;
-    npy_intp nx=0, i=0;
-    double x=0, y=0, r2=0, *probptr=0;
-    if (!PyArg_ParseTuple(args, (char*)"OOO", &xobj, &yobj, &probobj)) {
-        return NULL;
-    }
-
-    nx=PyArray_SIZE(xobj);
-
-    for (i=0; i<nx; i++) {
-        x= *( (double*) PyArray_GETPTR1(xobj, i) );
-        y= *( (double*) PyArray_GETPTR1(yobj, i) );
-        probptr = (double*) PyArray_GETPTR1(probobj, i);
-
-        r2 = x*x + y*y;
-
-        if (r2 >= self->radius_sq) {
-            *probptr=0.0; 
-        } else {
-            *probptr=1.0; 
-        }
-    }
-    Py_RETURN_NONE;
-}
-
-
-static PyMethodDef PyGMixZDisk2D_methods[] = {
-    {"get_lnprob_scalar1d", (PyCFunction)PyGMixZDisk2D_get_lnprob_scalar1d, METH_VARARGS, "0 inside disk, throw exception outside"},
-    {"get_prob_scalar1d", (PyCFunction)PyGMixZDisk2D_get_prob_scalar1d, METH_VARARGS, "1 inside disk, 0 outside"},
-
-    {"get_lnprob_scalar2d", (PyCFunction)PyGMixZDisk2D_get_lnprob_scalar2d, METH_VARARGS, "0 inside disk, throw exception outside"},
-    {"get_prob_scalar2d", (PyCFunction)PyGMixZDisk2D_get_prob_scalar2d, METH_VARARGS, "1 inside disk, 0 outside"},
-    {"get_prob_array2d", (PyCFunction)PyGMixZDisk2D_get_prob_array2d, METH_VARARGS, "1 inside disk, 0 outside"},
-    {NULL}  /* Sentinel */
-};
-
-
-static PyTypeObject PyGMixZDisk2DType = {
-#if PY_MAJOR_VERSION >= 3
-    PyVarObject_HEAD_INIT(NULL, 0)
-#else
-    PyObject_HEAD_INIT(NULL)
-    0,                         /*ob_size*/
-#endif
-    "_gmix.ZDisk2D",            /*tp_name*/
-    sizeof(struct PyGMixZDisk2D), /*tp_basicsize*/
-    0,                         /*tp_itemsize*/
-    0,                         /*tp_dealloc*/
-    0,                         /*tp_print*/
-    0,                         /*tp_getattr*/
-    0,                         /*tp_setattr*/
-    0,                         /*tp_compare*/
-    0,                         /*tp_repr*/
-    0,                         /*tp_as_number*/
-    0,                         /*tp_as_sequence*/
-    0,                         /*tp_as_mapping*/
-    0,                         /*tp_hash */
-    0,                         /*tp_call*/
-    0,                         /*tp_str*/
-    0,                         /*tp_getattro*/
-    0,                         /*tp_setattro*/
-    0,                         /*tp_as_buffer*/
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /*tp_flags*/
-    "PyGMix ZDisk2D distribution",           /* tp_doc */
-    0,                     /* tp_traverse */
-    0,                     /* tp_clear */
-    0,                     /* tp_richcompare */
-    0,                     /* tp_weaklistoffset */
-    0,                     /* tp_iter */
-    0,                     /* tp_iternext */
-    PyGMixZDisk2D_methods,             /* tp_methods */
-    0,             /* tp_members */
-    0,                         /* tp_getset */
-    0,                         /* tp_base */
-    0,                         /* tp_dict */
-    0,                         /* tp_descr_get */
-    0,                         /* tp_descr_set */
-    0,                         /* tp_dictoffset */
-    //0,     /* tp_init */
-    (initproc)PyGMixZDisk2D_init,      /* tp_init */
-    0,                         /* tp_alloc */
-    //PyGMixObject_new,                 /* tp_new */
-    PyType_GenericNew,                 /* tp_new */
-};
-
-
-
-
-
 
 #if PY_MAJOR_VERSION >= 3
     static struct PyModuleDef moduledef = {
@@ -3107,13 +2926,7 @@ init_gmix(void)
 {
     PyObject* m=NULL;
 
-    PyGMixZDisk2DType.tp_new = PyType_GenericNew;
-
 #if PY_MAJOR_VERSION >= 3
-    if (PyType_Ready(&PyGMixZDisk2DType) < 0) {
-        return NULL;
-    }
-
 
     m = PyModule_Create(&moduledef);
     if (m==NULL) {
@@ -3121,10 +2934,6 @@ init_gmix(void)
     }
 
 #else
-    if (PyType_Ready(&PyGMixZDisk2DType) < 0) {
-        return;
-    }
-
 
 
     m = Py_InitModule3("_gmix", pygauss2d_funcs, "Define gmix funcs.");
@@ -3163,12 +2972,6 @@ init_gmix(void)
 #endif
         }
     }
-
-
-    Py_INCREF(&PyGMixZDisk2DType);
-    PyModule_AddObject(m, "ZDisk2D", (PyObject *)&PyGMixZDisk2DType);
-
-
 
     // for numpy
     import_array();

@@ -3877,7 +3877,7 @@ def scipy_to_lognorm(shape, scale):
 
     return meanx, sigmax
 
-class CenPrior(_gmix.Normal2D):
+class CenPrior(object):
     """
     Independent gaussians in each dimension
     """
@@ -4488,12 +4488,9 @@ _g_cosmos_k = 3
 '''
 
 
-class ZDisk2D(_gmix.ZDisk2D):
+class ZDisk2D(object):
     """
     uniform over a disk centered at zero [0,0] with radius r
-
-    Note get_lnprob_scalar1d and get_prob_scalar1d and 2d are already
-    part of base class
     """
     def __init__(self, radius, rng=None):
 
@@ -4502,7 +4499,60 @@ class ZDisk2D(_gmix.ZDisk2D):
         self.radius = radius
         self.radius_sq = radius**2
 
-        super(ZDisk2D,self).__init__(radius, rng=rng)
+    def get_lnprob_scalar1d(self, r):
+        """
+        get ln(prob) at radius r=sqrt(x^2 + y^2)
+        """
+        if r >= self.radius:
+            raise GMixRangeError("position out of bounds")
+        return 0.0
+
+    def get_prob_scalar1d(self, r):
+        """
+        get prob at radius r=sqrt(x^2 + y^2)
+        """
+        if r >= self.radius:
+            return 0.0
+        else:
+            return 1.0
+
+    def get_lnprob_scalar2d(self, x, y):
+        """
+        get ln(prob) at the input position
+        """
+        r2 = x**2 + y**2
+        if r2 >= self.radius_sq:
+            raise GMixRangeError("position out of bounds")
+
+        return 0.0
+
+    def get_prob_scalar2d(self, x, y):
+        """
+        get ln(prob) at the input position
+        """
+
+        r2 = x**2 + y**2
+        if r2 >= self.radius_sq:
+            return 0.0
+        else:
+            return 1.0
+
+    def get_prob_array2d(self, x, y):
+        """
+        probability, 1.0 inside disk, outside raises exception
+
+        does not raise an exception
+        """
+        x=numpy.array(x, dtype='f8', ndmin=1, copy=False)
+        y=numpy.array(y, dtype='f8', ndmin=1, copy=False)
+        out=numpy.zeros(x.size, dtype='f8')
+
+        r2 = x**2 + y**2
+        w,=numpy.where(r2 < self.radius_sq)
+        if w.size > 0:
+            out[w] = 1.0
+
+        return out
 
     def sample1d(self, n=None):
         """
@@ -4546,19 +4596,6 @@ class ZDisk2D(_gmix.ZDisk2D):
             y=y[0]
 
         return x,y
-
-    def get_prob_array2d(self, x, y):
-        """
-        probability, 1.0 inside disk, outside raises exception
-
-        does not raise an exception
-        """
-        x=numpy.array(x, dtype='f8', ndmin=1, copy=False)
-        y=numpy.array(y, dtype='f8', ndmin=1, copy=False)
-        out=numpy.zeros(x.size, dtype='f8')
-
-        super(ZDisk2D,self).get_prob_array2d(x,y,out)
-        return out
 
 class ZAnnulus(ZDisk2D):
     """
