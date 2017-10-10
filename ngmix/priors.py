@@ -2866,7 +2866,7 @@ class FlatEtaPrior(PriorBase):
     '''
 
 
-class Normal(_gmix.Normal):
+class Normal(object):
     """
     This class provides an interface consistent with LogNormal
 
@@ -2875,21 +2875,37 @@ class Normal(_gmix.Normal):
     def __init__(self, cen, sigma, rng=None):
         self.cen=cen
         self.sigma=sigma
+        self.s2inv=1.0/sigma**2
         self.ndim=1
 
         self.rng=make_rng(rng=rng)
 
-        super(Normal,self).__init__(cen, sigma)
+    def get_lnprob_scalar(self, x):
+        """
+        -0.5 * ( (x-cen)/sigma )**2
+        """
+        diff = self.cen-x
+        return -0.5*diff*diff*self.s2inv
+
+    def get_prob_scalar(self, x):
+        """
+        -0.5 * ( (x-cen)/sigma )**2
+        """
+        from math import exp
+        diff = self.cen-x
+        lnp = -0.5*diff*diff*self.s2inv
+        return exp(lnp)
 
     def sample(self, size=None):
         """
         Get samples.  Send no args to get a scalar.
         """
-        return self.rng.normal(loc=self.cen,
-                               scale=self.sigma,
-                               size=size)
-        #rand=self.cen + self.sigma*self.rng.randn(*args)
-        return rand
+        return self.rng.normal(
+            loc=self.cen,
+            scale=self.sigma,
+            size=size,
+        )
+
 
 class Bounded1D(PriorBase):
     """
@@ -3867,14 +3883,33 @@ class CenPrior(_gmix.Normal2D):
     """
     def __init__(self, cen1, cen2, sigma1, sigma2, rng=None):
 
-        self.cen1 = cen1
-        self.cen2 = cen2
-        self.sigma1 = sigma1
-        self.sigma2 = sigma2
+        self.cen1 = float(cen1)
+        self.cen2 = float(cen2)
+        self.sigma1 = float(sigma1)
+        self.sigma2 = float(sigma2)
+        self.s2inv1 = 1.0/self.sigma1**2
+        self.s2inv2 = 1.0/self.sigma2**2
 
         self.rng=make_rng(rng=rng)
 
-        super(CenPrior,self).__init__(cen1,cen2,sigma1,sigma2)
+    def get_lnprob_scalar(self, x1, x2):
+        """
+        log probability at the specified point
+        """
+        d1 = self.cen1-x1
+        d2 = self.cen2-x2
+        return -0.5*d1*d1*self.s2inv1 - 0.5*d2*d2*self.s2inv2
+
+    def get_prob_scalar(self, x1, x2):
+        """
+        log probability at the specified point
+        """
+        from math import exp
+        d1 = self.cen1-x1
+        d2 = self.cen2-x2
+        lnp = -0.5*d1*d1*self.s2inv1 - 0.5*d2*d2*self.s2inv2
+        return exp(lnp)
+
 
     def sample(self, n=None):
         """
@@ -3886,15 +3921,8 @@ class CenPrior(_gmix.Normal2D):
         rand1=rng.normal(loc=self.cen1, scale=self.sigma1, size=n)
         rand2=rng.normal(loc=self.cen2, scale=self.sigma2, size=n)
 
-        '''
-        if n is None:
-            rand1=self.cen1 + self.sigma1*rng.randn()
-            rand2=self.cen2 + self.sigma2*rng.randn()
-        else:
-            rand1=self.cen1 + self.sigma1*rng.randn(n)
-            rand2=self.cen2 + self.sigma2*rng.randn(n)
-        '''
         return rand1, rand2
+
     sample2d=sample
 
 SimpleGauss2D=CenPrior
