@@ -8,7 +8,6 @@ import numpy
 from . import gmix
 from .gmix import GMix
 
-from . import _gmix
 
 from .gexceptions import GMixRangeError, GMixMaxIterEM
 from .priors import srandu
@@ -110,7 +109,7 @@ class GMixEM(object):
             im *= (counts/im.sum())
         return im
 
-    def go(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
+    def go_c(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
         """
         Run the em algorithm from the input starting guesses
 
@@ -127,6 +126,7 @@ class GMixEM(object):
             The tolerance in the moments that implies convergence,
             default 1.e-6
         """
+        from . import _gmix
 
         if hasattr(self,'_gm'):
             del self._gm
@@ -170,7 +170,7 @@ class GMixEM(object):
         self._result = result
 
 
-    def go_new(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
+    def go(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
         """
         Run the em algorithm from the input starting guesses
 
@@ -325,7 +325,7 @@ def test_1gauss(counts=1.0,
     for i in xrange(2):
         tm0=time.time()
         em=GMixEM(obs)
-        em.go_new(gm_guess, sky, maxiter=maxiter)
+        em.go(gm_guess, sky, maxiter=maxiter)
         tm=time.time()-tm0
 
     gmfit=em.get_gmix()
