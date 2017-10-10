@@ -31,6 +31,7 @@ PyObject* GMixFatalError=NULL;
 
 // wrappers and functions that use the api directly
 
+/*
 static PyObject * PyGMix_get_cm_Tfactor(PyObject* self, PyObject* args) {
     double fracdev=0, TdByTe=0, Tfactor=0;
 
@@ -710,7 +711,6 @@ _bail:
 // multi-threaded version
 //
 
-/*
 static PyObject * PyGMix_fill_fdiff_parallel(PyObject* self, PyObject* args) {
 
     int status=1;
@@ -794,7 +794,6 @@ _bail:
 
 }
 
-*/
 
 //
 // 2-d integration, so will probably remain here
@@ -919,12 +918,11 @@ static PyObject * PyGMix_fill_fdiff_gauleg(PyObject* self, PyObject* args) {
 }
 
 
-
-
-
-/*
-   k space likelihood
 */
+
+
+
+//   k space likelihood
 static PyObject * PyGMix_get_loglikek(PyObject* self, PyObject* args) {
 
     PyObject
@@ -2799,6 +2797,7 @@ static PyObject* PyGMix_erf_array(PyObject* self, PyObject* args)
 static PyMethodDef pygauss2d_funcs[] = {
 
     // filling gaussian mixtures
+    /*
     {"gmix_fill",(PyCFunction)PyGMix_gmix_fill,
         METH_VARARGS, "Fill the input gmix with the input pars\n"},
     {"gmix_fill_cm",(PyCFunction)PyGMix_gmix_fill_cm,
@@ -2846,6 +2845,7 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"fill_fdiff_gauleg",  (PyCFunction)PyGMix_fill_fdiff_gauleg,
         METH_VARARGS,  "fill fdiff for LM, integrating over pixels\n"},
 
+        */
     // works in k space
     {"get_loglikek",  (PyCFunction)PyGMix_get_loglikek,
         METH_VARARGS,  "get log likelihood in k space\n"},

@@ -3900,6 +3900,16 @@ class CenPrior(object):
         d2 = self.cen2-x2
         return -0.5*d1*d1*self.s2inv1 - 0.5*d2*d2*self.s2inv2
 
+    def get_lnprob_scalar_sep(self, x1, x2):
+        """
+        log probability at the specified point, but separately
+        in the two dimensions
+        """
+        d1 = self.cen1-x1
+        d2 = self.cen2-x2
+        return -0.5*d1*d1*self.s2inv1, -0.5*d2*d2*self.s2inv2
+
+
     def get_prob_scalar(self, x1, x2):
         """
         log probability at the specified point
