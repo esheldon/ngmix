@@ -157,6 +157,7 @@ class GMix(object):
         gm=self.get_data()
 
         row0,col0 = self.get_cen()
+
         row_shift = row - row0
         col_shift = col - col0
 
@@ -767,9 +768,9 @@ class GMixModel(GMix):
         self._ngauss = _gmix_ngauss_dict[self._model]
         self._npars  = _gmix_npars_dict[self._model]
 
-        self._set_fill_func()
-
         self.reset()
+
+        self._set_fill_func()
         self.fill(pars)
 
     def copy(self):
@@ -785,17 +786,9 @@ class GMixModel(GMix):
 
         set pars as well
         """
-        gm=self.get_data()
+        super(GMixModel,self).set_cen(row,col)
 
         pars=self._pars
-        row0,col0=self.get_cen()
-
-        row_shift = row - row0
-        col_shift = col - col0
-
-        gm['row'] += row_shift
-        gm['col'] += col_shift
-
         pars[0] = row
         pars[1] = col
 
@@ -889,20 +882,18 @@ class GMixCoellip(GMixModel):
         self._model      = GMIX_COELLIP
         self._model_name = 'coellip'
 
-        self._set_fill_func()
-
         npars=len(pars)
 
         ncheck=npars-4
         if ( ncheck % 2 ) != 0:
             raise ValueError("coellip must have len(pars)==4+2*ngauss, got %s" % npars)
 
-        self._pars   =zeros(npars)
         self._ngauss = ncheck//2
         self._npars  = npars
 
         self.reset()
 
+        self._set_fill_func()
         self._fill(pars)
 
     def copy(self):
