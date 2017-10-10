@@ -387,6 +387,28 @@ def gmix_fill_coellip(gmix, pars):
 
 
 @njit(cache=True)
+def gmix_fill_full(gmix, pars):
+    """
+    fill a "full" gmix model, parameters are specified
+    for each gaussian independently
+    """
+
+    n_gauss=gmix.size
+    for i in xrange(n_gauss):
+        beg=i*6
+
+        gauss2d_set(
+            gmix[i],
+            pars[beg+0],
+            pars[beg+1],
+            pars[beg+2],
+            pars[beg+3],
+            pars[beg+4],
+            pars[beg+5],
+        )
+
+
+@njit(cache=True)
 def gmix_fill_cm(gmix, fracdev, TdByTe, Tfactor, pars):
     """
     fill a composite model
@@ -466,6 +488,7 @@ _gmix_fill_functions={
     'gauss': gmix_fill_gauss,
     'cm': gmix_fill_cm,
     'coellip': gmix_fill_coellip,
+    'full':gmix_fill_full,
 }
 
 @njit(cache=True)

@@ -25,7 +25,12 @@ from .gmix_nb import (
     gmix_convolve_fill,
     get_cm_Tfactor,
 )
-from .fitting_nb import get_loglike, fill_fdiff
+from .fitting_nb import (
+    get_loglike,
+    fill_fdiff,
+    get_model_s2n_sum,
+)
+
 from .render_nb import render
 from .pixels import make_coords
 
@@ -79,6 +84,7 @@ class GMix(object):
 
         self._model      = GMIX_FULL
         self._model_name = 'full'
+        self._set_fill_func()
 
         if ngauss is None and pars is None:
             raise GMixFatalError("send ngauss= or pars=")
@@ -89,10 +95,14 @@ class GMix(object):
                 raise GMixFatalError("len(pars) must be mutiple of 6 "
                                      "got %s" % npars)
             self._ngauss=npars//6
+            self._npars=npars
+            self._pars=zeros(self._npars)
             self.reset()
-            self.fill(pars)
+            self._fill(pars)
         else:
             self._ngauss=ngauss
+            self._npars=6*ngauss
+            self._npars=zeros(self._npars)
             self.reset()
 
     def get_data(self):
@@ -285,23 +295,40 @@ class GMix(object):
 
     def fill(self, pars):
         """
-        fill the gaussian mixture from a 'full' parameter array.
-
-        The length must match the internal size
+        Fill in the gaussian mixture with new parameters
 
         parameters
         ----------
-        pars: array-like
-            [p1,row1,col1,irr1,irc1,icc1,
-             p2,row2,col2,irr2,irc2,icc2,
-             ...]
-
-             Should have length 6*ngauss
+        pars: ndarray or sequence
+            The parameters
         """
 
+        npars=len(pars)
+        if npars != self._npars:
+            err="model '%s' requires %s pars, got %s"
+            err =err % (self._model_name,self._npars, npars)
+            raise GMixFatalError(err)
+
+        self._fill(pars)
+
+    def _fill(self, pars):
+        """
+        Fill in the gaussian mixture with new parameters, without
+        error checking
+
+        parameters
+        ----------
+        pars: ndarray or sequence
+            The parameters
+        """
+
+        self._pars[:] = pars
+
         gm=self.get_data()
-        pars=array(pars, dtype='f8', copy=False) 
-        _gmix.gmix_fill(gm, pars, self._model)
+        self._fill_func(
+            gm,
+            self._pars,
+        )
 
     def copy(self):
         """
@@ -547,9 +574,7 @@ class GMix(object):
 
         gm=self.get_data()
 
-        s2n_sum =_gmix.get_model_s2n_sum(gm,
-                                         obs.weight,
-                                         obs.jacobian._data)
+        s2n_sum =get_model_s2n_sum(gm, obs.pixels)
         return s2n_sum
 
     def get_model_s2n(self, obs):
@@ -648,6 +673,16 @@ class GMix(object):
 
         return gs_obj
 
+    def _set_fill_func(self):
+        """
+        set the function for filling the mixture
+        """
+
+        if self._model_name not in _gmix_fill_functions:
+            raise ValueError("bad model: '%s'" % self._model_name)
+
+        self._fill_func=_gmix_fill_functions[self._model_name]
+
     def __len__(self):
         return self._ngauss
 
@@ -733,7 +768,7 @@ class GMixModel(GMix):
         self._ngauss = _gmix_ngauss_dict[self._model]
         self._npars  = _gmix_npars_dict[self._model]
 
-        self._fill_func=_gmix_fill_functions[self._model_name]
+        self._set_fill_func()
 
         self.reset()
         self.fill(pars)
@@ -771,43 +806,6 @@ class GMixModel(GMix):
 
         pars[0] = row
         pars[1] = col
-
-    def fill(self, pars):
-        """
-        Fill in the gaussian mixture with new parameters
-
-        parameters
-        ----------
-        pars: ndarray or sequence
-            The parameters
-        """
-
-        npars=len(pars)
-        if npars != self._npars:
-            err="model '%s' requires %s pars, got %s"
-            err =err % (self._model_name,self._npars, npars)
-            raise GMixFatalError(err)
-
-        self._fill(pars)
-
-    def _fill(self, pars):
-        """
-        Fill in the gaussian mixture with new parameters, without
-        error checking
-
-        parameters
-        ----------
-        pars: ndarray or sequence
-            The parameters
-        """
-
-        self._pars[:] = pars
-
-        gm=self.get_data()
-        self._fill_func(
-            gm,
-            self._pars,
-        )
 
 class GMixCM(GMixModel):
     """
@@ -898,7 +896,8 @@ class GMixCoellip(GMixModel):
 
         self._model      = GMIX_COELLIP
         self._model_name = 'coellip'
-        self._fill_func  = _gmix_fill_functions[self._model_name]
+
+        self._set_fill_func()
 
         npars=len(pars)
 
