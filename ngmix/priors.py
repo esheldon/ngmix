@@ -25,8 +25,6 @@ from numpy.random import randn
 from . import gmix
 from .gexceptions import GMixRangeError
 
-from . import _gmix
-
 from . import shape
 
 #LOWVAL=-9999.0e47

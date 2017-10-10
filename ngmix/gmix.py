@@ -17,8 +17,6 @@ from . import moments
 
 from .gexceptions import GMixRangeError, GMixFatalError
 
-from . import _gmix
-
 from .gmix_nb import (
     _gmix_fill_functions,
     gmix_set_norms,

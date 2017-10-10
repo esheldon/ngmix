@@ -109,67 +109,6 @@ class GMixEM(object):
             im *= (counts/im.sum())
         return im
 
-    def go_c(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
-        """
-        Run the em algorithm from the input starting guesses
-
-        parameters
-        ----------
-        gmix_guess: GMix
-            A gaussian mixture (GMix or child class) representing
-            a starting guess for the algorithm
-        sky_guess: number
-            A guess at the sky value
-        maxiter: number, optional
-            The maximum number of iterations, default 100
-        tol: number, optional
-            The tolerance in the moments that implies convergence,
-            default 1.e-6
-        """
-        from . import _gmix
-
-        if hasattr(self,'_gm'):
-            del self._gm
-
-        gmtmp = gmix_guess.copy()
-        self._ngauss    = len(gmtmp)
-        self._sums      = numpy.zeros(self._ngauss, dtype=_sums_dtype)
-        self._sky_guess = sky_guess
-        self._maxiter   = maxiter
-        self._tol       = tol
-
-        # will raise GMixRangeError, but not GMixMaxIterEM, which
-        # we handle below
-        flags=0
-        try:
-            numiter, fdiff = _gmix.em_run(gmtmp._data,
-                                          self._obs.image,
-                                          self._obs.jacobian._data,
-                                          self._sums,
-                                          self._sky_guess,
-                                          self._counts,
-                                          self._tol,
-                                          self._maxiter)
-
-            # we have mutated the _data elements, we want to make
-            # sure the pars are propagated.  Make a new full gm
-            pars=gmtmp.get_full_pars()
-            self._gm=GMix(pars=pars)
-
-            if numiter >= maxiter:
-                flags = EM_MAXITER
-
-            result={'flags':flags,
-                    'numiter':numiter,
-                    'fdiff':fdiff}
-
-        except GMixRangeError:
-            # the iteration reached an invalid gaussian
-            result={'flags':EM_RANGE_ERROR}
-
-        self._result = result
-
-
     def go(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
         """
         Run the em algorithm from the input starting guesses
