@@ -1152,6 +1152,7 @@ static PyObject * PyGMix_fill_fdiffk(PyObject* self, PyObject* args) {
  *
  */
 
+/*
 
 static void em_clear_sums(struct PyGMix_EM_Sums *sums, npy_intp n_gauss)
 {
@@ -1159,12 +1160,11 @@ static void em_clear_sums(struct PyGMix_EM_Sums *sums, npy_intp n_gauss)
 }
 
 
-/*
 
-   note for em we immediately set the normalization, unlike shear measurements
-   where we allow T <= 0.0
 
-*/
+//   note for em we immediately set the normalization, unlike shear measurements
+//   where we allow T <= 0.0
+
 static 
 int em_set_gmix_from_sums(struct gauss *gmix,
                            npy_intp n_gauss,
@@ -1201,10 +1201,10 @@ _em_set_gmix_from_sums_bail:
 }
 
 
-/*
-   input gmix is guess and will eventually hold the final
-   stage of the iteration
-*/
+
+//   input gmix is guess and will eventually hold the final
+//   stage of the iteration
+
 static int em_run(PyObject* image_obj,
                   double sky,
                   double counts,
@@ -1420,10 +1420,8 @@ static PyObject * PyGMix_em_run(PyObject* self, PyObject* args) {
 }
 
 
-/*
-	for now straight conversion of the fortran
-*/
 
+// for now straight conversion of the fortran
 
 
 #define ADMOM_EDGE 0x1
@@ -1461,12 +1459,6 @@ struct AdmomResult {
     double F[6];
 };
 
-/*
-static void admom_sums_clear(struct AdmomSums *self)
-{
-    memset(self, 0, sizeof(struct AdmomSums));
-}
-*/
 
 static inline void admom_clear_result(struct AdmomResult *self)
 {
@@ -1474,11 +1466,9 @@ static inline void admom_clear_result(struct AdmomResult *self)
 }
 
 
-/*
-   get sums for the center
 
-   also set the flux sum while we are at it
-*/
+//   get sums for the center
+//   also set the flux sum while we are at it
 
 static void admom_censums(
           const struct Admom *self,
@@ -1595,18 +1585,18 @@ static void admom_momsums(
 
 }
 
-/*
-   set a new weight function
 
-   Since these are weighted moments, the following would hold
-   for gaussians
 
-       Cinv_meas = Cinv_true + Cinv_weight
+//   set a new weight function
+//
+//   Since these are weighted moments, the following would hold
+//   for gaussians
+//
+//       Cinv_meas = Cinv_true + Cinv_weight
+//
+//   So for the next iteration, subtract the covariance
+//   matrix of the weight
 
-   So for the next iteration, subtract the covariance
-   matrix of the weight
-
-*/
 
 static int deweight_moments(
           double Wrr, double Wrc, double Wcc,
@@ -2077,16 +2067,12 @@ static PyObject * PyGMix_admom_multi(PyObject* self, PyObject* args) {
 
 
 
-
-/*
-
-   full-covariance, nd-gaussian evaluations
-
-   can do either log or linear
-       log_pnorms, means, icovars, tmp_lnprob, x, dolog
-
-   make sure they are arrays from python
-*/
+//   full-covariance, nd-gaussian evaluations
+//
+//   can do either log or linear
+//       log_pnorms, means, icovars, tmp_lnprob, x, dolog
+//
+//   make sure they are arrays from python
 
 static int gmixnd_get_prob_args_check(PyObject* log_pnorms,
                                       PyObject* means,
@@ -2232,14 +2218,11 @@ PyObject * PyGMix_gmixnd_get_prob_scalar(PyObject* self, PyObject* args) {
 }
 
 
-/*
 
-   Difference between mean of the distribution
-   and parameters from the template set
+//   Difference between mean of the distribution
+//   and parameters from the template set
+//       mean - template_pars
 
-       mean - template_pars
-
-*/
 static void get_mom_xdiff(const PyObject* mean_obj,
                           const PyObject* pars_obj,
                           npy_intp i,
@@ -2277,11 +2260,7 @@ static void get_mom_xdiff_sheared(const PyObject* mean_obj,
 }
 
 
-/*
-
-   (xmean - x) C^{-1} (xmean - x)
-
-*/
+//   (xmean - x) C^{-1} (xmean - x)
 static double get_mom_chi2(const PyObject* icovar_obj,
                            const double *xdiff,
                            npy_intp ndim)
@@ -2301,17 +2280,13 @@ static double get_mom_chi2(const PyObject* icovar_obj,
     return chi2;
 }
 
-/*
+//   use nsigma to limit the range evaluated,
+//   saves time calling exp
+//
+//   if dolog is true, the points are always evaluated
+//   and nsigma is ignored. Also norm is log(norm)
+//   all error checking should be done in python
 
-   use nsigma to limit the range evaluated,
-   saves time calling exp
-
-   if dolog is true, the points are always evaluated
-   and nsigma is ignored. Also norm is log(norm)
-
-
-   all error checking should be done in python
-*/
 static 
 PyObject * PyGMix_mvn_calc_prob(PyObject* self, PyObject* args) {
 
@@ -2420,9 +2395,8 @@ static void get_mom_Qsums(const PyObject* icovar,
 
 }
 
-/*
-   currently only implements the d^2L/d^2M terms
-*/
+//   currently only implements the d^2L/d^2M terms
+
 static void get_mom_Rsums(const PyObject* icovar,
                           const PyObject* Qderiv,
                           const PyObject* Rderiv,
@@ -2493,31 +2467,6 @@ static void get_mom_Rsums(const PyObject* icovar,
 
 }
 
-/* Returns an integer in the range [0, n).
- *
- * Uses rand(), and so is affected-by/affects the same seed.
- */
-
-/*
-static int randint(int n) {
-  if ((n - 1) == RAND_MAX) {
-    return rand();
-  } else {
-    // Chop off all of the values that would cause skew...
-    long end = RAND_MAX / n; // truncate skew
-    assert (end > 0L);
-    end *= n;
-
-    // ... and ignore results from rand() that fall above that limit.
-    // (Worst case the loop condition should succeed 50% of the time,
-    // so we can expect to bail out of this loop pretty quickly.)
-    int r;
-    while ((r = rand()) >= end);
-
-    return r % n;
-  }
-}
-*/
 
 static 
 PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
@@ -2646,14 +2595,6 @@ PyObject * PyGMix_mvn_calc_pqr_templates(PyObject* self, PyObject* args) {
     }
     *R21ptr = *R12ptr;
 
-    /*
-    *Q1ptr *= -1;
-    *Q2ptr *= -1;
-    *R11ptr *= -1;
-    *R12ptr *= -1;
-    *R21ptr *= -1;
-    *R22ptr *= -1;
-    */
 
 
     //Py_RETURN_NONE;
@@ -2811,6 +2752,7 @@ PyObject * PyGMix_mvn_calc_pqr_templates_full(PyObject* self, PyObject* args) {
     return Py_BuildValue("ld", nuse, neff);
 }
 
+*/
 
 
 static PyObject* PyGMix_erf(PyObject* self, PyObject* args)
@@ -2915,6 +2857,7 @@ static PyMethodDef pygauss2d_funcs[] = {
 
     // expectation maximixation
 
+    /*
     {"em_run",(PyCFunction)PyGMix_em_run,
         METH_VARARGS,  "run the em algorithm\n"},
 
@@ -2943,6 +2886,7 @@ static PyMethodDef pygauss2d_funcs[] = {
     {"mvn_calc_pqr_templates_full",
         (PyCFunction)PyGMix_mvn_calc_pqr_templates_full,
         METH_VARARGS,  "get pqr for specified likelihood and templates"},
+    */
 
     // higher precision erf than is available in numpy
     {"erf", 
