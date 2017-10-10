@@ -52,7 +52,6 @@ from . import observation
 from .observation import Observation, ObsList, MultiBandObsList
 
 from . import lensfit
-from . import pqr
 
 from . import stats
 
