@@ -17,7 +17,7 @@ from .gexceptions import GMixRangeError
 from . import priors
 from .priors import LOWVAL
 from . import gmix
-from .gmix import GMixND
+from .gmix_ndim import GMixND
 
 
 class JointPriorTF(GMixND):

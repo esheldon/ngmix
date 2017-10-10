@@ -16,6 +16,9 @@ from .gmix import GMix
 from .gmix import GMixModel
 from .gmix import GMixCoellip
 
+from . import gmix_ndim
+from .gmix_ndim import GMixND
+
 from . import jacobian
 from .jacobian import Jacobian, UnitJacobian, DiagonalJacobian
 from . import fastexp
