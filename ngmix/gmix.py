@@ -96,13 +96,11 @@ class GMix(object):
                                      "got %s" % npars)
             self._ngauss=npars//6
             self._npars=npars
-            self._pars=zeros(self._npars)
             self.reset()
             self._fill(pars)
         else:
             self._ngauss=ngauss
             self._npars=6*ngauss
-            self._npars=zeros(self._npars)
             self.reset()
 
     def get_data(self):
@@ -631,6 +629,7 @@ class GMix(object):
         """
         Replace the data array with a zeroed one.
         """
+        self._pars = zeros(self._npars)
         self._data = zeros(self._ngauss, dtype=_gauss2d_dtype)
 
     def make_galsim_object(self):
@@ -772,13 +771,6 @@ class GMixModel(GMix):
 
         self.reset()
         self.fill(pars)
-
-    def reset(self):
-        """
-        Replace the data array with a zeroed one.
-        """
-        self._data = zeros(self._ngauss, dtype=_gauss2d_dtype)
-        self._pars = zeros(self._npars)
 
     def copy(self):
         """
