@@ -2753,47 +2753,6 @@ PyObject * PyGMix_mvn_calc_pqr_templates_full(PyObject* self, PyObject* args) {
 */
 
 
-static PyObject* PyGMix_erf(PyObject* self, PyObject* args)
-{
-    double val=0, out=0;
-    long double lval=0;
-    if (!PyArg_ParseTuple(args, (char*)"d", &val)) {
-        return NULL;
-    }
-
-    lval=(long double) val;
-
-    out=(double)erfl(lval);
-
-    return Py_BuildValue("d", out);
-
-}
-static PyObject* PyGMix_erf_array(PyObject* self, PyObject* args)
-{
-    PyObject *arr=NULL, *out=NULL;
-    double *pin=NULL, *pout=NULL, tmp=0;
-    npy_intp num=0, i=0;
-    long double lval=0;
-    if (!PyArg_ParseTuple(args, (char*)"OO", &arr, &out)) {
-        return NULL;
-    }
-
-    num=PyArray_SIZE(arr);
-    for (i=0; i<num; i++) {
-        pin = PyArray_GETPTR1( arr, i );
-        pout = PyArray_GETPTR1( out, i );
-
-        lval=(long double) (*pin);
-        tmp=(double) erfl(lval);
-
-        *pout = tmp;
-    }
-
-    return Py_BuildValue("");
-
-}
-
-
 static PyMethodDef pygauss2d_funcs[] = {
 
     // filling gaussian mixtures
@@ -2887,13 +2846,6 @@ static PyMethodDef pygauss2d_funcs[] = {
         (PyCFunction)PyGMix_mvn_calc_pqr_templates_full,
         METH_VARARGS,  "get pqr for specified likelihood and templates"},
     */
-
-    // higher precision erf than is available in numpy
-    {"erf", 
-        (PyCFunction)PyGMix_erf,
-        METH_VARARGS,  "erf with better precision."},
-    {"erf_array",(PyCFunction)PyGMix_erf_array,
-        METH_VARARGS,  "erf with better precision."},
 
     {NULL}
 };

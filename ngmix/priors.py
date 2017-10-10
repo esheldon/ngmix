@@ -1914,7 +1914,7 @@ class TwoSidedErf(PriorBase):
         """
         get the probability of the point
         """
-        from ._gmix import erf
+        from math import erf
 
         p1 = 0.5*erf((self.maxval-val)/self.width_at_max)
         p2 = 0.5*erf((val-self.minval)/self.width_at_min)
@@ -1940,24 +1940,13 @@ class TwoSidedErf(PriorBase):
         get the probability of the point
         """
 
-        from ._gmix import erf_array
-
         vals=array(vals, ndmin=1, dtype='f8', copy=False)
+        pvals = zeros(vals.size)
 
-        arg1=zeros(vals.size)
-        arg2=zeros(vals.size)
-        p1=zeros(vals.size)
-        p2=zeros(vals.size)
+        for i in xrange(vals.size):
+            pvals[i]=self.get_prob_scalar(vals[i]) 
 
-        arg1 = (self.maxval-vals)/self.width_at_max
-        arg2 = (vals-self.minval)/self.width_at_min
-        erf_array(arg1, p1)
-        erf_array(arg2, p2)
-
-        p1 *= 0.5
-        p2 *= 0.5
-
-        return p1+p2
+        return pvals
 
     def get_lnprob_array(self, vals):
         """
