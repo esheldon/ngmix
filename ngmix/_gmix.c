@@ -921,6 +921,7 @@ static PyObject * PyGMix_fill_fdiff_gauleg(PyObject* self, PyObject* args) {
 */
 
 
+/*
 
 //   k space likelihood
 static PyObject * PyGMix_get_loglikek(PyObject* self, PyObject* args) {
@@ -1025,13 +1026,12 @@ static PyObject * PyGMix_get_loglikek(PyObject* self, PyObject* args) {
 
 
 
-/*
-   k-space
 
-   Fill the input fdiff=(model-data)/err, return s2n_numer, s2n_denom
-
-   Error checking should be done in python.
-*/
+//   k-space
+//
+//   Fill the input fdiff=(model-data)/err, return s2n_numer, s2n_denom
+//
+//   Error checking should be done in python.
 static PyObject * PyGMix_fill_fdiffk(PyObject* self, PyObject* args) {
 
     PyObject
@@ -1143,6 +1143,7 @@ static PyObject * PyGMix_fill_fdiffk(PyObject* self, PyObject* args) {
     return Py_BuildValue("di", s2n_sum, npix);
 }
 
+*/
 
 /*
  *
@@ -2806,12 +2807,13 @@ static PyMethodDef pygauss2d_funcs[] = {
 
         */
     // works in k space
+    /*
     {"get_loglikek",  (PyCFunction)PyGMix_get_loglikek,
         METH_VARARGS,  "get log likelihood in k space\n"},
 
     {"fill_fdiffk",  (PyCFunction)PyGMix_fill_fdiffk,
         METH_VARARGS,  "fill fdiff for LM\n"},
-
+        */
 
 
     // expectation maximixation
