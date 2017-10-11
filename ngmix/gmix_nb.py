@@ -3,11 +3,6 @@ from numpy import array, nan
 from numba import njit
 from .fastexp_nb import exp3
 
-try:
-    xrange
-except:
-    xrange=range
-
 # need to make this a pure python exception
 from .gexceptions import GMixRangeError
 

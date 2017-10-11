@@ -4,7 +4,7 @@ class to create manipulated images for use in metacalibration
 Originally based off reading through Eric Huffs code; it has departed
 significantly.
 """
-from __future__ import print_function
+from __future__ import print_function, absolute_import, division
 import copy
 import numpy
 from numpy import zeros, ones, newaxis, sqrt, diag, dot, linalg, array
@@ -22,8 +22,6 @@ try:
 except ImportError:
     pass
 
-LANCZOS_PARS_DEFAULT={'order':5, 'conserve_dc':True, 'tol':1.0e-4}
-
 METACAL_TYPES = [
     '1p','1m','2p','2m',
     '1p_psf','1m_psf','2p_psf','2m_psf',
@@ -35,11 +33,6 @@ METACAL_REQUIRED_TYPES = [
 ]
 
 logger = logging.getLogger(__name__)
-
-try:
-    xrange=xrange
-except:
-    xrange=range
 
 def get_all_metacal(obs,
                     step=0.01,
@@ -757,9 +750,6 @@ class Metacal(object):
         """
         set the laczos interpolation configuration
         """
-        #self.interp = galsim.Lanczos(LANCZOS_PARS_DEFAULT['order'],
-        #                             LANCZOS_PARS_DEFAULT['conserve_dc'],
-        #                             LANCZOS_PARS_DEFAULT['tol'])
         self.interp = 'lanczos15'
 
     def _make_psf_obs(self, psf_im):

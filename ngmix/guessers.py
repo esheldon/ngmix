@@ -1,15 +1,10 @@
-from __future__ import print_function
+from __future__ import print_function, absolute_import, division
 import numpy
 from numpy import log
 from .fitting import print_pars
 from .gexceptions import GMixRangeError
 from .priors import srandu, LOWVAL
 from .shape import Shape
-
-try:
-    xrange=xrange
-except:
-    xrange=range
 
 class GuesserBase(object):
     def _fix_guess(self, guess, prior, ntry=4):

@@ -6,11 +6,6 @@ from .gmix_nb import (
     gmix_set_norms,
 )
 
-try:
-    xrange
-except:
-    xrange=range
-
 @njit(cache=True)
 def render(gmix, coords, image, fast_exp=0, max_chi2=300.0):
     """

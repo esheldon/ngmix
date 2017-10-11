@@ -1,4 +1,3 @@
-from __future__ import print_function
 import numpy
 from numba import jit, njit
 

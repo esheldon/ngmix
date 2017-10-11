@@ -5,11 +5,6 @@ from .gmix_nb import (
     gmix_set_norms,
 )
 
-try:
-    xrange
-except:
-    xrange=range
-
 @njit(cache=True)
 def get_loglike(gmix, pixels):
     """

@@ -1,18 +1,8 @@
 """
 Convention is that all priors should have peak ln(prob)==0. This
 helps use in priors for LM fitting
-
-I haven't forced the max prob to be 1.0 yet, but should
-
 """
-from __future__ import print_function
-
-try:
-    xrange = xrange
-    # We have Python 2
-except:
-    xrange = range
-    # We have Python 3
+from __future__ import print_function, absolute_import, division
 
 from sys import stderr 
 import math

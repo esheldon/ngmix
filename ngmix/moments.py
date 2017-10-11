@@ -1,12 +1,7 @@
-from __future__ import print_function
+from __future__ import print_function, absolute_import, division
 import numpy
 from .gexceptions import GMixRangeError
 from . import shape
-
-try:
-    xrange=xrange
-except:
-    xrange=range
 
 def sigma_to_fwhm(sigma):
     """

@@ -1,5 +1,4 @@
-import numpy
-from numba import jit, njit
+from numba import njit
 
 @njit(cache=True)
 def jacobian_get_vu(jacob, row, col):

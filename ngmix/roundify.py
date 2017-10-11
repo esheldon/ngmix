@@ -60,11 +60,6 @@ def get_round_obs(obs_in, sim_image=True):
 
     psf_round = obs_in.psf.gmix.make_round()
 
-    #pgm=obs_in.psf.gmix
-    #g1,g2,T=pgm.get_g1g2T()
-    #g1n,g2n,Tn=psf_round.get_g1g2T()
-    #print("    psf_e1,e2,T:",g1,g2,T,"round:",g1n,g2n,Tn)
-
     gm0_round = obs_in.gmix.make_round()
 
     gm_round = gm0_round.convolve(psf_round)

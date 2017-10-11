@@ -2,11 +2,7 @@
 fitting using galsim to create the models
 """
 
-from __future__ import print_function
-try:
-    xrange
-except:
-    xrange=range
+from __future__ import print_function, absolute_import, division
 
 import numpy
 

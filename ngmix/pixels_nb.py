@@ -3,12 +3,6 @@ from numba import njit
 
 from .jacobian_nb import jacobian_get_vu
 
-try:
-    xrange
-except:
-    xrange=range
-
-
 @njit(cache=True)
 def fill_pixels(pixels, image, weight, jacob):
     """
@@ -37,8 +31,8 @@ def fill_pixels(pixels, image, weight, jacob):
 
             v,u = jacobian_get_vu(jacob,row,col)
 
-            pixel['u'] = u
             pixel['v'] = v
+            pixel['u'] = u
 
             pixel['val'] = image[row,col]
             ivar = weight[row,col]
@@ -78,8 +72,8 @@ def fill_coords(coords, nrow, ncol, jacob):
 
             v,u = jacobian_get_vu(jacob,row,col)
 
-            coord['u'] = u
             coord['v'] = v
+            coord['u'] = u
 
             icoord += 1
 

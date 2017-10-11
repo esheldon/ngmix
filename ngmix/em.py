@@ -1,7 +1,7 @@
 """
 Fit an image with a gaussian mixture using the EM algorithm
 """
-from __future__ import print_function
+from __future__ import print_function, absolute_import, division
 
 import numpy
 
@@ -17,11 +17,6 @@ from .jacobian import Jacobian, UnitJacobian
 from .observation import Observation
 
 from .em_nb import em_run
-
-try:
-    xrange=xrange
-except:
-    xrange=range
 
 EM_RANGE_ERROR = 2**0
 EM_MAXITER = 2**1

@@ -1,11 +1,6 @@
 import numpy
 from numba import njit
 
-try:
-    xrange
-except:
-    xrange=range
-
 from .gmix_nb import (
     gmix_set_norms,
     gmix_eval_pixel_fast,

@@ -2,14 +2,7 @@
 - todo
     - remove old unused fitters
 """
-from __future__ import print_function
-
-try:
-    xrange = xrange
-    # We have Python 2
-except:
-    xrange = range
-    # We have Python 3
+from __future__ import print_function, absolute_import, division
 
 import os
 from sys import stdout

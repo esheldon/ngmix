@@ -5,11 +5,7 @@ this is a wrapper for the sklearn mixture, providing convenient fitting and
 loading, as well as very fast likelihood evaluation
 
 """
-from __future__ import print_function, division, absolute_import
-try:
-    xrange
-except:
-    xrange=range
+from __future__ import print_function, absolute_import, division
 
 import numpy
 from .gmix_ndim_nb import gmixnd_get_prob

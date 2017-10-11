@@ -11,11 +11,6 @@ from .gmix_nb import (
 )
 from .fastexp_nb import exp3
 
-try:
-    xrange
-except:
-    xrange=range
-
 @njit(cache=True)
 def em_run(conf, pixels, sums, gmix):
     """
