@@ -14,7 +14,7 @@ ADMOM_SMALL  = 0x8
 ADMOM_DET    = 0x10
 ADMOM_MAXIT  = 0x20
 
-@njit(cache=True)
+@njit
 def admom(confarray, wt, pixels, resarray):
     """
     run the adaptive moments algorithm
@@ -113,7 +113,7 @@ def admom(confarray, wt, pixels, resarray):
         res['flags'] = ADMOM_MAXIT
 
 
-@njit(cache=True)
+@njit
 def admom_censums(wt, pixels, res):
     """
     do sums for determining the center
@@ -132,7 +132,7 @@ def admom_censums(wt, pixels, res):
         res['sums'][1] += wdata*pixel['u']
         res['sums'][5] += wdata
 
-@njit(cache=True)
+@njit
 def admom_momsums(wt, pixels, res):
     """
     do sums for calculating the weighted moments
@@ -173,7 +173,7 @@ def admom_momsums(wt, pixels, res):
                 res['sums_cov'][i,j] += w2*var*F[i]*F[j]
 
 
-@njit(cache=True)
+@njit
 def deweight_moments(wt, Irr, Irc, Icc, res):
     """
     deweight a set of weighted moments
@@ -224,7 +224,7 @@ def deweight_moments(wt, Irr, Irc, Icc, res):
     )
 
 
-@njit(cache=True)
+@njit
 def clear_result(res):
     """
     clear some fields in the result structure

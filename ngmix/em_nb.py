@@ -11,7 +11,7 @@ from .gmix_nb import (
 )
 from .fastexp_nb import exp3
 
-@njit(cache=True)
+@njit
 def em_run(conf, pixels, sums, gmix):
     """
     run the EM algorithm
@@ -83,7 +83,7 @@ def em_run(conf, pixels, sums, gmix):
     numiter=i+1
     return numiter, frac_diff
 
-@njit(cache=True)
+@njit
 def do_scratch_sums(pixel, gmix, sums):
     """
     do the basic sums for this pixel, using
@@ -125,7 +125,7 @@ def do_scratch_sums(pixel, gmix, sums):
 
     return gtot
 
-@njit(cache=True)
+@njit
 def do_sums(sums, igrat):
     """
     do the sums based on the scratch values
@@ -149,7 +149,7 @@ def do_sums(sums, igrat):
         tsums['v2sum']  += tsums['tv2sum']*igrat
 
 
-@njit(cache=True)
+@njit
 def gmix_set_from_sums(gmix, sums):
     """
     fill the gaussian mixture from the em sums
@@ -176,7 +176,7 @@ def gmix_set_from_sums(gmix, sums):
 
         gauss2d_set_norm(gauss)
 
-@njit(cache=True)
+@njit
 def clear_sums(sums):
     """
     set all sums to zero

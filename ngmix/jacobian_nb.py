@@ -1,6 +1,6 @@
 from numba import njit
 
-@njit(cache=True)
+@njit
 def jacobian_get_vu(jacob, row, col):
     """
     convert row,col to v,u using the input jacobian

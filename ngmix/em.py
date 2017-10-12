@@ -255,7 +255,7 @@ def test_1gauss(counts=1.0,
     print("gm:",gm)
     print("gm_guess:",gm_guess)
     
-    # twice, first time numba deals with the cache
+    # twice, first time numba compiles the code
     for i in xrange(2):
         tm0=time.time()
         em=GMixEM(obs)

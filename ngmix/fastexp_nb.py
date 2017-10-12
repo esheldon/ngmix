@@ -9,7 +9,7 @@ _exp3_ivals, _exp3_lookup = make_exp_lookup(
 )
 _exp3_i0 = _exp3_ivals[0]
 
-@njit(cache=True)
+@njit
 def exp3(x):
     """
     fast exponential

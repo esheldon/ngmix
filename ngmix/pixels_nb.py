@@ -3,7 +3,7 @@ from numba import njit
 
 from .jacobian_nb import jacobian_get_vu
 
-@njit(cache=True)
+@njit
 def fill_pixels(pixels, image, weight, jacob):
     """
     store v,u image value, and 1/err for each pixel
@@ -45,7 +45,7 @@ def fill_pixels(pixels, image, weight, jacob):
             ipixel += 1
 
 
-@njit(cache=True)
+@njit
 def fill_coords(coords, nrow, ncol, jacob):
     """
     store v,u image value, and 1/err for each pixel

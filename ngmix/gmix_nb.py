@@ -8,7 +8,7 @@ from .gexceptions import GMixRangeError
 
 GMIX_LOW_DETVAL=1.0e-200
 
-@njit(cache=True)
+@njit
 def gmix_eval_pixel_fast(gmix, pixel, max_chi2=25.0):
     """
     evaluate a single gaussian mixture, using the
@@ -26,7 +26,7 @@ def gmix_eval_pixel_fast(gmix, pixel, max_chi2=25.0):
 
     return model_val
 
-@njit(cache=True)
+@njit
 def gauss2d_eval_pixel_fast(gauss, pixel, max_chi2=25.0):
     """
     evaluate a 2-d gaussian at the specified location, using
@@ -54,7 +54,7 @@ def gauss2d_eval_pixel_fast(gauss, pixel, max_chi2=25.0):
 
     return model_val
 
-@njit(cache=True)
+@njit
 def gauss2d_eval_pixel(gauss, pixel):
     """
     evaluate a 2-d gaussian at the specified location
@@ -80,7 +80,7 @@ def gauss2d_eval_pixel(gauss, pixel):
 
     return model_val
 
-@njit(cache=True)
+@njit
 def gmix_eval_pixel(gmix, pixel):
     """
     evaluate a single gaussian mixture
@@ -97,7 +97,7 @@ def gmix_eval_pixel(gmix, pixel):
 
 
 
-@njit(cache=True)
+@njit
 def gmix_get_cen(gmix):
     """
     get the center of the gaussian mixture, as well as
@@ -121,7 +121,7 @@ def gmix_get_cen(gmix):
 
     return row, col, psum
 
-@njit(cache=True)
+@njit
 def gmix_get_e1e2T(gmix):
     """
     get e1,e2,T for the gaussian mixture
@@ -161,7 +161,7 @@ def gmix_get_e1e2T(gmix):
 
     return e1, e2, T
 
-@njit(cache=True)
+@njit
 def gmix_set_norms(gmix):
     """
     set all norms for gaussians in the input gaussian mixture
@@ -174,7 +174,7 @@ def gmix_set_norms(gmix):
     for gauss in gmix:
         gauss2d_set_norm(gauss)
 
-@njit(cache=True)
+@njit
 def gauss2d_set_norm(gauss):
     """
     set the normalization, and nromalized variances
@@ -200,7 +200,7 @@ def gauss2d_set_norm(gauss):
 
     gauss['norm_set']=1
 
-@njit(cache=True)
+@njit
 def gauss2d_set(gauss,
                 p,
                 row, col,
@@ -284,7 +284,7 @@ _pvals_gauss = array([1.0])
 _fvals_gauss = array([1.0])
 
 
-@njit(cache=True)
+@njit
 def gmix_fill_simple(gmix, pars, fvals, pvals):
     """
     fill a simple (6 parameter) gaussian mixture model
@@ -319,28 +319,28 @@ def gmix_fill_simple(gmix, pars, fvals, pvals):
             T_i_2*(1+e1),
         )
 
-@njit(cache=True)
+@njit
 def gmix_fill_exp(gmix, pars):
     """
     fill an exponential model
     """
     gmix_fill_simple(gmix, pars, _fvals_exp, _pvals_exp)
 
-@njit(cache=True)
+@njit
 def gmix_fill_dev(gmix, pars):
     """
     fill a dev model
     """
     gmix_fill_simple(gmix, pars, _fvals_dev, _pvals_dev)
 
-@njit(cache=True)
+@njit
 def gmix_fill_turb(gmix, pars):
     """
     fill a turbulent psf model
     """
     gmix_fill_simple(gmix, pars, _fvals_turb, _pvals_turb)
 
-@njit(cache=True)
+@njit
 def gmix_fill_gauss(gmix, pars):
     """
     fill a gaussian model
@@ -348,7 +348,7 @@ def gmix_fill_gauss(gmix, pars):
     gmix_fill_simple(gmix, pars, _fvals_gauss, _pvals_gauss)
 
 
-@njit(cache=True)
+@njit
 def gmix_fill_coellip(gmix, pars):
     """
     fill a coelliptical model
@@ -381,7 +381,7 @@ def gmix_fill_coellip(gmix, pars):
         )
 
 
-@njit(cache=True)
+@njit
 def gmix_fill_full(gmix, pars):
     """
     fill a "full" gmix model, parameters are specified
@@ -403,7 +403,7 @@ def gmix_fill_full(gmix, pars):
         )
 
 
-@njit(cache=True)
+@njit
 def gmix_fill_cm(gmix, fracdev, TdByTe, Tfactor, pars):
     """
     fill a composite model
@@ -442,7 +442,7 @@ def gmix_fill_cm(gmix, fracdev, TdByTe, Tfactor, pars):
             T_i_2*(1+e1),
         )
 
-@njit(cache=True)
+@njit
 def get_cm_Tfactor(fracdev, TdByTe):
     """
     get the factor needed to convert T to the T needed
@@ -486,7 +486,7 @@ _gmix_fill_functions={
     'full':gmix_fill_full,
 }
 
-@njit(cache=True)
+@njit
 def gmix_convolve_fill(self, gmix, psf):
     """
     fill the gaussian mixture with the convolution of gmix0,
@@ -529,7 +529,7 @@ def gmix_convolve_fill(self, gmix, psf):
 
             itot += 1
 
-@njit(cache=True)
+@njit
 def g1g2_to_e1e2(g1, g2):
     """
     convert g to e

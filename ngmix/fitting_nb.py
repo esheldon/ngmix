@@ -5,7 +5,7 @@ from .gmix_nb import (
     gmix_set_norms,
 )
 
-@njit(cache=True)
+@njit
 def get_loglike(gmix, pixels):
     """
     get the log likelihood
@@ -57,7 +57,7 @@ def get_loglike(gmix, pixels):
 
     return loglike, s2n_numer, s2n_denom, npix
 
-@njit(cache=True)
+@njit
 def fill_fdiff(gmix, pixels, fdiff, start):
     """
     fill fdiff array (model-data)/err
@@ -82,7 +82,7 @@ def fill_fdiff(gmix, pixels, fdiff, start):
         model_val = gmix_eval_pixel_fast(gmix, pixel)
         fdiff[start+ipixel] = (model_val-pixel['val'])*pixel['ierr']
 
-@njit(cache=True)
+@njit
 def get_model_s2n_sum(gmix, pixels):
     """
     get the model s/n sum.

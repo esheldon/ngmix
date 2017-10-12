@@ -1,7 +1,7 @@
 import numpy
 from numba import njit
 
-@njit(cache=True)
+@njit
 def gmixnd_get_prob(log_pnorms,
                     means,
                     icovars,

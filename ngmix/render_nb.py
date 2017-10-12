@@ -6,7 +6,7 @@ from .gmix_nb import (
     gmix_set_norms,
 )
 
-@njit(cache=True)
+@njit
 def render(gmix, coords, image, fast_exp=0, max_chi2=300.0):
     """
     render the gaussian mixture in the image
