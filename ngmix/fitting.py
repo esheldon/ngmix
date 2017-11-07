@@ -655,6 +655,72 @@ class TemplateFluxFitter(FitterBase):
 
         for ipass in [1,2]:
             for iobs in xrange(nobs):
+                obs  = self.obs[iobs]
+
+                im=obs.image
+                wt=obs.weight
+                j=obs.jacobian
+
+                if ipass==1:
+                    model = self._get_model(iobs)
+                    xcorr_sum += (model*im*wt).sum()
+                    msq_sum += (model*model*wt).sum()
+                else:
+                    model = self._get_model(iobs, flux=flux)
+
+                    chi2 += self._get_chi2(model, im, wt)
+
+            if ipass==1:
+                if msq_sum==0:
+                    break
+                flux = xcorr_sum/msq_sum
+
+        # chi^2 per dof and error checking
+        dof=self.get_dof()
+        chi2per=9999.0
+        if dof > 0:
+            chi2per=chi2/dof
+        else:
+            flags |= ZERO_DOF
+
+        # final flux calculation with error checking
+        if msq_sum==0 or self.totpix==1:
+            flags |= DIV_ZERO
+        else:
+
+            arg=chi2/msq_sum/(self.totpix-1)
+            if arg >= 0.0:
+                flux_err = sqrt(arg)
+            else:
+                flags |= BAD_VAR
+
+        self._result={'model':self.model_name,
+                      'flags':flags,
+                      'chi2per':chi2per,
+                      'dof':dof,
+                      'flux':flux,
+                      'flux_err':flux_err}
+
+    def go_old(self):
+        """
+        calculate the flux using zero-lag cross-correlation
+        """
+
+        flags=0
+
+        xcorr_sum=0.0
+        msq_sum=0.0
+
+        chi2=0.0
+
+        cen=self.cen
+        nobs=len(self.obs)
+
+        flux=PDEF
+        flux_err=CDEF
+
+        for ipass in [1,2]:
+            for iobs in xrange(nobs):
                 obs=self.obs[iobs]
                 gm = self.gmix_list[iobs]
 
@@ -718,6 +784,52 @@ class TemplateFluxFitter(FitterBase):
                       'flux':flux,
                       'flux_err':flux_err}
 
+    def _get_chi2(self, model, im, wt):
+        """
+        get the chi^2 for this image/model
+
+        we can simulate when needed
+        """
+        if self.simulate_err:
+            err = numpy.zeros(model.shape)
+            w=numpy.where(wt > 0)
+            err[w] = numpy.sqrt(1.0/wt[w])
+            noisy_model = model.copy()
+            noisy_model += self.rng.normal(size=model.shape)*err
+            chi2 =( (model-noisy_model)**2 *wt ).sum()
+        else:
+            chi2 =( (model-im)**2 *wt ).sum()
+
+        return chi2
+
+    def _get_model(self, iobs, flux=None):
+        """
+        get the model image
+        """
+        if self.use_template:
+            if flux is not None:
+                model = self.template_list[iobs].copy()
+                norm = self.norm_list[iobs]
+                model *= (norm*flux)/model.sum()
+            else:
+                model = self.template_list[iobs]
+
+        else:
+
+            if flux is None:
+                gm = self.gmix_list[iobs]
+            else:
+                gm = self.gmix_list[iobs].copy()
+                norm = self.norm_list[iobs]
+                gm.set_flux(flux*norm)
+
+            obs = self.obs[iobs]
+            dims = obs.image.shape
+            jac = obs.jacobian
+            model = gm.make_image(dims, jacobian=jac)
+
+        return model
+
     def get_dof(self):
         """
         Effective def based on effective number of pixels
@@ -743,9 +855,26 @@ class TemplateFluxFitter(FitterBase):
         else:
             raise ValueError("obs should be Observation or ObsList")
 
+        tobs = obs_list[0]
+        if self.do_psf:
+            tobs = tobs.psf
+
+        if not tobs.has_gmix():
+            if not hasattr(tobs, 'template'):
+                raise ValueError("neither gmix or template image are set")
+
+        self.obs = obs_list
+        if tobs.has_gmix():
+            self._set_gmix_and_norms()
+        else:
+            self._set_templates_and_norms()
+
+    def _set_gmix_and_norms(self):
+        self.use_template=False
         cen=self.cen
-        gmix_list=[]
-        for obs in obs_list:
+        gmix_list = []
+        norm_list = []
+        for obs in self.obs:
             # these return copies, ok to modify
             if self.do_psf:
                 gmix=obs.get_psf_gmix()
@@ -759,9 +888,36 @@ class TemplateFluxFitter(FitterBase):
                 gmix.set_cen(cen[0], cen[1])
 
             gmix_list.append(gmix)
+            norm_list.append(gmix.get_flux())
 
-        self.obs = obs_list
         self.gmix_list = gmix_list
+        self.norm_list = norm_list
+
+    def _set_templates_and_norms(self):
+        self.use_template=True
+
+        assert self.cen_was_sent is False
+
+        template_list = []
+        norm_list = []
+        for obs in self.obs:
+            if self.do_psf:
+                template=obs.psf.template.copy()
+                norm = template.sum()
+                if self.normalize_psf:
+                    template *= 1.0/norm
+                    norm = 1.0
+            else:
+                template=obs.template.copy()
+                template *= 1.0/template.sum()
+                norm = 1.0
+
+            template_list.append(template)
+            norm_list.append(norm)
+
+        self.template_list = template_list
+        self.norm_list = norm_list
+
 
     def _set_totpix(self):
         """
