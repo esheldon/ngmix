@@ -630,12 +630,14 @@ class GMix(object):
     def make_galsim_object(self):
         """
         make a galsim representation for the gaussian mixture
+
+        Note ngmix fluxes are surface brightness, galsim are not.
+        So to get agreement in a drawn image you may need to 
+        convert the flux using a pixel scale squared
         """
         import galsim
 
         data = self.get_data()
-
-        row,col = self.get_cen()
 
         gsobjects=[]
         for i in xrange(len(self)):
@@ -644,8 +646,12 @@ class GMix(object):
             e1 = (data['icc'][i] - data['irr'][i])/T
             e2 = 2.0*data['irc'][i]/T
 
-            rowshift = data['row'][i]-row
-            colshift = data['col'][i]-col
+            # these will most likely be sky coordinates rather than actually
+            # (row,col), but I'm using those names to make it clear how we
+            # reverse these for galsim below
+
+            rowshift = data['row'][i]
+            colshift = data['col'][i]
 
             g1,g2=e1e2_to_g1g2(e1,e2)
 
@@ -660,10 +666,6 @@ class GMix(object):
             gsobjects.append( gsobj )
 
         gs_obj = galsim.Add(gsobjects)
-
-        #rowshift = row-int(row)-0.5
-        #colshift = col-int(col)-0.5
-        #gs_obj = gs_obj.shift(colshift, rowshift)
 
         return gs_obj
 

@@ -628,7 +628,7 @@ class TemplateFluxFitter(FitterBase):
         else:
             self.cen_was_sent=True
 
-        self.set_obs(obs)
+        self._set_obs(obs)
 
         self.model_name='template'
         self.npars=1
@@ -647,7 +647,6 @@ class TemplateFluxFitter(FitterBase):
 
         chi2=0.0
 
-        cen=self.cen
         nobs=len(self.obs)
 
         flux=PDEF
@@ -842,7 +841,7 @@ class TemplateFluxFitter(FitterBase):
 
 
 
-    def set_obs(self, obs_in):
+    def _set_obs(self, obs_in):
         """
         Input should be an Observation, ObsList
         """
