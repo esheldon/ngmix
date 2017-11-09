@@ -557,8 +557,7 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
             are used.
 
         TODO:
-            - try with psf models rather than using the images
-            - test more complex models
+            - try more complex wcs
         """
 
         self.model=model
@@ -667,11 +666,6 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
             )
 
             image_list.append( gim.array )
-
-            import images
-            images.compare_images(obs.image,
-                                  gim.array * obs.image.sum()/gim.array.sum(),
-                                  label1='image',label2='model')
 
         self.template_list=image_list
 
