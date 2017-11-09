@@ -556,6 +556,16 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
             If not sent, the psf images from the observations
             are used.
 
+        interp: string
+            type of interpolation when using the PSF image
+            rather than psf models.  Default lanzcos15
+        simulate_err: bool, optional
+            If set, noise is added according to the weight
+            map. Useful when trying to calculate the noise
+            on a model rather than from real data.
+        rng: numpy random number generator, optional
+            For use when simulate_err=True 
+
         TODO:
             - try more complex wcs
         """
