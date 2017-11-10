@@ -147,7 +147,7 @@ def _replace_image_with_noise(obs):
             nobs.image = nobs.noise
     else:
         for obslist in noise_obs:
-            for nobs in noise_obs:
+            for nobs in obslist:
                 nobs.image = nobs.noise
 
     return noise_obs
