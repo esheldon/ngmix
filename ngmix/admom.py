@@ -41,6 +41,19 @@ class Admom(object):
                  rng=None,
                  **unused_keys):
 
+        if isinstance(obs, ObsList):
+            if len(obs) != 1:
+                raise ValueError("at most one epoch can be fit")
+            obs = obs[0]
+        elif isinstance(obs, MultiBandObsList):
+            if len(obs) > 1: 
+                raise ValueError("at most one band can be fit")
+            else:
+                obs = obs[0]
+                if len(obs) != 1:
+                    raise ValueError("at most one epoch can be fit")
+                obs = obs[0]
+
         self._obs=obs
         self._set_conf(maxiter, shiftmax, etol, Ttol)
 
