@@ -526,10 +526,6 @@ class GMix(object):
             Where to start in the array, default 0
         """
 
-        if obs.jacobian is not None:
-            assert isinstance(obs.jacobian,Jacobian)
-
-
         nuse=fdiff.size-start
 
         image=obs.image
@@ -561,9 +557,6 @@ class GMix(object):
             The Observation to compare with. See ngmix.observation.Observation
             The Observation must have a weight map set
         """
-
-        if obs.jacobian is not None:
-            assert isinstance(obs.jacobian,Jacobian)
 
         gm=self.get_data()
 
@@ -603,9 +596,6 @@ class GMix(object):
         more:
             if True, return a dict with more informatioin
         """
-
-        if obs.jacobian is not None:
-            assert isinstance(obs.jacobian,Jacobian)
 
         gm  = self.get_data()
         res = get_loglike(gm, obs._pixels)
