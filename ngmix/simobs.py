@@ -112,7 +112,7 @@ def _simulate_obs(gmix, obs, **kw):
     new_obs = Observation(
         sim_image,
         weight=weight,
-        jacobian=obs.jacobian.copy(),
+        jacobian=obs.jacobian,
         psf=psf
     )
 
