@@ -659,42 +659,6 @@ class Bootstrapper(object):
                                                method=method,
                                                fitter=fitter,
                                                add_noise=add_noise)
-        '''
-        assert method=='best-fit',"only best-fit replacement is supported"
-
-        mbo = self.mb_obs_list
-        nband = len(mbo)
-
-        for band in xrange(nband):
-            olist = mbo[band]
-            nobs = len(olist)
-            for iobs,obs in enumerate(olist):
-
-                bmask = obs.bmask
-                if bmask is not None:
-                    w=where(bmask != 0)
-
-                    if w[0].size > 0:
-                        print("    replacing %d/%d masked pixels" % (w[0].size,bmask.size))
-                        obs.image_orig = obs.image.copy()
-                        gm = fitter.get_convolved_gmix(band=band, obsnum=iobs)
-
-                        im = obs.image
-                        model_image = gm.make_image(im.shape, jacobian=obs.jacobian)
-
-                        im[w] = model_image[w]
-
-                        if False:
-                            import images
-                            imdiff=im-obs.image_orig
-                            images.view_mosaic([bmask,obs.image_orig,im,imdiff],
-                                               titles=['mask','orig','mod image','mod-orig'])
-                            maxdiff=numpy.abs(imdiff).max()
-                            print("    Max abs diff:",maxdiff)
-                            images.multiview(imdiff,title='mod-orig max diff %g' % maxdiff)
-                            if raw_input('hit a key: ') == 'q':
-                                stop
-        '''
     def fit_max(self,
                 gal_model,
                 pars,
@@ -1322,24 +1286,6 @@ class AdmomBootstrapper(Bootstrapper):
         res=fitter.get_result()
         res['s2n_r'] = res['s2n']
         res['T_r']   = res['T']
-
-        """
-        try:
-            gm  = fitter.get_gmix()
-            gmr = gm.make_round()
-
-            e1r,e2r,T_r=gmr.get_e1e2T()
-
-            res=fitter.get_result()
-            flux=res['flux']
-            gmr.set_flux(flux)
-
-            res['s2n_r']=gmr.get_model_s2n(obs)
-            res['T_r'] = T_r
-
-        except GMixRangeError as err:
-            raise BootPSFFailure(str(err))
-        """
 
     def _get_psf_Tguess(self, obs):
         scale=obs.jacobian.get_scale()
