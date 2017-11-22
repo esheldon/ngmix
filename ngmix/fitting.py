@@ -658,7 +658,6 @@ class TemplateFluxFitter(FitterBase):
 
                 im=obs.image
                 wt=obs.weight
-                j=obs.jacobian
 
                 if ipass==1:
                     model = self._get_model(iobs)
@@ -700,88 +699,6 @@ class TemplateFluxFitter(FitterBase):
                       'flux':flux,
                       'flux_err':flux_err}
 
-    def go_old(self):
-        """
-        calculate the flux using zero-lag cross-correlation
-        """
-
-        flags=0
-
-        xcorr_sum=0.0
-        msq_sum=0.0
-
-        chi2=0.0
-
-        cen=self.cen
-        nobs=len(self.obs)
-
-        flux=PDEF
-        flux_err=CDEF
-
-        for ipass in [1,2]:
-            for iobs in xrange(nobs):
-                obs=self.obs[iobs]
-                gm = self.gmix_list[iobs]
-
-                im=obs.image
-                wt=obs.weight
-                j=obs.jacobian
-
-                if ipass==1:
-                    norm = 1.0
-                    if self.do_psf:
-                        if self.normalize_psf:
-                            gm.set_flux(1.0)
-                        else:
-                            norm = gm.get_flux()
-
-                    model=gm.make_image(im.shape, jacobian=j)
-                    xcorr_sum += (model*im*wt).sum()
-                    msq_sum += (model*model*wt).sum()
-                else:
-                    gm.set_flux(flux*norm)
-                    model=gm.make_image(im.shape, jacobian=j)
-
-                    if self.simulate_err:
-                        err = numpy.zeros(model.shape)
-                        w=numpy.where(wt > 0)
-                        err[w] = numpy.sqrt(1.0/wt[w])
-                        noisy_model = model.copy()
-                        noisy_model += self.rng.normal(size=model.shape)*err
-                        chi2 +=( (model-noisy_model)**2 *wt ).sum()
-                    else:
-                        chi2 +=( (model-im)**2 *wt ).sum()
-
-            if ipass==1:
-                if msq_sum==0:
-                    break
-                flux = xcorr_sum/msq_sum
-
-        # chi^2 per dof and error checking
-        dof=self.get_dof()
-        chi2per=9999.0
-        if dof > 0:
-            chi2per=chi2/dof
-        else:
-            flags |= ZERO_DOF
-
-        # final flux calculation with error checking
-        if msq_sum==0 or self.totpix==1:
-            flags |= DIV_ZERO
-        else:
-
-            arg=chi2/msq_sum/(self.totpix-1)
-            if arg >= 0.0:
-                flux_err = sqrt(arg)
-            else:
-                flags |= BAD_VAR
-
-        self._result={'model':self.model_name,
-                      'flags':flags,
-                      'chi2per':chi2per,
-                      'dof':dof,
-                      'flux':flux,
-                      'flux_err':flux_err}
 
     def _get_chi2(self, model, im, wt):
         """
