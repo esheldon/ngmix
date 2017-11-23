@@ -130,11 +130,9 @@ class Observation(object):
     @property
     def jacobian(self):
         """
-        getter for jacobian
-
-        currently this simply returns a reference
+        get a copy of the jacobian
         """
-        return self._jacobian
+        return self.get_jacobian()
 
     @jacobian.setter
     def jacobian(self, jacobian):
@@ -162,11 +160,9 @@ class Observation(object):
     @property
     def gmix(self):
         """
-        getter for gmix, gets a reference
-
-        currently this simply returns a reference
+        get a copy of the gaussian mixture
         """
-        return self._gmix
+        return self.get_gmix()
 
     @gmix.setter
     def gmix(self, gmix):
@@ -285,7 +281,8 @@ class Observation(object):
 
     def set_jacobian(self, jacobian):
         """
-        Set the jacobian.
+        Set the jacobian.  If None is sent, a UnitJacobian is generated with
+        center equal to the canonical center
 
         parameters
         ----------
@@ -293,13 +290,14 @@ class Observation(object):
         """
         if jacobian is None:
             cen=(numpy.array(self.image.shape)-1.0)/2.0
-            jacobian=UnitJacobian(row=cen[0], col=cen[1])
+            jac = UnitJacobian(row=cen[0], col=cen[1])
         else:
             mess=("jacobian must be of "
                   "type Jacobian, got %s" % type(jacobian))
             assert isinstance(jacobian,Jacobian),mess
+            jac = jacobian.copy()
 
-        self._jacobian=jacobian
+        self._jacobian=jac
 
     def get_jacobian(self):
         """
