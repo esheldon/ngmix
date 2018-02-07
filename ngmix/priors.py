@@ -1377,6 +1377,45 @@ class GPriorBase(PriorBase):
         plt.add(biggles.Curve(xvals, p, color='red'))
         plt.show()
 
+class GPriorGauss(GPriorBase):
+    def __init__(self, *args, **kw):
+        super(GPriorGauss,self).__init__(*args, **kw)
+        self.sigma = float(self.pars)
+
+    def sample1d(self, nrand, **kw):
+        """
+        Get random |g| from the 1d distribution
+
+        Set self.gmax appropriately
+
+        parameters
+        ----------
+        nrand: int
+            Number to generate
+        """
+
+        rng=self.rng
+
+        gmax=self.gmax - 1.0e-4
+
+        g = numpy.zeros(nrand)
+
+        ngood=0
+        nleft=nrand
+        while ngood < nrand:
+
+            # generate total g in [0,gmax)
+            grand = rng.normal(size=nleft, scale=self.sigma)
+
+            w,=numpy.where(grand < gmax)
+            if w.size > 0:
+                g[ngood:ngood+w.size] = grand[w]
+                ngood += w.size
+                nleft -= w.size
+   
+        return g
+
+
 
 class GPriorBA(GPriorBase):
     """
