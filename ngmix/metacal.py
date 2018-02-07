@@ -929,26 +929,23 @@ class MetacalAnalyticPSF(Metacal):
     """
     def __init__(self, obs, psf_obj, **kw):
 
-        raise RuntimeError("make sure this all works")
         self._set_psf(obs, psf_obj)
-
-
-        #self.psf_noise_image=numpy.random.normal(
-        #    scale=1.0e-6*obs.psf.image.max(),
-        #    size=obs.psf.image.shape,
-        #)
         super(MetacalAnalyticPSF,self).__init__(obs, **kw)
 
     def _set_psf(self,obs,psf_in):
         if isinstance(psf_in, dict):
-            assert psf_in['model']=='moffat'
-            pars=psf_in['pars']
-
-            psf_obj = galsim.Moffat(
-                beta=pars['beta'],
-                fwhm=pars['fwhm'],
-                #flux=float(flux),
-            )
+            if psf_in['model'] == 'gauss':
+                psf_obj = galsim.Gaussian(
+                    fwhm=psf_in['pars']['fwhm'],
+                )
+                print("psf obj:",psf_obj)
+            elif psf_int['model'] == 'moffat':
+                psf_obj = galsim.Moffat(
+                    beta=psf_in['pars']['beta'],
+                    fwhm=psf_in['pars']['fwhm'],
+                )
+            else:
+                raise ValueError("bad psf: %s" % psf_in['model'])
         else:
             psf_obj = psf_in
 
