@@ -66,7 +66,6 @@ def get_all_metacal(obs,
     """
 
     if fixnoise:
-        logger.debug("    Doing fixnoise")
         odict= _get_all_metacal_fixnoise(obs, step=step, **kw)
     else:
         odict= _get_all_metacal(obs, step=step, **kw)
@@ -184,8 +183,10 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     use_noise_image = kw.get('use_noise_image',False)
     if use_noise_image:
         noise_obs =  _replace_image_with_noise(obs)
+        logger.debug("    Doing fixnoise with input noise image")
     else:
         noise_obs = simobs.simulate_obs(None, obs, **kw)
+        logger.debug("    Doing fixnoise")
 
     # rotate by 90
     _rotate_obs_image(noise_obs, k=1)
