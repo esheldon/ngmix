@@ -1383,6 +1383,9 @@ class GPriorGauss(GPriorBase):
         self.sigma = float(self.pars)
 
     def sample1d(self, nrand, **kw):
+        raise NotImplementedError("no 1d for gauss")
+
+    def sample2d(self, nrand=None, **kw):
         """
         Get random |g| from the 1d distribution
 
@@ -1394,26 +1397,40 @@ class GPriorGauss(GPriorBase):
             Number to generate
         """
 
+        if nrand is None:
+            nrand=1
+            is_scalar=True
+        else:
+            is_scalar=False
+
         rng=self.rng
 
         gmax=self.gmax - 1.0e-4
 
-        g = numpy.zeros(nrand)
+        g1 = numpy.zeros(nrand)
+        g2 = numpy.zeros(nrand)
 
         ngood=0
         nleft=nrand
         while ngood < nrand:
 
             # generate total g in [0,gmax)
-            grand = rng.normal(size=nleft, scale=self.sigma)
+            g1rand = rng.normal(size=nleft, scale=self.sigma)
+            g2rand = rng.normal(size=nleft, scale=self.sigma)
+            grand = numpy.sqrt(g1rand**2 + g2rand**2)
 
             w,=numpy.where(grand < gmax)
             if w.size > 0:
-                g[ngood:ngood+w.size] = grand[w]
+                g1[ngood:ngood+w.size] = g1rand[w]
+                g2[ngood:ngood+w.size] = g2rand[w]
                 ngood += w.size
                 nleft -= w.size
    
-        return g
+        if is_scalar:
+            g1=g1[0]
+            g2=g2[0]
+
+        return g1, g2
 
 
 
