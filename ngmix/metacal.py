@@ -1199,16 +1199,16 @@ def _get_gauss_target_psf(psf, flux):
 
 def jackknife_shear(data, chunksize=1, dgamma=0.02):
     """
-    get the shear metacalibration style
+    get the shear metacalibration style with jackknifing
 
     parameters
     ----------
-    g: array
-        [N,2] shape measurements
-    R: array
-        [N,2] shape response measurements
+    data: array
+        Must have fields mcal_g, mcal_g_1p, mcal_g_1m, mcal_g_2p, mcal_g_2m
     chunksize: int, optional
-        chunksize for jackknifing
+        chunksize for jackknifing, default 1
+    dgamma: float, optional
+        dgamma for central derivative, defautl 2*0.01 = 0.02
     """
 
     g = data['mcal_g']
@@ -1257,6 +1257,44 @@ def jackknife_shear(data, chunksize=1, dgamma=0.02):
         'R_sum':R_sum,
         'R':R_sum/ntot,
         'shears':shears,
+    }
+
+    return out
+
+def get_shear(data, dgamma=0.02):
+    """
+    get the shear metacalibration style
+
+    parameters
+    ----------
+    data: array
+        Must have fields mcal_g, mcal_g_1p, mcal_g_1m, mcal_g_2p, mcal_g_2m
+    dgamma: float, optional
+        dgamma for central derivative, defautl 2*0.01 = 0.02
+    """
+
+
+    g = data['mcal_g']
+
+    R = numpy.zeros( (data.size, 2) )
+
+    R[:,0] = (data['mcal_g_1p'][:,0] - data['mcal_g_1m'][:,0])/dgamma
+    R[:,1] = (data['mcal_g_2p'][:,1] - data['mcal_g_2m'][:,1])/dgamma
+
+    ntot = data.size
+
+    g_mean = g.mean(axis=0)
+    R_mean = R.mean(axis=0)
+
+    g_err = g.std(axis=0)/sqrt(ntot)
+    R_err = R.std(axis=0)/sqrt(ntot)
+
+    shear = g_mean/R_mean
+    shear_err = numpy.abs(shear)*sqrt( (g_err/g_mean)**2 + (R_err/R_mean)**2 )
+
+    out={
+        'shear':shear,
+        'shear_err':shear_err,
     }
 
     return out
