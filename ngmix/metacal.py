@@ -1175,7 +1175,10 @@ def _get_gauss_target_psf(psf, flux):
     from numpy import meshgrid, arange, min, sqrt, log
     #dk = 0.1              # The resolution in k space for the KImage
 
-    dk = psf.stepK()/4.0
+    if hasattr(psf,'stepk'):
+        dk = psf.stepk/4.0
+    else:
+        dk = psf.stepK()/4.0
 
     small_kval = 1.e-2    # Find the k where the given psf hits this kvalue
     smaller_kval = 3.e-3  # Target PSF will have this kvalue at the same k

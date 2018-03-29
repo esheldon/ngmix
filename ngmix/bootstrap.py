@@ -2664,6 +2664,7 @@ class CompositeMaxRunner(MaxRunner):
             if res['flags']==0:
                 break
 
+        res['ntry'] = i+1
         self.fitter=fitter
 
     def _get_lm_fitter_class(self):
