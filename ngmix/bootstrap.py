@@ -2745,7 +2745,13 @@ def replace_masked_pixels(mb_obs_list,
         nobs = len(olist)
         for iobs,obs in enumerate(olist):
 
-            bmask = obs.bmask
+            im=obs.image
+
+            if obs.has_bmask():
+                bmask = obs.bmask
+            else:
+                bmask = None
+
             if hasattr(obs,'weight_raw'):
                 #print("    using raw weight for replace")
                 weight = obs.weight_raw
@@ -2759,7 +2765,7 @@ def replace_masked_pixels(mb_obs_list,
 
             if w[0].size > 0:
                 print("        replacing %d/%d masked or zero weight "
-                      "pixels" % (w[0].size,bmask.size))
+                      "pixels" % (w[0].size,im.size))
                 obs.image_orig = obs.image.copy()
                 gm = fitter.get_convolved_gmix(band=band, obsnum=iobs)
 
@@ -2769,7 +2775,7 @@ def replace_masked_pixels(mb_obs_list,
                 im[w] = model_image[w]
 
                 if add_noise:
-                    wgood=where( (weight > 0.0) & (bmask==0) )
+                    wgood=where( weight > 0.0 )
                     if wgood[0].size > 0:
                         median_err=numpy.median(1.0/weight[wgood])
 
