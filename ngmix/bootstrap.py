@@ -2369,7 +2369,6 @@ class MaxRunner(object):
         if self.method == 'lm':
             self.send_pars=max_pars['lm_pars']
 
-        print("lm pars:",self.send_pars)
         mess="model should be exp,dev,gauss, got '%s'" % model
         assert model in ['exp','dev','gauss'],mess
 
