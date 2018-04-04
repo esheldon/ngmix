@@ -596,7 +596,11 @@ class Bootstrapper(object):
     def _fit_one_psf_coellip(self, psf_obs, psf_model, Tguess, ntry, fit_pars):
 
         ngauss=get_coellip_ngauss(psf_model)
-        lm_pars={'maxfev': 4000}
+        lm_pars={
+            'maxfev': 4000,
+            'xtol':5.0e-5,
+            'ftol':5.0e-5,
+        }
 
         if fit_pars is not None:
             lm_pars.update(fit_pars)
@@ -608,7 +612,11 @@ class Bootstrapper(object):
 
 
     def _fit_one_psf_max(self, psf_obs, psf_model, Tguess, ntry, fit_pars):
-        lm_pars={'maxfev': 4000}
+        lm_pars={
+            'maxfev': 4000,
+            'xtol':5.0e-5,
+            'ftol':5.0e-5,
+        }
 
         if fit_pars is not None:
             lm_pars.update(fit_pars)
@@ -2361,6 +2369,7 @@ class MaxRunner(object):
         if self.method == 'lm':
             self.send_pars=max_pars['lm_pars']
 
+        print("lm pars:",self.send_pars)
         mess="model should be exp,dev,gauss, got '%s'" % model
         assert model in ['exp','dev','gauss'],mess
 
