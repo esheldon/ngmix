@@ -842,11 +842,18 @@ class GMixCM(GMixModel):
         ]
         return '\n'.join(rep)
 
-
 def get_coellip_npars(ngauss):
+    """
+    get the number of paramters for the given ngauss
+    coelliptical model
+    """
     return 4 + 2*ngauss
 
 def get_coellip_ngauss(npars):
+    """
+    get the number of gaussians for the given nparameters
+    coelliptical model
+    """
     return (npars-4)//2
 
 class GMixCoellip(GMixModel):
@@ -1038,6 +1045,8 @@ def get_model_num(model):
     Get the numerical identifier for the input model,
     which could be string or number
     """
+    if model not in _gmix_model_dict:
+        raise ValueError("unknown model: '%s'" % model)
     return _gmix_model_dict[model]
 
 def get_model_name(model):
@@ -1045,13 +1054,25 @@ def get_model_name(model):
     Get the string identifier for the input model,
     which could be string or number
     """
+    if model not in _gmix_string_dict:
+        raise ValueError("unknown model: '%s'" % model)
     return _gmix_string_dict[model]
+
+def get_model_ngauss(model):
+    """
+    get the number of gaussians for the given model
+    """
+    if model not in _gmix_ngauss_dict:
+        raise ValueError("unknown model: '%s'" % model)
+    return _gmix_ngauss_dict[model]
 
 def get_model_npars(model):
     """
     Get the number of parameters for the input model,
     which could be string or number
     """
+    if model not in _gmix_model_dict:
+        raise ValueError("bad model: '%s'" % model)
     mi=_gmix_model_dict[model]
     return _gmix_npars_dict[mi]
 
