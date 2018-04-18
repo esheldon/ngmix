@@ -480,7 +480,7 @@ class GMix(object):
     def _fill_image(self, image, jacobian=None, fast_exp=False):
         """
         Internal routine.  Render the mixture into a new image.  No error
-        checking on the image!
+        checking on the image!  The data are *added* to the image
 
         parameters
         ----------
