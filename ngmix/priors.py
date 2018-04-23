@@ -4075,7 +4075,7 @@ class TruncatedSimpleGauss2D(PriorBase):
                               scale=self.sigma2,
                               size=nleft)
 
-            rsq = rvals1**2 + rvals2**2
+            rsq = (rvals1-self.cen1)**2 + (rvals2-self.cen2)**2
 
             w,=numpy.where(rsq < self.maxval_sq)
             if w.size > 0:
