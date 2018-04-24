@@ -3292,20 +3292,6 @@ class MultivariateLogNormal(object):
         # will raise numpy.linalg.linalg.LinAlgError
         self.lcov_inv = numpy.linalg.inv(lcov)
 
-        '''
-        import images
-        import esutil as eu
-        print("orig")
-        images.imprint(cov)
-        print("lcov")
-        images.imprint(lcov)
-        print("lcorr")
-        lcorr=eu.stat.cov2cor(lcov)
-        images.imprint(lcorr)
-        images.view(lcorr)
-        #stop
-        '''
-
         self.log_dist = scipy.stats.multivariate_normal(mean=lmean, cov=lcov)
 
 
