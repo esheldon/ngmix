@@ -201,14 +201,6 @@ class JointPriorSimpleHybrid(GMixND):
             sigmas = samples.std(axis=0)
             self._sigma_estimates=sigmas
 
-            '''
-            print("means  of TF:",samples.mean(axis=0))
-            print("sigmas of TF:",sigmas)
-
-            import esutil as eu
-            eu.plotting.bhist(samples[:,4], binsize=0.2*sigmas[4], xlabel='log10(T)')
-            eu.plotting.bhist(samples[:,5], binsize=0.2*sigmas[5], xlabel='log10(F)')
-            '''
         return self._sigma_estimates
 
     def get_prob_scalar(self, pars, **keys):
@@ -1099,7 +1091,6 @@ class PriorSimpleSep(object):
         estimate the width in each dimension
         """
         if not hasattr(self, '_sigma_estimates'):
-            import esutil as eu
             samples=self.sample(n)
             sigmas = samples.std(axis=0)
 
@@ -1349,7 +1340,6 @@ class PriorSimpleSepRound(PriorSimpleSep):
         estimate the width in each dimension
         """
         if not hasattr(self, '_sigma_estimates'):
-            import esutil as eu
             samples=self.sample(n)
             sigmas = samples.std(axis=0)
 
@@ -1494,7 +1484,6 @@ class PriorSimpleSepFixT(object):
         estimate the width in each dimension
         """
         if not hasattr(self, '_sigma_estimates'):
-            import esutil as eu
             samples=self.sample(n)
             sigmas = samples.std(axis=0)
 
