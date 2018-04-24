@@ -18,6 +18,12 @@ from . import bootstrap
 
 from . import em
 
+try:
+    import covmatrix
+    have_covmatrix=True
+except:
+    have_covmatrix=False
+
 def test():
     suite = unittest.TestLoader().loadTestsFromTestCase(TestFitting)
     unittest.TextTestRunner(verbosity=2).run(suite)
@@ -97,6 +103,10 @@ class TestFitting(unittest.TestCase):
 
     def testMax(self):
 
+        if not have_covmatrix:
+            print("skipping max since covmatrix is not installed")
+            return
+
         print('\n')
         for noise in [0.001, 0.1, 1.0]:
             print('='*10)
@@ -139,6 +149,11 @@ class TestFitting(unittest.TestCase):
 
 
     def testCM(self):
+
+        if not have_covmatrix:
+            print("skipping cm since covmatrix is not installed")
+            return
+
 
         print('\n')
         for model in ['exp','dev','cm']:
