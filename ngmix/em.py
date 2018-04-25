@@ -156,11 +156,17 @@ class GMixEM(object):
                 'flags':flags,
                 'numiter':numiter,
                 'fdiff':fdiff,
+                'message':'OK',
             }
 
-        except GMixRangeError:
-            # the iteration reached an invalid gaussian
-            result={'flags':EM_RANGE_ERROR}
+        except (GMixRangeError,ZeroDivisionError) as err:
+            # most likely the algorithm reached an invalid gaussian
+            message = str(err)
+            print(message)
+            result={
+                'flags':EM_RANGE_ERROR,
+                'message': message,
+            }
 
         self._result = result
 

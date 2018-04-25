@@ -156,6 +156,9 @@ def gmix_get_e1e2T(gmix):
     T_sum = irr_sum + icc_sum
     T = T_sum/psum
 
+    if T_sum <= 0.0:
+        raise GMixRangeError("T <= 0.0")
+
     e1 = (icc_sum - irr_sum)/T_sum
     e2 = 2.0*irc_sum/T_sum
 
