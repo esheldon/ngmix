@@ -944,7 +944,7 @@ class FracdevFitterMax(FitterBase):
         """
         Run leastsq and set the result
         """
-        from .simplex import minimize_neldermead_rel as minimize_neldermead
+        from .simplex import minimize_neldermead
 
         result = minimize_neldermead(self._calc_neg_lnprob,
                                      fracdev_guess,
@@ -1553,8 +1553,7 @@ class MaxSimple(FitterBase):
         maxfev:
             Default is npars*200
         """
-        #from .simplex import minimize_neldermead
-        from .simplex import minimize_neldermead_rel as minimize_neldermead
+        from .simplex import minimize_neldermead
 
         options=self._options
         options.update(keys)
