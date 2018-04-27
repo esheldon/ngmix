@@ -2245,24 +2245,8 @@ class PSFRunnerCoellip(object):
         self.set_guess0(Tguess)
         self._set_prior()
 
-    def _set_prior(self):
-        from .joint_prior import PriorCoellipSame
-        from .priors import CenPrior, ZDisk2D, TwoSidedErf
-
-        Tguess=self.Tguess
-        Fguess=self.Fguess
-
-        cen_width=2*self.pixel_scale
-        cen_prior = CenPrior(0.0, 0.0, cen_width, cen_width)
-        g_prior=ZDisk2D(1.0)
-        T_prior = TwoSidedErf(0.01*Tguess, 0.001*Tguess, 100*Tguess, Tguess)
-        F_prior = TwoSidedErf(0.01*Fguess, 0.001*Fguess, 100*Fguess, Fguess)
-
-        self.prior=PriorCoellipSame(self.ngauss,
-                                    cen_prior,
-                                    g_prior,
-                                    T_prior,
-                                    F_prior)
+    def get_fitter(self):
+        return self.fitter
 
     def go(self, ntry=1):
         from .fitting import LMCoellip
@@ -2337,6 +2321,26 @@ class PSFRunnerCoellip(object):
         Fguess *= self.pixel_scale**2
 
         self.Fguess=Fguess
+
+    def _set_prior(self):
+        from .joint_prior import PriorCoellipSame
+        from .priors import CenPrior, ZDisk2D, TwoSidedErf
+
+        Tguess=self.Tguess
+        Fguess=self.Fguess
+
+        cen_width=2*self.pixel_scale
+        cen_prior = CenPrior(0.0, 0.0, cen_width, cen_width)
+        g_prior=ZDisk2D(1.0)
+        T_prior = TwoSidedErf(0.01*Tguess, 0.001*Tguess, 100*Tguess, Tguess)
+        F_prior = TwoSidedErf(0.01*Fguess, 0.001*Fguess, 100*Fguess, Fguess)
+
+        self.prior=PriorCoellipSame(self.ngauss,
+                                    cen_prior,
+                                    g_prior,
+                                    T_prior,
+                                    F_prior)
+
 
 _moffat2_pguess=array([0.5, 0.5])
 _moffat2_fguess=array([0.48955064,  1.50658978])

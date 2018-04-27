@@ -2701,7 +2701,8 @@ class GPriorMErf(GPriorBase):
 
         this does not include the 2*pi*g
         """
-        from ._gmix import erf
+        #from ._gmix import erf
+        from math import erf
 
         #numer1 = 2*pi*g*self.A*(1-exp( (g-1.0)/self.a ))
         numer1 = self.A*(1-exp( (g-1.0)/self.a ))
@@ -2722,14 +2723,17 @@ class GPriorMErf(GPriorBase):
 
         this does not include the 2*pi*g
         """
-        from ._gmix import erf_array
+        #from ._gmix import erf_array
+        from math import erf
 
         #numer1 = 2*pi*g*self.A*(1-exp( (g-1.0)/self.a ))
         numer1 = self.A*(1-exp( (g-1.0)/self.a ))
 
         gerf0=zeros(g.size)
         arg = (self.gmax_func-g)/self.gsigma
-        erf_array(arg, gerf0)
+        for i in xrange(g.size):
+            gerf0[i] = erf(arg[i])
+        #erf_array(arg, gerf0)
 
         gerf=0.5*(1.0+gerf0)
 
