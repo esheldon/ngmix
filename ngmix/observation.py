@@ -939,6 +939,10 @@ def make_iilist(obs, **kw):
                 gsimage,
                 x_interpolant=interp,
             )
+            if hasattr(ii,'SBProfile'):
+                gsvers=1
+            else:
+                gsvers=2
 
             if obs.has_psf():
                 psf_weight = obs.psf.weight,
@@ -954,21 +958,32 @@ def make_iilist(obs, **kw):
                     x_interpolant=interp,
                 )
                 # make dimensions odd
-                dim = 1 + psf_ii.SBProfile.getGoodImageSize(
-                    psf_ii.nyquistScale(),
-                    #wmult,
-                )
+                if gsvers==1:
+                    dim = 1 + psf_ii.SBProfile.getGoodImageSize(
+                        psf_ii.nyquistScale(),
+                    )
+                else:
+                    dim = 1 + psf_ii.getGoodImageSize(
+                        psf_ii.nyquist_scale
+                    )
 
             else:
                 # make dimensions odd
-                dim = 1 + ii.SBProfile.getGoodImageSize(
-                    ii.nyquistScale(),
-                    #wmult,
-                )
+                if hasattr(ii,'SBProfile'):
+                    dim = 1 + ii.SBProfile.getGoodImageSize(
+                        ii.nyquistScale(),
+                    )
+                else:
+                    dim = 1 + ii.getGoodImageSize(
+                        ii.nyquist_scale,
+                    )
                 psf_ii=None
                 psf_weight=None
 
-            dk=ii.stepK()
+            if gsvers==1:
+                dk=ii.stepK()
+            else:
+                dk=ii.stepk
 
             dimlist.append( dim )
             dklist.append(dk)
