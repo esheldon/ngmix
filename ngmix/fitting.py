@@ -1643,16 +1643,19 @@ class LMSimple(FitterBase):
             lm_pars=_default_lm_pars
         self.lm_pars=lm_pars
 
+        self._set_n_prior_pars()
 
+        self._set_fdiff_size()
+
+        self._band_pars=zeros(6)
+
+    def _set_n_prior_pars(self):
         # center1 + center2 + shape + T + fluxes
         if self.prior is None:
             self.n_prior_pars=0
         else:
             self.n_prior_pars=1 + 1 + 1 + 1 + self.nband
 
-        self._set_fdiff_size()
-
-        self._band_pars=zeros(6)
 
     def _set_fdiff_size(self):
         self.fdiff_size=self.totpix + self.n_prior_pars
@@ -2032,6 +2035,52 @@ class LMComposite(LMSimple):
     def _make_model(self, band_pars):
         gm0=gmix.GMixCM(self.fracdev, self.TdByTe, band_pars)
         return gm0
+
+class LMBDFix(LMSimple):
+    """
+    exp+dev model with pre-determined Tdev/Texp but not fracdev
+    """
+    def __init__(self, obs, TdByTe, **keys):
+        super(LMBDFix,self).__init__(obs, 'bdfix', **keys)
+
+        self._band_pars=zeros(7)
+        self.TdByTe=TdByTe
+
+    def _set_n_prior_pars(self):
+        # center1 + center2 + shape + T + fracdev + fluxes
+        if self.prior is None:
+            self.n_prior_pars=0
+        else:
+            self.n_prior_pars=1 + 1 + 1 + 1 + 1 + self.nband
+
+    def get_gmix(self, band=0):
+        """
+        Get a gaussian mixture at the "best" parameter set, which
+        definition depends on the sub-class
+        """
+        res=self.get_result()
+        pars=self.get_band_pars(res['pars'], band)
+        return self._make_model(pars)
+
+    def get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+        """
+
+        pars=self._band_pars
+
+        pars[0:6] = pars_in[0:6]
+        pars[6] = pars_in[6+band]
+
+        return pars
+
+
+    def _make_model(self, band_pars):
+        """
+        incoming parameters are 
+            [c1,c2,g1,g2,T,fracdev,F]
+        """
+        return gmix.GMixBDFix(self.TdByTe, band_pars)
 
 NOTFINITE_BIT=11
 def run_leastsq(func, guess, n_prior_pars, **keys):

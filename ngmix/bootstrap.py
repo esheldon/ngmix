@@ -1690,6 +1690,67 @@ class DeconvMetacalBootstrapper(MaxMetacalBootstrapper):
         Tpsf = Tpsf_sum/wsum
         return gpsf,Tpsf
 
+class BDFixBootstrapper(Bootstrapper):
+    def fit_max(self,
+                max_pars,
+                TdByTe,
+                guess=None,
+                guess_widths=None,
+                prior=None,
+                ntry=1,
+                obs=None):
+        """
+        fit the galaxy.  You must run fit_psf() successfully first
+        """
+
+        assert prior is not None
+        assert guess is None,"for now"
+
+        if obs is None:
+            obs = self.mb_obs_list
+
+        if not hasattr(self,'psf_flux_res'):
+            self.fit_gal_psf_flux()
+
+        guesser=self._get_guesser(prior)
+
+        runner=BDFixRunner(
+            obs,
+            max_pars,
+            TdByTe,
+            guesser,
+            prior=prior,
+        )
+
+        runner.go(ntry=ntry)
+
+        fitter=runner.fitter
+
+        res=fitter.get_result()
+
+        if res['flags'] != 0:
+            raise BootGalFailure("failed to fit galaxy with maxlike")
+
+        self.max_fitter = fitter
+
+    def _get_guesser(self, prior):
+        """
+        get a guesser that uses the psf T and galaxy psf flux to
+        generate a guess, drawing from priors on the other parameters
+        """
+        from .guessers import BDFixGuesser
+
+        psf_T = self.mb_obs_list[0][0].psf.gmix.get_T()
+
+        pres=self.get_psf_flux_result()
+
+        return BDFixGuesser(
+            psf_T,
+            pres['psf_flux'],
+            #1.0,
+            prior,
+        )
+
 
 class CompositeBootstrapper(Bootstrapper):
     def __init__(self, obs,
@@ -2722,6 +2783,59 @@ class CompositeMaxRunner(MaxRunner):
     def _get_lm_fitter_class(self):
         from .fitting import LMComposite
         return LMComposite
+
+
+class BDFixRunner(MaxRunner):
+    """
+    wrapper to generate guesses and run the psf fitter a few times
+    """
+    def __init__(self,
+                 obs,
+                 max_pars,
+                 TdByTe,
+                 guesser,
+                 prior=None):
+        self.obs=obs
+
+        self.max_pars=max_pars
+        self.TdByTe=TdByTe
+
+        self.method=max_pars['method']
+        if self.method == 'lm':
+            self.send_pars=max_pars['lm_pars']
+        else:
+            self.send_pars=max_pars
+
+        self.prior=prior
+
+        self.guesser=guesser
+
+    def _go_lm(self, ntry=1):
+        from .fitting import LMComposite
+
+        fitclass=self._get_lm_fitter_class()
+
+        for i in xrange(ntry):
+            guess=self.guesser()
+            fitter=fitclass(self.obs,
+                            self.TdByTe,
+                            lm_pars=self.send_pars,
+                            prior=self.prior)
+
+            fitter.go(guess)
+
+            res=fitter.get_result()
+            if res['flags']==0:
+                break
+
+        res['ntry'] = i+1
+        self.fitter=fitter
+
+    def _get_lm_fitter_class(self):
+        from .fitting import LMBDFix
+        return LMBDFix
+
+
 
 class CompositeMaxRunnerRound(CompositeMaxRunner,RoundRunnerBase):
     """

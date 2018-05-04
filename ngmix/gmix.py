@@ -842,6 +842,50 @@ class GMixCM(GMixModel):
         ]
         return '\n'.join(rep)
 
+class GMixBDFix(GMixModel):
+    def __init__(self, TdByTe, pars):
+        self._TdByTe = TdByTe
+        super(GMixBDFix,self).__init__(pars,'bdfix')
+
+    def copy(self):
+        """
+        Get a new GMix with the same parameters
+        """
+        return GMixBDFix(
+            self._TdByTe,
+            self._pars,
+        )
+
+    def _fill(self, pars):
+        """
+        Fill in the gaussian mixture with new parameters, with
+        no error checking
+
+        parameters
+        ----------
+        pars: ndarray or sequence
+            The parameters
+        """
+
+        self._pars[:] = pars
+
+        gm=self.get_data()
+        self._fill_func(
+            gm,
+            self._TdByTe,
+            self._pars,
+        )
+
+
+    def __repr__(self):
+        rep=super(GMixBDFix,self).__repr__()
+        rep = [
+            'TdByTe:  %g' % self._TdByTe,
+            rep,
+        ]
+        return '\n'.join(rep)
+
+
 def get_coellip_npars(ngauss):
     """
     get the number of paramters for the given ngauss
@@ -931,6 +975,7 @@ GMIX_BDF=6
 GMIX_COELLIP=7
 GMIX_SERSIC=8
 GMIX_CM=9
+GMIX_BDFIX=10
 
 _gmix_model_dict={
     'full':       GMIX_FULL,
@@ -950,6 +995,10 @@ _gmix_model_dict={
 
     GMIX_CM: GMIX_CM,
     'cm': GMIX_CM,
+
+    GMIX_BDFIX: GMIX_BDFIX,
+    'bdfix': GMIX_BDFIX,
+
 
     'coellip':    GMIX_COELLIP,
     GMIX_COELLIP: GMIX_COELLIP,
@@ -977,6 +1026,9 @@ _gmix_string_dict={
     GMIX_CM:'cm',
     'cm':'cm',
 
+    GMIX_BDFIX:'bdfix',
+    'bdfix':'bdfix',
+
     GMIX_COELLIP:'coellip',
     'coellip':'coellip',
 
@@ -992,6 +1044,7 @@ _gmix_npars_dict={
     GMIX_DEV:6,
 
     GMIX_CM:6,
+    GMIX_BDFIX:7,
 
     GMIX_BDC:8,
     GMIX_BDF:7,
@@ -1009,6 +1062,7 @@ _gmix_ngauss_dict={
     'dev':10,
 
     GMIX_CM:16,
+    GMIX_BDFIX:16,
 
     GMIX_BDC:16,
     GMIX_BDF:16,
