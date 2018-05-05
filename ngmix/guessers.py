@@ -219,8 +219,11 @@ class BDFixGuesser(TFluxAndPriorGuesser):
         guess[:,4] = self.T*(1.0 + r)
 
         # fracdev prior
-        guess[:,5] = rng.uniform(low=-0.1, high=0.1, size=n)
+        #guess[:,5] = rng.uniform(low=-0.1, high=0.1, size=n)
+        #guess[:,5] = rng.uniform(low=0.2, high=0.4, size=n)
         #guess[:,5] = rng.uniform(low=0.1, high=0.3, size=n)
+        guess[:,5] = rng.uniform(low=0.4, high=0.6, size=n)
+        #guess[:,5] = rng.uniform(low=0.9, high=0.99, size=n)
 
         for band in xrange(nband):
             r=rng.uniform(low=-0.1, high=0.1, size=n)
