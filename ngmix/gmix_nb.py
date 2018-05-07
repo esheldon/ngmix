@@ -192,6 +192,7 @@ def gauss2d_set_norm(gauss):
 
     if gauss['det'] < GMIX_LOW_DETVAL:
         raise GMixRangeError("det too low")
+
     T=gauss['irr']+gauss['icc']
     if T <= GMIX_LOW_DETVAL:
         raise GMixRangeError("T too low")
