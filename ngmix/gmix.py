@@ -842,6 +842,50 @@ class GMixCM(GMixModel):
         ]
         return '\n'.join(rep)
 
+class GMixBDF(GMixModel):
+    """
+    Gaussian mixture representing a bulge+disk with
+    fixed size ratio Td/Te=1
+    """
+    def __init__(self, pars):
+        super(GMixBDF,self).__init__(pars,'bdf')
+
+    def copy(self):
+        """
+        Get a new GMix with the same parameters
+        """
+        return GMixBDF(
+            self._pars,
+        )
+
+    def _fill(self, pars):
+        """
+        Fill in the gaussian mixture with new parameters, with
+        no error checking
+
+        parameters
+        ----------
+        pars: ndarray or sequence
+            The parameters
+        """
+
+        self._pars[:] = pars
+
+        gm=self.get_data()
+        self._fill_func(
+            gm,
+            self._pars,
+        )
+
+
+    def __repr__(self):
+        rep=super(GMixBDF,self).__repr__()
+        rep = [
+            rep,
+        ]
+        return '\n'.join(rep)
+
+
 def get_coellip_npars(ngauss):
     """
     get the number of paramters for the given ngauss
@@ -992,6 +1036,7 @@ _gmix_npars_dict={
     GMIX_DEV:6,
 
     GMIX_CM:6,
+    GMIX_BDF:7,
 
     GMIX_BDC:8,
     GMIX_BDF:7,
@@ -1009,6 +1054,7 @@ _gmix_ngauss_dict={
     'dev':10,
 
     GMIX_CM:16,
+    GMIX_BDF:16,
 
     GMIX_BDC:16,
     GMIX_BDF:16,

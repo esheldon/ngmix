@@ -193,6 +193,10 @@ def gauss2d_set_norm(gauss):
     if gauss['det'] < GMIX_LOW_DETVAL:
         raise GMixRangeError("det too low")
 
+    T=gauss['irr']+gauss['icc']
+    if T <= GMIX_LOW_DETVAL:
+        raise GMixRangeError("T too low")
+
     idet=1.0/gauss['det']
     gauss['drr'] = gauss['irr']*idet
     gauss['drc'] = gauss['irc']*idet
@@ -446,6 +450,52 @@ def gmix_fill_cm(gmix, fracdev, TdByTe, Tfactor, pars):
         )
 
 @njit
+def gmix_fill_bdf(gmix, pars):
+    """
+    fill a composite model with fixed Td/Te=1 but fracdev
+    varying
+    """
+
+    TdByTe=1.0
+
+    row     = pars[0]
+    col     = pars[1]
+    g1      = pars[2]
+    g2      = pars[3]
+    T       = pars[4]
+    fracdev = pars[5]
+    flux    = pars[6]
+
+    Tfactor  = get_cm_Tfactor(fracdev, TdByTe)
+    T = T*Tfactor
+
+    ifracdev = 1.0-fracdev
+
+    e1, e2 = g1g2_to_e1e2(g1, g2)
+
+    for i in xrange(16):
+        if i < 6:
+            p = _pvals_exp[i] * ifracdev
+            f = _fvals_exp[i]
+        else:
+            p = _pvals_dev[i-6] * fracdev
+            f = _fvals_dev[i-6] * TdByTe
+
+        T_i_2  = 0.5*T*f
+        flux_i = flux*p
+
+        gauss2d_set(
+            gmix[i],
+            flux_i,
+            row,
+            col, 
+            T_i_2*(1-e1), 
+            T_i_2*e2,
+            T_i_2*(1+e1),
+        )
+
+
+@njit
 def get_cm_Tfactor(fracdev, TdByTe):
     """
     get the factor needed to convert T to the T needed
@@ -485,6 +535,7 @@ _gmix_fill_functions={
     'turb': gmix_fill_turb,
     'gauss': gmix_fill_gauss,
     'cm': gmix_fill_cm,
+    'bdf': gmix_fill_bdf,
     'coellip': gmix_fill_coellip,
     'full':gmix_fill_full,
 }
