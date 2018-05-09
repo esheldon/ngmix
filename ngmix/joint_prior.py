@@ -1234,7 +1234,7 @@ class PriorSimpleSep(object):
         return rep
 
 
-class PriorBDFixSep(object):
+class PriorBDFSep(object):
     """
     Separate priors on each parameter
 

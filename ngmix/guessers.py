@@ -197,7 +197,7 @@ class TFluxAndPriorGuesser(GuesserBase):
                 else:
                     break
 
-class BDFixGuesser(TFluxAndPriorGuesser):
+class BDFGuesser(TFluxAndPriorGuesser):
     def __init__(self, Tguess, fluxes, prior):
         self.T=Tguess
         self.fluxes=numpy.array(fluxes, ndmin=1)

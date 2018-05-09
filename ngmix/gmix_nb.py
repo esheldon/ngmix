@@ -450,19 +450,21 @@ def gmix_fill_cm(gmix, fracdev, TdByTe, Tfactor, pars):
         )
 
 @njit
-
-def gmix_fill_bdfix(gmix, TdByTe, pars):
+def gmix_fill_bdf(gmix, pars):
     """
-    fill a composite model
+    fill a composite model with fixed Td/Te=1 but fracdev
+    varying
     """
 
-    row  = pars[0]
-    col  = pars[1]
-    g1   = pars[2]
-    g2   = pars[3]
-    T    = pars[4]
+    TdByTe=1.0
+
+    row     = pars[0]
+    col     = pars[1]
+    g1      = pars[2]
+    g2      = pars[3]
+    T       = pars[4]
     fracdev = pars[5]
-    flux = pars[6]
+    flux    = pars[6]
 
     Tfactor  = get_cm_Tfactor(fracdev, TdByTe)
     T = T*Tfactor
@@ -533,7 +535,7 @@ _gmix_fill_functions={
     'turb': gmix_fill_turb,
     'gauss': gmix_fill_gauss,
     'cm': gmix_fill_cm,
-    'bdfix': gmix_fill_bdfix,
+    'bdf': gmix_fill_bdf,
     'coellip': gmix_fill_coellip,
     'full':gmix_fill_full,
 }

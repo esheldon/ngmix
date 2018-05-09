@@ -1690,10 +1690,9 @@ class DeconvMetacalBootstrapper(MaxMetacalBootstrapper):
         Tpsf = Tpsf_sum/wsum
         return gpsf,Tpsf
 
-class BDFixBootstrapper(Bootstrapper):
+class BDFBootstrapper(Bootstrapper):
     def fit_max(self,
                 max_pars,
-                TdByTe,
                 guess=None,
                 guess_widths=None,
                 prior=None,
@@ -1714,10 +1713,9 @@ class BDFixBootstrapper(Bootstrapper):
 
         guesser=self._get_guesser(prior)
 
-        runner=BDFixRunner(
+        runner=BDFRunner(
             obs,
             max_pars,
-            TdByTe,
             guesser,
             prior=prior,
         )
@@ -1738,13 +1736,13 @@ class BDFixBootstrapper(Bootstrapper):
         get a guesser that uses the psf T and galaxy psf flux to
         generate a guess, drawing from priors on the other parameters
         """
-        from .guessers import BDFixGuesser
+        from .guessers import BDFGuesser
 
         psf_T = self.mb_obs_list[0][0].psf.gmix.get_T()
 
         pres=self.get_psf_flux_result()
 
-        return BDFixGuesser(
+        return BDFGuesser(
             psf_T,
             pres['psf_flux'],
             #1.0,
@@ -2785,20 +2783,18 @@ class CompositeMaxRunner(MaxRunner):
         return LMComposite
 
 
-class BDFixRunner(MaxRunner):
+class BDFRunner(MaxRunner):
     """
     wrapper to generate guesses and run the psf fitter a few times
     """
     def __init__(self,
                  obs,
                  max_pars,
-                 TdByTe,
                  guesser,
                  prior=None):
         self.obs=obs
 
         self.max_pars=max_pars
-        self.TdByTe=TdByTe
 
         self.method=max_pars['method']
         if self.method == 'lm':
@@ -2817,10 +2813,11 @@ class BDFixRunner(MaxRunner):
 
         for i in xrange(ntry):
             guess=self.guesser()
-            fitter=fitclass(self.obs,
-                            self.TdByTe,
-                            lm_pars=self.send_pars,
-                            prior=self.prior)
+            fitter=fitclass(
+                self.obs,
+                lm_pars=self.send_pars,
+                prior=self.prior,
+            )
 
             fitter.go(guess)
 
@@ -2832,8 +2829,8 @@ class BDFixRunner(MaxRunner):
         self.fitter=fitter
 
     def _get_lm_fitter_class(self):
-        from .fitting import LMBDFix
-        return LMBDFix
+        from .fitting import LMBDF
+        return LMBDF
 
 
 

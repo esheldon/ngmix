@@ -2036,15 +2036,14 @@ class LMComposite(LMSimple):
         gm0=gmix.GMixCM(self.fracdev, self.TdByTe, band_pars)
         return gm0
 
-class LMBDFix(LMSimple):
+class LMBDF(LMSimple):
     """
-    exp+dev model with pre-determined Tdev/Texp but not fracdev
+    exp+dev model with Tdev/Texp=1 but fracdev free
     """
-    def __init__(self, obs, TdByTe, **keys):
-        super(LMBDFix,self).__init__(obs, 'bdfix', **keys)
+    def __init__(self, obs, **keys):
+        super(LMBDF,self).__init__(obs, 'bdf', **keys)
 
         self._band_pars=zeros(7)
-        self.TdByTe=TdByTe
 
     def _set_n_prior_pars(self):
         # center1 + center2 + shape + T + fracdev + fluxes
@@ -2080,7 +2079,7 @@ class LMBDFix(LMSimple):
         incoming parameters are 
             [c1,c2,g1,g2,T,fracdev,F]
         """
-        return gmix.GMixBDFix(self.TdByTe, band_pars)
+        return gmix.GMixBDF(band_pars)
 
 NOTFINITE_BIT=11
 def run_leastsq(func, guess, n_prior_pars, **keys):
