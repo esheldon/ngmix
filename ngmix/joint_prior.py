@@ -1317,8 +1317,38 @@ class PriorBDFSep(object):
 
         return lnp
 
-
     def fill_fdiff(self, pars, fdiff, **keys):
+        """
+        set sqrt(-2ln(p)) ~ (model-data)/err
+        """
+        index=0
+
+        #fdiff[index] = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
+
+        fdiff1,fdiff2=self.cen_prior.get_fdiff(pars[0],pars[1])
+
+        fdiff[index] = fdiff1
+        index += 1
+        fdiff[index] = fdiff2
+        index += 1
+
+        fdiff[index] = self.g_prior.get_fdiff(pars[2],pars[3])
+        index += 1
+        fdiff[index] =  self.T_prior.get_fdiff_scalar(pars[4])
+        index += 1
+
+        fdiff[index] =  self.fracdev_prior.get_fdiff(pars[5], **keys)
+        index += 1
+
+        for i in xrange(self.nband):
+            F_prior=self.F_priors[i]
+            fdiff[index] = F_prior.get_fdiff(pars[6+i])
+            index += 1
+
+        return index
+
+
+    def fill_fdiff_old(self, pars, fdiff, **keys):
         """
         set sqrt(-2ln(p)) ~ (model-data)/err
         """

@@ -1478,6 +1478,23 @@ class GPriorBA(GPriorBase):
         self.sig2inv = 1./self.sig2
         self.sig4inv = 1./self.sig4
 
+    def get_fdiff(self, g1, g2):
+        """
+        For use with LM fitter, which requires
+        (model-data)/width
+        so we need to fake it
+
+        In this case the fake fdiff works OK because the prior
+        is on |g|, so the sign doesn't matter
+        """
+
+        lnp = self.get_lnprob_scalar2d(g1, g2)
+        chi2 = -2*lnp
+        chi2.clip(min=0.0, max=None, out=chi2)
+        fdiffish = sqrt(chi2)
+        return fdiffish
+
+
     def get_lnprob_scalar2d(self, g1, g2):
         """
         Get the 2d log prob for the input g value
@@ -2004,6 +2021,38 @@ class TwoSidedErf(PriorBase):
         if w.size > 0:
             lnp[w] = numpy.log( p[w] )
         return lnp
+
+    def get_fdiff_array(self, vals):
+        """
+        get the probability of the point
+        """
+
+        vals=array(vals, ndmin=1, dtype='f8', copy=False)
+        fdiff = zeros(vals.size)
+
+        for i in xrange(vals.size):
+            fdiff[i]=self.get_fdiff_scalar(vals[i]) 
+
+        return fdiff
+
+
+    def get_fdiff_scalar(self, val):
+        """
+        get the probability of the point
+        """
+        from math import erf
+
+        p1 = erf((self.maxval-val)/self.width_at_max)
+        p1 -= 1.0
+        p1 *= -BIGVAL/2
+
+        p2 = erf((val-self.minval)/self.width_at_min)
+        p2 -= 1
+        p2 *= -1
+        p2 *= -BIGVAL/2
+        
+        return p1+p2
+
 
     def sample(self, nrand=None):
         """
@@ -2912,6 +2961,7 @@ class Normal(object):
     def __init__(self, cen, sigma, rng=None):
         self.cen=cen
         self.sigma=sigma
+        self.sinv=1.0/sigma
         self.s2inv=1.0/sigma**2
         self.ndim=1
 
@@ -2932,6 +2982,13 @@ class Normal(object):
         diff = self.cen-x
         lnp = -0.5*diff*diff*self.s2inv
         return exp(lnp)
+
+    def get_fdiff(self, x):
+        """
+        For use with LM fitter
+        (model-data)/width for both coordinates
+        """
+        return (x-self.cen)*self.sinv
 
     def sample(self, size=None):
         """
@@ -3910,10 +3967,22 @@ class CenPrior(object):
         self.cen2 = float(cen2)
         self.sigma1 = float(sigma1)
         self.sigma2 = float(sigma2)
+        self.sinv1 = 1.0/self.sigma1
+        self.sinv2 = 1.0/self.sigma2
         self.s2inv1 = 1.0/self.sigma1**2
         self.s2inv2 = 1.0/self.sigma2**2
 
         self.rng=make_rng(rng=rng)
+
+    def get_fdiff(self, x1, x2):
+        """
+        For use with LM fitter
+        (model-data)/width for both coordinates
+        """
+        d1 = (x1-self.cen1)*self.sinv1
+        d2 = (x2-self.cen2)*self.sinv2
+        return d1, d2
+
 
     def get_lnprob_scalar(self, x1, x2):
         """
