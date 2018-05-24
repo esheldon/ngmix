@@ -2090,7 +2090,6 @@ class TwoSidedErf(PriorBase):
         
         return p1+p2
 
-
     def sample(self, nrand=None):
         """
         draw random samples; not perfect, only goes from
@@ -3004,12 +3003,26 @@ class Normal(object):
 
         self.rng=make_rng(rng=rng)
 
-    def get_lnprob_scalar(self, x):
+    def get_lnprob(self, x):
         """
         -0.5 * ( (x-cen)/sigma )**2
         """
         diff = self.cen-x
         return -0.5*diff*diff*self.s2inv
+
+    get_lnprob_scalar = get_lnprob
+    get_lnprob_array = get_lnprob
+
+    def get_prob(self, x):
+        """
+        -0.5 * ( (x-cen)/sigma )**2
+        """
+        diff = self.cen-x
+        lnp = -0.5*diff*diff*self.s2inv
+        return numpy.exp(lnp)
+
+
+    get_prob_array = get_prob
 
     def get_prob_scalar(self, x):
         """
