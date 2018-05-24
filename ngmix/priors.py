@@ -1480,6 +1480,33 @@ class GPriorBA(GPriorBase):
 
     def get_fdiff(self, g1, g2):
         """
+        for the LM fitter
+        """
+        if isinstance(g1, numpy.ndarray):
+            return self.get_fdiff_array(g1, g2)
+        else:
+            return self.get_fdiff_scalar(g1, g2)
+
+
+    def get_fdiff_scalar(self, g1, g2):
+        """
+        For use with LM fitter, which requires
+        (model-data)/width
+        so we need to fake it
+
+        In this case the fake fdiff works OK because the prior
+        is on |g|, so the sign doesn't matter
+        """
+
+        lnp = self.get_lnprob_scalar2d(g1, g2)
+        chi2 = -2*lnp
+        if chi2 < 0.0:
+            chi2=0.0
+        fdiffish = sqrt(chi2)
+        return fdiffish
+
+    def get_fdiff_array(self, g1, g2):
+        """
         For use with LM fitter, which requires
         (model-data)/width
         so we need to fake it
@@ -1493,6 +1520,7 @@ class GPriorBA(GPriorBase):
         chi2.clip(min=0.0, max=None, out=chi2)
         fdiffish = sqrt(chi2)
         return fdiffish
+
 
 
     def get_lnprob_scalar2d(self, g1, g2):
@@ -2022,9 +2050,18 @@ class TwoSidedErf(PriorBase):
             lnp[w] = numpy.log( p[w] )
         return lnp
 
+    def get_fdiff(self, x):
+        """
+        for the LM fitter
+        """
+        if isinstance(x, numpy.ndarray):
+            return self.get_fdiff_array(x)
+        else:
+            return self.get_fdiff_scalar(x)
+
     def get_fdiff_array(self, vals):
         """
-        get the probability of the point
+        for the LM fitter
         """
 
         vals=array(vals, ndmin=1, dtype='f8', copy=False)

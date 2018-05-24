@@ -1319,7 +1319,8 @@ class PriorBDFSep(object):
 
     def fill_fdiff(self, pars, fdiff, **keys):
         """
-        set sqrt(-2ln(p)) ~ (model-data)/err
+        (model-data)/err
+        but "data" here is the central value of a prior.
         """
         index=0
 
@@ -1334,10 +1335,10 @@ class PriorBDFSep(object):
 
         fdiff[index] = self.g_prior.get_fdiff(pars[2],pars[3])
         index += 1
-        fdiff[index] =  self.T_prior.get_fdiff_scalar(pars[4])
+        fdiff[index] =  self.T_prior.get_fdiff(pars[4])
         index += 1
 
-        fdiff[index] =  self.fracdev_prior.get_fdiff(pars[5], **keys)
+        fdiff[index] =  self.fracdev_prior.get_fdiff(pars[5])
         index += 1
 
         for i in xrange(self.nband):
