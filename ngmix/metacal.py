@@ -902,20 +902,23 @@ class MetacalGaussPSF(Metacal):
             # argh, galsim uses generic exceptions
             raise GMixRangeError("galsim error: '%s'" % str(err))
 
-    def _make_psf_obs(self, psf_im):
+    def _make_psf_obs(self, gsim):
 
+        noise = 1.0e-6
+        psf_im = gsim.array.copy()
+        psf_im += numpy.random.normal(scale=noise, size=psf_im.shape)
         obs=self.obs
 
-        cen = (numpy.array(psf_im.array.shape)-1.0)/2.0
+        cen = (numpy.array(psf_im.shape)-1.0)/2.0
         j = obs.psf.jacobian.copy()
         j.set_cen(
             row=cen[0],
             col=cen[1],
         )
 
-        weight = psf_im.array*0 + numpy.median(obs.psf.weight)
+        weight = psf_im*0 + 1.0/noise**2
         psf_obs = Observation(
-            psf_im.array,
+            psf_im,
             weight=weight,
             jacobian=j,
         )
