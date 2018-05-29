@@ -769,17 +769,37 @@ class KObservation(object):
 
         self.weight=weight
 
+    @property
+    def psf(self):
+        """
+        getter for psf
+
+        currently this simply returns a reference
+        """
+        #return self.get_psf()
+        return self._psf
+
+    def has_psf(self):
+        """
+        does this object have a psf set?
+        """
+        return hasattr(self,'_psf')
+
     def set_psf(self, psf):
         """
         set the psf KObservation.  can be None
 
         Shape of psf image should match the image
         """
-        self.psf = psf
+        if self.has_psf():
+            del self._psf
+
         if psf is None:
             return
 
         assert isinstance(psf, KObservation)
+
+        self._psf = psf
 
         if psf.kimage.array.shape!=self.kimage.array.shape:
             raise ValueError("psf kimage must have "
