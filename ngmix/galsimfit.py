@@ -221,22 +221,25 @@ class GalsimSimple(LMSimple):
         Fill the list of lists of gmix objects for the given parameters
         """
         import galsim
-        for band,kobs_list in enumerate(self.mb_kobs):
-            # pars for this band, in linear space
-            band_pars=self.get_band_pars(pars, band)
+        try:
+            for band,kobs_list in enumerate(self.mb_kobs):
+                # pars for this band, in linear space
+                band_pars=self.get_band_pars(pars, band)
 
-            for i,kobs in enumerate(kobs_list):
+                for i,kobs in enumerate(kobs_list):
 
-                gal = self.make_model(band_pars)
+                    gal = self.make_model(band_pars)
 
-                meta=kobs.meta
+                    meta=kobs.meta
 
-                kmodel=meta['kmodel']
+                    kmodel=meta['kmodel']
 
-                gal._drawKImage(kmodel)
+                    gal._drawKImage(kmodel)
 
-                if kobs.has_psf():
-                    kmodel *= kobs.psf.kimage
+                    if kobs.has_psf():
+                        kmodel *= kobs.psf.kimage
+        except RuntimeError as err:
+            raise GMixRangeError(str(err))
 
     def make_model(self, pars):
         """
