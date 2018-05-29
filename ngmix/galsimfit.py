@@ -235,7 +235,8 @@ class GalsimSimple(LMSimple):
 
                 gal._drawKImage(kmodel)
 
-                kmodel *= kobs.psf.kimage
+                if kobs.has_psf():
+                    kmodel *= kobs.psf.kimage
 
     def make_model(self, pars):
         """
@@ -463,7 +464,8 @@ class GalsimSimple(LMSimple):
 
                 gal.drawKImage(image=kmodel)
 
-                kmodel *= kobs.psf.kimage
+                if kobs.has_psf():
+                    kmodel *= kobs.psf.kimage
                 kmodel.real.array[:,:] *= kmodel.real.array[:,:]
                 kmodel.imag.array[:,:] *= kmodel.imag.array[:,:]
 
@@ -541,6 +543,69 @@ class SpergelFitter(GalsimSimple):
         nband should be set in set_lists, called before this
         """
         self.npars=6 + self.nband
+
+class MoffatFitter(GalsimSimple):
+    """
+    Fit the moffat profile with free beta to the input observations
+    """
+    def __init__(self, obs, **keys):
+        super(MoffatFitter,self).__init__(obs, 'moffat', **keys)
+
+    def _set_model_class(self):
+        import galsim
+        
+        self._model_class=galsim.Moffat
+
+    def make_round_model(self, pars):
+        """
+        make the galsim Moffat model
+        """
+        import galsim
+
+        r50   = pars[4]
+        beta  = pars[5]
+        flux  = pars[6]
+
+        # generic RuntimeError thrown
+        try:
+            gal = galsim.Moffat(
+                beta,
+                half_light_radius=r50,
+                flux=flux,
+            )
+        except RuntimeError as err:
+            raise GMixRangeError(str(err))
+
+        return gal
+
+    def get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+
+        input pars are [c1, c2, e1, e2, r50, beta, flux1, flux2, ....]
+        """
+
+        pars=self._band_pars
+
+        pars[0:6] = pars_in[0:6]
+        pars[6] = pars_in[6+band]
+        return pars
+
+    def _set_prior(self, **keys):
+        self.prior = keys.get('prior',None)
+        if self.prior is None:
+            self.n_prior_pars=0
+        else:
+            #                 c1  c2  e1e2  r50  beta   fluxes
+            self.n_prior_pars=1 + 1 + 1   + 1  + 1    + self.nband
+
+
+    def _set_npars(self):
+        """
+        nband should be set in set_lists, called before this
+        """
+        self.npars=6 + self.nband
+
 
 class GalsimTemplateFluxFitter(TemplateFluxFitter):
     def __init__(self, obs, model=None, psf_models=None, **keys):
