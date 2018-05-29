@@ -3270,6 +3270,41 @@ class LogNormal(PriorBase):
 
         return samples
 
+    def _calc_fdiff(self, pars):
+        ln = LogNormal(pars[0], pars[1])
+        model = ln.get_prob_array(self._fitx)*pars[2]
+
+        fdiff = model-self._fity
+        return fdiff
+
+    def fit(self, x, y):
+        """
+        fit to the input x and y
+        """
+        from .fitting import run_leastsq
+        rng=self.rng
+
+        self._fitx=x
+        self._fity=y
+
+        for i in xrange(4):
+            f1,f2,f3 = 1.0 + rng.uniform(low=0.1,high=0.1,size=3)
+            guess=numpy.array([
+                x.mean()*f1,
+                x.std()*f2,
+                y.mean()*f3,
+            ])
+
+            res=run_leastsq(
+                self._calc_fdiff,
+                guess,
+                0,
+            )
+            if res['flags']==0:
+                break
+
+        return res
+
 
 class MultivariateLogNormal(object):
     """
