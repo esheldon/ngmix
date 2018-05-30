@@ -450,7 +450,8 @@ class Bootstrapper(object):
                  ntry=4,
                  fit_pars=None,
                  skip_already_done=True,
-                 norm_key=None):
+                 norm_key=None,
+                 min_s2n=None):
         """
         Fit all psfs.  If the psf observations already have a gmix
         then this step is not necessary
@@ -525,6 +526,15 @@ class Bootstrapper(object):
 
                     self._fit_one_psf(psf_obs, psf_model, Tguess_i,
                                       ntry, fit_pars, norm_key=norm_key)
+
+                    if min_s2n is not None:
+                        res=psf_obs.meta['fitter'].get_result()
+                        s2n = res['flux']/res['flux_err']
+                        if s2n < min_s2n:
+                            res['flags']=BOOT_S2N_LOW
+                            psf_obs.gmix=None
+                            raise BootPSFFailure("    low psf s/n %g" % s2n)
+
                     new_obslist.append(obs)
                     ntot += 1
 
@@ -1161,6 +1171,7 @@ class AdmomBootstrapper(Bootstrapper):
                             Tguess_i = self._get_psf_Tguess(psf_obs)
 
                     self._fit_one_psf(psf_obs, Tguess_i)
+
                     new_obslist.append(obs)
                     ntot += 1
 
