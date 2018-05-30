@@ -1681,6 +1681,7 @@ class LMSimple(FitterBase):
         if result['flags']==0:
             result['g'] = result['pars'][2:2+2].copy()
             result['g_cov'] = result['pars_cov'][2:2+2, 2:2+2].copy()
+            self._set_flux(result)
             stat_dict=self.get_fit_stats(result['pars'])
             result.update(stat_dict)
 
@@ -1689,6 +1690,15 @@ class LMSimple(FitterBase):
 
     run_max=go
     run_lm=go
+
+    def _set_flux(self, res):
+        if self.nband==1:
+            res['flux'] = res['pars'][5]
+            res['flux_err'] = sqrt(res['pars_cov'][5,5])
+        else:
+            res['flux'] = res['pars'][5:]
+            res['flux_cov'] = res['pars_cov'][5:, 5:]
+            res['flux_err'] = sqrt(diag(res['flux_cov']))
 
     def _setup_data(self, guess):
         """
