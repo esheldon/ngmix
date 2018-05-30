@@ -1,4 +1,4 @@
-from __future__ import print_function
+from __future__ import print_function, absolute_import, division
 
 import numpy
 from numpy import where, sqrt, zeros
@@ -6,11 +6,6 @@ from .observation import Observation, ObsList, MultiBandObsList
 from .gmix import GMix
 
 from copy import deepcopy
-
-try:
-    xrange=xrange
-except:
-    xrange=range
 
 def simulate_obs(gmix, obs, **kw):
     """
@@ -117,7 +112,7 @@ def _simulate_obs(gmix, obs, **kw):
     new_obs = Observation(
         sim_image,
         weight=weight,
-        jacobian=obs.jacobian.copy(),
+        jacobian=obs.jacobian,
         psf=psf
     )
 

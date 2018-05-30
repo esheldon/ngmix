@@ -4,7 +4,7 @@ class to create manipulated images for use in metacalibration
 Originally based off reading through Eric Huffs code; it has departed
 significantly.
 """
-from __future__ import print_function
+from __future__ import print_function, absolute_import, division
 import copy
 import numpy
 from numpy import zeros, ones, newaxis, sqrt, diag, dot, linalg, array
@@ -22,8 +22,6 @@ try:
 except ImportError:
     pass
 
-LANCZOS_PARS_DEFAULT={'order':5, 'conserve_dc':True, 'tol':1.0e-4}
-
 METACAL_TYPES = [
     '1p','1m','2p','2m',
     '1p_psf','1m_psf','2p_psf','2m_psf',
@@ -35,11 +33,6 @@ METACAL_REQUIRED_TYPES = [
 ]
 
 logger = logging.getLogger(__name__)
-
-try:
-    xrange=xrange
-except:
-    xrange=range
 
 def get_all_metacal(obs,
                     step=0.01,
@@ -73,7 +66,6 @@ def get_all_metacal(obs,
     """
 
     if fixnoise:
-        logger.debug("    Doing fixnoise")
         odict= _get_all_metacal_fixnoise(obs, step=step, **kw)
     else:
         odict= _get_all_metacal(obs, step=step, **kw)
@@ -154,7 +146,7 @@ def _replace_image_with_noise(obs):
             nobs.image = nobs.noise
     else:
         for obslist in noise_obs:
-            for nobs in noise_obs:
+            for nobs in obslist:
                 nobs.image = nobs.noise
 
     return noise_obs
@@ -191,8 +183,10 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     use_noise_image = kw.get('use_noise_image',False)
     if use_noise_image:
         noise_obs =  _replace_image_with_noise(obs)
+        logger.debug("    Doing fixnoise with input noise image")
     else:
         noise_obs = simobs.simulate_obs(None, obs, **kw)
+        logger.debug("    Doing fixnoise")
 
     # rotate by 90
     _rotate_obs_image(noise_obs, k=1)
@@ -757,9 +751,6 @@ class Metacal(object):
         """
         set the laczos interpolation configuration
         """
-        #self.interp = galsim.Lanczos(LANCZOS_PARS_DEFAULT['order'],
-        #                             LANCZOS_PARS_DEFAULT['conserve_dc'],
-        #                             LANCZOS_PARS_DEFAULT['tol'])
         self.interp = 'lanczos15'
 
     def _make_psf_obs(self, psf_im):
@@ -911,20 +902,23 @@ class MetacalGaussPSF(Metacal):
             # argh, galsim uses generic exceptions
             raise GMixRangeError("galsim error: '%s'" % str(err))
 
-    def _make_psf_obs(self, psf_im):
+    def _make_psf_obs(self, gsim):
 
+        noise = 1.0e-6
+        psf_im = gsim.array.copy()
+        psf_im += numpy.random.normal(scale=noise, size=psf_im.shape)
         obs=self.obs
 
-        cen = (numpy.array(psf_im.array.shape)-1.0)/2.0
+        cen = (numpy.array(psf_im.shape)-1.0)/2.0
         j = obs.psf.jacobian.copy()
         j.set_cen(
             row=cen[0],
             col=cen[1],
         )
 
-        weight = psf_im.array*0 + numpy.median(obs.psf.weight)
+        weight = psf_im*0 + 1.0/noise**2
         psf_obs = Observation(
-            psf_im.array,
+            psf_im,
             weight=weight,
             jacobian=j,
         )
@@ -939,26 +933,22 @@ class MetacalAnalyticPSF(Metacal):
     """
     def __init__(self, obs, psf_obj, **kw):
 
-        raise RuntimeError("make sure this all works")
         self._set_psf(obs, psf_obj)
-
-
-        #self.psf_noise_image=numpy.random.normal(
-        #    scale=1.0e-6*obs.psf.image.max(),
-        #    size=obs.psf.image.shape,
-        #)
         super(MetacalAnalyticPSF,self).__init__(obs, **kw)
 
     def _set_psf(self,obs,psf_in):
         if isinstance(psf_in, dict):
-            assert psf_in['model']=='moffat'
-            pars=psf_in['pars']
-
-            psf_obj = galsim.Moffat(
-                beta=pars['beta'],
-                fwhm=pars['fwhm'],
-                #flux=float(flux),
-            )
+            if psf_in['model'] == 'gauss':
+                psf_obj = galsim.Gaussian(
+                    fwhm=psf_in['pars']['fwhm'],
+                )
+            elif psf_int['model'] == 'moffat':
+                psf_obj = galsim.Moffat(
+                    beta=psf_in['pars']['beta'],
+                    fwhm=psf_in['pars']['fwhm'],
+                )
+            else:
+                raise ValueError("bad psf: %s" % psf_in['model'])
         else:
             psf_obj = psf_in
 
@@ -1188,7 +1178,10 @@ def _get_gauss_target_psf(psf, flux):
     from numpy import meshgrid, arange, min, sqrt, log
     #dk = 0.1              # The resolution in k space for the KImage
 
-    dk = psf.stepK()/4.0
+    if hasattr(psf,'stepk'):
+        dk = psf.stepk/4.0
+    else:
+        dk = psf.stepK()/4.0
 
     small_kval = 1.e-2    # Find the k where the given psf hits this kvalue
     smaller_kval = 3.e-3  # Target PSF will have this kvalue at the same k
@@ -1212,16 +1205,16 @@ def _get_gauss_target_psf(psf, flux):
 
 def jackknife_shear(data, chunksize=1, dgamma=0.02):
     """
-    get the shear metacalibration style
+    get the shear metacalibration style with jackknifing
 
     parameters
     ----------
-    g: array
-        [N,2] shape measurements
-    R: array
-        [N,2] shape response measurements
+    data: array
+        Must have fields mcal_g, mcal_g_1p, mcal_g_1m, mcal_g_2p, mcal_g_2m
     chunksize: int, optional
-        chunksize for jackknifing
+        chunksize for jackknifing, default 1
+    dgamma: float, optional
+        dgamma for central derivative, defautl 2*0.01 = 0.02
     """
 
     g = data['mcal_g']
@@ -1270,6 +1263,44 @@ def jackknife_shear(data, chunksize=1, dgamma=0.02):
         'R_sum':R_sum,
         'R':R_sum/ntot,
         'shears':shears,
+    }
+
+    return out
+
+def get_shear(data, dgamma=0.02):
+    """
+    get the shear metacalibration style
+
+    parameters
+    ----------
+    data: array
+        Must have fields mcal_g, mcal_g_1p, mcal_g_1m, mcal_g_2p, mcal_g_2m
+    dgamma: float, optional
+        dgamma for central derivative, defautl 2*0.01 = 0.02
+    """
+
+
+    g = data['mcal_g']
+
+    R = numpy.zeros( (data.size, 2) )
+
+    R[:,0] = (data['mcal_g_1p'][:,0] - data['mcal_g_1m'][:,0])/dgamma
+    R[:,1] = (data['mcal_g_2p'][:,1] - data['mcal_g_2m'][:,1])/dgamma
+
+    ntot = data.size
+
+    g_mean = g.mean(axis=0)
+    R_mean = R.mean(axis=0)
+
+    g_err = g.std(axis=0)/sqrt(ntot)
+    R_err = R.std(axis=0)/sqrt(ntot)
+
+    shear = g_mean/R_mean
+    shear_err = numpy.abs(shear)*sqrt( (g_err/g_mean)**2 + (R_err/R_mean)**2 )
+
+    out={
+        'shear':shear,
+        'shear_err':shear_err,
     }
 
     return out

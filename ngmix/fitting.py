@@ -2,15 +2,9 @@
 - todo
     - remove old unused fitters
 """
-from __future__ import print_function
+from __future__ import print_function, absolute_import, division
 
-try:
-    xrange = xrange
-    # We have Python 2
-except:
-    xrange = range
-    # We have Python 3
-
+import os
 from sys import stdout
 import numpy
 from numpy import array, zeros, ones, diag
@@ -24,8 +18,6 @@ from . import shape
 from . import gmix
 from .gmix import GMix, GMixList, MultiBandGMixList
 
-from . import _gmix
-
 from . import priors
 from .priors import LOWVAL, BIGVAL
 
@@ -36,6 +28,9 @@ from .observation import Observation,ObsList,MultiBandObsList,get_mb_obs
 
 from . import stats
 
+
+from .gmix_nb import gmix_convolve_fill
+from .fitting_nb import fill_fdiff
 
 MAX_TAU=0.1
 MIN_ARATE=0.2
@@ -82,14 +77,8 @@ class FitterBase(object):
     def __init__(self, obs, model, **keys):
         self.keys=keys
 
-        self.margsky = keys.get('margsky', False)
-        self.use_logpars=keys.get('use_logpars',False)
-
         self.use_round_T=keys.get('use_round_T',False)
-
-        # psf fitters might not have this set to 1
-        self.nsub=keys.get('nsub',1)
-        self.npoints=keys.get('npoints',None)
+        assert self.use_round_T==False,"no longer support round T"
 
         self.set_obs(obs)
 
@@ -105,12 +94,6 @@ class FitterBase(object):
         self._set_totpix()
 
         self._gmix_all=None
-
-        #robust fitting
-        self.nu = keys.get('nu', 0.0)
-
-        if 'aperture' in keys:
-            self.set_aperture(keys['aperture'])
 
     def __repr__(self):
         rep="""
@@ -171,13 +154,6 @@ class FitterBase(object):
 
         return gm
 
-    def set_aperture(self, aper):
-        """
-        set the circular aperture for likelihood evaluations. only used by
-        calc_lnprob currently
-        """
-        self.obs.set_aperture(aper)
-
     def set_obs(self, obs_in):
         """
         Input should be an Observation, ObsList, or MultiBandObsList
@@ -192,13 +168,6 @@ class FitterBase(object):
             for obs in obslist:
                 nimage += 1
         self.nimage=nimage
-
-        if self.margsky:
-            for band_obs in self.obs:
-                for tobs in band_obs:
-                    tobs.model_image=tobs.image*0
-                    tobs.image_mean=_gmix.get_image_mean(tobs.image, tobs.weight)
-
 
     def _set_totpix(self):
         """
@@ -253,16 +222,12 @@ class FitterBase(object):
         return self.eff_npix
 
 
-    def calc_lnprob(self, pars, more=False, get_priors=False):
+    def calc_lnprob(self, pars, more=False):
         """
         This is all we use for mcmc approaches, but also used generally for the
         "get_fit_stats" method.  For the max likelihood fitter we also have a
         _get_ydiff method
         """
-
-        npoints=self.npoints
-        nsub=self.nsub
-
 
         try:
 
@@ -283,21 +248,18 @@ class FitterBase(object):
 
                 for obs,gm in zip(obs_list, gmix_list):
 
-                    if self.nu > 2.0:
-                        res = gm.get_loglike_robust(obs, self.nu, nsub=nsub, more=True)
-                    elif self.margsky:
-                        res = gm.get_loglike_margsky(obs, obs.model_image,
-                                                     nsub=nsub, more=True)
-                    else:
-                        res = gm.get_loglike(obs,
-                                             nsub=nsub,
-                                             npoints=npoints,
-                                             more=True)
+                    res = gm.get_loglike(
+                        obs,
+                        more=more,
+                    )
 
-                    lnprob    += res['loglike']
-                    s2n_numer += res['s2n_numer']
-                    s2n_denom += res['s2n_denom']
-                    npix      += res['npix']
+                    if more:
+                        lnprob    += res['loglike']
+                        s2n_numer += res['s2n_numer']
+                        s2n_denom += res['s2n_denom']
+                        npix      += res['npix']
+                    else:
+                        lnprob += res
 
             # total over all bands
             lnprob += ln_priors
@@ -309,15 +271,14 @@ class FitterBase(object):
             npix = 0
 
         if more:
-            return {'lnprob':lnprob,
-                    's2n_numer':s2n_numer,
-                    's2n_denom':s2n_denom,
-                    'npix':npix}
+            return {
+                'lnprob':lnprob,
+                's2n_numer':s2n_numer,
+                's2n_denom':s2n_denom,
+                'npix':npix,
+            }
         else:
-            if get_priors:
-                return lnprob, ln_priors
-            else:
-                return lnprob
+            return lnprob
 
     def get_fit_stats(self, pars):
         """
@@ -388,11 +349,11 @@ class FitterBase(object):
         self._gmix_all0 = gmix_all0
         self._gmix_all  = gmix_all
 
-    def _fill_gmix(self, gm, band_pars):
-        _gmix.gmix_fill(gm._data, band_pars, gm._model)
-
     def _convolve_gmix(self, gm, gm0, psf_gmix):
-        _gmix.convolve_fill(gm._data, gm0._data, psf_gmix._data)
+        """
+        norms get set
+        """
+        gmix_convolve_fill(gm._data, gm0._data, psf_gmix._data)
 
     def _fill_gmix_all(self, pars):
         """
@@ -409,7 +370,6 @@ class FitterBase(object):
             gmix_list0=self._gmix_all0[band]
             gmix_list=self._gmix_all[band]
 
-            # pars for this band, in linear space
             band_pars=self.get_band_pars(pars, band)
 
             for i,obs in enumerate(obs_list):
@@ -419,11 +379,9 @@ class FitterBase(object):
                 gm0=gmix_list0[i]
                 gm=gmix_list[i]
 
-                #gm0.fill(band_pars)
-                self._fill_gmix(gm0, band_pars)
-                #_gmix.gmix_fill(gm0._data, band_pars, gm0._model)
+                gm0._fill(band_pars)
                 self._convolve_gmix(gm, gm0, psf_gmix)
-                #_gmix.convolve_fill(gm._data, gm0._data, psf_gmix._data)
+
 
     def _fill_gmix_all_nopsf(self, pars):
         """
@@ -431,23 +389,15 @@ class FitterBase(object):
         """
 
         for band,obs_list in enumerate(self.obs):
-            gmix_list0=self._gmix_all0[band]
             gmix_list=self._gmix_all[band]
 
-            # pars for this band, in linear space
             band_pars=self.get_band_pars(pars, band)
 
             for i,obs in enumerate(obs_list):
 
-                gm0=gmix_list0[i]
                 gm=gmix_list[i]
 
-                try:
-                    _gmix.gmix_fill(gm0._data, band_pars, gm0._model)
-                    _gmix.gmix_fill(gm._data, band_pars, gm._model)
-                except ZeroDivisionError:
-                    raise GMixRangeError("zero division")
-
+                gm._fill(band_pars)
 
     def _get_priors(self, pars):
         """
@@ -499,7 +449,7 @@ class FitterBase(object):
                 wt=obs.weight
                 j=obs.jacobian
 
-                model=gm.make_image(im.shape,jacobian=j, nsub=self.nsub)
+                model=gm.make_image(im.shape,jacobian=j)
 
                 showim = im*wt
                 showmod = model*wt
@@ -678,7 +628,7 @@ class TemplateFluxFitter(FitterBase):
         else:
             self.cen_was_sent=True
 
-        self.set_obs(obs)
+        self._set_obs(obs)
 
         self.model_name='template'
         self.npars=1
@@ -697,7 +647,6 @@ class TemplateFluxFitter(FitterBase):
 
         chi2=0.0
 
-        cen=self.cen
         nobs=len(self.obs)
 
         flux=PDEF
@@ -705,37 +654,19 @@ class TemplateFluxFitter(FitterBase):
 
         for ipass in [1,2]:
             for iobs in xrange(nobs):
-                obs=self.obs[iobs]
-                gm = self.gmix_list[iobs]
+                obs  = self.obs[iobs]
 
                 im=obs.image
                 wt=obs.weight
-                j=obs.jacobian
 
                 if ipass==1:
-                    norm = 1.0
-                    if self.do_psf:
-                        if self.normalize_psf:
-                            gm.set_flux(1.0)
-                        else:
-                            norm = gm.get_flux()
-
-                    model=gm.make_image(im.shape, jacobian=j)
+                    model = self._get_model(iobs)
                     xcorr_sum += (model*im*wt).sum()
                     msq_sum += (model*model*wt).sum()
                 else:
-                    gm.set_flux(flux*norm)
-                    model=gm.make_image(im.shape, jacobian=j)
+                    model = self._get_model(iobs, flux=flux)
 
-                    if self.simulate_err:
-                        err = numpy.zeros(model.shape)
-                        w=numpy.where(wt > 0)
-                        err[w] = numpy.sqrt(1.0/wt[w])
-                        noisy_model = model.copy()
-                        noisy_model += self.rng.normal(size=model.shape)*err
-                        chi2 +=( (model-noisy_model)**2 *wt ).sum()
-                    else:
-                        chi2 +=( (model-im)**2 *wt ).sum()
+                    chi2 += self._get_chi2(model, im, wt)
 
             if ipass==1:
                 if msq_sum==0:
@@ -768,6 +699,53 @@ class TemplateFluxFitter(FitterBase):
                       'flux':flux,
                       'flux_err':flux_err}
 
+
+    def _get_chi2(self, model, im, wt):
+        """
+        get the chi^2 for this image/model
+
+        we can simulate when needed
+        """
+        if self.simulate_err:
+            err = numpy.zeros(model.shape)
+            w=numpy.where(wt > 0)
+            err[w] = numpy.sqrt(1.0/wt[w])
+            noisy_model = model.copy()
+            noisy_model += self.rng.normal(size=model.shape)*err
+            chi2 =( (model-noisy_model)**2 *wt ).sum()
+        else:
+            chi2 =( (model-im)**2 *wt ).sum()
+
+        return chi2
+
+    def _get_model(self, iobs, flux=None):
+        """
+        get the model image
+        """
+        if self.use_template:
+            if flux is not None:
+                model = self.template_list[iobs].copy()
+                norm = self.norm_list[iobs]
+                model *= (norm*flux)/model.sum()
+            else:
+                model = self.template_list[iobs]
+
+        else:
+
+            if flux is None:
+                gm = self.gmix_list[iobs]
+            else:
+                gm = self.gmix_list[iobs].copy()
+                norm = self.norm_list[iobs]
+                gm.set_flux(flux*norm)
+
+            obs = self.obs[iobs]
+            dims = obs.image.shape
+            jac = obs.jacobian
+            model = gm.make_image(dims, jacobian=jac)
+
+        return model
+
     def get_dof(self):
         """
         Effective def based on effective number of pixels
@@ -780,7 +758,7 @@ class TemplateFluxFitter(FitterBase):
 
 
 
-    def set_obs(self, obs_in):
+    def _set_obs(self, obs_in):
         """
         Input should be an Observation, ObsList
         """
@@ -793,9 +771,26 @@ class TemplateFluxFitter(FitterBase):
         else:
             raise ValueError("obs should be Observation or ObsList")
 
+        tobs = obs_list[0]
+        if self.do_psf:
+            tobs = tobs.psf
+
+        if not tobs.has_gmix():
+            if not hasattr(tobs, 'template'):
+                raise ValueError("neither gmix or template image are set")
+
+        self.obs = obs_list
+        if tobs.has_gmix():
+            self._set_gmix_and_norms()
+        else:
+            self._set_templates_and_norms()
+
+    def _set_gmix_and_norms(self):
+        self.use_template=False
         cen=self.cen
-        gmix_list=[]
-        for obs in obs_list:
+        gmix_list = []
+        norm_list = []
+        for obs in self.obs:
             # these return copies, ok to modify
             if self.do_psf:
                 gmix=obs.get_psf_gmix()
@@ -809,9 +804,36 @@ class TemplateFluxFitter(FitterBase):
                 gmix.set_cen(cen[0], cen[1])
 
             gmix_list.append(gmix)
+            norm_list.append(gmix.get_flux())
 
-        self.obs = obs_list
         self.gmix_list = gmix_list
+        self.norm_list = norm_list
+
+    def _set_templates_and_norms(self):
+        self.use_template=True
+
+        assert self.cen_was_sent is False
+
+        template_list = []
+        norm_list = []
+        for obs in self.obs:
+            if self.do_psf:
+                template=obs.psf.template.copy()
+                norm = template.sum()
+                if self.normalize_psf:
+                    template *= 1.0/norm
+                    norm = 1.0
+            else:
+                template=obs.template.copy()
+                template *= 1.0/template.sum()
+                norm = 1.0
+
+            template_list.append(template)
+            norm_list.append(norm)
+
+        self.template_list = template_list
+        self.norm_list = norm_list
+
 
     def _set_totpix(self):
         """
@@ -871,17 +893,12 @@ class FracdevFitterMax(FitterBase):
 
         self.method=method
 
-        self.margsky=False
-        self.use_logpars=keys.get('use_logpars',False)
         self.set_obs(obs)
         self._set_images(exp_pars, dev_pars)
 
         self.model_name='fracdev'
 
         self._set_totpix()
-
-        if 'aperture' in keys:
-            self.set_aperture(keys['aperture'])
 
         pars=keys.get('pars',None)
         if pars is None:
@@ -927,7 +944,7 @@ class FracdevFitterMax(FitterBase):
         """
         Run leastsq and set the result
         """
-        from .simplex import minimize_neldermead_rel as minimize_neldermead
+        from .simplex import minimize_neldermead
 
         result = minimize_neldermead(self._calc_neg_lnprob,
                                      fracdev_guess,
@@ -1118,13 +1135,7 @@ class FracdevFitterMax(FitterBase):
                 F = Fe + Fd
 
                 bad=False
-                if self.use_logpars:
-                    if F <= 0:
-                        bad=True
-                    else:
-                        allpars=numpy.array( [log(F), fracdev] )
-                else:
-                    allpars=numpy.array( [F, fracdev] )
+                allpars=numpy.array( [F, fracdev] )
 
                 if bad:
                     lnprob = -numpy.inf
@@ -1141,13 +1152,7 @@ class FracdevFitterMax(FitterBase):
                 T = (Fe*self.lin_exp_T + Fd*self.lin_dev_T)/F
 
                 bad=False
-                if self.use_logpars:
-                    if T <= 0 or F <= 0:
-                        bad=True
-                    else:
-                        allpars=numpy.array( [log(T), log(F), fracdev] )
-                else:
-                    allpars=numpy.array( [T, F, fracdev] )
+                allpars=numpy.array( [T, F, fracdev] )
 
                 if bad:
                     lnprob = -numpy.inf
@@ -1163,9 +1168,6 @@ class FracdevFitterMax(FitterBase):
         exp_pars=array(exp_pars,dtype='f8',ndmin=1,copy=True)
         dev_pars=array(dev_pars,dtype='f8',ndmin=1,copy=True)
 
-        if self.use_logpars:
-            exp_pars[4:] = exp(exp_pars[4:])
-            dev_pars[4:] = exp(dev_pars[4:])
         self.lin_exp_T = exp_pars[4]
         self.lin_dev_T = dev_pars[4]
         self.lin_exp_F = exp_pars[5:].copy()
@@ -1259,9 +1261,7 @@ class FracdevFitter(FitterBase):
         """
 
         self.npars=1
-        self.use_logpars=keys.get('use_logpars',False)
 
-        self.margsky=False
         self.set_obs(obs)
 
         self.model_name='fracdev'
@@ -1350,10 +1350,6 @@ class FracdevFitter(FitterBase):
         exp_pars=array(exp_pars,dtype='f8',ndmin=1,copy=True)
         dev_pars=array(dev_pars,dtype='f8',ndmin=1,copy=True)
 
-        if self.use_logpars:
-            exp_pars[4:] = exp(exp_pars[4:])
-            dev_pars[4:] = exp(dev_pars[4:])
-
         nb=self.nband
 
         enb=exp_pars.size-5
@@ -1433,15 +1429,35 @@ class MaxSimple(FitterBase):
         Default is npars*200
 
     """
-    def __init__(self, obs, model, method='Nelder-Mead', **keys):
+    def __init__(self,
+                 obs,
+                 model,
+                 method='Nelder-Mead',
+                 options=None,
+                 **keys):
         super(MaxSimple,self).__init__(obs, model, **keys)
         self._obs = obs
+
         self._model = model
-        self.method = method
+
         self._band_pars = numpy.zeros(6)
 
-        self._options={}
-        self._options.update(keys)
+        self._method = method
+
+        if method=='Nelder-Mead':
+            if options is not None:
+                self._options = options
+            else:
+                self._options = {}
+        else:
+            self._options=options
+
+            self._max_keys={}
+            tocheck=['jac','hess', 'hessp', 'bounds',
+                     'constraints', 'tol', 'callback']
+            for key in tocheck:
+                if key in keys:
+                    self._max_keys[key] = keys[key]
 
     def _setup_data(self, guess):
         """
@@ -1470,53 +1486,38 @@ class MaxSimple(FitterBase):
 
         pars=self._band_pars
 
-        if self.use_logpars:
-            _gmix.convert_simple_double_logpars_band(pars_in, pars, band)
-        else:
-            pars[0:5] = pars_in[0:5]
-            pars[5] = pars_in[5+band]
-
-        if self.use_round_T:
-            from .moments import get_T
-            pars[4] = get_T(pars[4], pars[2], pars[3])
-
+        pars[:] = pars_in[:]
         return pars
+
+
 
     def neglnprob(self, pars):
         return -1.0*self.calc_lnprob(pars)
 
-    def run_max(self, guess, **keys):
+    def run_max(self, guess):
         """
         Run maximizer and set the result.
 
-        extra keywords for nm are
-        --------------------------
-        xtol: float, optional
-            Tolerance in the vertices, relative to the vertex with
-            the lowest function value.  Default 1.0e-4
-        ftol: float, optional
-            Tolerance in the function value, relative to the
-            lowest function value for all vertices.  Default 1.0e-4
-        maxiter: int, optional
-            Default is npars*200
-        maxfev:
-            Default is npars*200
+        parameters
+        ----------
+        guess: array/sequence
+            Starting guess for the fitter
         """
-        if self.method in ['nm','Nelder-Mead']:
-            self.run_max_nm(guess, **keys)
+        if self._method in ['nm','Nelder-Mead']:
+            self.run_max_nm(guess, **self._options)
         else:
             import scipy.optimize
-
-            options=self._options
-            options.update(keys)
 
             guess=numpy.array(guess,dtype='f8',copy=False)
             self._setup_data(guess)
 
-            result = scipy.optimize.minimize(self.neglnprob,
-                                             guess,
-                                             method=self.method,
-                                             options=options)
+            result = scipy.optimize.minimize(
+                self.neglnprob,
+                guess,
+                method=self._method,
+                options=self._options,
+                **self._max_keys
+            )
             self._result = result
 
             result['model'] = self.model_name
@@ -1552,8 +1553,7 @@ class MaxSimple(FitterBase):
         maxfev:
             Default is npars*200
         """
-        #from .simplex import minimize_neldermead
-        from .simplex import minimize_neldermead_rel as minimize_neldermead
+        from .simplex import minimize_neldermead
 
         options=self._options
         options.update(keys)
@@ -1613,11 +1613,9 @@ class MaxCoellip(MaxSimple):
         Get linear pars for the specified band
         """
 
-        if self.use_logpars:
-            _gmix.convert_simple_double_logpars(pars_in, pars)
-        else:
-            pars=self._band_pars
-            pars[:] = pars_in[:]
+        pars=self._band_pars
+
+        pars[:] = pars_in[:]
         return pars
 
 
@@ -1645,21 +1643,24 @@ class LMSimple(FitterBase):
             lm_pars=_default_lm_pars
         self.lm_pars=lm_pars
 
+        self._set_n_prior_pars()
 
+        self._set_fdiff_size()
+
+        self._band_pars=zeros(6)
+
+    def _set_n_prior_pars(self):
         # center1 + center2 + shape + T + fluxes
         if self.prior is None:
             self.n_prior_pars=0
         else:
             self.n_prior_pars=1 + 1 + 1 + 1 + self.nband
 
-        self._set_fdiff_size()
-
-        self._band_pars=zeros(6)
 
     def _set_fdiff_size(self):
         self.fdiff_size=self.totpix + self.n_prior_pars
 
-    def run_lm(self, guess):
+    def go(self, guess):
         """
         Run leastsq and set the result
         """
@@ -1667,10 +1668,14 @@ class LMSimple(FitterBase):
         guess=array(guess,dtype='f8',copy=False)
         self._setup_data(guess)
 
-        result = run_leastsq(self._calc_fdiff,
-                             guess,
-                             self.n_prior_pars,
-                             **self.lm_pars)
+        self._make_lists()
+
+        result = run_leastsq(
+            self._calc_fdiff,
+            guess,
+            self.n_prior_pars,
+            **self.lm_pars
+        )
 
         result['model'] = self.model_name
         if result['flags']==0:
@@ -1680,8 +1685,10 @@ class LMSimple(FitterBase):
             result.update(stat_dict)
 
         self._result=result
-    run_max=run_lm
-    go=run_lm
+
+
+    run_max=go
+    run_lm=go
 
     def _setup_data(self, guess):
         """
@@ -1710,12 +1717,8 @@ class LMSimple(FitterBase):
 
         pars=self._band_pars
 
-        if self.use_logpars:
-            _gmix.convert_simple_double_logpars_band(pars_in, pars, band)
-        else:
-            pars[0:5] = pars_in[0:5]
-            pars[5] = pars_in[5+band]
-
+        pars[0:5] = pars_in[0:5]
+        pars[5] = pars_in[5+band]
 
         return pars
 
@@ -1728,22 +1731,38 @@ class LMSimple(FitterBase):
         T=res['pars'][4]
         Terr=res['pars_err'][4]
 
-        if self.use_logpars:
-            # sigma(logT) = dT/T
-            # => s2n(T) = 1.0/Terr
-            T_s2n = 1.0/Terr
+        if T==0.0 or Terr==0.0:
+            T_s2n=0.0
         else:
-            if T==0.0 or Terr==0.0:
-                T_s2n=0.0
-            else:
-                T_s2n = T/Terr
+            T_s2n = T/Terr
 
         return T_s2n
 
-
-    def _calc_fdiff(self, pars, more=False):
+    def _make_lists(self):
         """
+        lists of references.
+        """
+        pixels_list      = []
+        gmix_data_list   = []
 
+        for band in xrange(self.nband):
+
+            obs_list=self.obs[band]
+            gmix_list=self._gmix_all[band]
+
+            for obs,gm in zip(obs_list, gmix_list):
+
+                gmdata=gm.get_data()
+
+                pixels_list.append(obs._pixels)
+                gmix_data_list.append(gmdata)
+
+
+        self._pixels_list=pixels_list
+        self._gmix_data_list=gmix_data_list
+
+    def _calc_fdiff(self, pars):
+        """
         vector with (model-data)/error.
 
         The npars elements contain -ln(prior)
@@ -1752,45 +1771,27 @@ class LMSimple(FitterBase):
         # we cannot keep sending existing array into leastsq, don't know why
         fdiff=zeros(self.fdiff_size)
 
-        s2n_numer=0.0
-        s2n_denom=0.0
-        npix = 0
-
         try:
 
-
+            # all norms are set after fill
             self._fill_gmix_all(pars)
 
             start=self._fill_priors(pars, fdiff)
 
-            for band in xrange(self.nband):
+            for pixels,gmix in zip(self._pixels_list,self._gmix_data_list):
+                fill_fdiff(
+                    gmix,
+                    pixels,
+                    fdiff,
+                    start,
+                )
 
-                obs_list=self.obs[band]
-                gmix_list=self._gmix_all[band]
-
-                for obs,gm in zip(obs_list, gmix_list):
-
-                    res = gm.fill_fdiff(obs, fdiff, start=start,
-                                        nsub=self.nsub, npoints=self.npoints)
-
-                    s2n_numer += res['s2n_numer']
-                    s2n_denom += res['s2n_denom']
-                    npix += res['npix']
-
-                    start += obs.image.size
+                start += pixels.size
 
         except GMixRangeError as err:
             fdiff[:] = LOWVAL
-            s2n_numer=0.0
-            s2n_denom=BIGVAL
 
-        if more:
-            return {'fdiff':fdiff,
-                    's2n_numer':s2n_numer,
-                    's2n_denom':s2n_denom,
-                    'npix':npix}
-        else:
-            return fdiff
+        return fdiff
 
     def _fill_priors(self, pars, fdiff):
         """
@@ -1812,682 +1813,10 @@ class LMSimple(FitterBase):
         return nprior
 
 
-class LMGaussK(LMSimple):
-    """
-    LM fitter in k space, just a gaussian for now, no deconvolution
-    """
-    def __init__(self, obs,  **keys):
-        model="gauss"
-        super(LMGaussK,self).__init__(obs, model, **keys)
-
-    def set_obs(self, obs_in, **keys):
-        """
-        Input should be an Observation, ObsList, or MultiBandObsList
-        """
-
-        if isinstance(obs_in, (Observation, ObsList, MultiBandObsList)):
-            kobs = observation.make_kobs(obs_in, **self.keys)
-        else:
-            kobs = observation.get_kmb_obs(obs_in)
-
-        self.mb_kobs = kobs
-        self.nband=len(kobs)
-
-    def _set_fdiff_size(self):
-        # we have 2*totpix, since we use both real and imaginary 
-        # parts
-        self.fdiff_size = self.n_prior_pars + 2*self.totpix
-
-    def _init_gmix_all(self, pars):
-        """
-        input pars are in linear space
-
-        initialize the list of lists of gaussian mixtures
-        """
-
-        gmix_all  = MultiBandGMixList()
-
-        for band,kobs_list in enumerate(self.mb_kobs):
-            gmix_list=GMixList()
-
-            # pars for this band, in linear space
-            band_pars=self.get_band_pars(pars, band)
-
-            for i in xrange(len(kobs_list)):
-                gm = self._make_model(band_pars)
-
-                gmix_list.append(gm)
-
-            gmix_all.append(gmix_list)
-
-        self._gmix_all  = gmix_all
-
-    def _fill_gmix_all(self, pars):
-        """
-        Fill the list of lists of gmix objects for the given parameters
-        """
-
-        for band,kobs_list in enumerate(self.mb_kobs):
-            gmix_list=self._gmix_all[band]
-
-            # pars for this band, in linear space
-            band_pars=self.get_band_pars(pars, band)
-
-            g1 = band_pars[2]
-            g2 = band_pars[3]
-            T = band_pars[4]
-            e1,e2 = shape.g1g2_to_e1e2(g1, g2)
-
-            Thalf = 0.5*T
-            irr = Thalf*(1-e1)
-            irc = Thalf*e2
-            icc = Thalf*(1+e1)
-            det = irr*icc - irc**2
-
-            if det <= 0.0:
-                raise GMixRangeError("det is <= 0: %g" % det)
-            idet =1.0/det
-
-            # get inverse of covariance matrix for k space
-            nirr =  icc*idet
-            nicc =  irr*idet
-            nirc = -irc*idet
-            ndet = nirr*nicc - nirc**2
-
-            flux = band_pars[5]/sqrt(det)*2*numpy.pi
-
-            for i in xrange(len(kobs_list)):
-
-                gm=gmix_list[i]
-                gmdata=gm._data
-                gmdata['p'][0] = flux
-                gmdata['row'][0] = 0.0
-                gmdata['col'][0] = 0.0
-                gmdata['irr'][0] = nirr
-                gmdata['irc'][0] = nirc
-                gmdata['icc'][0] = nicc
-                gmdata['det'][0] = ndet
-                gmdata['norm_set'][0] = 0
-
-
-    def _fill_gmix_all_old(self, pars):
-        """
-        Fill the list of lists of gmix objects for the given parameters
-        """
-
-        for band,kobs_list in enumerate(self.mb_kobs):
-            gmix_list=self._gmix_all[band]
-
-            # pars for this band, in linear space
-            band_pars=self.get_band_pars(pars, band)
-
-            for i in xrange(len(kobs_list)):
-
-                gm=gmix_list[i]
-
-                try:
-                    _gmix.gmix_fill(gm._data, band_pars, gm._model)
-                except ZeroDivisionError:
-                    raise GMixRangeError("zero division")
-
-    def calc_lnprob(self, pars_in, more=False):
-
-        # we cannot keep sending existing array into leastsq, don't know why
-        fdiff=zeros(self.fdiff_size)
-
-        try:
-
-
-            lnprob = 0.0
-            s2n_sum=0.0
-            npix = 0
-
-            # we deal with center by shifting phase in k space
-            pars=pars_in.copy()
-            rowshift=pars_in[0]
-            colshift=pars_in[1]
-            pars[0:0+2] = 0.0
-
-            # these are the log pars (if working in log space)
-            ln_priors = self._get_priors(pars)
-
-            self._fill_gmix_all(pars)
-
-
-            for band in xrange(self.nband):
-
-                kobs_list=self.mb_kobs[band]
-                gmix_list=self._gmix_all[band]
-
-                for kobs,gm in zip(kobs_list, gmix_list):
-
-                    gmdata=gm._get_gmix_data()
-                    tloglike, ts2n_sum, tnpix = _gmix.get_loglikek(
-                        gmdata,
-                        kobs.kr.array,
-                        kobs.ki.array,
-                        kobs.weight.array,
-                        kobs.jacobian._data,
-                        rowshift,
-                        colshift,
-                    )
-
-                    lnprob  += tloglike
-                    s2n_sum += ts2n_sum
-                    npix    += tnpix
-
-            # total over all bands
-            lnprob += ln_priors
-
-        except GMixRangeError as err:
-            lnprob  = LOWVAL
-            s2n_sum = 0.0
-            npix    = 0
-
-
-        if more:
-            return {'lnprob':lnprob,
-                    's2n_sum':s2n_sum,
-                    'npix':npix}
-        else:
-            return lnprob
-
-
-
-    def _calc_fdiff(self, pars_in, more=False):
-        """
-
-        vector with (model-data)/error.
-
-        The npars elements contain -ln(prior)
-        """
-
-        # we cannot keep sending existing array into leastsq, don't know why
-        fdiff=zeros(self.fdiff_size)
-
-        try:
-
-            s2n_sum=0.0
-            npix = 0
-
-            # we deal with center by shifting phase in k space
-            pars=pars_in.copy()
-            rowshift=pars_in[0]
-            colshift=pars_in[1]
-            pars[0:0+2] = 0.0
-
-            self._fill_gmix_all(pars)
-
-            start=self._fill_priors(pars, fdiff)
-
-            for band in xrange(self.nband):
-
-                kobs_list=self.mb_kobs[band]
-                gmix_list=self._gmix_all[band]
-
-                for kobs,gm in zip(kobs_list, gmix_list):
-
-                    gmdata=gm._get_gmix_data()
-                    ts2n_sum, tnpix = _gmix.fill_fdiffk(
-                        gmdata,
-                        kobs.kr.array,
-                        kobs.ki.array,
-                        kobs.weight.array,
-                        kobs.jacobian._data,
-                        fdiff,
-                        rowshift,
-                        colshift,
-                        start,
-                    )
-
-                    s2n_sum += ts2n_sum
-                    npix += tnpix
-
-                    # skip 2*image size since we account for both
-                    # real and imaginary
-                    start += 2*kobs.kr.array.size
-
-        except GMixRangeError as err:
-            fdiff[:] = LOWVAL
-            s2n_sum=0.0
-
-        if more:
-            return {'fdiff':fdiff,
-                    's2n_sum':s2n_sum,
-                    'npix':npix}
-        else:
-            return fdiff
-
-
-
-    def _calc_fdiff_old(self, pars_in, more=False):
-        """
-
-        vector with (model-data)/error.
-
-        The npars elements contain -ln(prior)
-        """
-
-        # we cannot keep sending existing array into leastsq, don't know why
-        fdiff=zeros(self.fdiff_size)
-
-        try:
-
-            s2n_sum=0.0
-            npix = 0
-
-            T = pars_in[4]
-            if T <= 0.0:
-                raise GMixRangeError("T too small: %g" % T)
-            
-            # we do centering in k space as phase shifts
-            # also, convert T and flux to k space
-            pars=pars_in.copy()
-            rowshift=pars_in[0]
-            colshift=pars_in[1]
-
-            scale=self.mb_kobs[0][0].kr.scale
-
-            pars[0] = 0.0
-            pars[1] = 0.0
-            pars[4] = 4.0/T
-
-            # parseval's theorem, plus scale
-            # all get same scale
-            #print("scale:",scale)
-
-            fac = T*sqrt(self.totpix)*scale**2
-            pars[5:] *= fac
-            #1.0/(2*numpy.pi*sqrt(self.totpix))#*scale
-
-            self._fill_gmix_all(pars)
-
-            start=self._fill_priors(pars, fdiff)
-
-            for band in xrange(self.nband):
-
-                kobs_list=self.mb_kobs[band]
-                gmix_list=self._gmix_all[band]
-
-                for kobs,gm in zip(kobs_list, gmix_list):
-
-                    gmdata=gm._get_gmix_data()
-                    ts2n_sum, tnpix = _gmix.fill_fdiffk(
-                        gmdata,
-                        kobs.kr.array,
-                        kobs.ki.array,
-                        kobs.weight.array,
-                        kobs.jacobian._data,
-                        fdiff,
-                        rowshift,
-                        colshift,
-                        start,
-                    )
-
-                    s2n_sum += ts2n_sum
-                    npix += tnpix
-
-                    # skip 2*image size since we account for both
-                    # real and imaginary
-                    start += 2*kobs.kr.array.size
-
-        except GMixRangeError as err:
-            fdiff[:] = LOWVAL
-            s2n_sum=0.0
-
-        if more:
-            return {'fdiff':fdiff,
-                    's2n_sum':s2n_sum,
-                    'npix':npix}
-        else:
-            return fdiff
-
-    def get_fit_stats(self, pars):
-        """
-        Get some fit statistics for the input pars.
-
-        pars must be in the log scaling!
-        """
-        npars=self.npars
-
-        res=self._calc_fdiff(pars, more=True)
-
-        if res['s2n_sum'] > 0:
-            s2n=sqrt(res['s2n_sum'])
-        else:
-            s2n=0.0
-
-        res['s2n_w']   = s2n
-
-        return res
-
-    def _set_totpix(self):
-        """
-        Make sure the data are consistent.
-        """
-
-        totpix=0
-        for kobs_list in self.mb_kobs:
-            for kobs in kobs_list:
-                shape=kobs.kr.array.shape
-                totpix += shape[0]*shape[1]
-
-        self.totpix=totpix
-
-    def get_band_pars(self, pars_in, band):
-        """
-        Get linear pars for the specified band
-        """
-        from . import moments
-
-        pars=self._band_pars
-
-        if self.use_logpars:
-            _gmix.convert_simple_double_logpars_band(pars_in, pars, band)
-        else:
-            pars[0:5] = pars_in[0:5]
-            pars[5] = pars_in[5+band]
-
-        #pars[4] = moments.get_T(pars[4], pars[2], pars[3])
-
-        return pars
-
-
-
-class GalsimPSF(LMSimple):
-    """
-    a class to fit galsim models to PSF images
-
-    currently the jacobian is ignored and all fits are done in pixel coords.
-    The center is in pixel units, relative to the canonical center
-    """
-    def __init__(self, obs, model, **keys):
-        self.model=model
-        self.model_name=model
-        self.keys=keys
-
-        lm_pars=keys.get('lm_pars',None)
-        if lm_pars is None:
-            lm_pars=_default_lm_pars
-        self.lm_pars=lm_pars
-
-        if not isinstance(obs,Observation):
-            raise RuntimeError("A PSF fitter only works on a single image")
-
-        self.obs=obs
-        sqrt_ivar=obs.weight*0
-        w=numpy.where(obs.weight > 0)
-        if w[0].size > 0:
-            sqrt_ivar[w] = numpy.sqrt(obs.weight[w])
-        self.sqrt_ivar=sqrt_ivar.ravel()
-
-        self._set_gs_model(model)
-
-        self.fdiff_size=obs.image.size
-        self.n_prior_pars=0
-
-    def make_model_image(self, pars):
-        m, offrow, offcol=self._make_gs_model(pars)
-
-        dims=self.obs.image.shape
-        gsim = m.drawImage(
-            ny=dims[0],
-            nx=dims[1],
-            scale=1.0,
-            method='no_pixel',
-            offset=(offcol,offrow),
-        )
-
-        return gsim.array
-
-    def _make_gs_model(self, pars):
-        model=self.model
-        if model=="moffat":
-            offrow,offcol=pars[0],pars[1]
-            g1,g2=pars[2],pars[3]
-            beta=pars[4]
-            hlr=pars[5]
-            flux=pars[6]
-
-            if beta <= 1.1:
-                raise GMixRangeError("beta < 1.1")
-            if g1**2 + g2**2 > 0.99999:
-                raise GMixRangeError("g >= 1.0")
-
-            m=self.gs_model(
-                beta,
-                half_light_radius=hlr,
-                flux=flux,
-            )
-        else:
-            offrow,offcol=pars[0],pars[1]
-            g1,g2=pars[2],pars[3]
-            hlr=pars[4]
-            flux=pars[5]
-            m=self.gs_model(
-                half_light_radius=hlr,
-                flux=flux,
-            )
-
-        m = m.shear(g1=g1, g2=g2)
-
-        return m, offrow, offcol
-
-    def _set_gs_model(self, model):
-        import galsim
-        model=self.model
-
-        if model=="gauss":
-            # [cen1,cen2,g1,g2,hlr,flux]
-            gs_model = galsim.Gaussian
-            npars=6
-        elif model=="moffat":
-            # [cen1,cen2,g1,g2,beta,hlr,flux]
-            gs_model = galsim.Moffat
-            npars=7
-        else:
-            raise ValueError("unsupported galsim model: '%s'" % model)
-
-        self.gs_model = gs_model
-        self.npars=npars
-
-    def _calc_fdiff(self, pars, more=False):
-        """
-        vector with (model-data)/error.
-        """
-
-        im=self.obs.image
-
-        try:
-            model_image=self.make_model_image(pars)
-            if False:
-                import images
-                images.multiview(model_image,file='/astro/u/esheldon/www/tmp/plots/tmp.png')
-                stop
-
-            fdiff = model_image.ravel().copy()
-            fdiff -= im.ravel()
-            fdiff *= self.sqrt_ivar
-
-            if more:
-                ivar = self.obs.weight
-                s2n_numer = (im*model_image*ivar).sum()
-                s2n_denom = (model_image*model_image*ivar).sum()
-                npix=im.size
-
-        except GMixRangeError:
-            fdiff = im.ravel().copy()
-            fdiff[:] = LOWVAL
-            s2n_numer=0.0
-            s2n_denom=BIGVAL
-
-
-        if more:
-            return {'fdiff':fdiff,
-                    's2n_numer':s2n_numer,
-                    's2n_denom':s2n_denom,
-                    'npix':npix}
-        else:
-            #print(type(fdiff))
-            #print(fdiff)
-            return fdiff
-
-    def get_fit_stats(self, pars):
-        """
-        Get some fit statistics for the input pars.
-
-        pars must be in the log scaling!
-        """
-        npars=self.npars
-
-        res=self._calc_fdiff(pars, more=True)
-
-        if res['s2n_denom'] > 0:
-            s2n=res['s2n_numer']/sqrt(res['s2n_denom'])
-        else:
-            s2n=0.0
-
-
-        res['s2n_w']   = s2n
-        return res
-
-
-    def _setup_data(self, guess):
-        pass
-
-class LMMetaMomSimple(LMSimple):
-    def __init__(self, obs, model, wt_gmix, **keys):
-        super(LMSimple,self).__init__(obs, model, **keys)
-
-        # this is a dict
-        # can contain maxfev, ftol (tol in sum of squares)
-        # xtol (tol in solution), etc
-
-        lm_pars=keys.get('lm_pars',None)
-        if lm_pars is None:
-            lm_pars=_default_lm_pars
-        self.lm_pars=lm_pars
-
-        # center1 + center2 + shape + T + fluxes
-        if self.prior is None:
-            self.n_prior_pars=0
-        else:
-            self.n_prior_pars=1 + 1 + 1 + 1 + self.nband
-
-        self.fdiff_size=6*self.nimage + self.n_prior_pars
-        self._band_pars=zeros(6)
-
-        self.wt_gmix=wt_gmix
-        assert isinstance(wt_gmix,GMix)
-
-        self._calculate_obs_moments()
-
-    def run_lm(self, guess):
-        """
-        Run leastsq and set the result
-        """
-        from scipy.optimize import leastsq
-
-        guess=array(guess,dtype='f8',copy=False)
-        self._setup_data(guess)
-
-        result = run_leastsq(self._calc_fdiff,
-                             guess,
-                             self.n_prior_pars,
-                             **self.lm_pars)
-
-        # we will allow this for this fitter, but not ideal
-        if result['flags'] == ZERO_DOF:
-            result['flags']=0
-
-        result['model'] = self.model_name
-        if result['flags']==0:
-            result['g'] = result['pars'][2:2+2].copy()
-            result['g_cov'] = result['pars_cov'][2:2+2, 2:2+2].copy()
-            stat_dict=self.get_fit_stats(result['pars'])
-            result.update(stat_dict)
-
-        self._result=result
-    run_max=run_lm
-    go=run_lm
-
-
-    def _calculate_obs_moments(self):
-        """
-        calculate sums over all bands and epochs
-        """
-
-        wt_gmix=self.wt_gmix
-
-        moments=zeros(6*self.nimage)
-        momerr=zeros(6*self.nimage)
-
-        start=0
-        for obslist in self.obs:
-            for obs in obslist:
-
-                res=wt_gmix.get_weighted_moments(obs)
-
-                if res['flags'] != 0:
-                    tup=(res['flags'],res['flagstr'])
-                    raise RuntimeError("got flags %d (%s) in moms" % tup)
-
-                end=start+6
-                moments[start:end] = res['pars']
-                momerr[start:end] = sqrt(diag(res['pars_cov']))
-
-                start += 6
-
-        self.moments=moments
-        self.momerr=momerr
-
-    def _calc_fdiff(self, pars):
-        """
-        vector with (model-data)/error.
-        """
-
-        # we cannot keep sending existing array into leastsq, don't know why
-        fdiff=zeros(self.fdiff_size)
-        wt_gmix=self.wt_gmix
-
-        try:
-
-            self._fill_gmix_all(pars)
-
-            start=self._fill_priors(pars, fdiff)
-            mstart=0
-
-            for band in xrange(self.nband):
-
-                obs_list=self.obs[band]
-                gmix_list=self._gmix_all[band]
-
-                for obs,gm in zip(obs_list, gmix_list):
-
-                    res=wt_gmix.get_weighted_gmix_moments(
-                        gm,
-                        obs.image.shape,
-                        jacobian=obs.jacobian,
-                    )
-
-                    tmoments=res['pars']
-
-                    mend=mstart+6
-                    mom=self.moments[mstart:mend]
-                    momerr=self.momerr[mstart:mend]
-
-                    fdiff[start:start+6] = (tmoments-mom)/momerr
-
-                    start  += 6
-                    mstart += 6
-
-        except GMixRangeError as err:
-            fdiff[:] = LOWVAL
-
-        #print("fdiff:",fdiff)
-        return fdiff
-
 class LMCoellip(LMSimple):
+    """
+    class to run the LM leastsq code for the coelliptical model
+    """
     def __init__(self, obs, ngauss, **keys):
         self._ngauss=ngauss
         super(LMCoellip,self).__init__(obs, 'coellip', **keys)
@@ -2516,11 +1845,7 @@ class LMCoellip(LMSimple):
 
         pars=self._band_pars
 
-        if self.use_logpars:
-            _gmix.convert_simple_double_logpars(pars_in, pars)
-        else:
-            pars=self._band_pars
-            pars[:] = pars_in[:]
+        pars[:] = pars_in[:]
         return pars
 
 
@@ -2542,22 +1867,58 @@ class LMComposite(LMSimple):
         res=self.get_result()
         pars=self.get_band_pars(res['pars'], band)
         return gmix.GMixCM(self.fracdev,
-                                  self.TdByTe,
-                                  pars)
+                           self.TdByTe,
+                           pars)
 
 
     def _make_model(self, band_pars):
         gm0=gmix.GMixCM(self.fracdev, self.TdByTe, band_pars)
         return gm0
 
-    def _fill_gmix(self, gm, band_pars):
-        _gmix.gmix_fill_cm(gm._data, band_pars)
+class LMBDF(LMSimple):
+    """
+    exp+dev model with Tdev/Texp=1 but fracdev free
+    """
+    def __init__(self, obs, **keys):
+        super(LMBDF,self).__init__(obs, 'bdf', **keys)
 
-    def _convolve_gmix(self, gm, gm0, psf_gmix):
-        _gmix.convolve_fill(gm._data,
-                            gm0._data['gmix'][0],
-                            psf_gmix._data)
+        self._band_pars=zeros(7)
 
+    def _set_n_prior_pars(self):
+        # center1 + center2 + shape + T + fracdev + fluxes
+        if self.prior is None:
+            self.n_prior_pars=0
+        else:
+            self.n_prior_pars=1 + 1 + 1 + 1 + 1 + self.nband
+
+    def get_gmix(self, band=0):
+        """
+        Get a gaussian mixture at the "best" parameter set, which
+        definition depends on the sub-class
+        """
+        res=self.get_result()
+        pars=self.get_band_pars(res['pars'], band)
+        return self._make_model(pars)
+
+    def get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+        """
+
+        pars=self._band_pars
+
+        pars[0:6] = pars_in[0:6]
+        pars[6] = pars_in[6+band]
+
+        return pars
+
+
+    def _make_model(self, band_pars):
+        """
+        incoming parameters are 
+            [c1,c2,g1,g2,T,fracdev,F]
+        """
+        return gmix.GMixBDF(band_pars)
 
 NOTFINITE_BIT=11
 def run_leastsq(func, guess, n_prior_pars, **keys):
@@ -3069,14 +2430,8 @@ class MCMCSimple(MCMCBase):
 
         pars=self._band_pars
 
-        if self.use_logpars:
-            _gmix.convert_simple_double_logpars_band(pars_in, pars, band)
-        else:
-            pars[0:5] = pars_in[0:5]
-            pars[5] = pars_in[5+band]
-
+        pars[:] = pars_in[:]
         return pars
-
 
     def get_par_names(self, dolog=False):
         names=['cen1','cen2', 'g1','g2', 'T']
@@ -3623,184 +2978,8 @@ class MHTempSimple(MHSimple):
                               random_state=self.random_state)
         self._best_lnprob=None
 
-
-
 _default_min_err=array([1.e-4,1.e-4,1.e-3,1.e-3,1.0e-4,1.0e-4])
 _default_max_err=array([1.0,1.0,5.0,5.0,1.0,1.0])
-
-class PSampler(object):
-    def __init__(self, pars, perr, samples,
-                 max_use=None,
-                 nsigma=4.0,
-                 min_err=_default_min_err,
-                 max_err=_default_max_err,
-                 verbose=True):
-        self._pars=array(pars)
-        self._perr_orig=array(perr)
-        self._npars = self._pars.size
-
-        self._samples=samples
-        self._nsigma=nsigma
-
-        if max_use is None:
-            max_use=samples.shape[0]
-
-        self._max_use=max_use
-
-        self._set_err(min_err, max_err)
-        self.verbose=verbose
-
-    def get_result(self):
-        """
-        get the result dictionary
-        """
-        return self._result
-
-    def get_loglikes(self):
-        """
-        get the log likelihoods for used samples
-        """
-        return self._logl_vals
-
-    def get_likelihoods(self):
-        """
-        get the likelihoods for used samples
-        """
-        return self._lvals
-
-    def get_used_samples(self):
-        """
-        get the subset of the samples used
-        """
-        return self._used_samples
-    def get_used_indices(self):
-        """
-        get indices of used samples
-        """
-        return self._used_indices
-
-    def calc_loglikes(self, lnprob_func):
-        """
-        calculate the loglike for a subset of the points
-        """
-        res={'flags':0}
-        self._result=res
-
-        w=self._select_samples()
-
-        samples=self._samples
-        res['nuse'] = w.size
-        if w.size == 0:
-            res['flags']=1
-        else:
-            used_samples = samples[w]
-
-            logl_vals = zeros(w.size)
-            for i in xrange(w.size):
-                tpars = used_samples[i,:]
-                logl_vals[i] = lnprob_func(tpars)
-
-            logl_max = logl_vals.max()
-            logl_vals -= logl_max
-
-            lvals = exp(logl_vals)
-
-            self._used_samples = used_samples
-            self._used_indices = w
-
-            self._logl_vals=logl_vals
-            self._lvals=lvals
-
-            self._calc_result()
-
-    def _calc_result(self):
-        """
-        Calculate the mcmc stats and the "best fit" stats
-        """
-        from numpy import diag
-
-        result=self._result
-        if result['flags'] != 0:
-            return
-
-        pars,pars_cov = self.get_stats()
-        pars_err=sqrt(diag(pars_cov))
-
-        neff = self._lvals.sum()
-        efficiency = neff/self._lvals.size
-
-        res={'pars':pars,
-             'pars_cov':pars_cov,
-             'pars_err':pars_err,
-             'g':pars[2:2+2],
-             'g_cov':pars_cov[2:2+2, 2:2+2],
-             'neff':neff,
-             'efficiency':efficiency}
-
-        result.update(res)
-
-    def get_stats(self):
-        """
-        get expectation values and covariance for
-        g from the trials
-        """
-        from ngmix import stats
-
-        samples = self.get_used_samples()
-        likes   = self.get_likelihoods()
-
-        pars, pars_cov = stats.calc_mcmc_stats(samples, weights=likes)
-
-        return pars, pars_cov
-
-    def _select_samples(self):
-        from esutil.numpy_util import between
-        samples=self._samples
-        np = samples.shape[0]
-
-        pars=self._pars
-        perr=self._perr
-        nsigma=self._nsigma
-
-        logic = ones(np, dtype=bool)
-        for i in xrange(self._npars):
-            minval = pars[i]-nsigma*perr[i]
-            maxval = pars[i]+nsigma*perr[i]
-            logic = logic & between(samples[:,i], minval, maxval)
-
-        w,=where(logic)
-
-        if w.size > self._max_use:
-            w=w[0:self._max_use]
-
-            tmp=numpy.random.random(w.size)
-            s=tmp.argsort()
-
-            w = w[s]
-
-        return w
-
-    def _set_err(self, min_err, max_err):
-        if min_err is None:
-            min_err = self._pars_orig*0
-        else:
-            min_err=array(min_err,copy=False)
-
-        if max_err is None:
-            max_err = self._pars_orig*0 + numpy.inf
-        else:
-            max_err=array(max_err,copy=False)
-
-        assert min_err.size==self._pars.size,"min_err must be same size as pars"
-        assert max_err.size==self._pars.size,"max_err must be same size as pars"
-
-        operr=self._perr_orig
-        perr=self._perr_orig*0
-
-        for i in xrange(perr.size):
-            perr[i] = operr[i].clip(min=min_err[i],
-                                    max=max_err[i])
-        self._perr = perr
 
 class ISampler(object):
     """
@@ -4144,26 +3323,6 @@ class ISampler(object):
 
 # alias
 GCovSamplerT=ISampler
-
-def get_edge_aperture(dims, cen):
-    """
-    get circular aperture such that the entire aperture
-    is visible in all directions without hitting an edge
-
-    parameters
-    ----------
-    dims: 2-element sequence
-        dimensions of the array [dim1, dim2]
-    cen: 2-element sequence
-        [cen1, cen2]
-
-    returns
-    -------
-    min(min(cen[0],dims[0]-cen[0]),min(cen[1],dims[1]-cen[1]))
-    """
-    aperture=min(min(cen[0],dims[0]-cen[0]),min(cen[1],dims[1]-cen[1]))
-    return aperture
-
 
 def print_pars(pars, stream=stdout, fmt='%8.3g',front=None):
     """

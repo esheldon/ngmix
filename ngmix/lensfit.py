@@ -3,15 +3,10 @@ class LensfitSensitivity
 function calc_lensfit_shear
 """
 
-from __future__ import print_function
+from __future__ import print_function, absolute_import, division
 import numpy
 from numpy import where, zeros, ones, array, isfinite, newaxis
 from .gexceptions import GMixRangeError, GMixFatalError
-
-try:
-    xrange=xrange
-except:
-    xrange=range
 
 _default_h=1.0e-6
 

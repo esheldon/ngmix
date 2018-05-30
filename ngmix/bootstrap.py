@@ -45,7 +45,7 @@ BOOT_WEIGHTS_LOW= 2**5
 
 class Bootstrapper(object):
     def __init__(self, obs,
-                 use_logpars=False, intpars=None, find_cen=False,
+                 intpars=None, find_cen=False,
                  verbose=False,
                  **kw):
         """
@@ -62,12 +62,9 @@ class Bootstrapper(object):
             need to run fit_psfs()
         """
 
-        self.use_logpars=use_logpars
         self.intpars=intpars
         self.find_cen=find_cen
         self.verbose=verbose
-
-        self.use_round_T = kw.get('use_round_T',False)
 
         # this never gets modified in any way
         self.mb_obs_list_orig = get_mb_obs(obs)
@@ -304,10 +301,7 @@ class Bootstrapper(object):
                         print("    replace cov failed, using LM cov")
                         cov=res['pars_cov']
 
-                    if self.use_logpars:
-                        Ts2n = sqrt(1.0/cov[2,2])
-                    else:
-                        Ts2n = res['pars'][2]/sqrt(cov[2,2])
+                    Ts2n = res['pars'][2]/sqrt(cov[2,2])
             except GMixRangeError as err:
                 print(str(err))
                 flags |= BOOT_TS2N_ROUND_FAIL 
@@ -322,73 +316,12 @@ class Bootstrapper(object):
                               mb_obs_list,
                               res['model'],
                               max_pars,
-                              prior=round_prior,
-                              use_logpars=self.use_logpars)
+                              prior=round_prior)
 
         runner.go(ntry=ntry)
 
         return runner.fitter
  
-    def _get_s2n_Ts2n_r_alg(self, gm0_round):
-        """
-        get the round s2n and Ts2n
-        """
-        raise RuntimeError("this isn't multi-band")
-
-        Tround = gm0_round.get_T()
-
-        flags=0
-
-        s2n_sum=0.0
-        r4sum=0.0
-        r2sum=0.0
-
-        for obslist in self.mb_obs_list:
-            for obs in obslist:
-                psf_gm=obs.psf.gmix
-
-                # only makes sense for symmetric psf
-                psf_gm_round = psf_gm.make_round()
-
-                gm = gm0_round.convolve(psf_gm_round)
-
-                # these use only the weight maps. Use the same weight map
-                # for gal and psf
-                t_s2n_sum, t_r2sum, t_r4sum = \
-                    gm.get_model_s2n_Tvar_sums(obs)
-
-                s2n_sum += t_s2n_sum
-                r2sum += t_r2sum
-                r4sum += t_r4sum
-
-        if s2n_sum <= 0.0:
-            print("    failure: s2n_sum <= 0.0 :",s2n_sum)
-            flags |= BOOT_S2N_LOW
-            s2n=-9999.0
-            Ts2n=-9999.0
-        else:
-            s2n=sqrt(s2n_sum)
-
-            # weighted means
-            r2_mean = r2sum/s2n_sum
-            r4_mean = r4sum/s2n_sum
-
-            if r2_mean <= 0.0:
-                print("    failure: round r2 <= 0.0 :",r2_mean)
-                flags |= BOOT_R2_LOW
-                Ts2n=-9999.0
-            elif r4_mean <= 0.0:
-                print("    failure: round r2 == 0.0 :",r2_mean)
-                flags |= BOOT_R4_LOW
-                Ts2n=-9999.0
-            else:
-
-                # this one partially accounts for T-F covariance
-                r2sq = r2_mean**2
-                Ts2n = Tround * s2n * sqrt(r4_mean-r2sq) / (4. * r2sq)
-
-        return s2n, Ts2n, flags
-
 
     def _get_gmix_round(self, fitter, pars, band):
         """
@@ -408,16 +341,10 @@ class Bootstrapper(object):
         pars=pars_in.copy()
         pars_lin=pars.copy()
 
-        if self.use_logpars:
-            pars_lin[4:4+2] = exp(pars[4:4+2])
-
         g1,g2,T = pars_lin[2],pars_lin[3],pars_lin[4]
 
-        if self.use_round_T:
-            Tround=T
-        else:
-            f = get_round_factor(g1, g2)
-            Tround = T*f
+        f = get_round_factor(g1, g2)
+        Tround = T*f
 
         pars[2]=0.0
         pars[3]=0.0
@@ -426,10 +353,7 @@ class Bootstrapper(object):
 
         pars_lin[4]=Tround
 
-        if self.use_logpars:
-            pars[4] = log(pars_lin[4])
-        else:
-            pars[4] = pars_lin[4]
+        pars[4] = pars_lin[4]
 
         return pars, pars_lin
 
@@ -631,12 +555,10 @@ class Bootstrapper(object):
 
         if 'em' in psf_model:
             assert self.intpars is None,"pixel integration only for max like fitting"
-            assert self.use_round_T==False,"round_T only in simple fitters for now"
 
             runner=self._fit_one_psf_em(psf_obs, psf_model,
                                         Tguess, ntry, fit_pars)
         elif 'coellip' in psf_model:
-            assert self.use_round_T==False,"round_T only in simple fitters for now"
             runner=self._fit_one_psf_coellip(psf_obs, psf_model,
                                              Tguess, ntry, fit_pars)
         else:
@@ -674,7 +596,11 @@ class Bootstrapper(object):
     def _fit_one_psf_coellip(self, psf_obs, psf_model, Tguess, ntry, fit_pars):
 
         ngauss=get_coellip_ngauss(psf_model)
-        lm_pars={'maxfev': 4000}
+        lm_pars={
+            'maxfev': 4000,
+            'xtol':5.0e-5,
+            'ftol':5.0e-5,
+        }
 
         if fit_pars is not None:
             lm_pars.update(fit_pars)
@@ -686,7 +612,11 @@ class Bootstrapper(object):
 
 
     def _fit_one_psf_max(self, psf_obs, psf_model, Tguess, ntry, fit_pars):
-        lm_pars={'maxfev': 4000}
+        lm_pars={
+            'maxfev': 4000,
+            'xtol':5.0e-5,
+            'ftol':5.0e-5,
+        }
 
         if fit_pars is not None:
             lm_pars.update(fit_pars)
@@ -737,42 +667,6 @@ class Bootstrapper(object):
                                                method=method,
                                                fitter=fitter,
                                                add_noise=add_noise)
-        '''
-        assert method=='best-fit',"only best-fit replacement is supported"
-
-        mbo = self.mb_obs_list
-        nband = len(mbo)
-
-        for band in xrange(nband):
-            olist = mbo[band]
-            nobs = len(olist)
-            for iobs,obs in enumerate(olist):
-
-                bmask = obs.bmask
-                if bmask is not None:
-                    w=where(bmask != 0)
-
-                    if w[0].size > 0:
-                        print("    replacing %d/%d masked pixels" % (w[0].size,bmask.size))
-                        obs.image_orig = obs.image.copy()
-                        gm = fitter.get_convolved_gmix(band=band, obsnum=iobs)
-
-                        im = obs.image
-                        model_image = gm.make_image(im.shape, jacobian=obs.jacobian)
-
-                        im[w] = model_image[w]
-
-                        if False:
-                            import images
-                            imdiff=im-obs.image_orig
-                            images.view_mosaic([bmask,obs.image_orig,im,imdiff],
-                                               titles=['mask','orig','mod image','mod-orig'])
-                            maxdiff=numpy.abs(imdiff).max()
-                            print("    Max abs diff:",maxdiff)
-                            images.multiview(imdiff,title='mod-orig max diff %g' % maxdiff)
-                            if raw_input('hit a key: ') == 'q':
-                                stop
-        '''
     def fit_max(self,
                 gal_model,
                 pars,
@@ -808,8 +702,7 @@ class Bootstrapper(object):
         guesser=self._get_max_guesser(guess=guess, prior=prior)
 
         runner=MaxRunnerFixT(self.mb_obs_list, gal_model, pars, guesser, T,
-                             prior=prior,
-                             use_logpars=self.use_logpars)
+                             prior=prior)
 
         runner.go(ntry=ntry)
 
@@ -841,8 +734,7 @@ class Bootstrapper(object):
             guesser=self._get_max_guesser(guess=guess, prior=prior)
 
         runner=MaxRunnerGOnly(self.mb_obs_list, gal_model, max_pars, guesser, pars_in,
-                              prior=prior,
-                              use_logpars=self.use_logpars)
+                              prior=prior)
 
         runner.go(ntry=ntry)
 
@@ -880,7 +772,6 @@ class Bootstrapper(object):
             obs, gal_model, pars, guesser,
             prior=prior,
             intpars=self.intpars,
-            use_logpars=self.use_logpars,
         )
 
         runner.go(ntry=ntry)
@@ -959,8 +850,7 @@ class Bootstrapper(object):
 
         model=res['model']
         tfitter=MaxSimple(self.mb_obs_list,
-                          model,
-                          use_logpars=self.use_logpars)
+                          model)
         tfitter._setup_data(res['pars'])
  
         sampler=PSampler(res['pars'],
@@ -1026,10 +916,7 @@ class Bootstrapper(object):
         generate a guess, drawing from priors on the other parameters
         """
 
-        if self.use_logpars:
-            scaling='log'
-        else:
-            scaling='linear'
+        scaling='linear'
 
         if guess is not None:
             guesser=ParsGuesser(guess, scaling=scaling, widths=widths)
@@ -1100,8 +987,7 @@ class BootstrapperGaussMom(Bootstrapper):
         guesser=self._get_max_guesser(guess=guess, prior=prior)
 
         runner=MaxRunnerGaussMom(self.mb_obs_list, pars, guesser,
-                                 prior=prior,
-                                 use_logpars=self.use_logpars)
+                                 prior=prior)
 
         runner.go(ntry=ntry)
 
@@ -1409,24 +1295,6 @@ class AdmomBootstrapper(Bootstrapper):
         res['s2n_r'] = res['s2n']
         res['T_r']   = res['T']
 
-        """
-        try:
-            gm  = fitter.get_gmix()
-            gmr = gm.make_round()
-
-            e1r,e2r,T_r=gmr.get_e1e2T()
-
-            res=fitter.get_result()
-            flux=res['flux']
-            gmr.set_flux(flux)
-
-            res['s2n_r']=gmr.get_model_s2n(obs)
-            res['T_r'] = T_r
-
-        except GMixRangeError as err:
-            raise BootPSFFailure(str(err))
-        """
-
     def _get_psf_Tguess(self, obs):
         scale=obs.jacobian.get_scale()
         return 4.0*scale
@@ -1642,9 +1510,7 @@ class MaxMetacalBootstrapper(Bootstrapper):
         for key in sorted(obs_dict):
             # run a regular Bootstrapper on these observations
             boot = Bootstrapper(obs_dict[key],
-                                use_logpars=self.use_logpars,
                                 intpars=self.intpars,
-                                use_round_T=self.use_round_T,
                                 find_cen=self.find_cen,
                                 verbose=self.verbose)
 
@@ -1824,15 +1690,72 @@ class DeconvMetacalBootstrapper(MaxMetacalBootstrapper):
         Tpsf = Tpsf_sum/wsum
         return gpsf,Tpsf
 
+class BDFBootstrapper(Bootstrapper):
+    def fit_max(self,
+                max_pars,
+                guess=None,
+                guess_widths=None,
+                prior=None,
+                ntry=1,
+                obs=None):
+        """
+        fit the galaxy.  You must run fit_psf() successfully first
+        """
+
+        assert prior is not None
+        assert guess is None,"for now"
+
+        if obs is None:
+            obs = self.mb_obs_list
+
+        if not hasattr(self,'psf_flux_res'):
+            self.fit_gal_psf_flux()
+
+        guesser=self._get_guesser(prior)
+
+        runner=BDFRunner(
+            obs,
+            max_pars,
+            guesser,
+            prior=prior,
+        )
+
+        runner.go(ntry=ntry)
+
+        fitter=runner.fitter
+
+        res=fitter.get_result()
+
+        if res['flags'] != 0:
+            raise BootGalFailure("failed to fit galaxy with maxlike")
+
+        self.max_fitter = fitter
+
+    def _get_guesser(self, prior):
+        """
+        get a guesser that uses the psf T and galaxy psf flux to
+        generate a guess, drawing from priors on the other parameters
+        """
+        from .guessers import BDFGuesser
+
+        psf_T = self.mb_obs_list[0][0].psf.gmix.get_T()
+
+        pres=self.get_psf_flux_result()
+
+        return BDFGuesser(
+            psf_T,
+            pres['psf_flux'],
+            #1.0,
+            prior,
+        )
+
 
 class CompositeBootstrapper(Bootstrapper):
     def __init__(self, obs,
-                 use_logpars=False,
                  fracdev_prior=None,
                  fracdev_grid=None, **kw):
 
-        super(CompositeBootstrapper,self).__init__(obs,
-                                                   use_logpars=use_logpars, **kw)
+        super(CompositeBootstrapper,self).__init__(obs, **kw)
 
         self.fracdev_prior=fracdev_prior
         if fracdev_grid is not None:
@@ -1874,7 +1797,8 @@ class CompositeBootstrapper(Bootstrapper):
             exp_guess = None
             dev_guess = None
             
-        print("    fitting exp")
+        if self.verbose:
+            print("    fitting exp")
         exp_fitter=self._fit_one_model_max(
             'exp',
             pars,
@@ -1883,11 +1807,14 @@ class CompositeBootstrapper(Bootstrapper):
             ntry=ntry,
             guess_widths=guess_widths,
         )
-        fitting.print_pars(exp_fitter.get_result()['pars'], front='        gal_pars:')
-        fitting.print_pars(exp_fitter.get_result()['pars_err'], front='        gal_perr:')
-        print('        lnprob: %e' % exp_fitter.get_result()['lnprob'])
-        
-        print("    fitting dev")
+
+        if self.verbose:
+            fitting.print_pars(exp_fitter.get_result()['pars'], front='        gal_pars:')
+            fitting.print_pars(exp_fitter.get_result()['pars_err'], front='        gal_perr:')
+            print('        lnprob: %e' % exp_fitter.get_result()['lnprob'])
+            
+            print("    fitting dev")
+
         dev_fitter=self._fit_one_model_max(
             'dev',
             pars,
@@ -1896,26 +1823,31 @@ class CompositeBootstrapper(Bootstrapper):
             ntry=ntry,
             guess_widths=guess_widths,
         )
-        fitting.print_pars(dev_fitter.get_result()['pars'],
-                           front='        gal_pars:')
-        fitting.print_pars(dev_fitter.get_result()['pars_err'],
-                           front='        gal_perr:')
-        print('        lnprob: %e' % dev_fitter.get_result()['lnprob'])           
-            
-        print("    fitting fracdev")
+
+        if self.verbose:
+            fitting.print_pars(dev_fitter.get_result()['pars'],
+                               front='        gal_pars:')
+            fitting.print_pars(dev_fitter.get_result()['pars_err'],
+                               front='        gal_perr:')
+            print('        lnprob: %e' % dev_fitter.get_result()['lnprob'])           
+                
+            print("    fitting fracdev")
+
         use_grid=pars.get('use_fracdev_grid',False)
         fres=self._fit_fracdev(exp_fitter, dev_fitter, use_grid=use_grid)
 
         fracdev = fres['fracdev']
         fracdev_clipped = self._clip_fracdev(fracdev,pars)
 
-        mess='        nfev: %d fracdev: %.3f +/- %.3f clipped: %.3f'
-        print(mess % (fres['nfev'],fracdev,fres['fracdev_err'],fracdev_clipped))
 
         TdByTe_raw = self._get_TdByTe(exp_fitter, dev_fitter)
-        TdByTe_range = pars.get('TdByTe_range',[-1.0e9,1.0e-9])
+        TdByTe_range = pars.get('TdByTe_range',[-1.0e9,1.0e9])
         TdByTe = numpy.clip(TdByTe_raw,TdByTe_range[0],TdByTe_range[1])
-        print('        Td/Te: %.3f clipped: %.3f' % (TdByTe_raw,TdByTe))
+
+        if self.verbose:
+            mess='        nfev: %d fracdev: %.3f +/- %.3f clipped: %.3f'
+            print(mess % (fres['nfev'],fracdev,fres['fracdev_err'],fracdev_clipped))
+            print('        Td/Te: %.3f clipped: %.3f' % (TdByTe_raw,TdByTe))
         
         guesser=self._get_max_guesser(
             guess=guess,
@@ -1923,7 +1855,8 @@ class CompositeBootstrapper(Bootstrapper):
             widths=guess_widths,
         )
 
-        print("    fitting composite")
+        if self.verbose:
+            print("    fitting composite")
         ok=False
         for i in range(1,5):
             try:
@@ -1934,18 +1867,11 @@ class CompositeBootstrapper(Bootstrapper):
                     fracdev_clipped,
                     TdByTe,
                     prior=prior,
-                    use_logpars=self.use_logpars,
                 )
                 runner.go(ntry=ntry)
                 ok=True
                 break
             except GMixRangeError:
-                #if i==1:
-                #    print("caught GMixRange, clipping [-1.0,1.5]")
-                #    fracdev_clipped = fracdev_clipped.clip(min=-1.0, max=1.5)
-                #elif i==2:
-                #    print("caught GMixRange, clipping [ 0.0,1.0]")
-                #    fracdev_clipped = fracdev_clipped.clip(min=0.0, max=1.0)
                 print("caught GMixRange, clipping [ 0.0,1.0]")
                 fracdev_clipped = fracdev_clipped.clip(min=0.0, max=1.0)
 
@@ -1965,10 +1891,11 @@ class CompositeBootstrapper(Bootstrapper):
             pprint(res)
             raise BootGalFailure("weird error with lnprob missing")
 
-        fitting.print_pars(res['pars'], front='        gal_pars:')
-        fitting.print_pars(res['pars_err'], front='        gal_perr:')
-        print('        lnprob: %e' % res['lnprob'])
-        
+        if self.verbose:
+            fitting.print_pars(res['pars'], front='        gal_pars:')
+            fitting.print_pars(res['pars_err'], front='        gal_perr:')
+            print('        lnprob: %e' % res['lnprob'])
+            
 
         res['TdByTe'] = TdByTe
         res['TdByTe_noclip'] = TdByTe_raw
@@ -2027,8 +1954,7 @@ class CompositeBootstrapper(Bootstrapper):
                                        max_pars,
                                        res['fracdev'],
                                        res['TdByTe'],
-                                       prior=round_prior,
-                                       use_logpars=self.use_logpars)
+                                       prior=round_prior)
 
         runner.go(ntry=ntry)
 
@@ -2055,13 +1981,11 @@ class CompositeBootstrapper(Bootstrapper):
 
         fprior=self.fracdev_prior
         if fprior is None:
-            ffitter = FracdevFitter(self.mb_obs_list, epars, dpars,
-                                    use_logpars=self.use_logpars)
+            ffitter = FracdevFitter(self.mb_obs_list, epars, dpars)
             res=ffitter.get_result()
         else:
 
             ffitter = FracdevFitterMax(self.mb_obs_list, epars, dpars,
-                                       use_logpars=self.use_logpars,
                                        prior=fprior)
             if use_grid:
                 res=self._fit_fracdev_grid(ffitter)
@@ -2126,12 +2050,8 @@ class CompositeBootstrapper(Bootstrapper):
         epars=exp_fitter.get_result()['pars']
         dpars=dev_fitter.get_result()['pars']
 
-        if self.use_logpars:
-            Te = exp(epars[4])
-            Td = exp(dpars[4])
-        else:
-            Te = epars[4]
-            Td = dpars[4]
+        Te = epars[4]
+        Td = dpars[4]
         TdByTe = Td/Te
 
         return TdByTe
@@ -2139,10 +2059,8 @@ class CompositeBootstrapper(Bootstrapper):
 
 class BestBootstrapper(Bootstrapper):
     def __init__(self, obs,
-                 use_logpars=False,
                  fracdev_prior=None, **kw):
-        super(BestBootstrapper,self).__init__(obs,
-                                              use_logpars=use_logpars, **kw)
+        super(BestBootstrapper,self).__init__(obs, **kw)
 
     def fit_max(self, exp_prior, dev_prior, exp_rate, pars, ntry=1):
         """
@@ -2192,11 +2110,10 @@ class PSFRunner(object):
     """
     def __init__(self, obs, model, Tguess, lm_pars,
                  prior=None,
-                 intpars=None, use_round_T=False):
+                 intpars=None):
 
         self.obs=obs
         self.intpars=intpars
-        self.use_round_T=use_round_T
         self.prior=prior
 
         mess="psf model should be turb or gauss,got '%s'" % model
@@ -2221,7 +2138,6 @@ class PSFRunner(object):
             guess=self.get_guess()
 
             fitter=LMSimple(self.obs,self.model,lm_pars=self.lm_pars,
-                            use_round_T=self.use_round_T,
                             prior=self.prior,
                             npoints=npoints)
             fitter.go(guess)
@@ -2306,6 +2222,8 @@ class EMRunner(object):
             return self._get_em_guess_2gauss()
         elif self.ngauss==3:
             return self._get_em_guess_3gauss()
+        elif self.ngauss==4:
+            return self._get_em_guess_4gauss()
         else:
             raise ValueError("bad ngauss: %d" % self.ngauss)
 
@@ -2372,6 +2290,44 @@ class EMRunner(object):
 
         return GMix(pars=pars)
 
+    def _get_em_guess_4gauss(self):
+
+        sigma2 = self.sigma_guess**2
+
+        pars=array( [_em4_pguess[0]*(1.0+0.1*srandu()),
+                     0.1*srandu(),
+                     0.1*srandu(),
+                     _em4_fguess[0]*sigma2*(1.0 + 0.1*srandu()),
+                     0.01*srandu(),
+                     _em4_fguess[0]*sigma2*(1.0 + 0.1*srandu()),
+
+                     _em4_pguess[1]*(1.0+0.1*srandu()),
+                     0.1*srandu(),
+                     0.1*srandu(),
+                     _em4_fguess[1]*sigma2*(1.0 + 0.1*srandu()),
+                     0.01*srandu(),
+                     _em4_fguess[1]*sigma2*(1.0 + 0.1*srandu()),
+
+                     _em4_pguess[2]*(1.0+0.1*srandu()),
+                     0.1*srandu(),
+                     0.1*srandu(),
+                     _em4_fguess[2]*sigma2*(1.0 + 0.1*srandu()),
+                     0.01*srandu(),
+                     _em4_fguess[2]*sigma2*(1.0 + 0.1*srandu()),
+
+                     _em4_pguess[2]*(1.0+0.1*srandu()),
+                     0.1*srandu(),
+                     0.1*srandu(),
+                     _em4_fguess[2]*sigma2*(1.0 + 0.1*srandu()),
+                     0.01*srandu(),
+                     _em4_fguess[2]*sigma2*(1.0 + 0.1*srandu())]
+
+                  )
+
+
+        return GMix(pars=pars)
+
+
 class PSFRunnerCoellip(object):
     """
     wrapper to generate guesses and run the psf fitter a few times
@@ -2388,24 +2344,8 @@ class PSFRunnerCoellip(object):
         self.set_guess0(Tguess)
         self._set_prior()
 
-    def _set_prior(self):
-        from .joint_prior import PriorCoellipSame
-        from .priors import CenPrior, ZDisk2D, TwoSidedErf
-
-        Tguess=self.Tguess
-        Fguess=self.Fguess
-
-        cen_width=2*self.pixel_scale
-        cen_prior = CenPrior(0.0, 0.0, cen_width, cen_width)
-        g_prior=ZDisk2D(1.0)
-        T_prior = TwoSidedErf(0.01*Tguess, 0.001*Tguess, 100*Tguess, Tguess)
-        F_prior = TwoSidedErf(0.01*Fguess, 0.001*Fguess, 100*Fguess, Fguess)
-
-        self.prior=PriorCoellipSame(self.ngauss,
-                                    cen_prior,
-                                    g_prior,
-                                    T_prior,
-                                    F_prior)
+    def get_fitter(self):
+        return self.fitter
 
     def go(self, ntry=1):
         from .fitting import LMCoellip
@@ -2481,6 +2421,26 @@ class PSFRunnerCoellip(object):
 
         self.Fguess=Fguess
 
+    def _set_prior(self):
+        from .joint_prior import PriorCoellipSame
+        from .priors import CenPrior, ZDisk2D, TwoSidedErf
+
+        Tguess=self.Tguess
+        Fguess=self.Fguess
+
+        cen_width=2*self.pixel_scale
+        cen_prior = CenPrior(0.0, 0.0, cen_width, cen_width)
+        g_prior=ZDisk2D(1.0)
+        T_prior = TwoSidedErf(0.01*Tguess, 0.001*Tguess, 100*Tguess, Tguess)
+        F_prior = TwoSidedErf(0.01*Fguess, 0.001*Fguess, 100*Fguess, Fguess)
+
+        self.prior=PriorCoellipSame(self.ngauss,
+                                    cen_prior,
+                                    g_prior,
+                                    T_prior,
+                                    F_prior)
+
+
 _moffat2_pguess=array([0.5, 0.5])
 _moffat2_fguess=array([0.48955064,  1.50658978])
 
@@ -2502,27 +2462,21 @@ class MaxRunner(object):
                  max_pars,
                  guesser,
                  prior=None,
-                 intpars=None,
-                 use_logpars=False,
-                 use_round_T=False):
+                 intpars=None):
 
         self.obs=obs
         self.intpars=intpars
-        self.use_round_T=use_round_T
 
         self.max_pars=max_pars
         self.method=max_pars['method']
         if self.method == 'lm':
             self.send_pars=max_pars['lm_pars']
-        else:
-            self.send_pars=max_pars
 
         mess="model should be exp,dev,gauss, got '%s'" % model
         assert model in ['exp','dev','gauss'],mess
 
         self.model=model
         self.prior=prior
-        self.use_logpars=use_logpars
 
         self.guesser=guesser
 
@@ -2533,7 +2487,7 @@ class MaxRunner(object):
         if self.method=='lm':
             method=self._go_lm
         else:
-            raise ValueError("bad method '%s'" % self.method)
+            method=self._go_max
 
         lnprob_max=-numpy.inf
         method(ntry=ntry)
@@ -2553,8 +2507,6 @@ class MaxRunner(object):
             fitter=fitclass(self.obs,
                             self.model,
                             lm_pars=self.send_pars,
-                            use_logpars=self.use_logpars,
-                            use_round_T=self.use_round_T,
                             npoints=npoints,
                             prior=self.prior)
 
@@ -2567,16 +2519,52 @@ class MaxRunner(object):
         res['ntry'] = i+1
         self.fitter=fitter
 
+    def _go_max(self, ntry=1):
+        
+        if self.intpars is not None:
+            npoints=self.intpars['npoints']
+            #print("max gal fit using npoints:",npoints)
+        else:
+            npoints=None
+
+        fitclass=self._get_max_fitter_class()
+
+        for i in xrange(ntry):
+            guess=self.guesser()
+            fitter=fitclass(
+                self.obs,
+                self.model,
+                npoints=npoints,
+                prior=self.prior,
+
+                **self.max_pars
+            )
+
+            fitter.go(guess)
+
+            res=fitter.get_result()
+            if res['flags']==0:
+                break
+
+        res['ntry'] = i+1
+        self.fitter=fitter
+
+
     def _get_lm_fitter_class(self):
         from .fitting import LMSimple
         return LMSimple
+
+    def _get_max_fitter_class(self):
+        from .fitting import MaxSimple
+        return MaxSimple
+
 
 
 class MaxRunnerGaussMom(object):
     """
     wrapper to generate guesses and run the fitter a few times
     """
-    def __init__(self, obs, max_pars, guesser, prior=None, use_logpars=False):
+    def __init__(self, obs, max_pars, guesser, prior=None):
         self.obs=obs
 
         self.max_pars=max_pars
@@ -2587,7 +2575,6 @@ class MaxRunnerGaussMom(object):
             self.send_pars=max_pars
 
         self.prior=prior
-        self.use_logpars=use_logpars
 
         self.guesser=guesser
 
@@ -2608,7 +2595,6 @@ class MaxRunnerGaussMom(object):
             guess=self.guesser()
             fitter=fitclass(self.obs,
                             lm_pars=self.send_pars,
-                            use_logpars=self.use_logpars,
                             prior=self.prior)
 
             fitter.go(guess)
@@ -2626,7 +2612,7 @@ class MaxRunnerGaussMom(object):
 
 
 class MaxRunnerFixT(MaxRunner):
-    def __init__(self, obs, model, max_pars, guesser, T, prior=None, use_logpars=False):
+    def __init__(self, obs, model, max_pars, guesser, T, prior=None):
         self.obs=obs
 
         self.max_pars=max_pars
@@ -2639,7 +2625,6 @@ class MaxRunnerFixT(MaxRunner):
 
         self.model=model
         self.prior=prior
-        self.use_logpars=use_logpars
         self.T=T
 
         self.guesser=guesser
@@ -2653,7 +2638,6 @@ class MaxRunnerFixT(MaxRunner):
                                 self.model,
                                 T=self.T,
                                 lm_pars=self.send_pars,
-                                use_logpars=self.use_logpars,
                                 prior=self.prior)
 
             guess0=self.guesser()
@@ -2670,7 +2654,7 @@ class MaxRunnerFixT(MaxRunner):
         self.fitter=fitter
 
 class MaxRunnerGOnly(MaxRunner):
-    def __init__(self, obs, model, max_pars, guesser, pars_in, prior=None, use_logpars=False):
+    def __init__(self, obs, model, max_pars, guesser, pars_in, prior=None):
         self.obs=obs
 
         self.max_pars=max_pars
@@ -2683,7 +2667,6 @@ class MaxRunnerGOnly(MaxRunner):
 
         self.model=model
         self.prior=prior
-        self.use_logpars=use_logpars
         self.pars_in=pars_in
 
         self.guesser=guesser
@@ -2697,7 +2680,6 @@ class MaxRunnerGOnly(MaxRunner):
                                  self.model,
                                  pars=self.pars_in,
                                  lm_pars=self.send_pars,
-                                 use_logpars=self.use_logpars,
                                  prior=self.prior)
 
             guess0=self.guesser()
@@ -2720,11 +2702,7 @@ class MaxRunnerGOnly(MaxRunner):
 class RoundRunnerBase(object):
     def _get_round_guesser(self, **kw):
 
-        use_logpars=kw.get('use_logpars',False)
-        if use_logpars:
-            scaling='log'
-        else:
-            scaling='linear'
+        scaling='linear'
 
         prior=kw.get('prior',None)
         guesser=RoundParsGuesser(self.pars_sub,
@@ -2761,8 +2739,7 @@ class CompositeMaxRunner(MaxRunner):
                  guesser,
                  fracdev,
                  TdByTe,
-                 prior=None,
-                 use_logpars=False):
+                 prior=None):
         self.obs=obs
 
         self.max_pars=max_pars
@@ -2776,7 +2753,6 @@ class CompositeMaxRunner(MaxRunner):
             self.send_pars=max_pars
 
         self.prior=prior
-        self.use_logpars=use_logpars
 
         self.guesser=guesser
 
@@ -2791,7 +2767,6 @@ class CompositeMaxRunner(MaxRunner):
                             self.fracdev,
                             self.TdByTe,
                             lm_pars=self.send_pars,
-                            use_logpars=self.use_logpars,
                             prior=self.prior)
 
             fitter.go(guess)
@@ -2800,11 +2775,64 @@ class CompositeMaxRunner(MaxRunner):
             if res['flags']==0:
                 break
 
+        res['ntry'] = i+1
         self.fitter=fitter
 
     def _get_lm_fitter_class(self):
         from .fitting import LMComposite
         return LMComposite
+
+
+class BDFRunner(MaxRunner):
+    """
+    wrapper to generate guesses and run the psf fitter a few times
+    """
+    def __init__(self,
+                 obs,
+                 max_pars,
+                 guesser,
+                 prior=None):
+        self.obs=obs
+
+        self.max_pars=max_pars
+
+        self.method=max_pars['method']
+        if self.method == 'lm':
+            self.send_pars=max_pars['lm_pars']
+        else:
+            self.send_pars=max_pars
+
+        self.prior=prior
+
+        self.guesser=guesser
+
+    def _go_lm(self, ntry=1):
+        from .fitting import LMComposite
+
+        fitclass=self._get_lm_fitter_class()
+
+        for i in xrange(ntry):
+            guess=self.guesser()
+            fitter=fitclass(
+                self.obs,
+                lm_pars=self.send_pars,
+                prior=self.prior,
+            )
+
+            fitter.go(guess)
+
+            res=fitter.get_result()
+            if res['flags']==0:
+                break
+
+        res['ntry'] = i+1
+        self.fitter=fitter
+
+    def _get_lm_fitter_class(self):
+        from .fitting import LMBDF
+        return LMBDF
+
+
 
 class CompositeMaxRunnerRound(CompositeMaxRunner,RoundRunnerBase):
     """
@@ -2880,7 +2908,13 @@ def replace_masked_pixels(mb_obs_list,
         nobs = len(olist)
         for iobs,obs in enumerate(olist):
 
-            bmask = obs.bmask
+            im=obs.image
+
+            if obs.has_bmask():
+                bmask = obs.bmask
+            else:
+                bmask = None
+
             if hasattr(obs,'weight_raw'):
                 #print("    using raw weight for replace")
                 weight = obs.weight_raw
@@ -2894,7 +2928,7 @@ def replace_masked_pixels(mb_obs_list,
 
             if w[0].size > 0:
                 print("        replacing %d/%d masked or zero weight "
-                      "pixels" % (w[0].size,bmask.size))
+                      "pixels" % (w[0].size,im.size))
                 obs.image_orig = obs.image.copy()
                 gm = fitter.get_convolved_gmix(band=band, obsnum=iobs)
 
@@ -2904,7 +2938,7 @@ def replace_masked_pixels(mb_obs_list,
                 im[w] = model_image[w]
 
                 if add_noise:
-                    wgood=where( (weight > 0.0) & (bmask==0) )
+                    wgood=where( weight > 0.0 )
                     if wgood[0].size > 0:
                         median_err=numpy.median(1.0/weight[wgood])
 
@@ -2941,11 +2975,15 @@ def replace_masked_pixels(mb_obs_list,
     return mbo
 
 
-_em2_fguess =array([0.5793612389470884,1.621860687127999])
 _em2_pguess =array([0.596510042804182,0.4034898268889178])
+_em2_fguess =array([0.5793612389470884,1.621860687127999])
 
 _em3_pguess = array([0.596510042804182,0.4034898268889178,1.303069003078001e-07])
 _em3_fguess = array([0.5793612389470884,1.621860687127999,7.019347162356363])
+
+_em4_pguess = array([0.596510042804182,0.4034898268889178,1.303069003078001e-07,1.0e-8])
+_em4_fguess = array([0.5793612389470884,1.621860687127999,7.019347162356363,16.0])
+
 #_em3_pguess = array([0.7189864,0.2347828,0.04623086])
 #_em3_fguess = array([0.4431912,1.354587,8.274546])
 #_em3_pguess = array([0.60,0.36,0.04])

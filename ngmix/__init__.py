@@ -1,18 +1,16 @@
-"""
-todo:
-    - add ability to have priors
-"""
-
-__version__="v0.9.4"
+__version__="v1.0.0"
 
 from . import gmix
 from .gmix import GMix
 from .gmix import GMixModel
 from .gmix import GMixCoellip
 
+from . import gmix_ndim
+from .gmix_ndim import GMixND
+
 from . import jacobian
 from .jacobian import Jacobian, UnitJacobian, DiagonalJacobian
-from . import fastmath
+from . import fastexp
 
 from . import priors
 from .priors import srandu
@@ -43,7 +41,6 @@ from . import observation
 from .observation import Observation, ObsList, MultiBandObsList
 
 from . import lensfit
-from . import pqr
 
 from . import stats
 

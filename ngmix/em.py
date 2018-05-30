@@ -1,26 +1,22 @@
 """
 Fit an image with a gaussian mixture using the EM algorithm
 """
-from __future__ import print_function
+from __future__ import print_function, absolute_import, division
 
 import numpy
 
 from . import gmix
 from .gmix import GMix
 
-from . import _gmix
 
 from .gexceptions import GMixRangeError, GMixMaxIterEM
 from .priors import srandu
 
-from .jacobian import Jacobian
+from .jacobian import Jacobian, UnitJacobian
 
 from .observation import Observation
 
-try:
-    xrange=xrange
-except:
-    xrange=range
+from .em_nb import em_run
 
 EM_RANGE_ERROR = 2**0
 EM_MAXITER = 2**1
@@ -108,7 +104,7 @@ class GMixEM(object):
             im *= (counts/im.sum())
         return im
 
-    def run_em(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
+    def go(self, gmix_guess, sky_guess, maxiter=100, tol=1.e-6):
         """
         Run the em algorithm from the input starting guesses
 
@@ -129,346 +125,148 @@ class GMixEM(object):
         if hasattr(self,'_gm'):
             del self._gm
 
-        gmtmp = gmix_guess.copy()
-        self._ngauss    = len(gmtmp)
-        self._sums      = numpy.zeros(self._ngauss, dtype=_sums_dtype)
-        self._sky_guess = sky_guess
-        self._maxiter   = maxiter
-        self._tol       = tol
+        conf=self._make_conf()
+        conf['tol'] = tol
+        conf['maxiter'] = maxiter
+        conf['sky_guess'] = sky_guess
+        conf['counts'] = self._counts
+        conf['pixel_scale'] = self._obs.jacobian.get_scale()
 
-        # will raise GMixRangeError, but not GMixMaxIterEM, which
-        # we handle below
+        gm = gmix_guess.copy()
+        sums = self._make_sums(len(gm))
+
         flags=0
         try:
-            numiter, fdiff = _gmix.em_run(gmtmp._data,
-                                          self._obs.image,
-                                          self._obs.jacobian._data,
-                                          self._sums,
-                                          self._sky_guess,
-                                          self._counts,
-                                          self._tol,
-                                          self._maxiter)
+            numiter, fdiff = em_run(
+                conf,
+                self._obs.pixels,
+                sums,
+                gm.get_data(),
+            )
 
             # we have mutated the _data elements, we want to make
             # sure the pars are propagated.  Make a new full gm
-            pars=gmtmp.get_full_pars()
+            pars=gm.get_full_pars()
             self._gm=GMix(pars=pars)
 
             if numiter >= maxiter:
                 flags = EM_MAXITER
 
-            result={'flags':flags,
-                    'numiter':numiter,
-                    'fdiff':fdiff}
+            result={
+                'flags':flags,
+                'numiter':numiter,
+                'fdiff':fdiff,
+                'message':'OK',
+            }
 
-        except GMixRangeError:
-            # the iteration reached an invalid gaussian
-            result={'flags':EM_RANGE_ERROR}
+        except (GMixRangeError,ZeroDivisionError) as err:
+            # most likely the algorithm reached an invalid gaussian
+            message = str(err)
+            print(message)
+            result={
+                'flags':EM_RANGE_ERROR,
+                'message': message,
+            }
 
         self._result = result
 
-    # alias
-    go=run_em
+    run_em=go
 
-class ApproxEMSimple(object):
-    """
-    Fit a set of observations with psfs/jacobians with 
-    an approximate EM algorithm
-    
-    DOES NOT CONVERGE TO MAX LIKE POINT
-
-    parameters
-    ----------
-    mb_obs_list: MulitBandObsList
-    
-    """
-    def __init__(self, mb_obs_list, model):
-        self._obs = mb_obs_list
-        self._model = model
-        
-    def get_result(self):
+    def _make_sums(self, ngauss):
         """
-        Get some stats about the processing
+        make the sum structure
         """
-        return self._result
+        return numpy.zeros(ngauss, dtype=_sums_dtype)
 
-    def run_em(self, miniter=10, maxiter=10, tol=1.e-4, guess=None, verbose=False):
+    def _make_conf(self):
         """
-        Run the em algorithm from the input starting guesses
-
-        parameters
-        ----------
-        guess: array-like, optional
-            guess parameters 
-        miniter: number, optional
-            minimum number of iterations, default 20
-        maxiter: number, optional
-            The maximum number of iterations, default 100
-        tol: number, optional
-            The tolerance in the parameters for ocnvergence
-            default 1.e-4
+        make the sum structure
         """
-
-        import emshear
-        my_guess = None
-        if guess is not None:            
-            e1,e2 = emshear.g1g2_to_e1e2(guess[2],guess[3])
-            my_guess = guess.copy()
-            my_guess[2] = e1
-            my_guess[3] = e2
-
-        self._fit = emshear.EMFitSimple(self._obs,self._model,guess=my_guess)        
-        self._fit.go(maxiter,minitr=miniter,xtol=tol,verbose=verbose)
-
-        my_pars = self._fit.get_pars()
-        pars = my_pars.copy()
-        g1,g2 = emshear.e1e2_to_g1g2(pars[2],pars[3])
-        pars[2] = g1
-        pars[3] = g2
-        self._result={'pars':pars,'lnprob':self._fit.lnL(my_pars)}
-
-    # alias
-    go=run_em
-    
-_sums_dtype=[('gi','f8'),
-             # scratch on a given pixel
-             ('trowsum','f8'),
-             ('tcolsum','f8'),
-             ('tu2sum','f8'),
-             ('tuvsum','f8'),
-             ('tv2sum','f8'),
-             # sums over all pixels
-             ('pnew','f8'),
-             ('rowsum','f8'),
-             ('colsum','f8'),
-             ('u2sum','f8'),
-             ('uvsum','f8'),
-             ('v2sum','f8')]
+        conf_arr = numpy.zeros(1, dtype=_em_conf_dtype)
+        return conf_arr[0]
 
 
 
-'''
-@autojit
-def _clear_sums(sums):
-    ngauss=sums.size
-    for i in xrange(ngauss):
-        sums[i].gi=0
-        sums[i].trowsum=0
-        sums[i].tcolsum=0
-        sums[i].tu2sum=0
-        sums[i].tuvsum=0
-        sums[i].tv2sum=0
-        sums[i].pnew=0
-        sums[i].rowsum=0
-        sums[i].colsum=0
-        sums[i].u2sum=0
-        sums[i].uvsum=0
-        sums[i].v2sum=0
+_sums_dtype=[
+    ('gi','f8'),
 
-# have to send whole array
-@jit(argtypes=[_gauss2d[:], int64, float64, float64, float64, float64, float64, float64])
-def _gauss2d_set(self, i, p, row, col, irr, irc, icc):
+    # scratch on a given pixel
+    ('trowsum','f8'),
+    ('tcolsum','f8'),
+    ('tu2sum','f8'),
+    ('tuvsum','f8'),
+    ('tv2sum','f8'),
 
-    det = irr*icc - irc*irc
-    if det < 1.0e-200:
-        raise GMixRangeError("found det <= 0: %s" % det)
+    # sums over all pixels
+    ('pnew','f8'),
+    ('rowsum','f8'),
+    ('colsum','f8'),
+    ('u2sum','f8'),
+    ('uvsum','f8'),
+    ('v2sum','f8'),
+]
+_sums_dtype=numpy.dtype(_sums_dtype,align=True)
 
-    self[i].p=p
-    self[i].row=row
-    self[i].col=col
-    self[i].irr=irr
-    self[i].irc=irc
-    self[i].icc=icc
+_em_conf_dtype=[
+    ('tol','f8'),
+    ('maxiter','i4'),
+    ('sky_guess','f8'),
+    ('counts','f8'),
+    ('pixel_scale','f8'),
+]
+_em_conf_dtype=numpy.dtype(_em_conf_dtype,align=True)
 
-    self[i].det = det
-
-    idet=1.0/det
-    self[i].drr = irr*idet
-    self[i].drc = irc*idet
-    self[i].dcc = icc*idet
-    self[i].norm = 1./(2*numpy.pi*numpy.sqrt(det))
-
-    self[i].pnorm = self[i].p*self[i].norm
-
-@autojit
-def _set_gmix_from_sums(gmix, sums):
-    ngauss=gmix.size 
-    for i in xrange(ngauss):
-        p=sums[i].pnew
-        _gauss2d_set(gmix,
-                     i,
-                     p,
-                     sums[i].rowsum/p,
-                     sums[i].colsum/p,
-                     sums[i].u2sum/p,
-                     sums[i].uvsum/p,
-                     sums[i].v2sum/p)
-
-@autojit
-def _gauss2d_verify(self):
-    ngauss=self.size
-    for i in xrange(ngauss):
-        if self[i].det < 1.0e-200:
-            raise GMixRangeError("det <= 0: %s" % self[i].det)
-
-@jit(argtypes=[ _gauss2d[:] ])
-def _get_wmomsum(self):
-    ngauss=self.size
-    wmom=0.0
-    for i in xrange(ngauss):
-        wmom += self[i].p*(self[i].irr + self[i].icc)
-    return wmom
-
-
-#@jit(argtypes=[float64[:,:],_gauss2d[:],_sums[:],_jacobian[:],float64,int64,float64,int64,float64[:]],
-#     locals=dict(psum=float64, skysum=float64))
-#def _run_em(image, gmix, sums, j, sky, maxiter, tol, i0, expvals):
-@jit(argtypes=[float64[:,:],_gauss2d[:],_sums[:],_jacobian[:],float64,int64,float64],
-     locals=dict(psum=float64, skysum=float64))
-def _run_em(image, gmix, sums, j, sky, maxiter, tol):
-    """
-    this is a mess without inlining
-    """
-    nrows,ncols=image.shape
-    counts=numpy.sum(image)
-
-    ngauss=gmix.size
-    scale=j[0].sdet
-    npoints=image.size
-    area = npoints*scale*scale
-
-    nsky = sky/counts
-    psky = sky/(counts/area)
-
-    wmomlast=-9999.0
-    fdiff=9999.0
-
-    iiter=0
-    while iiter < maxiter:
-        #_gauss2d_verify(gmix)
-
-        psum=0.0
-        skysum=0.0
-        _clear_sums(sums)
-
-
-        for row in xrange(nrows):
-            u=j[0].dudrow*(row - j[0].row0) + j[0].dudcol*(0 - j[0].col0)
-            v=j[0].dvdrow*(row - j[0].row0) + j[0].dvdcol*(0 - j[0].col0)
-            for col in xrange(ncols):
-                
-                imnorm = image[row,col]/counts
-
-                gtot=0.0
-                for i in xrange(ngauss):
-                    udiff = u-gmix[i].row
-                    vdiff = v-gmix[i].col
-
-                    u2 = udiff*udiff
-                    v2 = vdiff*vdiff
-                    uv = udiff*vdiff
-
-                    chi2=gmix[i].dcc*u2 + gmix[i].drr*v2 - 2.0*gmix[i].drc*uv
-                    sums[i].gi = gmix[i].norm*gmix[i].p*numpy.exp( -0.5*chi2 )
-                    # note a bigger range is needed than for rendering since we
-                    # need to sample the space
-                    """
-                    if chi2 < 50.0 and chi2 >= 0.0:
-                        pnorm = gmix[i].pnorm
-                        x = -0.5*chi2
-
-                        # 3rd order approximation to exp
-                        ival = int64(x-0.5)
-                        f = x - ival
-                        index = ival-i0
-                        
-                        expval = expvals[index]
-                        fexp = (6+f*(6+f*(3+f)))*0.16666666
-                        expval *= fexp
-
-                        sums[i].gi = pnorm*expval
-                    """
-                    gtot += sums[i].gi
-
-                    sums[i].trowsum = u*sums[i].gi
-                    sums[i].tcolsum = v*sums[i].gi
-                    sums[i].tu2sum  = u2*sums[i].gi
-                    sums[i].tuvsum  = uv*sums[i].gi
-                    sums[i].tv2sum  = v2*sums[i].gi
-
-                gtot += nsky
-                igrat = imnorm/gtot
-                for i in xrange(ngauss):
-                    # wtau is gi[pix]/gtot[pix]*imnorm[pix]
-                    # which is Dave's tau*imnorm = wtau
-                    wtau = sums[i].gi*igrat
-
-                    psum += wtau
-                    sums[i].pnew += wtau
-
-                    # row*gi/gtot*imnorm
-                    sums[i].rowsum += sums[i].trowsum*igrat
-                    sums[i].colsum += sums[i].tcolsum*igrat
-                    sums[i].u2sum  += sums[i].tu2sum*igrat
-                    sums[i].uvsum  += sums[i].tuvsum*igrat
-                    sums[i].v2sum  += sums[i].tv2sum*igrat
-
-                skysum += nsky*imnorm/gtot
-                u += j[0].dudcol
-                v += j[0].dvdcol
-
-        _set_gmix_from_sums(gmix, sums)
-
-        psky = skysum
-        nsky = psky/area
-
-        wmom = _get_wmomsum(gmix)
-        wmom /= psum
-        fdiff = numpy.abs((wmom-wmomlast)/wmom)
-
-        if fdiff < tol:
-            break
-
-        wmomlast = wmom
-        iiter += 1
-
-    return iiter, fdiff
-'''
-
-def test_1gauss(counts=1.0, noise=0.0, T=4.0, maxiter=4000, g1=0.0, g2=0.0, show=False, pad=False, verbose=True):
+def test_1gauss(counts=1.0,
+                noise=0.0,
+                T=4.0,
+                maxiter=4000,
+                g1=0.0,
+                g2=0.0,
+                show=False,
+                pad=False,
+                verbose=True,
+                seed=31415):
     import time
+
+    rng=numpy.random.RandomState(seed)
 
     sigma=numpy.sqrt(T/2)
     dim=int(2*5*sigma)
     dims=[dim]*2
     cen=[dims[0]/2., dims[1]/2.]
 
+    jacob=UnitJacobian(row=cen[0], col=cen[1])
 
-    pars = [cen[0],cen[1], g1, g2, T, counts]
+    pars = [0.0, 0.0, g1, g2, T, counts]
     gm=gmix.GMixModel(pars, "gauss")
 
-    im0=gm.make_image(dims)
+    im0=gm.make_image(dims, jacobian=jacob)
 
-    im = im0 + noise*numpy.random.randn(im0.size).reshape(dims)
+    im = im0 + rng.normal(size=im0.shape, scale=noise)
 
     imsky,sky = prep_image(im) 
 
-    obs=Observation(imsky)
+    obs=Observation(imsky, jacobian=jacob)
 
-    gm_guess=gm.copy()
-    gm_guess._data['p']=1.0
-    gm_guess._data['row'] += 1*srandu()
-    gm_guess._data['col'] += 1*srandu()
-    gm_guess._data['irr'] += 0.5*srandu()
-    gm_guess._data['irc'] += 0.5*srandu()
-    gm_guess._data['icc'] += 0.5*srandu()
+    guess_pars = [
+        srandu(rng=rng),
+        srandu(rng=rng),
+        0.05*srandu(rng=rng),
+        0.05*srandu(rng=rng),
+        T*(1.0 + 0.1*srandu(rng=rng)),
+        counts*(1.0 + 0.1*srandu(rng=rng)),
+    ]
+    gm_guess= gmix.GMixModel(guess_pars, "gauss")
 
+    print("gm:",gm)
+    print("gm_guess:",gm_guess)
     
-    tm0=time.time()
-    em=GMixEM(obs)
-    em.run_em(gm_guess, sky, maxiter=maxiter)
-    tm=time.time()-tm0
-
+    # twice, first time numba compiles the code
+    for i in xrange(2):
+        tm0=time.time()
+        em=GMixEM(obs)
+        em.go(gm_guess, sky, maxiter=maxiter)
+        tm=time.time()-tm0
 
     gmfit=em.get_gmix()
     res=em.get_result()
@@ -612,8 +410,12 @@ def test_1gauss_jacob(counts_sky=100.0, noise_sky=0.0, maxiter=100, show=False):
 def test_2gauss(counts=100.0, noise=0.0, maxiter=100,show=False):
     import time
     dims=[25,25]
-    cen1=[ 0.35*dims[0], 0.35*dims[1] ]
-    cen2=[ 0.6*dims[0], 0.5*dims[1] ]
+
+    cen=(numpy.array(dims)-1.0)/2.0
+    jacob=UnitJacobian(row=cen[0], col=cen[1])
+
+    cen1=[ -3.25, -3.25]
+    cen2=[ 3.0, 0.5]
 
     e1_1=0.1
     e2_1=0.05
@@ -631,7 +433,6 @@ def test_2gauss(counts=100.0, noise=0.0, maxiter=100,show=False):
     irc_2 = T_2/2.*e2_2
     icc_2 = T_2/2.*(1+e1_2)
 
-
     pars = [counts_1, cen1[0],cen1[1], irr_1, irc_1, icc_1,
             counts_2, cen2[0],cen2[1], irr_2, irc_2, icc_2]
 
@@ -639,12 +440,12 @@ def test_2gauss(counts=100.0, noise=0.0, maxiter=100,show=False):
     print('gmix true:')
     print(gm)
 
-    im0=gm.make_image(dims)
+    im0=gm.make_image(dims, jacobian=jacob)
     im = im0 + noise*numpy.random.randn(im0.size).reshape(dims)
 
     imsky,sky = prep_image(im) 
 
-    obs=Observation(imsky)
+    obs=Observation(imsky, jacobian=jacob)
 
     gm_guess=gm.copy()
     gm_guess._data['p']=[0.5,0.5]
@@ -657,10 +458,11 @@ def test_2gauss(counts=100.0, noise=0.0, maxiter=100,show=False):
     print('guess:')
     print(gm_guess)
 
-    tm0=time.time()
-    em=GMixEM(obs)
-    em.go(gm_guess, sky, maxiter=maxiter)
-    tm=time.time()-tm0
+    for i in xrange(2):
+        tm0=time.time()
+        em=GMixEM(obs)
+        em.go(gm_guess, sky, maxiter=maxiter)
+        tm=time.time()-tm0
     print('time:',tm,'seconds')
 
     gmfit=em.get_gmix()

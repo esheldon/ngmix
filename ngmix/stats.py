@@ -1,14 +1,6 @@
-from __future__ import print_function
+from __future__ import print_function, absolute_import, division
 import numpy
 from numpy import zeros
-
-try:
-    xrange = xrange
-    # We have Python 2
-except:
-    xrange = range
-    # We have Python 3
-
 
 def calc_mcmc_stats(data, sigma_clip=False, weights=None, **kw):
     """

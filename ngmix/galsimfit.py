@@ -2,11 +2,7 @@
 fitting using galsim to create the models
 """
 
-from __future__ import print_function
-try:
-    xrange
-except:
-    xrange=range
+from __future__ import print_function, absolute_import, division
 
 import numpy
 
@@ -181,10 +177,7 @@ class GalsimSimple(LMSimple):
 
             self._fill_models(pars)
 
-            #print_pars(fdiff[0:5],front="befor fill:")
             start=self._fill_priors(pars, fdiff)
-            #print_pars(pars,front="      pars:")
-            #print_pars(fdiff[0:start],front="after fill:")
 
             for band in xrange(self.nband):
 
@@ -228,39 +221,26 @@ class GalsimSimple(LMSimple):
         Fill the list of lists of gmix objects for the given parameters
         """
         import galsim
-        for band,kobs_list in enumerate(self.mb_kobs):
-            # pars for this band, in linear space
-            band_pars=self.get_band_pars(pars, band)
+        try:
+            for band,kobs_list in enumerate(self.mb_kobs):
+                # pars for this band, in linear space
+                band_pars=self.get_band_pars(pars, band)
 
-            for i,kobs in enumerate(kobs_list):
+                for i,kobs in enumerate(kobs_list):
 
-                gal = self.make_model(band_pars)
+                    gal = self.make_model(band_pars)
 
-                meta=kobs.meta
+                    meta=kobs.meta
 
-                kmodel=meta['kmodel']
+                    kmodel=meta['kmodel']
 
-                gal._drawKImage(kmodel)
+                    gal._drawKImage(kmodel)
 
-                kmodel *= kobs.psf.kimage
+                    if kobs.has_psf():
+                        kmodel *= kobs.psf.kimage
+        except RuntimeError as err:
+            raise GMixRangeError(str(err))
 
-    """
-                if False:
-                    #print("kmodel before",kmodel)
-
-                    dk = kmodel.scale
-                    dx = numpy.pi/( max(kmodel.array.shape) // 2 * dk )
-
-                    real_prof = galsim.PixelScale(dx).toImage(gal)
-                    kmodel = real_prof._setup_image(
-                        kmodel, None, None, None, False, numpy.complex128,
-                        odd=True,wmult=1.0,
-                    )
-                    kmodel.setCenter(0,0)
-                    #print("kmodel after",kmodel)
-                    gal.SBProfile.drawK(kmodel.image.view(), dk)
-                else:
-    """
     def make_model(self, pars):
         """
         make the galsim model
@@ -487,7 +467,8 @@ class GalsimSimple(LMSimple):
 
                 gal.drawKImage(image=kmodel)
 
-                kmodel *= kobs.psf.kimage
+                if kobs.has_psf():
+                    kmodel *= kobs.psf.kimage
                 kmodel.real.array[:,:] *= kmodel.real.array[:,:]
                 kmodel.imag.array[:,:] *= kmodel.imag.array[:,:]
 
@@ -566,30 +547,108 @@ class SpergelFitter(GalsimSimple):
         """
         self.npars=6 + self.nband
 
-class GalsimTemplateFluxFitter(TemplateFluxFitter):
-    def __init__(self, obs, model, psf_models, **keys):
-        """
-        TODO:
-            
-            - center
-            - flux is always about 1
+class MoffatFitter(GalsimSimple):
+    """
+    Fit the moffat profile with free beta to the input observations
+    """
+    def __init__(self, obs, **keys):
+        super(MoffatFitter,self).__init__(obs, 'moffat', **keys)
 
+    def _set_model_class(self):
+        import galsim
+        
+        self._model_class=galsim.Moffat
+
+    def make_round_model(self, pars):
+        """
+        make the galsim Moffat model
+        """
+        import galsim
+
+        r50   = pars[4]
+        beta  = pars[5]
+        flux  = pars[6]
+
+        # generic RuntimeError thrown
+        try:
+            gal = galsim.Moffat(
+                beta,
+                half_light_radius=r50,
+                flux=flux,
+            )
+        except RuntimeError as err:
+            raise GMixRangeError(str(err))
+
+        return gal
+
+    def get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+
+        input pars are [c1, c2, e1, e2, r50, beta, flux1, flux2, ....]
+        """
+
+        pars=self._band_pars
+
+        pars[0:6] = pars_in[0:6]
+        pars[6] = pars_in[6+band]
+        return pars
+
+    def _set_prior(self, **keys):
+        self.prior = keys.get('prior',None)
+        if self.prior is None:
+            self.n_prior_pars=0
+        else:
+            #                 c1  c2  e1e2  r50  beta   fluxes
+            self.n_prior_pars=1 + 1 + 1   + 1  + 1    + self.nband
+
+
+    def _set_npars(self):
+        """
+        nband should be set in set_lists, called before this
+        """
+        self.npars=6 + self.nband
+
+
+class GalsimTemplateFluxFitter(TemplateFluxFitter):
+    def __init__(self, obs, model=None, psf_models=None, **keys):
+        """
         parameters
         -----------
         obs: Observation or ObsList
             See ngmix.observation.Observation.
-        model: galsim model
-            A Galsim model, e.g. Exponential
-        psf_models: galsim model or list thereof
-            the psf models should have the same shape as the obs
+        model: galsim model, optional
+            A Galsim model, e.g. Exponential.  If not sent,
+            a psf flux is measured
+        psf_models: galsim model or list thereof, optional
+            If not sent, the psf images from the observations
+            are used.
+
+        interp: string
+            type of interpolation when using the PSF image
+            rather than psf models.  Default lanzcos15
+        simulate_err: bool, optional
+            If set, noise is added according to the weight
+            map. Useful when trying to calculate the noise
+            on a model rather than from real data.
+        rng: numpy random number generator, optional
+            For use when simulate_err=True 
+
+        TODO:
+            - try more complex wcs
         """
 
         self.model=model
         self.psf_models=psf_models
 
+        if self.model is not None:
+            self.model = self.model.withFlux(1.0)
 
         self.keys=keys
         self.normalize_psf = keys.get('normalize_psf',True)
+        assert self.normalize_psf==True,"currently must have normalize_psf=True"
+
+        self.interp=keys.get('interp',observation.DEFAULT_XINTERP)
 
         self.simulate_err=keys.get('simulate_err',False)
         if self.simulate_err:
@@ -598,139 +657,134 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
                 rng = numpy.random.RandomState()
             self.rng=rng
 
-        self.set_obs(obs)
+        self._set_obs(obs)
+        self._set_psf_models()
 
         self.model_name='template'
         self.npars=1
 
         self._set_totpix()
 
+        self._set_template_images()
 
-    def go(self):
+    def _get_model(self, iobs, flux=None):
         """
-        calculate the flux using zero-lag cross-correlation
+        get the model image
         """
 
-        flags=0
-
-        xcorr_sum=0.0
-        msq_sum=0.0
-
-        chi2=0.0
-
-        nobs=len(self.obs)
-
-        flux=PDEF
-        flux_err=CDEF
-
-        for ipass in [1,2]:
-            for iobs in xrange(nobs):
-                obs=self.obs[iobs]
-
-                model = self.image_list[iobs]
-
-                im=obs.image
-                wt=obs.weight
-
-                if ipass==1:
-                    xcorr_sum += (model*im*wt).sum()
-                    msq_sum += (model*model*wt).sum()
-                else:
-                    model *= (flux/model.sum())
-
-                    if self.simulate_err:
-                        err = numpy.zeros(model.shape)
-                        w=numpy.where(wt > 0)
-                        err[w] = numpy.sqrt(1.0/wt[w])
-                        noisy_model = model.copy()
-                        noisy_model += self.rng.normal(size=model.shape)*err
-                        chi2 +=( (model-noisy_model)**2 *wt ).sum()
-                    else:
-                        chi2 +=( (model-im)**2 *wt ).sum()
-
-            if ipass==1:
-                if msq_sum==0:
-                    break
-                flux = xcorr_sum/msq_sum
-
-        # chi^2 per dof and error checking
-        dof=self.get_dof()
-        chi2per=9999.0
-        if dof > 0:
-            chi2per=chi2/dof
+        if flux is not None:
+            model = self.template_list[iobs].copy()
+            model *= flux/model.sum()
         else:
-            flags |= ZERO_DOF
+            model = self.template_list[iobs]
 
-        # final flux calculation with error checking
-        if msq_sum==0 or self.totpix==1:
-            flags |= DIV_ZERO
+        return model
+
+    def _set_psf_models(self):
+        if self.psf_models is not None:
+            if len(self.psf_models) != len(self.obs):
+                raise ValueError("psf models must be same "
+                                 "size as observations ")
+
+            self.psf_models = [p.withFlux(1.0) for p in self.psf_models]
         else:
+            self._set_psf_models_from_images()
 
-            arg=chi2/msq_sum/(self.totpix-1)
-            if arg >= 0.0:
-                flux_err = numpy.sqrt(arg)
-            else:
-                flags |= BAD_VAR
-
-        self._result={'model':self.model_name,
-                      'flags':flags,
-                      'chi2per':chi2per,
-                      'dof':dof,
-                      'flux':flux,
-                      'flux_err':flux_err}
-
-    def set_obs(self, obs_in):
+    def _set_psf_models_from_images(self):
         """
-        Input should be an Observation, ObsList
+        we use the psfs stored in the observations as
+        the psf model
         """
         import galsim
 
+        models=[]
+        for obs in self.obs:
+
+            im = obs.psf.image.copy()
+            im *= 1.0/im.sum()
+
+            psf_gsimage = galsim.Image(
+                im,
+                wcs=obs.psf.jacobian.get_galsim_wcs(),
+            )
+            psf_ii = galsim.InterpolatedImage(
+                psf_gsimage,
+                x_interpolant=self.interp,
+            )
+
+            models.append(psf_ii)
+
+        self.psf_models = models
+
+    def _set_template_images(self):
+        """
+        set the images used for the templates
+        """
+        import galsim
+
+        image_list=[]
+
+        for i,obs in enumerate(self.obs):
+
+            psf_model=self.psf_models[i]
+
+            if self.model is not None:
+                obj = galsim.Convolve(self.model, psf_model)
+            else:
+                obj = psf_model
+
+
+            nrow,ncol=obs.image.shape
+
+            gim = self._do_draw(
+                obj,
+                ncol,
+                nrow,
+                obs.jacobian,
+            )
+
+            image_list.append( gim.array )
+
+        self.template_list=image_list
+
+    def _do_draw(self, obj, ncol, nrow, jac):
+        wcs = jac.get_galsim_wcs()
+
+        # note reverse for galsim
+        canonical_center = (numpy.array( (ncol,nrow) )-1.0)/2.0
+        jrow, jcol = jac.get_cen()
+        offset = (jcol, jrow) - canonical_center
+        try:
+            gim = obj.drawImage(
+                nx=ncol,
+                ny=nrow,
+                wcs=wcs,
+                offset=offset,
+                method='no_pixel', # pixel is assumed to be in psf
+            )
+        except RuntimeError as err:
+            # argh another generic exception
+            raise GMixRangeError(str(err))
+
+        return gim
+
+    def _set_obs(self, obs_in):
+        """
+        Input should be an Observation, ObsList
+        """
 
         if isinstance(obs_in,Observation):
             obs_list=ObsList()
             obs_list.append(obs_in)
             
-            self.psf_models = [self.psf_models]
+            if self.psf_models is not None:
+                if not isinstance(self.psf_models,(list,tuple)):
+                    self.psf_models = [self.psf_models]
 
         elif isinstance(obs_in,ObsList):
             obs_list=obs_in
 
-            if len(self.psf_models) != obs_list:
-                raise ValueError("psf models must be same size as obs list")
         else:
             raise ValueError("obs should be Observation or ObsList")
 
-        image_list=[]
-
-        model = self.model.withFlux(1.0)
-
-        for i,obs in enumerate(obs_list):
-
-            psf_model=self.psf_models[i]
-
-            if self.normalize_psf:
-                psf_model = psf_model.withFlux(1.0)
-
-            obj = galsim.Convolve(model, psf_model)
-
-            wcs = obs.jacobian.get_galsim_wcs()
-
-            nrow,ncol=obs.image.shape
-
-            try:
-                gim = obj.drawImage(
-                    nx=ncol,
-                    ny=nrow,
-                    wcs=wcs,
-                    method='no_pixel', # pixel is assumed to be in psf
-                )
-            except RuntimeError as err:
-                # argh another generic exception
-                raise GMixRangeError(str(err))
-
-            image_list.append( gim.array )
-
-        self.obs = obs_list
-        self.image_list=image_list
-
-
+        self.obs=obs_list

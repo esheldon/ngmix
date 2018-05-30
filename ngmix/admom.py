@@ -1,11 +1,10 @@
-from __future__ import print_function
+from __future__ import print_function, absolute_import, division
 import numpy
 from numpy import array, diag
 
 from .gmix import GMix, GMixModel
 from .shape import e1e2_to_g1g2
 from .observation import Observation, ObsList, MultiBandObsList
-from . import _gmix
 from .gexceptions import GMixRangeError
 
 def run_admom(obs, guess, **kw):
@@ -40,13 +39,53 @@ class Admom(object):
     def __init__(self, obs, maxiter=200, shiftmax=5.0,
                  etol=1.0e-5, Ttol=0.001,
                  rng=None,
-                 deconv=False,
                  **unused_keys):
 
-        self._set_obs(obs, deconv)
+        if isinstance(obs, ObsList):
+            if len(obs) != 1:
+                raise ValueError("at most one epoch can be fit")
+            obs = obs[0]
+        elif isinstance(obs, MultiBandObsList):
+            if len(obs) > 1: 
+                raise ValueError("at most one band can be fit")
+            else:
+                obs = obs[0]
+                if len(obs) != 1:
+                    raise ValueError("at most one epoch can be fit")
+                obs = obs[0]
+
+        self._obs=obs
         self._set_conf(maxiter, shiftmax, etol, Ttol)
 
         self.rng=rng
+
+    def go(self, guess):
+        """
+        run the adpative moments
+
+        parameters
+        ----------
+        guess_gmix: ngmix.GMix or a float
+            A guess for the fitter.  Can be a full gaussian
+            mixture or a single value for T, in which case
+            the rest of the parameters are random numbers
+            about the jacobian center and zero ellipticity
+        """
+        from .admom_nb import admom
+
+        guess_gmix=self._get_guess(guess)
+
+        ares=self._get_am_result()
+
+        wt_gmix = guess_gmix._data
+        admom(
+            self.conf,
+            wt_gmix,
+            self._obs.pixels,
+            ares,
+        )
+
+        self.result = copy_result(ares)
 
     def get_result(self):
         """
@@ -75,130 +114,14 @@ class Admom(object):
 
         return GMixModel(pars, "gauss")
 
-    def go(self, guess):
-        """
-        run the adpative moments
 
-        parameters
-        ----------
-        guess_gmix: ngmix.GMix or a float
-            A guess for the fitter.  Can be a full gaussian
-            mixture or a single value for T, in which case
-            the rest of the parameters are random numbers
-            about the jacobian center and zero ellipticity
-        """
-
+    def _get_guess(self, guess):
         if isinstance(guess,GMix):
             guess_gmix=guess
         else:
             Tguess = guess
             guess_gmix = self._generate_guess(Tguess)
-
-        res=self._go(guess_gmix)
-
-
-    def _go(self, guess_gmix):
-
-        ares=self._get_am_result()
-
-        try:
-            if self._deconv:
-                _gmix.admom_multi_deconv(
-                    self.conf,
-                    self._imlist,
-                    self._wtlist,
-                    self._psflist,
-                    self._jlist,
-                    guess_gmix._data,
-                    ares,
-                )
-            else:
-                if len(self._imlist) > 1:
-                    _gmix.admom_multi(
-                        self.conf,
-                        self._imlist,
-                        self._wtlist,
-                        self._jlist,
-                        guess_gmix._data,
-                        ares,
-                    )
-                else:
-                    _gmix.admom(
-                        self.conf,
-                        self._imlist[0],
-                        self._wtlist[0],
-                        self._jlist[0],
-                        guess_gmix._data,
-                        ares,
-                    )
-
-        except GMixRangeError as err:
-            print("caught admom exception: '%s'" % str(err))
-            pass
-
-        self.result = copy_result(ares)
-
-    def _set_obs(self, obs, deconv):
-
-        assert deconv==False,"deconv doesn't work yet"
-        self._deconv=deconv
-
-        imlist=[]
-        wtlist=[]
-        jlist=[]
-
-        if deconv:
-            self._psflist=[]
-
-        if isinstance(obs,MultiBandObsList):
-            mbobs=obs
-            for obs_list in mbobs:
-                for obs in obs_list:
-                    imlist.append(obs.image)
-                    wtlist.append(obs.weight)
-                    jlist.append(obs.jacobian._data)
-                    if deconv and obs.has_psf_gmix():
-                        self._psflist.append(obs.psf.gmix._data)
-
-        elif isinstance(obs, ObsList):
-            obslist=obs
-            for obs in obslist:
-                imlist.append(obs.image)
-                wtlist.append(obs.weight)
-                jlist.append(obs.jacobian._data)
-                if deconv and obs.has_psf_gmix():
-                    self._psflist.append(obs.psf.gmix._data)
-
-        elif isinstance(obs, Observation):
-            imlist.append(obs.image)
-            wtlist.append(obs.weight)
-            jlist.append(obs.jacobian._data)
-            if deconv and obs.has_psf_gmix():
-                self._psflist.append(obs.psf.gmix._data)
-        else:
-            raise ValueError("obs is type '%s' but should be "
-                             "Observation, ObsList, or MultiBandObsList")
-
-        if deconv:
-            np=len(self._psflist)
-            ni=len(imlist)
-
-            if np != ni:
-                raise ValueError("only some of obs had psf set: %d/%d" % (np,ni))
-
-        if len(imlist) > 1000:
-            raise ValueError("currently limited to 1000 "
-                             "images, got %d" % len(imlist))
-
-        self._imlist=imlist
-        self._wtlist=wtlist
-        self._jlist=jlist
-
-        for wt in wtlist:
-            wbad=numpy.where(wt <= 0.0)
-            if wbad[0].size > 0:
-                raise ValueError("admom found wt <= 0.0")
-
+        return guess_gmix
 
     def _set_conf(self, maxiter, shiftmax, etol, Ttol):
         dt=numpy.dtype(_admom_conf_dtype, align=True)
@@ -226,7 +149,7 @@ class Admom(object):
 
         rng=self._get_rng()
 
-        scale=self._jlist[0]['sdet'][0]
+        scale=self._obs.jacobian.get_scale()
         pars=numpy.zeros(6)
         pars[0:0+2] = rng.uniform(low=-0.5*scale, high=0.5*scale, size=2)
         pars[2:2+2] = rng.uniform(low=-0.3, high=0.3, size=2)
@@ -389,9 +312,13 @@ _admom_result_dtype=[
     ('wsum','f8'),
 
     ('sums','f8',6),
-    ('sums_cov','f8', 36),
+    #('sums_cov','f8', 36),
+    ('sums_cov','f8', (6,6)),
 
     ('pars','f8',6),
+
+    # temporary
+    ('F','f8',6),
 ]
 
 _admom_flagmap={

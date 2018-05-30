@@ -1,18 +1,8 @@
 """
 Convention is that all priors should have peak ln(prob)==0. This
 helps use in priors for LM fitting
-
-I haven't forced the max prob to be 1.0 yet, but should
-
 """
-from __future__ import print_function
-
-try:
-    xrange = xrange
-    # We have Python 2
-except:
-    xrange = range
-    # We have Python 3
+from __future__ import print_function, absolute_import, division
 
 from sys import stderr 
 import math
@@ -24,8 +14,6 @@ from numpy.random import randn
 
 from . import gmix
 from .gexceptions import GMixRangeError
-
-from . import _gmix
 
 from . import shape
 
@@ -1389,6 +1377,62 @@ class GPriorBase(PriorBase):
         plt.add(biggles.Curve(xvals, p, color='red'))
         plt.show()
 
+class GPriorGauss(GPriorBase):
+    def __init__(self, *args, **kw):
+        super(GPriorGauss,self).__init__(*args, **kw)
+        self.sigma = float(self.pars)
+
+    def sample1d(self, nrand, **kw):
+        raise NotImplementedError("no 1d for gauss")
+
+    def sample2d(self, nrand=None, **kw):
+        """
+        Get random |g| from the 1d distribution
+
+        Set self.gmax appropriately
+
+        parameters
+        ----------
+        nrand: int
+            Number to generate
+        """
+
+        if nrand is None:
+            nrand=1
+            is_scalar=True
+        else:
+            is_scalar=False
+
+        rng=self.rng
+
+        gmax=self.gmax - 1.0e-4
+
+        g1 = numpy.zeros(nrand)
+        g2 = numpy.zeros(nrand)
+
+        ngood=0
+        nleft=nrand
+        while ngood < nrand:
+
+            # generate total g in [0,gmax)
+            g1rand = rng.normal(size=nleft, scale=self.sigma)
+            g2rand = rng.normal(size=nleft, scale=self.sigma)
+            grand = numpy.sqrt(g1rand**2 + g2rand**2)
+
+            w,=numpy.where(grand < gmax)
+            if w.size > 0:
+                g1[ngood:ngood+w.size] = g1rand[w]
+                g2[ngood:ngood+w.size] = g2rand[w]
+                ngood += w.size
+                nleft -= w.size
+   
+        if is_scalar:
+            g1=g1[0]
+            g2=g2[0]
+
+        return g1, g2
+
+
 
 class GPriorBA(GPriorBase):
     """
@@ -1433,6 +1477,51 @@ class GPriorBA(GPriorBase):
         self.sig4 = self.sigma**4
         self.sig2inv = 1./self.sig2
         self.sig4inv = 1./self.sig4
+
+    def get_fdiff(self, g1, g2):
+        """
+        for the LM fitter
+        """
+        if isinstance(g1, numpy.ndarray):
+            return self.get_fdiff_array(g1, g2)
+        else:
+            return self.get_fdiff_scalar(g1, g2)
+
+
+    def get_fdiff_scalar(self, g1, g2):
+        """
+        For use with LM fitter, which requires
+        (model-data)/width
+        so we need to fake it
+
+        In this case the fake fdiff works OK because the prior
+        is on |g|, so the sign doesn't matter
+        """
+
+        lnp = self.get_lnprob_scalar2d(g1, g2)
+        chi2 = -2*lnp
+        if chi2 < 0.0:
+            chi2=0.0
+        fdiffish = sqrt(chi2)
+        return fdiffish
+
+    def get_fdiff_array(self, g1, g2):
+        """
+        For use with LM fitter, which requires
+        (model-data)/width
+        so we need to fake it
+
+        In this case the fake fdiff works OK because the prior
+        is on |g|, so the sign doesn't matter
+        """
+
+        lnp = self.get_lnprob_scalar2d(g1, g2)
+        chi2 = -2*lnp
+        chi2.clip(min=0.0, max=None, out=chi2)
+        fdiffish = sqrt(chi2)
+        return fdiffish
+
+
 
     def get_lnprob_scalar2d(self, g1, g2):
         """
@@ -1914,7 +2003,7 @@ class TwoSidedErf(PriorBase):
         """
         get the probability of the point
         """
-        from ._gmix import erf
+        from math import erf
 
         p1 = 0.5*erf((self.maxval-val)/self.width_at_max)
         p2 = 0.5*erf((val-self.minval)/self.width_at_min)
@@ -1940,24 +2029,13 @@ class TwoSidedErf(PriorBase):
         get the probability of the point
         """
 
-        from ._gmix import erf_array
-
         vals=array(vals, ndmin=1, dtype='f8', copy=False)
+        pvals = zeros(vals.size)
 
-        arg1=zeros(vals.size)
-        arg2=zeros(vals.size)
-        p1=zeros(vals.size)
-        p2=zeros(vals.size)
+        for i in xrange(vals.size):
+            pvals[i]=self.get_prob_scalar(vals[i]) 
 
-        arg1 = (self.maxval-vals)/self.width_at_max
-        arg2 = (vals-self.minval)/self.width_at_min
-        erf_array(arg1, p1)
-        erf_array(arg2, p2)
-
-        p1 *= 0.5
-        p2 *= 0.5
-
-        return p1+p2
+        return pvals
 
     def get_lnprob_array(self, vals):
         """
@@ -1971,6 +2049,46 @@ class TwoSidedErf(PriorBase):
         if w.size > 0:
             lnp[w] = numpy.log( p[w] )
         return lnp
+
+    def get_fdiff(self, x):
+        """
+        for the LM fitter
+        """
+        if isinstance(x, numpy.ndarray):
+            return self.get_fdiff_array(x)
+        else:
+            return self.get_fdiff_scalar(x)
+
+    def get_fdiff_array(self, vals):
+        """
+        for the LM fitter
+        """
+
+        vals=array(vals, ndmin=1, dtype='f8', copy=False)
+        fdiff = zeros(vals.size)
+
+        for i in xrange(vals.size):
+            fdiff[i]=self.get_fdiff_scalar(vals[i]) 
+
+        return fdiff
+
+
+    def get_fdiff_scalar(self, val):
+        """
+        get the probability of the point
+        """
+        from math import erf
+
+        p1 = erf((self.maxval-val)/self.width_at_max)
+        p1 -= 1.0
+        p1 *= -BIGVAL/2
+
+        p2 = erf((val-self.minval)/self.width_at_min)
+        p2 -= 1
+        p2 *= -1
+        p2 *= -BIGVAL/2
+        
+        return p1+p2
 
     def sample(self, nrand=None):
         """
@@ -2668,7 +2786,8 @@ class GPriorMErf(GPriorBase):
 
         this does not include the 2*pi*g
         """
-        from ._gmix import erf
+        #from ._gmix import erf
+        from math import erf
 
         #numer1 = 2*pi*g*self.A*(1-exp( (g-1.0)/self.a ))
         numer1 = self.A*(1-exp( (g-1.0)/self.a ))
@@ -2689,14 +2808,17 @@ class GPriorMErf(GPriorBase):
 
         this does not include the 2*pi*g
         """
-        from ._gmix import erf_array
+        #from ._gmix import erf_array
+        from math import erf
 
         #numer1 = 2*pi*g*self.A*(1-exp( (g-1.0)/self.a ))
         numer1 = self.A*(1-exp( (g-1.0)/self.a ))
 
         gerf0=zeros(g.size)
         arg = (self.gmax_func-g)/self.gsigma
-        erf_array(arg, gerf0)
+        for i in xrange(g.size):
+            gerf0[i] = erf(arg[i])
+        #erf_array(arg, gerf0)
 
         gerf=0.5*(1.0+gerf0)
 
@@ -2866,7 +2988,7 @@ class FlatEtaPrior(PriorBase):
     '''
 
 
-class Normal(_gmix.Normal):
+class Normal(object):
     """
     This class provides an interface consistent with LogNormal
 
@@ -2875,21 +2997,59 @@ class Normal(_gmix.Normal):
     def __init__(self, cen, sigma, rng=None):
         self.cen=cen
         self.sigma=sigma
+        self.sinv=1.0/sigma
+        self.s2inv=1.0/sigma**2
         self.ndim=1
 
         self.rng=make_rng(rng=rng)
 
-        super(Normal,self).__init__(cen, sigma)
+    def get_lnprob(self, x):
+        """
+        -0.5 * ( (x-cen)/sigma )**2
+        """
+        diff = self.cen-x
+        return -0.5*diff*diff*self.s2inv
+
+    get_lnprob_scalar = get_lnprob
+    get_lnprob_array = get_lnprob
+
+    def get_prob(self, x):
+        """
+        -0.5 * ( (x-cen)/sigma )**2
+        """
+        diff = self.cen-x
+        lnp = -0.5*diff*diff*self.s2inv
+        return numpy.exp(lnp)
+
+
+    get_prob_array = get_prob
+
+    def get_prob_scalar(self, x):
+        """
+        -0.5 * ( (x-cen)/sigma )**2
+        """
+        from math import exp
+        diff = self.cen-x
+        lnp = -0.5*diff*diff*self.s2inv
+        return exp(lnp)
+
+    def get_fdiff(self, x):
+        """
+        For use with LM fitter
+        (model-data)/width for both coordinates
+        """
+        return (x-self.cen)*self.sinv
 
     def sample(self, size=None):
         """
         Get samples.  Send no args to get a scalar.
         """
-        return self.rng.normal(loc=self.cen,
-                               scale=self.sigma,
-                               size=size)
-        #rand=self.cen + self.sigma*self.rng.randn(*args)
-        return rand
+        return self.rng.normal(
+            loc=self.cen,
+            scale=self.sigma,
+            size=size,
+        )
+
 
 class Bounded1D(PriorBase):
     """
@@ -3110,6 +3270,41 @@ class LogNormal(PriorBase):
 
         return samples
 
+    def _calc_fdiff(self, pars):
+        ln = LogNormal(pars[0], pars[1])
+        model = ln.get_prob_array(self._fitx)*pars[2]
+
+        fdiff = model-self._fity
+        return fdiff
+
+    def fit(self, x, y):
+        """
+        fit to the input x and y
+        """
+        from .fitting import run_leastsq
+        rng=self.rng
+
+        self._fitx=x
+        self._fity=y
+
+        for i in xrange(4):
+            f1,f2,f3 = 1.0 + rng.uniform(low=0.1,high=0.1,size=3)
+            guess=numpy.array([
+                x.mean()*f1,
+                x.std()*f2,
+                y.mean()*f3,
+            ])
+
+            res=run_leastsq(
+                self._calc_fdiff,
+                guess,
+                0,
+            )
+            if res['flags']==0:
+                break
+
+        return res
+
 
 class MultivariateLogNormal(object):
     """
@@ -3242,20 +3437,6 @@ class MultivariateLogNormal(object):
 
         # will raise numpy.linalg.linalg.LinAlgError
         self.lcov_inv = numpy.linalg.inv(lcov)
-
-        '''
-        import images
-        import esutil as eu
-        print("orig")
-        images.imprint(cov)
-        print("lcov")
-        images.imprint(lcov)
-        print("lcorr")
-        lcorr=eu.stat.cov2cor(lcov)
-        images.imprint(lcorr)
-        images.view(lcorr)
-        #stop
-        '''
 
         self.log_dist = scipy.stats.multivariate_normal(mean=lmean, cov=lcov)
 
@@ -3411,171 +3592,6 @@ def lognorm_convert(mean, sigma, base=math.e):
     logsigma = sqrt(logvar)
 
     return logmean, logsigma
-
-
-
-class MultivariateNormal(object):
-    """
-    multi-variate normal distribution
-
-    parameters
-    ----------
-    mean: array-like
-        [Ndim] of means for each dim. of the distribution
-    cov: array-like
-        [Ndim,Ndim] covariance matrix
-    """
-    def __init__(self, mean, cov):
-
-        self._set_mean_cov(mean,cov)
-
-    def get_prob(self, xinput, nsigma=100.0):
-        """
-        get the prob for the input x
-
-        parameters
-        ----------
-        x: float or array-like
-            Array with length equal to number of dimensions
-
-        returns
-        -------
-        prob: array
-            The probability
-        """
-
-        x =  self._get_arg(xinput)
-        prob=zeros(x.shape[0],dtype='f8')
-
-        dolog=0
-        _gmix.mvn_calc_prob(self.mean,
-                            self.icov,
-                            self.norm,
-                            nsigma,
-                            x,
-                            dolog,
-                            prob)
-        return prob
-
-    def get_lnprob(self, xinput):
-        """
-        get the log prob for the input x
-
-        parameters
-        ----------
-        x: float or array-like
-            Array with length equal to number of dimensions
-
-        returns
-        -------
-        lnprob: array
-            The log probability
-        """
-
-        x =  self._get_arg(xinput)
-        lnprob=zeros(x.shape[0],dtype='f8')
-
-        dolog=1
-        nsigma=1000.0 # not used
-        _gmix.mvn_calc_prob(self.mean,
-                            self.icov,
-                            self.log_norm,
-                            nsigma,
-                            x,
-                            dolog,
-                            lnprob)
-        return lnprob
-
-    def get_pqr(self, xinput, nsigma=100.0):
-        """
-        calculate the p,q,r sums over templates
-        """
-        x =  self._get_arg(xinput)
-
-        P=numpy.zeros(1)
-        Q=numpy.zeros(2)
-        R=numpy.zeros( (2,2) )
-
-        _gmix.mvn_calc_pqr(self.mean,
-                           self.icov,
-                           self.norm,
-                           nsigma,
-                           x,
-                           P,Q,R)
-
-        P=P[0]
-        return P,Q,R
-
-
-    def _get_arg(self, x):
-        x=array(x, ndmin=2, dtype='f8', copy=False)
-
-        sh=x.shape
-
-        ndim=self.ndim
-        if len(sh) != 2 or sh[1] != ndim:
-            mess="x should have shape [N,%d], got [%d,%d]"
-            mess=mess % (ndim,sh[0],sh[1])
-            raise ValueError(mess)
-
-        return x
-
-    def sample(self, n=None):
-        """
-        sample from the distribution
-
-        parameters
-        ----------
-        n: int, optional
-            Number of points to generate from the distribution
-
-        returns
-        -------
-        random points:
-            If n is None or 1, a 1-d array is returned, else a [N, ndim]
-            array is returned
-        """
-        if not hasattr(self,'dist'):
-            self._set_scipy_dist()
-
-        return self._dist.rvs(n)
-
-    def _set_scipy_dist(self):
-        """
-        for sampling
-        """
-        import scipy.stats
-        self._dist = scipy.stats.multivariate_normal(mean=self.mean,
-                                                     cov=self.cov)
-
-    def _set_mean_cov(self, mean, cov):
-        """
-        Genrate the mean and covariance in log space, 
-        as well as the multivariate normal for the log space
-        """
-        from numpy import pi
-
-        mean=array(mean,ndmin=1,dtype='f8',copy=True)
-        cov=array(cov,ndmin=2,dtype='f8',copy=True)
-
-        self.mean=mean
-        self.cov=cov
-
-        ndim=mean.size
-        self.ndim=ndim
-
-        if ndim != cov.shape[0] or ndim != cov.shape[1]:
-            raise ValueError("mean has size %d but "
-                             "cov has shape %s" % (ndim,str(cov.shape)))
-
-        # will raise numpy.linalg.linalg.LinAlgError
-        self.icov = numpy.linalg.inv(cov)
-
-        det = numpy.linalg.det(cov)
-        self.norm=1.0/sqrt( (2.0*pi)**self.ndim * det )
-        self.log_norm = log(self.norm)
-
-
 
 
 class BFracBase(PriorBase):
@@ -4026,20 +4042,61 @@ def scipy_to_lognorm(shape, scale):
 
     return meanx, sigmax
 
-class CenPrior(_gmix.Normal2D):
+class CenPrior(object):
     """
     Independent gaussians in each dimension
     """
     def __init__(self, cen1, cen2, sigma1, sigma2, rng=None):
 
-        self.cen1 = cen1
-        self.cen2 = cen2
-        self.sigma1 = sigma1
-        self.sigma2 = sigma2
+        self.cen1 = float(cen1)
+        self.cen2 = float(cen2)
+        self.sigma1 = float(sigma1)
+        self.sigma2 = float(sigma2)
+        self.sinv1 = 1.0/self.sigma1
+        self.sinv2 = 1.0/self.sigma2
+        self.s2inv1 = 1.0/self.sigma1**2
+        self.s2inv2 = 1.0/self.sigma2**2
 
         self.rng=make_rng(rng=rng)
 
-        super(CenPrior,self).__init__(cen1,cen2,sigma1,sigma2)
+    def get_fdiff(self, x1, x2):
+        """
+        For use with LM fitter
+        (model-data)/width for both coordinates
+        """
+        d1 = (x1-self.cen1)*self.sinv1
+        d2 = (x2-self.cen2)*self.sinv2
+        return d1, d2
+
+
+    def get_lnprob_scalar(self, x1, x2):
+        """
+        log probability at the specified point
+        """
+        d1 = self.cen1-x1
+        d2 = self.cen2-x2
+        return -0.5*d1*d1*self.s2inv1 - 0.5*d2*d2*self.s2inv2
+
+    def get_lnprob_scalar_sep(self, x1, x2):
+        """
+        log probability at the specified point, but separately
+        in the two dimensions
+        """
+        d1 = self.cen1-x1
+        d2 = self.cen2-x2
+        return -0.5*d1*d1*self.s2inv1, -0.5*d2*d2*self.s2inv2
+
+
+    def get_prob_scalar(self, x1, x2):
+        """
+        log probability at the specified point
+        """
+        from math import exp
+        d1 = self.cen1-x1
+        d2 = self.cen2-x2
+        lnp = -0.5*d1*d1*self.s2inv1 - 0.5*d2*d2*self.s2inv2
+        return exp(lnp)
+
 
     def sample(self, n=None):
         """
@@ -4051,15 +4108,8 @@ class CenPrior(_gmix.Normal2D):
         rand1=rng.normal(loc=self.cen1, scale=self.sigma1, size=n)
         rand2=rng.normal(loc=self.cen2, scale=self.sigma2, size=n)
 
-        '''
-        if n is None:
-            rand1=self.cen1 + self.sigma1*rng.randn()
-            rand2=self.cen2 + self.sigma2*rng.randn()
-        else:
-            rand1=self.cen1 + self.sigma1*rng.randn(n)
-            rand2=self.cen2 + self.sigma2*rng.randn(n)
-        '''
         return rand1, rand2
+
     sample2d=sample
 
 SimpleGauss2D=CenPrior
@@ -4169,7 +4219,7 @@ class TruncatedSimpleGauss2D(PriorBase):
                               scale=self.sigma2,
                               size=nleft)
 
-            rsq = rvals1**2 + rvals2**2
+            rsq = (rvals1-self.cen1)**2 + (rvals2-self.cen2)**2
 
             w,=numpy.where(rsq < self.maxval_sq)
             if w.size > 0:
@@ -4625,12 +4675,9 @@ _g_cosmos_k = 3
 '''
 
 
-class ZDisk2D(_gmix.ZDisk2D):
+class ZDisk2D(object):
     """
     uniform over a disk centered at zero [0,0] with radius r
-
-    Note get_lnprob_scalar1d and get_prob_scalar1d and 2d are already
-    part of base class
     """
     def __init__(self, radius, rng=None):
 
@@ -4639,7 +4686,60 @@ class ZDisk2D(_gmix.ZDisk2D):
         self.radius = radius
         self.radius_sq = radius**2
 
-        super(ZDisk2D,self).__init__(radius, rng=rng)
+    def get_lnprob_scalar1d(self, r):
+        """
+        get ln(prob) at radius r=sqrt(x^2 + y^2)
+        """
+        if r >= self.radius:
+            raise GMixRangeError("position out of bounds")
+        return 0.0
+
+    def get_prob_scalar1d(self, r):
+        """
+        get prob at radius r=sqrt(x^2 + y^2)
+        """
+        if r >= self.radius:
+            return 0.0
+        else:
+            return 1.0
+
+    def get_lnprob_scalar2d(self, x, y):
+        """
+        get ln(prob) at the input position
+        """
+        r2 = x**2 + y**2
+        if r2 >= self.radius_sq:
+            raise GMixRangeError("position out of bounds")
+
+        return 0.0
+
+    def get_prob_scalar2d(self, x, y):
+        """
+        get ln(prob) at the input position
+        """
+
+        r2 = x**2 + y**2
+        if r2 >= self.radius_sq:
+            return 0.0
+        else:
+            return 1.0
+
+    def get_prob_array2d(self, x, y):
+        """
+        probability, 1.0 inside disk, outside raises exception
+
+        does not raise an exception
+        """
+        x=numpy.array(x, dtype='f8', ndmin=1, copy=False)
+        y=numpy.array(y, dtype='f8', ndmin=1, copy=False)
+        out=numpy.zeros(x.size, dtype='f8')
+
+        r2 = x**2 + y**2
+        w,=numpy.where(r2 < self.radius_sq)
+        if w.size > 0:
+            out[w] = 1.0
+
+        return out
 
     def sample1d(self, n=None):
         """
@@ -4683,19 +4783,6 @@ class ZDisk2D(_gmix.ZDisk2D):
             y=y[0]
 
         return x,y
-
-    def get_prob_array2d(self, x, y):
-        """
-        probability, 1.0 inside disk, outside raises exception
-
-        does not raise an exception
-        """
-        x=numpy.array(x, dtype='f8', ndmin=1, copy=False)
-        y=numpy.array(y, dtype='f8', ndmin=1, copy=False)
-        out=numpy.zeros(x.size, dtype='f8')
-
-        super(ZDisk2D,self).get_prob_array2d(x,y,out)
-        return out
 
 class ZAnnulus(ZDisk2D):
     """

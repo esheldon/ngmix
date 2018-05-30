@@ -1,17 +1,18 @@
-import distutils
-from distutils.core import setup, Extension, Command
-import numpy
+from distutils.core import setup
 
-sources=["ngmix/_gmix.c"]
-include_dirs=[numpy.get_include()]
+try:
+    # for python 3, let 2to3 do most of the work
+    from distutils.command.build_py import build_py_2to3 as build_py
+except ImportError:
+    # for python 2 don't apply any transformations
+    from distutils.command.build_py import build_py
 
-ext=Extension("ngmix._gmix", sources, include_dirs=include_dirs)
-
-setup(name="ngmix", 
-      packages=['ngmix'],
-      version="v0.9.4",
-      ext_modules=[ext])
-
-
-
-
+setup(
+    name="ngmix", 
+    author="Erin Sheldon",
+    url="https://github.com/esheldon/ngmix",
+    description="fast 2-d gaussian mixtures for modeling astronomical images",
+    packages=['ngmix'],
+    version="1.0.0",
+    cmdclass={'build_py': build_py},
+)
