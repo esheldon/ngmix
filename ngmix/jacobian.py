@@ -151,6 +151,17 @@ class Jacobian(object):
         """
         return self._data['sdet'][0]
 
+    def get_vu(self, row, col):
+        """
+        get v,u given row,col
+        """
+        from .jacobian_nb import jacobian_get_vu
+        return jacobian_get_vu(self._data, row, col)
+
+    def __call__(self, row, col):
+        from .jacobian_nb import jacobian_get_vu
+        return jacobian_get_vu(self._data, row, col)
+
     row0=property(fget=get_row0)
     col0=property(fget=get_col0)
 
