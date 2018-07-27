@@ -83,6 +83,56 @@ def fill_fdiff(gmix, pixels, fdiff, start):
         fdiff[start+ipixel] = (model_val-pixel['val'])*pixel['ierr']
 
 @njit
+def finish_fdiff(pixels, fdiff, start):
+    """
+    fill fdiff array (model-data)/err
+
+    parameters
+    ----------
+    fdiff: gaussian mixture
+        this is assumed to corrently hold the model value, will
+        be converted to (model-data)/err
+    pixels: array if pixel structs
+        u,v,val,ierr
+    fdiff: array
+        Array to fill, should be same length as pixels
+    """
+
+    n_pixels = pixels.shape[0]
+    for ipixel in xrange(n_pixels):
+        pixel = pixels[ipixel]
+
+        model_val = fdiff[start+ipixel]
+
+        fdiff[start+ipixel] = (model_val-pixel['val'])*pixel['ierr']
+
+
+@njit
+def update_model_array(gmix, pixels, arr, start):
+    """
+    fill 1d array, adding to existing pixels
+
+    parameters
+    ----------
+    gmix: gaussian mixture
+        See gmix.py
+    pixels: array if pixel structs
+        u,v,val,ierr
+    arr: array
+        Array to fill
+    """
+
+    if gmix['norm_set'][0] == 0:
+        gmix_set_norms(gmix)
+
+    n_pixels = pixels.shape[0]
+    for ipixel in xrange(n_pixels):
+        pixel = pixels[ipixel]
+
+        model_val = gmix_eval_pixel_fast(gmix, pixel)
+        arr[start+ipixel] += model_val
+
+@njit
 def get_model_s2n_sum(gmix, pixels):
     """
     get the model s/n sum.
