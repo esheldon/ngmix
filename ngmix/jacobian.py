@@ -158,6 +158,14 @@ class Jacobian(object):
         from .jacobian_nb import jacobian_get_vu
         return jacobian_get_vu(self._data, row, col)
 
+    def get_rowcol(self, v, u):
+        """
+        get row,col given v,u
+        """
+        from .jacobian_nb import jacobian_get_rowcol
+        return jacobian_get_rowcol(self._data, v, u)
+
+
     def __call__(self, row, col):
         from .jacobian_nb import jacobian_get_vu
         return jacobian_get_vu(self._data, row, col)
@@ -271,7 +279,8 @@ class Jacobian(object):
         self._data['dudrow']=dudrow
         self._data['dudcol']=dudcol
 
-        self._data['det'] = numpy.abs( dudrow*dvdcol-dudcol*dvdrow )
+        #self._data['det'] = numpy.abs( dudrow*dvdcol-dudcol*dvdrow )
+        self._data['det'] = dvdrow*dudcol - dvdcol*dudrow
         self._data['sdet'] = sqrt(self._data['det'])
 
 
