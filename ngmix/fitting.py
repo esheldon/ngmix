@@ -1682,6 +1682,7 @@ class LMSimple(FitterBase):
             result['g'] = result['pars'][2:2+2].copy()
             result['g_cov'] = result['pars_cov'][2:2+2, 2:2+2].copy()
             self._set_flux(result)
+            self._set_T(result)
             stat_dict=self.get_fit_stats(result['pars'])
             result.update(stat_dict)
 
@@ -1690,6 +1691,10 @@ class LMSimple(FitterBase):
 
     run_max=go
     run_lm=go
+
+    def _set_T(self, res):
+        res['T'] = res['pars'][4]
+        res['T_err'] = sqrt(res['pars_cov'][4,4])
 
     def _set_flux(self, res):
         if self.nband==1:
@@ -1826,6 +1831,8 @@ class LMSimple(FitterBase):
 class LMCoellip(LMSimple):
     """
     class to run the LM leastsq code for the coelliptical model
+
+    TODO make special set_flux and set_T methods
     """
     def __init__(self, obs, ngauss, **keys):
         self._ngauss=ngauss
