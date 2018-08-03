@@ -68,6 +68,7 @@ def get_all_metacal(obs,
     if fixnoise:
         odict= _get_all_metacal_fixnoise(obs, step=step, **kw)
     else:
+        logger.debug("    not doing fixnoise")
         odict= _get_all_metacal(obs, step=step, **kw)
 
         if cheatnoise is not None:
@@ -186,10 +187,9 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
         logger.debug("    Doing fixnoise with input noise image")
     else:
         noise_obs = simobs.simulate_obs(None, obs, **kw)
-        logger.debug("    Doing fixnoise")
 
     # rotate by 90
-    _rotate_obs_image(noise_obs, k=1)
+    noise_obs = _rotate_obs_image(noise_obs, k=1)
 
     obsdict       = _get_all_metacal(obs, step=step, **kw)
     noise_obsdict = _get_all_metacal(noise_obs, step=step, **kw)
@@ -200,7 +200,7 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
         nmbobs = noise_obsdict[type]
 
         # rotate back, which is 3 more rotations
-        _rotate_obs_image(nmbobs, k=3)
+        nmbobs = _rotate_obs_image(nmbobs, k=3)
 
         if isinstance(imbobs,Observation):
             _doadd_single_obs(imbobs, nmbobs)
@@ -1353,6 +1353,49 @@ def _rotate_obs_image(obs, k=1):
     """
 
     if isinstance(obs, Observation):
+
+        image=numpy.rot90(obs.image, k=k)
+        weight=numpy.rot90(obs.weight, k=k)
+        if obs.has_bmask():
+            bmask=numpy.rot90(obs.bmask, k=k)
+        else:
+            bmask=None
+
+        nobs = Observation(
+            image,
+            weight=weight,
+            bmask=bmask,
+            jacobian=obs.jacobian,
+            psf=obs.psf,
+            meta=obs.meta,
+        )
+        return nobs
+
+    elif isinstance(obs, ObsList):
+        nobslist=ObsList()
+        for tobs in obs:
+            nobs=_rotate_obs_image(tobs, k=k)
+            nobslist.append(nobs)
+        return nobslist
+
+    elif isinstance(obs, MultiBandObsList):
+        nmbobs=MultiBandObsList()
+        for obslist in obs:
+            nobslist = _rotate_obs_image(obslist, k=k)
+            nmbobs.append( nobslist )
+        return nmbobs
+
+    else:
+        raise ValueError("obs must be Observation, ObsList, "
+                         "or MultiBandObsList")
+
+
+def _rotate_obs_image_square(obs, k=1):
+    """
+    rotate the image.  internal routine just for fixnoise with rotnoise=True
+    """
+
+    if isinstance(obs, Observation):
         obs.set_image(numpy.rot90(obs.image, k=k))
     elif isinstance(obs, ObsList):
         for tobs in obs:
@@ -1363,6 +1406,7 @@ def _rotate_obs_image(obs, k=1):
     else:
         raise ValueError("obs must be Observation, ObsList, "
                          "or MultiBandObsList")
+
 
 
 def _add_noise_odict(odict, noise):
