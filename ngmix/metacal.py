@@ -189,7 +189,8 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
         noise_obs = simobs.simulate_obs(None, obs, **kw)
 
     # rotate by 90
-    noise_obs = _rotate_obs_image(noise_obs, k=1)
+    #noise_obs = _rotate_obs_image_nonsquare(noise_obs, k=1)
+    _rotate_obs_image_square(noise_obs, k=1)
 
     obsdict       = _get_all_metacal(obs, step=step, **kw)
     noise_obsdict = _get_all_metacal(noise_obs, step=step, **kw)
@@ -200,7 +201,8 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
         nmbobs = noise_obsdict[type]
 
         # rotate back, which is 3 more rotations
-        nmbobs = _rotate_obs_image(nmbobs, k=3)
+        #nmbobs = _rotate_obs_image_nonsquare(nmbobs, k=3)
+        _rotate_obs_image_square(nmbobs, k=3)
 
         if isinstance(imbobs,Observation):
             _doadd_single_obs(imbobs, nmbobs)
@@ -1347,7 +1349,7 @@ def _init_mb_obs_list_dict(keys):
         odict[key] = MultiBandObsList()
     return odict
 
-def _rotate_obs_image(obs, k=1):
+def _rotate_obs_image_nonsquare(obs, k=1):
     """
     rotate the image.  internal routine just for fixnoise with rotnoise=True
     """
@@ -1374,14 +1376,14 @@ def _rotate_obs_image(obs, k=1):
     elif isinstance(obs, ObsList):
         nobslist=ObsList()
         for tobs in obs:
-            nobs=_rotate_obs_image(tobs, k=k)
+            nobs=_rotate_obs_image_nonsquare(tobs, k=k)
             nobslist.append(nobs)
         return nobslist
 
     elif isinstance(obs, MultiBandObsList):
         nmbobs=MultiBandObsList()
         for obslist in obs:
-            nobslist = _rotate_obs_image(obslist, k=k)
+            nobslist = _rotate_obs_image_nonsquare(obslist, k=k)
             nmbobs.append( nobslist )
         return nmbobs
 
@@ -1399,10 +1401,10 @@ def _rotate_obs_image_square(obs, k=1):
         obs.set_image(numpy.rot90(obs.image, k=k))
     elif isinstance(obs, ObsList):
         for tobs in obs:
-            _rotate_obs_image(tobs, k=k)
+            _rotate_obs_image_square(tobs, k=k)
     elif isinstance(obs, MultiBandObsList):
         for obslist in obs:
-            _rotate_obs_image(obslist, k=k)
+            _rotate_obs_image_square(obslist, k=k)
     else:
         raise ValueError("obs must be Observation, ObsList, "
                          "or MultiBandObsList")
