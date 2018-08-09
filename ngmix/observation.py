@@ -213,7 +213,8 @@ class Observation(object):
 
         if image_old is not None:
             mess=("old and new image must have same shape, to "
-                  "maintain consistency")
+                  "maintain consistency, got %s "
+                  "vs %s" % (image.shape,image_old.shape))
             assert image.shape == image_old.shape,mess
 
         self._image=image
