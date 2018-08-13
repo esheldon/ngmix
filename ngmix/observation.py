@@ -449,6 +449,37 @@ class Observation(object):
                             "dictionary form, got %s" % type(meta))
         self._meta.update(meta)
 
+    def copy(self):
+        """
+        make a copy of the observation
+        """
+        if self.has_bmask():
+            bmask=self.bmask.copy()
+        else:
+            bmask=None
+
+        if self.has_gmix():
+            # makes a copy
+            gmix=self.gmix
+        else:
+            gmix=None
+
+        if self.has_psf():
+            psf=self.psf.copy()
+        else:
+            psf=None
+
+        meta=copy.deepcopy(self.meta)
+
+        return Observation(
+            self.image.copy(),
+            weight=self.weight.copy(),
+            bmask=bmask,
+            gmix=gmix,
+            jacobian=self.jacobian, # makes a copy
+            meta=meta,
+            psf=psf,
+        )
 
     def _update_pixels(self):
         """
