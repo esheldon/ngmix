@@ -22,6 +22,8 @@ class Observation(object):
         Weight map, same shape as image
     bmask: ndarray, optional
         A bitmask array
+    noise: ndarray, optional
+        A noise field to associate with this observation
     jacobian: Jacobian, optional
         Type Jacobian or a sub-type
     gmix: GMix, optional
@@ -36,6 +38,7 @@ class Observation(object):
                  image,
                  weight=None,
                  bmask=None,
+                 noise=None,
                  jacobian=None,
                  gmix=None,
                  psf=None,
@@ -59,6 +62,7 @@ class Observation(object):
 
         # optional, if None nothing is set
         self.set_bmask(bmask)
+        self.set_noise(noise)
         self.set_gmix(gmix)
         self.set_psf(psf)
 
@@ -126,6 +130,22 @@ class Observation(object):
         set the bmask
         """
         self.set_bmask(bmask)
+
+    @property
+    def noise(self):
+        """
+        getter for noise
+
+        currently this simply returns a reference
+        """
+        return self._noise
+
+    @noise.setter
+    def noise(self, noise):
+        """
+        set the noise
+        """
+        self.set_noise(noise)
 
     @property
     def jacobian(self):
@@ -276,6 +296,39 @@ class Observation(object):
         returns True if a bitmask is set
         """
         if hasattr(self,'_bmask'):
+            return True
+        else:
+            return False
+
+    def set_noise(self, noise):
+        """
+        Set a noise image
+
+        parameters
+        ----------
+        noise: ndarray (or None)
+        """
+        if noise is None:
+            if self.has_noise():
+                del self._noise
+        else:
+
+            image=self.image
+
+            # force contiguous C, but we don't know what dtype to expect
+            noise=numpy.ascontiguousarray(noise)
+            assert len(noise.shape)==2,"noise must be 2d"
+
+            assert (noise.shape==image.shape),\
+                    "image and noise must be same shape"
+
+            self._noise=noise
+
+    def has_noise(self):
+        """
+        returns True if a bitmask is set
+        """
+        if hasattr(self,'_noise'):
             return True
         else:
             return False
@@ -458,6 +511,11 @@ class Observation(object):
         else:
             bmask=None
 
+        if self.has_noise():
+            noise=self.noise.copy()
+        else:
+            noise=None
+
         if self.has_gmix():
             # makes a copy
             gmix=self.gmix
@@ -475,6 +533,7 @@ class Observation(object):
             self.image.copy(),
             weight=self.weight.copy(),
             bmask=bmask,
+            noise=noise,
             gmix=gmix,
             jacobian=self.jacobian, # makes a copy
             meta=meta,
