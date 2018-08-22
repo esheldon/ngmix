@@ -14,6 +14,7 @@ from numpy import where, array, sqrt, exp, log, linspace, zeros
 from numpy import isfinite, median, diag
 from numpy.linalg import LinAlgError
 
+from . import admom
 from . import fitting
 from .fitting import print_pars
 from .gmix import GMix, GMixModel, GMixCM, get_coellip_npars
@@ -571,6 +572,8 @@ class Bootstrapper(object):
         elif 'coellip' in psf_model:
             runner=self._fit_one_psf_coellip(psf_obs, psf_model,
                                              Tguess, ntry, fit_pars)
+        elif psf_model=='am':
+            runner=self._fit_one_psf_am(psf_obs, Tguess, ntry)
         else:
             runner=self._fit_one_psf_max(psf_obs, psf_model,
                                          Tguess, ntry, fit_pars)
@@ -602,6 +605,12 @@ class Bootstrapper(object):
         runner.go(ntry=ntry)
 
         return runner
+
+    def _fit_one_psf_am(self, psf_obs, Tguess, ntry):
+        runner=AMRunner(psf_obs, Tguess)
+        runner.go(ntry=ntry)
+        return runner
+
 
     def _fit_one_psf_coellip(self, psf_obs, psf_model, Tguess, ntry, fit_pars):
 
@@ -2174,6 +2183,29 @@ class PSFRunner(object):
         Fguess *= self.obs.jacobian.get_scale()**2
         self.guess0=array( [0.0, 0.0, 0.0, 0.0, Tguess, Fguess] )
 
+class AMRunner(object):
+    """
+    wrapper to run am
+    """
+    def __init__(self, obs, Tguess):
+
+        self.obs=obs
+        self.Tguess = Tguess
+
+    def get_fitter(self):
+        return self.fitter
+
+    def go(self, ntry=1):
+
+        for i in xrange(ntry):
+
+            fitter=admom.run_admom(self.obs, self.Tguess)
+            res=fitter.get_result()
+            if res['flags']==0:
+                break
+
+        res['ntry'] = i+1
+        self.fitter=fitter
 
 class EMRunner(object):
     """
