@@ -541,6 +541,50 @@ class GMix(object):
             start,
         )
 
+    def get_weighted_moments(self, obs):
+        """
+        Get weighted moments using this mixture as the weight
+
+        parameters
+        ----------
+        obs: Observation
+            The Observation to compare with. See ngmix.observation.Observation
+            The Observation must have a weight map set
+        """
+        from . import admom
+        from . import admom_nb
+
+        self.set_norms_if_needed()
+
+        dt=numpy.dtype(admom._admom_result_dtype, align=True)
+        aresarray=numpy.zeros(1, dtype=dt)
+        ares=aresarray[0]
+
+        wt_gm=self.get_data()
+
+
+        admom_nb.admom_momsums(
+            wt_gm,
+            obs.pixels,
+            ares,
+        )
+
+        finv = 1.0/ares['sums'][5]
+
+        M1 = ares['sums'][2]*finv
+        M2 = ares['sums'][3]*finv
+        T  = ares['sums'][4]*finv
+
+        ares['pars'][0] = ares['sums'][0]*finv
+        ares['pars'][1] = ares['sums'][1]*finv
+        ares['pars'][2] = M1
+        ares['pars'][3] = M2
+        ares['pars'][4] = T
+        ares['pars'][5] = 1.0
+
+        res=admom.copy_result(aresarray)
+        return res
+
     def get_model_s2n_sum(self, obs):
         """
         Get the s/n sum for the model, using only the weight
