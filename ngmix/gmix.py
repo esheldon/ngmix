@@ -2,7 +2,10 @@ from __future__ import print_function, absolute_import, division
 
 import copy
 import numpy
-from numpy import array, zeros, exp, log10, log, dot, sqrt, diag
+from numpy import (
+    array, zeros, exp, log10, log, dot, sqrt, diag,
+    isfinite,
+)
 from .jacobian import Jacobian, UnitJacobian
 from .shape import Shape, e1e2_to_g1g2
 
@@ -543,46 +546,60 @@ class GMix(object):
 
     def get_weighted_moments(self, obs):
         """
-        Get weighted moments using this mixture as the weight
+        Get weighted moments using this mixture as the weight, including
+        e1,e2,T,s2n etc.  If you just want the raw moments use
+        get_weighted_sums()
+
+        If you want the expected fluxes, you should set the flux to the inverse
+        of the normalization which is 2*pi*sqrt(det)
 
         parameters
         ----------
         obs: Observation
             The Observation to compare with. See ngmix.observation.Observation
             The Observation must have a weight map set
+
+        returns:
+            result array with basic sums as well as summary statistics
+            such as e1,e2,T,s2n etc.
+        """
+
+        res = self.get_weighted_sums(obs)
+        return get_weighted_moments_stats(res)
+
+    def get_weighted_sums(self, obs, res=None):
+        """
+        Get weighted moments using this mixture as the weight.  To
+        get more summary statistics use get_weighted_moments or
+        send this result to ngmix.gmix.get_weighted_moments_stats()
+
+        parameters
+        ----------
+        obs: Observation
+            The Observation to compare with. See ngmix.observation.Observation
+            The Observation must have a weight map set
+        res: result array, optional
+            If sent, sums will be added to the array rather than making
+            a new one
         """
         from . import admom
         from . import admom_nb
 
         self.set_norms_if_needed()
 
-        dt=numpy.dtype(admom._admom_result_dtype, align=True)
-        aresarray=numpy.zeros(1, dtype=dt)
-        ares=aresarray[0]
+        if res is None:
+            dt=numpy.dtype(admom._admom_result_dtype, align=True)
+            resarray=numpy.zeros(1, dtype=dt)
+            res=resarray[0]
 
         wt_gm=self.get_data()
 
-
+        # this will add to the sums
         admom_nb.admom_momsums(
             wt_gm,
             obs.pixels,
-            ares,
+            res,
         )
-
-        finv = 1.0/ares['sums'][5]
-
-        M1 = ares['sums'][2]*finv
-        M2 = ares['sums'][3]*finv
-        T  = ares['sums'][4]*finv
-
-        ares['pars'][0] = ares['sums'][0]*finv
-        ares['pars'][1] = ares['sums'][1]*finv
-        ares['pars'][2] = M1
-        ares['pars'][3] = M2
-        ares['pars'][4] = T
-        ares['pars'][5] = 1.0
-
-        res=admom.copy_result(aresarray)
         return res
 
     def get_model_s2n_sum(self, obs):
@@ -1174,6 +1191,109 @@ def pack_to_dict(res):
         's2n_denom':s2n_denom,
         'npix':npix,
     }
+
+def get_weighted_moments_stats(ares):
+    """
+    do some additional calculations based on the sums
+    """
+    from .admom import get_ratio_error
+
+    res={}
+    for n in ares.dtype.names:
+        if n == 'sums':
+            res[n] = ares[n].copy()
+        elif n=='sums_cov':
+            res[n] = ares[n].copy()
+        else:
+            res[n] = ares[n]
+
+    # we always have a measure of the flux
+    sums=res['sums']
+    sums_cov=res['sums_cov']
+    pars=res['pars']
+
+    flux_sum=sums[5]
+
+    res['flux']  = flux_sum
+    pars[5] = res['flux']
+
+    # these might not get filled in if T is too small
+    # or if the flux variance is zero somehow
+    res['T']     = -9999.0
+    res['s2n']   = -9999.0
+    res['e']     = array([-9999.0, -9999.0])
+    res['e_err'] = 9999.0
+
+    if res['flags']==0:
+
+        if flux_sum > 0.0:
+            finv = 1.0/flux_sum
+
+            row = sums[0]*finv
+            col = sums[1]*finv
+            M1  = sums[2]*finv
+            M2  = sums[3]*finv
+            T   = sums[4]*finv
+
+            pars[0] = row
+            pars[1] = col
+            pars[2] = M1
+            pars[3] = M2
+            pars[4] = T
+
+            res['T'] = pars[4]
+
+            res['T_err'] = get_ratio_error(
+                sums[4],
+                sums[5],
+                sums_cov[4,4],
+                sums_cov[5,5],
+                sums_cov[4,5],
+            )
+
+            if res['T'] > 0.0:
+                res['e'][:] = res['pars'][2:2+2]/res['T']
+
+                e1_err = get_ratio_error(
+                    sums[2],
+                    sums[4],
+                    sums_cov[2,2],
+                    sums_cov[4,4],
+                    sums_cov[2,4],
+                )
+                e2_err = get_ratio_error(
+                    sums[3],
+                    sums[4],
+                    sums_cov[3,3],
+                    sums_cov[4,4],
+                    sums_cov[3,4],
+                )
+
+                if (not isfinite(e1_err) or not isfinite(e2_err)):
+                    res['e_cov'] = diag( [9999.0,9999.0] )
+                else:
+                    res['e_cov'] = diag([e1_err**2, e2_err**2])
+
+            else:
+                # T <= 0.0
+                res['flags'] |= 0x8
+
+        else:
+            # flux <= 0.0
+            res['flags'] |= 0x4
+
+        fvar_sum=sums_cov[5,5]
+
+        if fvar_sum > 0.0:
+
+            flux_err = sqrt(fvar_sum)
+            res['s2n'] = flux_sum/flux_err
+
+        else:
+            # zero var flag
+            res['flags'] |= 0x40
+
+    return res
 
 _moms_flagmap={
     0:'ok',

@@ -85,7 +85,7 @@ class Admom(object):
             ares,
         )
 
-        self.result = copy_result(ares)
+        self.result = get_result(ares)
 
     def get_result(self):
         """
@@ -196,7 +196,7 @@ def get_sum_err(var_a, var_b, cov_ab):
 def get_sum_var(var_a, var_b, cov_ab):
     return var_a + var_b - 2*cov_ab
 
-def copy_result(ares):
+def get_result(ares):
     """
     copy the result structure to a dict, and
     calculate a few more things
