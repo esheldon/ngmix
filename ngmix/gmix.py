@@ -544,7 +544,7 @@ class GMix(object):
             start,
         )
 
-    def get_weighted_moments(self, obs):
+    def get_weighted_moments(self, obs, maxrad):
         """
         Get weighted moments using this mixture as the weight, including
         e1,e2,T,s2n etc.  If you just want the raw moments use
@@ -564,10 +564,10 @@ class GMix(object):
             such as e1,e2,T,s2n etc.
         """
 
-        res = self.get_weighted_sums(obs)
+        res = self.get_weighted_sums(obs,maxrad)
         return get_weighted_moments_stats(res)
 
-    def get_weighted_sums(self, obs, res=None):
+    def get_weighted_sums(self, obs, maxrad, res=None):
         """
         Get weighted moments using this mixture as the weight.  To
         get more summary statistics use get_weighted_moments or
@@ -583,7 +583,7 @@ class GMix(object):
             a new one
         """
         from . import admom
-        from . import admom_nb
+        from . import gmix_nb
 
         self.set_norms_if_needed()
 
@@ -595,10 +595,11 @@ class GMix(object):
         wt_gm=self.get_data()
 
         # this will add to the sums
-        admom_nb.admom_momsums(
+        gmix_nb.get_weighted_sums(
             wt_gm,
             obs.pixels,
             res,
+            maxrad,
         )
         return res
 
@@ -1294,10 +1295,3 @@ def get_weighted_moments_stats(ares):
             res['flags'] |= 0x40
 
     return res
-
-_moms_flagmap={
-    0:'ok',
-    1:'zero weight encountered',
-}
-
-
