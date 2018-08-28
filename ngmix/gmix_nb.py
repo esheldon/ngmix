@@ -629,15 +629,15 @@ def get_weighted_sums(wt, pixels, res, maxrad):
     for i_pixel in xrange(n_pixels):
 
         pixel = pixels[i_pixel]
-        weight = gmix_eval_pixel_fast(wt, pixel)
-
-        var = 1.0/(pixel['ierr']*pixel['ierr'])
 
         vmod = pixel['v']-vcen
         umod = pixel['u']-ucen
 
         rad2 = umod*umod + vmod*vmod
         if rad2 < maxrad2:
+
+            weight = gmix_eval_pixel_fast(wt, pixel)
+            var = 1.0/(pixel['ierr']*pixel['ierr'])
 
             wdata = weight*pixel['val']
             w2 = weight*weight
