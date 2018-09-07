@@ -1335,9 +1335,7 @@ class AdmomBootstrapper(Bootstrapper):
         return 2.0*T
 
 class AdmomMetacalBootstrapper(AdmomBootstrapper):
-    # when symmetrizing psf, no need for psf response.
     _default_metacal_pars={
-        'symmetrize_psf':True,
         'types': ['noshear','1p','1m','2p','2m'],
     }
 
