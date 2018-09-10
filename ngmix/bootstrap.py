@@ -1247,9 +1247,13 @@ class AdmomBootstrapper(Bootstrapper):
 
         for i in xrange(pars['ntry']):
             # this generates a gaussian mixture guess based on Tguess
-            fitter.go(Tguess)
-
-            res=fitter.get_result()
+            try:
+                # should probably move this catch into admom
+                fitter.go(Tguess)
+                res=fitter.get_result()
+            except GMixRangeError as err:
+                print(str(err))
+                res = {'flags':1}
 
             if doround:
                 if res['flags'] != 0:
@@ -1259,15 +1263,13 @@ class AdmomBootstrapper(Bootstrapper):
             if res['flags'] == 0:
                 break
 
-        if res['flags'] != 0:
-            return fitter
+        if res['flags']==0:
+            # for consistency
+            res['g']     = res['e']
+            res['g_cov'] = res['e_cov']
 
-        # for consistency
-        res['g']     = res['e']
-        res['g_cov'] = res['e_cov']
-
-        if doround:
-            self._set_round_s2n(obs,fitter)
+            if doround:
+                self._set_round_s2n(obs,fitter)
         return fitter
 
     def _set_flux(self, mb_obs_list, fitter):
@@ -1335,9 +1337,7 @@ class AdmomBootstrapper(Bootstrapper):
         return 2.0*T
 
 class AdmomMetacalBootstrapper(AdmomBootstrapper):
-    # when symmetrizing psf, no need for psf response.
     _default_metacal_pars={
-        'symmetrize_psf':True,
         'types': ['noshear','1p','1m','2p','2m'],
     }
 
@@ -1431,9 +1431,15 @@ class AdmomMetacalBootstrapper(AdmomBootstrapper):
 
             boot.fit(Tguess=Tguess)
 
+            # flags actually raise BootGalFailure from the AdmomBootstrapper
+            # so this is not necessary
             tres=boot.get_fitter().get_result()
 
-            res['mcal_flags'] |= tres['flags']
+            #if tres['flags'] != 0:
+            #    raise BootGalFailure("failed to fit galaxy with admom")
+
+            # should be zero
+            #res['mcal_flags'] |= tres['flags']
 
             if key=='noshear':
                 tres['gpsf'] = gpsf
