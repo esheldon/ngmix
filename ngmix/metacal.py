@@ -784,10 +784,13 @@ class Metacal(object):
         psf_obs = self._make_psf_obs(psf_im)
         psf_obs.meta.update(obs.psf.meta) 
 
+        meta={}
+        meta.update(obs.meta)
         newobs=Observation(im.array,
                            jacobian=obs.jacobian.copy(),
                            weight=obs.weight.copy(),
-                           psf=psf_obs)
+                           psf=psf_obs,
+                           meta=meta)
 
         #_compare_psfs(self.obs.psf, psf_obs)
         return newobs
