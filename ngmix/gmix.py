@@ -617,13 +617,22 @@ class GMix(object):
         self._pars = zeros(self._npars)
         self._data = zeros(self._ngauss, dtype=_gauss2d_dtype)
 
-    def make_galsim_object(self):
+    def make_galsim_object(self, s1=None, s2=None, psf=None):
         """
         make a galsim representation for the gaussian mixture
 
         Note ngmix fluxes are surface brightness, galsim are not.
         So to get agreement in a drawn image you may need to 
         convert the flux using a pixel scale squared
+
+        parameters
+        ----------
+        s1,s2: float
+            additional shear to add.
+        psf: galsim psf
+            a psf by which to convolve each gaussian.  This is useful
+            because galsim convolutions cannot be done on shifted
+            objects
         """
         import galsim
 
@@ -651,6 +660,12 @@ class GMix(object):
             gsobj = galsim.Gaussian(flux=flux, sigma=sigma_round)
 
             gsobj = gsobj.shear(g1=g1, g2=g2)
+            if s1 is not None:
+                gsobj = gsobj.shear(g1=s1, g2=s2)
+
+            if psf is not None:
+                gsobj = galsim.Convolve(gsobj, psf)
+
             gsobj = gsobj.shift(colshift, rowshift)
 
             gsobjects.append( gsobj )
