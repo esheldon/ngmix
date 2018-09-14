@@ -57,7 +57,7 @@ class Bootstrapper(object):
         obs: observation(s)
             Either an Observation, ObsList, or MultiBandObsList The
             Observations must have a psf set.
-            
+
             If the psf observations already have gmix objects set, there is no
             need to run fit_psfs()
         """
@@ -279,7 +279,7 @@ class Bootstrapper(object):
 
             psf_T=psf_T_sum/wsum
 
-            # and finally, do the fit 
+            # and finally, do the fit
             try:
                 round_fitter=self._fit_sim_round(fitter,
                                                  pars_round,
@@ -290,7 +290,7 @@ class Bootstrapper(object):
                 res=round_fitter.get_result()
                 if res['flags'] != 0:
                     print("        round fit fail")
-                    flags |= BOOT_TS2N_ROUND_FAIL 
+                    flags |= BOOT_TS2N_ROUND_FAIL
                 else:
                     import covmatrix
                     try:
@@ -310,7 +310,7 @@ class Bootstrapper(object):
                         Ts2n = res['pars'][2]/sqrt(cov[2,2])
             except GMixRangeError as err:
                 print(str(err))
-                flags |= BOOT_TS2N_ROUND_FAIL 
+                flags |= BOOT_TS2N_ROUND_FAIL
 
         return s2n, Ts2n, psf_T, flags
 
@@ -328,7 +328,7 @@ class Bootstrapper(object):
         runner.go(ntry=ntry)
 
         return runner.fitter
- 
+
     def _get_s2n_Ts2n_r_alg(self, gm0_round):
         """
         get the round s2n and Ts2n
@@ -440,7 +440,7 @@ class Bootstrapper(object):
 
         Modify the jacobian of our version of the observations accordingly.
 
-        apply a wide prior on the center, just for stability.  Apply an 
+        apply a wide prior on the center, just for stability.  Apply an
         informative prior on T and g, uninformative on flux.
         """
         from . import priors, joint_priors, guessers
@@ -547,7 +547,7 @@ class Bootstrapper(object):
             Fitting parameters for psf.
         skip_already_done: bool
             Skip psfs with a gmix already set
-        norm_key: will use this key in the PSF meta data to fudge the normalization 
+        norm_key: will use this key in the PSF meta data to fudge the normalization
             of the PSF model via amplitude -> amplitude*norm where amplitude is the PSF normalization
             (usually 1)
         """
@@ -962,7 +962,7 @@ class Bootstrapper(object):
                           model,
                           use_logpars=self.use_logpars)
         tfitter._setup_data(res['pars'])
- 
+
         sampler=PSampler(res['pars'],
                          res['pars_err'],
                          samples,
@@ -1170,7 +1170,7 @@ class AdmomBootstrapper(Bootstrapper):
         obs: observation(s)
             Either an Observation, ObsList, or MultiBandObsList The
             Observations must have a psf set.
-            
+
             If the psf observations already have gmix objects set, there is no
             need to run fit_psfs()
         """
@@ -1443,7 +1443,7 @@ class AdmomBootstrapper(Bootstrapper):
                 ntot += 1
 
         T = Tsum/ntot
-        
+
         return 2.0*T
 
 class AdmomMetacalBootstrapper(AdmomBootstrapper):
@@ -1633,8 +1633,8 @@ class MaxMetacalBootstrapper(Bootstrapper):
 
         return metacal_pars
 
-    def _do_metacal_max_fits(self, obs_dict, psf_model, gal_model, pars, 
-                             psf_Tguess, prior, psf_ntry, ntry, 
+    def _do_metacal_max_fits(self, obs_dict, psf_model, gal_model, pars,
+                             psf_Tguess, prior, psf_ntry, ntry,
                              psf_fit_pars):
 
         # overall flags, or'ed from each bootstrapper
@@ -1840,7 +1840,8 @@ class CompositeBootstrapper(Bootstrapper):
                                         fracdev_grid['max'],
                                         fracdev_grid['num'])
         else:
-            self.fracdev_tests=linspace(-1.0,1.5,26)
+            # self.fracdev_tests=linspace(-1.0,1.5,26)
+            self.fracdev_tests=linspace(0.0,1.0,26)
 
     def fit_max(self,
                 model,
@@ -1873,7 +1874,7 @@ class CompositeBootstrapper(Bootstrapper):
         else:
             exp_guess = None
             dev_guess = None
-            
+
         print("    fitting exp")
         exp_fitter=self._fit_one_model_max(
             'exp',
@@ -1886,7 +1887,7 @@ class CompositeBootstrapper(Bootstrapper):
         fitting.print_pars(exp_fitter.get_result()['pars'], front='        gal_pars:')
         fitting.print_pars(exp_fitter.get_result()['pars_err'], front='        gal_perr:')
         print('        lnprob: %e' % exp_fitter.get_result()['lnprob'])
-        
+
         print("    fitting dev")
         dev_fitter=self._fit_one_model_max(
             'dev',
@@ -1900,8 +1901,8 @@ class CompositeBootstrapper(Bootstrapper):
                            front='        gal_pars:')
         fitting.print_pars(dev_fitter.get_result()['pars_err'],
                            front='        gal_perr:')
-        print('        lnprob: %e' % dev_fitter.get_result()['lnprob'])           
-            
+        print('        lnprob: %e' % dev_fitter.get_result()['lnprob'])
+
         print("    fitting fracdev")
         use_grid=pars.get('use_fracdev_grid',False)
         fres=self._fit_fracdev(exp_fitter, dev_fitter, use_grid=use_grid)
@@ -1916,7 +1917,7 @@ class CompositeBootstrapper(Bootstrapper):
         TdByTe_range = pars.get('TdByTe_range',[-1.0e9,1.0e-9])
         TdByTe = numpy.clip(TdByTe_raw,TdByTe_range[0],TdByTe_range[1])
         print('        Td/Te: %.3f clipped: %.3f' % (TdByTe_raw,TdByTe))
-        
+
         guesser=self._get_max_guesser(
             guess=guess,
             prior=prior,
@@ -1968,7 +1969,7 @@ class CompositeBootstrapper(Bootstrapper):
         fitting.print_pars(res['pars'], front='        gal_pars:')
         fitting.print_pars(res['pars_err'], front='        gal_perr:')
         print('        lnprob: %e' % res['lnprob'])
-        
+
 
         res['TdByTe'] = TdByTe
         res['TdByTe_noclip'] = TdByTe_raw
@@ -2033,7 +2034,7 @@ class CompositeBootstrapper(Bootstrapper):
         runner.go(ntry=ntry)
 
         return runner.fitter
- 
+
 
     def isample(self, ipars, prior=None):
         super(CompositeBootstrapper,self).isample(ipars,prior=prior)
@@ -2314,7 +2315,7 @@ class EMRunner(object):
         sigma2 = self.sigma_guess**2
         pars=array( [1.0 + 0.1*srandu(),
                      0.1*srandu(),
-                     0.1*srandu(), 
+                     0.1*srandu(),
                      sigma2*(1.0 + 0.1*srandu()),
                      0.2*sigma2*srandu(),
                      sigma2*(1.0 + 0.1*srandu())] )
@@ -2539,7 +2540,7 @@ class MaxRunner(object):
         method(ntry=ntry)
 
     def _go_lm(self, ntry=1):
-        
+
         if self.intpars is not None:
             npoints=self.intpars['npoints']
             #print("max gal fit using npoints:",npoints)
@@ -2601,7 +2602,7 @@ class MaxRunnerGaussMom(object):
         method(ntry=ntry)
 
     def _go_lm(self, ntry=1):
-        
+
         fitclass=self._get_lm_fitter_class()
 
         for i in xrange(ntry):
@@ -2646,7 +2647,7 @@ class MaxRunnerFixT(MaxRunner):
 
     def go(self, ntry=1):
         from .fitting import LMSimpleFixT
-        
+
 
         for i in xrange(ntry):
             fitter=LMSimpleFixT(self.obs,
@@ -2690,7 +2691,7 @@ class MaxRunnerGOnly(MaxRunner):
 
     def go(self, ntry=1):
         from .fitting import LMSimpleGOnly
-        
+
 
         for i in xrange(ntry):
             fitter=LMSimpleGOnly(self.obs,
