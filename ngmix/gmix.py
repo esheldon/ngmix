@@ -617,7 +617,7 @@ class GMix(object):
         self._pars = zeros(self._npars)
         self._data = zeros(self._ngauss, dtype=_gauss2d_dtype)
 
-    def make_galsim_object(self, s1=None, s2=None, psf=None):
+    def make_galsim_object(self, Tmin=0.001):
         """
         make a galsim representation for the gaussian mixture
 
@@ -627,12 +627,10 @@ class GMix(object):
 
         parameters
         ----------
-        s1,s2: float
-            additional shear to add.
-        psf: galsim psf
-            a psf by which to convolve each gaussian.  This is useful
-            because galsim convolutions cannot be done on shifted
-            objects
+        Tmin: float, optional
+            Minimum size for gaussians.  Galsim doesn't allow objects
+            with less than zero size because when convolving it renders
+            the object
         """
         import galsim
 
@@ -655,16 +653,14 @@ class GMix(object):
             g1,g2=e1e2_to_g1g2(e1,e2)
 
             Tround = moments.get_Tround(T, g1, g2)
+            if Tround < Tmin:
+                Tround=Tmin
+
             sigma_round = sqrt(Tround/2.0)
 
             gsobj = galsim.Gaussian(flux=flux, sigma=sigma_round)
 
             gsobj = gsobj.shear(g1=g1, g2=g2)
-            if s1 is not None:
-                gsobj = gsobj.shear(g1=s1, g2=s2)
-
-            if psf is not None:
-                gsobj = galsim.Convolve(gsobj, psf)
 
             gsobj = gsobj.shift(colshift, rowshift)
 
