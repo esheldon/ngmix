@@ -1937,6 +1937,16 @@ class LMBDF(LMSimple):
         """
         return gmix.GMixBDF(band_pars)
 
+    def _set_flux(self, res):
+        if self.nband==1:
+            res['flux'] = res['pars'][6]
+            res['flux_err'] = sqrt(res['pars_cov'][6,6])
+        else:
+            res['flux'] = res['pars'][6:]
+            res['flux_cov'] = res['pars_cov'][6:, 6:]
+            res['flux_err'] = sqrt(diag(res['flux_cov']))
+
+
 NOTFINITE_BIT=11
 def run_leastsq(func, guess, n_prior_pars, **keys):
     """

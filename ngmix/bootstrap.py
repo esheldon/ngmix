@@ -797,11 +797,18 @@ class Bootstrapper(object):
         #else:
         #    print('using input guesser')
 
-        runner=MaxRunner(
-            obs, gal_model, pars, guesser,
-            prior=prior,
-            intpars=self.intpars,
-        )
+        if gal_model=='bdf':
+            runner=BDFRunner(
+                obs, pars, guesser,
+                prior=prior,
+            )
+
+        else:
+            runner=MaxRunner(
+                obs, gal_model, pars, guesser,
+                prior=prior,
+                intpars=self.intpars,
+            )
 
         runner.go(ntry=ntry)
 
