@@ -2157,11 +2157,11 @@ class PSFRunner(object):
     """
     def __init__(self, obs, model, Tguess, lm_pars,
                  prior=None,
-                 intpars=None):
+                 rng=None):
 
         self.obs=obs
-        self.intpars=intpars
         self.prior=prior
+        self.set_rng(rng)
 
         mess="psf model should be turb or gauss,got '%s'" % model
         assert model in ['turb','gauss'],mess
@@ -2173,20 +2173,12 @@ class PSFRunner(object):
     def go(self, ntry=1):
         from .fitting import LMSimple
 
-        if self.intpars is not None:
-            npoints=self.intpars['npoints']
-            #print("psffit using npoints:",npoints)
-        else:
-            npoints=None
-
-
         for i in xrange(ntry):
 
             guess=self.get_guess()
 
             fitter=LMSimple(self.obs,self.model,lm_pars=self.lm_pars,
-                            prior=self.prior,
-                            npoints=npoints)
+                            prior=self.prior)
             fitter.go(guess)
 
             res=fitter.get_result()
@@ -2196,12 +2188,14 @@ class PSFRunner(object):
         self.fitter=fitter
 
     def get_guess(self):
+        rng=self.rng
+
         guess=self.guess0.copy()
 
-        guess[0:0+2] += 0.01*srandu(2)
-        guess[2:2+2] += 0.1*srandu(2)
-        guess[4] = guess[4]*(1.0 + 0.1*srandu())
-        guess[5] = guess[5]*(1.0 + 0.1*srandu())
+        guess[0:0+2] += rng.uniform(low=-0.01, high=0.01, size=2)
+        guess[2:2+2] += rng.uniform(low=-0.1, high=0.1, size=2)
+        guess[4] = guess[4]*(1.0 + rng.uniform(low=-0.1, high=0.1))
+        guess[5] = guess[5]*(1.0 + rng.uniform(low=-0.1, high=0.1))
 
         return guess
 
@@ -2209,6 +2203,12 @@ class PSFRunner(object):
         Fguess = self.obs.image.sum()
         Fguess *= self.obs.jacobian.get_scale()**2
         self.guess0=array( [0.0, 0.0, 0.0, 0.0, Tguess, Fguess] )
+
+    def set_rng(self, rng):
+        if rng is None:
+            rng=numpy.random.RandomState()
+
+        self.rng=rng
 
 class AMRunner(object):
     """
@@ -2402,10 +2402,10 @@ class PSFRunnerCoellip(object):
     """
     wrapper to generate guesses and run the psf fitter a few times
     """
-    def __init__(self, obs, Tguess, ngauss, lm_pars, intpars=None):
+    def __init__(self, obs, Tguess, ngauss, lm_pars, rng=None):
 
         self.obs=obs
-        self.intpars=intpars
+        self.set_rng(rng)
 
         self.ngauss=ngauss
         self.npars = get_coellip_npars(ngauss)
@@ -2420,16 +2420,9 @@ class PSFRunnerCoellip(object):
     def go(self, ntry=1):
         from .fitting import LMCoellip
 
-        if self.intpars is not None:
-            npoints=self.intpars['npoints']
-            #print("psf coellip fit using npoints:",npoints)
-        else:
-            npoints=None
-
         for i in xrange(ntry):
             guess=self.get_guess()
-            fitter=LMCoellip(self.obs,self.ngauss,lm_pars=self.lm_pars, prior=self.prior,
-                             npoints=npoints)
+            fitter=LMCoellip(self.obs,self.ngauss,lm_pars=self.lm_pars, prior=self.prior)
             fitter.go(guess)
 
             res=fitter.get_result()
@@ -2440,41 +2433,43 @@ class PSFRunnerCoellip(object):
 
     def get_guess(self):
 
+        rng=self.rng
+
         guess=numpy.zeros(self.npars)
 
-        guess[0:0+2] = 0.01*srandu(2)
-        guess[2:2+2] = 0.05*srandu(2)
+        guess[0:0+2] += rng.uniform(low=-0.01, high=0.01, size=2)
+        guess[2:2+2] += rng.uniform(low=-0.05, high=0.05, size=2)
 
         fac=0.01
         if self.ngauss==1:
-            guess[4] = self.Tguess*(1.0 + 0.1*srandu())
-            guess[5] = self.Fguess*(1.0 + 0.1*srandu())
+            guess[4] = self.Tguess*(1.0 + rng.uniform(low=-0.1, high=0.1))
+            guess[5] = self.Fguess*(1.0 + rng.uniform(low=-0.1, high=0.1))
         elif self.ngauss==2:
-            guess[4] = self.Tguess*_moffat2_fguess[0]*(1.0 + fac*srandu())
-            guess[5] = self.Tguess*_moffat2_fguess[1]*(1.0 + fac*srandu())
+            guess[4] = self.Tguess*_moffat2_fguess[0]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[5] = self.Tguess*_moffat2_fguess[1]*(1.0 + rng.uniform(low=-fac,high=fac))
 
-            guess[6] = self.Fguess*_moffat2_pguess[0]*(1.0 + fac*srandu())
-            guess[7] = self.Fguess*_moffat2_pguess[1]*(1.0 + fac*srandu())
+            guess[6] = self.Fguess*_moffat2_pguess[0]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[7] = self.Fguess*_moffat2_pguess[1]*(1.0 + rng.uniform(low=-fac,high=fac))
 
         elif self.ngauss==3:
-            guess[4] = self.Tguess*_moffat3_fguess[0]*(1.0 + fac*srandu())
-            guess[5] = self.Tguess*_moffat3_fguess[1]*(1.0 + fac*srandu())
-            guess[6] = self.Tguess*_moffat3_fguess[2]*(1.0 + fac*srandu())
+            guess[4] = self.Tguess*_moffat3_fguess[0]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[5] = self.Tguess*_moffat3_fguess[1]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[6] = self.Tguess*_moffat3_fguess[2]*(1.0 + rng.uniform(low=-fac,high=fac))
 
-            guess[7] = self.Fguess*_moffat3_pguess[0]*(1.0 + fac*srandu())
-            guess[8] = self.Fguess*_moffat3_pguess[1]*(1.0 + fac*srandu())
-            guess[9] = self.Fguess*_moffat3_pguess[2]*(1.0 + fac*srandu())
+            guess[7] = self.Fguess*_moffat3_pguess[0]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[8] = self.Fguess*_moffat3_pguess[1]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[9] = self.Fguess*_moffat3_pguess[2]*(1.0 + rng.uniform(low=-fac,high=fac))
 
         elif self.ngauss==4:
-            guess[4] = self.Tguess*_moffat4_fguess[0]*(1.0 + fac*srandu())
-            guess[5] = self.Tguess*_moffat4_fguess[1]*(1.0 + fac*srandu())
-            guess[6] = self.Tguess*_moffat4_fguess[2]*(1.0 + fac*srandu())
-            guess[7] = self.Tguess*_moffat4_fguess[3]*(1.0 + fac*srandu())
+            guess[4] = self.Tguess*_moffat4_fguess[0]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[5] = self.Tguess*_moffat4_fguess[1]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[6] = self.Tguess*_moffat4_fguess[2]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[7] = self.Tguess*_moffat4_fguess[3]*(1.0 + rng.uniform(low=-fac,high=fac))
 
-            guess[8]  = self.Fguess*_moffat4_pguess[0]*(1.0 + fac*srandu())
-            guess[9]  = self.Fguess*_moffat4_pguess[1]*(1.0 + fac*srandu())
-            guess[10] = self.Fguess*_moffat4_pguess[2]*(1.0 + fac*srandu())
-            guess[11] = self.Fguess*_moffat4_pguess[3]*(1.0 + fac*srandu())
+            guess[8]  = self.Fguess*_moffat4_pguess[0]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[9]  = self.Fguess*_moffat4_pguess[1]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[10] = self.Fguess*_moffat4_pguess[2]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[11] = self.Fguess*_moffat4_pguess[3]*(1.0 + rng.uniform(low=-fac,high=fac))
 
 
         else:
@@ -2495,20 +2490,28 @@ class PSFRunnerCoellip(object):
         from .joint_prior import PriorCoellipSame
         from .priors import CenPrior, ZDisk2D, TwoSidedErf
 
+        rng=self.rng
+
         Tguess=self.Tguess
         Fguess=self.Fguess
 
         cen_width=2*self.pixel_scale
-        cen_prior = CenPrior(0.0, 0.0, cen_width, cen_width)
-        g_prior=ZDisk2D(1.0)
-        T_prior = TwoSidedErf(0.01*Tguess, 0.001*Tguess, 100*Tguess, Tguess)
-        F_prior = TwoSidedErf(0.01*Fguess, 0.001*Fguess, 100*Fguess, Fguess)
+        cen_prior = CenPrior(0.0, 0.0, cen_width, cen_width, rng=rng)
+        g_prior=ZDisk2D(1.0, rng=rng)
+        T_prior = TwoSidedErf(0.01*Tguess, 0.001*Tguess, 100*Tguess, Tguess, rng=rng)
+        F_prior = TwoSidedErf(0.01*Fguess, 0.001*Fguess, 100*Fguess, Fguess, rng=rng)
 
         self.prior=PriorCoellipSame(self.ngauss,
                                     cen_prior,
                                     g_prior,
                                     T_prior,
                                     F_prior)
+
+    def set_rng(self, rng):
+        if rng is None:
+            rng=numpy.random.RandomState()
+
+        self.rng=rng
 
 
 _moffat2_pguess=array([0.5, 0.5])
