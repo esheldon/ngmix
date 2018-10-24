@@ -2541,7 +2541,7 @@ class MaxRunner(object):
         self.intpars=intpars
 
         self.max_pars=max_pars
-        self.method=max_pars['method']
+        self.method=max_pars.get('method','lm')
         if self.method == 'lm':
             self.send_pars=max_pars['lm_pars']
 
@@ -2869,7 +2869,7 @@ class BDFRunner(MaxRunner):
 
         self.max_pars=max_pars
 
-        self.method=max_pars['method']
+        self.method=max_pars.get('method','lm')
         if self.method == 'lm':
             self.send_pars=max_pars['lm_pars']
         else:
@@ -2880,8 +2880,6 @@ class BDFRunner(MaxRunner):
         self.guesser=guesser
 
     def _go_lm(self, ntry=1):
-        from .fitting import LMComposite
-
         fitclass=self._get_lm_fitter_class()
 
         for i in xrange(ntry):

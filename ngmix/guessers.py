@@ -120,8 +120,7 @@ class TFluxAndPriorGuesser(GuesserBase):
         'linear' or 'log'
     """
     def __init__(self, T, fluxes, prior, scaling='linear'):
-        if numpy.isscalar(fluxes):
-            fluxes=numpy.array(fluxes, dtype='f8', ndmin=1)
+        fluxes=numpy.array(fluxes, dtype='f8', ndmin=1)
 
         self.T=T
         self.fluxes=fluxes
@@ -133,8 +132,8 @@ class TFluxAndPriorGuesser(GuesserBase):
         else:
             self.log_T = log(T)
 
-        lfluxes = fluxes.copy()
-        w, = numpy.where(fluxes < 0.0)
+        lfluxes = self.fluxes.copy()
+        w, = numpy.where(self.fluxes < 0.0)
         if w.size > 0:
             lfluxes[w[:]] = 1.0e-10
         self.log_fluxes = log(lfluxes)
