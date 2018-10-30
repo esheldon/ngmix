@@ -2077,6 +2077,7 @@ class TwoSidedErf(PriorBase):
         """
         get the probability of the point
         """
+        """
         from math import erf
 
         p1 = erf((self.maxval-val)/self.width_at_max)
@@ -2087,8 +2088,15 @@ class TwoSidedErf(PriorBase):
         p2 -= 1
         p2 *= -1
         p2 *= -BIGVAL/2
-        
+
         return p1+p2
+        """
+        p=self.get_lnprob_scalar(val)
+
+        p = -2*p
+        if p < 0.0:
+            p = 0.0
+        return sqrt(p)
 
     def sample(self, nrand=None):
         """

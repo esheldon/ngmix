@@ -170,6 +170,8 @@ class Jacobian(object):
         from .jacobian_nb import jacobian_get_vu
         return jacobian_get_vu(self._data, row, col)
 
+    cen=property(fget=get_cen)
+
     row0=property(fget=get_row0)
     col0=property(fget=get_col0)
 

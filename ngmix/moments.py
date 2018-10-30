@@ -8,6 +8,13 @@ def sigma_to_fwhm(sigma):
     convert sigma to fwhm for a gaussian
     """
     return sigma*2.3548200450309493
+
+def T_to_fwhm(T):
+    """
+    convert sigma to fwhm for a gaussian
+    """
+    sigma=numpy.sqrt(T/2.0)
+    return sigma_to_fwhm(sigma)
  
 def fwhm_to_sigma(fwhm):
     """
@@ -15,6 +22,14 @@ def fwhm_to_sigma(fwhm):
     """
     return fwhm/2.3548200450309493
  
+def fwhm_to_T(fwhm):
+    """
+    convert fwhm to T for a gaussian
+    """
+    sigma = fwhm_to_sigma(fwhm)
+    return 2*sigma**2
+ 
+
 def r50_to_sigma(r50):
     """
     convert r50, the half light radius, to sigma for a gaussian
