@@ -792,6 +792,9 @@ class Metacal(object):
                            psf=psf_obs,
                            meta=meta)
 
+        if obs.has_bmask():
+            newobs.bmask = obs.bmask
+
         #_compare_psfs(self.obs.psf, psf_obs)
         return newobs
 
@@ -1079,12 +1082,19 @@ class MetacalAnalyticPSF(Metacal):
 
         psf_obs = self._make_psf_obs(psf_im)
 
+        meta={}
+        meta.update(obs.meta)
         newobs=Observation(
             im.array,
             jacobian=obs.jacobian.copy(),
             weight=obs.weight.copy(),
             psf=psf_obs,
+            meta=meta,
         )
+
+        if obs.has_bmask():
+            newobs.bmask = obs.bmask
+
         if False:
             import images
             print("orig psf im sum:",self.obs.psf.image.sum())
