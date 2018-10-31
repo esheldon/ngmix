@@ -1289,10 +1289,12 @@ def get_weighted_moments_stats(ares):
             else:
                 # T <= 0.0
                 res['flags'] |= 0x8
+                res['flagstr'] = 'T <= 0.0'
 
         else:
             # flux <= 0.0
             res['flags'] |= 0x4
+            res['flagstr'] = 'flux <= 0.0'
 
         fvar_sum=sums_cov[5,5]
 
@@ -1304,5 +1306,6 @@ def get_weighted_moments_stats(ares):
         else:
             # zero var flag
             res['flags'] |= 0x40
+            res['flagstr'] = 'zero var'
 
     return res
