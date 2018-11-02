@@ -534,12 +534,6 @@ class Metacal(object):
 
         imconv = self._get_target_gal_obj(psf_obj,shear=shear)
 
-        # this should carry over the wcs
-        #newim = self.image.copy()
-        #imconv.drawImage(
-        #    image=newim,
-        #    method='no_pixel' # pixel is in the PSF
-        #)
         ny,nx=self.image.array.shape
 
         try:
@@ -1002,12 +996,11 @@ class MetacalFitGaussPSF(Metacal):
 
         g = sqrt(shear.g1**2 + shear.g2**2)
         if g in self._psf_cache:
-            psf_grown_image = self._psf_cache[g].copy()
+            tpsf_grown_image, psf_grown = self._psf_cache[g]
+            psf_grown_image = tpsf_grown_image.copy()
         else:
 
-            # in this case, the two are the same because the
-            # pixel is already in there
-            psf_grown, psf_grown_nopix = self._get_dilated_psf(shear)
+            psf_grown = self._get_dilated_psf(shear)
 
             # this should carry over the wcs
             psf_grown_image = self.psf_image.copy()
@@ -1023,12 +1016,13 @@ class MetacalFitGaussPSF(Metacal):
                 # argh, galsim uses generic exceptions
                 raise GMixRangeError("galsim error: '%s'" % str(err))
 
+            psf_grown_image.array[:,:] += self.psf_noise_image
+            self._psf_cache[g] = (psf_grown_image, psf_grown)
+
         if get_nopix:
             return psf_grown_image, psf_grown_image, psf_grown
         else:
             return psf_grown_image, psf_grown
-
-
 
     def _setup_psf(self):
         self._psf_cache={}
@@ -1086,18 +1080,18 @@ class MetacalFitGaussPSF(Metacal):
 
         # we don't convolve by the pixel, its already in there
         #psf_grown = galsim.Convolve(psf_grown_nopix,self.pixel)
-        return psf_grown, psf_grown
+        return psf_grown
 
     def _make_psf_obs(self, gsim):
-
+        """
+        make a new psf observation
+        """
         psf_im = gsim.array.copy()
-        psf_im += self.psf_noise_image
-        obs=self.obs
 
         cen = (numpy.array(psf_im.shape)-1.0)/2.0
 
         # this makes a copy
-        j = obs.psf.jacobian
+        j = self.obs.psf.jacobian
         j.set_cen(
             row=cen[0],
             col=cen[1],
