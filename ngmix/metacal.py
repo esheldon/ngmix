@@ -98,6 +98,10 @@ def _get_all_metacal(obs, step=0.01, **kw):
                 # we default to only shear terms, not psf shear terms
                 kw['types']=kw.get('types',METACAL_REQUIRED_TYPES)
                 m=MetacalGaussPSF(obs, **kw)
+            elif psf=='fitgauss':
+                # we default to only shear terms, not psf shear terms
+                kw['types']=kw.get('types',METACAL_REQUIRED_TYPES)
+                m=MetacalFitGaussPSF(obs, **kw)
             else:
                 psf = kw.pop('psf')
                 m=MetacalAnalyticPSF(obs, psf, **kw)
@@ -795,6 +799,25 @@ class Metacal(object):
         if obs.has_bmask():
             newobs.bmask = obs.bmask
 
+        """
+        import images
+        images.compare_images(
+            self.obs.psf.image,
+            newobs.psf.image,
+            label1='psf',
+            label2='new psf',
+        )
+        images.compare_images(
+            self.obs.image,
+            newobs.image,
+            label1='im',
+            label2='new im',
+        )
+
+        if 'q'==raw_input('hit a key (q to quit): '):
+            stop
+        """
+
         #_compare_psfs(self.obs.psf, psf_obs)
         return newobs
 
@@ -915,6 +938,138 @@ class MetacalGaussPSF(Metacal):
         noise = 1.0e-6
         psf_im = gsim.array.copy()
         psf_im += numpy.random.normal(scale=noise, size=psf_im.shape)
+        obs=self.obs
+
+        cen = (numpy.array(psf_im.shape)-1.0)/2.0
+        j = obs.psf.jacobian.copy()
+        j.set_cen(
+            row=cen[0],
+            col=cen[1],
+        )
+
+        weight = psf_im*0 + 1.0/noise**2
+        psf_obs = Observation(
+            psf_im,
+            weight=weight,
+            jacobian=j,
+        )
+        return psf_obs
+
+class MetacalFitGaussPSF(Metacal):
+    """
+    base the new PSF off of a simple gaussian fit
+    """
+    def __init__(self, *args, **kw):
+        super(MetacalFitGaussPSF,self).__init__(*args, **kw)
+
+        if 'rng' in kw:
+            self.rng=kw['rng']
+        else:
+            self.rng=numpy.random.RandomState()
+
+        self.psf_flux = self.obs.psf.image.sum()
+        self._do_psf_fit()
+
+        assert not self.prepix,'no prepix for fit gauss psf'
+        assert not self.shear_pixelized_psf,'no shear_pixelized_psf for fit gauss psf'
+        assert self.symmetrize_psf==False,\
+                "no symmetrize for fit gauss psf"
+        assert self.shear_pixelized_psf==False,\
+                "no shear pixelized psf for fit gauss psf"
+
+    def _do_psf_fit(self):
+        """
+        do the gaussian fit
+        """
+        from .bootstrap import PSFRunner
+        from .gexceptions import BootPSFFailure
+
+        jacobian=self.obs.psf.jacobian
+        Tguess = 4.0 * jacobian.get_scale()**2
+
+        runner=PSFRunner(self.obs.psf, 'gauss', Tguess, {})
+        runner.go(ntry=4)
+        res=runner.fitter.get_result()
+
+        if res['flags'] != 0:
+            raise BootPSFFailure('failed to fit psf for MetacalFitGaussPSF')
+
+        T = res['pars'][4]
+        sigma = sqrt(T/2.0)
+
+        self.gauss_psf = galsim.Gaussian(
+            sigma=sigma,
+            flux=self.psf_flux,
+        )
+
+    def _get_dilated_psf(self, shear, doshear=False):
+        """
+        dilate the psf by the input shear and reconvolve by the pixel.  See
+        _do_dilate for the algorithm
+
+        If doshear, also shear it
+        """
+
+        assert doshear==False
+
+        psf_grown = _do_dilate(self.gauss_psf, shear)
+
+        # we don't convolve by the pixel, its already in there
+        #psf_grown = galsim.Convolve(psf_grown_nopix,self.pixel)
+        return psf_grown, psf_grown
+
+    def get_target_psf(self, shear, type, get_nopix=False):
+        """
+        get galsim object for the dilated, possibly sheared, psf
+
+        parameters
+        ----------
+        shear: ngmix.Shape
+            The applied shear
+        type: string
+            Type of psf target.  For type='gal_shear', the psf is just dilated to
+            deal with noise amplification.  For type='psf_shear' the psf is also
+            sheared for calculating Rpsf
+
+        returns
+        -------
+        galsim object
+        """
+
+        _check_shape(shear)
+
+        if type=='psf_shear':
+            doshear=True
+        else:
+            doshear=False
+
+        psf_grown, psf_grown_nopix = self._get_dilated_psf(
+            shear,
+            doshear=doshear,
+        )
+
+        # this should carry over the wcs
+        psf_grown_image = self.psf_image.copy()
+
+        try:
+            psf_grown_image = psf_grown.drawImage(
+                wcs=self.psf_image.wcs,
+            )
+
+            if get_nopix:
+                return psf_grown_image, psf_grown_image, psf_grown
+            else:
+                return psf_grown_image, psf_grown
+
+        except RuntimeError as err:
+            # argh, galsim uses generic exceptions
+            raise GMixRangeError("galsim error: '%s'" % str(err))
+
+    def _make_psf_obs(self, gsim):
+
+        psf_im = gsim.array.copy()
+        noise = psf_im.max()/1000.0
+        psf_im += self.rng.normal(scale=noise, size=psf_im.shape)
         obs=self.obs
 
         cen = (numpy.array(psf_im.shape)-1.0)/2.0
