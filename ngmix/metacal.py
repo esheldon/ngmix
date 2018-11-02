@@ -995,10 +995,7 @@ class MetacalFitGaussPSF(Metacal):
             'psf_shear is not supported for MetacalFitGaussPSF'
 
         g = sqrt(shear.g1**2 + shear.g2**2)
-        if g in self._psf_cache:
-            tpsf_grown_image, psf_grown = self._psf_cache[g]
-            psf_grown_image = tpsf_grown_image.copy()
-        else:
+        if g not in self._psf_cache:
 
             psf_grown = self._get_dilated_psf(shear)
 
@@ -1017,7 +1014,13 @@ class MetacalFitGaussPSF(Metacal):
                 raise GMixRangeError("galsim error: '%s'" % str(err))
 
             psf_grown_image.array[:,:] += self.psf_noise_image
-            self._psf_cache[g] = (psf_grown_image, psf_grown)
+            self._psf_cache[g] = (
+                psf_grown_image,
+                psf_grown,
+            )
+
+        tpsf_grown_image, psf_grown = self._psf_cache[g]
+        psf_grown_image = tpsf_grown_image.copy()
 
         if get_nopix:
             return psf_grown_image, psf_grown_image, psf_grown
