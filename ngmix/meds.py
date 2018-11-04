@@ -122,7 +122,7 @@ class MEDS(meds.MEDS):
         return obslist
 
     def get_ngmix_jacobian(self, iobj, icutout):
-        """Get an ngmix.Jacobian representation
+        """Get an ngmix.Jacobian representation.
 
         Parameters
         ----------
