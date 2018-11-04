@@ -46,6 +46,11 @@ class MultiBandMEDS(object):
             Weight type. can be one of
                 'weight': the actual weight map
                 'uberseg': uberseg modified weight map
+                'cweight': weight map zeroed outside the object's seg map
+                'cseg': weight map zeroed outside of circular aperture that
+                    doesn't touch any other object.
+                'cseg-canonical': same as 'cseg' but uses the postage stamp
+                    center instead of the object's position.
             Default is 'weight'
 
         Returns
@@ -74,6 +79,11 @@ class MultiBandMEDS(object):
             Weight type. can be one of
                 'weight': the actual weight map
                 'uberseg': uberseg modified weight map
+                'cweight': weight map zeroed outside the object's seg map
+                'cseg': weight map zeroed outside of circular aperture that
+                    doesn't touch any other object.
+                'cseg-canonical': same as 'cseg' but uses the postage stamp
+                    center instead of the object's position.
             Default is 'weight'
 
         Returns
@@ -103,6 +113,11 @@ class MEDS(meds.MEDS):
             Weight type. can be one of
                 'weight': the actual weight map
                 'uberseg': uberseg modified weight map
+                'cweight': weight map zeroed outside the object's seg map
+                'cseg': weight map zeroed outside of circular aperture that
+                    doesn't touch any other object.
+                'cseg-canonical': same as 'cseg' but uses the postage stamp
+                    center instead of the object's position.
             Default is 'weight'
 
         Returns
@@ -158,6 +173,11 @@ class MEDS(meds.MEDS):
             Weight type. can be one of
                 'weight': the actual weight map
                 'uberseg': uberseg modified weight map
+                'cweight': weight map zeroed outside the object's seg map
+                'cseg': weight map zeroed outside of circular aperture that
+                    doesn't touch any other object.
+                'cseg-canonical': same as 'cseg' but uses the postage stamp
+                    center instead of the object's position.
             Default is 'weight'
 
         Returns
