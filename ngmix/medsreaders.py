@@ -1,5 +1,5 @@
 import numpy as np
-import meds
+from meds import MEDS as _MEDS
 
 from .observation import MultiBandObsList, Observation, ObsList
 from .jacobian import Jacobian
@@ -101,7 +101,7 @@ class MultiBandMEDS(object):
         return mbobs
 
 
-class MEDS(meds.MEDS):
+class MEDS(_MEDS):
     def get_obslist(self, iobj, weight_type='weight'):
         """Get an ngmix ObsList for all observations.
 
