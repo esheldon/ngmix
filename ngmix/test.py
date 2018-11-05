@@ -1,22 +1,14 @@
 from __future__ import print_function, absolute_import, division
 import sys, os
 import unittest
-import numpy
-from numpy import array, zeros, diag, exp
-from numpy import sqrt, where, log, log10, isfinite, newaxis
-from numpy.random import uniform as randu
-from pprint import pprint
-
-from . import stats
-from .priors import srandu
+import numpy as np
 
 from . import joint_prior
-from .fitting import *
-from .gexceptions import *
+from . import gmix
 from .jacobian import Jacobian, UnitJacobian
 from . import bootstrap
-
-from . import em
+from .observation import Observation
+from .fitting import print_pars
 
 def test():
     suite = unittest.TestLoader().loadTestsFromTestCase(TestFitting)
@@ -38,13 +30,13 @@ class TestFitting(unittest.TestCase):
         self.noisepsf=0.001
 
         self.seed=100
-        self.rng=numpy.random.RandomState(self.seed)
+        self.rng=np.random.RandomState(self.seed)
 
     def get_obs_data(self, model, noise):
 
         rng=self.rng
 
-        sigma=sqrt( (self.T + self.Tpsf)/2. )
+        sigma=np.sqrt( (self.T + self.Tpsf)/2. )
         dims=[2.*5.*sigma]*2
         cen=[dims[0]/2., dims[1]/2.]
 
@@ -56,7 +48,7 @@ class TestFitting(unittest.TestCase):
         pars_psf = [0.0, 0.0, self.g1psf, self.g2psf, self.Tpsf, self.countspsf]
         gm_psf=gmix.GMixModel(pars_psf, self.psf_model)
 
-        pars_obj = array([0.0, 0.0, self.g1, self.g2, self.T, self.counts])
+        pars_obj = np.array([0.0, 0.0, self.g1, self.g2, self.T, self.counts])
         npars=pars_obj.size
         gm_obj0=gmix.GMixModel(pars_obj, model)
 
@@ -68,7 +60,7 @@ class TestFitting(unittest.TestCase):
             size=im_psf.shape,
         )
         im_psf[:,:] += npsf
-        wt_psf=zeros(im_psf.shape) + 1./self.noisepsf**2
+        wt_psf=np.zeros(im_psf.shape) + 1./self.noisepsf**2
 
         im_obj=gm.make_image(dims, jacobian=j)
         n=rng.normal(
@@ -76,7 +68,7 @@ class TestFitting(unittest.TestCase):
             size=im_obj.shape,
         )
         im_obj[:,:] += n
-        wt_obj=zeros(im_obj.shape) + 1./noise**2
+        wt_obj=np.zeros(im_obj.shape) + 1./noise**2
 
         psf_obs = Observation(
             im_psf,
@@ -98,6 +90,8 @@ class TestFitting(unittest.TestCase):
 
     def testExp(self):
 
+        rng=self.rng
+
         print('\n')
         for noise in [0.001, 0.1, 1.0]:
             print('='*10)
@@ -108,12 +102,12 @@ class TestFitting(unittest.TestCase):
             obs.set_psf(mdict['psf_obs'])
 
             pars=mdict['pars'].copy()
-            pars[0] += randu(low=-0.1,high=0.1)
-            pars[1] += randu(low=-0.1,high=0.1)
-            pars[2] += randu(low=-0.1,high=0.1)
-            pars[3] += randu(low=-0.1,high=0.1)
-            pars[4] *= (1.0 + randu(low=-0.1,high=0.1))
-            pars[5] *= (1.0 + randu(low=-0.1,high=0.1))
+            pars[0] += rng.uniform(low=-0.1,high=0.1)
+            pars[1] += rng.uniform(low=-0.1,high=0.1)
+            pars[2] += rng.uniform(low=-0.1,high=0.1)
+            pars[3] += rng.uniform(low=-0.1,high=0.1)
+            pars[4] *= (1.0 + rng.uniform(low=-0.1,high=0.1))
+            pars[5] *= (1.0 + rng.uniform(low=-0.1,high=0.1))
 
             max_pars={'method':'lm',
                       'lm_pars':{'maxfev':4000}}
@@ -134,4 +128,31 @@ class TestFitting(unittest.TestCase):
             print('s2n:',res['s2n_w'])
 
 
+    def testEM(self):
 
+        print('\n')
+        for noise in [0.001]:
+            print('='*10)
+            print('noise:',noise)
+            mdict=self.get_obs_data('exp',noise)
+
+            obs=mdict['obs']
+            
+            em_pars={
+                'maxiter':500,
+                'tol':1.0e-5,
+            }
+            for ngauss in [1,2,3,4]:
+                print('ngauss:',ngauss)
+                Tguess=4.0
+                runner=bootstrap.EMRunner(
+                    obs,
+                    Tguess,
+                    ngauss,
+                    em_pars,
+                    rng=self.rng,
+                )
+                runner.go(ntry=2)
+                gm=runner.fitter.get_gmix()
+                print(gm)
+                
