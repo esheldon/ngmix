@@ -38,25 +38,63 @@ class TestFitting(unittest.TestCase):
         self.noisepsf=0.001
 
         self.seed=100
-        numpy.random.seed(self.seed)
+        self.rng=numpy.random.RandomState(self.seed)
 
     def get_obs_data(self, model, noise):
-        obsdata=make_test_observations(
-            model,
-            g1_obj=self.g1,
-            g2_obj=self.g2,
-            T_obj=self.T,
-            counts_obj=self.counts,
-            noise_obj=noise,
-            psf_model=self.psf_model,
-            g1_psf=self.g1psf,
-            g2_psf=self.g2psf,
-            T_psf=self.Tpsf,
-            counts_psf=self.countspsf,
-            noise_psf=self.noisepsf,
+
+        rng=self.rng
+
+        sigma=sqrt( (self.T + self.Tpsf)/2. )
+        dims=[2.*5.*sigma]*2
+        cen=[dims[0]/2., dims[1]/2.]
+
+        j=UnitJacobian(
+            row=cen[0],
+            col=cen[1],
         )
 
-        return obsdata
+        pars_psf = [0.0, 0.0, self.g1psf, self.g2psf, self.Tpsf, self.countspsf]
+        gm_psf=gmix.GMixModel(pars_psf, self.psf_model)
+
+        pars_obj = array([0.0, 0.0, self.g1, self.g2, self.T, self.counts])
+        npars=pars_obj.size
+        gm_obj0=gmix.GMixModel(pars_obj, model)
+
+        gm=gm_obj0.convolve(gm_psf)
+
+        im_psf=gm_psf.make_image(dims, jacobian=j)
+        npsf=rng.normal(
+            scale=self.noisepsf,
+            size=im_psf.shape,
+        )
+        im_psf[:,:] += npsf
+        wt_psf=zeros(im_psf.shape) + 1./self.noisepsf**2
+
+        im_obj=gm.make_image(dims, jacobian=j)
+        n=rng.normal(
+            scale=noise,
+            size=im_obj.shape,
+        )
+        im_obj[:,:] += n
+        wt_obj=zeros(im_obj.shape) + 1./noise**2
+
+        psf_obs = Observation(
+            im_psf,
+            weight=wt_psf,
+            jacobian=j,
+        )
+
+        obs=Observation(
+            im_obj,
+            weight=wt_obj,
+            jacobian=j,
+        )
+
+        return {
+            'psf_obs':psf_obs,
+            'obs':obs,
+            'pars':pars_obj,
+        }
 
     def testExp(self):
 
@@ -95,71 +133,5 @@ class TestFitting(unittest.TestCase):
             print_pars(res['pars_err'], front='pars err:  ')
             print('s2n:',res['s2n_w'])
 
-def make_test_observations(model, **kw):
 
-    imdata=make_test_images(model, **kw)
-
-    psf_obs = Observation(
-        imdata['psf'],
-        jacobian=imdata['jacobian'],
-    )
-
-    obs=Observation(
-        imdata['im'],
-        weight=imdata['wt'],
-        jacobian=imdata['jacobian'],
-    )
-
-    return {
-        'psf_obs':psf_obs,
-        'obs':obs,
-        'pars':imdata['pars'],
-    }
-
-def make_test_images(model,
-                     g1_obj=0.1,
-                     g2_obj=0.05,
-                     T_obj=16.0,
-                     counts_obj=100.0,
-                     noise_obj=0.001,
-                     psf_model="gauss",
-                     g1_psf=0.0,
-                     g2_psf=0.0,
-                     T_psf=4.0,
-                     counts_psf=100.0,
-                     noise_psf=0.001):
-
-
-    sigma=sqrt( (T_obj + T_psf)/2. )
-    dims=[2.*5.*sigma]*2
-    cen=[dims[0]/2., dims[1]/2.]
-
-    j=UnitJacobian(row=cen[0],col=cen[1])
-
-    pars_psf = [0.0, 0.0, g1_psf, g2_psf, T_psf, counts_psf]
-    gm_psf=gmix.GMixModel(pars_psf, psf_model)
-
-    pars_obj = array([0.0, 0.0, g1_obj, g2_obj, T_obj, counts_obj])
-    npars=pars_obj.size
-    gm_obj0=gmix.GMixModel(pars_obj, model)
-
-    gm=gm_obj0.convolve(gm_psf)
-
-    im_psf=gm_psf.make_image(dims, jacobian=j)
-    npsf=noise_psf*numpy.random.randn(im_psf.size).reshape(im_psf.shape)
-    im_psf[:,:] += npsf
-    wt_psf=zeros(im_psf.shape) + 1./noise_psf**2
-
-    im_obj=gm.make_image(dims, jacobian=j)
-    n=noise_obj*numpy.random.randn(im_obj.size).reshape(im_obj.shape)
-    im_obj[:,:] += n
-    wt_obj=zeros(im_obj.shape) + 1./noise_obj**2
-
-    return {
-        'pars':pars_obj,
-        'psf':im_psf,
-        'im':im_obj,
-        'wt':wt_obj,
-        'jacobian':j,
-    }
 
