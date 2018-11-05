@@ -18,12 +18,6 @@ from . import bootstrap
 
 from . import em
 
-try:
-    import covmatrix
-    have_covmatrix=True
-except:
-    have_covmatrix=False
-
 def test():
     suite = unittest.TestLoader().loadTestsFromTestCase(TestFitting)
     unittest.TextTestRunner(verbosity=2).run(suite)
@@ -64,7 +58,7 @@ class TestFitting(unittest.TestCase):
 
         return obsdata
 
-    def testLM(self):
+    def testExp(self):
 
         print('\n')
         for noise in [0.001, 0.1, 1.0]:
@@ -101,105 +95,9 @@ class TestFitting(unittest.TestCase):
             print_pars(res['pars_err'], front='pars err:  ')
             print('s2n:',res['s2n_w'])
 
-    def testMax(self):
-
-        if not have_covmatrix:
-            print("skipping max since covmatrix is not installed")
-            return
-
-        print('\n')
-        for noise in [0.001, 0.1, 1.0]:
-            print('='*10)
-            print('noise:',noise)
-            mdict=self.get_obs_data('exp',noise)
-
-            obs=mdict['obs']
-            obs.set_psf(mdict['psf_obs'])
-
-            pars=mdict['pars'].copy()
-            pars[0] += randu(low=-0.1,high=0.1)
-            pars[1] += randu(low=-0.1,high=0.1)
-            pars[2] += randu(low=-0.1,high=0.1)
-            pars[3] += randu(low=-0.1,high=0.1)
-            pars[4] *= (1.0 + randu(low=-0.1,high=0.1))
-            pars[5] *= (1.0 + randu(low=-0.1,high=0.1))
-
-            max_pars={
-                'method':'Nelder-Mead',
-                'options':{
-                    'maxiter':2000,
-                    'maxfev':4000,
-                },
-            }
-
-            prior=joint_prior.make_uniform_simple_sep([0.0,0.0],     # cen
-                                                      [0.1,0.1],     # g
-                                                      [-10.0,3500.], # T
-                                                      [-0.97,1.0e9]) # flux
-
-            boot=bootstrap.Bootstrapper(obs)
-            boot.fit_psfs('gauss', 4.0)
-            boot.fit_max('exp', max_pars, pars, prior=prior)
-            res=boot.get_max_fitter().get_result()
-
-            print_pars(mdict['pars'],   front='pars true: ')
-            print_pars(res['pars'],     front='pars meas: ')
-            print_pars(res['pars_err'], front='pars err:  ')
-            print('s2n:',res['s2n_w'])
-
-
-    def testCM(self):
-
-        if not have_covmatrix:
-            print("skipping cm since covmatrix is not installed")
-            return
-
-
-        print('\n')
-        for model in ['exp','dev','cm']:
-            print("model:",model)
-            for noise in [0.001]:
-            #for noise in [0.001, 0.1, 1.0]:
-                print('='*10)
-                print('    noise:',noise)
-                mdict=self.get_obs_data(model,noise)
-
-                obs=mdict['obs']
-                obs.set_psf(mdict['psf_obs'])
-
-                max_pars={'method':'lm',
-                          'lm_pars':{'maxfev':4000}}
-
-                #prior=joint_prior.make_uniform_simple_sep([0.0,0.0],     # cen
-                #                                          [0.1,0.1],     # g
-                #                                          [-10.0,3500.], # T
-                #                                          [-0.97,1.0e9]) # flux
-                prior=None
-
-                boot=bootstrap.CompositeBootstrapper(obs,verbose=True)
-                boot.fit_psfs('gauss', 4.0)
-                boot.fit_max('cm', max_pars, prior=prior)
-                res=boot.get_max_fitter().get_result()
-
-                print_pars(mdict['pars'],   front='    pars true: ')
-                print_pars(res['pars'],     front='    pars meas: ')
-                print_pars(res['pars_err'], front='    pars err:  ')
-                print("    fracdev:",res['fracdev'], "TdByTe:",res['TdByTe'],"TdByTe_noclip:",res['TdByTe_noclip'])
-                print('    s2n:',res['s2n_w'])
-
-
 def make_test_observations(model, **kw):
 
-    if model=='cm':
-        imdata_dev=make_test_images('dev', **kw)
-        imdata_exp=make_test_images('exp', **kw)
-
-        imdata={}
-        imdata.update(imdata_dev)
-        imdata['im'] = (imdata_dev['im'] + imdata_exp['im'])*0.5
-        imdata['wt'] = 1.0/(1.0/imdata_dev['wt'] + 1.0/imdata_exp['wt'])
-    else:
-        imdata=make_test_images(model, **kw)
+    imdata=make_test_images(model, **kw)
 
     psf_obs = Observation(
         imdata['psf'],
