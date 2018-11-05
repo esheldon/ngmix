@@ -10,8 +10,8 @@ class MultiBandMEDS(object):
 
     Parameters
     ----------
-    mlist : list of str
-        List of paths to the MEDS files.
+    mlist : list of `ngmix.medsreaders.NGMixMEDS` objects
+        List of the `NGMixMEDS` objects for each band.
 
     Attributes
     ----------
@@ -101,7 +101,7 @@ class MultiBandMEDS(object):
         return mbobs
 
 
-class MEDS(_MEDS):
+class NGMixMEDS(_MEDS):
     def get_obslist(self, iobj, weight_type='weight'):
         """Get an ngmix ObsList for all observations.
 
