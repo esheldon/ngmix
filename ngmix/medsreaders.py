@@ -5,8 +5,8 @@ from .observation import MultiBandObsList, Observation, ObsList
 from .jacobian import Jacobian
 
 
-class MultiBandMEDS(object):
-    """Interface to MEDS objects in more than one band for ngmix.
+class MultiBandNGMixMEDS(object):
+    """Interface to NGMixMEDS objects in more than one band.
 
     Parameters
     ----------
