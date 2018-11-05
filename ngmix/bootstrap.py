@@ -46,7 +46,7 @@ BOOT_WEIGHTS_LOW= 2**5
 
 class Bootstrapper(object):
     def __init__(self, obs,
-                 intpars=None, find_cen=False,
+                 find_cen=False,
                  verbose=False,
                  **kw):
         """
@@ -63,7 +63,6 @@ class Bootstrapper(object):
             need to run fit_psfs()
         """
 
-        self.intpars=intpars
         self.find_cen=find_cen
         self.verbose=verbose
 
@@ -565,8 +564,6 @@ class Bootstrapper(object):
         """
 
         if 'em' in psf_model:
-            assert self.intpars is None,"pixel integration only for max like fitting"
-
             runner=self._fit_one_psf_em(psf_obs, psf_model,
                                         Tguess, ntry, fit_pars)
         elif 'coellip' in psf_model:
@@ -624,7 +621,7 @@ class Bootstrapper(object):
         if fit_pars is not None:
             lm_pars.update(fit_pars)
 
-        runner=PSFRunnerCoellip(psf_obs, Tguess, ngauss, lm_pars, intpars=self.intpars)
+        runner=PSFRunnerCoellip(psf_obs, Tguess, ngauss, lm_pars)
         runner.go(ntry=ntry)
 
         return runner
@@ -640,8 +637,7 @@ class Bootstrapper(object):
         if fit_pars is not None:
             lm_pars.update(fit_pars)
 
-        runner=PSFRunner(psf_obs, psf_model, Tguess, lm_pars,
-                         intpars=self.intpars)
+        runner=PSFRunner(psf_obs, psf_model, Tguess, lm_pars)
         runner.go(ntry=ntry)
 
         return runner
@@ -807,7 +803,6 @@ class Bootstrapper(object):
             runner=MaxRunner(
                 obs, gal_model, pars, guesser,
                 prior=prior,
-                intpars=self.intpars,
             )
 
         runner.go(ntry=ntry)
@@ -1557,7 +1552,6 @@ class MaxMetacalBootstrapper(Bootstrapper):
         for key in sorted(obs_dict):
             # run a regular Bootstrapper on these observations
             boot = Bootstrapper(obs_dict[key],
-                                intpars=self.intpars,
                                 find_cen=self.find_cen,
                                 verbose=self.verbose)
 
@@ -2534,11 +2528,9 @@ class MaxRunner(object):
                  model,
                  max_pars,
                  guesser,
-                 prior=None,
-                 intpars=None):
+                 prior=None):
 
         self.obs=obs
-        self.intpars=intpars
 
         self.max_pars=max_pars
         self.method=max_pars.get('method','lm')
@@ -2566,22 +2558,17 @@ class MaxRunner(object):
         method(ntry=ntry)
 
     def _go_lm(self, ntry=1):
-        
-        if self.intpars is not None:
-            npoints=self.intpars['npoints']
-            #print("max gal fit using npoints:",npoints)
-        else:
-            npoints=None
 
         fitclass=self._get_lm_fitter_class()
 
         for i in xrange(ntry):
             guess=self.guesser()
-            fitter=fitclass(self.obs,
-                            self.model,
-                            lm_pars=self.send_pars,
-                            npoints=npoints,
-                            prior=self.prior)
+            fitter=fitclass(
+                self.obs,
+                self.model,
+                lm_pars=self.send_pars,
+                prior=self.prior,
+            )
 
             fitter.go(guess)
 
@@ -2593,12 +2580,6 @@ class MaxRunner(object):
         self.fitter=fitter
 
     def _go_max(self, ntry=1):
-        
-        if self.intpars is not None:
-            npoints=self.intpars['npoints']
-            #print("max gal fit using npoints:",npoints)
-        else:
-            npoints=None
 
         fitclass=self._get_max_fitter_class()
 
@@ -2607,7 +2588,6 @@ class MaxRunner(object):
             fitter=fitclass(
                 self.obs,
                 self.model,
-                npoints=npoints,
                 prior=self.prior,
 
                 **self.max_pars
