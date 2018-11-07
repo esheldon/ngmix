@@ -1,4 +1,4 @@
-__version__="v1.0.0"
+__version__="v1.1.0rc1"
 
 from . import gmix
 from .gmix import GMix
