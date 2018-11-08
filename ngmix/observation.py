@@ -44,21 +44,21 @@ class Observation(object):
                  psf=None,
                  meta=None):
 
-        # pixels depends on both image and weight, so
-        # delay until both are set
+        # pixels depends on image, weight and jacobian, so delay until all are
+        # set
 
         self.set_image(image, update_pixels=False)
 
-        # these are always present.  If None, they
-        # get default values
+        # If these are None, they get default values
 
         self.set_weight(weight, update_pixels=False)
-        self.set_jacobian(jacobian)
-        self.set_meta(meta)
+        self.set_jacobian(jacobian, update_pixels=False)
 
-        # now that both image and weight are set, create
+        # now image, weight, and jacobian are set, create
         # the pixel array
         self._update_pixels()
+
+        self.set_meta(meta)
 
         # optional, if None nothing is set
         self.set_bmask(bmask)
@@ -333,7 +333,7 @@ class Observation(object):
         else:
             return False
 
-    def set_jacobian(self, jacobian):
+    def set_jacobian(self, jacobian, update_pixels=True):
         """
         Set the jacobian.  If None is sent, a UnitJacobian is generated with
         center equal to the canonical center
@@ -352,6 +352,9 @@ class Observation(object):
             jac = jacobian.copy()
 
         self._jacobian=jac
+
+        if update_pixels:
+            self._update_pixels()
 
     def get_jacobian(self):
         """
@@ -542,8 +545,7 @@ class Observation(object):
 
     def _update_pixels(self):
         """
-        create the pixel struct array, for efficient cache
-        usage at the C level
+        create the pixel struct array, for efficient cache usage
         """
 
         self._pixels = make_pixels(
