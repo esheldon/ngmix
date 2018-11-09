@@ -1,5 +1,3 @@
-import numpy
-from numpy import nan
 from numba import njit
 
 from .gexceptions import GMixRangeError
