@@ -1,10 +1,10 @@
 import numpy
-from .pixels_nb import fill_pixels, fill_coords
 
 def make_pixels(image, weight, jacob):
     """
     make a pixel array from the image and weight
     """
+    from .pixels_nb import fill_pixels
 
     pixels = numpy.zeros(image.size, dtype=_pixels_dtype)
 
