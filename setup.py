@@ -8,7 +8,7 @@ except ImportError:
     from distutils.command.build_py import build_py
 
 setup(
-    name="ngmix", 
+    name="ngmix",
     author="Erin Sheldon",
     url="https://github.com/esheldon/ngmix",
     description="fast 2-d gaussian mixtures for modeling astronomical images",
