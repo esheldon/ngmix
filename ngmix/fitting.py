@@ -584,7 +584,7 @@ class FitterBase(object):
 
             if diag_on_fail:
                 hdiag=diag(diag(hess))
-                cov = -linalg.inv(hess)
+                cov = -linalg.inv(hdiag)
             else:
                 raise
         return cov
@@ -1017,7 +1017,7 @@ class FracdevFitterMax(FitterBase):
             # this might still fail
             if diag_on_fail:
                 hdiag=diag(diag(hess))
-                cov = -linalg.inv(hess)
+                cov = -linalg.inv(hdiag)
             else:
                 raise
         return cov
@@ -1324,7 +1324,7 @@ class FracdevFitter(FitterBase):
             # pull out a diagonal version of the hessian
             # this might still fail
             hdiag=diag(diag(hess))
-            cov = -linalg.inv(hess)
+            cov = -linalg.inv(hdiag)
 
         res['pars_cov'] = cov
         res['pars_err'] = sqrt(diag(cov))
