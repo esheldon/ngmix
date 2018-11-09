@@ -1,7 +1,4 @@
-import numpy
 from numpy import zeros, sqrt
-
-import copy
 
 _jacobian_dtype=[('row0','f8'),
                  ('col0','f8'),
@@ -36,8 +33,8 @@ class Jacobian(object):
 
     parameters
     -----------
-    Note: You can always send wcs= instead of the individual derivatives, which must have
-    the attributes following the galsim convention dudx, dudy, etc.
+    Note: You can always send wcs= instead of the individual derivatives, which
+    must have the attributes following the galsim convention dudx, dudy, etc.
 
     parameters for row,col mode
     ---------------------------
@@ -218,7 +215,6 @@ class Jacobian(object):
         """
         import galsim
 
-        d=self._data
         dudx=self.dudcol
         dudy=self.dudrow
         dvdx=self.dvdcol
@@ -281,14 +277,16 @@ class Jacobian(object):
         self._data['dudrow']=dudrow
         self._data['dudcol']=dudcol
 
-        #self._data['det'] = numpy.abs( dudrow*dvdcol-dudcol*dvdrow )
         self._data['det'] = dvdrow*dudcol - dvdcol*dudrow
         self._data['sdet'] = sqrt(self._data['det'])
 
 
 
     def __repr__(self):
-        fmt="row0: %-10.5g col0: %-10.5g dvdrow: %-10.5g dvdcol: %-10.5g dudrow: %-10.5g dudcol: %-10.5g"
+        fmt=(
+            'row0: %-10.5g col0: %-10.5g dvdrow: %-10.5g '
+            'dvdcol: %-10.5g dudrow: %-10.5g dudcol: %-10.5g'
+        )
         return fmt % (self.row0,
                       self.col0,
                       self.dvdrow,
