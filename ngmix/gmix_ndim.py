@@ -7,6 +7,11 @@ loading, as well as very fast likelihood evaluation
 """
 from __future__ import print_function, absolute_import, division
 
+try:
+    xrange
+except NameError:
+    xrange=range
+
 import numpy
 from .gmix_ndim_nb import gmixnd_get_prob
 
@@ -15,7 +20,12 @@ class GMixND(object):
     Gaussian mixture in arbitrary dimensions.  A bit awkward
     in dim=1 e.g. becuase assumes means are [ndim,npars]
     """
-    def __init__(self, weights=None, means=None, covars=None, file=None, rng=None):
+    def __init__(self,
+                 weights=None,
+                 means=None,
+                 covars=None,
+                 file=None,
+                 rng=None):
 
         if rng is None:
             rng=numpy.random.RandomState()
@@ -31,7 +41,9 @@ class GMixND(object):
             elif (weights is not None
                     or means is not None
                     or covars is not None):
-                raise RuntimeError("send all or none of weights, means, covars")
+                raise RuntimeError(
+                    'send all or none of weights, means, covars'
+                )
 
     def set_mixture(self, weights, means, covars):
         """
@@ -115,7 +127,7 @@ class GMixND(object):
             fits.write(self.weights, extname='weights')
             fits.write(self.means, extname='means')
             fits.write(self.covars, extname='covars')
-        
+
     def load_mixture(self, fname):
         """
         load the mixture from a file
@@ -255,7 +267,7 @@ class GMixND(object):
             self.covars, 'full',
         )
 
-        self._gmm=gmm 
+        self._gmm=gmm
 
     def _calc_icovars_and_norms(self):
         """
