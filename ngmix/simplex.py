@@ -69,7 +69,8 @@ def minimize_neldermead(func, x0,
     fsim = numpy.zeros((N + 1,), float)
     sim[0] = x0
 
-    fsim[0] = func(x0); fcalls += 1
+    fsim[0] = func(x0)
+    fcalls += 1
     nonzdelt = 0.05
     zdelt = 0.00025
     for k in range(0, N):
@@ -80,7 +81,8 @@ def minimize_neldermead(func, x0,
             y[k] = zdelt
 
         sim[k + 1] = y
-        f = func(y); fcalls += 1
+        f = func(y)
+        fcalls += 1
         fsim[k + 1] = f
 
     ind = numpy.argsort(fsim)
@@ -95,7 +97,7 @@ def minimize_neldermead(func, x0,
         xdiff = numpy.abs(sim[1:, :] - sim[0,:])
         xvt = numpy.abs(sim[0,:])*xtol
         xcomp = (xdiff - xvt).max()
-    
+
         fdiff = numpy.abs( (fsim[0] - fsim[1:]) ).max()
         fvt = numpy.abs(fsim[0])*ftol
         fcomp = fdiff - fvt
@@ -105,12 +107,14 @@ def minimize_neldermead(func, x0,
 
         xbar = numpy.add.reduce(sim[:-1], 0) / N
         xr = (1 + rho) * xbar - rho * sim[-1]
-        fxr = func(xr); fcalls += 1
+        fxr = func(xr)
+        fcalls += 1
         doshrink = 0
 
         if fxr < fsim[0]:
             xe = (1 + rho * chi) * xbar - rho * chi * sim[-1]
-            fxe = func(xe); fcalls += 1
+            fxe = func(xe)
+            fcalls += 1
 
             if fxe < fxr:
                 sim[-1] = xe
@@ -126,7 +130,8 @@ def minimize_neldermead(func, x0,
                 # Perform contraction
                 if fxr < fsim[-1]:
                     xc = (1 + psi * rho) * xbar - psi * rho * sim[-1]
-                    fxc = func(xc); fcalls += 1
+                    fxc = func(xc)
+                    fcalls += 1
 
                     if fxc <= fxr:
                         sim[-1] = xc
@@ -136,7 +141,8 @@ def minimize_neldermead(func, x0,
                 else:
                     # Perform an inside contraction
                     xcc = (1 - psi) * xbar + psi * sim[-1]
-                    fxcc = func(xcc); fcalls += 1
+                    fxcc = func(xcc)
+                    fcalls += 1
 
                     if fxcc < fsim[-1]:
                         sim[-1] = xcc
@@ -147,7 +153,8 @@ def minimize_neldermead(func, x0,
                 if doshrink:
                     for j in one2np1:
                         sim[j] = sim[0] + sigma * (sim[j] - sim[0])
-                        fsim[j] = func(sim[j]); fcalls += 1
+                        fsim[j] = func(sim[j])
+                        fcalls += 1
 
         ind = numpy.argsort(fsim)
         sim = numpy.take(sim, ind, 0)
@@ -242,7 +249,8 @@ def minimize_neldermead_old(func, x0,
     fsim = numpy.zeros((N + 1,), float)
     sim[0] = x0
 
-    fsim[0] = func(x0); fcalls += 1
+    fsim[0] = func(x0)
+    fcalls += 1
     nonzdelt = 0.05
     zdelt = 0.00025
     for k in range(0, N):
@@ -253,7 +261,8 @@ def minimize_neldermead_old(func, x0,
             y[k] = zdelt
 
         sim[k + 1] = y
-        f = func(y); fcalls += 1
+        f = func(y)
+        fcalls += 1
         fsim[k + 1] = f
 
     ind = numpy.argsort(fsim)
@@ -270,12 +279,14 @@ def minimize_neldermead_old(func, x0,
 
         xbar = numpy.add.reduce(sim[:-1], 0) / N
         xr = (1 + rho) * xbar - rho * sim[-1]
-        fxr = func(xr); fcalls += 1
+        fxr = func(xr)
+        fcalls += 1
         doshrink = 0
 
         if fxr < fsim[0]:
             xe = (1 + rho * chi) * xbar - rho * chi * sim[-1]
-            fxe = func(xe); fcalls += 1
+            fxe = func(xe)
+            fcalls += 1
 
             if fxe < fxr:
                 sim[-1] = xe
@@ -291,7 +302,8 @@ def minimize_neldermead_old(func, x0,
                 # Perform contraction
                 if fxr < fsim[-1]:
                     xc = (1 + psi * rho) * xbar - psi * rho * sim[-1]
-                    fxc = func(xc); fcalls += 1
+                    fxc = func(xc)
+                    fcalls += 1
 
                     if fxc <= fxr:
                         sim[-1] = xc
@@ -301,7 +313,8 @@ def minimize_neldermead_old(func, x0,
                 else:
                     # Perform an inside contraction
                     xcc = (1 - psi) * xbar + psi * sim[-1]
-                    fxcc = func(xcc); fcalls += 1
+                    fxcc = func(xcc)
+                    fcalls += 1
 
                     if fxcc < fsim[-1]:
                         sim[-1] = xcc
@@ -312,7 +325,8 @@ def minimize_neldermead_old(func, x0,
                 if doshrink:
                     for j in one2np1:
                         sim[j] = sim[0] + sigma * (sim[j] - sim[0])
-                        fsim[j] = func(sim[j]); fcalls += 1
+                        fsim[j] = func(sim[j])
+                        fcalls += 1
 
         ind = numpy.argsort(fsim)
         sim = numpy.take(sim, ind, 0)
