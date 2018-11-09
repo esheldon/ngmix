@@ -1,5 +1,10 @@
 from numba import njit
 
+try:
+    xrange
+except NameError:
+    xrange=range
+
 from .gmix_nb import (
     gmix_eval_pixel_fast,
     gmix_set_norms,
