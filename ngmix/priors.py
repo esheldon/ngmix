@@ -4,15 +4,18 @@ helps use in priors for LM fitting
 """
 from __future__ import print_function, absolute_import, division
 
-from sys import stderr 
+try:
+    xrange
+except NameError:
+    xrange=range
+
+from sys import stderr
 import math
 
 import numpy
-from numpy import where, array, exp, log, log10, sqrt, cos, sin, zeros, ones, diag
-from numpy import newaxis, pi
-from numpy.random import randn
+from numpy import where, array, exp, log, sqrt, cos, sin, zeros, diag
+from numpy import pi
 
-from . import gmix
 from .gexceptions import GMixRangeError
 
 from . import shape
@@ -169,7 +172,7 @@ class GPriorBase(PriorBase):
 
     def get_pqr_num(self, g1in, g2in, s1=0.0, s2=0.0, h=1.e-6):
         """
-        Evaluate 
+        Evaluate
             P
             Q
             R
@@ -197,8 +200,6 @@ class GPriorBase(PriorBase):
         h2=1./(2.*h)
         hsq=1./h**2
 
-        twoh=2*h
-
         P=self.get_pj(g1, g2, s1, s2)
 
         Q1_p   = self.get_pj(g1, g2, s1+h, s2)
@@ -215,14 +216,6 @@ class GPriorBase(PriorBase):
         R11 = (Q1_p - 2*P + Q1_m)*hsq
         R22 = (Q2_p - 2*P + Q2_m)*hsq
         R12 = (R12_pp - Q1_p - Q2_p + 2*P - Q1_m - Q2_m + R12_mm)*hsq*0.5
-
-        #d1_2p = self.get_pj(g1, g2, s1+twoh, s2)
-        #d1_2m = self.get_pj(g1, g2, s1-twoh, s2)
-        #d2_2p = self.get_pj(g1, g2, s1, s2+twoh)
-        #d2_2m = self.get_pj(g1, g2, s1, s2-twoh)
-
-        #S111 = (d1_2p - 2*Q1_p + 2*Q1_m - d1_2m)/(2*h**3)
-        #S222 = (d2_2p - 2*Q2_p + 2*Q2_m - d2_2m)/(2*h**3)
 
         np=g1.size
         Q = numpy.zeros( (np,2) )
@@ -244,7 +237,7 @@ class GPriorBase(PriorBase):
 
     def get_pqrs_num(self, g1in, g2in, h=1.e-5):
         """
-        Evaluate 
+        Evaluate
             P
             Q
             R
@@ -395,14 +388,14 @@ class GPriorBase(PriorBase):
             h = fac*maxval2d*rng.uniform(size=nleft)
 
             pjvals = self.get_pj(g1rand,g2rand,s1,s2)
-            
+
             w,=numpy.where(h < pjvals)
             if w.size > 0:
                 g1[ngood:ngood+w.size] = g1rand[w]
                 g2[ngood:ngood+w.size] = g2rand[w]
                 ngood += w.size
                 nleft -= w.size
-   
+
         return g1,g2
 
 
@@ -449,7 +442,7 @@ class GPriorBase(PriorBase):
                 g[ngood:ngood+w.size] = grand[w]
                 ngood += w.size
                 nleft -= w.size
-   
+
         return g
 
 
@@ -525,7 +518,7 @@ class GPriorBase(PriorBase):
 
     def set_maxval1d_scipy(self):
         """
-        Use a simple minimizer to find the max value of the 1d 
+        Use a simple minimizer to find the max value of the 1d
         distribution
         """
         import scipy.optimize
@@ -533,7 +526,7 @@ class GPriorBase(PriorBase):
         (minvalx, fval, iterations, fcalls, warnflag) \
                 = scipy.optimize.fmin(self.get_prob_scalar1d_neg,
                                       0.1,
-                                      full_output=True, 
+                                      full_output=True,
                                       disp=False)
         if warnflag != 0:
             raise RuntimeError("failed to find min: warnflag %d" % warnflag)
@@ -543,7 +536,7 @@ class GPriorBase(PriorBase):
 
     def set_maxval1d(self, maxguess=0.1):
         """
-        Use a simple minimizer to find the max value of the 1d 
+        Use a simple minimizer to find the max value of the 1d
         distribution
         """
         from .simplex import minimize_neldermead
@@ -595,7 +588,7 @@ class GPriorBase(PriorBase):
             Number of pairs to use at each shear test value
         """
         from . import pqr
-        from .shape import Shape, shear_reduced
+        from .shape import shear_reduced
 
         shear1_true=numpy.linspace(smin, smax, nshear)
         shear2_true=numpy.zeros(nshear)
@@ -603,14 +596,12 @@ class GPriorBase(PriorBase):
         shear1_meas=numpy.zeros(nshear)
         shear2_meas=numpy.zeros(nshear)
         shear1_meas_err=numpy.zeros(nshear)
-        shear2_meas_err=numpy.zeros(nshear)
-        
+
         # _te means expanded around truth
         shear1_meas_te=numpy.zeros(nshear)
         shear2_meas_te=numpy.zeros(nshear)
         shear1_meas_err_te=numpy.zeros(nshear)
-        shear2_meas_err_te=numpy.zeros(nshear)
- 
+
         theta=numpy.pi/2.0
         twotheta = 2.0*theta
         cos2angle = numpy.cos(twotheta)
@@ -649,7 +640,7 @@ class GPriorBase(PriorBase):
                 Pscale = P/P.max()
                 print("Pmin:",P.min(),"Pmax:",P.max())
                 print("Pscale_min: %g" % Pscale.min())
-                #w,=numpy.where( (Pscale[first] > 1.0e-6) & (Pscale[second] > 1.0e-6) )
+
                 w,=numpy.where( (Pscale[first] > 0.) & (Pscale[second] > 0.) )
                 w=numpy.concatenate( (first[w], second[w] ) )
                 print("kept: %d/%d" % (w.size, npair*2))
@@ -660,7 +651,10 @@ class GPriorBase(PriorBase):
                 Pscale = P_te/P_te.max()
                 print("P_te_min:",P_te.min(),"P_te_max:",P_te.max())
                 print("P_te_scale_min: %g" % Pscale.min())
-                w,=numpy.where( (Pscale[first] > 1.0e-6) & (Pscale[second] > 1.0e-6) )
+                w,=numpy.where(
+                    (Pscale[first] > 1.0e-6)
+                    & (Pscale[second] > 1.0e-6)
+                )
                 w=numpy.concatenate( (first[w], second[w] ) )
                 print("kept: %d/%d" % (w.size, npair*2))
                 P_te=P_te[w]
@@ -702,10 +696,12 @@ class GPriorBase(PriorBase):
                 mess='true: %.6f,%.6f meas: %.6f,%.6f expand true: %.6f,%.6f'
                 print(mess % (s1,s2,g1g2[0],g1g2[1],g1g2_te[0],g1g2_te[1]))
             else:
-                mess='true: %.6f meas: %.6f +/- %.6f expand true: %.6f +/- %.6f'
-                #err=numpy.sqrt(C[0,0])
+                mess=(
+                    'true: %.6f meas: %.6f +/- %.6f '
+                    'expand true: %.6f +/- %.6f'
+                )
                 err_te=numpy.sqrt(C_te[0,0])
-                
+
                 err=g1s.std()/sqrt(g1s.size)
 
                 shear1_meas_err[ishear] = err
@@ -727,10 +723,10 @@ class GPriorBase(PriorBase):
             plt.ylabel=r'$\Delta g/g$'
             plt.aspect_ratio=1.0
 
-            plt.add( biggles.FillBetween([0.0,smax], [0.004,0.004], 
+            plt.add( biggles.FillBetween([0.0,smax], [0.004,0.004],
                                          [0.0,smax], [0.000,0.000],
                                           color='grey90') )
-            plt.add( biggles.FillBetween([0.0,smax], [0.002,0.002], 
+            plt.add( biggles.FillBetween([0.0,smax], [0.002,0.002],
                                          [0.0,smax], [0.000,0.000],
                                           color='grey80') )
 
@@ -749,10 +745,18 @@ class GPriorBase(PriorBase):
             plt.add(pts_te)
 
             if not doring:
-                perr=biggles.SymmetricErrorBarsY(shear1_true, fracdiff, fracdiff_err,
-                                                 color='blue')
-                perr_te=biggles.SymmetricErrorBarsY(shear1_true, fracdiff_te, fracdiff_err_te,
-                                                 color='blue')
+                perr=biggles.SymmetricErrorBarsY(
+                    shear1_true,
+                    fracdiff,
+                    fracdiff_err,
+                    color='blue',
+                )
+                perr_te=biggles.SymmetricErrorBarsY(
+                    shear1_true,
+                    fracdiff_te,
+                    fracdiff_err_te,
+                    color='blue',
+                )
                 plt.add(perr,perr_te)
 
             coeffs=numpy.polyfit(shear1_true, fracdiff, 2)
@@ -762,8 +766,8 @@ class GPriorBase(PriorBase):
                                 color='black')
             curve.label=r'$\Delta g/g = %.1f g^2$' % coeffs[0]
             plt.add(curve)
-
-            plt.add( biggles.PlotKey(0.1, 0.9, [pts,pts_te,curve], halign='left') )
+            pkey=biggles.PlotKey(0.1, 0.9, [pts,pts_te,curve], halign='left')
+            plt.add(pkey)
 
             if eps:
                 print('writing:',eps)
@@ -794,8 +798,8 @@ class GPriorBase(PriorBase):
             Number of pairs to use at each shear test value
         """
         from . import pqr
-        from .shape import Shape, shear_reduced
- 
+        from .shape import shear_reduced
+
         theta=numpy.pi/2.0
         twotheta = 2.0*theta
         cos2angle = numpy.cos(twotheta)
@@ -836,7 +840,10 @@ class GPriorBase(PriorBase):
             frac_err=err/shear
 
             if doring:
-                mess='iter: %d true: %.6f, %.6f meas: %.6f, %.6f frac: %.6f %.6f'
+                mess=(
+                    'iter: %d true: %.6f, %.6f '
+                    'meas: %.6f, %.6f frac: %.6f %.6f'
+                )
                 print(mess % (i+1,shear[0],shear[1],shmeas[0],shmeas[1],frac[0],frac[1]))
             else:
                 mess='iter: %d true: %.6f,%.6f meas: %.6f +/- %.6f %.6f +/- %.6f frac: %.6f +/- %.6f %.6f +/- %.6f'
@@ -884,7 +891,7 @@ class GPriorBase(PriorBase):
         """
 
         import biggles
-        from .shape import Shape, shear_reduced
+        from .shape import shear_reduced
         from . import lensfit
 
         # prior used for derivatives; can be different from self!
@@ -900,11 +907,10 @@ class GPriorBase(PriorBase):
 
 
         shear_meas=numpy.zeros( (nshear,2) )
-        shear_meas_err=numpy.zeros( (nshear,2) )
 
         fracdiff=numpy.zeros( nshear )
         fracdiff_err=numpy.zeros( nshear )
- 
+
         theta=numpy.pi/2.0
         twotheta = 2.0*theta
         cos2angle = numpy.cos(twotheta)
@@ -948,6 +954,7 @@ class GPriorBase(PriorBase):
                 rg1,rg2=glike.sample(nsample)
                 iweights=None
 
+                """
                 if False:
                     nbin=30
                     plt=biggles.plot_hist(rg1,nbin=nbin, color='blue',visible=False)
@@ -955,7 +962,7 @@ class GPriorBase(PriorBase):
                     key=raw_input('hit a key: ')
                     if key.lower()=='q':
                         stop
-
+                """
                 gsamples[:,0] = rg1
                 gsamples[:,1] = rg2
                 lsobj = lensfit.LensfitSensitivity(gsamples, prior, weights=iweights, h=h)
@@ -1009,7 +1016,7 @@ class GPriorBase(PriorBase):
 
         plt.yrange=[-ym, ym]
 
-        plt.add( biggles.FillBetween([0.0,smax], [0.001,0.001], 
+        plt.add( biggles.FillBetween([0.0,smax], [0.001,0.001],
                                      [0.0,smax], [-0.001,-0.001],
                                       color='grey80') )
         plt.add( biggles.Curve([0.0,smax],[0.0,0.0]) )
@@ -1056,14 +1063,12 @@ class GPriorBase(PriorBase):
 
         First use test_pqrs_make_W and invert to get Winv
         """
-        from .shape import Shape, shear_reduced
-        from . import pqr
 
         nshear=len(shears1)
         try:
             n=len(nchunks)
-            print("nchunks for each sent")
-        except:
+            print("nchunks",n,"for each sent")
+        except TypeError:
             nchunks = [nchunks]*nshear
             print("same nchunks for all")
 
@@ -1074,7 +1079,7 @@ class GPriorBase(PriorBase):
         shear2_meas=numpy.zeros(nshear,dtype=dtype)
         shear1_err=numpy.zeros(nshear,dtype=dtype)
         shear2_err=numpy.zeros(nshear,dtype=dtype)
-        
+
         for ishear in xrange(nshear):
             print("-"*70)
             s1=shear1_true[ishear]
@@ -1098,8 +1103,12 @@ class GPriorBase(PriorBase):
             fdiff1_err=s1e/s1
             fdiff2=s2m/s2-1
             fdiff2_err=s2e/s2
-            mess='true: %.7f,%.7f meas: %.7f +/- %.7f,%.7f +/- %.7f fdiff: %.6f +/- %.6f %.6f +/- %.6f'
-            print(mess % (s1,s2,s1m,s1e,s2m,s2e,fdiff1,fdiff1_err,fdiff2,fdiff2_err))
+            mess=(
+                'true: %.7f,%.7f meas: %.7f +/- %.7f,%.7f +/- %.7f '
+                'fdiff: %.6f +/- %.6f %.6f +/- %.6f'
+            )
+            tup=(s1,s2,s1m,s1e,s2m,s2e,fdiff1,fdiff1_err,fdiff2,fdiff2_err)
+            print(mess % tup)
 
         shear1_true=shear1_true.astype('f8')
         shear2_true=shear2_true.astype('f8')
@@ -1121,10 +1130,7 @@ class GPriorBase(PriorBase):
 
             plt.yrange=[-0.0015,0.0015]
             smax=shear1_true.max()
-            #plt.add( biggles.FillBetween([0.0,smax], [0.004,0.004], 
-            #                             [0.0,smax], [-0.004,-0.004],
-            #                              color='grey90') )
-            plt.add( biggles.FillBetween([0.0,smax], [0.001,0.001], 
+            plt.add( biggles.FillBetween([0.0,smax], [0.001,0.001],
                                          [0.0,smax], [-0.001,-0.001],
                                           color='grey80') )
             plt.add( biggles.Curve([0.0,smax],[0.0,0.0]) )
@@ -1168,7 +1174,7 @@ class GPriorBase(PriorBase):
         nref=[4000,1000,400,100,100,100]
         ivals=numpy.interp(svals, sref, nref).astype('i8')
         return ivals
-        
+
     def test_pqrs_shear_one(self,
                             shear1,
                             shear2,
@@ -1203,7 +1209,7 @@ class GPriorBase(PriorBase):
         #W8 = array(W, dtype='f8', copy=False)
         #Winv = numpy.linalg.inv(W8)
         Winv = array(Winv, dtype=dtype, copy=False)
- 
+
         theta=numpy.pi/2.0
         twotheta = 2.0*theta
         cos2angle = numpy.cos(twotheta)
@@ -1254,7 +1260,7 @@ class GPriorBase(PriorBase):
 
         shear1_err = shear1_each.std()/sqrt(nchunks)
         shear2_err = shear2_each.std()/sqrt(nchunks)
-        
+
         return shear1_meas, shear1_err, shear2_meas, shear2_err
 
     def test_make_pqrs_W(self,
@@ -1269,7 +1275,6 @@ class GPriorBase(PriorBase):
         """
         import images
 
-        from .shape import Shape, shear_reduced
         from . import pqr
 
         theta=numpy.pi/2.0
@@ -1332,8 +1337,6 @@ class GPriorBase(PriorBase):
         self.ydata = ydata[w]
         self.ierr = 1.0/sqrt(self.ydata)
 
-        dof=self.xdata.size-3
-
         if guess is None:
             guess=self._get_guess(self.ydata.sum())
 
@@ -1358,7 +1361,7 @@ class GPriorBase(PriorBase):
         """
         for the fitter
         """
-        
+
         self.set_pars(pars)
         p = self.get_prob_array1d(self.xdata)
         fdiff = (p-self.ydata)*self.ierr
@@ -1425,7 +1428,7 @@ class GPriorGauss(GPriorBase):
                 g2[ngood:ngood+w.size] = g2rand[w]
                 ngood += w.size
                 nleft -= w.size
-   
+
         if is_scalar:
             g1=g1[0]
             g2=g2[0]
@@ -1559,7 +1562,7 @@ class GPriorBA(GPriorBase):
 
         gsq=g1arr*g1arr + g2arr*g2arr
         omgsq=1.0-gsq
-        
+
         w,=where(omgsq > 0.0)
         if w.size > 0:
             omgsq *= omgsq
@@ -1589,7 +1592,7 @@ class GPriorBA(GPriorBase):
 
         gsq=g*g
         omgsq=1.0-gsq
-        
+
         if omgsq > 0.0:
             omgsq *= omgsq
 
@@ -1607,7 +1610,7 @@ class GPriorBA(GPriorBase):
 
         gsq=g*g
         omgsq=1.0-gsq
-        
+
         w,=where(omgsq > 0.0)
         if w.size > 0:
             omgsq *= omgsq
@@ -1647,7 +1650,7 @@ class GPriorBA(GPriorBase):
 
     def get_pqr(self, g1in, g2in):
         """
-        Evaluate 
+        Evaluate
             P
             Q
             R
@@ -1716,7 +1719,7 @@ class GPriorBA(GPriorBase):
 
     def get_pqr_expand(self, g1in, g2in, s1, s2):
         """
-        Evaluate 
+        Evaluate
             P
             Q
             R
@@ -1767,7 +1770,7 @@ class GPriorBA(GPriorBase):
 
         bigfac1 = (s2sqmo + 4*s1**4*sigma**2 + 4*s2**4*sigma**2 + s1**2*(1 + 8*s2**2*sigma**2))
         bigfac2 = (s2sqmo + 8*s2**2*sigma**2 + s1**2*(1 + 8*sigma**2))
-        
+
         bigfac3 = (g2**2*s2 + (1 + g1**2 - 2*g1*s1)*s2 + g2*(-1 + s1**2 - s2**2))
         bigfac4 = (g1**2*s1 + s1*(1 + g2**2 - 2*g2*s2) + g1*(-1 - s1**2 + s2**2))
 
@@ -1918,9 +1921,6 @@ def _gprior2d_exp_scalar(A, a, g0sq, gmax, g, gsq):
     prior=numer/denom
 
     return prior
-
-def _gprior1d_exp_scalar(A, a, g0sq, gmax, g, gsq):
-    return 2*numpy.pi*g*_gprior2d_exp_scalar(A, a, g0sq, gmax, g, gsq)
 
 def _gprior2d_exp_array(A, a, g0sq, gmax, g, gsq, output):
 
@@ -2617,8 +2617,9 @@ class GPriorM(GPriorBase):
         """
         Fill the output with the 2d prob for the input g value
         """
+        raise NotImplementedError('implement')
 
-        _gprior2d_exp_array(self.A, self.a, self.g0sq, self.gmax, g, gsq, output)
+        #_gprior2d_exp_array(self.A, self.a, self.g0sq, self.gmax, g, gsq, output)
 
     def get_prob_scalar1d(self, g):
         """
@@ -2850,11 +2851,11 @@ class GPriorMErf(GPriorBase):
 
         guess=zeros( (n, self.npars) )
 
-        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n,rng=rng))
-        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n,rng=rng))
-        guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n,rng=rng))
-        guess[:,3] = cen[3]*(1.0 + 0.2*srandu(n,rng=rng))
-        guess[:,4] = cen[4]*(1.0 + 0.2*srandu(n,rng=rng))
+        guess[:,0] = cen[0]*(1.0 + 0.2*srandu(n))
+        guess[:,1] = cen[1]*(1.0 + 0.2*srandu(n))
+        guess[:,2] = cen[2]*(1.0 + 0.2*srandu(n))
+        guess[:,3] = cen[3]*(1.0 + 0.2*srandu(n))
+        guess[:,4] = cen[4]*(1.0 + 0.2*srandu(n))
 
         if is_scalar:
             guess=guess[0,:]
@@ -3220,10 +3221,6 @@ class LogNormal(PriorBase):
         is drawn from lognormal
         """
         z = self.rng.normal(size=nrand)
-        #if nrand is None:
-        #    z=self.rng.randn()
-        #else:
-        #    z=self.rng.randn(nrand)
         r = numpy.exp(self.logmean + self.logsigma*z)
 
         if self.shift is not None:
@@ -3807,8 +3804,6 @@ class TruncatedGaussianPolar(PriorBase):
         nleft=nrand
         ngood=0
         while nleft > 0:
-            #r1=self.mean1 + self.sigma1*randn(nleft)
-            #r2=self.mean2 + self.sigma2*randn(nleft)
             r1=rng.normal(loc=self.mean1,
                           scale=self.sigma1,
                           size=nleft)
@@ -4218,8 +4213,6 @@ class TruncatedSimpleGauss2D(PriorBase):
         nleft=nrand
         while ngood < nrand:
             
-            #rvals1=self.cen1 + self.sigma1*randn(nleft)
-            #rvals2=self.cen2 + self.sigma2*randn(nleft)
             rvals1=rng.normal(loc=self.cen1,
                               scale=self.sigma1,
                               size=nleft)
@@ -4670,18 +4663,6 @@ _g_cosmos_c = array([  0.00000000e+00,   4.16863836e+01,   1.08898496e+03,
 _g_cosmos_k= 3
 
 
-'''
-_g_cosmos_t = array([0.,0.,0.,0.,0.001,0.15,0.2,0.4,0.5,
-                     0.7,0.8,0.9,0.92,0.999,1.,1.,1.,1.])
-
-_g_cosmos_c= array([0.,41.56646313,1089.28265178,1117.24827112, 
-          1083.02107936,836.29580332,502.71408304,282.19129159, 
-          -14.58689825,4.83572205,-3.331918,2.16668349, 
-          0.,0.,0.,0., 0.,0.])
-
-_g_cosmos_k = 3
-'''
-
 
 class ZDisk2D(object):
     """
@@ -4914,7 +4895,6 @@ class ZDisk2DErf(object):
         """
         works for both array and scalar
         """
-        from ._gmix import erf_array
 
         prob = self.get_prob_array1d(vals)
 
@@ -4951,6 +4931,7 @@ class UDisk2DCut(object):
             retval=0.0
 
         return retval
+
     def get_lnprob_scalar2d(self, x1, x2):
         """
         works for both array and scalar
@@ -5068,7 +5049,7 @@ class LimitPDF(object):
                 break
 
         return val
-    
+
     def _sample_many(self, nrand):
         """
         sample an array of values
@@ -5083,7 +5064,7 @@ class LimitPDF(object):
         nleft=nrand
 
         while ngood < nrand:
-            
+
             rvals = pdf.sample(nleft)
 
             w,=numpy.where( (rvals > limits[0]) & (rvals < limits[1]) )
@@ -5091,9 +5072,9 @@ class LimitPDF(object):
                 samples[ngood:ngood+w.size] = rvals[w]
                 ngood += w.size
                 nleft -= w.size
- 
+
         return samples
- 
+
     def set_limits(self, limits):
         """
         set the limits
@@ -5104,10 +5085,10 @@ class LimitPDF(object):
             n=len(limits)
             if n == 2:
                 ok=True
-        except:
+        except TypeError:
             pass
 
-        if ok==False:
+        if ok is False:
             raise ValueError("expected limits to be 2-element sequence, "
                              "got %s" % limits)
 
