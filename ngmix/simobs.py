@@ -1,5 +1,10 @@
 from __future__ import print_function, absolute_import, division
 
+try:
+    xrange
+except NameError:
+    xrange=range
+
 import numpy
 from numpy import where, sqrt, zeros
 from .observation import Observation, ObsList, MultiBandObsList
@@ -62,8 +67,8 @@ def _simulate_mobs(gmix_list, mobs, **kw):
 
         if not len(gmix_list)==len(mobs):
 
-            mess="len(obs)==%d but len(gmix_list)==%d"
-            mess=mess % (len(obs),len(gmix_list))
+            mess="len(mobs)==%d but len(gmix_list)==%d"
+            mess=mess % (len(mobs),len(gmix_list))
             raise ValueError(mess)
 
     new_mobs=MultiBandObsList()
