@@ -1,6 +1,6 @@
 import numpy
 
-from .gexceptions import GMixRangeError, GMixFatalError
+from .gexceptions import GMixRangeError
 
 def shear_reduced(g1, g2, s1, s2):
     """
@@ -175,7 +175,7 @@ def g1g2_to_e1e2(g1, g2):
 
         e1 = fac*g1
         e2 = fac*g2
-    
+
     return e1,e2
 
 def e1e2_to_g1g2(e1, e2):
@@ -221,7 +221,7 @@ def e1e2_to_g1g2(e1, e2):
             g1,g2=0.0,0.0
 
         else:
-        
+
             eta=numpy.arctanh(e)
             g = numpy.tanh(0.5*eta)
 
@@ -255,7 +255,6 @@ def g1g2_to_eta1eta2(g1, g2):
 
 
     if isinstance(g1, numpy.ndarray):
-        n=g1.size
 
         g=numpy.sqrt(g1*g1 + g2*g2)
         w,=numpy.where(g >= 1.0)
@@ -290,7 +289,7 @@ def g1g2_to_eta1eta2(g1, g2):
 
             eta1 = fac*g1
             eta2 = fac*g2
-            
+
     return eta1,eta2
 
 
@@ -383,6 +382,10 @@ def eta1eta2_to_g1g2(eta1,eta2):
 
         g1[w] = fac*eta1[w]
         g2[w] = fac*eta2[w]
+
+    if is_scalar:
+        g1 = g1[0]
+        g2 = g2[0]
 
     return g1,g2
 
