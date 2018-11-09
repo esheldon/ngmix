@@ -3342,8 +3342,10 @@ class ISampler(object):
         min_err=array(min_err,copy=False)
         max_err=array(max_err,copy=False)
 
-        assert min_err.size==self._pars.size,"min_err must be same size as pars"
-        assert max_err.size==self._pars.size,"max_err must be same size as pars"
+        assert min_err.size==self._pars.size,\
+            "min_err must be same size as pars"
+        assert max_err.size==self._pars.size,\
+            "max_err must be same size as pars"
 
         self._min_err=min_err
         self._max_err=max_err
