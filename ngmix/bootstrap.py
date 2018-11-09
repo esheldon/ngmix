@@ -10,19 +10,22 @@ from __future__ import print_function
 
 from pprint import pprint
 import numpy
-from numpy import where, array, sqrt, exp, log, linspace, zeros
-from numpy import isfinite, median, diag
+from numpy import where, array, sqrt, log, linspace, zeros
+from numpy import isfinite
 from numpy.linalg import LinAlgError
 
 from . import admom
 from . import fitting
-from .fitting import print_pars
 from .gmix import GMix, GMixModel, GMixCM, get_coellip_npars
 from .em import GMixEM, prep_image
 from .observation import Observation, ObsList, MultiBandObsList, get_mb_obs
-from .priors import srandu
 from .shape import get_round_factor
-from .guessers import TFluxGuesser, TFluxAndPriorGuesser, ParsGuesser, RoundParsGuesser
+from .guessers import (
+    TFluxGuesser,
+    TFluxAndPriorGuesser,
+    ParsGuesser,
+    RoundParsGuesser,
+)
 from .gexceptions import GMixRangeError, BootPSFFailure, BootGalFailure
 
 from . import roundify
@@ -32,7 +35,7 @@ from copy import deepcopy
 
 try:
     xrange=xrange
-except:
+except NameError:
     xrange=range
 
 BOOT_S2N_LOW = 2**0
@@ -58,7 +61,7 @@ class Bootstrapper(object):
         obs: observation(s)
             Either an Observation, ObsList, or MultiBandObsList The
             Observations must have a psf set.
-            
+
             If the psf observations already have gmix objects set, there is no
             need to run fit_psfs()
         """
@@ -226,87 +229,6 @@ class Bootstrapper(object):
 
         return s2n, psf_T, flags
 
-    def _get_s2n_Ts2n_r_sim(self, fitter, pars_round, ntry, max_pars,
-                            round_prior=None):
-
-        s2n=-9999.0
-        Ts2n=-9999.0
-        psf_T=-9999.0
-        flags=0
-
-        # first set the gmix on all observations
-        max_fitter=self.get_max_fitter()
-        print("    setting gmix in each obs")
-        for band,obslist in enumerate(self.mb_obs_list):
-            # pars_round could be in log and include all bands
-            gm_round_band = self._get_gmix_round(max_fitter, pars_round, band)
-            for obs in obslist:
-                obs.gmix = gm_round_band.copy()
-
-        # now get roundified observations
-        print("    getting round obs")
-        mb_obs_list = roundify.get_round_mb_obs_list(self.mb_obs_list,
-                                                     sim_image=True)
-
-        print("    getting s2n")
-        s2n_sum=0.0
-        psf_T_sum=0.0
-        wsum=0.0
-        try:
-            for obslist in mb_obs_list:
-                for obs in obslist:
-                    gm = obs.gmix.convolve( obs.psf.gmix )
-
-                    s2n_sum += obs.gmix.get_model_s2n_sum(obs)
-
-                    wt=obs.weight.sum()
-                    psf_T=obs.psf.gmix.get_T()
-                    psf_T_sum += wt*psf_T
-                    wsum += wt
-
-        except GMixRangeError:
-            print("    failure convolving round gmixes")
-            s2n_sum=-9999.0
-
-        if s2n_sum <= 0.0:
-            print("    failure: s2n_sum <= 0.0 :",s2n_sum)
-            flags |= BOOT_S2N_LOW
-        else:
-            s2n=sqrt(s2n_sum)
-
-            psf_T=psf_T_sum/wsum
-
-            # and finally, do the fit 
-            try:
-                round_fitter=self._fit_sim_round(fitter,
-                                                 pars_round,
-                                                 mb_obs_list,
-                                                 ntry,
-                                                 max_pars,
-                                                 round_prior=round_prior)
-                res=round_fitter.get_result()
-                if res['flags'] != 0:
-                    print("        round fit fail")
-                    flags |= BOOT_TS2N_ROUND_FAIL 
-                else:
-                    import covmatrix
-                    try:
-                        tcov=covmatrix.calc_cov(round_fitter.calc_lnprob, res['pars'], 1.0e-3)
-                    except LinAlgError:
-                        tcov=None
-
-                    if tcov is not None and tcov[2,2] > 0.0:
-                        cov=tcov
-                    else:
-                        print("    replace cov failed, using LM cov")
-                        cov=res['pars_cov']
-
-                    Ts2n = res['pars'][2]/sqrt(cov[2,2])
-            except GMixRangeError as err:
-                print(str(err))
-                flags |= BOOT_TS2N_ROUND_FAIL 
-
-        return s2n, Ts2n, psf_T, flags
 
     def _fit_sim_round(self, fitter, pars_round, mb_obs_list,
                        ntry, max_pars, round_prior=None):
@@ -321,7 +243,7 @@ class Bootstrapper(object):
         runner.go(ntry=ntry)
 
         return runner.fitter
- 
+
 
     def _get_gmix_round(self, fitter, pars, band):
         """
@@ -364,7 +286,7 @@ class Bootstrapper(object):
 
         Modify the jacobian of our version of the observations accordingly.
 
-        apply a wide prior on the center, just for stability.  Apply an 
+        apply a wide prior on the center, just for stability.  Apply an
         informative prior on T and g, uninformative on flux.
         """
         from . import priors, joint_priors, guessers
@@ -472,9 +394,11 @@ class Bootstrapper(object):
             Fitting parameters for psf.
         skip_already_done: bool
             Skip psfs with a gmix already set
-        norm_key: will use this key in the PSF meta data to fudge the normalization 
-            of the PSF model via amplitude -> amplitude*norm where amplitude is the PSF normalization
-            (usually 1)
+        norm_key:
+            will use this key in the PSF meta data to fudge the
+            normalization of the PSF model via
+            amplitude -> amplitude*norm where amplitude is the PSF
+            normalization (usually 1)
         """
 
         ntot=0
@@ -682,6 +606,7 @@ class Bootstrapper(object):
                                                method=method,
                                                fitter=fitter,
                                                add_noise=add_noise)
+
     def fit_max(self,
                 gal_model,
                 pars,
@@ -750,8 +675,14 @@ class Bootstrapper(object):
         else:
             guesser=self._get_max_guesser(guess=guess, prior=prior)
 
-        runner=MaxRunnerGOnly(self.mb_obs_list, gal_model, max_pars, guesser, pars_in,
-                              prior=prior)
+        runner=MaxRunnerGOnly(
+            self.mb_obs_list,
+            gal_model,
+            max_pars,
+            guesser,
+            pars_in,
+            prior=prior,
+        )
 
         runner.go(ntry=ntry)
 
@@ -826,7 +757,6 @@ class Bootstrapper(object):
         max_fitter=self.max_fitter
         use_fitter=max_fitter
 
-        niter=len(ipars['nsample'])
         for i,nsample in enumerate(ipars['nsample']):
             sampler=self._make_isampler(use_fitter, ipars)
             if sampler is None:
@@ -850,7 +780,6 @@ class Bootstrapper(object):
 
     def _make_isampler(self, fitter, ipars):
         from .fitting import ISampler
-        from numpy.linalg import LinAlgError
 
         res=fitter.get_result()
         icov = res['pars_cov']
@@ -883,7 +812,7 @@ class Bootstrapper(object):
         tfitter=MaxSimple(self.mb_obs_list,
                           model)
         tfitter._setup_data(res['pars'])
- 
+
         sampler=PSampler(res['pars'],
                          res['pars_err'],
                          samples,
@@ -921,7 +850,11 @@ class Bootstrapper(object):
             if not obs_list[0].has_psf_gmix():
                 raise RuntimeError("you need to fit the psfs first")
 
-            fitter=fitting.TemplateFluxFitter(obs_list, do_psf=True, normalize_psf=normalize_psf)
+            fitter=fitting.TemplateFluxFitter(
+                obs_list,
+                do_psf=True,
+                normalize_psf=normalize_psf,
+            )
             fitter.go()
 
             res=fitter.get_result()
@@ -933,7 +866,6 @@ class Bootstrapper(object):
                 psf_flux[i] = res['flux']
                 psf_flux_err[i] = res['flux_err']
 
-                #print("    psf flux %d: %.3f +/- %.3f" % (i,res['flux'],res['flux_err']))
             else:
                 print("failed to fit psf flux for band",i)
 
@@ -1005,7 +937,6 @@ class BootstrapperGaussMom(Bootstrapper):
                                                   guess=guess,
                                                   prior=prior,
                                                   ntry=ntry)
-        res=self.max_fitter.get_result()
 
     def _fit_one_model_max(self, pars, guess=None, prior=None, ntry=1):
         """
@@ -1087,7 +1018,7 @@ class AdmomBootstrapper(Bootstrapper):
         obs: observation(s)
             Either an Observation, ObsList, or MultiBandObsList The
             Observations must have a psf set.
-            
+
             If the psf observations already have gmix objects set, there is no
             need to run fit_psfs()
         """
@@ -1345,7 +1276,7 @@ class AdmomBootstrapper(Bootstrapper):
                 ntot += 1
 
         T = Tsum/ntot
-        
+
         return 2.0*T
 
 class AdmomMetacalBootstrapper(AdmomBootstrapper):
@@ -1415,7 +1346,8 @@ class AdmomMetacalBootstrapper(AdmomBootstrapper):
                     Tguess=psf_Tguess,
                     Tguess_key=psf_Tguess_key,
                     skip_failed=True,
-                    skip_already_done=False, # just in case we have a bookkeeping problem
+                    # just in case we have a bookkeeping problem
+                    skip_already_done=False,
                 )
 
                 wsum     = 0.0
@@ -1543,8 +1475,8 @@ class MaxMetacalBootstrapper(Bootstrapper):
 
         return metacal_pars
 
-    def _do_metacal_max_fits(self, obs_dict, psf_model, gal_model, pars, 
-                             psf_Tguess, prior, psf_ntry, ntry, 
+    def _do_metacal_max_fits(self, obs_dict, psf_model, gal_model, pars,
+                             psf_Tguess, prior, psf_ntry, ntry,
                              psf_fit_pars, guesser=None):
 
         # overall flags, or'ed from each bootstrapper
@@ -1565,7 +1497,13 @@ class MaxMetacalBootstrapper(Bootstrapper):
             boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry,
                           fit_pars=psf_fit_pars,
                           skip_already_done=False)
-            boot.fit_max(gal_model, pars, guesser=guesser, prior=prior, ntry=ntry)
+            boot.fit_max(
+                gal_model,
+                pars,
+                guesser=guesser,
+                prior=prior,
+                ntry=ntry,
+            )
             boot.set_round_s2n()
 
             tres=boot.get_max_fitter().get_result()
@@ -1629,107 +1567,6 @@ class MetacalAnalyticPSFBootstrapper(MaxMetacalBootstrapper):
         )
         return odict
 
-class DeconvMetacalBootstrapper(MaxMetacalBootstrapper):
-    def fit_metacal(self,
-                    psf_model, # to get gpsf,Tpsf
-                    psf_Tguess,
-                    weight_sigma=3.5, # pixels
-                    psf_fit_pars=None,
-                    metacal_pars=None,
-                    psf_ntry=5,
-                    ntry=1,
-                    **kw):
-        """
-        run metacalibration
-
-        parameters
-        ----------
-        psf_model: string
-            model to fit for psf
-        psf_Tguess: float
-            T guess for psf
-        psf_fit_pars: dict, optional
-            parameters for psf fit
-        weight_sigma: float, optional
-            sigma for the weight function in k space
-        metacal_pars: dict, optional
-            Parameters for metacal, default {'step':0.01}
-        psf_ntry: int, optional
-            Number of times to retry psf fitting, default 5
-        ntry: int, optional
-            Number of times to retry fitting, default 1
-        **kw:
-            extra keywords for get_all_metacal
-        """
-
-        metacal_pars_in=metacal_pars
-        metacal_pars={'step':0.01}
-        if metacal_pars_in is not None:
-            metacal_pars.update(metacal_pars_in)
-
-        metacal_pars.update(kw)
-        obs_dict = metacal.get_all_metacal(self.mb_obs_list, **metacal_pars)
-
-        res = self._do_metacal_deconv(
-            obs_dict,
-            psf_model, psf_Tguess, psf_ntry, psf_fit_pars,
-            ntry,
-        )
-
-        self.metacal_res = res
-
-    def _do_metacal_deconv(self,
-                           obs_dict,
-                           psf_model, psf_Tguess, psf_ntry, psf_fit_pars,
-                           ntry):
-
-        # overall flags, or'ed from each bootstrapper
-        res={'mcal_flags':0}
-        for key in sorted(obs_dict):
-            # run a regular Bootstrapper on these observations
-            boot = DeconvBootstrapper(obs_dict[key])
-
-            boot.fit_psfs(psf_model, psf_Tguess, ntry=psf_ntry, fit_pars=psf_fit_pars)
-            boot.do_deconv(ntry=ntry)
-
-            tres=boot.get_deconv_fitter().get_result()
-
-            res['mcal_flags'] |= tres['flags']
-
-            tres['s2n_w'] = tres['s2n_r']
-            tres['T'] = tres['T']
-
-            gpsf,Tpsf=self._calc_mean_psf_stats(boot.mb_obs_list)
-            tres['gpsf'] = gpsf
-            tres['Tpsf'] = Tpsf
-
-            res[key] = tres
-
-        return res
-
-    def _calc_mean_psf_stats(self, mbobs):
-
-        gpsf_sum = zeros(2)
-        Tpsf_sum = 0.0
-        wsum=0.0
-        for obslist in mbobs:
-            for obs in obslist:
-                if hasattr(obs,'psf_nopix'):
-                    g1,g2,T=obs.psf_nopix.gmix.get_g1g2T()
-                else:
-                    g1,g2,T=obs.psf.gmix.get_g1g2T()
-
-                twsum += obs.weight.sum()
-
-                wsum += twsum
-                gpsf_sum[0] += g1*twsum
-                gpsf_sum[1] += g2*twsum
-                Tpsf_sum += T*twsum
-
-
-        gpsf = gpsf_sum/wsum
-        Tpsf = Tpsf_sum/wsum
-        return gpsf,Tpsf
 
 class BDFBootstrapper(Bootstrapper):
     def fit_max(self,
@@ -1837,7 +1674,7 @@ class CompositeBootstrapper(Bootstrapper):
         else:
             exp_guess = None
             dev_guess = None
-            
+
         if self.verbose:
             print("    fitting exp")
         exp_fitter=self._fit_one_model_max(
@@ -1850,10 +1687,11 @@ class CompositeBootstrapper(Bootstrapper):
         )
 
         if self.verbose:
-            fitting.print_pars(exp_fitter.get_result()['pars'], front='        gal_pars:')
-            fitting.print_pars(exp_fitter.get_result()['pars_err'], front='        gal_perr:')
+            tres=exp_fitter.get_result()
+            fitting.print_pars(tres['pars'], front='        gal_pars:')
+            fitting.print_pars(tres['pars_err'], front='        gal_perr:')
             print('        lnprob: %e' % exp_fitter.get_result()['lnprob'])
-            
+
             print("    fitting dev")
 
         dev_fitter=self._fit_one_model_max(
@@ -1870,8 +1708,8 @@ class CompositeBootstrapper(Bootstrapper):
                                front='        gal_pars:')
             fitting.print_pars(dev_fitter.get_result()['pars_err'],
                                front='        gal_perr:')
-            print('        lnprob: %e' % dev_fitter.get_result()['lnprob'])           
-                
+            print('        lnprob: %e' % dev_fitter.get_result()['lnprob'])
+
             print("    fitting fracdev")
 
         use_grid=pars.get('use_fracdev_grid',False)
@@ -1887,9 +1725,11 @@ class CompositeBootstrapper(Bootstrapper):
 
         if self.verbose:
             mess='        nfev: %d fracdev: %.3f +/- %.3f clipped: %.3f'
-            print(mess % (fres['nfev'],fracdev,fres['fracdev_err'],fracdev_clipped))
+            mess = mess % (fres['nfev'],fracdev,
+                           fres['fracdev_err'],fracdev_clipped)
+            print(mess)
             print('        Td/Te: %.3f clipped: %.3f' % (TdByTe_raw,TdByTe))
-        
+
         guesser=self._get_max_guesser(
             guess=guess,
             prior=prior,
@@ -1918,8 +1758,10 @@ class CompositeBootstrapper(Bootstrapper):
 
 
         if not ok:
-            raise BootGalFailure("failed to fit galaxy with maxlike: GMixRange "
-                                 "indicating model problems")
+            raise BootGalFailure(
+                'failed to fit galaxy with maxlike: GMixRange '
+                'indicating model problems'
+            )
 
         self.max_fitter=runner.fitter
 
@@ -1936,7 +1778,7 @@ class CompositeBootstrapper(Bootstrapper):
             fitting.print_pars(res['pars'], front='        gal_pars:')
             fitting.print_pars(res['pars_err'], front='        gal_perr:')
             print('        lnprob: %e' % res['lnprob'])
-            
+
 
         res['TdByTe'] = TdByTe
         res['TdByTe_noclip'] = TdByTe_raw
@@ -2000,7 +1842,7 @@ class CompositeBootstrapper(Bootstrapper):
         runner.go(ntry=ntry)
 
         return runner.fitter
- 
+
 
     def isample(self, ipars, prior=None):
         super(CompositeBootstrapper,self).isample(ipars,prior=prior)
@@ -2078,11 +1920,6 @@ class CompositeBootstrapper(Bootstrapper):
         if w.size == 0:
             return None
 
-        if False:
-            from biggles import plot
-            plot(tests[w], lnps[w])
-            key=raw_input('hit a key: ')
-
         ibest=lnps[w].argmax()
         guess=tests[w[ibest]]
         return guess
@@ -2112,9 +1949,19 @@ class BestBootstrapper(Bootstrapper):
             self.fit_gal_psf_flux()
 
         print("    fitting exp")
-        exp_fitter=self._fit_one_model_max('exp',pars,prior=exp_prior,ntry=ntry)
+        exp_fitter=self._fit_one_model_max(
+            'exp',
+            pars,
+            prior=exp_prior,
+            ntry=ntry,
+        )
         print("    fitting dev")
-        dev_fitter=self._fit_one_model_max('dev',pars,prior=dev_prior,ntry=ntry)
+        dev_fitter=self._fit_one_model_max(
+            'dev',
+            pars,
+            prior=dev_prior,
+            ntry=ntry,
+        )
 
         exp_res=exp_fitter.get_result()
         dev_res=dev_fitter.get_result()
@@ -2298,7 +2145,7 @@ class EMRunner(object):
         sigma2 = self.sigma_guess**2
         pars=array( [1.0 + rng.uniform(low=-0.1,high=0.1),
                      rng.uniform(low=-0.1,high=0.1),
-                     rng.uniform(low=-0.1,high=0.1), 
+                     rng.uniform(low=-0.1,high=0.1),
                      sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
                      rng.uniform(low=-0.2*sigma2, high=0.2*sigma2),
                      sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1))] )
@@ -2332,28 +2179,29 @@ class EMRunner(object):
 
         sigma2 = self.sigma_guess**2
 
-        pars=array( [_em3_pguess[0]*(1.0+rng.uniform(low=-0.1,high=0.1)),
-                     rng.uniform(low=-0.1,high=0.1),
-                     rng.uniform(low=-0.1,high=0.1),
-                     _em3_fguess[0]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
-                     rng.uniform(low=-0.01,high=0.01),
-                     _em3_fguess[0]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+        pars=array(
+            [_em3_pguess[0]*(1.0+rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.1,high=0.1),
+             rng.uniform(low=-0.1,high=0.1),
+             _em3_fguess[0]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.01,high=0.01),
+             _em3_fguess[0]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
 
-                     _em3_pguess[1]*(1.0+rng.uniform(low=-0.1,high=0.1)),
-                     rng.uniform(low=-0.1,high=0.1),
-                     rng.uniform(low=-0.1,high=0.1),
-                     _em3_fguess[1]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
-                     rng.uniform(low=-0.01,high=0.01),
-                     _em3_fguess[1]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+             _em3_pguess[1]*(1.0+rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.1,high=0.1),
+             rng.uniform(low=-0.1,high=0.1),
+             _em3_fguess[1]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.01,high=0.01),
+             _em3_fguess[1]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
 
-                     _em3_pguess[2]*(1.0+rng.uniform(low=-0.1,high=0.1)),
-                     rng.uniform(low=-0.1,high=0.1),
-                     rng.uniform(low=-0.1,high=0.1),
-                     _em3_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
-                     rng.uniform(low=-0.01,high=0.01),
-                     _em3_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1))]
+             _em3_pguess[2]*(1.0+rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.1,high=0.1),
+             rng.uniform(low=-0.1,high=0.1),
+             _em3_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.01,high=0.01),
+             _em3_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1))]
 
-                  )
+        )
 
 
         return GMix(pars=pars)
@@ -2363,35 +2211,36 @@ class EMRunner(object):
 
         sigma2 = self.sigma_guess**2
 
-        pars=array( [_em4_pguess[0]*(1.0+rng.uniform(low=-0.1,high=0.1)),
-                     rng.uniform(low=-0.1,high=0.1),
-                     rng.uniform(low=-0.1,high=0.1),
-                     _em4_fguess[0]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
-                     rng.uniform(low=-0.01,high=0.01),
-                     _em4_fguess[0]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+        pars=array(
+            [_em4_pguess[0]*(1.0+rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.1,high=0.1),
+             rng.uniform(low=-0.1,high=0.1),
+             _em4_fguess[0]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.01,high=0.01),
+             _em4_fguess[0]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
 
-                     _em4_pguess[1]*(1.0+rng.uniform(low=-0.1,high=0.1)),
-                     rng.uniform(low=-0.1,high=0.1),
-                     rng.uniform(low=-0.1,high=0.1),
-                     _em4_fguess[1]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
-                     rng.uniform(low=-0.01,high=0.01),
-                     _em4_fguess[1]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+             _em4_pguess[1]*(1.0+rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.1,high=0.1),
+             rng.uniform(low=-0.1,high=0.1),
+             _em4_fguess[1]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.01,high=0.01),
+             _em4_fguess[1]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
 
-                     _em4_pguess[2]*(1.0+rng.uniform(low=-0.1,high=0.1)),
-                     rng.uniform(low=-0.1,high=0.1),
-                     rng.uniform(low=-0.1,high=0.1),
-                     _em4_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
-                     rng.uniform(low=-0.01,high=0.01),
-                     _em4_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+             _em4_pguess[2]*(1.0+rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.1,high=0.1),
+             rng.uniform(low=-0.1,high=0.1),
+             _em4_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.01,high=0.01),
+             _em4_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
 
-                     _em4_pguess[2]*(1.0+rng.uniform(low=-0.1,high=0.1)),
-                     rng.uniform(low=-0.1,high=0.1),
-                     rng.uniform(low=-0.1,high=0.1),
-                     _em4_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
-                     rng.uniform(low=-0.01,high=0.01),
-                     _em4_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1))]
+             _em4_pguess[2]*(1.0+rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.1,high=0.1),
+             rng.uniform(low=-0.1,high=0.1),
+             _em4_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.01,high=0.01),
+             _em4_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1))]
 
-                  )
+        )
 
 
         return GMix(pars=pars)
@@ -2567,7 +2416,6 @@ class MaxRunner(object):
         else:
             method=self._go_max
 
-        lnprob_max=-numpy.inf
         method(ntry=ntry)
 
     def _go_lm(self, ntry=1):
@@ -2650,11 +2498,10 @@ class MaxRunnerGaussMom(object):
         else:
             raise ValueError("bad method '%s'" % self.method)
 
-        lnprob_max=-numpy.inf
         method(ntry=ntry)
 
     def _go_lm(self, ntry=1):
-        
+
         fitclass=self._get_lm_fitter_class()
 
         for i in xrange(ntry):
@@ -2697,7 +2544,7 @@ class MaxRunnerFixT(MaxRunner):
 
     def go(self, ntry=1):
         from .fitting import LMSimpleFixT
-        
+
 
         for i in xrange(ntry):
             fitter=LMSimpleFixT(self.obs,
@@ -2739,7 +2586,7 @@ class MaxRunnerGOnly(MaxRunner):
 
     def go(self, ntry=1):
         from .fitting import LMSimpleGOnly
-        
+
 
         for i in xrange(ntry):
             fitter=LMSimpleGOnly(self.obs,
@@ -2823,8 +2670,6 @@ class CompositeMaxRunner(MaxRunner):
         self.guesser=guesser
 
     def _go_lm(self, ntry=1):
-        from .fitting import LMComposite
-
         fitclass=self._get_lm_fitter_class()
 
         for i in xrange(ntry):
@@ -2969,7 +2814,6 @@ def replace_masked_pixels(mb_obs_list,
 
     for band in xrange(nband):
         olist = mbo[band]
-        nobs = len(olist)
         for iobs,obs in enumerate(olist):
 
             im=obs.image
@@ -3029,7 +2873,7 @@ def replace_masked_pixels(mb_obs_list,
                     )
                     maxdiff=numpy.abs(imdiff).max()
                     print("    Max abs diff:",maxdiff)
-                    #images.multiview(imdiff,title='mod-orig max diff %g' % maxdiff)
+
                     if raw_input('hit a key: ') == 'q':
                         stop
 
