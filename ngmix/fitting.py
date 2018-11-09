@@ -1797,9 +1797,9 @@ class LMSimple(FitterBase):
 
             start=self._fill_priors(pars, fdiff)
 
-            for pixels,gmix in zip(self._pixels_list,self._gmix_data_list):
+            for pixels,gm in zip(self._pixels_list,self._gmix_data_list):
                 fill_fdiff(
-                    gmix,
+                    gm,
                     pixels,
                     fdiff,
                     start,
