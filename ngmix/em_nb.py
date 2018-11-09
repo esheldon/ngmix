@@ -1,5 +1,10 @@
 from numba import njit
 
+try:
+    xrange
+except NameError:
+    xrange=range
+
 from .gexceptions import GMixRangeError
 from .gmix_nb import (
     gauss2d_set,

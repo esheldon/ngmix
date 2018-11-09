@@ -34,7 +34,7 @@ from . import metacal
 from copy import deepcopy
 
 try:
-    xrange=xrange
+    xrange
 except NameError:
     xrange=range
 

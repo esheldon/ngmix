@@ -1,3 +1,8 @@
+try:
+    xrange
+except NameError:
+    xrange=range
+
 from numba import njit
 
 from .gmix_nb import (

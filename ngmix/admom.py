@@ -1,4 +1,10 @@
 from __future__ import print_function, absolute_import, division
+
+try:
+    xrange
+except NameError:
+    xrange=range
+
 import numpy
 from numpy import diag
 
