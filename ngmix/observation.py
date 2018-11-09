@@ -688,7 +688,8 @@ class MultiBandObsList(list):
 
         over-riding this for type safety
         """
-        assert isinstance(obs_list,ObsList),"obs_list should be of type ObsList"
+        assert isinstance(obs_list,ObsList),\
+            'obs_list should be of type ObsList'
         super(MultiBandObsList,self).append(obs_list)
 
     @property
@@ -779,7 +780,8 @@ class MultiBandObsList(list):
         """
         over-riding this for type safety
         """
-        assert isinstance(obs_list,ObsList),"obs_list should be of type ObsList"
+        assert isinstance(obs_list,ObsList),\
+            'obs_list should be of type ObsList'
         super(MultiBandObsList,self).__setitem__(index, obs_list)
 
 def get_mb_obs(obs_in):
@@ -801,7 +803,9 @@ def get_mb_obs(obs_in):
     elif isinstance(obs_in,MultiBandObsList):
         obs=obs_in
     else:
-        raise ValueError("obs should be Observation, ObsList, or MultiBandObsList")
+        raise ValueError(
+            'obs should be Observation, ObsList, or MultiBandObsList'
+        )
 
     return obs
 
@@ -968,7 +972,8 @@ class KObsList(list):
         """
         over-riding this for type safety
         """
-        assert isinstance(kobs,KObservation),"kobs should be of type KObservation"
+        assert isinstance(kobs,KObservation),\
+            'kobs should be of type KObservation'
         super(KObsList,self).__setitem__(index, kobs)
 
 
@@ -1030,8 +1035,6 @@ def make_iilist(obs, **kw):
         The x interpolant, default 'lanczos15'
     """
     import galsim
-
-    wmult=1.0
 
     interp=kw.get('interp',DEFAULT_XINTERP)
     mb_obs = get_mb_obs(obs)
@@ -1134,7 +1137,6 @@ def make_kobs(mb_obs, **kw):
     interp: string, optional
         The x interpolant, default 'lanczos15'
     """
-    import galsim
 
     mb_iilist, dim, dk = make_iilist(mb_obs, **kw)
 
