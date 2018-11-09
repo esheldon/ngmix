@@ -1,4 +1,10 @@
 from __future__ import print_function, absolute_import, division
+
+try:
+    xrange
+except NameError:
+    xrange=range
+
 import numpy
 from numpy import zeros
 
@@ -46,7 +52,10 @@ def get_sigma_clipped_indices(data, weights=None, **kw):
                                              **kw)
 
         if tind.size < 4:
-            print("warning: sigma clip removed too many points, skipping sigma clip")
+            print(
+                'warning: sigma clip removed too many points, '
+                'skipping sigma clip'
+            )
             ok=False
             break
         keep = keep[tind]
