@@ -149,7 +149,7 @@ def _replace_image_with_noise(obs):
     noise_obs = copy.deepcopy(obs)
 
     if isinstance(noise_obs, Observation):
-        noise_obs.image = noise_image.noise
+        noise_obs.image = noise_obs.noise
     elif isinstance(noise_obs, ObsList):
         for nobs in noise_obs:
             nobs.image = nobs.noise
