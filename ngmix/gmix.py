@@ -1,9 +1,8 @@
 from __future__ import print_function, absolute_import, division
 
-import copy
 import numpy
 from numpy import (
-    array, zeros, exp, log10, log, dot, sqrt, diag,
+    array, zeros, sqrt, diag,
     isfinite,
 )
 from .jacobian import Jacobian, UnitJacobian
@@ -11,7 +10,7 @@ from .shape import Shape, e1e2_to_g1g2
 
 from . import moments
 
-from .gexceptions import GMixRangeError, GMixFatalError
+from .gexceptions import GMixFatalError
 
 from .gmix_nb import (
     _gmix_fill_functions,
@@ -35,11 +34,9 @@ def make_gmix_model(pars, model):
     """
     get a gaussian mixture model for the given model
     """
-    model_num=get_model_num(model)
+
     if model==GMIX_COELLIP:
         return GMixCoellip(pars)
-    elif model==GMIX_SERSIC:
-        return GMixSersic(pars)
     elif model==GMIX_FULL:
         return GMix(pars=pars)
     else:
@@ -128,7 +125,7 @@ class GMix(object):
             pars[beg+3] = gm['irr'][i]
             pars[beg+4] = gm['irc'][i]
             pars[beg+5] = gm['icc'][i]
-            
+
             beg += 6
         return pars
 
@@ -146,7 +143,7 @@ class GMix(object):
         col=colsum/psum
 
         return row,col
-    
+
     def set_cen(self, row, col):
         """
         Move the mixture to a new center
@@ -338,7 +335,7 @@ class GMix(object):
         """
         Get a sheared version of the gaussian mixture
 
-        call as either 
+        call as either
             gmnew = gm.get_sheared(shape)
         or
             gmnew = gm.get_sheared(g1,g2)
@@ -499,11 +496,6 @@ class GMix(object):
         else:
             assert isinstance(jacobian,Jacobian)
 
-        if fast_exp:
-            fexp = 1
-        else:
-            fexp = 0
-
         gm=self.get_data()
 
         coords=make_coords(image.shape, jacobian)
@@ -639,7 +631,7 @@ class GMix(object):
             The Observation to compare with. See ngmix.observation.Observation
             The Observation must have a weight map set
         """
-        
+
         s2n_sum = self.get_model_s2n_sum(obs)
         s2n = sqrt(s2n_sum)
         return s2n
@@ -666,12 +658,6 @@ class GMix(object):
 
         return res
 
-    def get_data(self):
-        """
-        same as get_data for normal models, but not all
-        """
-        return self._data
-
     def reset(self):
         """
         Replace the data array with a zeroed one.
@@ -684,7 +670,7 @@ class GMix(object):
         make a galsim representation for the gaussian mixture
 
         Note ngmix fluxes are surface brightness, galsim are not.
-        So to get agreement in a drawn image you may need to 
+        So to get agreement in a drawn image you may need to
         convert the flux using a pixel scale squared
 
         parameters
@@ -747,7 +733,7 @@ class GMix(object):
 
     def __repr__(self):
         rep=[]
-        #fmt="p: %-10.5g row: %-10.5g col: %-10.5g irr: %-10.5g irc: %-10.5g icc: %-10.5g"
+
         fmt="p: %.4g row: %.4g col: %.4g irr: %.4g irc: %.4g icc: %.4g"
         for i in xrange(self._ngauss):
             t=self._data[i]
@@ -793,14 +779,16 @@ class MultiBandGMixList(list):
 
         over-riding this for type safety
         """
-        assert isinstance(gmix_list,GMixList),"gmix_list should be of type GMixList"
+        assert isinstance(gmix_list,GMixList),\
+            "gmix_list should be of type GMixList"
         super(MultiBandGMixList,self).append(gmix_list)
 
     def __setitem__(self, index, gmix_list):
         """
         over-riding this for type safety
         """
-        assert isinstance(gmix_list,GMixList),"gmix_list should be of type GMixList"
+        assert isinstance(gmix_list,GMixList),\
+            "gmix_list should be of type GMixList"
         super(MultiBandGMixList,self).__setitem__(index, gmix_list)
 
 
@@ -996,7 +984,8 @@ class GMixCoellip(GMixModel):
 
         ncheck=npars-4
         if ( ncheck % 2 ) != 0:
-            raise ValueError("coellip must have len(pars)==4+2*ngauss, got %s" % npars)
+            raise ValueError('coellip must have len(pars)==4+2*ngauss, '
+                             'got %s' % npars)
 
         self._ngauss = ncheck//2
         self._npars  = npars
@@ -1020,9 +1009,9 @@ MAX_SERSIC_N=5.999
 
 _sersic_nvals_10gauss=array([0.75, 1.0, 1.05, 1.25, 1.5, 2.00, 2.50, 3.00, 3.50, 4.00, 4.50, 5.00, 5.50, 6.00])
 _sersic_data_10gauss=array([
-    [0.000249964,  0.00160301,  0.00626292,  0.0192913,  0.0514659,  0.124931,  0.28234,  0.593018,  1.13983,  2.01192,  1.69267e-06,  2.49274e-05,  0.000196065,  0.00113602,  0.00553923,  0.0243836,  0.0958122,  0.287113,  0.434863,  0.15093], 
+    [0.000249964,  0.00160301,  0.00626292,  0.0192913,  0.0514659,  0.124931,  0.28234,  0.593018,  1.13983,  2.01192,  1.69267e-06,  2.49274e-05,  0.000196065,  0.00113602,  0.00553923,  0.0243836,  0.0958122,  0.287113,  0.434863,  0.15093],
 
-    [0.000141183,  0.00103725,  0.00453358,  0.0154615,  0.0452213,  0.118812,  0.288153,  0.657267,  1.43447,  3.09618,  8.69196e-06,  0.000114263,  0.00083198,  0.00442365,  0.0188262,  0.0653268,  0.177007,  0.32906,  0.317786,  0.0866153], 
+    [0.000141183,  0.00103725,  0.00453358,  0.0154615,  0.0452213,  0.118812,  0.288153,  0.657267,  1.43447,  3.09618,  8.69196e-06,  0.000114263,  0.00083198,  0.00442365,  0.0188262,  0.0653268,  0.177007,  0.32906,  0.317786,  0.0866153],
     [0.000120697,  0.000909617,  0.0040539,  0.0140571,  0.0417659,  0.111547,  0.275608,  0.64312,  1.44609,  3.25247,  1.0192e-05,  0.000132091,  0.000947265,  0.00494159,  0.0205266,  0.0691038,  0.180863,  0.325843,  0.310749,  0.086884], 
     [6.39097e-05,  0.000527167,  0.00252544,  0.00935232,  0.0296281,  0.0845536,  0.224712,  0.571277,  1.4312,  3.73464,  1.58929e-05,  0.000195935,  0.00133795,  0.00658759,  0.0254544,  0.0785048,  0.18699,  0.31222,  0.29498,  0.0937132], 
     [2.9818e-05,  0.00027051,  0.00140013,  0.0055675,  0.0189225,  0.0581109,  0.167323,  0.466364,  1.3084,  3.997,  2.20616e-05,  0.000258835,  0.00168076,  0.00781816,  0.0283343,  0.0816486,  0.182828,  0.295325,  0.290403,  0.111681], 
