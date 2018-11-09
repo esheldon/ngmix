@@ -2447,7 +2447,7 @@ class MCMCSimple(MCMCBase):
 
         self._result['g'] = self._result['pars'][g1i:g1i+2].copy()
         self._result['g_cov'] = \
-            self._result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
+            self._result['pars_cov'][g1i:g1i+2, g2i:g2i+2].copy()
 
     def get_band_pars(self, pars_in, band):
         """
