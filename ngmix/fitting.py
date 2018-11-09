@@ -3339,15 +3339,8 @@ class ISampler(object):
         self._cov = cov
 
     def _set_minmax_err(self, min_err, max_err):
-        if min_err is None:
-            min_err = pars*0
-        else:
-            min_err=array(min_err,copy=False)
-
-        if max_err is None:
-            max_err = pars*0 + numpy.inf
-        else:
-            max_err=array(max_err,copy=False)
+        min_err=array(min_err,copy=False)
+        max_err=array(max_err,copy=False)
 
         assert min_err.size==self._pars.size,"min_err must be same size as pars"
         assert max_err.size==self._pars.size,"max_err must be same size as pars"
