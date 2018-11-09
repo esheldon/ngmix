@@ -523,7 +523,9 @@ class JointPriorSimpleLinPars(GMixND):
 
         w=self.check_bounds_array(pars)
         if w.size > 0:
-            lnp[w]=super(JointPriorSimpleLinPars,self).get_lnprob_array(pars[w,:])
+            lnp[w]=super(JointPriorSimpleLinPars,self).get_lnprob_array(
+                pars[w,:]
+            )
 
         return lnp
 
