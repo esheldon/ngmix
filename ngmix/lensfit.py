@@ -4,9 +4,15 @@ function calc_lensfit_shear
 """
 
 from __future__ import print_function, absolute_import, division
+
+try:
+    xrange
+except NameError:
+    xrange=range
+
 import numpy
 from numpy import where, zeros, ones, array, isfinite, newaxis
-from .gexceptions import GMixRangeError, GMixFatalError
+from .gexceptions import GMixRangeError
 
 _default_h=1.0e-6
 
@@ -66,7 +72,7 @@ class LensfitSensitivity(object):
         g_prior:
             The g prior object.
         weights: array
-            Weights for each point in n-d space.  Cannot 
+            Weights for each point in n-d space.  Cannot
             use this with remove_prior=True
         remove_prior: bool, optional
             Remove the prior value from the Q,R terms.  This is needed
@@ -348,7 +354,7 @@ def lensfit_jackknife(g, gsens, do_ring=False, **keys):
     weights: array, optional
         Weights to apply
     progress: bool, optional
-        show a progress bar 
+        show a progress bar
     show: bool, optional
         Show a plot of the jackknife sample values
     eps: string, optional
@@ -397,7 +403,7 @@ def _lensfit_jackknife(g, gsens,
 
     if gsens_alt is not None:
         gsens_alt_sum = (gsens_alt*wa).sum(axis=0)
-        
+
         gsens_alt_mean=gsens_alt_sum/wsum
         shear = shear/gsens_alt_mean
 
@@ -406,7 +412,7 @@ def _lensfit_jackknife(g, gsens,
 
         beg = i*chunksize
         end = (i+1)*chunksize
-        
+
         if progress:
             frac=float(i+1)/nchunks
             pg.update(frac=frac)
@@ -430,7 +436,8 @@ def _lensfit_jackknife(g, gsens,
     fac = (nchunks-1)/float(nchunks)
 
     shear_cov[0,0] = fac*( ((shear[0]-shears[:,0])**2).sum() )
-    shear_cov[0,1] = fac*( ((shear[0]-shears[:,0]) * (shear[1]-shears[:,1])).sum() )
+    shear_cov[0,1] = \
+        fac*( ((shear[0]-shears[:,0]) * (shear[1]-shears[:,1])).sum() )
     shear_cov[1,0] = shear_cov[0,1]
     shear_cov[1,1] = fac*( ((shear[1]-shears[:,1])**2).sum() )
 
@@ -476,7 +483,7 @@ def _lensfit_jackknife_ring(g, gsens,
 
     ntot = g.shape[0]
     if ( (ntot % 2) != 0 ):
-        raise  ValueError("expected factor of two, got %d" % ntot)
+        raise ValueError("expected factor of two, got %d" % ntot)
     npair = ntot//2
 
     # some may not get used
@@ -492,7 +499,7 @@ def _lensfit_jackknife_ring(g, gsens,
 
     if gsens_alt is not None:
         gsens_alt_sum = (gsens_alt*wa).sum(axis=0)
-        
+
         gsens_alt_mean=gsens_alt_sum/wsum
         shear = shear/gsens_alt_mean
 
@@ -501,7 +508,7 @@ def _lensfit_jackknife_ring(g, gsens,
 
         beg = i*chunksize*2
         end = (i+1)*chunksize*2
-        
+
         if progress:
             frac=float(i+1)/nchunks
             pg.update(frac=frac)
@@ -527,7 +534,8 @@ def _lensfit_jackknife_ring(g, gsens,
     fac = (nchunks-1)/float(nchunks)
 
     shear_cov[0,0] = fac*( ((shear[0]-shears[:,0])**2).sum() )
-    shear_cov[0,1] = fac*( ((shear[0]-shears[:,0]) * (shear[1]-shears[:,1])).sum() )
+    shear_cov[0,1] = \
+        fac*( ((shear[0]-shears[:,0]) * (shear[1]-shears[:,1])).sum() )
     shear_cov[1,0] = shear_cov[0,1]
     shear_cov[1,1] = fac*( ((shear[1]-shears[:,1])**2).sum() )
 
