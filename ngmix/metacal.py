@@ -1130,7 +1130,7 @@ class MetacalAnalyticPSF(Metacal):
                 psf_obj = galsim.Gaussian(
                     fwhm=psf_in['pars']['fwhm'],
                 )
-            elif psf_int['model'] == 'moffat':
+            elif psf_in['model'] == 'moffat':
                 psf_obj = galsim.Moffat(
                     beta=psf_in['pars']['beta'],
                     fwhm=psf_in['pars']['fwhm'],
