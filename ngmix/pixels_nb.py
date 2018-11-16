@@ -1,6 +1,11 @@
 import numpy
 from numba import njit
 
+try:
+    xrange
+except NameError:
+    xrange=range
+
 from .jacobian_nb import jacobian_get_vu
 
 @njit

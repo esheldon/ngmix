@@ -5,11 +5,15 @@ Originally based off reading through Eric Huffs code; it has departed
 significantly.
 """
 from __future__ import print_function, absolute_import, division
+
+try:
+    xrange
+except NameError:
+    xrange=range
+
 import copy
 import numpy
-from numpy import zeros, ones, newaxis, sqrt, diag, dot, linalg, array
-from numpy import median, where
-from .jacobian import Jacobian, UnitJacobian
+from numpy import zeros, sqrt, diag
 from .observation import Observation, ObsList, MultiBandObsList
 from .shape import Shape
 from . import simobs
@@ -145,7 +149,7 @@ def _replace_image_with_noise(obs):
     noise_obs = copy.deepcopy(obs)
 
     if isinstance(noise_obs, Observation):
-        noise_obs.image = noise_image.noise
+        noise_obs.image = noise_obs.noise
     elif isinstance(noise_obs, ObsList):
         for nobs in noise_obs:
             nobs.image = nobs.noise
@@ -373,7 +377,7 @@ class Metacal(object):
 
         if get_unsheared:
             newpsf_image, newpsf_nopix_image, newpsf_obj = \
-                    self.get_target_psf(shear, type, get_nopix=True)
+                self.get_target_psf(shear, type, get_nopix=True)
         else:
             newpsf_image, newpsf_obj = self.get_target_psf(shear, type)
 
@@ -440,9 +444,9 @@ class Metacal(object):
         shear: ngmix.Shape
             The applied shear
         type: string
-            Type of psf target.  For type='gal_shear', the psf is just dilated to
-            deal with noise amplification.  For type='psf_shear' the psf is also
-            sheared for calculating Rpsf
+            Type of psf target.  For type='gal_shear', the psf is just dilated
+            to deal with noise amplification.  For type='psf_shear' the psf is
+            also sheared for calculating Rpsf
 
         returns
         -------
@@ -618,7 +622,7 @@ class Metacal(object):
 
         # interpolated psf image
         psf_int = galsim.InterpolatedImage(self.psf_image,
-                                           x_interpolant = self.interp)
+                                           x_interpolant=self.interp)
 
         # this can be used to deconvolve the psf from the galaxy image
         psf_int_inv = galsim.Deconvolve(psf_int)
@@ -780,7 +784,7 @@ class Metacal(object):
         obs=self.obs
 
         psf_obs = self._make_psf_obs(psf_im)
-        psf_obs.meta.update(obs.psf.meta) 
+        psf_obs.meta.update(obs.psf.meta)
 
         meta={}
         meta.update(obs.meta)
@@ -815,6 +819,7 @@ class Metacal(object):
         #_compare_psfs(self.obs.psf, psf_obs)
         return newobs
 
+'''
 def _compare_psfs(orig, gpsf):
     import images
     from . import admom
@@ -840,7 +845,6 @@ def _compare_psfs(orig, gpsf):
     print("cen gauss:",res_gauss['pars'][0:0+2])
 
 
-    '''
     images.compare_images(
         orig.image,
         gpsf.image,
@@ -849,9 +853,9 @@ def _compare_psfs(orig, gpsf):
         width=1200,
         height=1200,
     )
-    '''
     if 'q'==input('hit a key: '):
         stop
+'''
 
 class MetacalGaussPSF(Metacal):
     def __init__(self, *args, **kw):
@@ -859,10 +863,10 @@ class MetacalGaussPSF(Metacal):
 
         self.psf_flux = self.obs.psf.image.sum()
 
-        assert self.symmetrize_psf==False,\
-                "no symmetrize for GaussPSF"
-        assert self.shear_pixelized_psf==False,\
-                "no shear pixelized psf for GaussPSF"
+        assert self.symmetrize_psf is False,\
+            "no symmetrize for GaussPSF"
+        assert self.shear_pixelized_psf is False,\
+            "no shear pixelized psf for GaussPSF"
 
 
     def _do_dilate(self, psf, shear):
@@ -878,9 +882,9 @@ class MetacalGaussPSF(Metacal):
         shear: ngmix.Shape
             The applied shear
         type: string
-            Type of psf target.  For type='gal_shear', the psf is just dilated to
-            deal with noise amplification.  For type='psf_shear' the psf is also
-            sheared for calculating Rpsf
+            Type of psf target.  For type='gal_shear', the psf is just dilated
+            to deal with noise amplification.  For type='psf_shear' the psf is
+            also sheared for calculating Rpsf
 
         returns
         -------
@@ -966,11 +970,12 @@ class MetacalFitGaussPSF(Metacal):
         self._setup_psf()
 
         assert not self.prepix,'no prepix for fit gauss psf'
-        assert not self.shear_pixelized_psf,'no shear_pixelized_psf for fit gauss psf'
-        assert self.symmetrize_psf==False,\
-                "no symmetrize for fit gauss psf"
-        assert self.shear_pixelized_psf==False,\
-                "no shear pixelized psf for fit gauss psf"
+        assert not self.shear_pixelized_psf,\
+            'no shear_pixelized_psf for fit gauss psf'
+        assert self.symmetrize_psf is False,\
+            'no symmetrize for fit gauss psf'
+        assert self.shear_pixelized_psf is False,\
+            'no shear pixelized psf for fit gauss psf'
 
     def get_target_psf(self, shear, type, get_nopix=False):
         """
@@ -1125,7 +1130,7 @@ class MetacalAnalyticPSF(Metacal):
                 psf_obj = galsim.Gaussian(
                     fwhm=psf_in['pars']['fwhm'],
                 )
-            elif psf_int['model'] == 'moffat':
+            elif psf_in['model'] == 'moffat':
                 psf_obj = galsim.Moffat(
                     beta=psf_in['pars']['beta'],
                     fwhm=psf_in['pars']['fwhm'],
@@ -1167,9 +1172,9 @@ class MetacalAnalyticPSF(Metacal):
         shear: ngmix.Shape
             The applied shear
         type: string
-            Type of psf target.  For type='gal_shear', the psf is just dilated to
-            deal with noise amplification.  For type='psf_shear' the psf is also
-            sheared for calculating Rpsf
+            Type of psf target.  For type='gal_shear', the psf is just dilated
+            to deal with noise amplification.  For type='psf_shear' the psf is
+            also sheared for calculating Rpsf
 
         returns
         -------
@@ -1270,6 +1275,7 @@ class MetacalAnalyticPSF(Metacal):
         if obs.has_bmask():
             newobs.bmask = obs.bmask
 
+        '''
         if False:
             import images
             print("orig psf im sum:",self.obs.psf.image.sum())
@@ -1281,6 +1287,7 @@ class MetacalAnalyticPSF(Metacal):
             )
             if 'q'==raw_input('hit a key: '):
                 stop
+        '''
 
         return newobs
 
@@ -1312,7 +1319,7 @@ def _make_symmetrized_gsimage_int(im_input, wcs, interp):
     interpolated image from it
     """
     gsim=_make_symmetrized_gsimage(im_input, wcs)
-    return galsim.InterpolatedImage( gsim, x_interpolant = interp)
+    return galsim.InterpolatedImage( gsim, x_interpolant=interp)
 
 
 def _make_symmetrized_gsimage(im_input, wcs):
@@ -1333,6 +1340,7 @@ def _make_symmetrized_image(im_input):
 
     im *= (1.0/4.0)
 
+    """
     if False:
         import images
         images.multiview(im)
@@ -1346,7 +1354,7 @@ def _make_symmetrized_image(im_input):
         )
         if 'q'==raw_input('hit a key: '):
             stop
-
+    """
     return im
 
 def _check_shape(shape):
@@ -1384,11 +1392,12 @@ def _get_gauss_target_psf(psf, flux):
     ksq = (kx**2 + ky**2) * dk**2
     ksq_max = min(ksq[karr_r < small_kval * psf.flux])
 
-    # We take our target PSF to be the (round) Gaussian that is even smaller at this ksq
+    # We take our target PSF to be the (round) Gaussian that is even smaller at
+    # this ksq
     # exp(-0.5 * ksq_max * sigma_sq) = smaller_kval
     sigma_sq = -2. * log(smaller_kval) / ksq_max
 
-    return galsim.Gaussian(sigma = sqrt(sigma_sq), flux=flux)
+    return galsim.Gaussian(sigma=sqrt(sigma_sq), flux=flux)
 
 
 
@@ -1441,7 +1450,8 @@ def jackknife_shear(data, chunksize=1, dgamma=0.02):
     fac = (nchunks-1)/float(nchunks)
 
     shear_cov[0,0] = fac*( ((shear[0]-shears[:,0])**2).sum() )
-    shear_cov[0,1] = fac*( ((shear[0]-shears[:,0]) * (shear[1]-shears[:,1])).sum() )
+    shear_cov[0,1] = \
+        fac*( ((shear[0]-shears[:,0]) * (shear[1]-shears[:,1])).sum() )
     shear_cov[1,0] = shear_cov[0,1]
     shear_cov[1,1] = fac*( ((shear[1]-shears[:,1])**2).sum() )
 
@@ -1512,7 +1522,6 @@ def _make_metacal_mb_obs_list_dict(mb_obs_list, step, **kw):
 
 def _make_metacal_obs_list_dict(obs_list, step, **kw):
     odict = None
-    first=True
     for obs in obs_list:
 
         todict=_get_all_metacal(obs, step=step, **kw)
@@ -1704,12 +1713,14 @@ def test():
                 print("writing psf:",psffile)
                 fitsio.write(psffile, obs.psf.image, clobber=True)
 
-            mcalfile='test-image-mcal-%sshear-%.2f-%.2f.fits' % (type,shear.g1,shear.g2)
+            mcalfile='test-image-mcal-%sshear-%.2f-%.2f.fits' % \
+                (type,shear.g1,shear.g2)
             mcalfile=os.path.join(dir,mcalfile)
             print("writing metacaled imag:",mcalfile)
             fitsio.write(mcalfile, obs_mcal.image, clobber=True)
 
-            mcal_psf_file='test-psf-mcal-%sshear-%.2f-%.2f.fits' % (type,shear.g1,shear.g2)
+            mcal_psf_file='test-psf-mcal-%sshear-%.2f-%.2f.fits' % \
+                (type,shear.g1,shear.g2)
             mcal_psf_file=os.path.join(dir,mcal_psf_file)
             print("writing metacaled psf image:",mcal_psf_file)
             fitsio.write(mcal_psf_file, obs_mcal.psf.image, clobber=True)
@@ -1765,7 +1776,10 @@ def _get_sim_obs(s1, s2, g1=0.2, g2=0.1, r50=3.0, r50_psf=1.8):
     psf = galsim.Gaussian(flux=fluxpsf, half_light_radius=r50_psf)
     psf = psf.shear(g1=g1psf,g2=g2psf)
 
-    psf_dilated = galsim.Gaussian(flux=fluxpsf, half_light_radius=r50_psf_dilated)
+    psf_dilated = galsim.Gaussian(
+        flux=fluxpsf,
+        half_light_radius=r50_psf_dilated,
+    )
     psf_dilated = psf_dilated.shear(g1=g1psf,g2=g2psf)
 
     gal = galsim.Convolve([psf, gal0])

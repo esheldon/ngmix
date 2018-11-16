@@ -8,8 +8,6 @@ def make_exp_lookup(minval=-100, maxval=100, dtype='f8'):
 
     ivals = numpy.arange(minval,maxval+1,dtype='i4')
 
-    index=0
-
     expvals[:] = numpy.exp(ivals)
 
     return ivals, expvals

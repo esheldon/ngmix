@@ -1,5 +1,10 @@
 from __future__ import print_function, absolute_import, division
 
+try:
+    xrange
+except NameError:
+    xrange=range
+
 import numpy
 from numpy import where, log10, zeros, ones, exp, sqrt
 from numpy.random import random as randu
@@ -9,7 +14,6 @@ from .gexceptions import GMixRangeError
 
 from . import priors
 from .priors import LOWVAL
-from . import gmix
 from .gmix_ndim import GMixND
 
 
@@ -312,9 +316,9 @@ class JointPriorSimpleHybrid(GMixND):
         T=pars[4]
         F=pars[5]
         if (  T < T_bounds[0]
-            or T > T_bounds[1]
-            or F < F_bounds[0]
-            or F > F_bounds[1]):
+                or T > T_bounds[1]
+                or F < F_bounds[0]
+                or F > F_bounds[1]):
 
             if throw:
                 raise GMixRangeError("g or T or F out of range")
@@ -380,7 +384,7 @@ class JointPriorSersicHybrid(JointPriorSimpleHybrid):
         lnp=super(JointPriorSersicHybrid,self).get_lnprob_scalar(pars, **keys)
         lnp += self.n_prior.get_lnprob_scalar(pars[6])
         return lnp
-        
+
     def get_lnprob_array(self, pars, **keys):
         """
         log probability for array input [N,ndims]
@@ -425,11 +429,11 @@ class JointPriorSersicHybrid(JointPriorSimpleHybrid):
         logn=pars[6]
 
         if (  T < T_bounds[0]
-            or T > T_bounds[1]
-            or F < F_bounds[0]
-            or F > F_bounds[1]
-            or logn < logn_bounds[0]
-            or logn > logn_bounds[1]):
+                or T > T_bounds[1]
+                or F < F_bounds[0]
+                or F > F_bounds[1]
+                or logn < logn_bounds[0]
+                or logn > logn_bounds[1]):
 
             if throw:
                 raise GMixRangeError("T, F or n out of range")
@@ -519,7 +523,9 @@ class JointPriorSimpleLinPars(GMixND):
 
         w=self.check_bounds_array(pars)
         if w.size > 0:
-            lnp[w]=super(JointPriorSimpleLinPars,self).get_lnprob_array(pars[w,:])
+            lnp[w]=super(JointPriorSimpleLinPars,self).get_lnprob_array(
+                pars[w,:]
+            )
 
         return lnp
 
@@ -647,7 +653,7 @@ class JointPriorSimpleLinPars(GMixND):
 
         linear parameters input
 
-        Evaluate 
+        Evaluate
             P
             Q
             R
@@ -741,11 +747,11 @@ class JointPriorSimpleLinPars(GMixND):
         T=pars[1]
         F=pars[2]
         if (g < 0.0
-            or g >= 1.0
-            or T < T_bounds[0]
-            or T > T_bounds[1]
-            or F < Flux_bounds[0]
-            or F > Flux_bounds[1]):
+                or g >= 1.0
+                or T < T_bounds[0]
+                or T > T_bounds[1]
+                or F < Flux_bounds[0]
+                or F > Flux_bounds[1]):
 
             if throw:
                 raise GMixRangeError("g or T or F out of range")
@@ -791,14 +797,14 @@ class JointPriorSimpleLinPars(GMixND):
             Number of pairs to use at each shear test value
         """
         import lensing
-        from .shape import Shape, shear_reduced
+        from .shape import shear_reduced
 
         shear1_true=numpy.linspace(smin, smax, nshear)
         shear2_true=numpy.zeros(nshear)
 
         shear1_meas=numpy.zeros(nshear)
         shear2_meas=numpy.zeros(nshear)
-        
+
         # _te means expanded around truth
         shear1_meas_te=numpy.zeros(nshear)
         shear2_meas_te=numpy.zeros(nshear)
@@ -810,7 +816,7 @@ class JointPriorSimpleLinPars(GMixND):
 
         # extra dim because working in 2d
         samples=numpy.zeros( (npair*2, self.ndim+1) )
-        g=numpy.zeros(npair)
+
         g1=numpy.zeros(npair*2)
         g2=numpy.zeros(npair*2)
 
@@ -848,7 +854,12 @@ class JointPriorSimpleLinPars(GMixND):
             else:
                 s1expand=s1
                 s2expand=s2
-            P_te,Q_te,R_te=self.get_pqr_num(samples, s1=s1expand, s2=s2expand, h=h)
+            P_te,Q_te,R_te=self.get_pqr_num(
+                samples,
+                s1=s1expand,
+                s2=s2expand,
+                h=h,
+            )
 
 
             g1g2, C = lensing.pqr.get_pqr_shear(P,Q,R)
@@ -878,10 +889,10 @@ class JointPriorSimpleLinPars(GMixND):
             plt.ylabel=r'$\Delta g/g$'
             plt.aspect_ratio=1.0
 
-            plt.add( biggles.FillBetween([0.0,smax], [0.004,0.004], 
+            plt.add( biggles.FillBetween([0.0,smax], [0.004,0.004],
                                          [0.0,smax], [0.000,0.000],
                                           color='grey90') )
-            plt.add( biggles.FillBetween([0.0,smax], [0.002,0.002], 
+            plt.add( biggles.FillBetween([0.0,smax], [0.002,0.002],
                                          [0.0,smax], [0.000,0.000],
                                           color='grey80') )
 
@@ -903,13 +914,22 @@ class JointPriorSimpleLinPars(GMixND):
                 coeffs=numpy.polyfit(shear1_true, fracdiff, 2)
                 poly=numpy.poly1d(coeffs)
 
-                curve=biggles.Curve(shear1_true, poly(shear1_true), type='solid',
-                                    color='black')
+                curve=biggles.Curve(
+                    shear1_true,
+                    poly(shear1_true),
+                    type='solid',
+                    color='black',
+                )
                 #curve.label=r'$\Delta \gamma/\gamma~\propto~\gamma^2$'
                 curve.label=r'$\Delta g/g = 1.9 g^2$'
                 plt.add(curve)
-
-                plt.add( biggles.PlotKey(0.1, 0.9, [pts,pts_te,curve], halign='left') )
+                pkey = biggles.PlotKey(
+                    0.1,
+                    0.9,
+                    [pts,pts_te,curve],
+                    halign='left',
+                )
+                plt.add(pkey)
                 print(poly)
 
             print('writing:',eps)
@@ -936,7 +956,13 @@ class JointPriorSimpleLogPars(JointPriorSimpleLinPars):
         self.T_bounds=T_bounds
         self.F_bounds=F_bounds
 
-        super(JointPriorSimpleLogPars,self).__init__(weights, means, covars, 0.0, 0.0)
+        super(JointPriorSimpleLogPars,self).__init__(
+            weights,
+            means,
+            covars,
+            0.0,
+            0.0,
+        )
 
         self._make_gmm()
 
@@ -953,10 +979,10 @@ class JointPriorSimpleLogPars(JointPriorSimpleLinPars):
         T=pars[1]
         F=pars[2]
         if (eta > self.eta_max
-            or T < T_bounds[0]
-            or T > T_bounds[1]
-            or F < F_bounds[0]
-            or F > F_bounds[1]):
+                or T < T_bounds[0]
+                or T > T_bounds[1]
+                or F < F_bounds[0]
+                or F > F_bounds[1]):
 
             if throw:
                 raise GMixRangeError("g or T or F out of range")

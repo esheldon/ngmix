@@ -89,7 +89,7 @@ def get_round_obs(obs_in, sim_image=True):
     obs=Observation(imuse,
                     weight=weight,
                     jacobian=obs_in.jacobian,
-                    gmix=gm_round0,
+                    gmix=gm_round,
                     psf=psf_obs)
 
     obs.gmix_convolved = gm_round

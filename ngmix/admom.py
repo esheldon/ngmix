@@ -1,11 +1,16 @@
 from __future__ import print_function, absolute_import, division
+
+try:
+    xrange
+except NameError:
+    xrange=range
+
 import numpy
-from numpy import array, diag
+from numpy import diag
 
 from .gmix import GMix, GMixModel
 from .shape import e1e2_to_g1g2
-from .observation import Observation, ObsList, MultiBandObsList
-from .gexceptions import GMixRangeError
+from .observation import ObsList, MultiBandObsList
 
 def run_admom(obs, guess, **kw):
     am=Admom(obs, **kw)
@@ -46,7 +51,7 @@ class Admom(object):
                 raise ValueError("at most one epoch can be fit")
             obs = obs[0]
         elif isinstance(obs, MultiBandObsList):
-            if len(obs) > 1: 
+            if len(obs) > 1:
                 raise ValueError("at most one band can be fit")
             else:
                 obs = obs[0]

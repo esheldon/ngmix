@@ -1,4 +1,10 @@
 from __future__ import print_function, absolute_import, division
+
+try:
+    xrange
+except NameError:
+    xrange=range
+
 import numpy
 from numpy import log
 from .fitting import print_pars
@@ -58,7 +64,7 @@ class TFluxGuesser(GuesserBase):
         self.fluxes=fluxes
         self.prior=prior
         self.scaling=scaling
-        
+
         if T <= 0.0:
             self.log_T = log(1.0e-10)
         else:
@@ -143,10 +149,8 @@ class TFluxAndPriorGuesser(GuesserBase):
         center, shape are just distributed around zero
         """
         fluxes=self.fluxes
-        log_fluxes=self.log_fluxes
 
         nband=fluxes.size
-        np = 5+nband
 
         guess = self.prior.sample(n)
 
@@ -585,9 +589,4 @@ class R50NuFluxGuesser(R50FluxGuesser):
             guess=guess[0,:]
         return guess
 
-class PriorGuesser(object):
-    def __init__(self, prior):
-        self.prior=prior
 
-    def __call__(self):
-        return self.prior.sample()

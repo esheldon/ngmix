@@ -1,4 +1,8 @@
-import numpy
+try:
+    xrange
+except NameError:
+    xrange=range
+
 from numba import njit
 
 from .gmix_nb import (
@@ -80,7 +84,7 @@ def admom(confarray, wt, pixels, resarray):
         e1 = (Icc - Irr)/T
         e2 = 2*Irc/T
 
-        if ( 
+        if (
                 ( abs(e1-e1old) < conf['etol'])
               and
                 ( abs(e2-e2old) < conf['etol'])

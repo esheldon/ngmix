@@ -3,6 +3,11 @@ Fit an image with a gaussian mixture using the EM algorithm
 """
 from __future__ import print_function, absolute_import, division
 
+try:
+    xrange
+except NameError:
+    xrange=range
+
 import numpy
 
 from . import gmix
@@ -244,7 +249,7 @@ def test_1gauss(counts=1.0,
 
     im = im0 + rng.normal(size=im0.shape, scale=noise)
 
-    imsky,sky = prep_image(im) 
+    imsky,sky = prep_image(im)
 
     obs=Observation(imsky, jacobian=jacob)
 
@@ -260,7 +265,7 @@ def test_1gauss(counts=1.0,
 
     print("gm:",gm)
     print("gm_guess:",gm_guess)
-    
+
     # twice, first time numba compiles the code
     for i in xrange(2):
         tm0=time.time()
@@ -299,7 +304,12 @@ def test_1gauss(counts=1.0,
 
     return gmfit
 
-def test_1gauss_T_recovery(noise, T = 8.0, counts=1.0, ntrial=100, show=True, png=None):
+def test_1gauss_T_recovery(noise,
+                           T=8.0,
+                           counts=1.0,
+                           ntrial=100,
+                           show=True,
+                           png=None):
     import biggles
 
     T_true=T
@@ -308,7 +318,12 @@ def test_1gauss_T_recovery(noise, T = 8.0, counts=1.0, ntrial=100, show=True, pn
     for i in xrange(ntrial):
         while True:
             try:
-                gm=test_1gauss(noise=noise, T=T_true, counts=counts, verbose=False)
+                gm=test_1gauss(
+                    noise=noise,
+                    T=T_true,
+                    counts=counts,
+                    verbose=False,
+                )
                 T=gm.get_T()
                 T_meas[i]=T
                 break
@@ -322,7 +337,8 @@ def test_1gauss_T_recovery(noise, T = 8.0, counts=1.0, ntrial=100, show=True, pn
     print("<T>:",mean,"sigma(T):",std)
     binsize=0.2*std
     plt=biggles.plot_hist(T_meas, binsize=binsize, visible=False)
-    plt.add( biggles.Point(T_true, 0.0, type='filled circle', size=2, color='red') )
+    p=biggles.Point(T_true, 0.0, type='filled circle', size=2, color='red')
+    plt.add(p)
     plt.title='Flux: %g T: %g noise: %g' % (counts, T_true, noise)
 
     xmin=mean-4.0*std
@@ -337,7 +353,10 @@ def test_1gauss_T_recovery(noise, T = 8.0, counts=1.0, ntrial=100, show=True, pn
         print(png)
         plt.write_img(800, 800, png)
 
-def test_1gauss_jacob(counts_sky=100.0, noise_sky=0.0, maxiter=100, show=False):
+def test_1gauss_jacob(counts_sky=100.0,
+                      noise_sky=0.0,
+                      maxiter=100,
+                      show=False):
     import time
     #import images
     dims=[25,25]
@@ -356,9 +375,8 @@ def test_1gauss_jacob(counts_sky=100.0, noise_sky=0.0, maxiter=100, show=False):
 
     g1=0.1
     g2=0.05
-    Tpix=8.0
+
     Tsky=8.0*jfac**2
-    counts_pix=counts_sky/jfac**2
     noise_pix=noise_sky/jfac**2
 
     pars = [0.0, 0.0, g1, g2, Tsky, counts_sky]
@@ -370,7 +388,7 @@ def test_1gauss_jacob(counts_sky=100.0, noise_sky=0.0, maxiter=100, show=False):
 
     im = im0 + noise_pix*numpy.random.randn(im0.size).reshape(dims)
 
-    imsky,sky = prep_image(im) 
+    imsky,sky = prep_image(im)
 
     obs=Observation(imsky, jacobian=j)
 
@@ -443,7 +461,7 @@ def test_2gauss(counts=100.0, noise=0.0, maxiter=100,show=False):
     im0=gm.make_image(dims, jacobian=jacob)
     im = im0 + noise*numpy.random.randn(im0.size).reshape(dims)
 
-    imsky,sky = prep_image(im) 
+    imsky,sky = prep_image(im)
 
     obs=Observation(imsky, jacobian=jacob)
 

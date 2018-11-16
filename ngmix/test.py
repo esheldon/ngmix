@@ -1,11 +1,10 @@
 from __future__ import print_function, absolute_import, division
-import sys, os
 import unittest
 import numpy as np
 
 from . import joint_prior
 from . import gmix
-from .jacobian import Jacobian, UnitJacobian
+from .jacobian import UnitJacobian
 from . import bootstrap
 from .observation import Observation
 from .fitting import print_pars
@@ -45,11 +44,11 @@ class TestFitting(unittest.TestCase):
             col=cen[1],
         )
 
-        pars_psf = [0.0, 0.0, self.g1psf, self.g2psf, self.Tpsf, self.countspsf]
+        pars_psf = [0.0, 0.0, self.g1psf, self.g2psf,
+                    self.Tpsf, self.countspsf]
         gm_psf=gmix.GMixModel(pars_psf, self.psf_model)
 
         pars_obj = np.array([0.0, 0.0, self.g1, self.g2, self.T, self.counts])
-        npars=pars_obj.size
         gm_obj0=gmix.GMixModel(pars_obj, model)
 
         gm=gm_obj0.convolve(gm_psf)
@@ -137,7 +136,7 @@ class TestFitting(unittest.TestCase):
             mdict=self.get_obs_data('exp',noise)
 
             obs=mdict['obs']
-            
+
             em_pars={
                 'maxiter':500,
                 'tol':1.0e-5,
@@ -155,4 +154,4 @@ class TestFitting(unittest.TestCase):
                 runner.go(ntry=2)
                 gm=runner.fitter.get_gmix()
                 print(gm)
-                
+

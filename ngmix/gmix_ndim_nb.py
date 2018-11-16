@@ -1,6 +1,11 @@
 import numpy
 from numba import njit
 
+try:
+    xrange
+except NameError:
+    xrange=range
+
 @njit
 def gmixnd_get_prob(log_pnorms,
                     means,

@@ -4,27 +4,27 @@
 """
 from __future__ import print_function, absolute_import, division
 
-import os
+try:
+    xrange
+except NameError:
+    xrange=range
+
 from sys import stdout
 import numpy
-from numpy import array, zeros, ones, diag
-from numpy import exp, sqrt, where, log, log10, isfinite
+from numpy import array, zeros, diag
+from numpy import exp, sqrt, where, isfinite
 from numpy import linalg
 from numpy.linalg import LinAlgError
-import time
-from pprint import pprint, pformat
+from pprint import pformat
 
-from . import shape
 from . import gmix
-from .gmix import GMix, GMixList, MultiBandGMixList
+from .gmix import GMixList, MultiBandGMixList
 
-from . import priors
 from .priors import LOWVAL, BIGVAL
 
-from .gexceptions import GMixRangeError, GMixFatalError
+from .gexceptions import GMixRangeError
 
-from . import observation
-from .observation import Observation,ObsList,MultiBandObsList,get_mb_obs
+from .observation import Observation,ObsList,get_mb_obs
 
 from . import stats
 
@@ -78,7 +78,7 @@ class FitterBase(object):
         self.keys=keys
 
         self.use_round_T=keys.get('use_round_T',False)
-        assert self.use_round_T==False,"no longer support round T"
+        assert self.use_round_T is False,"no longer support round T"
 
         self.set_obs(obs)
 
@@ -105,8 +105,10 @@ class FitterBase(object):
         else:
             extra=''
 
-        rep=rep%{'model':self.model_name,
-                 'extra':extra}
+        rep=rep % {
+            'model':self.model_name,
+            'extra':extra,
+        }
         return rep
 
     def get_result(self):
@@ -115,7 +117,8 @@ class FitterBase(object):
         """
 
         if not hasattr(self,'_result'):
-            raise ValueError("No result, you must run_mcmc and calc_result first")
+            raise ValueError('No result, you must run_mcmc '
+                             'and calc_result first')
         return self._result
 
     def get_gmix(self, band=0):
@@ -286,7 +289,6 @@ class FitterBase(object):
 
         pars must be in the log scaling!
         """
-        npars=self.npars
 
         res=self.calc_lnprob(pars, more=True)
 
@@ -488,7 +490,12 @@ class FitterBase(object):
         bad=True
 
         try:
-            cov = self.get_cov(res['pars'], h=h, m=m, diag_on_fail=diag_on_fail)
+            cov = self.get_cov(
+                res['pars'],
+                h=h,
+                m=m,
+                diag_on_fail=diag_on_fail,
+            )
 
             cdiag = diag(cov)
 
@@ -577,7 +584,7 @@ class FitterBase(object):
 
             if diag_on_fail:
                 hdiag=diag(diag(hess))
-                cov = -linalg.inv(hess)
+                cov = -linalg.inv(hdiag)
             else:
                 raise
         return cov
@@ -1010,7 +1017,7 @@ class FracdevFitterMax(FitterBase):
             # this might still fail
             if diag_on_fail:
                 hdiag=diag(diag(hess))
-                cov = -linalg.inv(hess)
+                cov = -linalg.inv(hdiag)
             else:
                 raise
         return cov
@@ -1101,8 +1108,6 @@ class FracdevFitterMax(FitterBase):
 
                 image   = images[epoch]
                 weight = weights[epoch]
-
-                npix = image.size
 
                 exp_image = eimages[epoch].copy()
                 dev_image = dimages[epoch].copy()
@@ -1319,9 +1324,8 @@ class FracdevFitter(FitterBase):
             # pull out a diagonal version of the hessian
             # this might still fail
             hdiag=diag(diag(hess))
-            cov = -linalg.inv(hess)
+            cov = -linalg.inv(hdiag)
 
-        pars_err=sqrt(cov[0,0])
         res['pars_cov'] = cov
         res['pars_err'] = sqrt(diag(cov))
 
@@ -1793,9 +1797,9 @@ class LMSimple(FitterBase):
 
             start=self._fill_priors(pars, fdiff)
 
-            for pixels,gmix in zip(self._pixels_list,self._gmix_data_list):
+            for pixels,gm in zip(self._pixels_list,self._gmix_data_list):
                 fill_fdiff(
-                    gmix,
+                    gm,
                     pixels,
                     fdiff,
                     start,
@@ -1932,7 +1936,7 @@ class LMBDF(LMSimple):
 
     def _make_model(self, band_pars):
         """
-        incoming parameters are 
+        incoming parameters are
             [c1,c2,g1,g2,T,fracdev,F]
         """
         return gmix.GMixBDF(band_pars)
@@ -2099,7 +2103,8 @@ class MCMCBase(FitterBase):
     """
     A base class for MCMC runs using emcee.
 
-    Extra user-facing methods are run_mcmc(), calc_result(), get_trials(), get_sampler(), make_plots()
+    Extra user-facing methods are
+    run_mcmc(), calc_result(), get_trials(), get_sampler(), make_plots()
     """
     def __init__(self, obs, model, **keys):
         super(MCMCBase,self).__init__(obs, model, **keys)
@@ -2237,7 +2242,12 @@ class MCMCBase(FitterBase):
 
         trials=self.get_trials()
 
-        pars,pars_cov = stats.calc_mcmc_stats(trials, sigma_clip=sigma_clip, weights=weights, **kw)
+        pars,pars_cov = stats.calc_mcmc_stats(
+            trials,
+            sigma_clip=sigma_clip,
+            weights=weights,
+            **kw
+        )
 
         return pars, pars_cov
 
@@ -2246,7 +2256,11 @@ class MCMCBase(FitterBase):
         Calculate the mcmc stats and the "best fit" stats
         """
 
-        pars,pars_cov = self.get_stats(sigma_clip=sigma_clip, weights=weights, **kw)
+        pars,pars_cov = self.get_stats(
+            sigma_clip=sigma_clip,
+            weights=weights,
+            **kw
+        )
         pars_err=sqrt(diag(pars_cov))
         res={'model':self.model_name,
              'flags':self.flags,
@@ -2281,6 +2295,7 @@ class MCMCBase(FitterBase):
         self._best_lnprob=None
 
         ok=False
+        gerror=None
         for i in xrange(self.nwalkers):
             try:
                 self._init_gmix_all(pos[i,:])
@@ -2299,24 +2314,7 @@ class MCMCBase(FitterBase):
         """
         auto-correlation for emcee
         """
-        import emcee
-
-
-        trials=self.get_trials()
-
         self._tau = 1.0e9
-
-        # need to figure out how to make this work.
-        # could not find good examples on line
-        #tau2 = emcee.autocorr.integrated_time(trials,low=10,high=200,step=10)
-        #try:
-        #    tau2 = emcee.autocorr.integrated_time(trials,window=100)
-        #except TypeError as err:
-        #    tau2 = emcee.autocorr.integrated_time(trials,low=10,high=200,step=10)
-
-        #tau2 = tau2.max()
-        #self._tau=tau2
-
 
     def _make_sampler(self):
         """
@@ -2337,8 +2335,8 @@ class MCMCBase(FitterBase):
             #print('            replacing random state')
             #sampler.random_state=self.random_state.get_state()
 
-            # OK, we will just hope that _random doesn't change names in the future.
-            # but at least we get control back
+            # OK, we will just hope that _random doesn't change names in the
+            # future.  but at least we get control back
             sampler._random = self.random_state
 
         return sampler
@@ -2448,7 +2446,8 @@ class MCMCSimple(MCMCBase):
         g2i=self.g2i
 
         self._result['g'] = self._result['pars'][g1i:g1i+2].copy()
-        self._result['g_cov'] = self._result['pars_cov'][g1i:g1i+2, g1i:g1i+2].copy()
+        self._result['g_cov'] = \
+            self._result['pars_cov'][g1i:g1i+2, g2i:g2i+2].copy()
 
     def get_band_pars(self, pars_in, band):
         """
@@ -2551,7 +2550,12 @@ class MH(object):
             Extra weights to apply.
         """
         from .stats import calc_mcmc_stats
-        stats = calc_mcmc_stats(self._trials, sigma_clip=sigma_clip, weights=weights, **kw)
+        stats = calc_mcmc_stats(
+            self._trials,
+            sigma_clip=sigma_clip,
+            weights=weights,
+            **kw
+        )
         return stats
 
     def set_random_state(self, seed=None, state=None):
@@ -2812,7 +2816,6 @@ class MHTemp(MH):
         """
         super(MHTemp,self)._init_data(pars_start, nstep)
 
-        T=self.T
         oldlike_T = self._oldlike*self.Tinv
 
         loglike_T = self._loglike.copy()
@@ -2858,14 +2861,21 @@ class MHSimple(MCMCSimple):
             assert numpy.all(step_sizes > 0),mess
 
         elif len(sdim) == 2:
-            mess="step_sizes needs to be a square matrix, has dims %dx%d." % sdim
+            mess=(
+                'step_sizes needs to be a square '
+                'matrix, has dims %dx%d.' % sdim
+            )
             assert (sdim[0] == sdim[1]),mess
             ns=sdim[0]
             mess="step_sizes has size=%d, expected %d" % (ns,self.npars)
             assert (ns == self.npars),mess
-            assert numpy.all(numpy.linalg.eigvals(step_sizes) > 0),"step_sizes must be positive definite."
+            assert numpy.all(numpy.linalg.eigvals(step_sizes) > 0),\
+                "step_sizes must be positive definite."
         else:
-            assert len(sdim) <= 2, "step_sizes cannot have dimension greater than 2, has %d dims." % len(sdim)
+            assert len(sdim) <= 2, (
+                'step_sizes cannot have dimension greater than '
+                '2, has %d dims.' % len(sdim)
+            )
         self._step_sizes=step_sizes
         self._ndim_step_sizes = len(sdim)
 
@@ -2924,7 +2934,8 @@ class MHSimple(MCMCSimple):
         Take gaussian steps
         """
         if self._ndim_step_sizes == 1:
-            return pos+self._step_sizes*self.random_state.normal(size=self.npars)
+            r=self.random_state.normal(size=self.npars)
+            return pos+self._step_sizes*r
         else:
             return numpy.random.multivariate_normal(pos, self._step_sizes)
 
@@ -2954,19 +2965,11 @@ class MHSimple(MCMCSimple):
         """
         auto-correlation scale lenght*2 divided by the number of steps
         """
-        import emcee
 
         # need to figure out how to make this work.
         # could not find good examples on line
 
         self._tau = 1.0e9
-
-        #trials=self.get_trials()
-
-        # actually 2*tau
-        #tau2 = emcee.autocorr.integrated_time(trials,low=10,high=200,step=10)
-        #tau2 = tau2.max()
-        #self._tau=tau2
 
 
 class MHTempSimple(MHSimple):
@@ -3044,7 +3047,9 @@ class ISampler(object):
 
         for ind in self._asinh_pars:
             self._pars[ind] = asinh(self._pars_orig[ind])
-            jac[ind] = 1.0/numpy.sqrt(1.0 + self._pars_orig[ind]*self._pars_orig[ind])
+            jac[ind] = 1.0/numpy.sqrt(
+                1.0 + self._pars_orig[ind]*self._pars_orig[ind]
+            )
 
         for i in xrange(self._npars):
             for j in xrange(self._npars):
@@ -3056,7 +3061,9 @@ class ISampler(object):
         npars = pars_orig.shape[0]
         logdetjac = zeros(npars)
         for ind in self._asinh_pars:
-            logdetjac += numpy.log(1.0/numpy.sqrt(1.0 + pars_orig[:,ind]*pars_orig[:,ind]))
+            logdetjac += numpy.log(
+                1.0/numpy.sqrt(1.0 + pars_orig[:,ind]*pars_orig[:,ind])
+            )
         return logdetjac
 
     def pars_to_pars_orig(self,pars):
@@ -3332,18 +3339,13 @@ class ISampler(object):
         self._cov = cov
 
     def _set_minmax_err(self, min_err, max_err):
-        if min_err is None:
-            min_err = pars*0
-        else:
-            min_err=array(min_err,copy=False)
+        min_err=array(min_err,copy=False)
+        max_err=array(max_err,copy=False)
 
-        if max_err is None:
-            max_err = pars*0 + numpy.inf
-        else:
-            max_err=array(max_err,copy=False)
-
-        assert min_err.size==self._pars.size,"min_err must be same size as pars"
-        assert max_err.size==self._pars.size,"max_err must be same size as pars"
+        assert min_err.size==self._pars.size,\
+            "min_err must be same size as pars"
+        assert max_err.size==self._pars.size,\
+            "max_err must be same size as pars"
 
         self._min_err=min_err
         self._max_err=max_err

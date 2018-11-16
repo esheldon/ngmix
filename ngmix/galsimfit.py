@@ -4,6 +4,11 @@ fitting using galsim to create the models
 
 from __future__ import print_function, absolute_import, division
 
+try:
+    xrange
+except NameError:
+    xrange=range
+
 import numpy
 
 from .fitting import (
@@ -11,14 +16,12 @@ from .fitting import (
     TemplateFluxFitter,
     run_leastsq,
     _default_lm_pars,
-    print_pars,
-    PDEF,CDEF,
 )
 
 from . import observation
 from .observation import Observation, ObsList, MultiBandObsList
 
-from .priors import LOWVAL,BIGVAL
+from .priors import LOWVAL
 from .gexceptions import GMixRangeError
 
 class GalsimRunner(object):
@@ -220,7 +223,6 @@ class GalsimSimple(LMSimple):
 
         Fill the list of lists of gmix objects for the given parameters
         """
-        import galsim
         try:
             for band,kobs_list in enumerate(self.mb_kobs):
                 # pars for this band, in linear space
@@ -287,9 +289,9 @@ class GalsimSimple(LMSimple):
 
     def _set_model_class(self):
         import galsim
-        if self.model_name=='exp': 
+        if self.model_name=='exp':
             self._model_class=galsim.Exponential
-        elif self.model_name=='dev': 
+        elif self.model_name=='dev':
             self._model_class=galsim.DeVaucouleurs
         elif self.model_name=='gauss':
             self._model_class=galsim.Gaussian
@@ -358,7 +360,7 @@ class GalsimSimple(LMSimple):
             self.n_prior_pars=1 + 1 + 1   + 1  + self.nband
 
     def _set_fdiff_size(self):
-        # we have 2*totpix, since we use both real and imaginary 
+        # we have 2*totpix, since we use both real and imaginary
         # parts
         self.fdiff_size = self.n_prior_pars + 2*self.totpix
 
@@ -406,6 +408,8 @@ class GalsimSimple(LMSimple):
 
         for band in xrange(self.nband):
             band_pars = self.get_band_pars(guess, band)
+            # just doing this to see if an exception is raised. This
+            # will bother flake8
             gal = self.make_model(band_pars)
 
         return guess
@@ -494,7 +498,7 @@ class SpergelFitter(GalsimSimple):
 
     def _set_model_class(self):
         import galsim
-        
+
         self._model_class=galsim.Spergel
 
     def make_round_model(self, pars):
@@ -556,7 +560,7 @@ class MoffatFitter(GalsimSimple):
 
     def _set_model_class(self):
         import galsim
-        
+
         self._model_class=galsim.Moffat
 
     def make_round_model(self, pars):
@@ -632,7 +636,7 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
             map. Useful when trying to calculate the noise
             on a model rather than from real data.
         rng: numpy random number generator, optional
-            For use when simulate_err=True 
+            For use when simulate_err=True
 
         TODO:
             - try more complex wcs
@@ -646,7 +650,8 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
 
         self.keys=keys
         self.normalize_psf = keys.get('normalize_psf',True)
-        assert self.normalize_psf==True,"currently must have normalize_psf=True"
+        assert self.normalize_psf is True,\
+            "currently must have normalize_psf=True"
 
         self.interp=keys.get('interp',observation.DEFAULT_XINTERP)
 
@@ -776,7 +781,7 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
         if isinstance(obs_in,Observation):
             obs_list=ObsList()
             obs_list.append(obs_in)
-            
+
             if self.psf_models is not None:
                 if not isinstance(self.psf_models,(list,tuple)):
                     self.psf_models = [self.psf_models]

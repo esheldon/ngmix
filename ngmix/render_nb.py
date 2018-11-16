@@ -1,10 +1,14 @@
-import numpy
-from numba import jit, njit
+from numba import njit
 from .gmix_nb import (
     gmix_eval_pixel,
     gmix_eval_pixel_fast,
     gmix_set_norms,
 )
+
+try:
+    xrange
+except NameError:
+    xrange=range
 
 @njit
 def render(gmix, coords, image, fast_exp=0, max_chi2=300.0):

@@ -1,3 +1,8 @@
+try:
+    xrange
+except NameError:
+    xrange=range
+
 import numpy
 from numpy import array, nan
 from numba import njit

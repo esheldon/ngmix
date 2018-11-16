@@ -1,5 +1,4 @@
-import numpy
-from numba import jit, njit
+from numba import njit
 
 from .fastexp import make_exp_lookup
 

@@ -15,20 +15,20 @@ def T_to_fwhm(T):
     """
     sigma=numpy.sqrt(T/2.0)
     return sigma_to_fwhm(sigma)
- 
+
 def fwhm_to_sigma(fwhm):
     """
     convert fwhm to sigma for a gaussian
     """
     return fwhm/2.3548200450309493
- 
+
 def fwhm_to_T(fwhm):
     """
     convert fwhm to T for a gaussian
     """
     sigma = fwhm_to_sigma(fwhm)
     return 2*sigma**2
- 
+
 
 def r50_to_sigma(r50):
     """
