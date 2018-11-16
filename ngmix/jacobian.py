@@ -1,4 +1,4 @@
-from numpy import zeros, sqrt
+from numpy import zeros, sqrt, abs
 
 _jacobian_dtype=[('row0','f8'),
                  ('col0','f8'),
@@ -278,8 +278,7 @@ class Jacobian(object):
         self._data['dudcol']=dudcol
 
         self._data['det'] = dvdrow*dudcol - dvdcol*dudrow
-        self._data['sdet'] = sqrt(self._data['det'])
-
+        self._data['sdet'] = sqrt(abs(self._data['det']))
 
 
     def __repr__(self):
