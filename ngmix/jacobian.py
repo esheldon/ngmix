@@ -1,5 +1,5 @@
 import numpy
-from numpy import zeros, sqrt
+from numpy import zeros, sqrt, abs
 
 import copy
 
@@ -281,10 +281,8 @@ class Jacobian(object):
         self._data['dudrow']=dudrow
         self._data['dudcol']=dudcol
 
-        #self._data['det'] = numpy.abs( dudrow*dvdcol-dudcol*dvdrow )
         self._data['det'] = dvdrow*dudcol - dvdcol*dudrow
-        self._data['sdet'] = sqrt(self._data['det'])
-
+        self._data['sdet'] = sqrt(abs(self._data['det']))
 
 
     def __repr__(self):
