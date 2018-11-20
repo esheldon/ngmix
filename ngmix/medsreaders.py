@@ -188,9 +188,9 @@ class NGMixMEDS(_MEDS):
         im = self.get_cutout(iobj, icutout, type='image')
         bmask = self.get_cutout(iobj, icutout, type='bmask')
 
-        if 'noise_cutouts' in self._fits:
+        try:
             noise = self.get_cutout(iobj, icutout, type='noise')
-        else:
+        except Exception:
             noise = None
 
         if weight_type == 'uberseg':
