@@ -188,6 +188,11 @@ class NGMixMEDS(_MEDS):
         im = self.get_cutout(iobj, icutout, type='image')
         bmask = self.get_cutout(iobj, icutout, type='bmask')
 
+        try:
+            noise = self.get_cutout(iobj, icutout, type='noise')
+        except Exception:
+            noise = None
+
         if weight_type == 'uberseg':
             wt = self.get_uberseg(iobj, icutout)
         elif weight_type == 'cweight':
@@ -227,6 +232,7 @@ class NGMixMEDS(_MEDS):
             im,
             weight=wt,
             bmask=bmask,
+            noise=noise,
             meta=meta,
             jacobian=jacobian,
             psf=psf_obs)
