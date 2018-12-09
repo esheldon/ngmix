@@ -15,8 +15,10 @@ import copy
 import numpy
 from numpy import zeros, sqrt, diag
 from .observation import Observation, ObsList, MultiBandObsList
+from . import shape
 from .shape import Shape
 from . import simobs
+from . import moments
 
 from .gexceptions import GMixRangeError
 import logging
@@ -657,7 +659,6 @@ class Metacal(object):
         return psf_int_nopix
 
     def _get_symmetrize_dilation(self):
-        from . import moments
 
         if self.symmetrize_dilation is not None:
             return self.symmetrize_dilation
@@ -1064,13 +1065,19 @@ class MetacalFitGaussPSF(Metacal):
 
         runner=PSFRunner(self.obs.psf, 'gauss', Tguess, {})
         runner.go(ntry=4)
-        res=runner.fitter.get_result()
+
+        fitter = runner.fitter
+        res = fitter.get_result()
 
         if res['flags'] != 0:
             raise BootPSFFailure('failed to fit psf for MetacalFitGaussPSF')
 
-        T = res['pars'][4]
-        sigma = sqrt(T/2.0)
+        psf_gmix = fitter.get_gmix()
+        e1,e2,T = psf_gmix.get_e1e2T()
+
+        dilation = _get_ellip_dilation(e1,e2,T)
+        T_dilated = T*dilation
+        sigma = sqrt(T_dilated/2.0)
 
         self.gauss_psf = galsim.Gaussian(
             sigma=sigma,
@@ -1292,6 +1299,29 @@ class MetacalAnalyticPSF(Metacal):
         return newobs
 
 
+def _get_ellip_dilation(e1,e2,T):
+    """
+    when making a symmetric version of the PSF, we need
+    to dilate to hide modes that get exposed
+    """
+    irr, irc, icc = moments.e2mom(e1,e2,T)
+
+    mat=numpy.zeros( (2,2) )
+    mat[0,0]=irr
+    mat[0,1]=irc
+    mat[1,0]=irc
+    mat[1,1]=icc
+
+    eigs=numpy.linalg.eigvals(mat)
+
+    dilation = eigs.max()/(T/2.)
+    dilation=sqrt(dilation)
+
+    #dilation = 1.0 + 2*(dilation-1.0)
+    if dilation > 1.1:
+        dilation=1.1
+
+    return dilation
 
 
 def _do_dilate(obj, shear):
