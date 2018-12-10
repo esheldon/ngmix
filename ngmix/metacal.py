@@ -1057,13 +1057,13 @@ class MetacalFitGaussPSF(Metacal):
         """
         do the gaussian fit
         """
-        from .bootstrap import PSFRunner
+        from .bootstrap import AMRunner
         from .gexceptions import BootPSFFailure
 
         jacobian=self.obs.psf.jacobian
         Tguess = 4.0 * jacobian.get_scale()**2
+        runner=AMRunner(self.obs.psf, Tguess)
 
-        runner=PSFRunner(self.obs.psf, 'gauss', Tguess, {})
         runner.go(ntry=4)
 
         fitter = runner.fitter
@@ -1317,7 +1317,9 @@ def _get_ellip_dilation(e1,e2,T):
     dilation = eigs.max()/(T/2.)
     dilation=sqrt(dilation)
 
-    #dilation = 1.0 + 2*(dilation-1.0)
+    dilation = 1.0 + 2*(dilation-1.0)
+    print('dilation:',dilation)
+
     if dilation > 1.1:
         dilation=1.1
 
