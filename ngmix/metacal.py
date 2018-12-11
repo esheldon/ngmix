@@ -298,6 +298,9 @@ class Metacal(object):
             The shear step value to use for metacal
         types: list
             Types to get.  Default is given in METACAL_TYPES
+        force_required_types: bool, optional (default: True)
+            If `True`, then forcibly output all of the required metacal
+            types. Otherwise, only output exactly what is in types.
 
         returns
         -------
@@ -315,9 +318,17 @@ class Metacal(object):
         # will be added
         ttypes=kw.get('types',METACAL_TYPES)
         types=[t for t in ttypes]
-        for rtype in METACAL_REQUIRED_TYPES:
-            if rtype not in types:
-                types.append(rtype)
+        if kw.get('force_required_types', True):
+            for rtype in METACAL_REQUIRED_TYPES:
+                if rtype not in types:
+                    types.append(rtype)
+        # all of the types we will get
+        final_types = [t for t in types]
+
+        # we add 1p here if we want noshear since we get both of those
+        # at once below
+        if 'noshear' in types and '1p' not in types:
+            types.append('1p')
 
         shdict={}
 
@@ -358,7 +369,7 @@ class Metacal(object):
 
             odict[type] = obs
 
-        return odict
+        return {t: odict[t] for t in final_types}
 
 
     def get_obs_galshear(self, shear, get_unsheared=False):
