@@ -29,6 +29,13 @@ class MultiBandNGMixMEDS(object):
         self.mlist = mlist
 
     @property
+    def nband(self):
+        """
+        number of bands
+        """
+        return len(self.mlist)
+
+    @property
     def size(self):
         """Number of entries in the catalog.
         """
@@ -186,7 +193,11 @@ class NGMixMEDS(_MEDS):
             An `Observation` for this cutout.
         """
         im = self.get_cutout(iobj, icutout, type='image')
-        bmask = self.get_cutout(iobj, icutout, type='bmask')
+
+        try:
+            bmask = self.get_cutout(iobj, icutout, type='bmask')
+        except Exception:
+            bmask = None
 
         try:
             noise = self.get_cutout(iobj, icutout, type='noise')
