@@ -1318,7 +1318,6 @@ def _get_ellip_dilation(e1,e2,T):
     dilation=sqrt(dilation)
 
     dilation = 1.0 + 2*(dilation-1.0)
-    print('dilation:',dilation)
 
     if dilation > 1.1:
         dilation=1.1
