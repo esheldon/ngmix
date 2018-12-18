@@ -3719,6 +3719,7 @@ class TruncatedGaussian(PriorBase):
         self.mean=mean
         self.sigma=sigma
         self.ivar=1.0/sigma**2
+        self.sinv=1.0/sigma
         self.minval=minval
         self.maxval=maxval
 
@@ -3743,6 +3744,15 @@ class TruncatedGaussian(PriorBase):
             lnp[w] = -0.5*diff*diff*self.ivar
 
         return lnp
+
+    def get_fdiff(self, x):
+        """
+        For use with LM fitter
+        (model-data)/width for both coordinates
+        """
+        if x < self.minval or x > self.maxval:
+            raise GMixRangeError("value out of range")
+        return (x-self.mean)*self.sinv
 
     def sample(self, nrand=1):
 
