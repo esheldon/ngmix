@@ -727,7 +727,7 @@ class GMix(object):
 
             sigma_round = sqrt(Tround/2.0)
 
-            gsobj = galsim.Gaussian(flux=flux, sigma=sigma_round)
+            gsobj = galsim.Gaussian(flux=flux, sigma=sigma_round, gsparams=gsparams)
 
             gsobj = gsobj.shear(g1=g1, g2=g2)
 
