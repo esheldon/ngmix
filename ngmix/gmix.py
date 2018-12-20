@@ -670,7 +670,7 @@ class GMix(object):
         self._pars = zeros(self._npars)
         self._data = zeros(self._ngauss, dtype=_gauss2d_dtype)
 
-    def make_galsim_object(self, Tmin=0.001):
+    def make_galsim_object(self, Tmin=1e-6, gsparams=None):
         """
         make a galsim representation for the gaussian mixture
 
@@ -684,8 +684,22 @@ class GMix(object):
             Minimum size for gaussians.  Galsim doesn't allow objects
             with less than zero size because when convolving it renders
             the object
+        gsparams: GSParams or dict, optional
+            A GSParams object (or dict convertable to one) that sets
+            certain useful parameters for GalSim renderings (e.g.
+            a larger maximum FFT size)
         """
+
         import galsim
+
+        if gsparams and (type(gsparams) is not galsim._galsim.GSParams):
+            if isinstance(gsparams, dict):
+                # Convert to actual gsparams object
+                gsparams = galsim.GSParams(**gsparams)
+            else:
+                raise TypeError('Only `dict` and `galsim.GSParam` types allowed'
+                                ' for gsparams; input has type of {}.'
+                                .format(type(gsparams)))
 
         data = self.get_data()
 
@@ -693,6 +707,8 @@ class GMix(object):
         for i in xrange(len(self)):
             flux = data['p'][i]
             T = data['irr'][i] + data['icc'][i]
+            if T == 0: T = Tmin
+
             e1 = (data['icc'][i] - data['irr'][i])/T
             e2 = 2.0*data['irc'][i]/T
 
