@@ -692,7 +692,7 @@ class GMix(object):
 
         import galsim
 
-        if gsparams and (type(gsparams) is not galsim._galsim.GSParams):
+        if (gsparams is not None) and (not isinstance(gsparams, galsim.GSParams)):
             if isinstance(gsparams, dict):
                 # Convert to actual gsparams object
                 gsparams = galsim.GSParams(**gsparams)
@@ -707,7 +707,8 @@ class GMix(object):
         for i in xrange(len(self)):
             flux = data['p'][i]
             T = data['irr'][i] + data['icc'][i]
-            if T == 0: T = Tmin
+            if T == 0:
+                T = Tmin
 
             e1 = (data['icc'][i] - data['irr'][i])/T
             e2 = 2.0*data['irc'][i]/T
