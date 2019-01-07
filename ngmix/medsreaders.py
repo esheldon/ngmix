@@ -137,10 +137,12 @@ class NGMixMEDS(_MEDS):
             obs = self.get_obs(iobj, icut, weight_type=weight_type)
             obslist.append(obs)
 
-        if 'flux' in obs.meta:
-            obslist.meta['flux'] = obs.meta['flux']
-        if 'T' in obs.meta:
-            obslist.meta['T'] = obs.meta['T']
+        if len(obslist) > 0:
+            obs = obslist[0]
+            if 'flux' in obs.meta:
+                obslist.meta['flux'] = obs.meta['flux']
+            if 'T' in obs.meta:
+                obslist.meta['T'] = obs.meta['T']
         return obslist
 
     def get_ngmix_jacobian(self, iobj, icutout):
