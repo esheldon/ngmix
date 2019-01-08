@@ -29,14 +29,16 @@ except ImportError:
     pass
 
 METACAL_TYPES = [
+    'noshear',
     '1p','1m','2p','2m',
     '1p_psf','1m_psf','2p_psf','2m_psf',
-    'noshear',
 ]
-METACAL_REQUIRED_TYPES = [
+METACAL_MINIMAL_TYPES = [
     'noshear',
     '1p','1m','2p','2m',
 ]
+# for backward compatibility
+METACAL_REQUIRED_TYPES = METACAL_MINIMAL_TYPES 
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +54,25 @@ def get_all_metacal(obs,
     ----------
     obs: Observation, ObsList, or MultiBandObsList
         The values in the dict correspond to these
-    step: float
-        The shear step value to use for metacal
+    step: float, optional
+        The shear step value to use for metacal.  Default 0.01
+    psf: string, optional
+        PSF to use for metacal. Default is a dilated version
+        of the original psf, but you can also set psf to
+
+            'gauss': reconvolve gaussian that is larger than
+                     the original and round.  
+            'fitgauss': fit a gaussian to the PSF and make
+                        use round, dilated version for reconvolution
+        
+    types: list, optional
+        If psf='gauss' or 'fitgauss', then the default set is the minimal
+        set ['noshear','1p','1m','2p','2m']
+
+        Otherwise, the default is the full possible set listed in
+        ['noshear','1p','1m','2p','2m',
+         '1p_psf','1m_psf','2p_psf','2m_psf']
+
     fixnoise: bool
         If set to True, add a compensating noise field to cancel the correlated
         noise component.  Default True
@@ -102,11 +121,11 @@ def _get_all_metacal(obs, step=0.01, **kw):
 
             if psf=='gauss':
                 # we default to only shear terms, not psf shear terms
-                kw['types']=kw.get('types',METACAL_REQUIRED_TYPES)
+                kw['types']=kw.get('types',METACAL_MINIMAL_TYPES)
                 m=MetacalGaussPSF(obs, **kw)
             elif psf=='fitgauss':
                 # we default to only shear terms, not psf shear terms
-                kw['types']=kw.get('types',METACAL_REQUIRED_TYPES)
+                kw['types']=kw.get('types',METACAL_MINIMAL_TYPES)
                 m=MetacalFitGaussPSF(obs, **kw)
             else:
                 psf = kw.pop('psf')
@@ -288,36 +307,46 @@ class Metacal(object):
         self._setup(**kw)
         self._set_data()
 
-    def get_all(self, step, **kw):
+    def get_all(self, step=0.01, types=None, **kw):
         """
         Get all the "usual" combinations of metacal images in a dict
 
         parameters
         ----------
         step: float
-            The shear step value to use for metacal
+            The shear step value to use for metacal. Default 0.01
         types: list
-            Types to get.  Default is given in METACAL_TYPES
+            Types to get.  Default is the full possible set listed in
+            METACAL_TYPES = ['noshear','1p','1m','2p','2m',
+                             '1p_psf','1m_psf','2p_psf','2m_psf']
+
+            If you are not using a round PSF, you should also request the
+            sheared psf terms to make psf leakage corrections
+            ['1p_psf','1m_psf','2p_psf','2m_psf'].  You can get this
+            full set in METACAL_TYPES
 
         returns
         -------
-        A dictionary with all the relevant metacaled images
-            dict keys:
+        A dictionary with all the relevant metacaled images, e.g.
+            with dict keys:
+                noshear -> (0, 0)
                 1p -> ( shear, 0)
                 1m -> (-shear, 0)
                 2p -> ( 0,  shear)
                 2m -> ( 0, -shear)
-            similar for 1p_psf etc.
-            'noshear' is also returned
         """
 
-        # we always want these, plus noshear
-        # will be added
-        ttypes=kw.get('types',METACAL_TYPES)
-        types=[t for t in ttypes]
-        for rtype in METACAL_REQUIRED_TYPES:
-            if rtype not in types:
-                types.append(rtype)
+        if types is None:
+            types = [t for t in METACAL_TYPES]
+        else:
+            for t in types:
+                assert t in METACAL_TYPES,'bad metacal type: %s' % t
+
+        # we add 1p here if we want noshear since we get both of those
+        # at once below
+
+        if 'noshear' in types and '1p' not in types:
+            types.append('1p')
 
         shdict={}
 

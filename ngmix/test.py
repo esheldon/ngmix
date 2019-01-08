@@ -8,6 +8,7 @@ from .jacobian import UnitJacobian
 from . import bootstrap
 from .observation import Observation
 from .fitting import print_pars
+from . import metacal
 
 def test():
     suite = unittest.TestLoader().loadTestsFromTestCase(TestFitting)
@@ -154,4 +155,34 @@ class TestFitting(unittest.TestCase):
                 runner.go(ntry=2)
                 gm=runner.fitter.get_gmix()
                 print(gm)
+
+    def testMetacalGetAll(self):
+        """
+        test getting metacal sheared images
+        """
+        noise=0.001
+        mdict=self.get_obs_data('exp',noise)
+        obs=mdict['obs']
+        obs.set_psf(mdict['psf_obs'])
+
+        odict = metacal.get_all_metacal(obs)
+
+        for t in metacal.METACAL_TYPES:
+            assert t in odict,'missing metacal type: %s' % t
+
+        try:
+            odict = metacal.get_all_metacal(obs, psf='gauss',types=['blah'])
+            failed=False
+        except AssertionError as err:
+            failed=True
+
+        self.assertTrue(failed,'fail for wrong metacal type')
+
+        for psf in ['gauss','fitgauss']:
+            odict = metacal.get_all_metacal(obs, psf='gauss')
+            assert len(odict)==len(metacal.METACAL_MINIMAL_TYPES),\
+                'got wrong types for psf="%s": %s' % (psf,repr(odict.keys()))
+
+            for t in metacal.METACAL_MINIMAL_TYPES:
+                assert t in odict,'missing metacal type for psf="%s": %s' % (psf,t)
 
