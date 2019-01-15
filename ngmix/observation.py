@@ -1061,7 +1061,7 @@ def make_iilist(obs, **kw):
                 gsvers=2
 
             if obs.has_psf():
-                psf_weight = obs.psf.weight,
+                psf_weight = obs.psf.weight
 
                 # normalized
                 psf_gsimage = galsim.Image(
@@ -1108,8 +1108,11 @@ def make_iilist(obs, **kw):
                 'wcs':obs.jacobian.get_galsim_wcs(),
                 'ii':ii,
                 'weight':obs.weight,
+                'meta':obs.meta,
                 'psf_ii':psf_ii,
                 'psf_weight':psf_weight,
+                'psf_meta':obs.psf.meta,
+                'realspace_gsimage':gsimage,
             })
 
         mb_iilist.append(iilist)
@@ -1155,8 +1158,8 @@ def make_kobs(mb_obs, **kw):
 
             # need a better way to deal with weights, chi^2 etc.
             weight = kimage.real.copy()
-            medweight = numpy.median(iidict['weight'])
-            weight.array[:,:] = 0.5*medweight
+            useweight = iidict['weight'].max()
+            weight.array[:,:] = 0.5*useweight
 
             # parseval's theorem
             weight *= (1.0/weight.array.size)
@@ -1168,21 +1171,31 @@ def make_kobs(mb_obs, **kw):
                     scale=dk,
                 )
 
-                psf_medweight = numpy.median(iidict['psf_weight'])
+                psf_useweight = iidict['psf_weight'].max()
                 psf_weight = psf_kimage.real.copy()
-                psf_weight.array[:,:] = 0.5*psf_medweight
+                psf_weight.array[:,:] = 0.5*psf_useweight
 
+                # parseval's theorem
+                psf_weight *= (1.0/psf_weight.array.size)
+
+                psf_meta={}
+                psf_meta.update(iidict['psf_meta'])
+                psf_meta['ii'] = iidict['psf_ii']
                 psf_kobs = KObservation(
                     psf_kimage,
                     weight=psf_weight,
+                    meta=psf_meta,
                 )
             else:
                 psf_kobs=None
 
+            meta = iidict['meta']
+            meta['realspace_gsimage'] = iidict['realspace_gsimage']
             kobs = KObservation(
                 kimage,
                 weight=weight,
                 psf=psf_kobs,
+                meta=meta,
             )
 
             kobs_list.append(kobs)
