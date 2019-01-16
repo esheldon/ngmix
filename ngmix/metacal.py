@@ -61,10 +61,13 @@ def get_all_metacal(obs,
         of the original psf, but you can also set psf to
 
             'gauss': reconvolve gaussian that is larger than
-                     the original and round.  
+                     the original and round.
             'fitgauss': fit a gaussian to the PSF and make
                         use round, dilated version for reconvolution
-        
+    reconv_psf: list-like
+        A list or set of nested lists (matching the input obs) which
+        has the galsim object that should be used directly (e.g., no dilation)
+        as the reconvolution PSF.
     types: list, optional
         If psf='gauss' or 'fitgauss', then the default set is the minimal
         set ['noshear','1p','1m','2p','2m']
@@ -115,9 +118,15 @@ def _get_all_metacal(obs, step=0.01, **kw):
     get all metacal
     """
     if isinstance(obs, Observation):
-
-        psf=kw.get('psf',None)
-        if psf is not None:
+        if '_reconv_psf' in kw:
+            reconv_psf = kw.get('_reconv_psf')
+        else:
+            reconv_psf = kw.get('reconv_psf', None)
+        psf = kw.get('psf', None)
+        if reconv_psf is not None:
+            assert isinstance(reconv_psf, galsim.GSObject)
+            m = MetacalForcedPSF(obs, psf, **kw)
+        elif psf is not None:
 
             if psf=='gauss':
                 # we default to only shear terms, not psf shear terms
@@ -1328,6 +1337,114 @@ class MetacalAnalyticPSF(Metacal):
         return newobs
 
 
+class MetacalForcedPSF(Metacal):
+    """Metacal w/ a forced, undialted PSF.
+    """
+    def __init__(self, obs, psf_obj, **kw):
+        self.psf_obj = psf_obj
+        super(MetacalAnalyticPSF, self).__init__(obs, **kw)
+
+    def get_target_psf(self, shear, type, get_nopix=False):
+        """
+        get galsim object for the dilated, possibly sheared, psf
+
+        parameters
+        ----------
+        shear: ngmix.Shape
+            The applied shear
+        type: string
+            Type of psf target. For type='gal_shear', nothing is done.
+            to deal with noise amplification.  For type='psf_shear', an
+            error is raised!
+        returns
+        -------
+        galsim object
+        """
+
+        _check_shape(shear)
+
+        assert type != 'psf_shear', "'psf_shear' is not allowed!"
+
+        # this should carry over the wcs
+        psf_grown_image = self.psf_image.copy()
+
+        try:
+            psf_grown_image = self.psf_obj.drawImage(
+                wcs=self.psf_image.wcs,
+                method='no_pixel'  # pixel is in the psf
+            )
+        except RuntimeError as err:
+            # argh, galsim uses generic exceptions
+            raise GMixRangeError("galsim error: '%s'" % str(err))
+
+        if get_nopix:
+            # there is no pixel for analytic psf, just return
+            # a copy
+            return psf_grown_image, psf_grown_image.copy(), self.psf_obj
+        else:
+            return psf_grown_image, self.psf_obj
+
+    def _get_dilated_psf(self, shear, doshear=False):
+        """
+        For this version we never pixelize the input
+        analytic model
+        """
+        assert False
+
+    def _make_psf_obs(self, psf_im):
+        obs = self.obs
+        wtval = numpy.median(obs.psf.weight)
+
+        wtim = numpy.zeros(psf_im.array.shape) + wtval
+
+        jacob = obs.psf.jacobian.copy()
+        cen = (numpy.array(wtim.shape) - 1.0) / 2.0
+        jacob.set_cen(row=cen[0], col=cen[1])
+
+        psf_obs = Observation(
+            psf_im.array,
+            weight=wtim,
+            jacobian=jacob,
+        )
+
+        return psf_obs
+
+    def _make_obs(self, im, psf_im):
+        """
+        Make new Observation objects for the image and psf.
+        Copy out the weight maps and jacobians from the original
+        Observation.
+
+        parameters
+        ----------
+        im: Galsim Image
+        psf_im: Galsim Image
+
+        returns
+        -------
+        A new Observation
+        """
+
+        obs = self.obs
+
+        psf_obs = self._make_psf_obs(psf_im)
+
+        meta = {}
+        meta.update(obs.meta)
+        newobs = Observation(
+            im.array,
+            jacobian=obs.jacobian.copy(),
+            weight=obs.weight.copy(),
+            psf=psf_obs,
+            meta=meta,
+        )
+
+        if obs.has_bmask():
+            newobs.bmask = obs.bmask
+
+        return newobs
+
+
 def _get_ellip_dilation(e1,e2,T):
     """
     when making a symmetric version of the PSF, we need
@@ -1569,7 +1686,9 @@ def get_shear(data, dgamma=0.02):
 def _make_metacal_mb_obs_list_dict(mb_obs_list, step, **kw):
 
     new_dict=None
-    for obs_list in mb_obs_list:
+    for i, obs_list in enumerate(mb_obs_list):
+        if 'reconv_psf' in kw:
+            kw['_reconv_psf_list'] = kw['reconv_psf'][i]
         odict = _make_metacal_obs_list_dict(obs_list, step, **kw)
 
         if new_dict is None:
@@ -1582,8 +1701,9 @@ def _make_metacal_mb_obs_list_dict(mb_obs_list, step, **kw):
 
 def _make_metacal_obs_list_dict(obs_list, step, **kw):
     odict = None
-    for obs in obs_list:
-
+    for i, obs in enumerate(obs_list):
+        if '_reconv_psf_list' in kw:
+            kw['_reconv_psf'] = kw['_reconv_psf_list'][i]
         todict=_get_all_metacal(obs, step=step, **kw)
 
         if odict is None:
