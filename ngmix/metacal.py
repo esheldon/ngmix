@@ -125,7 +125,8 @@ def _get_all_metacal(obs, step=0.01, **kw):
         psf = kw.get('psf', None)
         if reconv_psf is not None:
             assert isinstance(reconv_psf, galsim.GSObject)
-            m = MetacalForcedPSF(obs, psf, **kw)
+            logger.debug('forcing reconv psf to input %s', repr(reconv_psf))
+            m = MetacalForcedPSF(obs, reconv_psf, **kw)
         elif psf is not None:
 
             if psf=='gauss':
@@ -1005,6 +1006,11 @@ class MetacalFitGaussPSF(Metacal):
             self.rng=kw['rng']
         else:
             self.rng=numpy.random.RandomState()
+            
+        if 'dilation_fudge' in kw:
+            self.dilation_fudge = kw['dilation_fudge']
+        else:
+            self.dilation_fudge = 1.0
 
         self._setup_psf()
 
@@ -1115,7 +1121,8 @@ class MetacalFitGaussPSF(Metacal):
 
         dilation = _get_ellip_dilation(e1,e2,T)
         T_dilated = T*dilation
-        sigma = sqrt(T_dilated/2.0)
+        logger.debug('dilation fudge factor: %f', self.dilation_fudge)
+        sigma = sqrt(T_dilated/2.0) * self.dilation_fudge
 
         self.gauss_psf = galsim.Gaussian(
             sigma=sigma,
@@ -1342,7 +1349,7 @@ class MetacalForcedPSF(Metacal):
     """
     def __init__(self, obs, psf_obj, **kw):
         self.psf_obj = psf_obj
-        super(MetacalAnalyticPSF, self).__init__(obs, **kw)
+        super(MetacalForcedPSF, self).__init__(obs, **kw)
 
     def get_target_psf(self, shear, type, get_nopix=False):
         """
