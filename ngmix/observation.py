@@ -1047,9 +1047,10 @@ def make_iilist(obs, **kw):
         iilist=[]
         for obs in obs_list:
 
+            jac=obs.jacobian
             gsimage = galsim.Image(
                 obs.image,
-                wcs=obs.jacobian.get_galsim_wcs(),
+                wcs=jac.get_galsim_wcs(),
             )
             ii = galsim.InterpolatedImage(
                 gsimage,
@@ -1105,7 +1106,8 @@ def make_iilist(obs, **kw):
             dklist.append(dk)
 
             iilist.append({
-                'wcs':obs.jacobian.get_galsim_wcs(),
+                'wcs':jac.get_galsim_wcs(),
+                'scale':jac.scale,
                 'ii':ii,
                 'weight':obs.weight,
                 'meta':obs.meta,
@@ -1154,6 +1156,7 @@ def make_kobs(mb_obs, **kw):
                 nx=dim,
                 ny=dim,
                 scale=dk,
+                #recenter=False,
             )
 
             # need a better way to deal with weights, chi^2 etc.
@@ -1169,6 +1172,7 @@ def make_kobs(mb_obs, **kw):
                     nx=dim,
                     ny=dim,
                     scale=dk,
+                    #recenter=False,
                 )
 
                 psf_useweight = iidict['psf_weight'].max()
@@ -1191,6 +1195,7 @@ def make_kobs(mb_obs, **kw):
 
             meta = iidict['meta']
             meta['realspace_gsimage'] = iidict['realspace_gsimage']
+            meta['scale'] = iidict['scale']
             kobs = KObservation(
                 kimage,
                 weight=weight,
