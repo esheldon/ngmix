@@ -1946,8 +1946,48 @@ def _gprior1d_exp_scalar(A, a, g0sq, gmax, g, gsq, output):
 
 
 
-class FlatPriorBase(PriorBase):
+class FlatPrior(PriorBase):
+    def __init__(self, minval, maxval, rng=None):
+        PriorBase.__init__(self, rng=rng)
+
+        self.minval=minval
+        self.maxval=maxval
+
+    def get_prob_scalar(self, val):
+        """
+        returns 1 or raises a GMixRangeError
+        """
+        retval=1.0
+        if val < self.minval or val > self.maxval:
+            raise GMixRangeError("value %s out of range: "
+                                 "[%s,%s]" % (val, self.minval, self.maxval))
+        return retval
+
+    def get_lnprob_scalar(self, val):
+        """
+        returns 0.0 or raises a GMixRangeError
+        """
+        retval=0.0
+        if val < self.minval or val > self.maxval:
+            raise GMixRangeError("value %s out of range: "
+                                 "[%s,%s]" % (val, self.minval, self.maxval))
+        return retval
+
+    def get_fdiff(self, val):
+        """
+        returns 0.0 or raises a GMixRangeError
+        """
+        retval=0.0
+        if val < self.minval or val > self.maxval:
+            raise GMixRangeError("value %s out of range: "
+                                 "[%s,%s]" % (val, self.minval, self.maxval))
+        return retval
+
+
     def sample(self, n=None):
+        """
+        returns samples uniformly on the interval
+        """
         if n is None:
             is_scalar=True
             n=1
@@ -1962,26 +2002,6 @@ class FlatPriorBase(PriorBase):
 
         return rvals
 
-class FlatPrior(FlatPriorBase):
-    def __init__(self, minval, maxval, rng=None):
-        PriorBase.__init__(self, rng=rng)
-
-        self.minval=minval
-        self.maxval=maxval
-
-    def get_prob_scalar(self, val):
-        retval=1.0
-        if val < self.minval or val > self.maxval:
-            raise GMixRangeError("value %s out of range: "
-                                 "[%s,%s]" % (val, self.minval, self.maxval))
-        return retval
-
-    def get_lnprob_scalar(self, val):
-        retval=0.0
-        if val < self.minval or val > self.maxval:
-            raise GMixRangeError("value %s out of range: "
-                                 "[%s,%s]" % (val, self.minval, self.maxval))
-        return retval
 
 class TwoSidedErf(PriorBase):
     """
