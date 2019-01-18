@@ -3296,8 +3296,11 @@ class LogNormal(PriorBase):
         return samples
 
     def _calc_fdiff(self, pars):
-        ln = LogNormal(pars[0], pars[1])
-        model = ln.get_prob_array(self._fitx)*pars[2]
+        try:
+            ln = LogNormal(pars[0], pars[1])
+            model = ln.get_prob_array(self._fitx)*pars[2]
+        except (GMixRangeError,ValueError):
+            return self._fity*0 - numpy.inf
 
         fdiff = model-self._fity
         return fdiff
