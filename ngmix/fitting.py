@@ -57,6 +57,8 @@ DIV_ZERO = 2**9  # division by zero
 
 ZERO_DOF = 2**10 # dof zero so can't do chi^2/dof
 
+TYPE_ERROR_FLAG = 2**11 # Type error from scipy
+
 
 class FitterBase(object):
     """
@@ -2072,6 +2074,18 @@ def run_leastsq(func, guess, n_prior_pars, **keys):
         res['flags']=DIV_ZERO
         res['errmsg']="zero division"
         print('    zero division')
+    
+    except TypeError:
+        pars,pcov,perr=_get_def_stuff(npars)
+
+        res['pars']=pars
+        res['pars_cov0']=pcov
+        res['pars_cov']=pcov
+        res['nfev']=-1
+
+        res['flags']=TYPE_ERROR_FLAG
+        res['errmsg']="type error"
+        print('    type error')
 
     return res
 
