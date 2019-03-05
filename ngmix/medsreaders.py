@@ -240,7 +240,11 @@ class NGMixMEDS(_MEDS):
         if 'number' in c.dtype.names:
             meta['number'] = c['number'][iobj]
 
-        psf_obs = self.get_psf_obs(iobj, icutout)
+        if 'psf' in self._fits:
+            psf_obs = self.get_psf_obs(iobj, icutout)
+        else:
+            psf_obs = None
+
         obs = Observation(
             im,
             weight=wt,
