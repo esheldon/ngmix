@@ -552,7 +552,6 @@ class Observation(object):
             self.image,
             self.weight,
             self._jacobian,
-            trim=True,
         )
 
 class ObsList(list):
