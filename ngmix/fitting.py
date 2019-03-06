@@ -180,8 +180,7 @@ class FitterBase(object):
         totpix=0
         for obs_list in self.obs:
             for obs in obs_list:
-                shape=obs.image.shape
-                totpix += shape[0]*shape[1]
+                totpix += obs.pixels.size
 
         self.totpix=totpix
 
@@ -849,8 +848,7 @@ class TemplateFluxFitter(FitterBase):
 
         totpix=0
         for obs in self.obs:
-            shape=obs.image.shape
-            totpix += shape[0]*shape[1]
+            totpix += obs.pixels.size
 
         self.totpix=totpix
 

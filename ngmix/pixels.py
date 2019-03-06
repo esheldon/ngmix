@@ -1,18 +1,28 @@
 import numpy
+from .gexceptions import GMixFatalError
 
-def make_pixels(image, weight, jacob):
+def make_pixels(image, weight, jacob, trim=False):
     """
     make a pixel array from the image and weight
     """
     from .pixels_nb import fill_pixels
 
-    pixels = numpy.zeros(image.size, dtype=_pixels_dtype)
+    if trim:
+        w=numpy.where(weight > 0.0)
+        if w[0].size == 0:
+            raise GMixFatalError('no weights > 0')
+        npixels = w[0].size
+    else:
+        npixels = image.size
+
+    pixels = numpy.zeros(npixels, dtype=_pixels_dtype)
 
     fill_pixels(
         pixels,
         image,
         weight,
         jacob._data,
+        trim=trim,
     )
 
     return pixels

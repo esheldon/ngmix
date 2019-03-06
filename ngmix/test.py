@@ -32,7 +32,7 @@ class TestFitting(unittest.TestCase):
         self.seed=100
         self.rng=np.random.RandomState(self.seed)
 
-    def get_obs_data(self, model, noise):
+    def get_obs_data(self, model, noise, mask=False):
 
         rng=self.rng
 
@@ -70,6 +70,21 @@ class TestFitting(unittest.TestCase):
         im_obj[:,:] += n
         wt_obj=np.zeros(im_obj.shape) + 1./noise**2
 
+        if mask:
+            # apply a circular mask on the weight
+            shape=wt_obj.shape
+            rad = shape[0]/2.0
+            maxrad = rad*2.0/3.0
+
+            cen = (np.array(shape)-1.0)/2.0
+            rows, cols = np.mgrid[0:shape[0], 0:shape[1]]
+            rows = rows - cen[0]
+            cols = cols - cen[1]
+            r2 = rows**2 + cols**2
+            w=np.where(r2 > maxrad**2)
+            wt_obj[w] = 0.0
+
+
         psf_obs = Observation(
             im_psf,
             weight=wt_psf,
@@ -100,6 +115,46 @@ class TestFitting(unittest.TestCase):
 
             obs=mdict['obs']
             obs.set_psf(mdict['psf_obs'])
+
+            pars=mdict['pars'].copy()
+            pars[0] += rng.uniform(low=-0.1,high=0.1)
+            pars[1] += rng.uniform(low=-0.1,high=0.1)
+            pars[2] += rng.uniform(low=-0.1,high=0.1)
+            pars[3] += rng.uniform(low=-0.1,high=0.1)
+            pars[4] *= (1.0 + rng.uniform(low=-0.1,high=0.1))
+            pars[5] *= (1.0 + rng.uniform(low=-0.1,high=0.1))
+
+            max_pars={'method':'lm',
+                      'lm_pars':{'maxfev':4000}}
+
+            prior=joint_prior.make_uniform_simple_sep([0.0,0.0],     # cen
+                                                      [0.1,0.1],     # g
+                                                      [-10.0,3500.], # T
+                                                      [-0.97,1.0e9]) # flux
+
+            boot=bootstrap.Bootstrapper(obs)
+            boot.fit_psfs('gauss', 4.0)
+            boot.fit_max('exp', max_pars, pars, prior=prior)
+            res=boot.get_max_fitter().get_result()
+
+            print_pars(mdict['pars'],   front='pars true: ')
+            print_pars(res['pars'],     front='pars meas: ')
+            print_pars(res['pars_err'], front='pars err:  ')
+            print('s2n:',res['s2n_w'])
+
+    def testWeight(self):
+
+        rng=self.rng
+
+        print('\n')
+        for noise in [0.001, 0.1, 1.0]:
+            print('='*10)
+            print('noise:',noise)
+            mdict=self.get_obs_data('exp',noise,mask=True)
+
+            obs=mdict['obs']
+            obs.set_psf(mdict['psf_obs'])
+
 
             pars=mdict['pars'].copy()
             pars[0] += rng.uniform(low=-0.1,high=0.1)

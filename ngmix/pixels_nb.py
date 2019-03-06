@@ -9,7 +9,7 @@ except NameError:
 from .jacobian_nb import jacobian_get_vu
 
 @njit
-def fill_pixels(pixels, image, weight, jacob):
+def fill_pixels(pixels, image, weight, jacob, trim=False):
     """
     store v,u image value, and 1/err for each pixel
 
@@ -32,6 +32,10 @@ def fill_pixels(pixels, image, weight, jacob):
     for row in xrange(nrow):
         for col in xrange(ncol):
 
+            ivar = weight[row,col]
+            if trim and ivar <= 0.0:
+                continue
+
             pixel = pixels[ipixel]
 
             v,u = jacobian_get_vu(jacob,row,col)
@@ -40,7 +44,6 @@ def fill_pixels(pixels, image, weight, jacob):
             pixel['u'] = u
 
             pixel['val'] = image[row,col]
-            ivar = weight[row,col]
 
             if ivar < 0.0:
                 ivar = 0.0
@@ -49,6 +52,9 @@ def fill_pixels(pixels, image, weight, jacob):
 
             ipixel += 1
 
+    if ipixel != pixels.size:
+        #raise RuntimeError('only filled %d/%d pixels' % (ipixel, pixels.size))
+        raise RuntimeError('some pixels were not filled')
 
 @njit
 def fill_coords(coords, nrow, ncol, jacob):
