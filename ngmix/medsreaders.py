@@ -3,6 +3,7 @@ from meds import MEDS as _MEDS
 
 from .observation import MultiBandObsList, Observation, ObsList
 from .jacobian import Jacobian
+from .gexceptions import GMixFatalError
 
 
 class MultiBandNGMixMEDS(object):
@@ -134,8 +135,12 @@ class NGMixMEDS(_MEDS):
         """
         obslist = ObsList()
         for icut in range(self._cat['ncutout'][iobj]):
-            obs = self.get_obs(iobj, icut, weight_type=weight_type)
-            obslist.append(obs)
+            try:
+                obs = self.get_obs(iobj, icut, weight_type=weight_type)
+                obslist.append(obs)
+            except GMixFatalError as err:
+                print('zero weight observation found, skipping')
+
 
         if len(obslist) > 0:
             obs = obslist[0]
