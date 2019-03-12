@@ -3760,8 +3760,8 @@ class Sinh(PriorBase):
             is_scalar=False
 
         vals = self.rng.uniform(
-            low = self.mean - 3*self.scale,
-            high = self.mean + 3*self.scale,
+            low = self.mean - self.scale,
+            high = self.mean + self.scale,
             size = nrand
         )
 
