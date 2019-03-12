@@ -2097,26 +2097,31 @@ class TwoSidedErf(PriorBase):
         """
         get the probability of the point
         """
-        """
-        from math import erf
 
-        p1 = erf((self.maxval-val)/self.width_at_max)
-        p1 -= 1.0
-        p1 *= -BIGVAL/2
-
-        p2 = erf((val-self.minval)/self.width_at_min)
-        p2 -= 1
-        p2 *= -1
-        p2 *= -BIGVAL/2
-
-        return p1+p2
-        """
         p=self.get_lnprob_scalar(val)
 
         p = -2*p
         if p < 0.0:
             p = 0.0
         return sqrt(p)
+
+
+        """
+        from math import erf
+
+        p1 = erf((self.maxval-val)/self.width_at_max)
+        p1 -= 1.0
+        #p1 *= -BIGVAL/2
+        p1 *= -1
+
+        p2 = erf((val-self.minval)/self.width_at_min)
+        p2 -= 1
+        #p2 *= -1
+        #p2 *= -BIGVAL/2
+
+        return p1+p2
+        """
+
 
     def sample(self, nrand=None):
         """
@@ -3731,6 +3736,40 @@ class BFrac(BFracBase):
 
         lnp = numpy.log(p_bd + p_dev)
         return lnp
+
+class Sinh(PriorBase):
+    def __init__(self, mean, scale, rng=None):
+        PriorBase.__init__(self, rng=rng)
+
+        self.mean=mean
+        self.scale=scale
+
+    def get_fdiff(self, x):
+        """
+        For use with LM fitter
+        (model-data)/width for both coordinates
+        """
+        return numpy.sinh( (x-self.mean)/self.scale )
+
+    def sample(self, nrand=1):
+
+        if nrand is None:
+            is_scalar=True
+            nrand=1
+        else:
+            is_scalar=False
+
+        vals = self.rng.uniform(
+            low = self.mean - 3*self.scale,
+            high = self.mean + 3*self.scale,
+            size = nrand
+        )
+
+        if is_scalar:
+            vals=vals[0]
+
+        return vals
+
 
 class TruncatedGaussian(PriorBase):
     """
