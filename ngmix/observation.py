@@ -56,7 +56,7 @@ class Observation(object):
 
         # now image, weight, and jacobian are set, create
         # the pixel array
-        self._update_pixels()
+        self.update_pixels()
 
         self.set_meta(meta)
 
@@ -240,7 +240,7 @@ class Observation(object):
         self._image=image
 
         if update_pixels:
-            self._update_pixels()
+            self.update_pixels()
 
     def set_weight(self, weight, update_pixels=True):
         """
@@ -265,7 +265,7 @@ class Observation(object):
 
         self._weight=weight
         if update_pixels:
-            self._update_pixels()
+            self.update_pixels()
 
     def set_bmask(self, bmask):
         """
@@ -354,7 +354,7 @@ class Observation(object):
         self._jacobian=jac
 
         if update_pixels:
-            self._update_pixels()
+            self.update_pixels()
 
     def get_jacobian(self):
         """
@@ -543,7 +543,7 @@ class Observation(object):
             psf=psf,
         )
 
-    def _update_pixels(self):
+    def update_pixels(self):
         """
         create the pixel struct array, for efficient cache usage
         """
