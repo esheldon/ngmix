@@ -3028,8 +3028,8 @@ class Normal(object):
 
     C class defined get_lnprob_scalar(x) and get_prob_scalar(x)
     """
-    def __init__(self, cen, sigma, rng=None):
-        self.cen=cen
+    def __init__(self, mean, sigma, rng=None):
+        self.mean=mean
         self.sigma=sigma
         self.sinv=1.0/sigma
         self.s2inv=1.0/sigma**2
@@ -3039,9 +3039,9 @@ class Normal(object):
 
     def get_lnprob(self, x):
         """
-        -0.5 * ( (x-cen)/sigma )**2
+        -0.5 * ( (x-mean)/sigma )**2
         """
-        diff = self.cen-x
+        diff = self.mean-x
         return -0.5*diff*diff*self.s2inv
 
     get_lnprob_scalar = get_lnprob
@@ -3049,9 +3049,9 @@ class Normal(object):
 
     def get_prob(self, x):
         """
-        -0.5 * ( (x-cen)/sigma )**2
+        -0.5 * ( (x-mean)/sigma )**2
         """
-        diff = self.cen-x
+        diff = self.mean-x
         lnp = -0.5*diff*diff*self.s2inv
         return numpy.exp(lnp)
 
@@ -3060,10 +3060,10 @@ class Normal(object):
 
     def get_prob_scalar(self, x):
         """
-        -0.5 * ( (x-cen)/sigma )**2
+        -0.5 * ( (x-mean)/sigma )**2
         """
         from math import exp
-        diff = self.cen-x
+        diff = self.mean-x
         lnp = -0.5*diff*diff*self.s2inv
         return exp(lnp)
 
@@ -3072,14 +3072,14 @@ class Normal(object):
         For use with LM fitter
         (model-data)/width for both coordinates
         """
-        return (x-self.cen)*self.sinv
+        return (x-self.mean)*self.sinv
 
     def sample(self, size=None):
         """
         Get samples.  Send no args to get a scalar.
         """
         return self.rng.normal(
-            loc=self.cen,
+            loc=self.mean,
             scale=self.sigma,
             size=size,
         )
