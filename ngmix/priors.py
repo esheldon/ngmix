@@ -36,8 +36,15 @@ def make_rng(rng=None):
     return rng
 
 class PriorBase(object):
-    def __init__(self, rng=None):
+    def __init__(self, bounds=None, rng=None):
+        self.bounds=bounds
         self.rng=make_rng(rng=rng)
+
+    def has_bounds(self):
+        """
+        returns True if the object has a bounds defined
+        """
+        return hasattr(self,'bounds') and self.bounds is not None
 
 class GPriorBase(PriorBase):
     """
@@ -3022,20 +3029,20 @@ class FlatEtaPrior(PriorBase):
     '''
 
 
-class Normal(object):
+class Normal(PriorBase):
     """
     This class provides an interface consistent with LogNormal
 
     C class defined get_lnprob_scalar(x) and get_prob_scalar(x)
     """
-    def __init__(self, mean, sigma, rng=None):
+    def __init__(self, mean, sigma, bounds=None, rng=None):
+        super(Normal,self).__init__(rng=rng, bounds=bounds)
+
         self.mean=mean
         self.sigma=sigma
         self.sinv=1.0/sigma
         self.s2inv=1.0/sigma**2
         self.ndim=1
-
-        self.rng=make_rng(rng=rng)
 
     def get_lnprob(self, x):
         """
@@ -3084,6 +3091,38 @@ class Normal(object):
             size=size,
         )
 
+class LMBounds(PriorBase):
+    """
+    class to hold simple bounds for the leastsqbound version
+    of LM.
+
+    The fdiff is always zero, but the bounds  will be sent
+    to the minimizer
+    """
+    def __init__(self, minval, maxval, rng=None):
+
+        super(LMBounds,self).__init__(rng=rng)
+
+        self.bounds = (minval, maxval)
+        self.mean   = (minval+maxval)/2.0
+        self.sigma  = (maxval-minval)*0.28
+
+    def get_fdiff(self, val):
+        """
+        fdiff for the input val, always zero
+        """
+        return 0.0*val
+
+    def sample(self, n=None):
+        """
+        returns samples uniformly on the interval
+        """
+
+        return self.rng.uniform(
+            low=self.bounds[0],
+            high=self.bounds[1],
+            size=n,
+        )
 
 class Bounded1D(PriorBase):
     """
@@ -4117,11 +4156,12 @@ def scipy_to_lognorm(shape, scale):
 
     return meanx, sigmax
 
-class CenPrior(object):
+class CenPrior(PriorBase):
     """
     Independent gaussians in each dimension
     """
     def __init__(self, cen1, cen2, sigma1, sigma2, rng=None):
+        super(CenPrior,self).__init__(rng=rng)
 
         self.cen1 = float(cen1)
         self.cen2 = float(cen2)
@@ -4131,8 +4171,6 @@ class CenPrior(object):
         self.sinv2 = 1.0/self.sigma2
         self.s2inv1 = 1.0/self.sigma1**2
         self.s2inv2 = 1.0/self.sigma2**2
-
-        self.rng=make_rng(rng=rng)
 
     def get_fdiff(self, x1, x2):
         """

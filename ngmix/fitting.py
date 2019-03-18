@@ -1977,7 +1977,8 @@ def run_leastsq(func, guess, n_prior_pars, **keys):
     xtol:
         Relative error desired in solution. 1.0e-6
     """
-    from scipy.optimize import leastsq
+    #from scipy.optimize import leastsq
+    from .leastsqbound import leastsqbound as leastsq
 
     npars=guess.size
     k_space=keys.pop('k_space',False)
