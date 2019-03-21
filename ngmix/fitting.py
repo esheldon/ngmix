@@ -3362,6 +3362,15 @@ def print_pars(pars, stream=stdout, fmt='%8.3g',front=None):
     if pars is None:
         stream.write('%s\n' % None)
     else:
-        fmt = ' '.join( [fmt+' ']*len(pars) )
-        stream.write(fmt % tuple(pars))
+        #fmt = ' '.join( [fmt+' ']*len(pars) )
+        #stream.write(fmt % tuple(pars))
+        s = format_pars(pars, fmt=fmt)
+        stream.write(s)
         stream.write('\n')
+
+def format_pars(pars, fmt='%8.3g'):
+    """
+    make a nice string of the pars with no line breaks
+    """
+    fmt = ' '.join( [fmt+' ']*len(pars) )
+    return fmt % tuple(pars)
