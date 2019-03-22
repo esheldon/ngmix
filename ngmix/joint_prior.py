@@ -621,42 +621,35 @@ class PriorCoellipSame(PriorSimpleSep):
         """
         set possibe bounds
         """
-        # need to implement properly
 
         self.bounds=None
 
-        print('IMPLEMENT BOUNDS FOR PriorCoellipSame')
+        return
 
-        '''
         bounds = [
             (None,None), # c1
             (None,None), # c2
             (None,None), # g1
             (None,None), # g2
-            #(-1.0,1.0),  # g1
-            #(-1.0,1.0),  # g2
         ]
 
-        allp = [
-            self.T_prior,
-            self.fracdev_prior,
-        ] + self.F_priors
-
         some_have_bounds=False
-        for i,p in enumerate(allp):
+
+        for p in [self.T_prior, self.F_prior]:
             if p.has_bounds():
                 some_have_bounds=True
-                bounds.append( (p.bounds[0], p.bounds[1]) )
+                pbounds = [ (p.bounds[0], p.bounds[1]) ]
             else:
-                bounds.append( (None,None) )
+                pbounds = [ (None,None) ]
 
-        if not some_have_bounds:
-            bounds=None
+            bounds += [pbounds]*self.ngauss
+        
+        if some_have_bounds:
+            bounds = bounds + Tbounds*self.ngauss + Fbounds*self.ngauss
+        else:
+            bounds = None
 
         self.bounds=bounds
-        '''
-
-
 
     def get_lnprob_scalar(self, pars, **keys):
         """
