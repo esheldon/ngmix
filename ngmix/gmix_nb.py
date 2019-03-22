@@ -461,7 +461,7 @@ def gmix_fill_bdf(gmix, pars):
     varying
     """
 
-    TdByTe=1.0
+    TdByTe=2.36
 
     row     = pars[0]
     col     = pars[1]
