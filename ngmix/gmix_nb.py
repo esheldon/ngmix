@@ -464,9 +464,11 @@ def gmix_fill_bd(gmix, pars):
     g1       = pars[2]
     g2       = pars[3]
     T        = pars[4]
-    TdByTe   = pars[5]
+    lTrat    = pars[5]
     fracdev  = pars[6]
     flux     = pars[7]
+
+    TdByTe = 10.0**lTrat
 
     Tfactor  = get_cm_Tfactor(fracdev, TdByTe)
     T = T*Tfactor

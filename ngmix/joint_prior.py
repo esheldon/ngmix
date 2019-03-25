@@ -239,7 +239,7 @@ class PriorBDSep(PriorSimpleSep):
         The prior on g (g1,g2).
     T_prior:
         Prior on T or some size parameter
-    TdByTe:
+    logTratio:
         Prior on Td/Te
     fracdev_prior:
         Prior on fracdev for bulge+disk
@@ -251,7 +251,7 @@ class PriorBDSep(PriorSimpleSep):
                  cen_prior,
                  g_prior,
                  T_prior,
-                 TdByTe_prior,
+                 logTratio_prior,
                  fracdev_prior,
                  F_prior):
 
@@ -260,7 +260,7 @@ class PriorBDSep(PriorSimpleSep):
         self.cen_prior=cen_prior
         self.g_prior=g_prior
         self.T_prior=T_prior
-        self.TdByTe_prior = TdByTe_prior
+        self.logTratio_prior = logTratio_prior
         self.fracdev_prior=fracdev_prior
 
         if isinstance(F_prior,(list,tuple)):
@@ -286,7 +286,7 @@ class PriorBDSep(PriorSimpleSep):
 
         allp = [
             self.T_prior,
-            self.TdByTe_prior,
+            self.logTratio_prior,
             self.fracdev_prior,
         ] + self.F_priors
 
@@ -313,7 +313,7 @@ class PriorBDSep(PriorSimpleSep):
         lnp = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
         lnp += self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
         lnp += self.T_prior.get_lnprob_scalar(pars[4], **keys)
-        lnp += self.TdByTe_prior.get_lnprob_scalar(pars[5], **keys)
+        lnp += self.logTratio_prior.get_lnprob_scalar(pars[5], **keys)
         lnp += self.fracdev_prior.get_lnprob_scalar(pars[6], **keys)
 
         for i, F_prior in enumerate(self.F_priors):
@@ -342,7 +342,7 @@ class PriorBDSep(PriorSimpleSep):
         fdiff[index] =  self.T_prior.get_fdiff(pars[4])
         index += 1
 
-        fdiff[index] =  self.TdByTe_prior.get_fdiff(pars[5])
+        fdiff[index] =  self.logTratio_prior.get_fdiff(pars[5])
         index += 1
 
         fdiff[index] =  self.fracdev_prior.get_fdiff(pars[6])
@@ -363,7 +363,7 @@ class PriorBDSep(PriorSimpleSep):
         lnp = self.cen_prior.get_lnprob_array(pars[:,0], pars[:,1])
         lnp += self.g_prior.get_lnprob_array2d(pars[:,2],pars[:,3])
         lnp += self.T_prior.get_lnprob_array(pars[:,4])
-        lnp += self.TdByTe_prior.get_lnprob_array(pars[:,5])
+        lnp += self.logTratio_prior.get_lnprob_array(pars[:,5])
         lnp += self.fracdev_prior.get_lnprob_array(pars[:,6])
 
         for i in xrange(self.nband):
@@ -388,7 +388,7 @@ class PriorBDSep(PriorSimpleSep):
         cen1,cen2 = self.cen_prior.sample(n)
         g1,g2=self.g_prior.sample2d(n)
         T=self.T_prior.sample(n)
-        TdByTe=self.TdByTe_prior.sample(n)
+        logTratio=self.logTratio_prior.sample(n)
         fracdev=self.fracdev_prior.sample(n)
 
         samples[:,0] = cen1
@@ -396,7 +396,7 @@ class PriorBDSep(PriorSimpleSep):
         samples[:,2] = g1
         samples[:,3] = g2
         samples[:,4] = T
-        samples[:,5] = TdByTe
+        samples[:,5] = logTratio
         samples[:,6] = fracdev
 
         for i in xrange(self.nband):
@@ -413,7 +413,7 @@ class PriorBDSep(PriorSimpleSep):
         reps += [str(self.cen_prior),
                  str(self.g_prior),
                  str(self.T_prior),
-                 str(self.TdByTe_prior),
+                 str(self.logTratio_prior),
                  str(self.fracdev_prior)]
 
         for p in self.F_priors:
