@@ -2693,6 +2693,53 @@ class CompositeMaxRunner(MaxRunner):
         from .fitting import LMComposite
         return LMComposite
 
+class BDRunner(MaxRunner):
+    """
+    wrapper to generate guesses and run the psf fitter a few times
+    """
+    def __init__(self,
+                 obs,
+                 max_pars,
+                 guesser,
+                 prior=None):
+        self.obs=obs
+
+        self.max_pars=max_pars
+
+        self.method=max_pars.get('method','lm')
+        if self.method == 'lm':
+            self.send_pars=max_pars['lm_pars']
+        else:
+            self.send_pars=max_pars
+
+        self.prior=prior
+
+        self.guesser=guesser
+
+    def _go_lm(self, ntry=1):
+        fitclass=self._get_lm_fitter_class()
+
+        for i in xrange(ntry):
+            guess=self.guesser()
+            fitter=fitclass(
+                self.obs,
+                lm_pars=self.send_pars,
+                prior=self.prior,
+            )
+
+            fitter.go(guess)
+
+            res=fitter.get_result()
+            if res['flags']==0:
+                break
+
+        res['ntry'] = i+1
+        self.fitter=fitter
+
+    def _get_lm_fitter_class(self):
+        from .fitting import LMBD
+        return LMBD
+
 
 class BDFRunner(MaxRunner):
     """

@@ -1060,6 +1060,8 @@ GMIX_COELLIP=7
 GMIX_SERSIC=8
 GMIX_CM=9
 
+GMIX_BD=10
+
 _gmix_model_dict={
     'full':       GMIX_FULL,
     GMIX_FULL:    GMIX_FULL,
@@ -1073,6 +1075,10 @@ _gmix_model_dict={
     GMIX_DEV:     GMIX_DEV,
     'bdc':        GMIX_BDC,
     GMIX_BDC:     GMIX_BDC,
+
+    'bd':        GMIX_BD,
+    GMIX_BD:     GMIX_BD,
+
     'bdf':        GMIX_BDF,
     GMIX_BDF:     GMIX_BDF,
 
@@ -1099,6 +1105,10 @@ _gmix_string_dict={
     'dev':'dev',
     GMIX_BDC:'bdc',
     'bdc':'bdc',
+
+    GMIX_BD:'bd',
+    'bd':'bd',
+
     GMIX_BDF:'bdf',
     'bdf':'bdf',
 
@@ -1120,10 +1130,12 @@ _gmix_npars_dict={
     GMIX_DEV:6,
 
     GMIX_CM:6,
+
+    GMIX_BD:8,
+
     GMIX_BDF:7,
 
     GMIX_BDC:8,
-    GMIX_BDF:7,
     GMIX_SERSIC:7,
 }
 
@@ -1138,10 +1150,10 @@ _gmix_ngauss_dict={
     'dev':10,
 
     GMIX_CM:16,
+    GMIX_BD:16,
     GMIX_BDF:16,
 
     GMIX_BDC:16,
-    GMIX_BDF:16,
     GMIX_SERSIC:4,
 
     'em1':1,

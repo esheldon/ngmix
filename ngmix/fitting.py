@@ -1672,12 +1672,19 @@ class LMSimple(FitterBase):
 
         self._make_lists()
 
+        if self.prior is not None:
+            bounds=self.prior.bounds
+        else:
+            bounds=None
+
         result = run_leastsq(
             self._calc_fdiff,
             guess,
             self.n_prior_pars,
+            bounds=bounds,
             **self.lm_pars
         )
+
 
         result['model'] = self.model_name
         if result['flags']==0:
@@ -1726,7 +1733,7 @@ class LMSimple(FitterBase):
             self._init_gmix_all(guess)
         except ZeroDivisionError:
             raise GMixRangeError("got zero division")
-
+        
     def get_band_pars(self, pars_in, band):
         """
         Get linear pars for the specified band
@@ -1893,6 +1900,77 @@ class LMComposite(LMSimple):
     def _make_model(self, band_pars):
         gm0=gmix.GMixCM(self.fracdev, self.TdByTe, band_pars)
         return gm0
+
+class LMBD(LMSimple):
+    """
+    exp+dev model with Td/Te and fracdev free
+    """
+    def __init__(self, obs, **keys):
+        super(LMBD,self).__init__(obs, 'bd', **keys)
+
+        self._band_pars=zeros(8)
+
+    def _set_n_prior_pars(self):
+        # center1 + center2 + shape + T + TdByTe + fracdev + fluxes
+        if self.prior is None:
+            self.n_prior_pars=0
+        else:
+            self.n_prior_pars=1 + 1 + 1 + 1 + 1 + 1 + self.nband
+
+    def get_gmix(self, band=0):
+        """
+        Get a gaussian mixture at the "best" parameter set, which
+        definition depends on the sub-class
+        """
+        res=self.get_result()
+        pars=self.get_band_pars(res['pars'], band)
+        return self._make_model(pars)
+
+    def get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+        """
+
+        pars=self._band_pars
+
+        pars[0:7] = pars_in[0:7]
+        pars[7] = pars_in[7+band]
+
+        return pars
+
+
+    def _make_model(self, band_pars):
+        """
+        incoming parameters are
+            [c1,c2,g1,g2,T,fracdev,F]
+        """
+        return gmix.GMixModel(band_pars,'bd')
+
+    def _set_flux(self, res):
+        if self.nband==1:
+            res['flux'] = res['pars'][7]
+            res['flux_err'] = sqrt(res['pars_cov'][7,7])
+        else:
+            res['flux'] = res['pars'][7:]
+            res['flux_cov'] = res['pars_cov'][7:, 7:]
+            res['flux_err'] = sqrt(diag(res['flux_cov']))
+
+    '''
+    def _setup_data(self, guess):
+        super(LMBD,self)._setup_data(guess)
+
+        import images
+        gm = self._gmix_all[0][0]
+        print('gm:',gm)
+        im = gm.make_image(
+            self.obs[0][0].image.shape,
+            jacobian=self.obs[0][0].jacobian,
+        )
+        print(im.std())
+        images.multiview(im)
+        stop
+    '''
+
 
 class LMBDF(LMSimple):
     """
