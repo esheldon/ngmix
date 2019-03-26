@@ -1,9 +1,15 @@
 __version__="v1.2"
 
 from . import gmix
-from .gmix import GMix
-from .gmix import GMixModel
-from .gmix import GMixCoellip
+from .gmix import (
+    GMix,
+    GMixModel,
+    GMixBDF,
+    GMixCoellip,
+
+    GMixList,
+    MultiBandGMixList,
+)
 
 from . import gmix_ndim
 from .gmix_ndim import GMixND

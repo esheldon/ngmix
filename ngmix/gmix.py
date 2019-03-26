@@ -35,13 +35,16 @@ from .pixels import make_coords
 # this is for backward compatibility
 from .gmix_ndim import GMixND
 
-def make_gmix_model(pars, model):
+def make_gmix_model(pars, model, **kw):
     """
     get a gaussian mixture model for the given model
     """
 
+    model = get_model_num(model)
     if model==GMIX_COELLIP:
         return GMixCoellip(pars)
+    elif model==GMIX_BDF:
+        return GMixBDF(pars=pars, **kw)
     elif model==GMIX_FULL:
         return GMix(pars=pars)
     else:
