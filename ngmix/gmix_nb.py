@@ -454,6 +454,7 @@ def gmix_fill_cm(gmix, fracdev, TdByTe, Tfactor, pars):
             T_i_2*(1+e1),
         )
 
+@njit
 def gmix_fill_bd(gmix, pars):
     """
     fill a bulge plus disk model
