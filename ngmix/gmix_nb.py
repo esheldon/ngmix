@@ -502,13 +502,11 @@ def gmix_fill_bd(gmix, pars):
 
 
 @njit
-def gmix_fill_bdf(gmix, pars):
+def gmix_fill_bdf(gmix, pars, TdByTe):
     """
     fill a composite model with fixed Td/Te=1 but fracdev
     varying
     """
-
-    TdByTe=1.0
 
     row     = pars[0]
     col     = pars[1]

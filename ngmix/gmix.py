@@ -831,6 +831,10 @@ class GMixModel(GMix):
     """
     def __init__(self, pars, model):
 
+        assert model != 'bdf','use GMixBDF for bdf model'
+        self._do_init(pars, model)
+
+    def _do_init(self, pars, model):
         self._model      = _gmix_model_dict[model]
         self._model_name = _gmix_string_dict[self._model]
 
@@ -930,15 +934,20 @@ class GMixBDF(GMixModel):
     Gaussian mixture representing a bulge+disk with
     fixed size ratio Td/Te=1
     """
-    def __init__(self, pars):
-        super(GMixBDF,self).__init__(pars,'bdf')
+    def __init__(self, pars=None, TdByTe=1.0):
+        assert pars is not None,'send pars='
+        assert TdByTe is not None,'send TdByTe='
+
+        self.TdByTe = float(TdByTe)
+        super(GMixBDF,self)._do_init(pars,'bdf')
 
     def copy(self):
         """
         Get a new GMix with the same parameters
         """
         return GMixBDF(
-            self._pars,
+            pars=self._pars.copy(),
+            TdByTe=self.TdByTe,
         )
 
     def _fill(self, pars):
@@ -958,12 +967,14 @@ class GMixBDF(GMixModel):
         self._fill_func(
             gm,
             self._pars,
+            self.TdByTe,
         )
 
 
     def __repr__(self):
         rep=super(GMixBDF,self).__repr__()
         rep = [
+            'TdByTe:  %g' % self.TdByTe,
             rep,
         ]
         return '\n'.join(rep)
