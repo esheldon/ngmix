@@ -935,13 +935,25 @@ class GMixCM(GMixModel):
 class GMixBDF(GMixModel):
     """
     Gaussian mixture representing a bulge+disk with
-    fixed size ratio Td/Te=1
+    fixed size ratio
+
+    Parameters
+    ----------
+    pars: sequence
+        [c1,c2,g1,g2,T,flux]
+    TdByTe: number, optional
+        Optionally set TdByTe.  Defaults to 1.0
+
+        Notes: a value of 1.0 is not the most common value for real world
+        galaxies.  It is more typically ~0.3 when fitting to COSMOS galaxies.
+        But 1.0 provides much more stable fits generally and does not reduce
+        accuracy much.
     """
     def __init__(self, pars=None, TdByTe=1.0):
         assert pars is not None,'send pars='
         assert TdByTe is not None,'send TdByTe='
 
-        self.TdByTe = float(TdByTe)
+        self._TdByTe = float(TdByTe)
         super(GMixBDF,self)._do_init(pars,'bdf')
 
     def copy(self):
@@ -950,7 +962,7 @@ class GMixBDF(GMixModel):
         """
         return GMixBDF(
             pars=self._pars.copy(),
-            TdByTe=self.TdByTe,
+            TdByTe=self._TdByTe,
         )
 
     def _fill(self, pars):
@@ -970,14 +982,14 @@ class GMixBDF(GMixModel):
         self._fill_func(
             gm,
             self._pars,
-            self.TdByTe,
+            self._TdByTe,
         )
 
 
     def __repr__(self):
         rep=super(GMixBDF,self).__repr__()
         rep = [
-            'TdByTe:  %g' % self.TdByTe,
+            'TdByTe:  %g' % self._TdByTe,
             rep,
         ]
         return '\n'.join(rep)
