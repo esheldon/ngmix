@@ -180,8 +180,7 @@ class FitterBase(object):
         totpix=0
         for obs_list in self.obs:
             for obs in obs_list:
-                shape=obs.image.shape
-                totpix += shape[0]*shape[1]
+                totpix += obs.pixels.size
 
         self.totpix=totpix
 
@@ -849,8 +848,7 @@ class TemplateFluxFitter(FitterBase):
 
         totpix=0
         for obs in self.obs:
-            shape=obs.image.shape
-            totpix += shape[0]*shape[1]
+            totpix += obs.pixels.size
 
         self.totpix=totpix
 
@@ -1674,12 +1672,16 @@ class LMSimple(FitterBase):
 
         self._make_lists()
 
+        bounds = self._get_bounds()
+
         result = run_leastsq(
             self._calc_fdiff,
             guess,
             self.n_prior_pars,
+            bounds=bounds,
             **self.lm_pars
         )
+
 
         result['model'] = self.model_name
         if result['flags']==0:
@@ -1692,6 +1694,15 @@ class LMSimple(FitterBase):
 
         self._result=result
 
+    def _get_bounds(self):
+        """
+        get bounds on parameters
+        """
+        bounds=None
+        if self.prior is not None:
+            if hasattr(self.prior,'bounds'):
+                bounds=self.prior.bounds
+        return bounds
 
     run_max=go
     run_lm=go
@@ -1728,7 +1739,7 @@ class LMSimple(FitterBase):
             self._init_gmix_all(guess)
         except ZeroDivisionError:
             raise GMixRangeError("got zero division")
-
+        
     def get_band_pars(self, pars_in, band):
         """
         Get linear pars for the specified band
@@ -1896,6 +1907,77 @@ class LMComposite(LMSimple):
         gm0=gmix.GMixCM(self.fracdev, self.TdByTe, band_pars)
         return gm0
 
+class LMBD(LMSimple):
+    """
+    exp+dev model with Td/Te and fracdev free
+    """
+    def __init__(self, obs, **keys):
+        super(LMBD,self).__init__(obs, 'bd', **keys)
+
+        self._band_pars=zeros(8)
+
+    def _set_n_prior_pars(self):
+        # center1 + center2 + shape + T + TdByTe + fracdev + fluxes
+        if self.prior is None:
+            self.n_prior_pars=0
+        else:
+            self.n_prior_pars=1 + 1 + 1 + 1 + 1 + 1 + self.nband
+
+    def get_gmix(self, band=0):
+        """
+        Get a gaussian mixture at the "best" parameter set, which
+        definition depends on the sub-class
+        """
+        res=self.get_result()
+        pars=self.get_band_pars(res['pars'], band)
+        return self._make_model(pars)
+
+    def get_band_pars(self, pars_in, band):
+        """
+        Get linear pars for the specified band
+        """
+
+        pars=self._band_pars
+
+        pars[0:7] = pars_in[0:7]
+        pars[7] = pars_in[7+band]
+
+        return pars
+
+
+    def _make_model(self, band_pars):
+        """
+        incoming parameters are
+            [c1,c2,g1,g2,T,TdByTe,fracdev,F]
+        """
+        return gmix.GMixModel(band_pars,'bd')
+
+    def _set_flux(self, res):
+        if self.nband==1:
+            res['flux'] = res['pars'][7]
+            res['flux_err'] = sqrt(res['pars_cov'][7,7])
+        else:
+            res['flux'] = res['pars'][7:]
+            res['flux_cov'] = res['pars_cov'][7:, 7:]
+            res['flux_err'] = sqrt(diag(res['flux_cov']))
+
+    '''
+    def _setup_data(self, guess):
+        super(LMBD,self)._setup_data(guess)
+
+        import images
+        gm = self._gmix_all[0][0]
+        print('gm:',gm)
+        im = gm.make_image(
+            self.obs[0][0].image.shape,
+            jacobian=self.obs[0][0].jacobian,
+        )
+        print(im.std())
+        images.multiview(im)
+        stop
+    '''
+
+
 class LMBDF(LMSimple):
     """
     exp+dev model with Tdev/Texp=1 but fracdev free
@@ -1979,7 +2061,8 @@ def run_leastsq(func, guess, n_prior_pars, **keys):
     xtol:
         Relative error desired in solution. 1.0e-6
     """
-    from scipy.optimize import leastsq
+    #from scipy.optimize import leastsq
+    from .leastsqbound import leastsqbound as leastsq
 
     npars=guess.size
     k_space=keys.pop('k_space',False)
@@ -3363,6 +3446,15 @@ def print_pars(pars, stream=stdout, fmt='%8.3g',front=None):
     if pars is None:
         stream.write('%s\n' % None)
     else:
-        fmt = ' '.join( [fmt+' ']*len(pars) )
-        stream.write(fmt % tuple(pars))
+        #fmt = ' '.join( [fmt+' ']*len(pars) )
+        #stream.write(fmt % tuple(pars))
+        s = format_pars(pars, fmt=fmt)
+        stream.write(s)
         stream.write('\n')
+
+def format_pars(pars, fmt='%8.3g'):
+    """
+    make a nice string of the pars with no line breaks
+    """
+    fmt = ' '.join( [fmt+' ']*len(pars) )
+    return fmt % tuple(pars)

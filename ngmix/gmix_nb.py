@@ -455,13 +455,58 @@ def gmix_fill_cm(gmix, fracdev, TdByTe, Tfactor, pars):
         )
 
 @njit
-def gmix_fill_bdf(gmix, pars):
+def gmix_fill_bd(gmix, pars):
+    """
+    fill a bulge plus disk model
+    """
+
+    row      = pars[0]
+    col      = pars[1]
+    g1       = pars[2]
+    g2       = pars[3]
+    T        = pars[4]
+    lTrat    = pars[5]
+    fracdev  = pars[6]
+    flux     = pars[7]
+
+    TdByTe = 10.0**lTrat
+
+    Tfactor  = get_cm_Tfactor(fracdev, TdByTe)
+    T = T*Tfactor
+
+    ifracdev = 1.0-fracdev
+
+    e1, e2 = g1g2_to_e1e2(g1, g2)
+
+    for i in xrange(16):
+        if i < 6:
+            p = _pvals_exp[i] * ifracdev
+            f = _fvals_exp[i]
+        else:
+            p = _pvals_dev[i-6] * fracdev
+            f = _fvals_dev[i-6] * TdByTe
+
+        T_i_2  = 0.5*T*f
+        flux_i = flux*p
+
+        gauss2d_set(
+            gmix[i],
+            flux_i,
+            row,
+            col,
+            T_i_2*(1-e1),
+            T_i_2*e2,
+            T_i_2*(1+e1),
+        )
+
+
+
+@njit
+def gmix_fill_bdf(gmix, pars, TdByTe):
     """
     fill a composite model with fixed Td/Te=1 but fracdev
     varying
     """
-
-    TdByTe=1.0
 
     row     = pars[0]
     col     = pars[1]
@@ -540,6 +585,7 @@ _gmix_fill_functions={
     'turb': gmix_fill_turb,
     'gauss': gmix_fill_gauss,
     'cm': gmix_fill_cm,
+    'bd': gmix_fill_bd,
     'bdf': gmix_fill_bdf,
     'coellip': gmix_fill_coellip,
     'full':gmix_fill_full,

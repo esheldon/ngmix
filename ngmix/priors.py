@@ -36,8 +36,15 @@ def make_rng(rng=None):
     return rng
 
 class PriorBase(object):
-    def __init__(self, rng=None):
+    def __init__(self, bounds=None, rng=None):
+        self.bounds=bounds
         self.rng=make_rng(rng=rng)
+
+    def has_bounds(self):
+        """
+        returns True if the object has a bounds defined
+        """
+        return hasattr(self,'bounds') and self.bounds is not None
 
 class GPriorBase(PriorBase):
     """
@@ -2095,28 +2102,35 @@ class TwoSidedErf(PriorBase):
 
     def get_fdiff_scalar(self, val):
         """
-        get the probability of the point
+        get something similar to a (model-data)/err.  Note however that with
+        the current implementation, the *sign* of the difference is lost in
+        this case.
         """
-        """
-        from math import erf
 
-        p1 = erf((self.maxval-val)/self.width_at_max)
-        p1 -= 1.0
-        p1 *= -BIGVAL/2
-
-        p2 = erf((val-self.minval)/self.width_at_min)
-        p2 -= 1
-        p2 *= -1
-        p2 *= -BIGVAL/2
-
-        return p1+p2
-        """
         p=self.get_lnprob_scalar(val)
 
         p = -2*p
         if p < 0.0:
             p = 0.0
         return sqrt(p)
+
+
+        """
+        from math import erf
+
+        p1 = erf((self.maxval-val)/self.width_at_max)
+        p1 -= 1.0
+        #p1 *= -BIGVAL/2
+        p1 *= -1
+
+        p2 = erf((val-self.minval)/self.width_at_min)
+        p2 -= 1
+        #p2 *= -1
+        #p2 *= -BIGVAL/2
+
+        return p1+p2
+        """
+
 
     def sample(self, nrand=None):
         """
@@ -3017,26 +3031,26 @@ class FlatEtaPrior(PriorBase):
     '''
 
 
-class Normal(object):
+class Normal(PriorBase):
     """
+    A Normal distribution.
+    
     This class provides an interface consistent with LogNormal
-
-    C class defined get_lnprob_scalar(x) and get_prob_scalar(x)
     """
-    def __init__(self, cen, sigma, rng=None):
-        self.cen=cen
+    def __init__(self, mean, sigma, bounds=None, rng=None):
+        super(Normal,self).__init__(rng=rng, bounds=bounds)
+
+        self.mean=mean
         self.sigma=sigma
         self.sinv=1.0/sigma
         self.s2inv=1.0/sigma**2
         self.ndim=1
 
-        self.rng=make_rng(rng=rng)
-
     def get_lnprob(self, x):
         """
-        -0.5 * ( (x-cen)/sigma )**2
+        -0.5 * ( (x-mean)/sigma )**2
         """
-        diff = self.cen-x
+        diff = self.mean-x
         return -0.5*diff*diff*self.s2inv
 
     get_lnprob_scalar = get_lnprob
@@ -3044,9 +3058,9 @@ class Normal(object):
 
     def get_prob(self, x):
         """
-        -0.5 * ( (x-cen)/sigma )**2
+        -0.5 * ( (x-mean)/sigma )**2
         """
-        diff = self.cen-x
+        diff = self.mean-x
         lnp = -0.5*diff*diff*self.s2inv
         return numpy.exp(lnp)
 
@@ -3055,10 +3069,10 @@ class Normal(object):
 
     def get_prob_scalar(self, x):
         """
-        -0.5 * ( (x-cen)/sigma )**2
+        -0.5 * ( (x-mean)/sigma )**2
         """
         from math import exp
-        diff = self.cen-x
+        diff = self.mean-x
         lnp = -0.5*diff*diff*self.s2inv
         return exp(lnp)
 
@@ -3067,18 +3081,50 @@ class Normal(object):
         For use with LM fitter
         (model-data)/width for both coordinates
         """
-        return (x-self.cen)*self.sinv
+        return (x-self.mean)*self.sinv
 
     def sample(self, size=None):
         """
         Get samples.  Send no args to get a scalar.
         """
         return self.rng.normal(
-            loc=self.cen,
+            loc=self.mean,
             scale=self.sigma,
             size=size,
         )
 
+class LMBounds(PriorBase):
+    """
+    class to hold simple bounds for the leastsqbound version
+    of LM.
+
+    The fdiff is always zero, but the bounds  will be sent
+    to the minimizer
+    """
+    def __init__(self, minval, maxval, rng=None):
+
+        super(LMBounds,self).__init__(rng=rng)
+
+        self.bounds = (minval, maxval)
+        self.mean   = (minval+maxval)/2.0
+        self.sigma  = (maxval-minval)*0.28
+
+    def get_fdiff(self, val):
+        """
+        fdiff for the input val, always zero
+        """
+        return 0.0*val
+
+    def sample(self, n=None):
+        """
+        returns samples uniformly on the interval
+        """
+
+        return self.rng.uniform(
+            low=self.bounds[0],
+            high=self.bounds[1],
+            size=n,
+        )
 
 class Bounded1D(PriorBase):
     """
@@ -3732,6 +3778,48 @@ class BFrac(BFracBase):
         lnp = numpy.log(p_bd + p_dev)
         return lnp
 
+class Sinh(PriorBase):
+    """
+    a sinh distribution with mean and scale.
+
+    Currently only supports "fdiff" style usage as a prior,
+    e.g. for LM.
+    """
+    def __init__(self, mean, scale, rng=None):
+        PriorBase.__init__(self, rng=rng)
+
+        self.mean=mean
+        self.scale=scale
+
+    def get_fdiff(self, x):
+        """
+        For use with LM fitter
+        (model-data)/width for both coordinates
+        """
+        return numpy.sinh( (x-self.mean)/self.scale )
+
+    def sample(self, nrand=1):
+        """
+        sample around the mean, +/- a scale length
+        """
+        if nrand is None:
+            is_scalar=True
+            nrand=1
+        else:
+            is_scalar=False
+
+        vals = self.rng.uniform(
+            low = self.mean - self.scale,
+            high = self.mean + self.scale,
+            size = nrand
+        )
+
+        if is_scalar:
+            vals=vals[0]
+
+        return vals
+
+
 class TruncatedGaussian(PriorBase):
     """
     Truncated gaussian
@@ -4078,11 +4166,12 @@ def scipy_to_lognorm(shape, scale):
 
     return meanx, sigmax
 
-class CenPrior(object):
+class CenPrior(PriorBase):
     """
     Independent gaussians in each dimension
     """
     def __init__(self, cen1, cen2, sigma1, sigma2, rng=None):
+        super(CenPrior,self).__init__(rng=rng)
 
         self.cen1 = float(cen1)
         self.cen2 = float(cen2)
@@ -4092,8 +4181,6 @@ class CenPrior(object):
         self.sinv2 = 1.0/self.sigma2
         self.s2inv1 = 1.0/self.sigma1**2
         self.s2inv2 = 1.0/self.sigma2**2
-
-        self.rng=make_rng(rng=rng)
 
     def get_fdiff(self, x1, x2):
         """

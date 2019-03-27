@@ -9,7 +9,7 @@ except NameError:
 from .jacobian_nb import jacobian_get_vu
 
 @njit
-def fill_pixels(pixels, image, weight, jacob):
+def fill_pixels(pixels, image, weight, jacob, ignore_zero_weight=True):
     """
     store v,u image value, and 1/err for each pixel
 
@@ -25,12 +25,21 @@ def fill_pixels(pixels, image, weight, jacob):
         2-d image array same shape as image
     jacob: jacobian structure
         row0,col0,dvdrow,dvdcol,dudrow,dudcol,...
+    ignore_zero_weight: bool
+        If set, zero or negative weight pixels are ignored.
+        In this case it verified that the input pixels
+        are equal in length to the set of positive weight
+        pixels in the weight image.  Default True.
     """
     nrow, ncol = image.shape
 
     ipixel=0
     for row in xrange(nrow):
         for col in xrange(ncol):
+
+            ivar = weight[row,col]
+            if ignore_zero_weight and ivar <= 0.0:
+                continue
 
             pixel = pixels[ipixel]
 
@@ -40,7 +49,6 @@ def fill_pixels(pixels, image, weight, jacob):
             pixel['u'] = u
 
             pixel['val'] = image[row,col]
-            ivar = weight[row,col]
 
             if ivar < 0.0:
                 ivar = 0.0
@@ -49,6 +57,9 @@ def fill_pixels(pixels, image, weight, jacob):
 
             ipixel += 1
 
+    if ipixel != pixels.size:
+        #raise RuntimeError('only filled %d/%d pixels' % (ipixel, pixels.size))
+        raise RuntimeError('some pixels were not filled')
 
 @njit
 def fill_coords(coords, nrow, ncol, jacob):

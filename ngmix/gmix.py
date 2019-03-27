@@ -35,13 +35,16 @@ from .pixels import make_coords
 # this is for backward compatibility
 from .gmix_ndim import GMixND
 
-def make_gmix_model(pars, model):
+def make_gmix_model(pars, model, **kw):
     """
     get a gaussian mixture model for the given model
     """
 
+    model = get_model_num(model)
     if model==GMIX_COELLIP:
         return GMixCoellip(pars)
+    elif model==GMIX_BDF:
+        return GMixBDF(pars=pars, **kw)
     elif model==GMIX_FULL:
         return GMix(pars=pars)
     else:
@@ -831,6 +834,10 @@ class GMixModel(GMix):
     """
     def __init__(self, pars, model):
 
+        assert model != 'bdf','use GMixBDF for bdf model'
+        self._do_init(pars, model)
+
+    def _do_init(self, pars, model):
         self._model      = _gmix_model_dict[model]
         self._model_name = _gmix_string_dict[self._model]
 
@@ -928,17 +935,34 @@ class GMixCM(GMixModel):
 class GMixBDF(GMixModel):
     """
     Gaussian mixture representing a bulge+disk with
-    fixed size ratio Td/Te=1
+    fixed size ratio
+
+    Parameters
+    ----------
+    pars: sequence
+        [c1,c2,g1,g2,T,flux]
+    TdByTe: number, optional
+        Optionally set TdByTe.  Defaults to 1.0
+
+        Notes: a value of 1.0 is not the most common value for real world
+        galaxies.  It is more typically ~0.3 when fitting to COSMOS galaxies.
+        But 1.0 provides much more stable fits generally and does not reduce
+        accuracy much.
     """
-    def __init__(self, pars):
-        super(GMixBDF,self).__init__(pars,'bdf')
+    def __init__(self, pars=None, TdByTe=1.0):
+        assert pars is not None,'send pars='
+        assert TdByTe is not None,'send TdByTe='
+
+        self._TdByTe = float(TdByTe)
+        super(GMixBDF,self)._do_init(pars,'bdf')
 
     def copy(self):
         """
         Get a new GMix with the same parameters
         """
         return GMixBDF(
-            self._pars,
+            pars=self._pars.copy(),
+            TdByTe=self._TdByTe,
         )
 
     def _fill(self, pars):
@@ -958,12 +982,14 @@ class GMixBDF(GMixModel):
         self._fill_func(
             gm,
             self._pars,
+            self._TdByTe,
         )
 
 
     def __repr__(self):
         rep=super(GMixBDF,self).__repr__()
         rep = [
+            'TdByTe:  %g' % self._TdByTe,
             rep,
         ]
         return '\n'.join(rep)
@@ -1060,6 +1086,8 @@ GMIX_COELLIP=7
 GMIX_SERSIC=8
 GMIX_CM=9
 
+GMIX_BD=10
+
 _gmix_model_dict={
     'full':       GMIX_FULL,
     GMIX_FULL:    GMIX_FULL,
@@ -1073,6 +1101,10 @@ _gmix_model_dict={
     GMIX_DEV:     GMIX_DEV,
     'bdc':        GMIX_BDC,
     GMIX_BDC:     GMIX_BDC,
+
+    'bd':        GMIX_BD,
+    GMIX_BD:     GMIX_BD,
+
     'bdf':        GMIX_BDF,
     GMIX_BDF:     GMIX_BDF,
 
@@ -1099,6 +1131,10 @@ _gmix_string_dict={
     'dev':'dev',
     GMIX_BDC:'bdc',
     'bdc':'bdc',
+
+    GMIX_BD:'bd',
+    'bd':'bd',
+
     GMIX_BDF:'bdf',
     'bdf':'bdf',
 
@@ -1120,10 +1156,12 @@ _gmix_npars_dict={
     GMIX_DEV:6,
 
     GMIX_CM:6,
+
+    GMIX_BD:8,
+
     GMIX_BDF:7,
 
     GMIX_BDC:8,
-    GMIX_BDF:7,
     GMIX_SERSIC:7,
 }
 
@@ -1138,10 +1176,10 @@ _gmix_ngauss_dict={
     'dev':10,
 
     GMIX_CM:16,
+    GMIX_BD:16,
     GMIX_BDF:16,
 
     GMIX_BDC:16,
-    GMIX_BDF:16,
     GMIX_SERSIC:4,
 
     'em1':1,
