@@ -2102,7 +2102,9 @@ class TwoSidedErf(PriorBase):
 
     def get_fdiff_scalar(self, val):
         """
-        get the probability of the point
+        get something similar to a (model-data)/err.  Note however that with
+        the current implementation, the *sign* of the difference is lost in
+        this case.
         """
 
         p=self.get_lnprob_scalar(val)
@@ -3031,9 +3033,9 @@ class FlatEtaPrior(PriorBase):
 
 class Normal(PriorBase):
     """
+    A Normal distribution.
+    
     This class provides an interface consistent with LogNormal
-
-    C class defined get_lnprob_scalar(x) and get_prob_scalar(x)
     """
     def __init__(self, mean, sigma, bounds=None, rng=None):
         super(Normal,self).__init__(rng=rng, bounds=bounds)
@@ -3777,6 +3779,12 @@ class BFrac(BFracBase):
         return lnp
 
 class Sinh(PriorBase):
+    """
+    a sinh distribution with mean and scale.
+
+    Currently only supports "fdiff" style usage as a prior,
+    e.g. for LM.
+    """
     def __init__(self, mean, scale, rng=None):
         PriorBase.__init__(self, rng=rng)
 
@@ -3791,7 +3799,9 @@ class Sinh(PriorBase):
         return numpy.sinh( (x-self.mean)/self.scale )
 
     def sample(self, nrand=1):
-
+        """
+        sample around the mean, +/- a scale length
+        """
         if nrand is None:
             is_scalar=True
             nrand=1
