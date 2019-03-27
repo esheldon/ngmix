@@ -13,6 +13,6 @@ setup(
     url="https://github.com/esheldon/ngmix",
     description="fast 2-d gaussian mixtures for modeling astronomical images",
     packages=['ngmix'],
-    version="1.2",
+    version="1.3.0",
     cmdclass={'build_py': build_py},
 )
