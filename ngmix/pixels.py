@@ -18,7 +18,6 @@ def make_pixels(image, weight, jacob, ignore_zero_weight=True):
         2-d image array same shape as image
     jacob: jacobian structure
         row0,col0,dvdrow,dvdcol,dudrow,dudcol,...
-
     ignore_zero_weight: bool
         If set, zero or negative weight pixels are ignored.  In this case the
         returned pixels array is equal in length to the set of positive weight
