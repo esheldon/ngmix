@@ -1672,10 +1672,7 @@ class LMSimple(FitterBase):
 
         self._make_lists()
 
-        if self.prior is not None:
-            bounds=self.prior.bounds
-        else:
-            bounds=None
+        bounds = self._get_bounds()
 
         result = run_leastsq(
             self._calc_fdiff,
@@ -1697,6 +1694,15 @@ class LMSimple(FitterBase):
 
         self._result=result
 
+    def _get_bounds(self):
+        """
+        get bounds on parameters
+        """
+        bounds=None
+        if self.prior is not None:
+            if hasattr(self.prior,'bounds'):
+                bounds=self.prior.bounds
+        return bounds
 
     run_max=go
     run_lm=go
@@ -1942,7 +1948,7 @@ class LMBD(LMSimple):
     def _make_model(self, band_pars):
         """
         incoming parameters are
-            [c1,c2,g1,g2,T,fracdev,F]
+            [c1,c2,g1,g2,T,TdByTe,fracdev,F]
         """
         return gmix.GMixModel(band_pars,'bd')
 
