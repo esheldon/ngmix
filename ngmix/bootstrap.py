@@ -2695,7 +2695,7 @@ class CompositeMaxRunner(MaxRunner):
 
 class BDRunner(MaxRunner):
     """
-    wrapper to generate guesses and run the psf fitter a few times
+    wrapper to generate guesses and run the BD fitter a few times
     """
     def __init__(self,
                  obs,
@@ -2743,7 +2743,7 @@ class BDRunner(MaxRunner):
 
 class BDFRunner(MaxRunner):
     """
-    wrapper to generate guesses and run the psf fitter a few times
+    wrapper to generate guesses and run the BDF fitter a few times
     """
     def __init__(self,
                  obs,
