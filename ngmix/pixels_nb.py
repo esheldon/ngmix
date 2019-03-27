@@ -9,7 +9,7 @@ except NameError:
 from .jacobian_nb import jacobian_get_vu
 
 @njit
-def fill_pixels(pixels, image, weight, jacob, ignore_zero_weight=False):
+def fill_pixels(pixels, image, weight, jacob, ignore_zero_weight=True):
     """
     store v,u image value, and 1/err for each pixel
 
