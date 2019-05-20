@@ -18,7 +18,6 @@ from .observation import Observation, ObsList, MultiBandObsList
 from .shape import Shape
 from . import simobs
 from . import moments
-from .bootstrap import PSFRunner
 
 from .gexceptions import GMixRangeError
 import logging
@@ -1023,7 +1022,7 @@ class MetacalFitGaussPSF(Metacal):
 
         if the above all fail, rase BootPSFFailure
         """
-        from .bootstrap import AMRunner
+        from .bootstrap import AMRunner, PSFRunner
         from .gexceptions import BootPSFFailure
 
         ntry = 4
