@@ -1043,13 +1043,14 @@ class MetacalFitGaussPSF(Metacal):
         if res['flags'] == 0:
             psf_gmix = fitter.get_gmix()
         else:
+            # try maximum likelihood
+
             lm_pars = {
                 'maxfev': 2000,
                 'ftol': 1.0e-05,
                 'xtol': 1.0e-05,
             }
 
-            # try maximum likelihood
             runner = PSFRunner(
                 psfobs,
                 'gauss',
