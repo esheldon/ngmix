@@ -9,16 +9,16 @@ from __future__ import print_function, absolute_import, division
 try:
     xrange
 except NameError:
-    xrange=range
+    xrange = range
 
 import copy
 import numpy
 from numpy import zeros, sqrt, diag
 from .observation import Observation, ObsList, MultiBandObsList
-from . import shape
 from .shape import Shape
 from . import simobs
 from . import moments
+from .bootstrap import PSFRunner
 
 from .gexceptions import GMixRangeError
 import logging
@@ -30,17 +30,18 @@ except ImportError:
 
 METACAL_TYPES = [
     'noshear',
-    '1p','1m','2p','2m',
-    '1p_psf','1m_psf','2p_psf','2m_psf',
+    '1p', '1m', '2p', '2m',
+    '1p_psf', '1m_psf', '2p_psf', '2m_psf',
 ]
 METACAL_MINIMAL_TYPES = [
     'noshear',
-    '1p','1m','2p','2m',
+    '1p', '1m', '2p', '2m',
 ]
 # for backward compatibility
-METACAL_REQUIRED_TYPES = METACAL_MINIMAL_TYPES 
+METACAL_REQUIRED_TYPES = METACAL_MINIMAL_TYPES
 
 logger = logging.getLogger(__name__)
+
 
 def get_all_metacal(obs,
                     step=0.01,
@@ -61,10 +62,10 @@ def get_all_metacal(obs,
         of the original psf, but you can also set psf to
 
             'gauss': reconvolve gaussian that is larger than
-                     the original and round.  
+                     the original and round.
             'fitgauss': fit a gaussian to the PSF and make
                         use round, dilated version for reconvolution
-        
+
     types: list, optional
         If psf='gauss' or 'fitgauss', then the default set is the minimal
         set ['noshear','1p','1m','2p','2m']
@@ -91,13 +92,13 @@ def get_all_metacal(obs,
     """
 
     if fixnoise:
-        odict= _get_all_metacal_fixnoise(obs, step=step, **kw)
+        odict = _get_all_metacal_fixnoise(obs, step=step, **kw)
     else:
         logger.debug("    not doing fixnoise")
-        odict= _get_all_metacal(obs, step=step, **kw)
+        odict = _get_all_metacal(obs, step=step, **kw)
 
         if cheatnoise is not None:
-            logger.debug("    cheatnoise:",cheatnoise)
+            logger.debug("    cheatnoise:", cheatnoise)
             # add the noise *after* the metacal process,
             # cheating the correlated noise effect.  This is
             # useful for testing the increase in noise
@@ -108,6 +109,7 @@ def get_all_metacal(obs,
 
     return odict
 
+
 def _get_all_metacal(obs, step=0.01, **kw):
     """
     internal routine
@@ -116,33 +118,34 @@ def _get_all_metacal(obs, step=0.01, **kw):
     """
     if isinstance(obs, Observation):
 
-        psf=kw.get('psf',None)
+        psf = kw.get('psf', None)
         if psf is not None:
 
-            if psf=='gauss':
+            if psf == 'gauss':
                 # we default to only shear terms, not psf shear terms
-                kw['types']=kw.get('types',METACAL_MINIMAL_TYPES)
-                m=MetacalGaussPSF(obs, **kw)
-            elif psf=='fitgauss':
+                kw['types'] = kw.get('types', METACAL_MINIMAL_TYPES)
+                m = MetacalGaussPSF(obs, **kw)
+            elif psf == 'fitgauss':
                 # we default to only shear terms, not psf shear terms
-                kw['types']=kw.get('types',METACAL_MINIMAL_TYPES)
-                m=MetacalFitGaussPSF(obs, **kw)
+                kw['types'] = kw.get('types', METACAL_MINIMAL_TYPES)
+                m = MetacalFitGaussPSF(obs, **kw)
             else:
                 psf = kw.pop('psf')
-                m=MetacalAnalyticPSF(obs, psf, **kw)
+                m = MetacalAnalyticPSF(obs, psf, **kw)
         else:
-            m=Metacal(obs, **kw)
+            m = Metacal(obs, **kw)
 
-        odict=m.get_all(step, **kw)
+        odict = m.get_all(step, **kw)
     elif isinstance(obs, MultiBandObsList):
-        odict=_make_metacal_mb_obs_list_dict(obs, step, **kw)
+        odict = _make_metacal_mb_obs_list_dict(obs, step, **kw)
     elif isinstance(obs, ObsList):
-        odict=_make_metacal_obs_list_dict(obs, step, **kw)
+        odict = _make_metacal_obs_list_dict(obs, step, **kw)
     else:
         raise ValueError("obs must be Observation, ObsList, "
                          "or MultiBandObsList")
 
     return odict
+
 
 def _add_obs_images(obs1, obs2):
     """
@@ -151,15 +154,16 @@ def _add_obs_images(obs1, obs2):
     if isinstance(obs1, Observation):
         obs1.image += obs2.image
     elif isinstance(obs1, ObsList):
-        for o1,o2 in zip(obs1,obs2):
+        for o1, o2 in zip(obs1, obs2):
             _add_obs_images(o1, o2)
     elif isinstance(obs1, MultiBandObsList):
         for olist1, olist2 in zip(obs1, obs2):
-            for o1,o2 in zip(olist1,olist2):
+            for o1, o2 in zip(olist1, olist2):
                 _add_obs_images(o1, o2)
     else:
         raise ValueError("obs must be Observation, ObsList, "
                          "or MultiBandObsList")
+
 
 def _replace_image_with_noise(obs):
     """
@@ -181,16 +185,17 @@ def _replace_image_with_noise(obs):
 
     return noise_obs
 
+
 def _doadd_single_obs(obs, nobs):
     obs.image_orig = obs.image.copy()
     obs.weight_orig = obs.weight.copy()
 
-    im  = obs.image
+    im = obs.image
     nim = nobs.image
 
     obs.image = im + nim
 
-    wpos=numpy.where(
+    wpos = numpy.where(
         (obs.weight != 0.0) &
         (nobs.weight != 0.0)
     )
@@ -198,10 +203,11 @@ def _doadd_single_obs(obs, nobs):
         tvar = obs.weight*0
         # add the variances
         tvar[wpos] = (
-            1.0/obs.weight[wpos]  +
+            1.0/obs.weight[wpos] +
             1.0/nobs.weight[wpos]
         )
         obs.weight[wpos] = 1.0/tvar[wpos]
+
 
 def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     """
@@ -210,18 +216,17 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     """
 
     # Using None for the model means we get just noise
-    use_noise_image = kw.get('use_noise_image',False)
+    use_noise_image = kw.get('use_noise_image', False)
     if use_noise_image:
-        noise_obs =  _replace_image_with_noise(obs)
+        noise_obs = _replace_image_with_noise(obs)
         logger.debug("    Doing fixnoise with input noise image")
     else:
         noise_obs = simobs.simulate_obs(None, obs, **kw)
 
     # rotate by 90
-    #noise_obs = _rotate_obs_image_nonsquare(noise_obs, k=1)
     _rotate_obs_image_square(noise_obs, k=1)
 
-    obsdict       = _get_all_metacal(obs, step=step, **kw)
+    obsdict = _get_all_metacal(obs, step=step, **kw)
     noise_obsdict = _get_all_metacal(noise_obs, step=step, **kw)
 
     for type in obsdict:
@@ -230,32 +235,30 @@ def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
         nmbobs = noise_obsdict[type]
 
         # rotate back, which is 3 more rotations
-        #nmbobs = _rotate_obs_image_nonsquare(nmbobs, k=3)
         _rotate_obs_image_square(nmbobs, k=3)
 
-        if isinstance(imbobs,Observation):
+        if isinstance(imbobs, Observation):
             _doadd_single_obs(imbobs, nmbobs)
 
-        elif isinstance(imbobs,ObsList):
+        elif isinstance(imbobs, ObsList):
             for iobs in xrange(len(imbobs)):
 
-                obs  = imbobs[iobs]
+                obs = imbobs[iobs]
                 nobs = nmbobs[iobs]
 
                 _doadd_single_obs(obs, nobs)
 
-        elif isinstance(imbobs,MultiBandObsList):
+        elif isinstance(imbobs, MultiBandObsList):
             for imb in xrange(len(imbobs)):
-                iolist=imbobs[imb]
-                nolist=nmbobs[imb]
+                iolist = imbobs[imb]
+                nolist = nmbobs[imb]
 
                 for iobs in xrange(len(iolist)):
 
-                    obs  = iolist[iobs]
+                    obs = iolist[iobs]
                     nobs = nolist[iobs]
 
                     _doadd_single_obs(obs, nobs)
-
 
     return obsdict
 
@@ -302,7 +305,7 @@ class Metacal(object):
 
     def __init__(self, obs, **kw):
 
-        self.obs=obs
+        self.obs = obs
 
         self._setup(**kw)
         self._set_data()
@@ -340,7 +343,7 @@ class Metacal(object):
             types = [t for t in METACAL_TYPES]
         else:
             for t in types:
-                assert t in METACAL_TYPES,'bad metacal type: %s' % t
+                assert t in METACAL_TYPES, 'bad metacal type: %s' % t
 
         # we add 1p here if we want noshear since we get both of those
         # at once below
@@ -348,34 +351,34 @@ class Metacal(object):
         if 'noshear' in types and '1p' not in types:
             types.append('1p')
 
-        shdict={}
+        shdict = {}
 
         # galshear keys
-        shdict['1m']=Shape(-step,  0.0)
-        shdict['1p']=Shape( step,  0.0)
+        shdict['1m'] = Shape(-step,  0.0)
+        shdict['1p'] = Shape(+step,  0.0)
 
-        shdict['2m']=Shape(0.0, -step)
-        shdict['2p']=Shape(0.0,  step)
+        shdict['2m'] = Shape(0.0, -step)
+        shdict['2p'] = Shape(0.0, +step)
 
         # psfshear keys
-        keys=list(shdict.keys())
+        keys = list(shdict.keys())
         for key in keys:
             pkey = '%s_psf' % key
             shdict[pkey] = shdict[key].copy()
 
-        odict={}
+        odict = {}
 
         for type in types:
             if type == 'noshear':
                 # we get noshear with 1p
                 continue
 
-            sh=shdict[type]
+            sh = shdict[type]
 
             if 'psf' in type:
                 obs = self.get_obs_psfshear(sh)
             else:
-                if type=='1p':
+                if type == '1p':
                     # add in noshear from this one
                     obs, obs_noshear = self.get_obs_galshear(
                         sh,
@@ -388,7 +391,6 @@ class Metacal(object):
             odict[type] = obs
 
         return odict
-
 
     def get_obs_galshear(self, shear, get_unsheared=False):
         """
@@ -404,7 +406,7 @@ class Metacal(object):
             sheared
         """
 
-        type='gal_shear'
+        type = 'gal_shear'
 
         if get_unsheared:
             newpsf_image, newpsf_nopix_image, newpsf_obj = \
@@ -427,7 +429,7 @@ class Metacal(object):
             uobs.psf.galsim_obj = newpsf_obj
 
             psf_nopix_obs = self._make_psf_obs(newpsf_nopix_image)
-            uobs.psf_nopix=psf_nopix_obs
+            uobs.psf_nopix = psf_nopix_obs
 
             return newobs, uobs
         else:
@@ -465,7 +467,6 @@ class Metacal(object):
         newobs = self._make_obs(conv_image, newpsf_image)
         return newobs
 
-
     def get_target_psf(self, shear, type, get_nopix=False):
         """
         get galsim object for the dilated, possibly sheared, psf
@@ -486,10 +487,10 @@ class Metacal(object):
 
         _check_shape(shear)
 
-        if type=='psf_shear':
-            doshear=True
+        if type == 'psf_shear':
+            doshear = True
         else:
-            doshear=False
+            doshear = False
 
         psf_grown, psf_grown_nopix = self._get_dilated_psf(
             shear,
@@ -499,18 +500,17 @@ class Metacal(object):
         # this should carry over the wcs
         psf_grown_image = self.psf_image.copy()
 
-
         try:
             psf_grown.drawImage(
                 image=psf_grown_image,
-                method='no_pixel' # pixel is in the psf
+                method='no_pixel'  # pixel is in the psf
             )
 
             if get_nopix:
                 psf_grown_nopix_image = self.psf_image.copy()
                 psf_grown_nopix.drawImage(
                     image=psf_grown_nopix_image,
-                    method='no_pixel' # pixel is in the psf
+                    method='no_pixel'  # pixel is in the psf
                 )
 
                 return psf_grown_image, psf_grown_nopix_image, psf_grown
@@ -537,8 +537,8 @@ class Metacal(object):
         if self.prepix:
             p1, p2 = psf_grown_nopix, psf_grown_nopix
         else:
-            psf_grown = galsim.Convolve(psf_grown_nopix,self.pixel)
-            p1,p2 = psf_grown, psf_grown_nopix
+            psf_grown = galsim.Convolve(psf_grown_nopix, self.pixel)
+            p1, p2 = psf_grown, psf_grown_nopix
 
         if doshear and self.shear_pixelized_psf:
             p1 = p1.shear(g1=shear.g1, g2=shear.g2)
@@ -567,22 +567,20 @@ class Metacal(object):
         galsim image object
         """
 
-        imconv = self._get_target_gal_obj(psf_obj,shear=shear)
+        imconv = self._get_target_gal_obj(psf_obj, shear=shear)
 
-        ny,nx=self.image.array.shape
+        ny, nx = self.image.array.shape
 
         try:
-            newim=imconv.drawImage(
+            newim = imconv.drawImage(
                 nx=nx,
                 ny=ny,
-                #scale=0.263,
                 wcs=self.image.wcs,
                 dtype=numpy.float64,
             )
         except RuntimeError as err:
             # argh, galsim uses generic exceptions
             raise GMixRangeError("galsim error: '%s'" % str(err))
-
 
         return newim
 
@@ -621,14 +619,14 @@ class Metacal(object):
         """
 
         # if None, we will calculate it from the PSF ellipticity
-        self.symmetrize_dilation=kw.get('symmetrize_dilation',None)
+        self.symmetrize_dilation = kw.get('symmetrize_dilation', None)
 
-        self.prepix=kw.get('prepix',False)
-        self.symmetrize_psf=kw.get('symmetrize_psf',False)
+        self.prepix = kw.get('prepix', False)
+        self.symmetrize_psf = kw.get('symmetrize_psf', False)
 
-        self.shear_pixelized_psf=kw.get('shear_pixelized_psf',False)
+        self.shear_pixelized_psf = kw.get('shear_pixelized_psf', False)
 
-        obs=self.obs
+        obs = self.obs
         if not obs.has_psf():
             raise ValueError("observation must have a psf observation set")
 
@@ -640,7 +638,7 @@ class Metacal(object):
         create galsim objects based on the input observation
         """
 
-        obs=self.obs
+        obs = self.obs
 
         # these would share data with the original numpy arrays, make copies
         # to be sure they don't get modified
@@ -660,7 +658,6 @@ class Metacal(object):
 
         self.image_int = galsim.InterpolatedImage(self.image,
                                                   x_interpolant=self.interp)
-
 
         # deconvolved galaxy image, psf+pixel removed
         self.image_int_nopsf = galsim.Convolve(self.image_int,
@@ -682,7 +679,7 @@ class Metacal(object):
 
         psf_int_nopix = galsim.Convolve([sym_psf_int, self.pixel_inv])
 
-        dilation=self._get_symmetrize_dilation()
+        dilation = self._get_symmetrize_dilation()
 
         psf_int_nopix = psf_int_nopix.dilate(dilation)
         return psf_int_nopix
@@ -699,30 +696,27 @@ class Metacal(object):
         psf_gmix = self.obs.psf.gmix
 
         # g1,g2,T = psf_gmix.get_g1g2T()
-        e1,e2,T = psf_gmix.get_e1e2T()
+        e1, e2, T = psf_gmix.get_e1e2T()
 
-        irr, irc, icc = moments.e2mom(e1,e2,T)
+        irr, irc, icc = moments.e2mom(e1, e2, T)
 
-        mat=numpy.zeros( (2,2) )
-        mat[0,0]=irr
-        mat[0,1]=irc
-        mat[1,0]=irc
-        mat[1,1]=icc
+        mat = numpy.zeros((2, 2))
+        mat[0, 0] = irr
+        mat[0, 1] = irc
+        mat[1, 0] = irc
+        mat[1, 1] = icc
 
-        eigs=numpy.linalg.eigvals(mat)
+        eigs = numpy.linalg.eigvals(mat)
 
         dilation = eigs.max()/(T/2.)
-        dilation=sqrt(dilation)
+        dilation = sqrt(dilation)
 
         dilation = 1.0 + 2*(dilation-1.0)
         if dilation > 1.1:
-            dilation=1.1
-        g1,g2,T = psf_gmix.get_g1g2T()
+            dilation = 1.1
+        g1, g2, T = psf_gmix.get_g1g2T()
 
         return dilation
-
-
-
 
     def get_wcs(self):
         """
@@ -736,38 +730,34 @@ class Metacal(object):
         """
         return self.obs.psf.jacobian.get_galsim_wcs()
 
-
     def _set_wcs_choose(self, jacobian, **kw):
         """
         create a galsim JacobianWCS from the input ngmix.Jacobian, as
         well as pixel objects
         """
 
-        self.jacobian=jacobian
-        wcs_convention=kw.get("wcs_convention",None)
+        self.jacobian = jacobian
+        wcs_convention = kw.get("wcs_convention", None)
         logger.debug("        wcs convention: %s" % wcs_convention)
 
-        if wcs_convention==1:
+        if wcs_convention == 1:
             self.gs_wcs = galsim.JacobianWCS(jacobian.dudrow,
                                              jacobian.dudcol,
                                              jacobian.dvdrow,
                                              jacobian.dvdcol)
-        elif wcs_convention==2:
+        elif wcs_convention == 2:
             self.gs_wcs = galsim.JacobianWCS(jacobian.dudcol,
                                              jacobian.dudrow,
                                              jacobian.dvdcol,
                                              jacobian.dvdrow)
 
-        elif wcs_convention==3:
+        elif wcs_convention == 3:
             self.gs_wcs = galsim.JacobianWCS(jacobian.dvdcol,
                                              jacobian.dvdrow,
                                              jacobian.dudcol,
                                              jacobian.dudrow)
         else:
             raise ValueError("bad wcs_convention: %s" % wcs_convention)
-
-
-
 
     def _set_pixel(self):
         """
@@ -777,8 +767,8 @@ class Metacal(object):
         to get the proper pixel
         """
 
-        wcs=self.get_wcs()
-        self.pixel     = wcs.toWorld(galsim.Pixel(scale=1))
+        wcs = self.get_wcs()
+        self.pixel = wcs.toWorld(galsim.Pixel(scale=1))
         self.pixel_inv = galsim.Deconvolve(self.pixel)
 
     def _set_interp(self):
@@ -789,7 +779,7 @@ class Metacal(object):
 
     def _make_psf_obs(self, psf_im):
 
-        obs=self.obs
+        obs = self.obs
         psf_obs = Observation(psf_im.array,
                               weight=obs.psf.weight.copy(),
                               jacobian=obs.psf.jacobian.copy())
@@ -811,85 +801,30 @@ class Metacal(object):
         A new Observation
         """
 
-        obs=self.obs
+        obs = self.obs
 
         psf_obs = self._make_psf_obs(psf_im)
         psf_obs.meta.update(obs.psf.meta)
 
-        meta={}
+        meta = {}
         meta.update(obs.meta)
-        newobs=Observation(im.array,
-                           jacobian=obs.jacobian.copy(),
-                           weight=obs.weight.copy(),
-                           psf=psf_obs,
-                           meta=meta)
+        newobs = Observation(
+            im.array,
+            jacobian=obs.jacobian.copy(),
+            weight=obs.weight.copy(),
+            psf=psf_obs,
+            meta=meta,
+        )
 
         if obs.has_bmask():
             newobs.bmask = obs.bmask
 
-        """
-        import images
-        images.compare_images(
-            self.obs.psf.image,
-            newobs.psf.image,
-            label1='psf',
-            label2='new psf',
-        )
-        images.compare_images(
-            self.obs.image,
-            newobs.image,
-            label1='im',
-            label2='new im',
-        )
-
-        if 'q'==raw_input('hit a key (q to quit): '):
-            stop
-        """
-
-        #_compare_psfs(self.obs.psf, psf_obs)
         return newobs
 
-'''
-def _compare_psfs(orig, gpsf):
-    import images
-    from . import admom
-
-    Tguess=4.0
-    amorig=admom.run_admom(
-        orig,
-        Tguess,
-    )
-    amgauss=admom.run_admom(
-        gpsf,
-        Tguess,
-    )
-
-    res_orig=amorig.get_result()
-    res_gauss=amgauss.get_result()
-
-    print("T orig: ",res_orig['T'])
-    print("T gauss:",res_gauss['T'])
-    print("orig  jacobian cen:",orig.jacobian.get_cen())
-    print("gauss jacobian cen:",gpsf.jacobian.get_cen())
-    print("cen orig: ",res_orig['pars'][0:0+2])
-    print("cen gauss:",res_gauss['pars'][0:0+2])
-
-
-    images.compare_images(
-        orig.image,
-        gpsf.image,
-        label1='original',
-        label2='gauss',
-        width=1200,
-        height=1200,
-    )
-    if 'q'==input('hit a key: '):
-        stop
-'''
 
 class MetacalGaussPSF(Metacal):
     def __init__(self, *args, **kw):
-        super(MetacalGaussPSF,self).__init__(*args, **kw)
+        super(MetacalGaussPSF, self).__init__(*args, **kw)
 
         self.psf_flux = self.obs.psf.image.sum()
 
@@ -897,7 +832,6 @@ class MetacalGaussPSF(Metacal):
             "no symmetrize for GaussPSF"
         assert self.shear_pixelized_psf is False,\
             "no shear pixelized psf for GaussPSF"
-
 
     def _do_dilate(self, psf, shear):
         newpsf = _get_gauss_target_psf(psf, flux=self.psf_flux)
@@ -923,10 +857,10 @@ class MetacalGaussPSF(Metacal):
 
         _check_shape(shear)
 
-        if type=='psf_shear':
-            doshear=True
+        if type == 'psf_shear':
+            doshear = True
         else:
-            doshear=False
+            doshear = False
 
         psf_grown, psf_grown_nopix = self._get_dilated_psf(
             shear,
@@ -936,22 +870,16 @@ class MetacalGaussPSF(Metacal):
         # this should carry over the wcs
         psf_grown_image = self.psf_image.copy()
 
-
-
         try:
             psf_grown_image = psf_grown.drawImage(
                 wcs=self.psf_image.wcs,
             )
-            #psf_grown.drawImage(
-            #    image=psf_grown_image,
-            #    method='no_pixel' # pixel is in the psf
-            #)
 
             if get_nopix:
                 psf_grown_nopix_image = self.psf_image.copy()
                 psf_grown_nopix.drawImage(
                     image=psf_grown_nopix_image,
-                    method='no_pixel' # pixel is in the psf
+                    method='no_pixel'  # pixel is in the psf
                 )
 
                 return psf_grown_image, psf_grown_nopix_image, psf_grown
@@ -966,7 +894,7 @@ class MetacalGaussPSF(Metacal):
         noise = 1.0e-6
         psf_im = gsim.array.copy()
         psf_im += numpy.random.normal(scale=noise, size=psf_im.shape)
-        obs=self.obs
+        obs = self.obs
 
         cen = (numpy.array(psf_im.shape)-1.0)/2.0
         j = obs.psf.jacobian.copy()
@@ -983,6 +911,7 @@ class MetacalGaussPSF(Metacal):
         )
         return psf_obs
 
+
 class MetacalFitGaussPSF(Metacal):
     """
     base the new PSF off of a simple gaussian fit
@@ -990,16 +919,16 @@ class MetacalFitGaussPSF(Metacal):
     this version does not support shearing the PSF
     """
     def __init__(self, *args, **kw):
-        super(MetacalFitGaussPSF,self).__init__(*args, **kw)
+        super(MetacalFitGaussPSF, self).__init__(*args, **kw)
 
         if 'rng' in kw:
-            self.rng=kw['rng']
+            self.rng = kw['rng']
         else:
-            self.rng=numpy.random.RandomState()
+            self.rng = numpy.random.RandomState()
 
         self._setup_psf()
 
-        assert not self.prepix,'no prepix for fit gauss psf'
+        assert not self.prepix, 'no prepix for fit gauss psf'
         assert not self.shear_pixelized_psf,\
             'no shear_pixelized_psf for fit gauss psf'
         assert self.symmetrize_psf is False,\
@@ -1026,7 +955,7 @@ class MetacalFitGaussPSF(Metacal):
 
         _check_shape(shear)
 
-        assert type=='gal_shear',\
+        assert type == 'gal_shear',\
             'psf_shear is not supported for MetacalFitGaussPSF'
 
         g = sqrt(shear.g1**2 + shear.g2**2)
@@ -1048,7 +977,7 @@ class MetacalFitGaussPSF(Metacal):
                 # argh, galsim uses generic exceptions
                 raise GMixRangeError("galsim error: '%s'" % str(err))
 
-            psf_grown_image.array[:,:] += self.psf_noise_image
+            psf_grown_image.array[:, :] += self.psf_noise_image
             self._psf_cache[g] = (
                 psf_grown_image,
                 psf_grown,
@@ -1063,7 +992,7 @@ class MetacalFitGaussPSF(Metacal):
             return psf_grown_image, psf_grown
 
     def _setup_psf(self):
-        self._psf_cache={}
+        self._psf_cache = {}
 
         self.psf_flux = self.obs.psf.image.sum()
         self._set_psf_noise()
@@ -1073,7 +1002,7 @@ class MetacalFitGaussPSF(Metacal):
         """
         set the noise image to be used for all PSFs
         """
-        pim=self.obs.psf.image
+        pim = self.obs.psf.image
         self.psf_noise = pim.max()/10000.0
 
         self.psf_noise_image = self.rng.normal(
@@ -1084,27 +1013,72 @@ class MetacalFitGaussPSF(Metacal):
 
     def _do_psf_fit(self):
         """
-        do the gaussian fit
+        do the gaussian fit.
+
+        try the following in order
+            - adaptive moments
+            - maximim likelihood
+            - see if there is already a gmix object
+
+
+        if the above all fail, rase BootPSFFailure
         """
         from .bootstrap import AMRunner
         from .gexceptions import BootPSFFailure
 
-        jacobian=self.obs.psf.jacobian
-        Tguess = 4.0 * jacobian.get_scale()**2
-        runner=AMRunner(self.obs.psf, Tguess)
+        ntry = 4
 
-        runner.go(ntry=4)
+        psfobs = self.obs.psf
+
+        fwhm_guess = 0.9
+        Tguess = moments.fwhm_to_T(fwhm_guess)
+
+        # try adaptive moments first
+        runner = AMRunner(psfobs, Tguess, rng=self.rng)
+
+        runner.go(ntry=ntry)
 
         fitter = runner.fitter
         res = fitter.get_result()
 
-        if res['flags'] != 0:
-            raise BootPSFFailure('failed to fit psf for MetacalFitGaussPSF')
+        if res['flags'] == 0:
+            psf_gmix = fitter.get_gmix()
+        else:
+            lm_pars = {
+                'maxfev': 2000,
+                'ftol': 1.0e-05,
+                'xtol': 1.0e-05,
+            }
 
-        psf_gmix = fitter.get_gmix()
-        e1,e2,T = psf_gmix.get_e1e2T()
+            # try maximum likelihood
+            runner = PSFRunner(
+                psfobs,
+                'gauss',
+                Tguess,
+                lm_pars,
+                rng=self.rng,
+            )
 
-        dilation = _get_ellip_dilation(e1,e2,T)
+            runner.go(ntry=ntry)
+
+            fitter = runner.fitter
+            res = fitter.get_result()
+
+            if res['flags'] == 0:
+                psf_gmix = fitter.get_gmix()
+            else:
+
+                # see if there was already a gmix that we might use instead
+                if psfobs.has_gmix() and len(psfobs.gmix) == 1:
+                    psf_gmix = psfobs.gmix.copy()
+                else:
+                    # ok, just raise and exception
+                    raise BootPSFFailure('failed to fit psf '
+                                         'for MetacalFitGaussPSF')
+
+        e1, e2, T = psf_gmix.get_e1e2T()
+
+        dilation = _get_ellip_dilation(e1, e2, T)
         T_dilated = T*dilation
         sigma = sqrt(T_dilated/2.0)
 
@@ -1119,11 +1093,9 @@ class MetacalFitGaussPSF(Metacal):
         _do_dilate for the algorithm
         """
 
-
         psf_grown = _do_dilate(self.gauss_psf, shear)
 
         # we don't convolve by the pixel, its already in there
-        #psf_grown = galsim.Convolve(psf_grown_nopix,self.pixel)
         return psf_grown
 
     def _make_psf_obs(self, gsim):
@@ -1158,9 +1130,9 @@ class MetacalAnalyticPSF(Metacal):
     def __init__(self, obs, psf_obj, **kw):
 
         self._set_psf(obs, psf_obj)
-        super(MetacalAnalyticPSF,self).__init__(obs, **kw)
+        super(MetacalAnalyticPSF, self).__init__(obs, **kw)
 
-    def _set_psf(self,obs,psf_in):
+    def _set_psf(self, obs, psf_in):
         if isinstance(psf_in, dict):
             if psf_in['model'] == 'gauss':
                 psf_obj = galsim.Gaussian(
@@ -1177,27 +1149,6 @@ class MetacalAnalyticPSF(Metacal):
             psf_obj = psf_in
 
         self.psf_obj = psf_obj
-
-    """
-    def get_target_psf(self, shear, type, get_nopix=False):
-        res=super(MetacalAnalyticPSF,self).get_target_psf(
-            shear,
-            type,
-            get_nopix=get_nopix,
-        )
-        if get_nopix:
-            im,imnopix,pg=res
-            arr=im.array
-            arr += self.psf_noise_image
-            arr=imnopix.array
-            arr += self.psf_noise_image
-        else:
-            im,pg=res
-            arr=im.array
-            arr += self.psf_noise_image
-
-        return res
-    """
 
     def get_target_psf(self, shear, type, get_nopix=False):
         """
@@ -1219,10 +1170,10 @@ class MetacalAnalyticPSF(Metacal):
 
         _check_shape(shear)
 
-        if type=='psf_shear':
-            doshear=True
+        if type == 'psf_shear':
+            doshear = True
         else:
-            doshear=False
+            doshear = False
 
         psf_grown = self._get_dilated_psf(shear, doshear=doshear)
 
@@ -1232,7 +1183,7 @@ class MetacalAnalyticPSF(Metacal):
         try:
             psf_grown_image = psf_grown.drawImage(
                 wcs=self.psf_image.wcs,
-                method='no_pixel' # pixel is in the psf
+                method='no_pixel'  # pixel is in the psf
             )
         except RuntimeError as err:
             # argh, galsim uses generic exceptions
@@ -1244,7 +1195,6 @@ class MetacalAnalyticPSF(Metacal):
             return psf_grown_image, psf_grown_image.copy(), psf_grown
         else:
             return psf_grown_image, psf_grown
-
 
     def _get_dilated_psf(self, shear, doshear=False):
         """
@@ -1259,16 +1209,15 @@ class MetacalAnalyticPSF(Metacal):
                                         g2=shear.g2)
         return psf_grown
 
-
     def _make_psf_obs(self, psf_im):
-        obs=self.obs
-        wtval=numpy.median(obs.psf.weight)
+        obs = self.obs
+        wtval = numpy.median(obs.psf.weight)
 
         wtim = numpy.zeros(psf_im.array.shape) + wtval
 
         jacob = obs.psf.jacobian.copy()
-        cen=( numpy.array(wtim.shape) - 1.0)/ 2.0
-        jacob.set_cen(row=cen[0],col=cen[1])
+        cen = (numpy.array(wtim.shape) - 1.0)/2.0
+        jacob.set_cen(row=cen[0], col=cen[1])
 
         psf_obs = Observation(
             psf_im.array,
@@ -1294,13 +1243,13 @@ class MetacalAnalyticPSF(Metacal):
         A new Observation
         """
 
-        obs=self.obs
+        obs = self.obs
 
         psf_obs = self._make_psf_obs(psf_im)
 
-        meta={}
+        meta = {}
         meta.update(obs.meta)
-        newobs=Observation(
+        newobs = Observation(
             im.array,
             jacobian=obs.jacobian.copy(),
             weight=obs.weight.copy(),
@@ -1328,28 +1277,28 @@ class MetacalAnalyticPSF(Metacal):
         return newobs
 
 
-def _get_ellip_dilation(e1,e2,T):
+def _get_ellip_dilation(e1, e2, T):
     """
     when making a symmetric version of the PSF, we need
     to dilate to hide modes that get exposed
     """
-    irr, irc, icc = moments.e2mom(e1,e2,T)
+    irr, irc, icc = moments.e2mom(e1, e2, T)
 
-    mat=numpy.zeros( (2,2) )
-    mat[0,0]=irr
-    mat[0,1]=irc
-    mat[1,0]=irc
-    mat[1,1]=icc
+    mat = numpy.zeros((2, 2))
+    mat[0, 0] = irr
+    mat[0, 1] = irc
+    mat[1, 0] = irc
+    mat[1, 1] = icc
 
-    eigs=numpy.linalg.eigvals(mat)
+    eigs = numpy.linalg.eigvals(mat)
 
     dilation = eigs.max()/(T/2.)
-    dilation=sqrt(dilation)
+    dilation = sqrt(dilation)
 
     dilation = 1.0 + 2*(dilation-1.0)
 
     if dilation > 1.1:
-        dilation=1.1
+        dilation = 1.1
 
     return dilation
 
@@ -1378,16 +1327,17 @@ def _make_symmetrized_gsimage_int(im_input, wcs, interp):
     get the symmetrized galsim image and create an
     interpolated image from it
     """
-    gsim=_make_symmetrized_gsimage(im_input, wcs)
-    return galsim.InterpolatedImage( gsim, x_interpolant=interp)
+    gsim = _make_symmetrized_gsimage(im_input, wcs)
+    return galsim.InterpolatedImage(gsim, x_interpolant=interp)
 
 
 def _make_symmetrized_gsimage(im_input, wcs):
     """
     wrap the symmetrized image int a galsim Image
     """
-    im=_make_symmetrized_image(im_input)
+    im = _make_symmetrized_image(im_input)
     return galsim.Image(im, wcs=wcs)
+
 
 def _make_symmetrized_image(im_input):
     """
@@ -1400,22 +1350,8 @@ def _make_symmetrized_image(im_input):
 
     im *= (1.0/4.0)
 
-    """
-    if False:
-        import images
-        images.multiview(im)
-        images.compare_images(
-            im_input,
-            im,
-            label1='orig',
-            label2='symm',
-            width=1000,
-            height=1000,
-        )
-        if 'q'==raw_input('hit a key: '):
-            stop
-    """
     return im
+
 
 def _check_shape(shape):
     """
@@ -1423,7 +1359,6 @@ def _check_shape(shape):
     """
     if not isinstance(shape, Shape):
         raise TypeError("shape must be of type ngmix.Shape")
-
 
 
 def _get_gauss_target_psf(psf, flux):
@@ -1434,9 +1369,8 @@ def _get_gauss_target_psf(psf, flux):
     assumes the psf is centered
     """
     from numpy import meshgrid, arange, min, sqrt, log
-    #dk = 0.1              # The resolution in k space for the KImage
 
-    if hasattr(psf,'stepk'):
+    if hasattr(psf, 'stepk'):
         dk = psf.stepk/4.0
     else:
         dk = psf.stepK()/4.0
@@ -1448,7 +1382,7 @@ def _get_gauss_target_psf(psf, flux):
     karr_r = kim.real.array
     # Find the smallest r where the kval < small_kval
     nk = karr_r.shape[0]
-    kx, ky = meshgrid(arange(-nk/2,nk/2), arange(-nk/2,nk/2))
+    kx, ky = meshgrid(arange(-nk/2, nk/2), arange(-nk/2, nk/2))
     ksq = (kx**2 + ky**2) * dk**2
     ksq_max = min(ksq[karr_r < small_kval * psf.flux])
 
@@ -1458,8 +1392,6 @@ def _get_gauss_target_psf(psf, flux):
     sigma_sq = -2. * log(smaller_kval) / ksq_max
 
     return galsim.Gaussian(sigma=sqrt(sigma_sq), flux=flux)
-
-
 
 
 def jackknife_shear(data, chunksize=1, dgamma=0.02):
@@ -1478,10 +1410,10 @@ def jackknife_shear(data, chunksize=1, dgamma=0.02):
 
     g = data['mcal_g']
 
-    R = numpy.zeros( (data.size, 2) )
+    R = numpy.zeros((data.size, 2))
 
-    R[:,0] = (data['mcal_g_1p'][:,0] - data['mcal_g_1m'][:,0])/dgamma
-    R[:,1] = (data['mcal_g_2p'][:,1] - data['mcal_g_2m'][:,1])/dgamma
+    R[:, 0] = (data['mcal_g_1p'][:, 0] - data['mcal_g_1m'][:, 0])/dgamma
+    R[:, 1] = (data['mcal_g_2p'][:, 1] - data['mcal_g_2m'][:, 1])/dgamma
 
     ntot = data.size
 
@@ -1492,40 +1424,41 @@ def jackknife_shear(data, chunksize=1, dgamma=0.02):
 
     shear = g_sum/R_sum
 
-    shears = zeros( (nchunks, 2) )
+    shears = zeros((nchunks, 2))
     for i in xrange(nchunks):
 
         beg = i*chunksize
         end = (i+1)*chunksize
 
-        tgsum  = g[beg:end,:].sum(axis=0)
-        tR_sum = R[beg:end,:].sum(axis=0)
+        tgsum = g[beg:end, :].sum(axis=0)
+        tR_sum = R[beg:end, :].sum(axis=0)
 
         j_g_sum = g_sum - tgsum
         j_R_sum = R_sum - tR_sum
 
         shears[i, :] = j_g_sum/j_R_sum
 
-    shear_cov = zeros( (2,2) )
+    shear_cov = zeros((2, 2))
     fac = (nchunks-1)/float(nchunks)
 
-    shear_cov[0,0] = fac*( ((shear[0]-shears[:,0])**2).sum() )
-    shear_cov[0,1] = \
-        fac*( ((shear[0]-shears[:,0]) * (shear[1]-shears[:,1])).sum() )
-    shear_cov[1,0] = shear_cov[0,1]
-    shear_cov[1,1] = fac*( ((shear[1]-shears[:,1])**2).sum() )
+    shear_cov[0, 0] = fac*(((shear[0]-shears[:, 0])**2).sum())
+    shear_cov[0, 1] = \
+        fac*(((shear[0]-shears[:, 0]) * (shear[1]-shears[:, 1])).sum())
+    shear_cov[1, 0] = shear_cov[0, 1]
+    shear_cov[1, 1] = fac*(((shear[1]-shears[:, 1])**2).sum())
 
-    out={
-        'shear':shear,
-        'shear_cov':shear_cov,
-        'shear_err':sqrt(diag(shear_cov)),
-        'g_sum':g_sum,
-        'R_sum':R_sum,
-        'R':R_sum/ntot,
-        'shears':shears,
+    out = {
+        'shear': shear,
+        'shear_cov': shear_cov,
+        'shear_err': sqrt(diag(shear_cov)),
+        'g_sum': g_sum,
+        'R_sum': R_sum,
+        'R': R_sum/ntot,
+        'shears': shears,
     }
 
     return out
+
 
 def get_shear(data, dgamma=0.02):
     """
@@ -1539,13 +1472,12 @@ def get_shear(data, dgamma=0.02):
         dgamma for central derivative, defautl 2*0.01 = 0.02
     """
 
-
     g = data['mcal_g']
 
-    R = numpy.zeros( (data.size, 2) )
+    R = numpy.zeros((data.size, 2))
 
-    R[:,0] = (data['mcal_g_1p'][:,0] - data['mcal_g_1m'][:,0])/dgamma
-    R[:,1] = (data['mcal_g_2p'][:,1] - data['mcal_g_2m'][:,1])/dgamma
+    R[:, 0] = (data['mcal_g_1p'][:, 0] - data['mcal_g_1m'][:, 0])/dgamma
+    R[:, 1] = (data['mcal_g_2p'][:, 1] - data['mcal_g_2m'][:, 1])/dgamma
 
     ntot = data.size
 
@@ -1556,11 +1488,11 @@ def get_shear(data, dgamma=0.02):
     R_err = R.std(axis=0)/sqrt(ntot)
 
     shear = g_mean/R_mean
-    shear_err = numpy.abs(shear)*sqrt( (g_err/g_mean)**2 + (R_err/R_mean)**2 )
+    shear_err = numpy.abs(shear)*sqrt((g_err/g_mean)**2 + (R_err/R_mean)**2)
 
-    out={
-        'shear':shear,
-        'shear_err':shear_err,
+    out = {
+        'shear': shear,
+        'shear_err': shear_err,
     }
 
     return out
@@ -1568,43 +1500,47 @@ def get_shear(data, dgamma=0.02):
 
 def _make_metacal_mb_obs_list_dict(mb_obs_list, step, **kw):
 
-    new_dict=None
+    new_dict = None
     for obs_list in mb_obs_list:
         odict = _make_metacal_obs_list_dict(obs_list, step, **kw)
 
         if new_dict is None:
-            new_dict=_init_mb_obs_list_dict(odict.keys())
+            new_dict = _init_mb_obs_list_dict(odict.keys())
 
         for key in odict:
             new_dict[key].append(odict[key])
 
     return new_dict
 
+
 def _make_metacal_obs_list_dict(obs_list, step, **kw):
     odict = None
     for obs in obs_list:
 
-        todict=_get_all_metacal(obs, step=step, **kw)
+        todict = _get_all_metacal(obs, step=step, **kw)
 
         if odict is None:
-            odict=_init_obs_list_dict(todict.keys())
+            odict = _init_obs_list_dict(todict.keys())
 
         for key in odict:
-            odict[key].append( todict[key] )
+            odict[key].append(todict[key])
 
     return odict
 
+
 def _init_obs_list_dict(keys):
-    odict={}
+    odict = {}
     for key in keys:
         odict[key] = ObsList()
     return odict
 
+
 def _init_mb_obs_list_dict(keys):
-    odict={}
+    odict = {}
     for key in keys:
         odict[key] = MultiBandObsList()
     return odict
+
 
 def _rotate_obs_image_nonsquare(obs, k=1):
     """
@@ -1613,12 +1549,12 @@ def _rotate_obs_image_nonsquare(obs, k=1):
 
     if isinstance(obs, Observation):
 
-        image=numpy.rot90(obs.image, k=k)
-        weight=numpy.rot90(obs.weight, k=k)
+        image = numpy.rot90(obs.image, k=k)
+        weight = numpy.rot90(obs.weight, k=k)
         if obs.has_bmask():
-            bmask=numpy.rot90(obs.bmask, k=k)
+            bmask = numpy.rot90(obs.bmask, k=k)
         else:
-            bmask=None
+            bmask = None
 
         nobs = Observation(
             image,
@@ -1631,17 +1567,17 @@ def _rotate_obs_image_nonsquare(obs, k=1):
         return nobs
 
     elif isinstance(obs, ObsList):
-        nobslist=ObsList()
+        nobslist = ObsList()
         for tobs in obs:
-            nobs=_rotate_obs_image_nonsquare(tobs, k=k)
+            nobs = _rotate_obs_image_nonsquare(tobs, k=k)
             nobslist.append(nobs)
         return nobslist
 
     elif isinstance(obs, MultiBandObsList):
-        nmbobs=MultiBandObsList()
+        nmbobs = MultiBandObsList()
         for obslist in obs:
             nobslist = _rotate_obs_image_nonsquare(obslist, k=k)
-            nmbobs.append( nobslist )
+            nmbobs.append(nobslist)
         return nmbobs
 
     else:
@@ -1665,7 +1601,6 @@ def _rotate_obs_image_square(obs, k=1):
     else:
         raise ValueError("obs must be Observation, ObsList, "
                          "or MultiBandObsList")
-
 
 
 def _add_noise_odict(odict, noise):
@@ -1693,6 +1628,7 @@ def _add_noise_odict(odict, noise):
 
         _add_noise_obs(tobs, noise, noise_image)
 
+
 def _add_noise_obs(obs, noise, noise_image):
     """
     add extra noise and modify the weight map
@@ -1700,11 +1636,11 @@ def _add_noise_obs(obs, noise, noise_image):
 
     if isinstance(obs, Observation):
 
-        weight=obs.weight
+        weight = obs.weight
 
         err2 = numpy.zeros(weight.shape) + noise**2
 
-        w=numpy.where(weight > 0)
+        w = numpy.where(weight > 0)
         if w[0].size > 0:
             err2[w] += 1.0/weight[w]
 
@@ -1721,156 +1657,6 @@ def _add_noise_obs(obs, noise, noise_image):
         for tobslist in obs:
             _add_noise_obs(tobslist, noise, noise_image)
 
-
     else:
         raise ValueError("obs must be Observation, ObsList, "
                          "or MultiBandObsList")
-
-
-def test():
-    import images
-    import fitsio
-    import os
-    #import mchuff
-
-    dir='./mcal-tests'
-    if not os.path.exists(dir):
-        os.makedirs(dir)
-
-    step=0.01
-    shears=[Shape(step,0.0), Shape(0.0,step)]
-
-    for i,shear in enumerate(shears):
-        for type in ['gal','psf']:
-
-            obs, obs_sheared_dilated = _get_sim_obs(shear.g1,shear.g2,
-                                                    r50=2.0, r50_psf=1.5)
-
-            m=Metacal(obs)
-
-
-
-            if type=='gal':
-                obs_mcal = m.get_obs_galshear(shear)
-            else:
-                obs_mcal = m.get_obs_psfshear(shear)
-
-            images.compare_images(obs_sheared_dilated.image,
-                                  obs_mcal.image,
-                                  label1='shear/dilate',
-                                  label2='metacal',
-                                  width=1000,
-                                  height=1000)
-
-            if i==0 and type=='gal':
-                imfile='test-image.fits'
-                imfile=os.path.join(dir, imfile)
-                print("writing image:",imfile)
-                fitsio.write(imfile, obs.image, clobber=True)
-
-                psffile='test-psf.fits'
-                psffile=os.path.join(dir, psffile)
-                print("writing psf:",psffile)
-                fitsio.write(psffile, obs.psf.image, clobber=True)
-
-            mcalfile='test-image-mcal-%sshear-%.2f-%.2f.fits' % \
-                (type,shear.g1,shear.g2)
-            mcalfile=os.path.join(dir,mcalfile)
-            print("writing metacaled imag:",mcalfile)
-            fitsio.write(mcalfile, obs_mcal.image, clobber=True)
-
-            mcal_psf_file='test-psf-mcal-%sshear-%.2f-%.2f.fits' % \
-                (type,shear.g1,shear.g2)
-            mcal_psf_file=os.path.join(dir,mcal_psf_file)
-            print("writing metacaled psf image:",mcal_psf_file)
-            fitsio.write(mcal_psf_file, obs_mcal.psf.image, clobber=True)
-
-
-    readme=os.path.join(dir, 'README')
-    with open(readme,'w') as fobj:
-        fobj.write("""metacal test files
-
-original images:
-----------------
-test-image.fits
-test-psf.fits
-
-metacaled images:
------------------
-
-# galaxy sheared
-test-image-mcal-galshear-0.01-0.00.fits
-test-psf-mcal-galshear-0.01-0.00.fits
-
-test-image-mcal-galshear-0.00-0.01.fits
-test-psf-mcal-galshear-0.00-0.01.fits
-
-# psf sheared
-test-image-mcal-psfshear-0.01-0.00.fits
-test-psf-mcal-psfshear-0.01-0.00.fits
-
-test-image-mcal-psfshear-0.00-0.01.fits
-test-psf-mcal-psfshear-0.00-0.01.fits
-"""     )
-
-def _get_sim_obs(s1, s2, g1=0.2, g2=0.1, r50=3.0, r50_psf=1.8):
-
-    dims=32,32
-
-    flux=100.0
-
-    g1psf=0.05
-    g2psf=-0.07
-    fluxpsf=1.0
-
-    s1abs = abs(s1)
-    s2abs = abs(s2)
-    dilate = 1. + 2.*max([s1abs,s2abs])
-
-    r50_psf_dilated = r50_psf * dilate
-
-    gal0 = galsim.Gaussian(flux=flux, half_light_radius=r50)
-    gal0 = gal0.shear(g1=g1, g2=g2)
-    gal0_sheared = gal0.shear(g1=s1, g2=s2)
-
-    psf = galsim.Gaussian(flux=fluxpsf, half_light_radius=r50_psf)
-    psf = psf.shear(g1=g1psf,g2=g2psf)
-
-    psf_dilated = galsim.Gaussian(
-        flux=fluxpsf,
-        half_light_radius=r50_psf_dilated,
-    )
-    psf_dilated = psf_dilated.shear(g1=g1psf,g2=g2psf)
-
-    gal = galsim.Convolve([psf, gal0])
-    gal_sheared_dilated = galsim.Convolve([psf_dilated, gal0_sheared])
-
-    psf_image = psf.drawImage(nx=dims[1],
-                              ny=dims[0],
-                              scale=1.0,
-                              dtype=numpy.float64)
-    psf_image_dilated = psf_dilated.drawImage(nx=dims[1],
-                                              ny=dims[0],
-                                              scale=1.0,
-                                              dtype=numpy.float64)
-
-
-    image = gal.drawImage(nx=dims[1],
-                          ny=dims[0],
-                          scale=1.0,
-                          dtype=numpy.float64)
-
-    image_sheared_dilated = gal_sheared_dilated.drawImage(nx=dims[1],
-                                                          ny=dims[0],
-                                                          scale=1.0,
-                                                          dtype=numpy.float64)
-
-
-    psf_obs = Observation(psf_image.array)
-    psf_obs_dilated = Observation(psf_image_dilated.array)
-
-    obs = Observation(image.array, psf=psf_obs)
-    obs_sheared_dilated = Observation(image_sheared_dilated.array,
-                                      psf=psf_obs_dilated)
-
-    return obs, obs_sheared_dilated
