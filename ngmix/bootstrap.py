@@ -2055,10 +2055,11 @@ class AMRunner(object):
     """
     wrapper to run am
     """
-    def __init__(self, obs, Tguess):
+    def __init__(self, obs, Tguess, rng=None):
 
         self.obs=obs
         self.Tguess = Tguess
+        self.rng = rng
 
     def get_fitter(self):
         return self.fitter
@@ -2067,7 +2068,7 @@ class AMRunner(object):
 
         for i in xrange(ntry):
 
-            fitter=admom.run_admom(self.obs, self.Tguess)
+            fitter=admom.run_admom(self.obs, self.Tguess, rng=self.rng)
             res=fitter.get_result()
             if res['flags']==0:
                 break
