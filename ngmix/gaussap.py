@@ -5,7 +5,145 @@ synthesize gaussian aperture fluxes
 import numpy as np
 from . import moments
 from .gmix import GMixModel, GMixCM, GMixBDF
+from .gexceptions import GMixRangeError
 from .jacobian import DiagonalJacobian
+
+RANGE_ERROR = 2**0
+
+
+def get_gaussap_flux(pars,
+                     model,
+                     pixel_scale,
+                     weight_fwhm,
+                     dim=None,
+                     psf_fwhm=None,
+                     fracdev=None,
+                     TdByTe=None,
+                     verbose=True):
+    """
+    Measure synthesized gaussian weighted apertures for a ngmix
+    models
+
+    parameters
+    ----------
+    pars: array
+        Shape [nobj, 6]
+    model: string
+        e.g. exp,dev,gauss,cm
+    pixel_scale: float
+        Pixel scale for the images.
+    weight_fwhm: float
+        FWHM of the weight function in the same units as the
+        pixel scale.
+    dims: size of the image to draw
+        If not set, it is taken to be 2*5*sigma of the weight function
+    psf_fwhm: float, optional
+        Size of the small psf with which to convolve the profile. Default
+        is the pixel scale.  This psf helps avoid issues with resolution
+    fracdev: array
+        Send for model 'cm'
+    TdByTe: array
+        Send for model 'cm'
+    verbose: bool
+        If True, print otu progress
+    """
+
+    fracdev, TdByTe, pars, gapmeas = _prepare(
+        pars,
+        model,
+        pixel_scale,
+        weight_fwhm,
+        dim=dim,
+        psf_fwhm=psf_fwhm,
+        fracdev=fracdev,
+        TdByTe=TdByTe,
+    )
+
+    nband = len(pars[0])-6+1
+
+    flags = np.zeros((pars.shape[0], nband), dtype='i4')
+    gap_flux = pars.copy()
+    gap_flux[:, :] = -9999
+
+    nobj = pars.shape[0]
+    for i in range(nobj):
+
+        if verbose and ((i+1) % 10) == 0:
+            print("%d/%d" % (i+1, nobj))
+
+        for band in range(nband):
+            tflux, tflags = _do_gap(fracdev, TdByTe, pars, gapmeas, i, band)
+            gap_flux[i, band] = tflux
+            flags[i, band] = tflags
+
+    return gap_flux, flags
+
+
+def _do_gap(fracdev, TdByTe, pars, gapmeas, i, band):
+    try:
+
+        tpars = np.zeros(6)
+        tpars[0:5] = pars[i, 0:5]
+        tpars[-1] = pars[i, 5+band]
+
+        tpars[4] = tpars[4].clip(min=0.0001)
+
+        if gapmeas.model == 'cm':
+            flux = gapmeas.get_aper_flux(
+                fracdev[i],
+                TdByTe[i],
+                tpars,
+            )
+        else:
+            flux = gapmeas.get_aper_flux(tpars)
+
+        flags = 0
+    except GMixRangeError as err:
+        print(str(err))
+        flags = RANGE_ERROR
+
+    return flux, flags
+
+
+def _prepare(pars,
+             model,
+             pixel_scale,
+             weight_fwhm,
+             dim=None,
+             psf_fwhm=None,
+             fracdev=None,
+             TdByTe=None):
+
+    pars = np.array(pars, dtype='f8', ndmin=2, copy=False)
+
+    if len(pars.shape) == 1:
+        oldpars = pars
+        pars = np.zeros((1, pars.shape[0]), dtype='f8')
+        pars[0, :] = oldpars
+
+    if model == 'cm':
+
+        fracdev = np.array(fracdev, dtype='f8', ndmin=1, copy=False)
+        TdByTe = np.array(TdByTe, dtype='f8', ndmin=1, copy=False)
+        assert fracdev.size == pars.shape[0], 'fracdev/pars must be same size'
+        assert TdByTe.size == pars.shape[0], 'TdByTe/pars must be same length'
+
+        gapmeas = GaussAperCM(
+            pixel_scale=pixel_scale,
+            weight_fwhm=weight_fwhm,
+            psf_fwhm=psf_fwhm,
+            dim=dim,
+        )
+    else:
+        gapmeas = GaussAper(
+            pixel_scale=pixel_scale,
+            weight_fwhm=weight_fwhm,
+            model=model,
+            psf_fwhm=psf_fwhm,
+            dim=dim,
+        )
+
+    return fracdev, TdByTe, pars, gapmeas
 
 
 class GaussAper(object):
