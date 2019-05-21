@@ -2,13 +2,16 @@
 synthesize gaussian aperture fluxes
 """
 
+from __future__ import print_function
 import numpy as np
 from . import moments
 from .gmix import GMixModel, GMixCM, GMixBDF
 from .gexceptions import GMixRangeError
 from .jacobian import DiagonalJacobian
 
-RANGE_ERROR = 2**0
+DEFAULT_FLUX = -9999.0
+NO_ATTEMPT = 2**0
+RANGE_ERROR = 2**1
 
 
 def get_gaussap_flux(pars,
@@ -19,6 +22,7 @@ def get_gaussap_flux(pars,
                      psf_fwhm=None,
                      fracdev=None,
                      TdByTe=None,
+                     mask=None,
                      verbose=True):
     """
     Measure synthesized gaussian weighted apertures for a ngmix
@@ -48,7 +52,7 @@ def get_gaussap_flux(pars,
         If True, print otu progress
     """
 
-    fracdev, TdByTe, pars, gapmeas = _prepare(
+    fracdev, TdByTe, pars, mask, gapmeas = _prepare(
         pars,
         model,
         pixel_scale,
@@ -57,19 +61,24 @@ def get_gaussap_flux(pars,
         psf_fwhm=psf_fwhm,
         fracdev=fracdev,
         TdByTe=TdByTe,
+        mask=mask,
     )
 
     nband = len(pars[0])-6+1
 
     flags = np.zeros((pars.shape[0], nband), dtype='i4')
-    gap_flux = pars.copy()
-    gap_flux[:, :] = -9999
+    gap_flux = np.zeros( (pars.shape[0], nband) )
+    gap_flux[:, :] = DEFAULT_FLUX
 
     nobj = pars.shape[0]
     for i in range(nobj):
 
-        if verbose and ((i+1) % 10) == 0:
+        if verbose and ((i+1) % 1000) == 0:
             print("%d/%d" % (i+1, nobj))
+
+        if not mask[i]:
+            flags[i] = NO_ATTEMPT
+            continue
 
         for band in range(nband):
             tflux, tflags = _do_gap(fracdev, TdByTe, pars, gapmeas, i, band)
@@ -80,6 +89,10 @@ def get_gaussap_flux(pars,
 
 
 def _do_gap(fracdev, TdByTe, pars, gapmeas, i, band):
+
+    flux = DEFAULT_FLUX
+    flags = RANGE_ERROR
+
     try:
 
         tpars = np.zeros(6)
@@ -100,7 +113,6 @@ def _do_gap(fracdev, TdByTe, pars, gapmeas, i, band):
         flags = 0
     except GMixRangeError as err:
         print(str(err))
-        flags = RANGE_ERROR
 
     return flux, flags
 
@@ -112,9 +124,17 @@ def _prepare(pars,
              dim=None,
              psf_fwhm=None,
              fracdev=None,
-             TdByTe=None):
+             TdByTe=None,
+             mask=None):
 
     pars = np.array(pars, dtype='f8', ndmin=2, copy=False)
+
+    if mask is not None:
+        mask = np.array(mask, dtype=np.bool_, ndmin=1, copy=False)
+        assert mask.shape[0] == pars.shape[0], \
+            'mask and pars must be same length'
+    else:
+        mask = np.ones(pars.shape[0], dtype=np.bool_)
 
     if len(pars.shape) == 1:
         oldpars = pars
@@ -143,7 +163,7 @@ def _prepare(pars,
             dim=dim,
         )
 
-    return fracdev, TdByTe, pars, gapmeas
+    return fracdev, TdByTe, pars, mask, gapmeas
 
 
 class GaussAper(object):
@@ -184,7 +204,7 @@ class GaussAper(object):
             sigma = moments.fwhm_to_sigma(weight_fwhm)
             dim = 2*5*sigma
 
-        self.dims = [dim]
+        self.dims = [dim]*2
 
         self._set_jacobian()
 
@@ -220,7 +240,7 @@ class GaussAper(object):
         """
         do the actual flux calcuation over the images
         """
-        weighted_im = self.weight_im*im
+        weighted_im = self.weight_image*im
         flux = weighted_im.sum()*self.pixel_scale**2
         return flux
 
@@ -356,6 +376,7 @@ class GaussAperCM(GaussAper):
         """
         get the cm gmix for this object
         """
+
         gm0 = GMixCM(
             fracdev,
             TdByTe,
