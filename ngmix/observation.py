@@ -22,6 +22,8 @@ class Observation(object):
         Weight map, same shape as image
     bmask: ndarray, optional
         A bitmask array
+    ormask: ndarray, optional
+        A bitmask array
     noise: ndarray, optional
         A noise field to associate with this observation
     jacobian: Jacobian, optional
@@ -38,6 +40,7 @@ class Observation(object):
                  image,
                  weight=None,
                  bmask=None,
+                 ormask=None,
                  noise=None,
                  jacobian=None,
                  gmix=None,
@@ -62,6 +65,7 @@ class Observation(object):
 
         # optional, if None nothing is set
         self.set_bmask(bmask)
+        self.set_ormask(ormask)
         self.set_noise(noise)
         self.set_gmix(gmix)
         self.set_psf(psf)
@@ -130,6 +134,23 @@ class Observation(object):
         set the bmask
         """
         self.set_bmask(bmask)
+
+    @property
+    def ormask(self):
+        """
+        getter for ormask
+
+        currently this simply returns a reference
+        """
+        return self._ormask
+
+    @ormask.setter
+    def ormask(self, ormask):
+        """
+        set the ormask
+        """
+        self.set_ormask(ormask)
+
 
     @property
     def noise(self):
@@ -296,6 +317,39 @@ class Observation(object):
         returns True if a bitmask is set
         """
         if hasattr(self,'_bmask'):
+            return True
+        else:
+            return False
+
+    def set_ormask(self, ormask):
+        """
+        Set the bitmask
+
+        parameters
+        ----------
+        ormask: ndarray (or None)
+        """
+        if ormask is None:
+            if self.has_ormask():
+                del self._ormask
+        else:
+
+            image=self.image
+
+            # force contiguous C, but we don't know what dtype to expect
+            ormask=numpy.ascontiguousarray(ormask)
+            assert len(ormask.shape)==2,"ormask must be 2d"
+
+            assert (ormask.shape==image.shape),\
+                    "image and ormask must be same shape"
+
+            self._ormask=ormask
+
+    def has_ormask(self):
+        """
+        returns True if a bitmask is set
+        """
+        if hasattr(self,'_ormask'):
             return True
         else:
             return False
@@ -514,6 +568,11 @@ class Observation(object):
         else:
             bmask=None
 
+        if self.has_ormask():
+            ormask=self.ormask.copy()
+        else:
+            ormask=None
+
         if self.has_noise():
             noise=self.noise.copy()
         else:
@@ -536,6 +595,7 @@ class Observation(object):
             self.image.copy(),
             weight=self.weight.copy(),
             bmask=bmask,
+            ormask=ormask,
             noise=noise,
             gmix=gmix,
             jacobian=self.jacobian, # makes a copy
