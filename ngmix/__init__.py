@@ -60,3 +60,4 @@ from . import simobs
 
 from . import test
 
+from . import gaussap
