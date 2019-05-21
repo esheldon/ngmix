@@ -207,6 +207,11 @@ class NGMixMEDS(_MEDS):
             bmask = None
 
         try:
+            ormask = self.get_cutout(iobj, icutout, type='ormask')
+        except Exception:
+            ormask = None
+
+        try:
             noise = self.get_cutout(iobj, icutout, type='noise')
         except Exception:
             noise = None
@@ -254,6 +259,7 @@ class NGMixMEDS(_MEDS):
             im,
             weight=wt,
             bmask=bmask,
+            ormask=ormask,
             noise=noise,
             meta=meta,
             jacobian=jacobian,
