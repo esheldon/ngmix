@@ -15,29 +15,20 @@ dependencies
 
 optional dependencies
 ---------------------
-* scipy: optional needed for image fitting using the Levenberg-Marquardt fitter
-* galsim: optional for doing metacalibration operations.
-* skikit-learn:  for sampling multivariate PDFs
-* statsmodels: optional for importance sampling (multivariate student
+* scipy: for image fitting using the Levenberg-Marquardt fitter
+* galsim: for performing metacalibration operations.
+* scikit-learn: for sampling multivariate PDFs
+* statsmodels: for importance sampling (multivariate student
     T distribution)
-* emcee: optional for doing MCMC fitting: http://dan.iel.fm/emcee/current/ Affine invariant MCMC sampler.
+* emcee: for exploring full posterior using mcmc
 
 installation
 ------------
 ```bash
-python setup.py install
-```
+# using conda.  This also installs numba and numpy
+conda install -c conda-forge ngmix 
 
-installing numba
-----------------
-```bash
-# by far the easiest way is using anaconda.
+# from source. In this case you need to install numba yourself
+python setup.py install
 conda install numba
 ```
-
-TODO
-----
-Make numba optional.  There are many useful data structures
-in ngmix that do not require numba, it would be nice to make them
-available without the numba dependency.  To implement this would
-be straightforward:  wrap some of the imports in try/except blocks
