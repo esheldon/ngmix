@@ -11,7 +11,7 @@ dependencies
 ------------
 
 * numpy
-* numba
+* numba >= 0.43
 
 optional dependencies
 ---------------------
