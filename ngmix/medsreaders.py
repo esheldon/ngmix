@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from meds import MEDS as _MEDS
 
@@ -232,16 +233,22 @@ class NGMixMEDS(_MEDS):
         jacobian = self.get_ngmix_jacobian(iobj, icutout)
         c = self._cat
 
+        ii = self.get_image_info()
+        file_id = c['file_id'][iobj, icutout]
+        file_path = os.path.basename(ii['image_path'][file_id]).strip()
+
         meta = dict(
             id=c['id'][iobj],
             index=iobj,
             icut=icutout,
             cutout_index=icutout,
-            file_id=c['file_id'][iobj, icutout],
+            file_id=file_id,
+            file_path=file_path,
             orig_row=c['orig_row'][iobj, icutout],
             orig_col=c['orig_col'][iobj, icutout],
             orig_start_row=c['orig_start_row'][iobj, icutout],
-            orig_start_col=c['orig_start_col'][iobj, icutout])
+            orig_start_col=c['orig_start_col'][iobj, icutout],
+        )
 
         if 'flux_auto' in c.dtype.names:
             meta['flux'] = c['flux_auto'][iobj]
