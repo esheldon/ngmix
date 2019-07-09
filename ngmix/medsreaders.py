@@ -296,12 +296,15 @@ class NGMixMEDS(_MEDS):
         weight = psf_im*0 + 1.0/noise**2
         jacobian = self.get_ngmix_jacobian(iobj, icutout)
 
-        cen = (np.array(psf_im.shape)-1.0) / 2.0
+        c = self._cat
+
         jacobian.set_cen(
-            row=cen[0],
-            col=cen[1])
+            row=c['psf_cutout_row'][iobj, icutout],
+            col=c['psf_cutout_col'][iobj, icutout],
+        )
 
         return Observation(
             psf_im,
             weight=weight,
-            jacobian=jacobian)
+            jacobian=jacobian,
+        )
