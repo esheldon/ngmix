@@ -1,7 +1,7 @@
-v0.9.0
-------
+v1.3.2
+-------
 
-first real version cut, mainly in anticipation for use in
-the LSST DM stack.
+bug fixes
 
-Code is python3 compatible.
+    Use psf_cutout_row and col for center in psf obs for
+    meds reader
