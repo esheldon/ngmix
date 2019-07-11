@@ -298,9 +298,10 @@ class NGMixMEDS(_MEDS):
 
         c = self._cat
 
+        row, col = self._get_psf_cen(iobj, icutout)
         jacobian.set_cen(
-            row=c['psf_cutout_row'][iobj, icutout],
-            col=c['psf_cutout_col'][iobj, icutout],
+            row=row,
+            col=col,
         )
 
         return Observation(
@@ -308,3 +309,10 @@ class NGMixMEDS(_MEDS):
             weight=weight,
             jacobian=jacobian,
         )
+
+    def _get_psf_cen(self, iobj, icutout):
+        """
+        get the center row,col of the psf
+        """
+        row=c['psf_cutout_row'][iobj, icutout]
+        col=c['psf_cutout_col'][iobj, icutout]
