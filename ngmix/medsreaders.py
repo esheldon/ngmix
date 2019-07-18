@@ -314,5 +314,8 @@ class NGMixMEDS(_MEDS):
         """
         get the center row,col of the psf
         """
-        row=c['psf_cutout_row'][iobj, icutout]
-        col=c['psf_cutout_col'][iobj, icutout]
+        c = self._cat
+
+        row = c['psf_cutout_row'][iobj, icutout]
+        col = c['psf_cutout_col'][iobj, icutout]
+        return row, col
