@@ -67,7 +67,7 @@ def get_gaussap_flux(pars,
     nband = _get_nband(pars, model)
 
     flags = np.zeros((pars.shape[0], nband), dtype='i4')
-    gap_flux = np.zeros( (pars.shape[0], nband) )
+    gap_flux = np.zeros((pars.shape[0], nband))
     gap_flux[:, :] = DEFAULT_FLUX
 
     nobj = pars.shape[0]
@@ -473,8 +473,9 @@ def _get_band_pars(pars, model, index, band):
 
     return tpars
 
+
 def _get_nband(pars, model):
-    if model=='bdf':
+    if model == 'bdf':
         nband = len(pars[0])-7+1
     else:
         nband = len(pars[0])-6+1
@@ -483,7 +484,7 @@ def _get_nband(pars, model):
 
 
 def _get_band_npars(model):
-    if model=='bdf':
+    if model == 'bdf':
         nband = 7
     else:
         nband = 6
