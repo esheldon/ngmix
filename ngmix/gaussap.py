@@ -64,7 +64,7 @@ def get_gaussap_flux(pars,
         mask=mask,
     )
 
-    nband = len(pars[0])-6+1
+    nband = _get_nband(pars, model)
 
     flags = np.zeros((pars.shape[0], nband), dtype='i4')
     gap_flux = np.zeros( (pars.shape[0], nband) )
@@ -95,11 +95,14 @@ def _do_gap(fracdev, TdByTe, pars, gapmeas, i, band):
 
     try:
 
+        tpars = _get_band_pars(pars, gapmeas.model, i, band)
+        """
         tpars = np.zeros(6)
         tpars[0:5] = pars[i, 0:5]
         tpars[-1] = pars[i, 5+band]
 
         tpars[4] = tpars[4].clip(min=0.0001)
+        """
 
         if gapmeas.model == 'cm':
             flux = gapmeas.get_aper_flux(
@@ -154,6 +157,16 @@ def _prepare(pars,
             psf_fwhm=psf_fwhm,
             dim=dim,
         )
+
+    elif model == 'bdf':
+
+        gapmeas = GaussAperBDF(
+            pixel_scale=pixel_scale,
+            weight_fwhm=weight_fwhm,
+            psf_fwhm=psf_fwhm,
+            dim=dim,
+        )
+
     else:
         gapmeas = GaussAper(
             pixel_scale=pixel_scale,
@@ -211,6 +224,7 @@ class GaussAper(object):
         self._set_weight(weight_fwhm)
         self._set_weight_image()
         self._set_psf(psf_fwhm)
+        self._set_expected_npars()
 
     def get_aper_flux(self, pars):
         """
@@ -229,8 +243,6 @@ class GaussAper(object):
             gaussian weighted fluxe in the aperture
         """
 
-        assert len(pars) == 6, 'expected pars to be a 6-element sequence'
-
         gm = self._get_object_gmix(pars)
         im = gm.make_image(self.dims, jacobian=self.jacobian)
 
@@ -248,11 +260,7 @@ class GaussAper(object):
         """
         get a gmix for the model
         """
-        if self.model == 'bdf':
-            gm0 = GMixBDF(pars)
-        else:
-            gm0 = GMixModel(pars, self.model)
-
+        gm0 = GMixModel(pars, self.model)
         gm = gm0.convolve(self.psf)
         return gm
 
@@ -312,12 +320,78 @@ class GaussAper(object):
         ]
         return GMixModel(pars, "gauss")
 
+    def _set_expected_npars(self):
+        """
+        set the expected number of pars
+        """
+        self._expected_npars = 6
+
+    def _check_pars(self, pars):
+        """
+        check the parameters have the right size
+        """
+        if len(pars) != self._expected_npars:
+            m = 'expected pars to be a %d-element sequence for model %s'
+            m = m % (self._expected_npars, self.model)
+            raise ValueError(m)
+
+
+class GaussAperBDF(GaussAper):
+    def __init__(self, pixel_scale, weight_fwhm, dim=None, psf_fwhm=None):
+        """
+        measure synthesized gaussian weighted apertures for a the bdf model
+
+        Parameters
+        ----------
+        pixel_scale: float
+            Pixel scale for images.
+        weight_fwhm: float
+            FWHM of the weight function in the same units as the
+            pixel scale.
+        psf_fwhm: float, optional
+            Size of the small psf with which to convolve the profile. Default
+            is the sqrt92*pixel_scale.  This psf helps avoid issues with
+            resolution
+        dim: int, optional
+            Dimension of the images to simulate. If not sent, 2*5*sigma of the
+            weight is used
+        """
+
+        super(GaussAperBDF, self).__init__(
+            pixel_scale,
+            weight_fwhm,
+            'bdf',
+            dim=dim,
+            psf_fwhm=psf_fwhm,
+        )
+
+    def _do_weighted_flux(self, im):
+        """
+        do the actual flux calcuation over the images
+        """
+        weighted_im = self.weight_image*im
+        flux = weighted_im.sum()*self.pixel_scale**2
+        return flux
+
+    def _get_object_gmix(self, pars):
+        """
+        get a gmix for the model
+        """
+        gm0 = GMixBDF(pars)
+        gm = gm0.convolve(self.psf)
+        return gm
+
+    def _set_expected_npars(self):
+        """
+        set the expected number of pars
+        """
+        self._expected_npars = 7
+
 
 class GaussAperCM(GaussAper):
     def __init__(self, pixel_scale, weight_fwhm, dim=None, psf_fwhm=None):
         """
-        measure synthesized gaussian weighted apertures for a simple ngmix
-        model
+        measure synthesized gaussian weighted apertures for the CM model
 
         Parameters
         ----------
@@ -364,12 +438,10 @@ class GaussAperCM(GaussAper):
             nband
         """
 
-        assert len(pars) == 6, 'expected pars to be a 6-element sequence'
+        self._check_pars(pars)
 
         gm = self._get_object_gmix(fracdev, TdByTe, pars)
-
         im = gm.make_image(self.dims, jacobian=self.jacobian)
-
         return self._do_weighted_flux(im)
 
     def _get_object_gmix(self, fracdev, TdByTe, pars):
@@ -385,3 +457,35 @@ class GaussAperCM(GaussAper):
 
         gm = gm0.convolve(self.psf)
         return gm
+
+
+def _get_band_pars(pars, model, index, band):
+
+    npars = _get_band_npars(model)
+
+    flux_start = npars-1
+
+    tpars = np.zeros(npars)
+    tpars[0:npars-1] = pars[index, 0:npars-1]
+    tpars[-1] = pars[index, flux_start+band]
+
+    tpars[4] = tpars[4].clip(min=0.0001)
+
+    return tpars
+
+def _get_nband(pars, model):
+    if model=='bdf':
+        nband = len(pars[0])-7+1
+    else:
+        nband = len(pars[0])-6+1
+
+    return nband
+
+
+def _get_band_npars(model):
+    if model=='bdf':
+        nband = 7
+    else:
+        nband = 6
+
+    return nband
