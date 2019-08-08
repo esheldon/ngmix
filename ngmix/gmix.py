@@ -313,7 +313,7 @@ class GMix(object):
 
         gm = self.get_data()
 
-        psum = 0.0
+        apflux = 0.0
         for i in range(gm.size):
             gauss = gm[i]
             det = gauss['det']
@@ -345,9 +345,9 @@ class GMix(object):
                     # use default fac of 1
                     pass
 
-            psum += pval*fac
+            apflux += pval*fac
 
-        return psum*self.get_flux()
+        return apflux
 
     def set_norms(self):
         """
