@@ -3278,6 +3278,16 @@ class LogNormal(PriorBase):
         lnp = self.get_lnprob_array(x)
         return numpy.exp(lnp)
 
+    def get_fdiff(self, x):
+        """
+        this is kind of hokey
+        """
+        lnp = self.get_lnprob_scalar(x)
+        chi2 = -2*lnp
+        if chi2 < 0.0:
+            chi2 = 0.0
+        fdiff = sqrt(chi2)
+        return fdiff
 
     def sample(self, nrand=None):
         """
