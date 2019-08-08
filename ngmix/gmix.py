@@ -17,6 +17,7 @@ from . import moments
 
 from .gexceptions import GMixFatalError
 
+from . import gmix_nb
 from .gmix_nb import (
     _gmix_fill_functions,
     gmix_set_norms,
@@ -276,6 +277,77 @@ class GMix(object):
 
     # alias
     set_psum=set_flux
+
+    def get_gaussap_flux(self, fwhm=None, sigma=None, T=None):
+        """
+        get a gaussian aperture weight flux for the mixture
+
+        parameters
+        ----------
+        fwhm or sigma or T: float
+            one must be sent for the gaussian weight
+
+        Returns
+        -------
+        Gaussian aperture weighted flux
+        """
+        from numpy import linalg
+
+        if fwhm is not None:
+            sigma = moments.fwhm_to_sigma(fwhm)
+        elif T is not None:
+            sigma = sqrt(T/2.0)
+        elif sigma is not None:
+            sigma = float(sigma)
+        else:
+            raise ValueError('send weight function sigma, fwhm, or T')
+
+        sigma2 = sigma**2
+
+        wt_mat = array(
+            [[sigma2, 0.0],
+             [0.0, sigma2]],
+        )
+        wt_mat_inv = linalg.inv(wt_mat)
+        wt_det = linalg.det(wt_mat)
+
+        gm = self.get_data()
+
+        psum = 0.0
+        for i in range(gm.size):
+            gauss = gm[i]
+            det = gauss['det']
+
+            pval = gauss['p']
+
+            fac = 1.0
+            if det > gmix_nb.GMIX_LOW_DETVAL:
+
+                mat = array(
+                    [[gauss['irr'], gauss['irc']],
+                     [gauss['irc'], gauss['icc']]],
+                )
+
+                try:
+
+                    mat_inv = linalg.inv(mat)
+
+                    invsum = mat_inv + wt_mat_inv
+
+                    newmat = linalg.inv(invsum)
+                    newdet = linalg.det(newmat)
+
+                    fac = sqrt(newdet/det)
+                    if fac > 1:
+                        fac = 1
+
+                except linalg.LinAlgError:
+                    # use default fac of 1
+                    pass
+
+            psum += pval*fac
+
+        return psum*self.get_flux()
 
     def set_norms(self):
         """
