@@ -1,13 +1,11 @@
 """
-synthesize gaussian aperture fluxes
+calculate gaussian aperture fluxes for a catalog of parameters
 """
 
 from __future__ import print_function
 import numpy as np
-from . import moments
 from .gmix import GMixModel, GMixCM, GMixBDF
 from .gexceptions import GMixRangeError
-from .jacobian import DiagonalJacobian
 
 DEFAULT_FLUX = -9999.0
 NO_ATTEMPT = 2**0
@@ -16,10 +14,7 @@ RANGE_ERROR = 2**1
 
 def get_gaussap_flux(pars,
                      model,
-                     pixel_scale,
                      weight_fwhm,
-                     dim=None,
-                     psf_fwhm=None,
                      fracdev=None,
                      TdByTe=None,
                      mask=None,
@@ -34,16 +29,9 @@ def get_gaussap_flux(pars,
         Shape [nobj, 6]
     model: string
         e.g. exp,dev,gauss,cm
-    pixel_scale: float
-        Pixel scale for the images.
     weight_fwhm: float
         FWHM of the weight function in the same units as the
         pixel scale.
-    dims: size of the image to draw
-        If not set, it is taken to be 2*5*sigma of the weight function
-    psf_fwhm: float, optional
-        Size of the small psf with which to convolve the profile. Default
-        is the pixel scale.  This psf helps avoid issues with resolution
     fracdev: array
         Send for model 'cm'
     TdByTe: array
@@ -52,13 +40,10 @@ def get_gaussap_flux(pars,
         If True, print otu progress
     """
 
-    fracdev, TdByTe, pars, mask, gapmeas = _prepare(
+    fracdev, TdByTe, pars, mask = _prepare(
         pars,
         model,
-        pixel_scale,
         weight_fwhm,
-        dim=dim,
-        psf_fwhm=psf_fwhm,
         fracdev=fracdev,
         TdByTe=TdByTe,
         mask=mask,
@@ -81,39 +66,44 @@ def get_gaussap_flux(pars,
             continue
 
         for band in range(nband):
-            tflux, tflags = _do_gap(fracdev, TdByTe, pars, gapmeas, i, band)
+            tflux, tflags = _do_gap(
+                weight_fwhm,
+                fracdev,
+                TdByTe,
+                pars,
+                model,
+                i,
+                band,
+            )
             gap_flux[i, band] = tflux
             flags[i, band] = tflags
 
     return gap_flux, flags
 
 
-def _do_gap(fracdev, TdByTe, pars, gapmeas, i, band):
+def _do_gap(weight_fwhm, fracdev, TdByTe, pars, model, i, band):
 
     flux = DEFAULT_FLUX
     flags = RANGE_ERROR
 
     try:
 
-        tpars = _get_band_pars(pars, gapmeas.model, i, band)
-        """
-        tpars = np.zeros(6)
-        tpars[0:5] = pars[i, 0:5]
-        tpars[-1] = pars[i, 5+band]
+        tpars = _get_band_pars(pars, model, i, band)
 
-        tpars[4] = tpars[4].clip(min=0.0001)
-        """
-
-        if gapmeas.model == 'cm':
-            flux = gapmeas.get_aper_flux(
+        if model == 'cm':
+            gm = GMixCM(
                 fracdev[i],
                 TdByTe[i],
-                tpars,
+                pars,
             )
+        elif model == 'bdf':
+            gm = GMixBDF(tpars)
         else:
-            flux = gapmeas.get_aper_flux(tpars)
+            gm = GMixModel(tpars, model)
 
+        flux = gm.get_gaussap_flux(fwhm=weight_fwhm)
         flags = 0
+
     except GMixRangeError as err:
         print(str(err))
 
@@ -122,10 +112,7 @@ def _do_gap(fracdev, TdByTe, pars, gapmeas, i, band):
 
 def _prepare(pars,
              model,
-             pixel_scale,
              weight_fwhm,
-             dim=None,
-             psf_fwhm=None,
              fracdev=None,
              TdByTe=None,
              mask=None):
@@ -151,34 +138,43 @@ def _prepare(pars,
         assert fracdev.size == pars.shape[0], 'fracdev/pars must be same size'
         assert TdByTe.size == pars.shape[0], 'TdByTe/pars must be same length'
 
-        gapmeas = GaussAperCM(
-            pixel_scale=pixel_scale,
-            weight_fwhm=weight_fwhm,
-            psf_fwhm=psf_fwhm,
-            dim=dim,
-        )
+    return fracdev, TdByTe, pars, mask
 
-    elif model == 'bdf':
 
-        gapmeas = GaussAperBDF(
-            pixel_scale=pixel_scale,
-            weight_fwhm=weight_fwhm,
-            psf_fwhm=psf_fwhm,
-            dim=dim,
-        )
+def _get_band_pars(pars, model, index, band):
 
+    npars = _get_band_npars(model)
+
+    flux_start = npars-1
+
+    tpars = np.zeros(npars)
+    tpars[0:npars-1] = pars[index, 0:npars-1]
+    tpars[-1] = pars[index, flux_start+band]
+
+    tpars[4] = tpars[4].clip(min=0.0001)
+
+    return tpars
+
+
+def _get_nband(pars, model):
+    if model == 'bdf':
+        nband = len(pars[0])-7+1
     else:
-        gapmeas = GaussAper(
-            pixel_scale=pixel_scale,
-            weight_fwhm=weight_fwhm,
-            model=model,
-            psf_fwhm=psf_fwhm,
-            dim=dim,
-        )
+        nband = len(pars[0])-6+1
 
-    return fracdev, TdByTe, pars, mask, gapmeas
+    return nband
 
 
+def _get_band_npars(model):
+    if model == 'bdf':
+        nband = 7
+    else:
+        nband = 6
+
+    return nband
+
+
+'''
 class GaussAper(object):
     def __init__(self,
                  pixel_scale,
@@ -215,9 +211,12 @@ class GaussAper(object):
 
         if dim is None:
             sigma = moments.fwhm_to_sigma(weight_fwhm)
-            dim = 2*5*sigma
+            dim = int(2*5*sigma)
+            if dim % 2 == 0:
+                dim += 1
 
         self.dims = [dim]*2
+        print('dims:', self.dims)
 
         self._set_jacobian()
 
@@ -457,36 +456,4 @@ class GaussAperCM(GaussAper):
 
         gm = gm0.convolve(self.psf)
         return gm
-
-
-def _get_band_pars(pars, model, index, band):
-
-    npars = _get_band_npars(model)
-
-    flux_start = npars-1
-
-    tpars = np.zeros(npars)
-    tpars[0:npars-1] = pars[index, 0:npars-1]
-    tpars[-1] = pars[index, flux_start+band]
-
-    tpars[4] = tpars[4].clip(min=0.0001)
-
-    return tpars
-
-
-def _get_nband(pars, model):
-    if model == 'bdf':
-        nband = len(pars[0])-7+1
-    else:
-        nband = len(pars[0])-6+1
-
-    return nband
-
-
-def _get_band_npars(model):
-    if model == 'bdf':
-        nband = 7
-    else:
-        nband = 6
-
-    return nband
+'''
