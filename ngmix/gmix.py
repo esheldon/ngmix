@@ -1012,7 +1012,7 @@ class GMixBDF(GMixModel):
     Parameters
     ----------
     pars: sequence
-        [c1,c2,g1,g2,T,flux]
+        [c1,c2,g1,g2,T,fracdev,flux]
     TdByTe: number, optional
         Optionally set TdByTe.  Defaults to 1.0
 
