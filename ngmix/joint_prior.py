@@ -383,7 +383,7 @@ class PriorBDSep(PriorSimpleSep):
         else:
             is_scalar=False
 
-        samples=zeros( (n,6+self.nband) )
+        samples=zeros( (n,7+self.nband) )
 
         cen1,cen2 = self.cen_prior.sample(n)
         g1,g2=self.g_prior.sample2d(n)
