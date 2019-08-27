@@ -28,9 +28,10 @@ install:
   - conda config --add channels conda-forge
   - conda update -q conda
   - conda info -a
-  - conda create -q -n test-env python \
-      numpy numba flake8 pyyaml scipy pytest galsim \
-      scikit-learn statsmodels emcee
+  - >
+    conda create -q -n test-env python
+    numpy numba flake8 pyyaml scipy pytest galsim
+    scikit-learn statsmodels emcee
   - source activate test-env
 
 script:
