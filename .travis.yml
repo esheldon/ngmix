@@ -21,7 +21,7 @@ install:
   - conda clean --all
 
 script:
-  - pip install . --no-deps -vv
+  - pip install . --no-deps
   # files that pass flake8 should be added here as we go
   - >
     flake8
