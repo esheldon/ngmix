@@ -20,7 +20,8 @@ install:
   - conda update --all
 
 script:
-  - pip install .
+  - pip install . --no-deps -vv
+  # files that pass flake8 should be added here as we go
   - >
     flake8
     ngmix/jacobian.py
@@ -29,6 +30,8 @@ script:
     ngmix/admom_nb.py
     ngmix/fastexp.py
     ngmix/fastexp_nb.py
+  # the `--pyargs` stuff makes sure to run the tests from the installed package
+  # we have to do this since we are using 2to3 to generate the python 3 code
   - pytest -vv --pyargs ngmix
   # make sure to uninstall so that we do not invalidate the build cache
   - pip uninstall ngmix -y
