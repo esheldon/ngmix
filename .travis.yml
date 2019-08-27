@@ -25,3 +25,4 @@ script:
   - pytest -vv --pyargs ngmix
   # make sure to uninstall so that we do not invalidate the build cache
   - pip uninstall ngmix -y
+  - rm -rf ${HOME}/miniconda/envs/test-env/lib/python*/site-packages/ngmix*
