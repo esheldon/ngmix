@@ -1,0 +1,38 @@
+language: generic
+
+matrix:
+  include:
+  - os: linux
+    sudo: required
+    env: TOXENV=py27
+  - os: linux
+    sudo: required
+    env: TOXENV=py36
+
+install:
+  - |
+    echo "installing miniconda"
+    rm -rf $HOME/miniconda
+    mkdir -p $HOME/download
+    if [ "${TOXENV}" = py27 ]; then
+      curl -s https://repo.continuum.io/miniconda/Miniconda2-latest-${CONDA_INST}-x86_64.sh -o $HOME/download/miniconda.sh
+      pyver=2.7
+    else
+      curl -s https://repo.continuum.io/miniconda/Miniconda3-latest-${CONDA_INST}-x86_64.sh -o $HOME/download/miniconda.sh
+      pyver=3.6
+    fi
+    bash $HOME/download/miniconda.sh -b -p $HOME/miniconda
+    export PATH=$HOME/miniconda/bin:$PATH
+    conda config --set always_yes yes --set changeps1 no
+    conda config --add channels defaults
+    conda config --add channels conda-forge
+    conda update -q conda
+    conda info -a
+    conda create -q -n test-env python=${pyver} \
+      numpy numba flake8 pyyaml scipy pytest galsim \
+      scikit-learn statsmodels emcee
+  - source activate test-env
+
+script:
+  - flake8 ngmix
+  - pytest -vv ngmix
