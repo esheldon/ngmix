@@ -2,19 +2,24 @@ import galsim
 import numpy as np
 import pytest
 
+from ngmix import Jacobian
 from ngmix.admom import Admom
-from ngmix import Observation, DiagonalJacobian
+from ngmix import Observation
 from ngmix.moments import fwhm_to_T
 
 
+@pytest.mark.parametrize('jac', [
+    Jacobian(y=26, x=26, dudx=0.25, dudy=0, dvdx=0, dvdy=0.25),
+    Jacobian(y=26, x=26, dudx=0.25, dudy=0, dvdx=0, dvdy=0.3),
+    Jacobian(y=26, x=26, dudx=0.25, dudy=0.01, dvdx=-0.02, dvdy=0.3)])
 @pytest.mark.parametrize('g1_true,g2_true', [
     (0, 0),
     (0.1, -0.2),
     (-0.1, 0.2)])
-def test_admom_smoke(g1_true, g2_true):
+def test_admom_smoke(g1_true, g2_true, jac):
     rng = np.random.RandomState(seed=10)
 
-    scale = 0.25
+    gs_wcs = jac.get_galsim_wcs()
     im = galsim.Gaussian(
         fwhm=0.9
     ).shear(
@@ -24,7 +29,7 @@ def test_admom_smoke(g1_true, g2_true):
     ).drawImage(
         nx=53,
         ny=53,
-        scale=scale)
+        wcs=gs_wcs)
     im = im.array
 
     noise = np.sqrt(np.sum(im**2)/5e2)
@@ -37,9 +42,9 @@ def test_admom_smoke(g1_true, g2_true):
     for _ in range(100):
         _im = im + (rng.normal(size=im.shape) * noise)
         obs = Observation(
-            image=_im / (scale**2),
-            weight=wgt * (scale**4),
-            jacobian=DiagonalJacobian(row=26, col=26, scale=scale))
+            image=_im,
+            weight=wgt,
+            jacobian=jac)
         fitter = Admom(obs, rng=rng)
         fitter.go(1)
         gm = fitter.get_gmix()
