@@ -1,25 +1,29 @@
 from numpy import zeros, sqrt, abs
 
-_jacobian_dtype=[('row0','f8'),
-                 ('col0','f8'),
-                 ('dvdrow','f8'),
-                 ('dvdcol','f8'),
-                 ('dudrow','f8'),
-                 ('dudcol','f8'),
-                 ('det','f8'),
-                 ('sdet','f8')]
+_jacobian_dtype = [
+    ('row0', 'f8'),
+    ('col0', 'f8'),
+    ('dvdrow', 'f8'),
+    ('dvdcol', 'f8'),
+    ('dudrow', 'f8'),
+    ('dudcol', 'f8'),
+    ('det', 'f8'),
+    ('sdet', 'f8')]
 
-_ROWCOL_REQ=['row','col',
-             'dvdrow',
-             'dvdcol',
-             'dudrow',
-             'dudcol']
+_ROWCOL_REQ = [
+    'row', 'col',
+    'dvdrow',
+    'dvdcol',
+    'dudrow',
+    'dudcol']
 
-_XY_REQ=['x','y',
-         'dudx',
-         'dudy',
-         'dvdx',
-         'dvdy']
+_XY_REQ = [
+    'x', 'y',
+    'dudx',
+    'dudy',
+    'dvdx',
+    'dvdy']
+
 
 class Jacobian(object):
     """
@@ -162,25 +166,23 @@ class Jacobian(object):
         from .jacobian_nb import jacobian_get_rowcol
         return jacobian_get_rowcol(self._data, v, u)
 
-
     def __call__(self, row, col):
         from .jacobian_nb import jacobian_get_vu
         return jacobian_get_vu(self._data, row, col)
 
-    cen=property(fget=get_cen)
+    cen = property(fget=get_cen)
 
-    row0=property(fget=get_row0)
-    col0=property(fget=get_col0)
+    row0 = property(fget=get_row0)
+    col0 = property(fget=get_col0)
 
-    dvdrow=property(fget=get_dvdrow)
-    dvdcol=property(fget=get_dvdcol)
-    dudrow=property(fget=get_dudrow)
-    dudcol=property(fget=get_dudcol)
+    dvdrow = property(fget=get_dvdrow)
+    dvdcol = property(fget=get_dvdcol)
+    dudrow = property(fget=get_dudrow)
+    dudcol = property(fget=get_dudcol)
 
-    det=property(fget=get_det)
-    sdet=property(fget=get_sdet)
-    scale=property(fget=get_scale)
-
+    det = property(fget=get_det)
+    sdet = property(fget=get_sdet)
+    scale = property(fget=get_scale)
 
     def set_cen(self, **kw):
         """
@@ -195,7 +197,6 @@ class Jacobian(object):
             self._data['col0'] = kw['x']
         else:
             raise ValueError("expected row=,col= or x=,y=")
-
 
     def copy(self):
         """
@@ -215,13 +216,12 @@ class Jacobian(object):
         """
         import galsim
 
-        dudx=self.dudcol
-        dudy=self.dudrow
-        dvdx=self.dvdcol
-        dvdy=self.dvdrow
+        dudx = self.dudcol
+        dudy = self.dudrow
+        dvdx = self.dvdcol
+        dvdy = self.dvdrow
 
-        return galsim.JacobianWCS(dudx,dudy,dvdx,dvdy)
-
+        return galsim.JacobianWCS(dudx, dudy, dvdx, dvdy)
 
     def _init_rowcol(self, **kw):
 
@@ -232,11 +232,11 @@ class Jacobian(object):
                 if k not in kw:
                     raise ValueError("missing keyword: '%s'" % k)
 
-            dvdrow=kw['dvdrow']
-            dvdcol=kw['dvdcol']
+            dvdrow = kw['dvdrow']
+            dvdcol = kw['dvdcol']
 
-            dudrow=kw['dudrow']
-            dudcol=kw['dudcol']
+            dudrow = kw['dudrow']
+            dudcol = kw['dudcol']
 
         self._finish_init(kw['row'], kw['col'],
                           dvdrow, dvdcol, dudrow, dudcol)
@@ -249,40 +249,39 @@ class Jacobian(object):
                 if k not in kw:
                     raise ValueError("missing keyword: '%s'" % k)
 
-            dvdrow=kw['dvdy']
-            dvdcol=kw['dvdx']
+            dvdrow = kw['dvdy']
+            dvdcol = kw['dvdx']
 
-            dudrow=kw['dudy']
-            dudcol=kw['dudx']
+            dudrow = kw['dudy']
+            dudcol = kw['dudx']
 
         self._finish_init(kw['y'], kw['x'],
                           dvdrow, dvdcol, dudrow, dudcol)
 
     def _extract_wcs(self, wcs):
-        dvdrow=wcs.dvdy
-        dvdcol=wcs.dvdx
+        dvdrow = wcs.dvdy
+        dvdcol = wcs.dvdx
 
-        dudrow=wcs.dudy
-        dudcol=wcs.dudx
+        dudrow = wcs.dudy
+        dudcol = wcs.dudx
 
         return dvdrow, dvdcol, dudrow, dudcol
 
     def _finish_init(self, row0, col0, dvdrow, dvdcol, dudrow, dudcol):
-        self._data['row0']=row0
-        self._data['col0']=col0
+        self._data['row0'] = row0
+        self._data['col0'] = col0
 
-        self._data['dvdrow']=dvdrow
-        self._data['dvdcol']=dvdcol
+        self._data['dvdrow'] = dvdrow
+        self._data['dvdcol'] = dvdcol
 
-        self._data['dudrow']=dudrow
-        self._data['dudcol']=dudcol
+        self._data['dudrow'] = dudrow
+        self._data['dudcol'] = dudcol
 
         self._data['det'] = dvdrow*dudcol - dvdcol*dudrow
         self._data['sdet'] = sqrt(abs(self._data['det']))
 
-
     def __repr__(self):
-        fmt=(
+        fmt = (
             'row0: %-10.5g col0: %-10.5g dvdrow: %-10.5g '
             'dvdcol: %-10.5g dudrow: %-10.5g dudcol: %-10.5g'
         )
@@ -292,6 +291,7 @@ class Jacobian(object):
                       self.dvdcol,
                       self.dudrow,
                       self.dudcol)
+
 
 class DiagonalJacobian(Jacobian):
     """
@@ -322,23 +322,24 @@ class DiagonalJacobian(Jacobian):
     def __init__(self, scale=1.0, **kw):
 
         if 'x' in kw:
-            assert 'y' in kw,"send both x= and y="
-            super(DiagonalJacobian,self).__init__(x=kw['x'],
-                                                  y=kw['y'],
-                                                  dudx=scale,
-                                                  dudy=0.0,
-                                                  dvdx=0.0,
-                                                  dvdy=scale)
+            assert 'y' in kw, "send both x= and y="
+            super(DiagonalJacobian, self).__init__(x=kw['x'],
+                                                   y=kw['y'],
+                                                   dudx=scale,
+                                                   dudy=0.0,
+                                                   dvdx=0.0,
+                                                   dvdy=scale)
         elif 'row' in kw:
-            assert 'col' in kw,"send both row= and col="
-            super(DiagonalJacobian,self).__init__(row=kw['row'],
-                                                  col=kw['col'],
-                                                  dvdrow=scale,
-                                                  dvdcol=0.0,
-                                                  dudrow=0.0,
-                                                  dudcol=scale)
+            assert 'col' in kw, "send both row= and col="
+            super(DiagonalJacobian, self).__init__(row=kw['row'],
+                                                   col=kw['col'],
+                                                   dvdrow=scale,
+                                                   dvdcol=0.0,
+                                                   dudrow=0.0,
+                                                   dudcol=scale)
         else:
             raise ValueError("expected row=,col= or x=,y=")
+
 
 class UnitJacobian(DiagonalJacobian):
     """
@@ -364,6 +365,4 @@ class UnitJacobian(DiagonalJacobian):
     """
 
     def __init__(self, **kw):
-        super(UnitJacobian,self).__init__(scale=1.0, **kw)
-
-
+        super(UnitJacobian, self).__init__(scale=1.0, **kw)
