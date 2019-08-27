@@ -17,9 +17,10 @@ install:
   - if [[ ! -e "$HOME/miniconda/bin/conda" ]]; then "./.ci_scripts/install_miniconda.sh"; fi
   - export PATH=$HOME/miniconda/bin:$PATH
   - source activate test-env
-  - conda update --all
+  - conda update --all -y
 
 script:
   - pip install .
   # - flake8 ngmix  # skipping this for now
   - pytest -vv --pyargs ngmix
+  - pip uninstall ngmix -y
