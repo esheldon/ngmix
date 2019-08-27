@@ -2,15 +2,22 @@ import galsim
 import numpy as np
 import pytest
 
+import ngmix
 from ngmix.fitting import LMSimple
 from ngmix import Jacobian
 from ngmix import Observation
 from ngmix.moments import fwhm_to_T
 
-GTOL = 4e-4
+GTOL = 2e-4
 
 
-@pytest.mark.parametrize('s2n', [1e2, 1e3, 1e9, 1e12])
+@pytest.mark.parametrize('s2n', [
+    1e2,
+    1e3,
+    1e9,
+    1e12,
+    1e16
+])
 @pytest.mark.parametrize('jac', [
     Jacobian(y=16, x=16, dudx=0.25, dudy=0, dvdx=0, dvdy=0.25),
     Jacobian(y=26, x=26, dudx=0.25, dudy=0, dvdx=0, dvdy=0.3),
@@ -23,6 +30,16 @@ GTOL = 4e-4
 ])
 def test_ml_fitting_gauss_smoke(g1_true, g2_true, jac, s2n):
     rng = np.random.RandomState(seed=10)
+
+    g_prior = ngmix.priors.GPriorBA(0.5)
+    cen_prior = ngmix.priors.CenPrior(0, 0, jac.scale, jac.scale)
+    T_prior = ngmix.priors.FlatPrior(0.1, 2)
+    F_prior = ngmix.priors.FlatPrior(1e-4, 1e9)
+    prior = ngmix.joint_prior.PriorSimpleSep(
+        cen_prior,
+        g_prior,
+        T_prior,
+        F_prior)
 
     gs_wcs = jac.get_galsim_wcs()
     im = galsim.Gaussian(
@@ -59,7 +76,7 @@ def test_ml_fitting_gauss_smoke(g1_true, g2_true, jac, s2n):
             image=_im,
             weight=wgt,
             jacobian=jac)
-        fitter = LMSimple(obs, 'gauss')
+        fitter = LMSimple(obs, 'gauss', prior=prior)
         fitter.go(guess + rng.normal(size=6) * 0.01)
         res = fitter.get_result()
         if res['flags'] == 0:
