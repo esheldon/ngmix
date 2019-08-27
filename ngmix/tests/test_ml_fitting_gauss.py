@@ -10,7 +10,7 @@ from ngmix.moments import fwhm_to_T
 GTOL = 4e-4
 
 
-@pytest.mark.parametrize('s2n', [1e2, 1e3, 1e9])
+@pytest.mark.parametrize('s2n', [1e2, 1e3, 1e9, 1e12])
 @pytest.mark.parametrize('jac', [
     Jacobian(y=16, x=16, dudx=0.25, dudy=0, dvdx=0, dvdy=0.25),
     Jacobian(y=26, x=26, dudx=0.25, dudy=0, dvdx=0, dvdy=0.3),
