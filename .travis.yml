@@ -31,11 +31,12 @@ install:
   - if [ "${TOXENV}" = py27 ]; then pyver=2.7; fi
   - if [ "${TOXENV}" = py36 ]; then pyver=3.6; fi
   - >
-    conda create -q -n test-env python=${pyver}
+    conda create -q -n test-env python=${pyver} pip setuptools
     numpy numba flake8 pyyaml scipy pytest galsim
     scikit-learn statsmodels emcee
   - source activate test-env
 
 script:
+  - pip install .
   # - flake8 ngmix  # skipping this for now
   - pytest -vv ngmix
