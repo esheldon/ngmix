@@ -2,26 +2,27 @@ import galsim
 import numpy as np
 import pytest
 
+from ngmix.fitting import LMSimple
 from ngmix import Jacobian
-from ngmix.admom import Admom
 from ngmix import Observation
 from ngmix.moments import fwhm_to_T
-from ngmix.gexceptions import GMixRangeError
 
-GTOL = 4e-4
+GTOL = 3e-4
 
 
 @pytest.mark.parametrize('s2n', [1e2, 1e3, 1e9])
 @pytest.mark.parametrize('jac', [
-    Jacobian(y=26, x=26, dudx=0.25, dudy=0, dvdx=0, dvdy=0.25),
+    Jacobian(y=16, x=16, dudx=0.25, dudy=0, dvdx=0, dvdy=0.25),
     Jacobian(y=26, x=26, dudx=0.25, dudy=0, dvdx=0, dvdy=0.3),
-    Jacobian(y=26, x=26, dudx=0.25, dudy=0.01, dvdx=-0.02, dvdy=0.3)])
+    Jacobian(y=26, x=26, dudx=0.25, dudy=0.01, dvdx=-0.02, dvdy=0.3)
+])
 @pytest.mark.parametrize('g1_true,g2_true', [
     (0, 0),
     (0.1, -0.2),
-    (-0.1, 0.2)])
-def test_admom_smoke(g1_true, g2_true, jac, s2n):
-    rng = np.random.RandomState(seed=100)
+    (-0.1, 0.2)
+])
+def test_ml_fitting_gauss_smoke(g1_true, g2_true, jac, s2n):
+    rng = np.random.RandomState(seed=10)
 
     gs_wcs = jac.get_galsim_wcs()
     im = galsim.Gaussian(
@@ -31,8 +32,8 @@ def test_admom_smoke(g1_true, g2_true, jac, s2n):
     ).withFlux(
         400
     ).drawImage(
-        nx=53,
-        ny=53,
+        nx=33,
+        ny=33,
         wcs=gs_wcs,
         method='no_pixel')
     im = im.array
@@ -40,6 +41,14 @@ def test_admom_smoke(g1_true, g2_true, jac, s2n):
     noise = np.sqrt(np.sum(im**2))/s2n
 
     wgt = np.ones_like(im) / noise**2
+
+    guess = np.ones(6) * 0.1
+    guess[0] = 0
+    guess[1] = 0
+    guess[2] = g1_true
+    guess[3] = g2_true
+    guess[4] = 2
+    guess[5] = 400
 
     g1arr = []
     g2arr = []
@@ -50,17 +59,14 @@ def test_admom_smoke(g1_true, g2_true, jac, s2n):
             image=_im,
             weight=wgt,
             jacobian=jac)
-        fitter = Admom(obs, rng=rng)
-        fitter.go(1)
-        try:
-            gm = fitter.get_gmix()
-            _g1, _g2, _T = gm.get_g1g2T()
-
+        fitter = LMSimple(obs, 'gauss')
+        fitter.go(guess + rng.normal(size=6) * 0.01)
+        res = fitter.get_result()
+        if res['flags'] == 0:
+            _g1, _g2, _T = res['g'][0], res['g'][1], res['pars'][4]
             g1arr.append(_g1)
             g2arr.append(_g2)
             Tarr.append(_T)
-        except GMixRangeError:
-            pass
 
     g1 = np.mean(g1arr)
     g1_err = np.std(g1arr) / np.sqrt(len(g1arr))
