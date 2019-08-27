@@ -37,6 +37,6 @@ install:
   - source activate test-env
 
 script:
-  - pip install -e .
+  - pip install .
   # - flake8 ngmix  # skipping this for now
-  - pytest -vv ngmix
+  - pytest -vv --pyargs ngmix
