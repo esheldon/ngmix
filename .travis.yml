@@ -21,7 +21,14 @@ install:
 
 script:
   - pip install .
-  # - flake8 ngmix  # skipping this for now
+  - >
+    flake8
+    ngmix/jacobian.py
+    ngmix/jacobian_nb.py
+    ngmix/admom.py
+    ngmix/admom_nb.py
+    ngmix/fastexp.py
+    ngmix/fastexp_nb.py
   - pytest -vv --pyargs ngmix
   # make sure to uninstall so that we do not invalidate the build cache
   - pip uninstall ngmix -y

@@ -1,7 +1,7 @@
 try:
     xrange
 except NameError:
-    xrange=range
+    xrange = range
 
 from numba import njit
 
@@ -11,12 +11,13 @@ from .gmix_nb import (
     GMIX_LOW_DETVAL,
 )
 
-ADMOM_EDGE   = 0x1
-ADMOM_SHIFT  = 0x2
-ADMOM_FAINT  = 0x4
-ADMOM_SMALL  = 0x8
-ADMOM_DET    = 0x10
-ADMOM_MAXIT  = 0x20
+ADMOM_EDGE = 0x1
+ADMOM_SHIFT = 0x2
+ADMOM_FAINT = 0x4
+ADMOM_SMALL = 0x8
+ADMOM_DET = 0x10
+ADMOM_MAXIT = 0x20
+
 
 @njit
 def admom(confarray, wt, pixels, resarray):
@@ -30,12 +31,12 @@ def admom(confarray, wt, pixels, resarray):
     """
     # to simplify notation
     conf = confarray[0]
-    res  = resarray[0]
+    res = resarray[0]
 
-    roworig=wt['row'][0]
-    colorig=wt['col'][0]
+    roworig = wt['row'][0]
+    colorig = wt['col'][0]
 
-    e1old=e2old=Told=-9999.0
+    e1old = e2old = Told = -9999.0
     for i in xrange(conf['maxit']):
 
         if wt['det'][0] < GMIX_LOW_DETVAL:
@@ -55,8 +56,8 @@ def admom(confarray, wt, pixels, resarray):
         wt['row'][0] = res['sums'][0]/res['sums'][5]
         wt['col'][0] = res['sums'][1]/res['sums'][5]
 
-        if ( abs(wt['row'][0]-roworig) > conf['shiftmax']
-                 or abs(wt['col'][0]-colorig) > conf['shiftmax'] ):
+        if (abs(wt['row'][0]-roworig) > conf['shiftmax']
+                or abs(wt['col'][0]-colorig) > conf['shiftmax']):
             res['flags'] = ADMOM_SHIFT
             break
 
@@ -71,7 +72,7 @@ def admom(confarray, wt, pixels, resarray):
         finv = 1.0/res['sums'][5]
         M1 = res['sums'][2]*finv
         M2 = res['sums'][3]*finv
-        T  = res['sums'][4]*finv
+        T = res['sums'][4]*finv
 
         Irr = 0.5*(T - M1)
         Icc = 0.5*(T + M1)
@@ -84,12 +85,9 @@ def admom(confarray, wt, pixels, resarray):
         e1 = (Icc - Irr)/T
         e2 = 2*Irc/T
 
-        if (
-                ( abs(e1-e1old) < conf['etol'])
-              and
-                ( abs(e2-e2old) < conf['etol'])
-              and
-                ( abs(T/Told-1.) < conf['Ttol'])  ):
+        if ((abs(e1-e1old) < conf['etol'])
+                and (abs(e2-e2old) < conf['etol'])
+                and (abs(T/Told-1.) < conf['Ttol'])):
 
             res['pars'][0] = wt['row'][0]
             res['pars'][1] = wt['col'][0]
@@ -107,9 +105,9 @@ def admom(confarray, wt, pixels, resarray):
             if res['flags'] != 0:
                 break
 
-            e1old=e1
-            e2old=e2
-            Told=T
+            e1old = e1
+            e2old = e2
+            Told = T
 
     res['numiter'] = i
 
@@ -136,6 +134,7 @@ def admom_censums(wt, pixels, res):
         res['sums'][1] += wdata*pixel['u']
         res['sums'][5] += wdata
 
+
 @njit
 def admom_momsums(wt, pixels, res):
     """
@@ -160,7 +159,6 @@ def admom_momsums(wt, pixels, res):
         wdata = weight*pixel['val']
         w2 = weight*weight
 
-
         F[0] = pixel['v']
         F[1] = pixel['u']
         F[2] = umod*umod - vmod*vmod
@@ -174,7 +172,7 @@ def admom_momsums(wt, pixels, res):
         for i in xrange(6):
             res['sums'][i] += wdata*F[i]
             for j in xrange(6):
-                res['sums_cov'][i,j] += w2*var*F[i]*F[j]
+                res['sums_cov'][i, j] += w2*var*F[i]*F[j]
 
 
 @njit
@@ -202,26 +200,26 @@ def deweight_moments(wt, Irr, Irc, Icc, res):
     Wcc = wt['icc'][0]
     detw = Wrr*Wcc - Wrc*Wrc
     if detw <= GMIX_LOW_DETVAL:
-        res['flags']=ADMOM_DET
+        res['flags'] = ADMOM_DET
         return
 
-    idetw=1.0/detw
-    idetm=1.0/detm
+    idetw = 1.0/detw
+    idetm = 1.0/detm
 
     # Nrr etc. are actually of the inverted covariance matrix
-    Nrr =  Icc*idetm - Wcc*idetw
-    Ncc =  Irr*idetm - Wrr*idetw
+    Nrr = Icc*idetm - Wcc*idetw
+    Ncc = Irr*idetm - Wrr*idetw
     Nrc = -Irc*idetm + Wrc*idetw
     detn = Nrr*Ncc - Nrc*Nrc
 
     if detn <= GMIX_LOW_DETVAL:
-        res['flags']=ADMOM_DET
+        res['flags'] = ADMOM_DET
         return
 
     # now set from the inverted matrix
-    idetn=1./detn
-    wt['irr'][0] =  Ncc*idetn
-    wt['icc'][0] =  Nrr*idetn
+    idetn = 1./detn
+    wt['irr'][0] = Ncc*idetn
+    wt['icc'][0] = Nrr*idetn
     wt['irc'][0] = -Nrc*idetn
     wt['det'][0] = (
         wt['irr'][0]*wt['icc'][0] - wt['irc'][0]*wt['irc'][0]
@@ -233,13 +231,13 @@ def clear_result(res):
     """
     clear some fields in the result structure
     """
-    res['npix']=0
-    res['wsum']=0.0
+    res['npix'] = 0
+    res['wsum'] = 0.0
     res['sums'][:] = 0.0
-    res['sums_cov'][:,:] = 0.0
+    res['sums_cov'][:, :] = 0.0
     res['pars'][:] = -9999.0
 
-    #res['flags']=0
-    #res['numiter']=0
-    #res['nimage']=0
-    #res['F'][:]=0.0
+    # res['flags']=0
+    # res['numiter']=0
+    # res['nimage']=0
+    # res['F'][:]=0.0
