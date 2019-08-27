@@ -12,9 +12,7 @@ fi
 
 bash $HOME/download/miniconda.sh -b -p $HOME/miniconda
 export PATH=$HOME/miniconda/bin:$PATH
-conda config --set always_yes yes --set changeps1 no
-conda config --add channels defaults
-conda config --add channels conda-forge
+cp .ci_scripts/condarc $HOME/miniconda/.condarc
 conda update -q conda
 conda info -a
 if [ "${TOXENV}" = py27 ]; then pyver=2.7; fi

@@ -16,9 +16,6 @@ cache:
 install:
   - if [[ ! -e "$HOME/miniconda/bin/conda" ]]; then "./.ci_scripts/install_miniconda.sh"; fi
   - export PATH=$HOME/miniconda/bin:$PATH
-  - conda config --set always_yes yes --set changeps1 no
-  - conda config --add channels defaults
-  - conda config --add channels conda-forge
   - source activate test-env
   - conda update --all
 
@@ -26,4 +23,5 @@ script:
   - pip install .
   # - flake8 ngmix  # skipping this for now
   - pytest -vv --pyargs ngmix
+  # make sure to uninstall so that we do not invalidate the build cache
   - pip uninstall ngmix -y
