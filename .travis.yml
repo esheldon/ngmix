@@ -14,7 +14,7 @@ cache:
     - $HOME/miniconda
 
 install:
-  - if [[ ! -e "$HOME/miniconda/bin/cond" ]]; then "./.ci_support/install_miniconda.sh"; fi
+  - if [[ ! -e "$HOME/miniconda/bin/conda" ]]; then "./.ci_support/install_miniconda.sh"; fi
   - export PATH=$HOME/miniconda/bin:$PATH
   - source activate test-env
   - conda update --all
