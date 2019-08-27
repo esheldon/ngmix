@@ -3,7 +3,7 @@ from __future__ import print_function, absolute_import, division
 try:
     xrange
 except NameError:
-    xrange=range
+    xrange = range
 
 import numpy
 from numpy import diag
@@ -12,12 +12,12 @@ from .gmix import GMix, GMixModel
 from .shape import e1e2_to_g1g2
 from .observation import ObsList, MultiBandObsList
 
+
 def run_admom(obs, guess, **kw):
-    am=Admom(obs, **kw)
-
+    am = Admom(obs, **kw)
     am.go(guess)
-
     return am
+
 
 class Admom(object):
     """
