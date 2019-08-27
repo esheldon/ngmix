@@ -8,14 +8,14 @@ from ngmix import Observation
 from ngmix.moments import fwhm_to_T
 from ngmix.gexceptions import GMixRangeError
 
-GTOL = 4e-4
+GTOL = 1e-3
 
 
-@pytest.mark.parametrize('s2n', [1e2, 1e3, 1e9])
+@pytest.mark.parametrize('s2n', [1e2, 1e3, 1e9, 1e12])
 @pytest.mark.parametrize('jac', [
     Jacobian(y=26, x=26, dudx=0.25, dudy=0, dvdx=0, dvdy=0.25),
     Jacobian(y=26, x=26, dudx=0.25, dudy=0, dvdx=0, dvdy=0.3),
-    Jacobian(y=26, x=26, dudx=0.25, dudy=0.01, dvdx=-0.02, dvdy=0.3)])
+    Jacobian(y=26, x=26, dudx=0.25, dudy=0.1, dvdx=-0.2, dvdy=0.3)])
 @pytest.mark.parametrize('g1_true,g2_true', [
     (0, 0),
     (0.1, -0.2),
