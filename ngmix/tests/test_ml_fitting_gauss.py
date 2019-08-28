@@ -8,27 +8,20 @@ from ngmix import Jacobian
 from ngmix import Observation
 from ngmix.moments import fwhm_to_T
 
-GTOL = 2e-4
+GTOL = 5e-4
 
 
-@pytest.mark.parametrize('s2n', [
-    1e2,
-    1e3,
-    1e9,
-    1e12,
-    1e16
-])
-@pytest.mark.parametrize('jac', [
-    Jacobian(y=16, x=16, dudx=0.25, dudy=0, dvdx=0, dvdy=0.25),
-    Jacobian(y=26, x=26, dudx=0.25, dudy=0, dvdx=0, dvdy=0.3),
-    Jacobian(y=26, x=26, dudx=0.25, dudy=0.1, dvdx=-0.2, dvdy=0.3)
-])
-@pytest.mark.parametrize('g1_true,g2_true', [
-    (0, 0),
-    (0.1, -0.2),
-    (-0.1, 0.2)
-])
-def test_ml_fitting_gauss_smoke(g1_true, g2_true, jac, s2n):
+@pytest.mark.parametrize('s2n', [1e2, 1e16])
+@pytest.mark.parametrize('wcs_g1', [-0.5, 0, 0.2])
+@pytest.mark.parametrize('wcs_g2', [-0.2, 0, 0.5])
+@pytest.mark.parametrize('g1_true', [-0.1, 0, 0.2])
+@pytest.mark.parametrize('g2_true', [-0.2, 0, 0.1])
+def test_ml_fitting_gauss_smoke(g1_true, g2_true, wcs_g1, wcs_g2, s2n):
+    jc = galsim.ShearWCS(
+        0.25, galsim.Shear(g1=wcs_g1, g2=wcs_g2)).jacobian()
+    jac = Jacobian(
+        y=16, x=16,
+        dudx=jc.dudx, dudy=jc.dudy, dvdx=jc.dvdx, dvdy=jc.dvdy)
     rng = np.random.RandomState(seed=10)
 
     g_prior = ngmix.priors.GPriorBA(0.5)
