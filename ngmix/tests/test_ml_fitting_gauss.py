@@ -17,12 +17,34 @@ GTOL = 5e-4
 @pytest.mark.parametrize('g1_true', [-0.1, 0, 0.2])
 @pytest.mark.parametrize('g2_true', [-0.2, 0, 0.1])
 def test_ml_fitting_gauss_smoke(g1_true, g2_true, wcs_g1, wcs_g2, s2n):
-    jc = galsim.ShearWCS(
-        0.25, galsim.Shear(g1=wcs_g1, g2=wcs_g2)).jacobian()
-    jac = Jacobian(
-        y=16, x=16,
-        dudx=jc.dudx, dudy=jc.dudy, dvdx=jc.dvdx, dvdy=jc.dvdy)
     rng = np.random.RandomState(seed=10)
+
+    image_size = 33
+    cen = (image_size - 1)/2
+    gs_wcs = galsim.ShearWCS(
+        0.25, galsim.Shear(g1=wcs_g1, g2=wcs_g2)).jacobian()
+
+    scale = np.sqrt(gs_wcs.pixelArea())
+    shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+    xy = gs_wcs.toImage(galsim.PositionD(shift))
+
+    jac = Jacobian(
+        y=cen + xy.y, x=cen + xy.x,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy, dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
+    im = galsim.Gaussian(
+        fwhm=0.9
+    ).shear(
+        g1=g1_true, g2=g2_true
+    ).withFlux(
+        400
+    ).shift(
+        dx=shift[0], dy=shift[1]
+    ).drawImage(
+        nx=image_size,
+        ny=image_size,
+        wcs=gs_wcs,
+        method='no_pixel')
 
     g_prior = ngmix.priors.GPriorBA(0.5)
     cen_prior = ngmix.priors.CenPrior(0, 0, jac.scale, jac.scale)
@@ -34,7 +56,6 @@ def test_ml_fitting_gauss_smoke(g1_true, g2_true, wcs_g1, wcs_g2, s2n):
         T_prior,
         F_prior)
 
-    gs_wcs = jac.get_galsim_wcs()
     im = galsim.Gaussian(
         fwhm=0.9
     ).shear(
@@ -42,14 +63,12 @@ def test_ml_fitting_gauss_smoke(g1_true, g2_true, wcs_g1, wcs_g2, s2n):
     ).withFlux(
         400
     ).drawImage(
-        nx=33,
-        ny=33,
+        nx=image_size,
+        ny=image_size,
         wcs=gs_wcs,
         method='no_pixel')
     im = im.array
-
     noise = np.sqrt(np.sum(im**2))/s2n
-
     wgt = np.ones_like(im) / noise**2
 
     guess = np.ones(6) * 0.1
