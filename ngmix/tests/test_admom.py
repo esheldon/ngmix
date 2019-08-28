@@ -65,7 +65,7 @@ def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
             jacobian=jac)
         fitter = Admom(obs, rng=rng)
         try:
-            fitter.go(1)
+            fitter.go(fwhm_to_T(0.9))
             gm = fitter.get_gmix()
             _g1, _g2, _T = gm.get_g1g2T()
 

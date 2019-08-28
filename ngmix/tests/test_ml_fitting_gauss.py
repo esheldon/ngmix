@@ -8,7 +8,7 @@ from ngmix import Jacobian
 from ngmix import Observation
 from ngmix.moments import fwhm_to_T
 
-GTOL = 2e-4
+GTOL = 1e-4
 
 
 @pytest.mark.parametrize('wcs_g1', [-0.5, 0, 0.2])
@@ -53,7 +53,7 @@ def test_ml_fitting_gauss_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
     guess[1] = 0
     guess[2] = g1_true
     guess[3] = g2_true
-    guess[4] = 2
+    guess[4] = fwhm_to_T(0.9)
     guess[5] = 400
 
     g1arr = []

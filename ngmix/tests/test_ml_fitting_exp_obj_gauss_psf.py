@@ -66,7 +66,7 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
     guess[1] = 0
     guess[2] = g1_true
     guess[3] = g2_true
-    guess[4] = 2
+    guess[4] = fwhm_to_T(0.5)
     guess[5] = 400
 
     g1arr = []
