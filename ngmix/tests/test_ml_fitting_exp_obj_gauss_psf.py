@@ -8,25 +8,25 @@ from ngmix import Jacobian
 from ngmix import Observation
 from ngmix.moments import fwhm_to_T
 
-GTOL = 3e-4
+GTOL = 1e-4
 
 
-@pytest.mark.parametrize('s2n', [1e2, 1e16])
 @pytest.mark.parametrize('wcs_g1', [-0.5, 0, 0.2])
 @pytest.mark.parametrize('wcs_g2', [-0.2, 0, 0.5])
 @pytest.mark.parametrize('g1_true', [-0.1, 0, 0.2])
 @pytest.mark.parametrize('g2_true', [-0.2, 0, 0.1])
 def test_ml_fitting_exp_obj_gauss_psf_smoke(
-        g1_true, g2_true, wcs_g1, wcs_g2, s2n):
-    jc = galsim.ShearWCS(
-        0.25, galsim.Shear(g1=wcs_g1, g2=wcs_g2)).jacobian()
-    jac = Jacobian(
-        y=16, x=16,
-        dudx=jc.dudx, dudy=jc.dudy, dvdx=jc.dvdx, dvdy=jc.dvdy)
+        g1_true, g2_true, wcs_g1, wcs_g2):
     rng = np.random.RandomState(seed=10)
 
+    image_size = 33
+    cen = (image_size - 1)/2
+    gs_wcs = galsim.ShearWCS(
+        0.25, galsim.Shear(g1=wcs_g1, g2=wcs_g2)).jacobian()
+    scale = np.sqrt(gs_wcs.pixelArea())
+
     g_prior = ngmix.priors.GPriorBA(0.5)
-    cen_prior = ngmix.priors.CenPrior(0, 0, jac.scale, jac.scale)
+    cen_prior = ngmix.priors.CenPrior(0, 0, scale, scale)
     T_prior = ngmix.priors.FlatPrior(0.1, 2)
     F_prior = ngmix.priors.FlatPrior(1e-4, 1e9)
     prior = ngmix.joint_prior.PriorSimpleSep(
@@ -35,7 +35,6 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
         T_prior,
         F_prior)
 
-    gs_wcs = jac.get_galsim_wcs()
     gal = galsim.Exponential(
         half_light_radius=0.5
     ).shear(
@@ -58,8 +57,7 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
         ny=33,
         wcs=gs_wcs,
         method='no_pixel').array
-
-    noise = np.sqrt(np.sum(im**2))/s2n
+    noise = np.sqrt(np.sum(im**2)) / 1e16
 
     wgt = np.ones_like(im) / noise**2
 
@@ -75,6 +73,22 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
     g2arr = []
     Tarr = []
     for _ in range(50):
+        shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+        xy = gs_wcs.toImage(galsim.PositionD(shift))
+
+        im = obj.shift(
+            dx=shift[0], dy=shift[1]
+        ).drawImage(
+            nx=image_size,
+            ny=image_size,
+            wcs=gs_wcs,
+            method='no_pixel').array
+
+        jac = Jacobian(
+            y=cen + xy.y, x=cen + xy.x,
+            dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+            dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
         _im = im + (rng.normal(size=im.shape) * noise)
         obs = Observation(
             image=_im,
@@ -91,11 +105,9 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
             Tarr.append(_T)
 
     g1 = np.mean(g1arr)
-    g1_err = np.std(g1arr) / np.sqrt(len(g1arr))
     g2 = np.mean(g2arr)
-    g2_err = np.std(g2arr) / np.sqrt(len(g2arr))
-    assert np.abs(g1 - g1_true) < max(GTOL, g1_err * 5)
-    assert np.abs(g2 - g2_true) < max(GTOL, g2_err * 5)
+    assert np.abs(g1 - g1_true) < GTOL
+    assert np.abs(g2 - g2_true) < GTOL
 
     if g1 == 0 and g2 == 0:
         T = np.mean(Tarr)
