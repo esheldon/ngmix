@@ -51,7 +51,8 @@ def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
             nx=image_size,
             ny=image_size,
             wcs=gs_wcs,
-            method='no_pixel').array
+            method='no_pixel',
+            dtype=np.float64).array
 
         jac = Jacobian(
             y=cen + xy.y, x=cen + xy.x,

@@ -82,7 +82,8 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
             nx=image_size,
             ny=image_size,
             wcs=gs_wcs,
-            method='no_pixel').array
+            method='no_pixel',
+            dtype=np.float64).array
 
         jac = Jacobian(
             y=cen + xy.y, x=cen + xy.x,
