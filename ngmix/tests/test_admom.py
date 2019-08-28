@@ -8,7 +8,7 @@ from ngmix import Observation
 from ngmix.moments import fwhm_to_T
 from ngmix.gexceptions import GMixRangeError
 
-GTOL = 1e-3
+GTOL = 2e-3
 
 
 @pytest.mark.parametrize('s2n', [1e3, 1e16])
