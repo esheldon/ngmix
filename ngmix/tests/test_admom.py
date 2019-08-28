@@ -46,7 +46,7 @@ def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, s2n):
     g1arr = []
     g2arr = []
     Tarr = []
-    for _ in range(100):
+    for _ in range(50):
         _im = im + (rng.normal(size=im.shape) * noise)
         obs = Observation(
             image=_im,

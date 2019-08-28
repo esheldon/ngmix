@@ -74,7 +74,7 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
     g1arr = []
     g2arr = []
     Tarr = []
-    for _ in range(100):
+    for _ in range(50):
         _im = im + (rng.normal(size=im.shape) * noise)
         obs = Observation(
             image=_im,
