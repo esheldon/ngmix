@@ -21,4 +21,4 @@ conda create -q -n test-env python=${pyver} pip setuptools \
     numpy numba flake8 pyyaml scipy pytest galsim \
     scikit-learn statsmodels emcee
 
-conda clean --all 
+conda clean --all

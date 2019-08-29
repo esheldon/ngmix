@@ -30,7 +30,6 @@ script:
     ngmix/admom.py
     ngmix/admom_nb.py
     ngmix/fastexp.py
-    ngmix/fastexp_nb.py
   # the `--pyargs` stuff makes sure to run the tests from the installed package
   # we have to do this since we are using 2to3 to generate the python 3 code
   - pytest -vv --pyargs ngmix
