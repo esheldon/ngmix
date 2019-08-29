@@ -6,7 +6,7 @@ except NameError:
 import numpy
 from numpy import array, nan
 from numba import njit
-from .fastexp_nb import exp3
+from .fastexp import expd
 
 # need to make this a pure python exception
 from .gexceptions import GMixRangeError
@@ -55,7 +55,7 @@ def gauss2d_eval_pixel_fast(gauss, pixel, max_chi2=25.0):
             - 2.0*gauss['drc']*vdiff*udiff )
 
     if chi2 < max_chi2 and chi2 >= 0.0:
-        model_val = gauss['pnorm']*exp3( -0.5*chi2 )
+        model_val = gauss['pnorm']*expd( -0.5*chi2 )
 
     return model_val
 
@@ -708,6 +708,3 @@ def get_weighted_sums(wt, pixels, res, maxrad):
                 res['sums'][i] += wdata*F[i]
                 for j in xrange(6):
                     res['sums_cov'][i,j] += w2*var*F[i]*F[j]
-
-
-

@@ -8,8 +8,6 @@ from ngmix import Jacobian
 from ngmix import Observation
 from ngmix.moments import fwhm_to_T
 
-GTOL = 1e-4
-
 
 @pytest.mark.parametrize('wcs_g1', [-0.5, 0, 0.2])
 @pytest.mark.parametrize('wcs_g2', [-0.2, 0, 0.5])
@@ -53,8 +51,8 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
     )
 
     im = obj.drawImage(
-        nx=33,
-        ny=33,
+        nx=image_size,
+        ny=image_size,
         wcs=gs_wcs,
         method='no_pixel').array
     noise = np.sqrt(np.sum(im**2)) / 1e16
@@ -71,7 +69,9 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
 
     g1arr = []
     g2arr = []
-    Tarr = []
+    farr = []
+    xarr = []
+    yarr = []
     for _ in range(50):
         shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
         xy = gs_wcs.toImage(galsim.PositionD(shift))
@@ -100,17 +100,20 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
         fitter.go(guess + rng.normal(size=6) * 0.01)
         res = fitter.get_result()
         if res['flags'] == 0:
-            _g1, _g2, _T = res['g'][0], res['g'][1], res['pars'][4]
+            _g1, _g2, _ = res['g'][0], res['g'][1], res['pars'][4]
             g1arr.append(_g1)
             g2arr.append(_g2)
-            Tarr.append(_T)
+            farr.append(res['pars'][5])
+            xarr.append(res['pars'][1])
+            yarr.append(res['pars'][0])
 
     g1 = np.mean(g1arr)
     g2 = np.mean(g2arr)
-    assert np.abs(g1 - g1_true) < GTOL
-    assert np.abs(g2 - g2_true) < GTOL
+    gtol = 1e-5
+    assert np.abs(g1 - g1_true) < gtol
+    assert np.abs(g2 - g2_true) < gtol
 
-    if g1 == 0 and g2 == 0:
-        T = np.mean(Tarr)
-        T_err = np.std(Tarr) / np.sqrt(len(Tarr))
-        assert np.abs(T - fwhm_to_T(0.9)) < T_err * 5
+    xerr = np.std(xarr) / np.sqrt(len(xarr))
+    assert np.abs(np.mean(xarr)) < xerr * 5
+    yerr = np.std(yarr) / np.sqrt(len(yarr))
+    assert np.abs(np.mean(yarr)) < yerr * 5

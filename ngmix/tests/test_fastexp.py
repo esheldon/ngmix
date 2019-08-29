@@ -2,16 +2,20 @@ import time
 import numpy as np
 import pytest
 
-from ngmix.fastexp_nb import exp3
+from ngmix.fastexp import expd
 
 
-@pytest.mark.parametrize('x', [-200, -100, -10, -2, -0.5, 0])
+@pytest.mark.parametrize('x', [-200, -100, -10, -2, -0.5, -1e-5, 0])
 def test_fastexp_smoke(x):
-    assert np.allclose(np.exp(x), exp3(x), atol=1e-4, rtol=1e-2)
+    assert np.allclose(np.exp(x), expd(x))
 
 
-@pytest.mark.parametrize('x', [-200, -100, -10, -2, -0.5, 0])
+@pytest.mark.parametrize('x', [-200, -100, -10, -2, -0.5, -1e-5, 0])
 def test_fastexp_timing(x):
+    # call a few tims for numba overhead
+    for _ in range(2):
+        expd(x)
+
     t0 = time.time()
     for _ in range(1000):
         np.exp(x)
@@ -19,8 +23,8 @@ def test_fastexp_timing(x):
 
     t0f = time.time()
     for _ in range(1000):
-        exp3(x)
+        expd(x)
     t0f = time.time() - t0f
 
-    # it should be at least 2x faster
-    assert t0f < t0 * 0.5, {'numpy': t0, 'fastexp': t0f}
+    # it should be faster
+    assert t0f < t0, {'numpy': t0, 'fastexp': t0f}

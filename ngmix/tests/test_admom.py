@@ -8,8 +8,6 @@ from ngmix import Observation
 from ngmix.moments import fwhm_to_T
 from ngmix.gexceptions import GMixRangeError
 
-GTOL = 7e-5
-
 
 @pytest.mark.parametrize('wcs_g1', [-0.05, 0, 0.02])
 @pytest.mark.parametrize('wcs_g2', [-0.02, 0, 0.05])
@@ -78,10 +76,10 @@ def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
 
     g1 = np.mean(g1arr)
     g2 = np.mean(g2arr)
-    assert np.abs(g1 - g1_true) < GTOL
-    assert np.abs(g2 - g2_true) < GTOL
+    gtol = 3e-6
+    assert np.abs(g1 - g1_true) < gtol
+    assert np.abs(g2 - g2_true) < gtol
 
-    if g1 == 0 and g2 == 0:
+    if g1_true == 0 and g2_true == 0:
         T = np.mean(Tarr)
-        T_err = np.std(Tarr) / np.sqrt(len(Tarr))
-        assert np.abs(T - fwhm_to_T(0.9)) < T_err * 5
+        assert np.abs(T - fwhm_to_T(0.9)) < 1e-6
