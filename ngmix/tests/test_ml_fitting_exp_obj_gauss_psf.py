@@ -23,9 +23,9 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
         0.25, galsim.Shear(g1=wcs_g1, g2=wcs_g2)).jacobian()
     scale = np.sqrt(gs_wcs.pixelArea())
 
-    g_prior = ngmix.priors.GPriorBA(0.5)
+    g_prior = ngmix.priors.GPriorBA(0.1)
     cen_prior = ngmix.priors.CenPrior(0, 0, scale, scale)
-    T_prior = ngmix.priors.FlatPrior(0.1, 2)
+    T_prior = ngmix.priors.FlatPrior(0.01, 2)
     F_prior = ngmix.priors.FlatPrior(1e-4, 1e9)
     prior = ngmix.joint_prior.PriorSimpleSep(
         cen_prior,
