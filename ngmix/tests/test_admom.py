@@ -9,20 +9,21 @@ from ngmix.moments import fwhm_to_T
 from ngmix.gexceptions import GMixRangeError
 
 
-# @pytest.mark.parametrize('wcs_g1', [-0.5, 0, 0.9])
-# @pytest.mark.parametrize('wcs_g2', [-0.2, 0, 0.5])
-# @pytest.mark.parametrize('g1_true', [-0.1, 0, 0.2])
-# @pytest.mark.parametrize('g2_true', [-0.2, 0, 0.1])
-def test_admom_smoke(g1_true=0, g2_true=0, wcs_g1=0.5, wcs_g2=0):
+@pytest.mark.parametrize('wcs_g1', [-0.5, 0, 0.2])
+@pytest.mark.parametrize('wcs_g2', [-0.2, 0, 0.5])
+@pytest.mark.parametrize('g1_true', [-0.1, 0, 0.2])
+@pytest.mark.parametrize('g2_true', [-0.2, 0, 0.1])
+def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
     rng = np.random.RandomState(seed=100)
 
-    image_size = 53
+    fwhm = 0.9
+    image_size = 107
     cen = (image_size - 1)/2
     gs_wcs = galsim.ShearWCS(
-        0.25, galsim.Shear(g1=wcs_g1, g2=wcs_g2)).jacobian()
+        0.125, galsim.Shear(g1=wcs_g1, g2=wcs_g2)).jacobian()
 
     obj = galsim.Gaussian(
-        fwhm=0.9
+        fwhm=fwhm
     ).shear(
         g1=g1_true, g2=g2_true
     ).withFlux(
@@ -64,25 +65,24 @@ def test_admom_smoke(g1_true=0, g2_true=0, wcs_g1=0.5, wcs_g2=0):
             jacobian=jac)
         fitter = Admom(obs, rng=rng)
         try:
-            fitter.go(fwhm_to_T(0.9) + rng.normal()*0.01)
-            gm = fitter.get_gmix()
-            _g1, _g2, _T = gm.get_g1g2T()
+            fitter.go(fwhm_to_T(fwhm) + rng.normal()*0.01)
+            res = fitter.get_result()
+            if res['flags'] == 0:
+                gm = fitter.get_gmix()
+                _g1, _g2, _T = gm.get_g1g2T()
 
-            g1arr.append(_g1)
-            g2arr.append(_g2)
-            Tarr.append(_T)
+                g1arr.append(_g1)
+                g2arr.append(_g2)
+                Tarr.append(_T)
         except GMixRangeError:
             pass
 
     g1 = np.mean(g1arr)
     g2 = np.mean(g2arr)
-    print(g1arr)
-    print("g1:", np.abs(g1 - g1_true), np.std(g1arr)/np.sqrt(len(g1arr)))
-    print("g2:", np.abs(g2 - g2_true), np.std(g2arr)/np.sqrt(len(g2arr)))
-    gtol = 3e-6
-    assert np.abs(g1 - g1_true) < gtol
-    assert np.abs(g2 - g2_true) < gtol
+    gtol = 1e-6
+    assert np.abs(g1 - g1_true) < gtol, (g1, np.std(g1arr)/np.sqrt(len(g1arr)))
+    assert np.abs(g2 - g2_true) < gtol, (g2, np.std(g2arr)/np.sqrt(len(g2arr)))
 
     if g1_true == 0 and g2_true == 0:
         T = np.mean(Tarr)
-        assert np.abs(T - fwhm_to_T(0.9)) < 1e-6
+        assert np.abs(T - fwhm_to_T(fwhm)) < 1e-6
