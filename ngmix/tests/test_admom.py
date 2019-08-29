@@ -9,11 +9,11 @@ from ngmix.moments import fwhm_to_T
 from ngmix.gexceptions import GMixRangeError
 
 
-@pytest.mark.parametrize('wcs_g1', [-0.05, 0, 0.02])
-@pytest.mark.parametrize('wcs_g2', [-0.02, 0, 0.05])
-@pytest.mark.parametrize('g1_true', [-0.1, 0, 0.2])
-@pytest.mark.parametrize('g2_true', [-0.2, 0, 0.1])
-def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
+# @pytest.mark.parametrize('wcs_g1', [-0.5, 0, 0.9])
+# @pytest.mark.parametrize('wcs_g2', [-0.2, 0, 0.5])
+# @pytest.mark.parametrize('g1_true', [-0.1, 0, 0.2])
+# @pytest.mark.parametrize('g2_true', [-0.2, 0, 0.1])
+def test_admom_smoke(g1_true=0, g2_true=0, wcs_g1=0.5, wcs_g2=0):
     rng = np.random.RandomState(seed=100)
 
     image_size = 53
@@ -64,7 +64,7 @@ def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
             jacobian=jac)
         fitter = Admom(obs, rng=rng)
         try:
-            fitter.go(fwhm_to_T(0.9))
+            fitter.go(fwhm_to_T(0.9) + rng.normal()*0.01)
             gm = fitter.get_gmix()
             _g1, _g2, _T = gm.get_g1g2T()
 
@@ -76,6 +76,9 @@ def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
 
     g1 = np.mean(g1arr)
     g2 = np.mean(g2arr)
+    print(g1arr)
+    print("g1:", np.abs(g1 - g1_true), np.std(g1arr)/np.sqrt(len(g1arr)))
+    print("g2:", np.abs(g2 - g2_true), np.std(g2arr)/np.sqrt(len(g2arr)))
     gtol = 3e-6
     assert np.abs(g1 - g1_true) < gtol
     assert np.abs(g2 - g2_true) < gtol
