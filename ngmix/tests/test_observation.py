@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from ngmix.observation import Observation, ObsList, MultiBandObsList
+from ngmix.observation import Observation
 from ngmix.jacobian import DiagonalJacobian
 from ngmix.gmix import GMix
 from ngmix.pixels import make_pixels
@@ -318,15 +318,3 @@ def test_observation_copy(image_data):
     assert np.all(obs.psf.image == new_obs.psf.image)
     new_obs.psf = new_psf
     assert np.all(obs.psf.image != new_obs.psf.image)
-
-
-def test_obslist_append_err():
-    obslist = ObsList()
-    with pytest.raises(AssertionError):
-        obslist.append(None)
-
-
-def test_multibandobslist_append_err():
-    mbobslist = MultiBandObsList()
-    with pytest.raises(AssertionError):
-        mbobslist.append(None)
