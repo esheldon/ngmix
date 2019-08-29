@@ -102,7 +102,7 @@ def test_ml_fitting_gauss_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
     g1err = np.std(g1arr) / np.sqrt(len(g1arr))
     g2 = np.mean(g2arr)
     g2err = np.std(g2arr) / np.sqrt(len(g2arr))
-    gtol = 1e-8
+    gtol = 1e-7
     assert np.abs(g1 - g1_true) < gtol
     assert np.abs(g2 - g2_true) < gtol
     assert np.abs(g1 - g1_true) < g1err * 5
