@@ -1,5 +1,6 @@
 from numba import njit
 
+
 @njit
 def jacobian_get_vu(jacob, row, col):
     """
@@ -12,7 +13,8 @@ def jacobian_get_vu(jacob, row, col):
     v = jacob['dvdrow'][0]*rowdiff + jacob['dvdcol'][0]*coldiff
     u = jacob['dudrow'][0]*rowdiff + jacob['dudcol'][0]*coldiff
 
-    return v,u
+    return v, u
+
 
 @njit
 def jacobian_get_rowcol(jacob, v, u):
@@ -20,7 +22,7 @@ def jacobian_get_rowcol(jacob, v, u):
     convert v,u to row,col using the input jacobian
     """
 
-    rowdiff =  jacob['dudcol'][0]*v - jacob['dvdcol'][0]*u
+    rowdiff = jacob['dudcol'][0]*v - jacob['dvdcol'][0]*u
     coldiff = -jacob['dudrow'][0]*v + jacob['dvdrow'][0]*u
 
     row = jacob['row0'][0] + rowdiff/jacob['det'][0]
