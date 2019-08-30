@@ -705,15 +705,23 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
         models=[]
         for obs in self.obs:
 
-            im = obs.psf.image.copy()
-            im *= 1.0/im.sum()
+            psf_jac = obs.psf.jacobian
+            psf_im = obs.psf.image.copy()
+
+            psf_im *= 1.0/psf_im.sum()
+
+            nrow, ncol = psf_im.shape
+            canonical_center = (numpy.array((ncol,nrow))-1.0)/2.0
+            jrow, jcol = psf_jac.get_cen()
+            offset = (jcol, jrow) - canonical_center
 
             psf_gsimage = galsim.Image(
-                im,
+                psf_im,
                 wcs=obs.psf.jacobian.get_galsim_wcs(),
             )
             psf_ii = galsim.InterpolatedImage(
                 psf_gsimage,
+                offset=offset,
                 x_interpolant=self.interp,
             )
 
