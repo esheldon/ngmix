@@ -94,7 +94,7 @@ def _do_gap(weight_fwhm, fracdev, TdByTe, pars, model, i, band):
             gm = GMixCM(
                 fracdev[i],
                 TdByTe[i],
-                pars,
+                tpars,
             )
         elif model == 'bdf':
             gm = GMixBDF(tpars)
