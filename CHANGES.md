@@ -1,3 +1,10 @@
+## unreleased
+
+### bug fixes
+
+- fixed bug in T fraction sum for `dev` profiles
+
+
 ## v1.3.5
 
 ### bug fixes
