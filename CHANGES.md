@@ -1,8 +1,9 @@
-## unreleased
+## v1.3.5
 
 ### bug fixes
 
 - better fast exponential function approximation
+- bug in gaussian aperture flux calculation for cm
 
 ### new features
 
