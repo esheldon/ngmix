@@ -2,8 +2,6 @@ import numpy as np
 import logging
 import ngmix
 from .observation import get_mb_obs
-from .shape import e1e2_to_g1g2
-from .gexceptions import GMixRangeError
 
 logger = logging.getLogger(__name__)
 
@@ -110,16 +108,6 @@ class GaussMom(object):
             return res
 
         res['numiter'] = 1
-        try:
-            res['g'] = np.array(e1e2_to_g1g2(res['e'][0], res['e'][1]))
-        except GMixRangeError:
-            res['g'] = np.array([-9999, -9999])
-            # we don't have a valid shape, set flags
-            res['flags'] = 0x80
-            res['flagstr'] = (
-                'e is out of range for a proper ellipticity - '
-                'could not convert to a shear!')
-
         return res
 
     def _set_mompars(self):

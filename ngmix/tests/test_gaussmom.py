@@ -7,13 +7,15 @@ from ngmix.gaussmom import GaussMom
 from ngmix import Observation
 from ngmix.gexceptions import GMixRangeError
 from ngmix.moments import fwhm_to_T
+from ngmix.shape import e1e2_to_g1g2
 
 
+@pytest.mark.parametrize('weight_fac', [1, 1e5])
 @pytest.mark.parametrize('wcs_g1', [-0.5, 0, 0.2])
 @pytest.mark.parametrize('wcs_g2', [-0.2, 0, 0.5])
 @pytest.mark.parametrize('g1_true', [-0.1, 0, 0.2])
 @pytest.mark.parametrize('g2_true', [-0.2, 0, 0.1])
-def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
+def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
     rng = np.random.RandomState(seed=100)
 
     fwhm = 0.9
@@ -63,13 +65,18 @@ def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
             image=_im,
             weight=wgt,
             jacobian=jac)
-        fitter = GaussMom(obs, fwhm * 1e5, rng=rng)
+        # use a huge weight so that we get the raw moments back out
+        fitter = GaussMom(obs, fwhm * weight_fac, rng=rng)
         try:
             fitter.go()
             res = fitter.get_result()
             if res['flags'] == 0:
-                g1arr.append(res['g'][0])
-                g2arr.append(res['g'][1])
+                if weight_fac > 1:
+                    _g1, _g2 = e1e2_to_g1g2(res['e'][0], res['e'][1])
+                else:
+                    _g1, _g2 = res['e'][0], res['e'][1]
+                g1arr.append(_g1)
+                g2arr.append(_g2)
                 Tarr.append(res['pars'][4])
         except GMixRangeError:
             pass
@@ -81,6 +88,8 @@ def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
     assert np.abs(g1 - g1_true) < gtol, (g1, np.std(g1arr)/np.sqrt(len(g1arr)))
     assert np.abs(g2 - g2_true) < gtol, (g2, np.std(g2arr)/np.sqrt(len(g2arr)))
 
-    if g1_true == 0 and g2_true == 0:
+    # T test should only pass when the weight function is constant so
+    # weight_fac needs to be rally big
+    if g1_true == 0 and g2_true == 0 and weight_fac > 1:
         T = np.mean(Tarr)
         assert np.abs(T - fwhm_to_T(fwhm)) < 1e-6
