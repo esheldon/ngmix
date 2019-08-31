@@ -2137,6 +2137,8 @@ class EMRunner(object):
             return self._get_em_guess_3gauss()
         elif self.ngauss==4:
             return self._get_em_guess_4gauss()
+        elif self.ngauss==5:
+            return self._get_em_guess_5gauss()
         else:
             raise ValueError("bad ngauss: %d" % self.ngauss)
 
@@ -2245,6 +2247,55 @@ class EMRunner(object):
 
 
         return GMix(pars=pars)
+
+    def _get_em_guess_5gauss(self):
+        rng=self.rng
+
+        sigma2 = self.sigma_guess**2
+
+        pars=array(
+            [_em5_pguess[0]*(1.0+rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.1,high=0.1),
+             rng.uniform(low=-0.1,high=0.1),
+             _em5_fguess[0]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.01,high=0.01),
+             _em5_fguess[0]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+
+             _em5_pguess[1]*(1.0+rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.1,high=0.1),
+             rng.uniform(low=-0.1,high=0.1),
+             _em5_fguess[1]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.01,high=0.01),
+             _em5_fguess[1]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+
+             _em5_pguess[2]*(1.0+rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.1,high=0.1),
+             rng.uniform(low=-0.1,high=0.1),
+             _em5_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.01,high=0.01),
+             _em5_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+
+             _em5_pguess[2]*(1.0+rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.1,high=0.1),
+             rng.uniform(low=-0.1,high=0.1),
+             _em5_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.01,high=0.01),
+             _em5_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+
+              _em5_pguess[2]*(1.0+rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.1,high=0.1),
+             rng.uniform(low=-0.1,high=0.1),
+             _em5_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+             rng.uniform(low=-0.01,high=0.01),
+             _em5_fguess[2]*sigma2*(1.0 + rng.uniform(low=-0.1,high=0.1)),
+
+            ]
+
+        )
+
+
+        return GMix(pars=pars)
+
 
     def set_rng(self, rng):
         if rng is None:
@@ -2939,6 +2990,9 @@ _em3_fguess = array([0.5793612389470884,1.621860687127999,7.019347162356363])
 
 _em4_pguess = array([0.596510042804182,0.4034898268889178,1.303069003078001e-07,1.0e-8])
 _em4_fguess = array([0.5793612389470884,1.621860687127999,7.019347162356363,16.0])
+
+_em5_pguess = array([0.59453032, 0.35671819, 0.03567182, 0.01189061, 0.00118906])
+_em5_fguess = array([0.5, 1.0, 3.0, 10.0, 20.0])
 
 #_em3_pguess = array([0.7189864,0.2347828,0.04623086])
 #_em3_fguess = array([0.4431912,1.354587,8.274546])
