@@ -1258,6 +1258,7 @@ _gmix_ngauss_dict={
     'em2':2,
     'em3':3,
     'em4':4,
+    'em5':5,
     'coellip1':1,
     'coellip2':2,
     'coellip3':3,
