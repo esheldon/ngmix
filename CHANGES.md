@@ -4,6 +4,10 @@
 
 - fixed bug in T fraction sum for `dev` profiles
 
+### new features
+
+- added a Gaussian moments fitter
+
 
 ## v1.3.5
 

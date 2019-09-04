@@ -43,6 +43,8 @@ from . import em
 
 from . import admom
 
+from . import gaussmom
+
 from . import observation
 from .observation import Observation, ObsList, MultiBandObsList
 
