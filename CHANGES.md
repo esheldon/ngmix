@@ -3,6 +3,7 @@
 ### bug fixes
 
 - fixed bug in T fraction sum for `dev` profiles
+- fixed bugs for the full bulge+disk fitter
 
 ### new features
 
