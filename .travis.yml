@@ -1,0 +1,38 @@
+language: generic
+
+matrix:
+  include:
+  - os: linux
+    sudo: required
+    env: TOXENV=py27
+  - os: linux
+    sudo: required
+    env: TOXENV=py36
+
+cache:
+  directories:
+    - $HOME/miniconda
+
+install:
+  - if [[ ! -e "$HOME/miniconda/bin/conda" ]]; then "./.ci_scripts/install_miniconda.sh"; fi
+  - export PATH=$HOME/miniconda/bin:$PATH
+  - source activate test-env
+  - conda update --all
+  - conda clean --all
+
+script:
+  - pip install . --no-deps
+  # files that pass flake8 should be added here as we go
+  - >
+    flake8
+    ngmix/jacobian.py
+    ngmix/jacobian_nb.py
+    ngmix/admom.py
+    ngmix/admom_nb.py
+    ngmix/fastexp.py
+  # the `--pyargs` stuff makes sure to run the tests from the installed package
+  # we have to do this since we are using 2to3 to generate the python 3 code
+  - pytest -vv --pyargs ngmix
+  # make sure to uninstall so that we do not invalidate the build cache
+  - pip uninstall ngmix -y
+  - rm -rf ${HOME}/miniconda/envs/test-env/lib/python*/site-packages/ngmix*

@@ -6,7 +6,7 @@ except NameError:
 import numpy
 from numpy import array, nan
 from numba import njit
-from .fastexp_nb import exp3
+from .fastexp import expd
 
 # need to make this a pure python exception
 from .gexceptions import GMixRangeError
@@ -55,7 +55,7 @@ def gauss2d_eval_pixel_fast(gauss, pixel, max_chi2=25.0):
             - 2.0*gauss['drc']*vdiff*udiff )
 
     if chi2 < max_chi2 and chi2 >= 0.0:
-        model_val = gauss['pnorm']*exp3( -0.5*chi2 )
+        model_val = gauss['pnorm']*expd( -0.5*chi2 )
 
     return model_val
 
@@ -268,16 +268,16 @@ _pvals_dev = array([
 ])
 
 _fvals_dev = array([
-    3.068330909892871e-07,
-    3.551788624668698e-06,
-    2.542810833482682e-05,
-    0.0001466508940804874,
-    0.0007457199853069548,
-    0.003544702600428794,
-    0.01648881157673708,
-    0.07893194619504579,
-    0.4203787615506401,
-    3.055782252301236,
+    2.9934935706271918e-07,
+    3.4651596338231207e-06,
+    2.4807910570562753e-05,
+    1.4307404300535354e-04,
+    7.2753169298239500e-04,
+    3.4582464394427260e-03,
+    1.6086645440719100e-02,
+    7.7006776775654429e-02,
+    4.1012562102501476e-01,
+    2.9812509778548648e+00
 ])
 
 _pvals_turb = array([
@@ -708,6 +708,3 @@ def get_weighted_sums(wt, pixels, res, maxrad):
                 res['sums'][i] += wdata*F[i]
                 for j in xrange(6):
                     res['sums_cov'][i,j] += w2*var*F[i]*F[j]
-
-
-

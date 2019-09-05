@@ -1,4 +1,4 @@
-__version__ = 'v1.3.4'
+__version__ = 'v1.3.5'
 
 from . import gmix
 from .gmix import (
@@ -42,6 +42,8 @@ from .bootstrap import Bootstrapper, CompositeBootstrapper
 from . import em
 
 from . import admom
+
+from . import gaussmom
 
 from . import observation
 from .observation import Observation, ObsList, MultiBandObsList
