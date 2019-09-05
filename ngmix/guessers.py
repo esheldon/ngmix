@@ -240,6 +240,49 @@ class BDFGuesser(TFluxAndPriorGuesser):
         return guess
 
 
+class BDGuesser(TFluxAndPriorGuesser):
+    def __init__(self, Tguess, fluxes, prior):
+        self.T=Tguess
+        self.fluxes=numpy.array(fluxes, ndmin=1)
+        self.prior=prior
+
+    def __call__(self, n=1, **keys):
+        """
+        center, shape are just distributed around zero
+        """
+        rng=self.prior.cen_prior.rng
+
+        fluxes=self.fluxes
+
+        guess = self.prior.sample(n)
+
+        nband=fluxes.size
+
+        r=rng.uniform(low=-0.1, high=0.1, size=n)
+        guess[:,4] = self.T*(1.0 + r)
+
+        # fracdev prior
+        #guess[:,5] = rng.uniform(low=-0.1, high=0.1, size=n)
+        #guess[:,5] = rng.uniform(low=0.2, high=0.4, size=n)
+        #guess[:,5] = rng.uniform(low=0.1, high=0.3, size=n)
+        guess[:,5] = rng.uniform(low=0.4, high=0.6, size=n)
+        # logTratio
+        # guess[:,6] = rng.uniform(low=-0.01, high=0.01, size=n)
+        #guess[:,5] = rng.uniform(low=0.9, high=0.99, size=n)
+
+        for band in xrange(nband):
+            r=rng.uniform(low=-0.1, high=0.1, size=n)
+            guess[:,7+band] = fluxes[band]*(1.0 + r)
+
+        if self.prior is not None:
+            self._fix_guess(guess, self.prior)
+
+        if n==1:
+            guess=guess[0,:]
+        return guess
+
+
+
 class ParsGuesser(GuesserBase):
     """
     pars include g1,g2
