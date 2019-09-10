@@ -1350,6 +1350,8 @@ def get_weighted_moments_stats(ares):
     flux_sum=sums[5]
 
     res['flux']  = flux_sum
+    res['flux_err'] = 9999.0
+
     pars[5] = res['flux']
 
     # these might not get filled in if T is too small
@@ -1358,6 +1360,19 @@ def get_weighted_moments_stats(ares):
     res['s2n']   = -9999.0
     res['e']     = array([-9999.0, -9999.0])
     res['e_err'] = 9999.0
+
+    fvar_sum=sums_cov[5,5]
+
+    if fvar_sum > 0.0:
+
+        res['flux_err'] = sqrt(fvar_sum)
+        res['s2n'] = flux_sum/res['flux_err']
+
+    else:
+        # zero var flag
+        res['flags'] |= 0x40
+        res['flagstr'] = 'zero var'
+
 
     if res['flags']==0:
 
@@ -1418,17 +1433,5 @@ def get_weighted_moments_stats(ares):
             # flux <= 0.0
             res['flags'] |= 0x4
             res['flagstr'] = 'flux <= 0.0'
-
-        fvar_sum=sums_cov[5,5]
-
-        if fvar_sum > 0.0:
-
-            flux_err = sqrt(fvar_sum)
-            res['s2n'] = flux_sum/flux_err
-
-        else:
-            # zero var flag
-            res['flags'] |= 0x40
-            res['flagstr'] = 'zero var'
 
     return res
