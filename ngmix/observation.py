@@ -45,7 +45,10 @@ class Observation(object):
                  jacobian=None,
                  gmix=None,
                  psf=None,
-                 meta=None):
+                 meta=None,
+                 ignore_zero_weight=True):
+
+        self._ignore_zero_weight = ignore_zero_weight
 
         # pixels depends on image, weight and jacobian, so delay until all are
         # set
@@ -612,6 +615,7 @@ class Observation(object):
             self.image,
             self.weight,
             self._jacobian,
+            ignore_zero_weight=self._ignore_zero_weight,
         )
 
 class ObsList(list):
