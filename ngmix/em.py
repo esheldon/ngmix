@@ -56,9 +56,11 @@ def prep_image(im0):
     # need no zero pixels and sky value
     im_min = im.min()
     im_max = im.max()
-    sky=0.001*(im_max-im_min)
 
-    im += (sky-im_min)
+    desired_minval = 0.001*(im_max-im_min)
+
+    sky = desired_minval - im_min
+    im += sky
 
     return im, sky
 
