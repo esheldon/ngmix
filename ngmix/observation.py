@@ -7,7 +7,8 @@ import copy
 
 from .pixels import make_pixels
 
-DEFAULT_XINTERP='lanczos15'
+DEFAULT_XINTERP = 'lanczos15'
+
 
 class Observation(object):
     """
@@ -124,7 +125,6 @@ class Observation(object):
         """
         return self._pixels
 
-
     @property
     def bmask(self):
         """
@@ -156,7 +156,6 @@ class Observation(object):
         set the ormask
         """
         self.set_ormask(ormask)
-
 
     @property
     def noise(self):
@@ -225,7 +224,6 @@ class Observation(object):
 
         currently this simply returns a reference
         """
-        #return self.get_psf()
         return self._psf
 
     @psf.setter
@@ -234,8 +232,6 @@ class Observation(object):
         set the psf
         """
         self.set_psf(psf)
-
-
 
     def set_image(self, image, update_pixels=True):
         """
@@ -248,23 +244,23 @@ class Observation(object):
         image: ndarray (or None)
         """
 
-        if hasattr(self,'_image'):
-            image_old=self._image
+        if hasattr(self, '_image'):
+            image_old = self._image
         else:
-            image_old=None
+            image_old = None
 
         # force f8 with native byte ordering, contiguous C layout
-        image=numpy.ascontiguousarray(image,dtype='f8')
+        image = numpy.ascontiguousarray(image, dtype='f8')
 
-        assert len(image.shape)==2,"image must be 2d"
+        assert len(image.shape) == 2, "image must be 2d"
 
         if image_old is not None:
-            mess=("old and new image must have same shape, to "
-                  "maintain consistency, got %s "
-                  "vs %s" % (image.shape,image_old.shape))
-            assert image.shape == image_old.shape,mess
+            mess = ("old and new image must have same shape, to "
+                    "maintain consistency, got %s "
+                    "vs %s" % (image.shape, image_old.shape))
+            assert image.shape == image_old.shape, mess
 
-        self._image=image
+        self._image = image
 
         if update_pixels:
             self.update_pixels()
@@ -278,19 +274,19 @@ class Observation(object):
         weight: ndarray (or None)
         """
 
-        image=self.image
+        image = self.image
         if weight is not None:
             # force f8 with native byte ordering, contiguous C layout
-            weight=numpy.ascontiguousarray(weight, dtype='f8')
-            assert len(weight.shape)==2,"weight must be 2d"
+            weight = numpy.ascontiguousarray(weight, dtype='f8')
+            assert len(weight.shape) == 2, "weight must be 2d"
 
-            mess="image and weight must be same shape"
-            assert (weight.shape==image.shape),mess
+            mess = "image and weight must be same shape"
+            assert (weight.shape == image.shape), mess
 
         else:
             weight = numpy.zeros(image.shape) + 1.0
 
-        self._weight=weight
+        self._weight = weight
         if update_pixels:
             self.update_pixels()
 
@@ -307,22 +303,22 @@ class Observation(object):
                 del self._bmask
         else:
 
-            image=self.image
+            image = self.image
 
             # force contiguous C, but we don't know what dtype to expect
-            bmask=numpy.ascontiguousarray(bmask)
-            assert len(bmask.shape)==2,"bmask must be 2d"
+            bmask = numpy.ascontiguousarray(bmask)
+            assert len(bmask.shape) == 2, "bmask must be 2d"
 
-            assert (bmask.shape==image.shape),\
-                    "image and bmask must be same shape"
+            assert (bmask.shape == image.shape), \
+                "image and bmask must be same shape"
 
-            self._bmask=bmask
+            self._bmask = bmask
 
     def has_bmask(self):
         """
         returns True if a bitmask is set
         """
-        if hasattr(self,'_bmask'):
+        if hasattr(self, '_bmask'):
             return True
         else:
             return False
@@ -340,22 +336,22 @@ class Observation(object):
                 del self._ormask
         else:
 
-            image=self.image
+            image = self.image
 
             # force contiguous C, but we don't know what dtype to expect
-            ormask=numpy.ascontiguousarray(ormask)
-            assert len(ormask.shape)==2,"ormask must be 2d"
+            ormask = numpy.ascontiguousarray(ormask)
+            assert len(ormask.shape) == 2, "ormask must be 2d"
 
-            assert (ormask.shape==image.shape),\
-                    "image and ormask must be same shape"
+            assert (ormask.shape == image.shape),\
+                "image and ormask must be same shape"
 
-            self._ormask=ormask
+            self._ormask = ormask
 
     def has_ormask(self):
         """
         returns True if a bitmask is set
         """
-        if hasattr(self,'_ormask'):
+        if hasattr(self, '_ormask'):
             return True
         else:
             return False
@@ -373,22 +369,22 @@ class Observation(object):
                 del self._noise
         else:
 
-            image=self.image
+            image = self.image
 
             # force contiguous C, but we don't know what dtype to expect
-            noise=numpy.ascontiguousarray(noise)
-            assert len(noise.shape)==2,"noise must be 2d"
+            noise = numpy.ascontiguousarray(noise)
+            assert len(noise.shape) == 2, "noise must be 2d"
 
-            assert (noise.shape==image.shape),\
-                    "image and noise must be same shape"
+            assert (noise.shape == image.shape), \
+                "image and noise must be same shape"
 
-            self._noise=noise
+            self._noise = noise
 
     def has_noise(self):
         """
         returns True if a bitmask is set
         """
-        if hasattr(self,'_noise'):
+        if hasattr(self, '_noise'):
             return True
         else:
             return False
@@ -403,15 +399,15 @@ class Observation(object):
         jacobian: Jacobian (or None)
         """
         if jacobian is None:
-            cen=(numpy.array(self.image.shape)-1.0)/2.0
+            cen = (numpy.array(self.image.shape)-1.0)/2.0
             jac = UnitJacobian(row=cen[0], col=cen[1])
         else:
-            mess=("jacobian must be of "
-                  "type Jacobian, got %s" % type(jacobian))
-            assert isinstance(jacobian,Jacobian),mess
+            mess = ("jacobian must be of "
+                    "type Jacobian, got %s" % type(jacobian))
+            assert isinstance(jacobian, Jacobian), mess
             jac = jacobian.copy()
 
-        self._jacobian=jac
+        self._jacobian = jac
 
         if update_pixels:
             self.update_pixels()
@@ -422,7 +418,7 @@ class Observation(object):
         """
         return self._jacobian.copy()
 
-    def set_psf(self,psf):
+    def set_psf(self, psf):
         """
         Set a psf Observation
         """
@@ -430,9 +426,9 @@ class Observation(object):
             del self._psf
 
         if psf is not None:
-            mess="psf must be of Observation, got %s" % type(psf)
-            assert isinstance(psf,Observation),mess
-            self._psf=psf
+            mess = "psf must be of Observation, got %s" % type(psf)
+            assert isinstance(psf, Observation), mess
+            self._psf = psf
 
     def get_psf(self):
         """
@@ -446,7 +442,7 @@ class Observation(object):
         """
         does this object have a psf set?
         """
-        return hasattr(self,'_psf')
+        return hasattr(self, '_psf')
 
     def get_psf_gmix(self):
         """
@@ -455,7 +451,6 @@ class Observation(object):
         if not self.has_psf_gmix():
             raise RuntimeError("this obs has not psf set with a gmix")
         return self.psf.get_gmix()
-
 
     def has_psf_gmix(self):
         """
@@ -466,8 +461,7 @@ class Observation(object):
         else:
             return False
 
-
-    def set_gmix(self,gmix):
+    def set_gmix(self, gmix):
         """
         Set a psf gmix.
         """
@@ -476,9 +470,9 @@ class Observation(object):
             del self._gmix
 
         if gmix is not None:
-            mess="gmix must be of type GMix, got %s" % type(gmix)
-            assert isinstance(gmix,GMix),mess
-            self._gmix=gmix.copy()
+            mess = "gmix must be of type GMix, got %s" % type(gmix)
+            assert isinstance(gmix, GMix), mess
+            self._gmix = gmix.copy()
 
     def get_gmix(self):
         """
@@ -510,9 +504,8 @@ class Observation(object):
         if Vsum > 0.0:
             s2n = Isum/numpy.sqrt(Vsum)
         else:
-            s2n=-9999.0
+            s2n = -9999.0
         return s2n
-
 
     def get_s2n_sums(self):
         """
@@ -528,7 +521,7 @@ class Observation(object):
         image = self.image
         weight = self.weight
 
-        w=numpy.where(weight > 0)
+        w = numpy.where(weight > 0)
 
         if w[0].size > 0:
             Isum = image[w].sum()
@@ -547,9 +540,9 @@ class Observation(object):
         """
 
         if meta is None:
-            meta={}
+            meta = {}
 
-        if not isinstance(meta,dict):
+        if not isinstance(meta, dict):
             raise TypeError("meta data must be in "
                             "dictionary form, got %s" % type(meta))
 
@@ -560,7 +553,7 @@ class Observation(object):
         Add some metadata
         """
 
-        if not isinstance(meta,dict):
+        if not isinstance(meta, dict):
             raise TypeError("meta data must be in "
                             "dictionary form, got %s" % type(meta))
         self._meta.update(meta)
@@ -570,32 +563,32 @@ class Observation(object):
         make a copy of the observation
         """
         if self.has_bmask():
-            bmask=self.bmask.copy()
+            bmask = self.bmask.copy()
         else:
-            bmask=None
+            bmask = None
 
         if self.has_ormask():
-            ormask=self.ormask.copy()
+            ormask = self.ormask.copy()
         else:
-            ormask=None
+            ormask = None
 
         if self.has_noise():
-            noise=self.noise.copy()
+            noise = self.noise.copy()
         else:
-            noise=None
+            noise = None
 
         if self.has_gmix():
             # makes a copy
-            gmix=self.gmix
+            gmix = self.gmix
         else:
-            gmix=None
+            gmix = None
 
         if self.has_psf():
-            psf=self.psf.copy()
+            psf = self.psf.copy()
         else:
-            psf=None
+            psf = None
 
-        meta=copy.deepcopy(self.meta)
+        meta = copy.deepcopy(self.meta)
 
         return Observation(
             self.image.copy(),
@@ -604,7 +597,7 @@ class Observation(object):
             ormask=ormask,
             noise=noise,
             gmix=gmix,
-            jacobian=self.jacobian, # makes a copy
+            jacobian=self.jacobian,  # makes a copy
             meta=meta,
             psf=psf,
         )
@@ -621,6 +614,7 @@ class Observation(object):
             ignore_zero_weight=self._ignore_zero_weight,
         )
 
+
 class ObsList(list):
     """
     Hold a list of Observation objects
@@ -629,7 +623,7 @@ class ObsList(list):
     """
 
     def __init__(self, meta=None):
-        super(ObsList,self).__init__()
+        super(ObsList, self).__init__()
 
         self.set_meta(meta)
 
@@ -639,9 +633,9 @@ class ObsList(list):
 
         over-riding this for type safety
         """
-        mess="obs should be of type Observation, got %s" % type(obs)
-        assert isinstance(obs,Observation),mess
-        super(ObsList,self).append(obs)
+        mess = "obs should be of type Observation, got %s" % type(obs)
+        assert isinstance(obs, Observation), mess
+        super(ObsList, self).append(obs)
 
     @property
     def meta(self):
@@ -668,9 +662,9 @@ class ObsList(list):
         """
 
         if meta is None:
-            meta={}
+            meta = {}
 
-        if not isinstance(meta,dict):
+        if not isinstance(meta, dict):
             raise TypeError("meta data must be in "
                             "dictionary form, got %s" % type(meta))
 
@@ -681,7 +675,7 @@ class ObsList(list):
         Add some metadata
         """
 
-        if not isinstance(meta,dict):
+        if not isinstance(meta, dict):
             raise TypeError("meta data must be in dictionary form")
         self.meta.update(meta)
 
@@ -701,9 +695,8 @@ class ObsList(list):
         if Vsum > 0.0:
             s2n = Isum/numpy.sqrt(Vsum)
         else:
-            s2n=-9999.0
+            s2n = -9999.0
         return s2n
-
 
     def get_s2n_sums(self):
         """
@@ -721,7 +714,7 @@ class ObsList(list):
         Npix = 0
 
         for obs in self:
-            tIsum,tVsum,tNpix = obs.get_s2n_sums()
+            tIsum, tVsum, tNpix = obs.get_s2n_sums()
             Isum += tIsum
             Vsum += tVsum
             Npix += tNpix
@@ -732,8 +725,9 @@ class ObsList(list):
         """
         over-riding this for type safety
         """
-        assert isinstance(obs,Observation),"obs should be of type Observation"
-        super(ObsList,self).__setitem__(index, obs)
+        assert isinstance(obs, Observation), \
+            "obs should be of type Observation"
+        super(ObsList, self).__setitem__(index, obs)
 
 
 class MultiBandObsList(list):
@@ -745,7 +739,7 @@ class MultiBandObsList(list):
     """
 
     def __init__(self, meta=None):
-        super(MultiBandObsList,self).__init__()
+        super(MultiBandObsList, self).__init__()
 
         self.set_meta(meta)
 
@@ -755,9 +749,9 @@ class MultiBandObsList(list):
 
         over-riding this for type safety
         """
-        assert isinstance(obs_list,ObsList),\
+        assert isinstance(obs_list, ObsList),\
             'obs_list should be of type ObsList'
-        super(MultiBandObsList,self).append(obs_list)
+        super(MultiBandObsList, self).append(obs_list)
 
     @property
     def meta(self):
@@ -784,9 +778,9 @@ class MultiBandObsList(list):
         """
 
         if meta is None:
-            meta={}
+            meta = {}
 
-        if not isinstance(meta,dict):
+        if not isinstance(meta, dict):
             raise TypeError("meta data must be in "
                             "dictionary form, got %s" % type(meta))
 
@@ -797,7 +791,7 @@ class MultiBandObsList(list):
         Add some metadata
         """
 
-        if not isinstance(meta,dict):
+        if not isinstance(meta, dict):
             raise TypeError("meta data must be in dictionary form")
         self._meta.update(meta)
 
@@ -817,7 +811,7 @@ class MultiBandObsList(list):
         if Vsum > 0.0:
             s2n = Isum/numpy.sqrt(Vsum)
         else:
-            s2n=-9999.0
+            s2n = -9999.0
         return s2n
 
     def get_s2n_sums(self):
@@ -836,7 +830,7 @@ class MultiBandObsList(list):
         Npix = 0
 
         for obslist in self:
-            tIsum,tVsum,tNpix = obslist.get_s2n_sums()
+            tIsum, tVsum, tNpix = obslist.get_s2n_sums()
             Isum += tIsum
             Vsum += tVsum
             Npix += tNpix
@@ -847,9 +841,10 @@ class MultiBandObsList(list):
         """
         over-riding this for type safety
         """
-        assert isinstance(obs_list,ObsList),\
+        assert isinstance(obs_list, ObsList),\
             'obs_list should be of type ObsList'
-        super(MultiBandObsList,self).__setitem__(index, obs_list)
+        super(MultiBandObsList, self).__setitem__(index, obs_list)
+
 
 def get_mb_obs(obs_in):
     """
@@ -858,17 +853,20 @@ def get_mb_obs(obs_in):
     Input should be an Observation, ObsList, or MultiBandObsList
     """
 
-    if isinstance(obs_in,Observation):
-        obs_list=ObsList()
+    if isinstance(obs_in, Observation):
+        obs_list = ObsList()
         obs_list.append(obs_in)
 
-        obs=MultiBandObsList()
+        obs = MultiBandObsList()
         obs.append(obs_list)
-    elif isinstance(obs_in,ObsList):
-        obs=MultiBandObsList()
+
+    elif isinstance(obs_in, ObsList):
+        obs = MultiBandObsList()
         obs.append(obs_in)
-    elif isinstance(obs_in,MultiBandObsList):
-        obs=obs_in
+
+    elif isinstance(obs_in, MultiBandObsList):
+        obs = obs_in
+
     else:
         raise ValueError(
             'obs should be Observation, ObsList, or MultiBandObsList'
@@ -895,7 +893,7 @@ class KObservation(object):
 
         self._set_jacobian()
 
-        self.meta={}
+        self.meta = {}
         if meta is not None:
             self.update_meta_data(meta)
 
@@ -905,12 +903,12 @@ class KObservation(object):
         """
         import galsim
 
-        if not isinstance(kimage,galsim.Image):
+        if not isinstance(kimage, galsim.Image):
             raise ValueError("kimage must be a galsim.Image")
         if kimage.array.dtype != numpy.complex128:
             raise ValueError("kimage must be complex")
 
-        self.kimage=kimage
+        self.kimage = kimage
 
     def _set_weight(self, weight):
         """
@@ -922,16 +920,16 @@ class KObservation(object):
         if weight is None:
             weight = self.kimage.real.copy()
             weight.setZero()
-            weight.array[:,:] = 1.0
+            weight.array[:, :] = 1.0
 
         else:
             assert isinstance(weight, galsim.Image)
 
-            if weight.array.shape!=self.kimage.array.shape:
+            if weight.array.shape != self.kimage.array.shape:
                 raise ValueError("weight kimage must have "
                                  "same shape as kimage")
 
-        self.weight=weight
+        self.weight = weight
 
     @property
     def psf(self):
@@ -940,14 +938,13 @@ class KObservation(object):
 
         currently this simply returns a reference
         """
-        #return self.get_psf()
         return self._psf
 
     def has_psf(self):
         """
         does this object have a psf set?
         """
-        return hasattr(self,'_psf')
+        return hasattr(self, '_psf')
 
     def set_psf(self, psf):
         """
@@ -965,10 +962,10 @@ class KObservation(object):
 
         self._psf = psf
 
-        if psf.kimage.array.shape!=self.kimage.array.shape:
+        if psf.kimage.array.shape != self.kimage.array.shape:
             raise ValueError("psf kimage must have "
                              "same shape as kimage")
-        assert numpy.allclose(psf.kimage.scale,self.kimage.scale)
+        assert numpy.allclose(psf.kimage.scale, self.kimage.scale)
 
     def _set_jacobian(self):
         """
@@ -977,9 +974,9 @@ class KObservation(object):
         scale is always the scale of the image
         """
 
-        scale=self.kimage.scale
+        scale = self.kimage.scale
 
-        dims=self.kimage.array.shape
+        dims = self.kimage.array.shape
         if (dims[0] % 2) == 0:
             cen = (numpy.array(dims)-1.0)/2.0 + 0.5
         else:
@@ -996,7 +993,7 @@ class KObservation(object):
         Add some metadata
         """
 
-        if not isinstance(meta,dict):
+        if not isinstance(meta, dict):
             raise TypeError("meta data must be in dictionary form")
         self.meta.update(meta)
 
@@ -1009,9 +1006,9 @@ class KObsList(list):
     """
 
     def __init__(self, meta=None):
-        super(KObsList,self).__init__()
+        super(KObsList, self).__init__()
 
-        self.meta={}
+        self.meta = {}
         if meta is not None:
             self.update_meta_data(meta)
 
@@ -1021,17 +1018,18 @@ class KObsList(list):
 
         over-riding this for type safety
         """
-        assert isinstance(kobs,KObservation),\
-                "kobs should be of type KObservation, got %s" % type(kobs)
+        assert isinstance(kobs, KObservation), \
+            ("kobs should be of type "
+             "KObservation, got %s" % type(kobs))
 
-        super(KObsList,self).append(kobs)
+        super(KObsList, self).append(kobs)
 
     def update_meta_data(self, meta):
         """
         Add some metadata
         """
 
-        if not isinstance(meta,dict):
+        if not isinstance(meta, dict):
             raise TypeError("meta data must be in dictionary form")
         self.meta.update(meta)
 
@@ -1039,10 +1037,9 @@ class KObsList(list):
         """
         over-riding this for type safety
         """
-        assert isinstance(kobs,KObservation),\
+        assert isinstance(kobs, KObservation),\
             'kobs should be of type KObservation'
-        super(KObsList,self).__setitem__(index, kobs)
-
+        super(KObsList, self).__setitem__(index, kobs)
 
 
 class KMultiBandObsList(list):
@@ -1054,9 +1051,9 @@ class KMultiBandObsList(list):
     """
 
     def __init__(self, meta=None):
-        super(KMultiBandObsList,self).__init__()
+        super(KMultiBandObsList, self).__init__()
 
-        self.meta={}
+        self.meta = {}
         if meta is not None:
             self.update_meta_data(meta)
 
@@ -1066,16 +1063,16 @@ class KMultiBandObsList(list):
 
         over-riding this for type safety
         """
-        assert isinstance(kobs_list,KObsList),\
-                "kobs_list should be of type KObsList"
-        super(KMultiBandObsList,self).append(kobs_list)
+        assert isinstance(kobs_list, KObsList), \
+            "kobs_list should be of type KObsList"
+        super(KMultiBandObsList, self).append(kobs_list)
 
     def update_meta_data(self, meta):
         """
         Add some metadata
         """
 
-        if not isinstance(meta,dict):
+        if not isinstance(meta, dict):
             raise TypeError("meta data must be in dictionary form")
         self.meta.update(meta)
 
@@ -1083,10 +1080,10 @@ class KMultiBandObsList(list):
         """
         over-riding this for type safety
         """
-        assert isinstance(kobs_list,KObsList),\
-                "kobs_list should be of type KObsList"
-        super(KMultiBandObsList,self).__setitem__(index, kobs_list)
+        assert isinstance(kobs_list, KObsList), \
+            "kobs_list should be of type KObsList"
 
+        super(KMultiBandObsList, self).__setitem__(index, kobs_list)
 
 
 def make_iilist(obs, **kw):
@@ -1103,18 +1100,19 @@ def make_iilist(obs, **kw):
     """
     import galsim
 
-    interp=kw.get('interp',DEFAULT_XINTERP)
+    interp = kw.get('interp', DEFAULT_XINTERP)
     mb_obs = get_mb_obs(obs)
 
-    dimlist=[]
-    dklist=[]
+    dimlist = []
+    dklist = []
 
-    mb_iilist=[]
-    for band,obs_list in enumerate(mb_obs):
-        iilist=[]
+    mb_iilist = []
+
+    for band, obs_list in enumerate(mb_obs):
+        iilist = []
         for obs in obs_list:
 
-            jac=obs.jacobian
+            jac = obs.jacobian
             gsimage = galsim.Image(
                 obs.image,
                 wcs=jac.get_galsim_wcs(),
@@ -1123,10 +1121,10 @@ def make_iilist(obs, **kw):
                 gsimage,
                 x_interpolant=interp,
             )
-            if hasattr(ii,'SBProfile'):
-                gsvers=1
+            if hasattr(ii, 'SBProfile'):
+                gsvers = 1
             else:
-                gsvers=2
+                gsvers = 2
 
             if obs.has_psf():
                 psf_weight = obs.psf.weight
@@ -1142,7 +1140,7 @@ def make_iilist(obs, **kw):
                     x_interpolant=interp,
                 )
                 # make dimensions odd
-                if gsvers==1:
+                if gsvers == 1:
                     dim = 1 + psf_ii.SBProfile.getGoodImageSize(
                         psf_ii.nyquistScale(),
                     )
@@ -1153,7 +1151,7 @@ def make_iilist(obs, **kw):
 
             else:
                 # make dimensions odd
-                if hasattr(ii,'SBProfile'):
+                if hasattr(ii, 'SBProfile'):
                     dim = 1 + ii.SBProfile.getGoodImageSize(
                         ii.nyquistScale(),
                     )
@@ -1161,27 +1159,27 @@ def make_iilist(obs, **kw):
                     dim = 1 + ii.getGoodImageSize(
                         ii.nyquist_scale,
                     )
-                psf_ii=None
-                psf_weight=None
+                psf_ii = None
+                psf_weight = None
 
-            if gsvers==1:
-                dk=ii.stepK()
+            if gsvers == 1:
+                dk = ii.stepK()
             else:
-                dk=ii.stepk
+                dk = ii.stepk
 
-            dimlist.append( dim )
+            dimlist.append(dim)
             dklist.append(dk)
 
             iilist.append({
-                'wcs':jac.get_galsim_wcs(),
-                'scale':jac.scale,
-                'ii':ii,
-                'weight':obs.weight,
-                'meta':obs.meta,
-                'psf_ii':psf_ii,
-                'psf_weight':psf_weight,
-                'psf_meta':obs.psf.meta,
-                'realspace_gsimage':gsimage,
+                'wcs': jac.get_galsim_wcs(),
+                'scale': jac.scale,
+                'ii': ii,
+                'weight': obs.weight,
+                'meta': obs.meta,
+                'psf_ii': psf_ii,
+                'psf_weight': psf_weight,
+                'psf_meta': obs.psf.meta,
+                'realspace_gsimage': gsimage,
             })
 
         mb_iilist.append(iilist)
@@ -1191,8 +1189,8 @@ def make_iilist(obs, **kw):
 
     imax = dimarr.argmax()
 
-    dim=dimarr[imax]
-    dk=dkarr[imax]
+    dim = dimarr[imax]
+    dk = dkarr[imax]
 
     return mb_iilist, dim, dk
 
@@ -1216,20 +1214,19 @@ def make_kobs(mb_obs, **kw):
 
     for iilist in mb_iilist:
 
-        kobs_list=KObsList()
+        kobs_list = KObsList()
         for iidict in iilist:
 
             kimage = iidict['ii'].drawKImage(
                 nx=dim,
                 ny=dim,
                 scale=dk,
-                #recenter=False,
             )
 
             # need a better way to deal with weights, chi^2 etc.
             weight = kimage.real.copy()
             useweight = iidict['weight'].max()
-            weight.array[:,:] = 0.5*useweight
+            weight.array[:, :] = 0.5*useweight
 
             # parseval's theorem
             weight *= (1.0/weight.array.size)
@@ -1239,17 +1236,16 @@ def make_kobs(mb_obs, **kw):
                     nx=dim,
                     ny=dim,
                     scale=dk,
-                    #recenter=False,
                 )
 
                 psf_useweight = iidict['psf_weight'].max()
                 psf_weight = psf_kimage.real.copy()
-                psf_weight.array[:,:] = 0.5*psf_useweight
+                psf_weight.array[:, :] = 0.5*psf_useweight
 
                 # parseval's theorem
                 psf_weight *= (1.0/psf_weight.array.size)
 
-                psf_meta={}
+                psf_meta = {}
                 psf_meta.update(iidict['psf_meta'])
                 psf_meta['ii'] = iidict['psf_ii']
                 psf_kobs = KObservation(
@@ -1258,7 +1254,7 @@ def make_kobs(mb_obs, **kw):
                     meta=psf_meta,
                 )
             else:
-                psf_kobs=None
+                psf_kobs = None
 
             meta = iidict['meta']
             meta['realspace_gsimage'] = iidict['realspace_gsimage']
@@ -1276,6 +1272,7 @@ def make_kobs(mb_obs, **kw):
 
     return mb_kobs
 
+
 def get_kmb_obs(obs_in):
     """
     convert the input to a MultiBandObsList
@@ -1283,17 +1280,17 @@ def get_kmb_obs(obs_in):
     Input should be an KObservation, KObsList, or KMultiBandObsList
     """
 
-    if isinstance(obs_in,KObservation):
-        obs_list=KObsList()
+    if isinstance(obs_in, KObservation):
+        obs_list = KObsList()
         obs_list.append(obs_in)
 
-        obs=KMultiBandObsList()
+        obs = KMultiBandObsList()
         obs.append(obs_list)
-    elif isinstance(obs_in,KObsList):
-        obs=KMultiBandObsList()
+    elif isinstance(obs_in, KObsList):
+        obs = KMultiBandObsList()
         obs.append(obs_in)
-    elif isinstance(obs_in,KMultiBandObsList):
-        obs=obs_in
+    elif isinstance(obs_in, KMultiBandObsList):
+        obs = obs_in
     else:
         raise ValueError("obs should be KObservation, "
                          "KObsList, or KMultiBandObsList")
