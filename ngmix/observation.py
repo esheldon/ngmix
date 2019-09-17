@@ -34,6 +34,9 @@ class Observation(object):
         Optional psf Observation
     meta: dict
         Optional dictionary
+    ignore_zero_weight: bool
+        If True, do not store zero weight pixels in the pixels
+        array.  Default is True.
     """
 
     def __init__(self,
