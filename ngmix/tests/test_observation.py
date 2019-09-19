@@ -197,6 +197,29 @@ def test_observation_pixels(image_data):
     assert np.all(pixels == my_pixels)
 
 
+def test_observation_pixels_noignore_zero(image_data):
+
+    weight = image_data['weight'].copy()
+    weight[:, 5] = 0.0
+
+    obs = Observation(
+        image=image_data['image'],
+        weight=weight,
+        jacobian=image_data['jacobian'],
+        ignore_zero_weight=False,
+    )
+    pixels = obs.pixels
+
+    my_pixels = make_pixels(
+        image_data['image'],
+        weight,
+        image_data['jacobian'],
+        ignore_zero_weight=False,
+    )
+
+    assert np.all(pixels == my_pixels)
+
+
 def test_observation_pixels_update_image(image_data):
     rng = np.random.RandomState(seed=11)
     obs = Observation(
