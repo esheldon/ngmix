@@ -300,6 +300,15 @@ def test_gmix_convolve_gauss():
 
 @pytest.mark.parametrize('start', [0, 13])
 def test_gmix_loglike_fdiff(start):
+    """
+    test that the approx fdiff calculation agrees well enough with that
+    calculated with the exp() value 
+
+    restrict comparisons to the valid range, which is +/- 5 sigma
+    """
+
+    rtol = 4.0e-5
+
     row, col, g1, g2, T, flux = -0.5, -0.4, 0, 0, 2.8, 5
     sigma = np.sqrt(T/2)
     pars = np.array([row, col, g1, g2, T, flux])
@@ -314,19 +323,23 @@ def test_gmix_loglike_fdiff(start):
     fdiff = np.zeros(dims[0] * dims[1] + start, dtype=np.float64)
     gm.fill_fdiff(obs, fdiff, start=start)
 
-    loglike = 0
+    cen = (np.array(dims)-1)/2
+
+    row_range = int(cen[0] - 2*sigma), int(cen[0] + 2*sigma)+1
+    col_range = int(cen[1] - 2*sigma), int(cen[1] + 2*sigma)+1
+
+    num = 10
+
     loc = start
-    for r in range(dims[0]):
-        for c in range(dims[1]):
+
+    for r in range(row_range[0], row_range[1]):
+        for c in range(col_range[0], col_range[1]):
+            loc = start + r*dims[1] + c
+
             v, u = obs.jacobian(r, c)
             chi2 = ((u - col)**2 + (v - row)**2)/sigma**2
             model = (
                 5 * np.exp(-0.5 * chi2) / 2.0 / np.pi / sigma**2)
             _fdiff = (model - obs.image[r, c]) * np.sqrt(obs.weight[r, c])
-            assert np.allclose(_fdiff, fdiff[loc])
-
-            loglike += _fdiff**2
-
-            loc += 1
-
-    assert np.allclose(loglike * -0.5, gm.get_loglike(obs))
+            print(_fdiff, fdiff[loc])
+            assert np.allclose(_fdiff, fdiff[loc], rtol=rtol)
