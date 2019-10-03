@@ -6,7 +6,7 @@ except NameError:
 import numpy
 from numpy import array, nan
 from numba import njit
-from .fastexp import expd
+from .fastexp import exp5, FASTEX_MAX_CHI2
 
 # need to make this a pure python exception
 from .gexceptions import GMixRangeError
@@ -14,7 +14,7 @@ from .gexceptions import GMixRangeError
 GMIX_LOW_DETVAL=1.0e-200
 
 @njit
-def gmix_eval_pixel_fast(gmix, pixel, max_chi2=25.0):
+def gmix_eval_pixel_fast(gmix, pixel):
     """
     evaluate a single gaussian mixture, using the
     fast exponential
@@ -25,14 +25,13 @@ def gmix_eval_pixel_fast(gmix, pixel, max_chi2=25.0):
         model_val += gauss2d_eval_pixel_fast(
             gmix[igauss],
             pixel,
-            max_chi2,
         )
 
 
     return model_val
 
 @njit
-def gauss2d_eval_pixel_fast(gauss, pixel, max_chi2=25.0):
+def gauss2d_eval_pixel_fast(gauss, pixel):
     """
     evaluate a 2-d gaussian at the specified location, using
     the fast exponential
@@ -54,8 +53,8 @@ def gauss2d_eval_pixel_fast(gauss, pixel, max_chi2=25.0):
             +     gauss['drr']*udiff*udiff
             - 2.0*gauss['drc']*vdiff*udiff )
 
-    if chi2 < max_chi2 and chi2 >= 0.0:
-        model_val = gauss['pnorm']*expd( -0.5*chi2 )
+    if chi2 < FASTEX_MAX_CHI2 and chi2 >= 0.0:
+        model_val = gauss['pnorm']*exp5(-0.5*chi2)
 
     return model_val
 
