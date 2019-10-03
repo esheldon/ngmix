@@ -8,10 +8,11 @@ from .gmix_nb import (
 try:
     xrange
 except NameError:
-    xrange=range
+    xrange = range
+
 
 @njit
-def render(gmix, coords, image, fast_exp=0, max_chi2=300.0):
+def render(gmix, coords, image, fast_exp=0):
     """
     render the gaussian mixture in the image
 
@@ -25,9 +26,6 @@ def render(gmix, coords, image, fast_exp=0, max_chi2=300.0):
         the image to fill, should be unraveled
     fast_exp: integer, optional
         1 for fast
-    max_chi2: float, optional
-        If fast_exp is 1, this is the maximum chi^2 to
-        be evaluated
     """
 
     if gmix['norm_set'][0] == 0:
@@ -37,11 +35,7 @@ def render(gmix, coords, image, fast_exp=0, max_chi2=300.0):
 
     if fast_exp:
         for icoord in xrange(n_coords):
-            image[icoord] += gmix_eval_pixel_fast(
-                gmix,
-                coords[icoord],
-                max_chi2=max_chi2,
-            )
+            image[icoord] += gmix_eval_pixel_fast(gmix, coords[icoord])
     else:
         for icoord in xrange(n_coords):
             image[icoord] += gmix_eval_pixel(gmix, coords[icoord])
