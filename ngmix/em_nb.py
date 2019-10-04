@@ -12,7 +12,7 @@ from .gmix_nb import (
     gauss2d_set_norm,
     gmix_get_e1e2T,
 )
-from .fastexp import exp5, FASTEXP_MAX_CHI2
+from .fastexp import fexp, FASTEXP_MAX_CHI2
 
 @njit
 def em_run(conf, pixels, sums, gmix):
@@ -114,7 +114,7 @@ def do_scratch_sums(pixel, gmix, sums):
             gauss['dcc']*v2 + gauss['drr']*u2 - 2.0*gauss['drc']*uv
 
         if chi2 < FASTEXP_MAX_CHI2 and chi2 >= 0.0:
-            tsums['gi'] = gauss['pnorm']*exp5(-0.5*chi2)
+            tsums['gi'] = gauss['pnorm']*fexp(-0.5*chi2)
         else:
             tsums['gi'] = 0.0
 

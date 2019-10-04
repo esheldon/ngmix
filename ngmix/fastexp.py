@@ -99,3 +99,5 @@ def exp5(x):
     expval *= (120+f*(120+f*(60+f*(20+f*(5+f)))))*0.0083333333
 
     return expval
+
+fexp = exp5
