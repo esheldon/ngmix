@@ -16,7 +16,7 @@ def _make_exp_lookup(minval=-15, maxval=0):
     return ivals, expvals
 
 
-FASTEX_MAX_CHI2 = 25.0
+FASTEXP_MAX_CHI2 = 25.0
 
 # we limit to chi squared of 25, which means an argument of
 # -0.5*25. Use -15 to be safe
