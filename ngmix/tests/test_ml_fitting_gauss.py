@@ -16,6 +16,9 @@ from ngmix.moments import fwhm_to_T
 def test_ml_fitting_gauss_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
     rng = np.random.RandomState(seed=42)
 
+    # allow some small relative bias due to approximate exp function
+    tol = 1.0e-5
+
     image_size = 33
     cen = (image_size - 1)/2
     gs_wcs = galsim.ShearWCS(
@@ -99,23 +102,18 @@ def test_ml_fitting_gauss_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
             yarr.append(res['pars'][0])
 
     g1 = np.mean(g1arr)
-    g1err = np.std(g1arr) / np.sqrt(len(g1arr))
     g2 = np.mean(g2arr)
-    g2err = np.std(g2arr) / np.sqrt(len(g2arr))
-    gtol = 1e-7
-    assert np.abs(g1 - g1_true) < gtol
-    assert np.abs(g2 - g2_true) < gtol
-    assert np.abs(g1 - g1_true) < g1err * 5
-    assert np.abs(g2 - g2_true) < g2err * 5
+    assert np.abs(g1 - g1_true) < tol
+    assert np.abs(g2 - g2_true) < tol
 
     if g1_true == 0 and g2_true == 0:
         T = np.mean(Tarr)
-        T_err = np.std(Tarr) / np.sqrt(len(Tarr))
-        assert np.abs(T - fwhm_to_T(0.9)) < T_err * 5
+        Ttrue = fwhm_to_T(0.9)
+        assert T/Ttrue-1 < tol
 
     fmn = np.mean(farr)/scale/scale
-    ferr = np.std(farr)/scale/scale / np.sqrt(len(farr))
-    assert np.abs(fmn - 400) < ferr * 5
+
+    assert np.abs(fmn/400-1) < tol
 
     xerr = np.std(xarr) / np.sqrt(len(xarr))
     assert np.abs(np.mean(xarr)) < xerr * 5
