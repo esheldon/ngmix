@@ -1262,6 +1262,8 @@ _gmix_ngauss_dict={
     'coellip1':1,
     'coellip2':2,
     'coellip3':3,
+    'coellip4':4,
+    'coellip5':5,
 }
 
 
