@@ -2011,22 +2011,31 @@ class PSFRunner(object):
         self.lm_pars=lm_pars
         self.set_guess0(Tguess)
 
-    def go(self, ntry=1):
+    def go(self, ntry=1, guess=None):
+
         from .fitting import LMSimple
 
         for i in xrange(ntry):
 
-            guess=self.get_guess()
+            if i == 0 and guess is not None:
+                this_guess = guess.copy()
+            else:
+                this_guess = self.get_guess()
 
-            fitter=LMSimple(self.obs,self.model,lm_pars=self.lm_pars,
-                            prior=self.prior)
-            fitter.go(guess)
+            fitter = LMSimple(
+                self.obs,
+                self.model,
+                lm_pars=self.lm_pars,
+                prior=self.prior,
+            )
 
-            res=fitter.get_result()
-            if res['flags']==0:
+            fitter.go(this_guess)
+
+            res = fitter.get_result()
+            if res['flags'] == 0:
                 break
 
-        self.fitter=fitter
+        self.fitter = fitter
 
     def get_guess(self):
         rng=self.rng
@@ -2102,19 +2111,23 @@ class EMRunner(object):
     def get_fitter(self):
         return self.fitter
 
-    def go(self, ntry=1):
+    def go(self, ntry=1, guess=None):
 
         fitter=GMixEM(self.obs)
         for i in xrange(ntry):
-            guess=self.get_guess()
 
-            fitter.go(guess, self.sky, **self.em_pars)
+            if i == 0 and guess is not None:
+                this_guess = guess.copy()
+            else:
+                this_guess = self.get_guess()
+
+            fitter.go(this_guess, self.sky, **self.em_pars)
 
             res=fitter.get_result()
             if res['flags']==0:
                 if False:
                     print("guess:")
-                    print(guess)
+                    print(this_guess)
                     print("fit:")
                     print(fitter.get_gmix())
                     print("niter:",res['numiter'])
@@ -2325,13 +2338,19 @@ class PSFRunnerCoellip(object):
     def get_fitter(self):
         return self.fitter
 
-    def go(self, ntry=1):
+    def go(self, ntry=1, guess=None):
         from .fitting import LMCoellip
 
         for i in xrange(ntry):
-            guess=self.get_guess()
+
+            if i == 0 and guess is not None:
+                this_guess = guess.copy()
+            else:
+                this_guess = self.get_guess()
+
             fitter=LMCoellip(self.obs,self.ngauss,lm_pars=self.lm_pars, prior=self.prior)
-            fitter.go(guess)
+
+            fitter.go(this_guess)
 
             res=fitter.get_result()
             if res['flags']==0:
@@ -2379,6 +2398,18 @@ class PSFRunnerCoellip(object):
             guess[10] = self.Fguess*_moffat4_pguess[2]*(1.0 + rng.uniform(low=-fac,high=fac))
             guess[11] = self.Fguess*_moffat4_pguess[3]*(1.0 + rng.uniform(low=-fac,high=fac))
 
+        elif self.ngauss==5:
+            guess[4] = self.Tguess*_moffat5_fguess[0]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[5] = self.Tguess*_moffat5_fguess[1]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[6] = self.Tguess*_moffat5_fguess[2]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[7] = self.Tguess*_moffat5_fguess[3]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[8] = self.Tguess*_moffat5_fguess[4]*(1.0 + rng.uniform(low=-fac,high=fac))
+
+            guess[9]  = self.Fguess*_moffat5_pguess[0]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[10] = self.Fguess*_moffat5_pguess[1]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[11] = self.Fguess*_moffat5_pguess[2]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[12] = self.Fguess*_moffat5_pguess[3]*(1.0 + rng.uniform(low=-fac,high=fac))
+            guess[13] = self.Fguess*_moffat5_pguess[4]*(1.0 + rng.uniform(low=-fac,high=fac))
 
         else:
             raise RuntimeError("ngauss should be 1,2,3,4")
@@ -2430,6 +2461,13 @@ _moffat3_fguess=array([ 0.36123609,  0.8426139,   2.58747785])
 
 _moffat4_pguess=array([0.44534,  0.366951,  0.10506,  0.0826497])
 _moffat4_fguess=array([0.541019,  1.19701,  0.282176,  3.51086])
+
+_moffat5_pguess=array([0.45,  0.25,  0.15,  0.1, 0.05])
+_moffat5_fguess=array([0.541019,  1.19701,  0.282176,  3.51086, ])
+
+_moffat5_pguess = array([0.57874897, 0.32273483, 0.03327272, 0.0341253 , 0.03111819])
+_moffat5_fguess = array([0.27831284, 0.9959897 , 5.86989779, 5.63590429, 4.17285878])
+
 #_moffat3_pguess=array([0.45, 0.45, 0.1])
 #_moffat3_fguess=array([0.48955064,  1.50658978, 3.0])
 
