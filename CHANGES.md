@@ -1,4 +1,4 @@
-## unreleased
+## v1.3.6
 
 ### bug fixes
 
@@ -7,8 +7,13 @@
 
 ### new features
 
+- added order 5 fast exponential to fastexp.py which
+  is exported as fexp. This has satisfactory accuracy
+  but is much faster than expd in some real world
+  scenarios.  Modified the tests accordinly.
 - added a Gaussian moments fitter
-
+- added 5 gaussian coellip fitting in the coellip
+  psf fitter
 
 ## v1.3.5
 
