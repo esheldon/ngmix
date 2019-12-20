@@ -38,6 +38,9 @@ class Observation(object):
     ignore_zero_weight: bool
         If True, do not store zero weight pixels in the pixels
         array.  Default is True.
+    store_pixels: bool
+        If True, store an array of pixels for use in fitting routines.
+        If False, the ignore_zero_weight keyword is not used.
     """
 
     def __init__(self,
@@ -50,9 +53,11 @@ class Observation(object):
                  gmix=None,
                  psf=None,
                  meta=None,
+                 store_pixels=True,
                  ignore_zero_weight=True):
 
         self._ignore_zero_weight = ignore_zero_weight
+        self._store_pixels = store_pixels
 
         # pixels depends on image, weight and jacobian, so delay until all are
         # set
@@ -606,6 +611,10 @@ class Observation(object):
         """
         create the pixel struct array, for efficient cache usage
         """
+
+        if not self._store_pixels:
+            self._pixels = None
+            return
 
         self._pixels = make_pixels(
             self.image,

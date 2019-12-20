@@ -197,6 +197,17 @@ def test_observation_pixels(image_data):
     assert np.all(pixels == my_pixels)
 
 
+def test_observation_nopixels(image_data):
+    obs = Observation(
+        image=image_data['image'],
+        weight=image_data['weight'],
+        jacobian=image_data['jacobian'],
+        store_pixels=False,
+    )
+    pixels = obs.pixels
+    assert pixels is None
+
+
 def test_observation_pixels_noignore_zero(image_data):
 
     weight = image_data['weight'].copy()
