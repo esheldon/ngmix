@@ -352,3 +352,30 @@ def test_observation_copy(image_data):
     assert np.all(obs.psf.image == new_obs.psf.image)
     new_obs.psf = new_psf
     assert np.all(obs.psf.image != new_obs.psf.image)
+
+
+def test_observation_context(image_data):
+    obs = Observation(
+        image=image_data['image'].copy(),
+        weight=image_data['weight'].copy(),
+    )
+
+    with pytest.raises(ValueError):
+        obs.image[5, 5] = 3
+        obs.weight[5, 5] = 55
+
+    with pytest.raises(ValueError):
+        # should be a no-op outside of a context
+        obs.writeable()
+        obs.image[5, 5] = 3
+        obs.weight[5, 5] = 55
+
+    assert obs.image[5, 5] != 3
+    assert obs.weight[5, 5] != 55
+
+    with obs.writeable():
+        obs.image[5, 5] = 3
+        obs.weight[5, 5] = 55
+
+    assert obs.image[5, 5] == 3
+    assert obs.weight[5, 5] == 55

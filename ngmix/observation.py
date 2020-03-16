@@ -56,6 +56,7 @@ class Observation(object):
                  store_pixels=True,
                  ignore_zero_weight=True):
 
+        self._writeable = False
         self._ignore_zero_weight = ignore_zero_weight
         self._store_pixels = store_pixels
 
@@ -89,7 +90,7 @@ class Observation(object):
 
         currently this simply returns a reference
         """
-        return self._image
+        return self._get_view(self._image)
 
     @image.setter
     def image(self, image):
@@ -108,7 +109,7 @@ class Observation(object):
 
         currently this simply returns a reference
         """
-        return self._weight
+        return self._get_view(self._weight)
 
     @weight.setter
     def weight(self, weight):
@@ -125,8 +126,8 @@ class Observation(object):
         """
         getter for pixels
 
-        currently this simply returns a reference.  Do not modify
-        the pixels array!
+        this simply returns a reference.  Note the pixels
+        array is read only.
         """
         return self._pixels
 
@@ -616,12 +617,36 @@ class Observation(object):
             self._pixels = None
             return
 
-        self._pixels = make_pixels(
+        pixels = make_pixels(
             self.image,
             self.weight,
             self._jacobian,
             ignore_zero_weight=self._ignore_zero_weight,
         )
+        pixels.flags['WRITEABLE'] = False
+        self._pixels = pixels
+
+    def _get_view(self, data):
+        view = data.view()
+        view.flags['WRITEABLE'] = self._writeable
+        return view
+
+    def writeable(self):
+        """
+        returns self.  This will only work in a with context, e.g
+        with obs.writeable():
+            obs.image[w] += 5
+        """
+        return self
+
+    def __enter__(self):
+        self._writeable = True
+        return self
+
+    def __exit__(self, exception_type, exception_value, traceback):
+        self._writeable = False
+        self.update_pixels()
+
 
 
 class ObsList(list):

@@ -189,25 +189,25 @@ def _doadd_single_obs(obs, nobs):
     obs.image_orig = obs.image.copy()
     obs.weight_orig = obs.weight.copy()
 
-    im = obs.image
-    nim = nobs.image
+    # the weight and image can be modified in the context, and update_pixels is
+    # automatically called upon exit
 
-    obs.image = im + nim
+    with obs.writeable():
+        obs.image += nobs.image
 
-    wpos = numpy.where(
-        (obs.weight != 0.0) &
-        (nobs.weight != 0.0)
-    )
-    if wpos[0].size > 0:
-        tvar = obs.weight*0
-        # add the variances
-        tvar[wpos] = (
-            1.0/obs.weight[wpos] +
-            1.0/nobs.weight[wpos]
+        wpos = numpy.where(
+            (obs.weight != 0.0) &
+            (nobs.weight != 0.0)
         )
-        obs.weight[wpos] = 1.0/tvar[wpos]
+        if wpos[0].size > 0:
+            tvar = obs.weight*0
+            # add the variances
+            tvar[wpos] = (
+                1.0/obs.weight[wpos] +
+                1.0/nobs.weight[wpos]
+            )
+            obs.weight[wpos] = 1.0/tvar[wpos]
 
-    obs.update_pixels()
 
 def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     """
