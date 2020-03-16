@@ -207,6 +207,7 @@ def _doadd_single_obs(obs, nobs):
         )
         obs.weight[wpos] = 1.0/tvar[wpos]
 
+    obs.update_pixels()
 
 def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
     """

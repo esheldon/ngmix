@@ -1,3 +1,9 @@
+## v1.3.8 (not released)
+
+## bug fixes
+
+- fix bug not updating pixel array when adding noise in metacal
+
 ## v1.3.6
 
 ### bug fixes
