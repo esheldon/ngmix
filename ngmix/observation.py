@@ -420,9 +420,13 @@ class Observation(object):
 
     def get_jacobian(self):
         """
-        get a copy of the jacobian
+        get a jacobian with reference to our jacobian's data
+
+        this is not writeable by default
         """
-        return self._jacobian.copy()
+        j = self._jacobian.copy()
+        j._data = self._get_view(self._jacobian._data)
+        return j
 
     def set_psf(self, psf):
         """
@@ -603,7 +607,7 @@ class Observation(object):
             ormask=ormask,
             noise=noise,
             gmix=gmix,
-            jacobian=self.jacobian,  # makes a copy
+            jacobian=self.jacobian,  # makes a copy internally
             meta=meta,
             psf=psf,
         )
@@ -646,7 +650,6 @@ class Observation(object):
     def __exit__(self, exception_type, exception_value, traceback):
         self._writeable = False
         self.update_pixels()
-
 
 
 class ObsList(list):
