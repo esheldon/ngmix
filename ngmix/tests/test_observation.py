@@ -355,27 +355,40 @@ def test_observation_copy(image_data):
 
 
 def test_observation_context(image_data):
+
     obs = Observation(
         image=image_data['image'].copy(),
         weight=image_data['weight'].copy(),
+        jacobian=image_data['jacobian'],
     )
 
     with pytest.raises(ValueError):
         obs.image[5, 5] = 3
+
+    with pytest.raises(ValueError):
         obs.weight[5, 5] = 55
 
     with pytest.raises(ValueError):
-        # should be a no-op outside of a context
-        obs.writeable()
+        obs.jacobian.set_cen(row=35, col=55)
+
+    # should be a no-op outside of a context
+    obs.writeable()
+    with pytest.raises(ValueError):
         obs.image[5, 5] = 3
+    with pytest.raises(ValueError):
         obs.weight[5, 5] = 55
+    with pytest.raises(ValueError):
+        obs.jacobian.set_cen(row=35, col=55)
 
     assert obs.image[5, 5] != 3
     assert obs.weight[5, 5] != 55
+    assert obs.jacobian.row0 != 35
 
     with obs.writeable():
         obs.image[5, 5] = 3
         obs.weight[5, 5] = 55
+        obs.jacobian.set_cen(row=35, col=55)
 
     assert obs.image[5, 5] == 3
     assert obs.weight[5, 5] == 55
+    assert obs.jacobian.row0 == 35
