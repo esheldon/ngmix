@@ -49,7 +49,6 @@ BOOT_WEIGHTS_LOW= 2**5
 
 class Bootstrapper(object):
     def __init__(self, obs,
-                 find_cen=False,
                  verbose=False,
                  **kw):
         """
@@ -66,7 +65,6 @@ class Bootstrapper(object):
             need to run fit_psfs()
         """
 
-        self.find_cen=find_cen
         self.verbose=verbose
 
         # this never gets modified in any way
@@ -74,9 +72,6 @@ class Bootstrapper(object):
 
         # this will get replaced if fit_psfs is run
         self.mb_obs_list=self.mb_obs_list_orig
-
-        if self.find_cen:
-            self._find_cen()
 
         self.model_fits={}
 
@@ -278,93 +273,6 @@ class Bootstrapper(object):
         pars[4] = pars_lin[4]
 
         return pars, pars_lin
-
-
-    def _find_cen(self, ntry=10, Tguess=4.0):
-        """
-        run a single-gaussian em fit, just to find the center
-
-        Modify the jacobian of our version of the observations accordingly.
-
-        apply a wide prior on the center, just for stability.  Apply an
-        informative prior on T and g, uninformative on flux.
-        """
-        from . import priors, joint_priors, guessers
-
-        # T prior. I think it's ok if this is too restrictive
-        max_pars={'maxfev':2000}
-
-        Twidth=Tguess*0.5
-
-        # width of cen prior in pixels, should be broad
-        cen_width=3 # 1-sigma range for prior on center
-
-        obs_orig = self.mb_obs_list[0][0]
-        jacob=obs_orig.jacobian
-        scale=jacob.get_scale()
-
-        nband=len(self.mb_obs_list)
-        fluxes=zeros(nband)
-        for i,obslist in enumerate(self.mb_obs_list):
-            fsum=0.0
-            N=0
-            for obs in obslist:
-                fsum += obs.image.sum()
-                N+=1
-
-            flux = fsum/N
-            if flux < 0.0:
-                flux=10.0
-            fluxes[i] = flux
-
-        gprior=priors.GPriorBA(0.2)
-        cen_prior=priors.CenPrior(
-            0.0,
-            0.0,
-            scale*cen_width,
-            scale*cen_width,
-        )
-
-        Tprior=priors.LogNormal(Tguess, Twidth)
-
-        # flux is the only uninformative prior
-        Fprior=[]
-        for i in xrange(len(fluxes)):
-            Fprior.append( priors.FlatPrior(-10.0, 1.e10) )
-
-        prior=joint_priors.PriorSimpleSep(
-            cen_prior,
-            gprior,
-            Tprior,
-            Fprior,
-        )
-        guesser=guessers.TFluxGuesser(
-            Tguess,
-            fluxes,
-        )
-        #guesser=guessers.TFluxAndPriorGuesser(
-        #    Tprior.mean,
-        #    fluxes,
-        #    prior,
-        #)
-        runner=MaxRunner(
-            'gauss',
-            max_pars,
-            guesser,
-            prior=prior,
-        )
-        runner.go(ntry=ntry)
-
-        fitter=runner.get_fitter()
-        res=fitter.get_result()
-
-        if res['flags']==0:
-            row,col=res['pars'][2],res['pars'][3]
-            print("        setting jacobian cen to:",row,col,
-                  "numiter:",res['numiter'])
-            jacob.set_cen(row=row,col=col)
-        else:
-            print("        failed to find cen")
 
     def fit_psfs(self, psf_model, Tguess,
                  Tguess_key=None,
@@ -1484,7 +1392,6 @@ class MaxMetacalBootstrapper(Bootstrapper):
         for key in sorted(obs_dict):
             # run a regular Bootstrapper on these observations
             boot = Bootstrapper(obs_dict[key],
-                                find_cen=self.find_cen,
                                 verbose=self.verbose)
 
             if False:
