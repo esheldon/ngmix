@@ -53,29 +53,6 @@ def _get_obs(rng):
     return obs
 
 
-def dofit_mcal(obs, rng):
-    mcal_boot = ngmix.bootstrap.MaxMetacalBootstrapper(obs)
-
-    psf_Tguess = 0.9*0.263**2
-    pars = {
-        'method': 'lm',
-        'lm_pars': {},
-    }
-    mcal_boot.fit_metacal(
-        'gauss',
-        'gauss',
-        pars,
-        psf_Tguess,
-        metacal_pars={
-            'psf': 'fitgauss',
-            'types': ['noshear', '1p', '1m'],
-            'fixnoise': True,
-        },
-    )
-
-    return mcal_boot.get_metacal_result()
-
-
 @pytest.mark.parametrize('models', [('gauss', 'gauss'), ('gauss', 'exp')])
 def test_bootstrap_max_smoke(models):
 
