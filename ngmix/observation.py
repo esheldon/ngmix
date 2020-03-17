@@ -88,7 +88,7 @@ class Observation(object):
         """
         getter for image
 
-        currently this simply returns a reference
+        returns a read-only reference
         """
         return self._get_view(self._image)
 
@@ -107,7 +107,7 @@ class Observation(object):
         """
         getter for weight
 
-        currently this simply returns a reference
+        returns a read-only reference
         """
         return self._get_view(self._weight)
 
@@ -126,8 +126,9 @@ class Observation(object):
         """
         getter for pixels
 
-        this simply returns a reference.  Note the pixels
-        array is read only.
+        this simply returns a reference.  Note the pixels array is *always*
+        read only.  To reset the pixels you must reset the
+        image/weight/jacobian
         """
         return self._pixels
 
@@ -136,14 +137,14 @@ class Observation(object):
         """
         getter for bmask
 
-        currently this simply returns a reference
+        returns a read-only reference
         """
-        return self._bmask
+        return self._get_view(self._bmask)
 
     @bmask.setter
     def bmask(self, bmask):
         """
-        set the bmask
+        set the bmask, with consistency checks
         """
         self.set_bmask(bmask)
 
@@ -152,9 +153,9 @@ class Observation(object):
         """
         getter for ormask
 
-        currently this simply returns a reference
+        returns a read-only reference
         """
-        return self._ormask
+        return self._get_view(self._ormask)
 
     @ormask.setter
     def ormask(self, ormask):
@@ -168,9 +169,9 @@ class Observation(object):
         """
         getter for noise
 
-        currently this simply returns a reference
+        returns a read-only reference
         """
-        return self._noise
+        return self._get_view(self._noise)
 
     @noise.setter
     def noise(self, noise):
@@ -182,7 +183,8 @@ class Observation(object):
     @property
     def jacobian(self):
         """
-        get a copy of the jacobian
+        get a read-only reference to the jacobian.  A new jacobian
+        is made with read-only reference to underlying data
         """
         return self.get_jacobian()
 
