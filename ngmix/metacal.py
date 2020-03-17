@@ -782,7 +782,7 @@ class Metacal(object):
         obs = self.obs
         psf_obs = Observation(psf_im.array,
                               weight=obs.psf.weight.copy(),
-                              jacobian=obs.psf.jacobian.copy())
+                              jacobian=obs.psf.jacobian)
         return psf_obs
 
     def _make_obs(self, im, psf_im):
@@ -810,7 +810,7 @@ class Metacal(object):
         meta.update(obs.meta)
         newobs = Observation(
             im.array,
-            jacobian=obs.jacobian.copy(),
+            jacobian=obs.jacobian,
             weight=obs.weight.copy(),
             psf=psf_obs,
             meta=meta,
@@ -897,6 +897,7 @@ class MetacalGaussPSF(Metacal):
         obs = self.obs
 
         cen = (numpy.array(psf_im.shape)-1.0)/2.0
+
         j = obs.psf.jacobian.copy()
         j.set_cen(
             row=cen[0],
@@ -1107,8 +1108,7 @@ class MetacalFitGaussPSF(Metacal):
 
         cen = (numpy.array(psf_im.shape)-1.0)/2.0
 
-        # this makes a copy
-        j = self.obs.psf.jacobian
+        j = self.obs.psf.jacobian.copy()
         j.set_cen(
             row=cen[0],
             col=cen[1],
@@ -1252,7 +1252,7 @@ class MetacalAnalyticPSF(Metacal):
         meta.update(obs.meta)
         newobs = Observation(
             im.array,
-            jacobian=obs.jacobian.copy(),
+            jacobian=obs.jacobian,
             weight=obs.weight.copy(),
             psf=psf_obs,
             meta=meta,
