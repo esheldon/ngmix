@@ -352,3 +352,63 @@ def test_observation_copy(image_data):
     assert np.all(obs.psf.image == new_obs.psf.image)
     new_obs.psf = new_psf
     assert np.all(obs.psf.image != new_obs.psf.image)
+
+
+def _dotest_readonly_attrs(obs):
+    attrs = ['image', 'weight', 'bmask', 'ormask', 'noise']
+    val = 9999
+
+    for attr in attrs:
+        ref = getattr(obs, attr)
+
+        with pytest.raises(ValueError):
+            ref[5, 5] = val
+
+        assert ref[5, 5] != val
+
+    with pytest.raises(ValueError):
+        obs.jacobian.set_cen(row=35, col=55)
+
+
+def _dotest_writeable_attrs(obs):
+
+    attrs = ['image', 'weight', 'bmask', 'ormask', 'noise']
+    val = 9999
+
+    with obs.writeable():
+
+        for attr in attrs:
+            ref = getattr(obs, attr)
+
+            ref[5, 5] = val
+
+        obs.jacobian.set_cen(row=35, col=55)
+
+    for attr in attrs:
+        ref = getattr(obs, attr)
+
+        assert ref[5, 5] == val
+
+    row, col = obs.jacobian.get_cen()
+    assert row == 35
+
+
+def test_observation_context(image_data):
+
+    obs = Observation(
+        image=image_data['image'].copy(),
+        weight=image_data['weight'].copy(),
+        bmask=image_data['bmask'].copy(),
+        ormask=image_data['ormask'].copy(),
+        noise=image_data['noise'].copy(),
+        jacobian=image_data['jacobian'],
+    )
+
+    _dotest_readonly_attrs(obs)
+
+    # should be a no-op outside of a context
+    obs.writeable()
+    _dotest_readonly_attrs(obs)
+
+    with obs.writeable():
+        _dotest_writeable_attrs(obs)

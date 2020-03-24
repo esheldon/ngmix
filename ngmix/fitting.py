@@ -1961,22 +1961,6 @@ class LMBD(LMSimple):
             res['flux_cov'] = res['pars_cov'][7:, 7:]
             res['flux_err'] = sqrt(diag(res['flux_cov']))
 
-    '''
-    def _setup_data(self, guess):
-        super(LMBD,self)._setup_data(guess)
-
-        import images
-        gm = self._gmix_all[0][0]
-        print('gm:',gm)
-        im = gm.make_image(
-            self.obs[0][0].image.shape,
-            jacobian=self.obs[0][0].jacobian,
-        )
-        print(im.std())
-        images.multiview(im)
-        stop
-    '''
-
 
 class LMBDF(LMSimple):
     """

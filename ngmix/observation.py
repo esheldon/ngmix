@@ -56,6 +56,7 @@ class Observation(object):
                  store_pixels=True,
                  ignore_zero_weight=True):
 
+        self._writeable = False
         self._ignore_zero_weight = ignore_zero_weight
         self._store_pixels = store_pixels
 
@@ -87,9 +88,9 @@ class Observation(object):
         """
         getter for image
 
-        currently this simply returns a reference
+        returns a read-only reference
         """
-        return self._image
+        return self._get_view(self._image)
 
     @image.setter
     def image(self, image):
@@ -106,9 +107,9 @@ class Observation(object):
         """
         getter for weight
 
-        currently this simply returns a reference
+        returns a read-only reference
         """
-        return self._weight
+        return self._get_view(self._weight)
 
     @weight.setter
     def weight(self, weight):
@@ -125,8 +126,9 @@ class Observation(object):
         """
         getter for pixels
 
-        currently this simply returns a reference.  Do not modify
-        the pixels array!
+        this simply returns a reference.  Note the pixels array is *always*
+        read only.  To reset the pixels you must reset the
+        image/weight/jacobian
         """
         return self._pixels
 
@@ -135,14 +137,14 @@ class Observation(object):
         """
         getter for bmask
 
-        currently this simply returns a reference
+        returns a read-only reference
         """
-        return self._bmask
+        return self._get_view(self._bmask)
 
     @bmask.setter
     def bmask(self, bmask):
         """
-        set the bmask
+        set the bmask, with consistency checks
         """
         self.set_bmask(bmask)
 
@@ -151,9 +153,9 @@ class Observation(object):
         """
         getter for ormask
 
-        currently this simply returns a reference
+        returns a read-only reference
         """
-        return self._ormask
+        return self._get_view(self._ormask)
 
     @ormask.setter
     def ormask(self, ormask):
@@ -167,9 +169,9 @@ class Observation(object):
         """
         getter for noise
 
-        currently this simply returns a reference
+        returns a read-only reference
         """
-        return self._noise
+        return self._get_view(self._noise)
 
     @noise.setter
     def noise(self, noise):
@@ -181,7 +183,8 @@ class Observation(object):
     @property
     def jacobian(self):
         """
-        get a copy of the jacobian
+        get a read-only reference to the jacobian.  A new jacobian
+        is made with read-only reference to underlying data
         """
         return self.get_jacobian()
 
@@ -419,9 +422,13 @@ class Observation(object):
 
     def get_jacobian(self):
         """
-        get a copy of the jacobian
+        get a jacobian with reference to our jacobian's data
+
+        this is not writeable by default
         """
-        return self._jacobian.copy()
+        j = self._jacobian.copy()
+        j._data = self._get_view(self._jacobian._data)
+        return j
 
     def set_psf(self, psf):
         """
@@ -602,7 +609,7 @@ class Observation(object):
             ormask=ormask,
             noise=noise,
             gmix=gmix,
-            jacobian=self.jacobian,  # makes a copy
+            jacobian=self.jacobian,  # makes a copy internally
             meta=meta,
             psf=psf,
         )
@@ -616,12 +623,35 @@ class Observation(object):
             self._pixels = None
             return
 
-        self._pixels = make_pixels(
+        pixels = make_pixels(
             self.image,
             self.weight,
             self._jacobian,
             ignore_zero_weight=self._ignore_zero_weight,
         )
+        pixels.flags['WRITEABLE'] = False
+        self._pixels = pixels
+
+    def _get_view(self, data):
+        view = data.view()
+        view.flags['WRITEABLE'] = self._writeable
+        return view
+
+    def writeable(self):
+        """
+        returns self.  This will only work in a with context, e.g
+        with obs.writeable():
+            obs.image[w] += 5
+        """
+        return self
+
+    def __enter__(self):
+        self._writeable = True
+        return self
+
+    def __exit__(self, exception_type, exception_value, traceback):
+        self._writeable = False
+        self.update_pixels()
 
 
 class ObsList(list):
