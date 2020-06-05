@@ -5,6 +5,7 @@ from .gmix_nb import (
     gmix_set_norms,
 )
 
+
 @njit
 def get_loglike(gmix, pixels):
     """
@@ -31,7 +32,7 @@ def get_loglike(gmix, pixels):
         number of pixels used
     """
 
-    if gmix['norm_set'][0] == 0:
+    if gmix["norm_set"][0] == 0:
         gmix_set_norms(gmix)
 
     npix = 0
@@ -43,19 +44,20 @@ def get_loglike(gmix, pixels):
 
         model_val = gmix_eval_pixel_fast(gmix, pixel)
 
-        ivar = pixel['ierr']*pixel['ierr']
-        val  = pixel['val']
-        diff = model_val-val
+        ivar = pixel["ierr"] * pixel["ierr"]
+        val = pixel["val"]
+        diff = model_val - val
 
-        loglike += diff*diff*ivar
+        loglike += diff * diff * ivar
 
         s2n_numer += val * model_val * ivar
         s2n_denom += model_val * model_val * ivar
         npix += 1
 
-    loglike *= (-0.5)
+    loglike *= -0.5
 
     return loglike, s2n_numer, s2n_denom, npix
+
 
 @njit
 def fill_fdiff(gmix, pixels, fdiff, start):
@@ -72,7 +74,7 @@ def fill_fdiff(gmix, pixels, fdiff, start):
         Array to fill, should be same length as pixels
     """
 
-    if gmix['norm_set'][0] == 0:
+    if gmix["norm_set"][0] == 0:
         gmix_set_norms(gmix)
 
     n_pixels = pixels.shape[0]
@@ -80,7 +82,8 @@ def fill_fdiff(gmix, pixels, fdiff, start):
         pixel = pixels[ipixel]
 
         model_val = gmix_eval_pixel_fast(gmix, pixel)
-        fdiff[start+ipixel] = (model_val-pixel['val'])*pixel['ierr']
+        fdiff[start + ipixel] = (model_val - pixel["val"]) * pixel["ierr"]
+
 
 @njit
 def finish_fdiff(pixels, fdiff, start):
@@ -102,9 +105,9 @@ def finish_fdiff(pixels, fdiff, start):
     for ipixel in range(n_pixels):
         pixel = pixels[ipixel]
 
-        model_val = fdiff[start+ipixel]
+        model_val = fdiff[start + ipixel]
 
-        fdiff[start+ipixel] = (model_val-pixel['val'])*pixel['ierr']
+        fdiff[start + ipixel] = (model_val - pixel["val"]) * pixel["ierr"]
 
 
 @njit
@@ -122,7 +125,7 @@ def update_model_array(gmix, pixels, arr, start):
         Array to fill
     """
 
-    if gmix['norm_set'][0] == 0:
+    if gmix["norm_set"][0] == 0:
         gmix_set_norms(gmix)
 
     n_pixels = pixels.shape[0]
@@ -130,7 +133,8 @@ def update_model_array(gmix, pixels, arr, start):
         pixel = pixels[ipixel]
 
         model_val = gmix_eval_pixel_fast(gmix, pixel)
-        arr[start+ipixel] += model_val
+        arr[start + ipixel] += model_val
+
 
 @njit
 def get_model_s2n_sum(gmix, pixels):
@@ -152,7 +156,7 @@ def get_model_s2n_sum(gmix, pixels):
         sum to calculate s/n
     """
 
-    if gmix['norm_set'][0] == 0:
+    if gmix["norm_set"][0] == 0:
         gmix_set_norms(gmix)
 
     n_pixels = pixels.shape[0]
@@ -162,10 +166,8 @@ def get_model_s2n_sum(gmix, pixels):
         pixel = pixels[ipixel]
 
         model_val = gmix_eval_pixel_fast(gmix, pixel)
-        ivar = pixel['ierr']*pixel['ierr']
+        ivar = pixel["ierr"] * pixel["ierr"]
 
-        s2n_sum += model_val*model_val*ivar
+        s2n_sum += model_val * model_val * ivar
 
     return s2n_sum
-
-
