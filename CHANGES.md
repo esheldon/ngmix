@@ -1,8 +1,23 @@
-## v1.3.8 (not released)
+## v1.3.8
 
-## bug fixes
+### bug fixes
 
 - fix bug not updating pixel array when adding noise in metacal
+
+### new features
+
+- added writeable context for observations, now returned references
+  for observation images etc. are read only unless in the writeable
+  context
+- jacobian getter returns new Jacobian with readonly view, rather
+  than a copy
+- added more unit tests
+
+## v1.3.7
+
+### new features
+
+- Add option to not store pixels
 
 ## v1.3.6
 
