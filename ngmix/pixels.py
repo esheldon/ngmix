@@ -1,6 +1,7 @@
 import numpy
 from .gexceptions import GMixFatalError
 
+
 def make_pixels(image, weight, jacob, ignore_zero_weight=True):
     """
     make a pixel array from the image and weight
@@ -30,9 +31,9 @@ def make_pixels(image, weight, jacob, ignore_zero_weight=True):
     from .pixels_nb import fill_pixels
 
     if ignore_zero_weight:
-        w=numpy.where(weight > 0.0)
+        w = numpy.where(weight > 0.0)
         if w[0].size == 0:
-            raise GMixFatalError('no weights > 0')
+            raise GMixFatalError("no weights > 0")
         npixels = w[0].size
     else:
         npixels = image.size
@@ -49,6 +50,7 @@ def make_pixels(image, weight, jacob, ignore_zero_weight=True):
 
     return pixels
 
+
 def make_coords(dims, jacob):
     """
     make a coords array
@@ -57,27 +59,25 @@ def make_coords(dims, jacob):
 
     nrow, ncol = dims
 
-    coords = numpy.zeros(nrow*ncol, dtype=_coords_dtype)
+    coords = numpy.zeros(nrow * ncol, dtype=_coords_dtype)
 
     fill_coords(
-        coords,
-        nrow,
-        ncol,
-        jacob._data,
+        coords, nrow, ncol, jacob._data,
     )
 
     return coords
 
-_pixels_dtype=[
-    ('u','f8'),
-    ('v','f8'),
-    ('val','f8'),
-    ('ierr','f8'),
-    ('fdiff','f8'),
+
+_pixels_dtype = [
+    ("u", "f8"),
+    ("v", "f8"),
+    ("val", "f8"),
+    ("ierr", "f8"),
+    ("fdiff", "f8"),
 ]
 
 
-_coords_dtype=[
-    ('u','f8'),
-    ('v','f8'),
+_coords_dtype = [
+    ("u", "f8"),
+    ("v", "f8"),
 ]
