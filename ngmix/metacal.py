@@ -347,8 +347,8 @@ class Metacal(object):
         shdict = {}
 
         # galshear keys
-        shdict['1m'] = Shape(-step,  0.0)
-        shdict['1p'] = Shape(+step,  0.0)
+        shdict['1m'] = Shape(-step, 0.0)
+        shdict['1p'] = Shape(+step, 0.0)
 
         shdict['2m'] = Shape(0.0, -step)
         shdict['2p'] = Shape(0.0, +step)
@@ -1253,20 +1253,6 @@ class MetacalAnalyticPSF(Metacal):
 
         if obs.has_bmask():
             newobs.bmask = obs.bmask
-
-        '''
-        if False:
-            import images
-            print("orig psf im sum:",self.obs.psf.image.sum())
-            print("new psf im sum:",psf_im.array.sum())
-            images.multiview(
-                psf_im.array,
-                title='psf',
-                file='/u/ki/esheldon/public_html/tmp/plots/tmp.png',
-            )
-            if 'q'==raw_input('hit a key: '):
-                stop
-        '''
 
         return newobs
 
