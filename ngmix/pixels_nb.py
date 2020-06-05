@@ -2,6 +2,7 @@ import numpy
 from numba import njit
 from .jacobian_nb import jacobian_get_vu
 
+
 @njit
 def fill_pixels(pixels, image, weight, jacob, ignore_zero_weight=True):
     """
@@ -27,22 +28,22 @@ def fill_pixels(pixels, image, weight, jacob, ignore_zero_weight=True):
     """
     nrow, ncol = image.shape
 
-    ipixel=0
+    ipixel = 0
     for row in range(nrow):
         for col in range(ncol):
 
-            ivar = weight[row,col]
+            ivar = weight[row, col]
             if ignore_zero_weight and ivar <= 0.0:
                 continue
 
             pixel = pixels[ipixel]
 
-            v,u = jacobian_get_vu(jacob,row,col)
+            v, u = jacobian_get_vu(jacob, row, col)
 
             pixel['v'] = v
             pixel['u'] = u
 
-            pixel['val'] = image[row,col]
+            pixel['val'] = image[row, col]
 
             if ivar < 0.0:
                 ivar = 0.0
@@ -52,8 +53,8 @@ def fill_pixels(pixels, image, weight, jacob, ignore_zero_weight=True):
             ipixel += 1
 
     if ipixel != pixels.size:
-        #raise RuntimeError('only filled %d/%d pixels' % (ipixel, pixels.size))
         raise RuntimeError('some pixels were not filled')
+
 
 @njit
 def fill_coords(coords, nrow, ncol, jacob):
@@ -74,13 +75,13 @@ def fill_coords(coords, nrow, ncol, jacob):
         row0,col0,dvdrow,dvdcol,dudrow,dudcol,...
     """
 
-    icoord=0
+    icoord = 0
     for row in range(nrow):
         for col in range(ncol):
 
             coord = coords[icoord]
 
-            v,u = jacobian_get_vu(jacob,row,col)
+            v, u = jacobian_get_vu(jacob, row, col)
 
             coord['v'] = v
             coord['u'] = u
