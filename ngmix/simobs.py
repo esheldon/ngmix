@@ -1,10 +1,3 @@
-from __future__ import print_function, absolute_import, division
-
-try:
-    xrange
-except NameError:
-    xrange=range
-
 import numpy
 from numpy import where, sqrt, zeros
 from .observation import Observation, ObsList, MultiBandObsList
@@ -73,7 +66,7 @@ def _simulate_mobs(gmix_list, mobs, **kw):
 
     new_mobs=MultiBandObsList()
     nband = len(mobs)
-    for i in xrange(nband):
+    for i in range(nband):
         if gmix_list is None:
             gmix=None
         else:

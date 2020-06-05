@@ -1,8 +1,3 @@
-try:
-    xrange
-except NameError:
-    xrange = range
-
 from numba import njit
 
 from .gmix_nb import (
@@ -37,7 +32,7 @@ def admom(confarray, wt, pixels, resarray):
     colorig = wt['col'][0]
 
     e1old = e2old = Told = -9999.0
-    for i in xrange(conf['maxit']):
+    for i in range(conf['maxit']):
 
         if wt['det'][0] < GMIX_LOW_DETVAL:
             res['flags'] = ADMOM_DET
@@ -122,7 +117,7 @@ def admom_censums(wt, pixels, res):
     """
 
     n_pixels = pixels.size
-    for i in xrange(n_pixels):
+    for i in range(n_pixels):
 
         pixel = pixels[i]
         weight = gmix_eval_pixel_fast(wt, pixel)
@@ -146,7 +141,7 @@ def admom_momsums(wt, pixels, res):
     F = res['F']
 
     n_pixels = pixels.size
-    for i_pixel in xrange(n_pixels):
+    for i_pixel in range(n_pixels):
 
         pixel = pixels[i_pixel]
         weight = gmix_eval_pixel_fast(wt, pixel)
@@ -169,9 +164,9 @@ def admom_momsums(wt, pixels, res):
         res['wsum'] += weight
         res['npix'] += 1
 
-        for i in xrange(6):
+        for i in range(6):
             res['sums'][i] += wdata*F[i]
-            for j in xrange(6):
+            for j in range(6):
                 res['sums_cov'][i, j] += w2*var*F[i]*F[j]
 
 

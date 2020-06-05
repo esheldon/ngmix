@@ -1,10 +1,3 @@
-from __future__ import print_function, absolute_import, division
-
-try:
-    xrange
-except NameError:
-    xrange=range
-
 import numpy
 from numpy import where, log10, zeros, ones, exp, sqrt
 from numpy.random import random as randu
@@ -146,7 +139,7 @@ class PriorSimpleSep(object):
         fdiff[index] =  self.T_prior.get_lnprob_scalar(pars[4], **keys)
         index += 1
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             fdiff[index] = F_prior.get_lnprob_scalar(pars[5+i], **keys)
             index += 1
@@ -177,7 +170,7 @@ class PriorSimpleSep(object):
         lnp += self.g_prior.get_lnprob_array2d(pars[:,2],pars[:,3])
         lnp += self.T_prior.get_lnprob_array(pars[:,4])
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             lnp += F_prior.get_lnprob_array(pars[:,5+i])
 
@@ -206,7 +199,7 @@ class PriorSimpleSep(object):
         samples[:,3] = g2
         samples[:,4] = T
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             F=F_prior.sample(n)
             samples[:,5+i] = F
@@ -348,7 +341,7 @@ class PriorBDSep(PriorSimpleSep):
         fdiff[index] =  self.fracdev_prior.get_fdiff(pars[6])
         index += 1
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             fdiff[index] = F_prior.get_fdiff(pars[7+i])
             index += 1
@@ -366,7 +359,7 @@ class PriorBDSep(PriorSimpleSep):
         lnp += self.logTratio_prior.get_lnprob_array(pars[:,5])
         lnp += self.fracdev_prior.get_lnprob_array(pars[:,6])
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             lnp += F_prior.get_lnprob_array(pars[:,7+i])
 
@@ -399,7 +392,7 @@ class PriorBDSep(PriorSimpleSep):
         samples[:,5] = logTratio
         samples[:,6] = fracdev
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             F=F_prior.sample(n)
             samples[:,7+i] = F
@@ -537,7 +530,7 @@ class PriorBDFSep(PriorSimpleSep):
         fdiff[index] =  self.fracdev_prior.get_fdiff(pars[5])
         index += 1
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             fdiff[index] = F_prior.get_fdiff(pars[6+i])
             index += 1
@@ -569,7 +562,7 @@ class PriorBDFSep(PriorSimpleSep):
         index += 1
 
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             fdiff[index] = F_prior.get_lnprob_scalar(pars[6+i], **keys)
             index += 1
@@ -590,7 +583,7 @@ class PriorBDFSep(PriorSimpleSep):
         lnp += self.T_prior.get_lnprob_array(pars[:,4])
         lnp += self.fracdev_prior.get_lnprob_array(pars[:,5])
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             lnp += F_prior.get_lnprob_array(pars[:,6+i])
 
@@ -621,7 +614,7 @@ class PriorBDFSep(PriorSimpleSep):
         samples[:,4] = T
         samples[:,5] = fracdev
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             F=F_prior.sample(n)
             samples[:,6+i] = F
@@ -722,7 +715,7 @@ class PriorSpergelSep(PriorSimpleSep):
         fdiff[index] =  self.nu_prior.get_lnprob_scalar(pars[5], **keys)
         index += 1
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             fdiff[index] = F_prior.get_lnprob_scalar(pars[6+i], **keys)
             index += 1
@@ -743,7 +736,7 @@ class PriorSpergelSep(PriorSimpleSep):
         lnp += self.r50_prior.get_lnprob_array(pars[:,4])
         lnp += self.nu_prior.get_lnprob_array(pars[:,5])
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             lnp += F_prior.get_lnprob_array(pars[:,6+i])
 
@@ -774,7 +767,7 @@ class PriorSpergelSep(PriorSimpleSep):
         samples[:,4] = r50
         samples[:,5] = nu
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             F=F_prior.sample(n)
             samples[:,6+i] = F
@@ -855,11 +848,11 @@ class PriorCoellipSame(PriorSimpleSep):
         lnp = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
         lnp += self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
 
-        for i in xrange(ngauss):
+        for i in range(ngauss):
             lnp += self.T_prior.get_lnprob_scalar(pars[4+i], **keys)
 
         F_prior=self.F_priors[0]
-        for i in xrange(ngauss):
+        for i in range(ngauss):
             lnp += F_prior.get_lnprob_scalar(pars[4+ngauss+i], **keys)
 
         return lnp
@@ -885,12 +878,12 @@ class PriorCoellipSame(PriorSimpleSep):
         fdiff[index] = self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
         index += 1
 
-        for i in xrange(ngauss):
+        for i in range(ngauss):
             fdiff[index] =  self.T_prior.get_lnprob_scalar(pars[4+i], **keys)
             index += 1
 
         F_prior=self.F_priors[0]
-        for i in xrange(ngauss):
+        for i in range(ngauss):
             fdiff[index] = F_prior.get_lnprob_scalar(pars[4+ngauss+i], **keys)
             index += 1
 
@@ -1708,7 +1701,7 @@ class JointPriorSimpleLinPars(GMixND):
         g1=numpy.zeros(npair*2)
         g2=numpy.zeros(npair*2)
 
-        for ishear in xrange(nshear):
+        for ishear in range(nshear):
             s1=shear1_true[ishear]
             s2=shear2_true[ishear]
 
@@ -2043,7 +2036,7 @@ class PriorSimpleSepRound(PriorSimpleSep):
         fdiff[index] =  self.T_prior.get_lnprob_scalar(pars[2], **keys)
         index += 1
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             fdiff[index] = F_prior.get_lnprob_scalar(pars[3+i], **keys)
             index += 1
@@ -2062,7 +2055,7 @@ class PriorSimpleSepRound(PriorSimpleSep):
         lnp = self.cen_prior.get_lnprob_array(pars[:,0], pars[:,1])
         lnp += self.T_prior.get_lnprob_array(pars[:,2])
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             lnp += F_prior.get_lnprob_array(pars[:,3+i])
 
@@ -2089,7 +2082,7 @@ class PriorSimpleSepRound(PriorSimpleSep):
         samples[:,1] = cen2
         samples[:,2] = T
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             F=F_prior.sample(n)
             samples[:,3+i] = F
@@ -2201,7 +2194,7 @@ class PriorSimpleSepFixT(object):
         fdiff[index] = self.g_prior.get_lnprob_scalar2d(pars[2],pars[3])
         index += 1
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             fdiff[index] = F_prior.get_lnprob_scalar(pars[4+i], **keys)
             index += 1
@@ -2231,7 +2224,7 @@ class PriorSimpleSepFixT(object):
         lnp = self.cen_prior.get_lnprob_array(pars[:,0], pars[:,1])
         lnp += self.g_prior.get_lnprob_array2d(pars[:,2],pars[:,3])
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             lnp += F_prior.get_lnprob_array(pars[:,5+i])
 
@@ -2258,7 +2251,7 @@ class PriorSimpleSepFixT(object):
         samples[:,2] = g1
         samples[:,3] = g2
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             F=F_prior.sample(n)
             samples[:,4+i] = F
@@ -2362,7 +2355,7 @@ class PriorMomSep(object):
         fdiff[index] =  self.T_prior.get_lnprob_scalar(pars[4])
         index += 1
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             fdiff[index] = F_prior.get_lnprob_scalar(pars[5+i], **keys)
             index += 1
@@ -2395,7 +2388,7 @@ class PriorMomSep(object):
         lnp += self.M2_prior.get_lnprob_array(pars[:,3])
         lnp += self.T_prior.get_lnprob_array(pars[:,4])
 
-        for i in xrange(self.nband):
+        for i in range(self.nband):
             F_prior=self.F_priors[i]
             lnp += F_prior.get_lnprob_array(pars[:,5+i])
 

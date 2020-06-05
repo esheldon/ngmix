@@ -2,13 +2,6 @@
 Convention is that all priors should have peak ln(prob)==0. This
 helps use in priors for LM fitting
 """
-from __future__ import print_function, absolute_import, division
-
-try:
-    xrange
-except NameError:
-    xrange=range
-
 from sys import stderr
 import math
 
@@ -616,7 +609,7 @@ class GPriorBase(PriorBase):
 
         g1=numpy.zeros(npair*2)
         g2=numpy.zeros(npair*2)
-        for ishear in xrange(nshear):
+        for ishear in range(nshear):
             print("-"*70)
             s1=shear1_true[ishear]
             s2=shear2_true[ishear]
@@ -820,7 +813,7 @@ class GPriorBase(PriorBase):
         else:
             shear_expand=array([0.0, 0.0])
 
-        for i in xrange(niter):
+        for i in range(niter):
 
             if doring:
 
@@ -933,7 +926,7 @@ class GPriorBase(PriorBase):
         # for holding likelihood samples
         gsamples=numpy.zeros( (nsample, 2) )
 
-        for ishear in xrange(nshear):
+        for ishear in range(nshear):
             print("-"*70,file=stderr)
 
             if ring:
@@ -952,7 +945,7 @@ class GPriorBase(PriorBase):
             g2m = g2s
 
             # add "noise" to the likelihood
-            for i in xrange(nshape):
+            for i in range(nshape):
                 if (i % 1000) == 0:
                     stderr.write('.')
 
@@ -1087,7 +1080,7 @@ class GPriorBase(PriorBase):
         shear1_err=numpy.zeros(nshear,dtype=dtype)
         shear2_err=numpy.zeros(nshear,dtype=dtype)
 
-        for ishear in xrange(nshear):
+        for ishear in range(nshear):
             print("-"*70)
             s1=shear1_true[ishear]
             s2=shear2_true[ishear]
@@ -1228,7 +1221,7 @@ class GPriorBase(PriorBase):
 
         shear1_each=numpy.zeros(nchunks, dtype=dtype)
         shear2_each=numpy.zeros(nchunks, dtype=dtype)
-        for i in xrange(nchunks):
+        for i in range(nchunks):
             if (i % print_step) == 0:
                 print("    chunk: %s/%s" % (i+1,nchunks))
             g1[0:npair],g2[0:npair] = self.sample2d(npair)
@@ -1296,7 +1289,7 @@ class GPriorBase(PriorBase):
         # for clarity
         nsofar=0
 
-        for i in xrange(nchunks):
+        for i in range(nchunks):
             print("chunk: %s/%s" % (i+1,nchunks))
 
             print("generating",npair*2,"shapes")
@@ -2059,7 +2052,7 @@ class TwoSidedErf(PriorBase):
         vals=array(vals, ndmin=1, dtype='f8', copy=False)
         pvals = zeros(vals.size)
 
-        for i in xrange(vals.size):
+        for i in range(vals.size):
             pvals[i]=self.get_prob_scalar(vals[i]) 
 
         return pvals
@@ -2094,7 +2087,7 @@ class TwoSidedErf(PriorBase):
         vals=array(vals, ndmin=1, dtype='f8', copy=False)
         fdiff = zeros(vals.size)
 
-        for i in xrange(vals.size):
+        for i in range(vals.size):
             fdiff[i]=self.get_fdiff_scalar(vals[i]) 
 
         return fdiff
@@ -2859,7 +2852,7 @@ class GPriorMErf(GPriorBase):
 
         gerf0=zeros(g.size)
         arg = (self.gmax_func-g)/self.gsigma
-        for i in xrange(g.size):
+        for i in range(g.size):
             gerf0[i] = erf(arg[i])
         #erf_array(arg, gerf0)
 
@@ -3371,7 +3364,7 @@ class LogNormal(PriorBase):
         self._fitx=x
         self._fity=y
 
-        for i in xrange(4):
+        for i in range(4):
             f1,f2,f3 = 1.0 + rng.uniform(low=0.1,high=0.1,size=3)
             guess=numpy.array([
                 x.mean()*f1,
@@ -3496,14 +3489,14 @@ class MultivariateLogNormal(object):
         lcov  = zeros( (ndim,ndim) )
 
         # first fill in diagonal terms
-        for i in xrange(ndim):
+        for i in range(ndim):
             lcov[i,i] = log( 1.0 + cov[i,i]/mean_sq[i] )
             lmean[i] = log(mean[i]) - 0.5*lcov[i,i]
             #print("lcov[%d,%d]: %g" % (i,i,lcov[i,i]))
 
         # now fill in off-diagonals
-        for i in xrange(ndim):
-            for j in xrange(i,ndim):
+        for i in range(ndim):
+            for j in range(i,ndim):
                 if i==j:
                     continue
 
@@ -3652,7 +3645,7 @@ class MVNMom(object):
         nsig=5
         rng = 5.0 + nsig*cen_sigma
 
-        for i in xrange(2):
+        for i in range(2):
             if cen[i] < 0:
                 cen_offsets[i] = -cen[i] + rng[i]
             elif cen[i] - rng[i] < 0:
@@ -3734,7 +3727,7 @@ class BFracBase(PriorBase):
 
         lnp=numpy.zeros(n)
 
-        for i in xrange(n):
+        for i in range(n):
             lnp[i] = self.get_lnprob_scalar(bfrac[i])
 
         return lnp
@@ -4437,7 +4430,7 @@ class TFluxPriorCosmosBase(PriorBase):
         n=T_and_flux.shape[0]
         lnp=numpy.zeros(n)
 
-        for i in xrange(n):
+        for i in range(n):
             lnp[i] = self.get_lnprob_one(T_and_flux[i,:])
 
         return lnp
@@ -4519,7 +4512,7 @@ class TFluxPriorCosmosBase(PriorBase):
 
         ngauss=self.weights.size
         pars=numpy.zeros(6*ngauss)
-        for i in xrange(ngauss):
+        for i in range(ngauss):
             index = i*6
             pars[index + 0] = self.weights[i]
             pars[index + 1] = self.means[i,0]
@@ -4716,7 +4709,7 @@ def _2gauss_prob_array(means, ivars, weights, vals, output):
     """
 
     n=vals.size
-    for i in xrange(n):
+    for i in range(n):
         val=vals[i]
         output[i] = _2gauss_prob_scalar(val)
 '''
@@ -5226,4 +5219,3 @@ class LimitPDF(object):
             raise ValueError("limits[0] must be less than "
                              "limits[1], got: %s" % limits)
         self.limits=limits
-

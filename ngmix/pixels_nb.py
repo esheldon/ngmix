@@ -1,11 +1,5 @@
 import numpy
 from numba import njit
-
-try:
-    xrange
-except NameError:
-    xrange=range
-
 from .jacobian_nb import jacobian_get_vu
 
 @njit
@@ -34,8 +28,8 @@ def fill_pixels(pixels, image, weight, jacob, ignore_zero_weight=True):
     nrow, ncol = image.shape
 
     ipixel=0
-    for row in xrange(nrow):
-        for col in xrange(ncol):
+    for row in range(nrow):
+        for col in range(ncol):
 
             ivar = weight[row,col]
             if ignore_zero_weight and ivar <= 0.0:
@@ -81,8 +75,8 @@ def fill_coords(coords, nrow, ncol, jacob):
     """
 
     icoord=0
-    for row in xrange(nrow):
-        for col in xrange(ncol):
+    for row in range(nrow):
+        for col in range(ncol):
 
             coord = coords[icoord]
 
@@ -92,6 +86,3 @@ def fill_coords(coords, nrow, ncol, jacob):
             coord['u'] = u
 
             icoord += 1
-
-
-

@@ -1,10 +1,3 @@
-from __future__ import print_function, absolute_import, division
-
-try:
-    xrange
-except NameError:
-    xrange=range
-
 import numpy
 from numpy import zeros
 
@@ -40,7 +33,7 @@ def get_sigma_clipped_indices(data, weights=None, **kw):
     npar = data.shape[1]
     keep=numpy.arange(npoints)
     ok=True
-    for i in xrange(npar):
+    for i in range(npar):
         if weights is None:
             send_weights=None
         else:
@@ -69,14 +62,14 @@ def _calc_stats(data):
     means = zeros(npar,dtype='f8')
     cov = zeros( (npar,npar), dtype='f8')
 
-    for i in xrange(npar):
+    for i in range(npar):
         means[i] = data[:, i].mean()
 
     num=ntrials
 
-    for i in xrange(npar):
+    for i in range(npar):
         idiff = data[:,i]-means[i]
-        for j in xrange(i,npar):
+        for j in range(i,npar):
             if i == j:
                 jdiff = idiff
             else:
@@ -98,20 +91,20 @@ def _calc_weighted_stats(data, weights):
     wsum = weights.sum()
 
     if wsum <= 0.0:
-        for i in xrange(data.shape[0]//100):
+        for i in range(data.shape[0]//100):
             print(i,data[i,:])
         raise ValueError("wsum <= 0: %s" % wsum)
 
     means = zeros(npar,dtype='f8')
     cov = zeros( (npar,npar), dtype='f8')
 
-    for i in xrange(npar):
+    for i in range(npar):
         dsum = (data[:, i]*weights).sum()
         means[i] = dsum/wsum
 
-    for i in xrange(npar):
+    for i in range(npar):
         idiff = data[:,i]-means[i]
-        for j in xrange(i,npar):
+        for j in range(i,npar):
             if i == j:
                 jdiff = idiff
             else:

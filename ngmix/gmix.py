@@ -1,10 +1,3 @@
-from __future__ import print_function, absolute_import, division
-
-try:
-    xrange
-except NameError:
-    xrange=range
-
 import numpy
 from numpy import (
     array, zeros, sqrt, diag,
@@ -127,7 +120,7 @@ class GMix(object):
         n=self._ngauss
         pars=numpy.zeros(n*6)
         beg=0
-        for i in xrange(n):
+        for i in range(n):
             pars[beg+0] = gm['p'][i]
             pars[beg+1] = gm['row'][i]
             pars[beg+2] = gm['col'][i]
@@ -435,7 +428,7 @@ class GMix(object):
         ndata = new_gmix.get_data()
         ndata['norm_set']=0
 
-        for i in xrange(len(self)):
+        for i in range(len(self)):
             irr=ndata['irr'][i]
             irc=ndata['irc'][i]
             icc=ndata['icc'][i]
@@ -547,7 +540,7 @@ class GMix(object):
         gdata['norm_set']=0
 
         ngauss=len(gm)
-        for i in xrange(ngauss):
+        for i in range(ngauss):
             Ti = gdata['irr'][i] + gdata['icc'][i]
             gdata['irc'][i] = 0.0
             gdata['irr'][i] = 0.5*Ti*factor
@@ -779,7 +772,7 @@ class GMix(object):
         data = self.get_data()
 
         gsobjects=[]
-        for i in xrange(len(self)):
+        for i in range(len(self)):
             flux = data['p'][i]
             T = data['irr'][i] + data['icc'][i]
             if T == 0:
@@ -832,7 +825,7 @@ class GMix(object):
         rep=[]
 
         fmt="p: %.4g row: %.4g col: %.4g irr: %.4g irc: %.4g icc: %.4g"
-        for i in xrange(self._ngauss):
+        for i in range(self._ngauss):
             t=self._data[i]
             s=fmt % (t['p'],t['row'],t['col'],t['irr'],t['irc'],t['icc'])
             rep.append(s)

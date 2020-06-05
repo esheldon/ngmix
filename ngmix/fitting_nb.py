@@ -1,10 +1,5 @@
 from numba import njit
 
-try:
-    xrange
-except NameError:
-    xrange=range
-
 from .gmix_nb import (
     gmix_eval_pixel_fast,
     gmix_set_norms,
@@ -43,7 +38,7 @@ def get_loglike(gmix, pixels):
     loglike = s2n_numer = s2n_denom = 0.0
 
     n_pixels = pixels.shape[0]
-    for ipixel in xrange(n_pixels):
+    for ipixel in range(n_pixels):
         pixel = pixels[ipixel]
 
         model_val = gmix_eval_pixel_fast(gmix, pixel)
@@ -81,7 +76,7 @@ def fill_fdiff(gmix, pixels, fdiff, start):
         gmix_set_norms(gmix)
 
     n_pixels = pixels.shape[0]
-    for ipixel in xrange(n_pixels):
+    for ipixel in range(n_pixels):
         pixel = pixels[ipixel]
 
         model_val = gmix_eval_pixel_fast(gmix, pixel)
@@ -104,7 +99,7 @@ def finish_fdiff(pixels, fdiff, start):
     """
 
     n_pixels = pixels.shape[0]
-    for ipixel in xrange(n_pixels):
+    for ipixel in range(n_pixels):
         pixel = pixels[ipixel]
 
         model_val = fdiff[start+ipixel]
@@ -131,7 +126,7 @@ def update_model_array(gmix, pixels, arr, start):
         gmix_set_norms(gmix)
 
     n_pixels = pixels.shape[0]
-    for ipixel in xrange(n_pixels):
+    for ipixel in range(n_pixels):
         pixel = pixels[ipixel]
 
         model_val = gmix_eval_pixel_fast(gmix, pixel)
@@ -163,7 +158,7 @@ def get_model_s2n_sum(gmix, pixels):
     n_pixels = pixels.shape[0]
     s2n_sum = 0.0
 
-    for ipixel in xrange(n_pixels):
+    for ipixel in range(n_pixels):
         pixel = pixels[ipixel]
 
         model_val = gmix_eval_pixel_fast(gmix, pixel)

@@ -1,10 +1,3 @@
-from __future__ import print_function, absolute_import, division
-
-try:
-    xrange
-except NameError:
-    xrange=range
-
 import numpy
 from numpy import log
 from .fitting import print_pars
@@ -21,8 +14,8 @@ class GuesserBase(object):
         """
 
         n=guess.shape[0]
-        for j in xrange(n):
-            for itry in xrange(ntry):
+        for j in range(n):
+            for itry in range(ntry):
                 try:
                     lnp=prior.get_lnprob_scalar(guess[j,:])
 
@@ -94,13 +87,13 @@ class TFluxGuesser(GuesserBase):
             guess[:,4] = self.T*(1.0 + 0.1*srandu(n))
 
             fluxes=self.fluxes
-            for band in xrange(nband):
+            for band in range(nband):
                 guess[:,5+band] = fluxes[band]*(1.0 + 0.1*srandu(n))
 
         else:
             guess[:,4] = self.log_T + 0.1*srandu(n)
 
-            for band in xrange(nband):
+            for band in range(nband):
                 guess[:,5+band] = self.log_fluxes[band] + 0.1*srandu(n)
 
         if self.prior is not None:
@@ -159,7 +152,7 @@ class TFluxAndPriorGuesser(GuesserBase):
         else:
             guess[:,4] = self.log_T + 0.1*srandu(n)
 
-        for band in xrange(nband):
+        for band in range(nband):
             if self.scaling=='linear':
                 guess[:,5+band] = fluxes[band]*(1.0 + 0.1*srandu(n))
             else:
@@ -177,8 +170,8 @@ class TFluxAndPriorGuesser(GuesserBase):
         """
 
         n=guess.shape[0]
-        for j in xrange(n):
-            for itry in xrange(ntry):
+        for j in range(n):
+            for itry in range(ntry):
                 try:
                     lnp=prior.get_lnprob_scalar(guess[j,:])
 
@@ -228,7 +221,7 @@ class BDFGuesser(TFluxAndPriorGuesser):
         guess[:,5] = rng.uniform(low=0.4, high=0.6, size=n)
         #guess[:,5] = rng.uniform(low=0.9, high=0.99, size=n)
 
-        for band in xrange(nband):
+        for band in range(nband):
             r=rng.uniform(low=-0.1, high=0.1, size=n)
             guess[:,6+band] = fluxes[band]*(1.0 + r)
 
@@ -270,7 +263,7 @@ class BDGuesser(TFluxAndPriorGuesser):
         # guess[:,6] = rng.uniform(low=-0.01, high=0.01, size=n)
         #guess[:,5] = rng.uniform(low=0.9, high=0.99, size=n)
 
-        for band in xrange(nband):
+        for band in range(nband):
             r=rng.uniform(low=-0.1, high=0.1, size=n)
             guess[:,7+band] = fluxes[band]*(1.0 + r)
 
@@ -326,7 +319,7 @@ class ParsGuesser(GuesserBase):
         guess[:,2]=guess_shape[:,0]
         guess[:,3]=guess_shape[:,1]
 
-        for i in xrange(4,self.np):
+        for i in range(4,self.np):
             if self.scaling=='linear':
                 guess[:,i] = pars[i]*(1.0 + widths[i]*srandu(n))
             else:
@@ -376,7 +369,7 @@ class RoundParsGuesser(GuesserBase):
         guess[:,0] = pars[0] + widths[0]*srandu(n)
         guess[:,1] = pars[1] + widths[1]*srandu(n)
 
-        for i in xrange(2,self.np):
+        for i in range(2,self.np):
             if self.scaling=='linear':
                 guess[:,i] = pars[i]*(1.0 + widths[i]*srandu(n))
             else:
@@ -405,7 +398,7 @@ def get_shape_guess(g1, g2, n, width, max=0.99):
     guess=numpy.zeros( (n, 2) )
     shape=Shape(g1, g2)
 
-    for i in xrange(n):
+    for i in range(n):
 
         while True:
             try:
@@ -452,7 +445,7 @@ class MomGuesser(GuesserBase):
 
         guess=numpy.zeros( (n, self.np) )
 
-        for i in xrange(self.np):
+        for i in range(self.np):
             guess[:,i] = pars[i] + widths[i]*srandu(n)
 
         if self.prior is not None:
@@ -517,7 +510,7 @@ class R50FluxGuesser(object):
         guess[:,4] = self.r50*(1.0 + 0.1*srandu(n, rng=rng))
 
         fluxes=self.fluxes
-        for band in xrange(nband):
+        for band in range(nband):
             guess[:,5+band] = fluxes[band]*(1.0 + 0.1*srandu(n, rng=rng))
 
         if self.prior is not None:
@@ -535,8 +528,8 @@ class R50FluxGuesser(object):
         """
 
         n=guess.shape[0]
-        for j in xrange(n):
-            for itry in xrange(ntry):
+        for j in range(n):
+            for itry in range(ntry):
                 try:
                     lnp=prior.get_lnprob_scalar(guess[j,:])
 
@@ -614,7 +607,7 @@ class R50NuFluxGuesser(R50FluxGuesser):
 
         guess[:,4] = self.r50*(1.0 + 0.1*srandu(n, rng=rng))
 
-        for i in xrange(n):
+        for i in range(n):
             while True:
                 nuguess = self.nu*(1.0 + 0.1*srandu(rng=rng))
                 if nuguess > self.NUMIN and nuguess < self.NUMAX:
@@ -622,7 +615,7 @@ class R50NuFluxGuesser(R50FluxGuesser):
             guess[i,5] = nuguess
 
         fluxes=self.fluxes
-        for band in xrange(nband):
+        for band in range(nband):
             guess[:,6+band] = fluxes[band]*(1.0 + 0.1*srandu(n, rng=rng))
 
         if self.prior is not None:

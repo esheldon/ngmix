@@ -2,14 +2,6 @@
 class LensfitSensitivity
 function calc_lensfit_shear
 """
-
-from __future__ import print_function, absolute_import, division
-
-try:
-    xrange
-except NameError:
-    xrange=range
-
 import numpy
 from numpy import where, zeros, ones, array, isfinite, newaxis
 from .gexceptions import GMixRangeError
@@ -408,7 +400,7 @@ def _lensfit_jackknife(g, gsens,
         shear = shear/gsens_alt_mean
 
     shears = numpy.zeros( (nchunks, 2) )
-    for i in xrange(nchunks):
+    for i in range(nchunks):
 
         beg = i*chunksize
         end = (i+1)*chunksize
@@ -504,7 +496,7 @@ def _lensfit_jackknife_ring(g, gsens,
         shear = shear/gsens_alt_mean
 
     shears = numpy.zeros( (nchunks, 2) )
-    for i in xrange(nchunks):
+    for i in range(nchunks):
 
         beg = i*chunksize*2
         end = (i+1)*chunksize*2

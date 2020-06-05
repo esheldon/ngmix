@@ -5,13 +5,6 @@ this is a wrapper for the sklearn mixture, providing convenient fitting and
 loading, as well as very fast likelihood evaluation
 
 """
-from __future__ import print_function, absolute_import, division
-
-try:
-    xrange
-except NameError:
-    xrange=range
-
 import numpy
 from .gmix_ndim_nb import gmixnd_get_prob
 
@@ -163,7 +156,7 @@ class GMixND(object):
         n=pars.shape[0]
         retvals = numpy.zeros(n)
 
-        for i in xrange(n):
+        for i in range(n):
             retvals[i] = self._get_prob(pars[i,:],dolog)
 
         return retvals
@@ -284,7 +277,7 @@ class GMixND(object):
         else:
             norms = numpy.zeros(self.ngauss)
             icovars = numpy.zeros( (self.ngauss, self.ndim, self.ndim) )
-            for i in xrange(self.ngauss):
+            for i in range(self.ngauss):
                 cov = self.covars[i,:,:]
                 icov = numpy.linalg.inv( cov )
 

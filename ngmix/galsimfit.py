@@ -1,14 +1,6 @@
 """
 fitting using galsim to create the models
 """
-
-from __future__ import print_function, absolute_import, division
-
-try:
-    xrange
-except NameError:
-    xrange=range
-
 import numpy
 
 from .fitting import (
@@ -70,7 +62,7 @@ class GalsimRunner(object):
     def go(self, ntry=1):
 
         fitter=self._create_fitter()
-        for i in xrange(ntry):
+        for i in range(ntry):
 
             guess=self.get_guess()
             fitter.go(guess)
@@ -182,7 +174,7 @@ class GalsimSimple(LMSimple):
 
             start=self._fill_priors(pars, fdiff)
 
-            for band in xrange(self.nband):
+            for band in range(self.nband):
 
                 kobs_list=self.mb_kobs[band]
                 for kobs in kobs_list:
@@ -406,7 +398,7 @@ class GalsimSimple(LMSimple):
             raise ValueError("expected %d entries in the "
                              "guess, but got %d" % (self.npars,guess.size))
 
-        for band in xrange(self.nband):
+        for band in range(self.nband):
             band_pars = self.get_band_pars(guess, band)
             # just doing this to see if an exception is raised. This
             # will bother flake8

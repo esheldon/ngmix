@@ -1,13 +1,6 @@
 """
 Fit an image with a gaussian mixture using the EM algorithm
 """
-from __future__ import print_function, absolute_import, division
-
-try:
-    xrange
-except NameError:
-    xrange=range
-
 import numpy
 
 from . import gmix
@@ -269,7 +262,7 @@ def test_1gauss(counts=1.0,
     print("gm_guess:",gm_guess)
 
     # twice, first time numba compiles the code
-    for i in xrange(2):
+    for i in range(2):
         tm0=time.time()
         em=GMixEM(obs)
         em.go(gm_guess, sky, maxiter=maxiter)
@@ -317,7 +310,7 @@ def test_1gauss_T_recovery(noise,
     T_true=T
 
     T_meas=numpy.zeros(ntrial)
-    for i in xrange(ntrial):
+    for i in range(ntrial):
         while True:
             try:
                 gm=test_1gauss(
@@ -478,7 +471,7 @@ def test_2gauss(counts=100.0, noise=0.0, maxiter=100,show=False):
     print('guess:')
     print(gm_guess)
 
-    for i in xrange(2):
+    for i in range(2):
         tm0=time.time()
         em=GMixEM(obs)
         em.go(gm_guess, sky, maxiter=maxiter)

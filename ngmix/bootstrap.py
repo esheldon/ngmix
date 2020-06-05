@@ -6,8 +6,6 @@ TODO
     - make it possible to specify the guess type (not just psf)
 
 """
-from __future__ import print_function
-
 from pprint import pprint
 import numpy
 from numpy import where, array, sqrt, log, linspace, zeros
@@ -32,11 +30,6 @@ from . import roundify
 from . import metacal
 
 from copy import deepcopy
-
-try:
-    xrange
-except NameError:
-    xrange=range
 
 BOOT_S2N_LOW = 2**0
 BOOT_R2_LOW = 2**1
@@ -1096,7 +1089,7 @@ class AdmomBootstrapper(Bootstrapper):
 
         fitter=admom.Admom(obs, maxiter=pars['maxiter'])
 
-        for i in xrange(pars['ntry']):
+        for i in range(pars['ntry']):
             # this generates a gaussian mixture guess based on Tguess
             try:
                 # should probably move this catch into admom
@@ -1820,7 +1813,7 @@ class CompositeBootstrapper(Bootstrapper):
     def _get_fracdev_guess(self, fitter):
         tests=self.fracdev_tests
         lnps=zeros(tests.size)
-        for i in xrange(tests.size):
+        for i in range(tests.size):
             lnps[i] = fitter.calc_lnprob(tests[i:i+1])
 
         w,=where(isfinite(lnps))
@@ -1922,7 +1915,7 @@ class PSFRunner(object):
 
         from .fitting import LMSimple
 
-        for i in xrange(ntry):
+        for i in range(ntry):
 
             if i == 0 and guess is not None:
                 this_guess = guess.copy()
@@ -1982,7 +1975,7 @@ class AMRunner(object):
 
     def go(self, ntry=1):
 
-        for i in xrange(ntry):
+        for i in range(ntry):
 
             fitter=admom.run_admom(self.obs, self.Tguess, rng=self.rng)
             res=fitter.get_result()
@@ -2021,7 +2014,7 @@ class EMRunner(object):
     def go(self, ntry=1, guess=None):
 
         fitter=GMixEM(self.obs)
-        for i in xrange(ntry):
+        for i in range(ntry):
 
             if i == 0 and guess is not None:
                 this_guess = guess.copy()
@@ -2248,7 +2241,7 @@ class PSFRunnerCoellip(object):
     def go(self, ntry=1, guess=None):
         from .fitting import LMCoellip
 
-        for i in xrange(ntry):
+        for i in range(ntry):
 
             if i == 0 and guess is not None:
                 this_guess = guess.copy()
@@ -2419,7 +2412,7 @@ class MaxRunner(object):
 
         fitclass=self._get_lm_fitter_class()
 
-        for i in xrange(ntry):
+        for i in range(ntry):
             guess=self.guesser()
             fitter=fitclass(
                 self.obs,
@@ -2441,7 +2434,7 @@ class MaxRunner(object):
 
         fitclass=self._get_max_fitter_class()
 
-        for i in xrange(ntry):
+        for i in range(ntry):
             guess=self.guesser()
             fitter=fitclass(
                 self.obs,
@@ -2501,7 +2494,7 @@ class MaxRunnerGaussMom(object):
 
         fitclass=self._get_lm_fitter_class()
 
-        for i in xrange(ntry):
+        for i in range(ntry):
             guess=self.guesser()
             fitter=fitclass(self.obs,
                             lm_pars=self.send_pars,
@@ -2543,7 +2536,7 @@ class MaxRunnerFixT(MaxRunner):
         from .fitting import LMSimpleFixT
 
 
-        for i in xrange(ntry):
+        for i in range(ntry):
             fitter=LMSimpleFixT(self.obs,
                                 self.model,
                                 T=self.T,
@@ -2585,7 +2578,7 @@ class MaxRunnerGOnly(MaxRunner):
         from .fitting import LMSimpleGOnly
 
 
-        for i in xrange(ntry):
+        for i in range(ntry):
             fitter=LMSimpleGOnly(self.obs,
                                  self.model,
                                  pars=self.pars_in,
@@ -2669,7 +2662,7 @@ class CompositeMaxRunner(MaxRunner):
     def _go_lm(self, ntry=1):
         fitclass=self._get_lm_fitter_class()
 
-        for i in xrange(ntry):
+        for i in range(ntry):
             guess=self.guesser()
             fitter=fitclass(self.obs,
                             self.fracdev,
@@ -2716,7 +2709,7 @@ class BDRunner(MaxRunner):
     def _go_lm(self, ntry=1):
         fitclass=self._get_lm_fitter_class()
 
-        for i in xrange(ntry):
+        for i in range(ntry):
             guess=self.guesser()
             fitter=fitclass(
                 self.obs,
@@ -2764,7 +2757,7 @@ class BDFRunner(MaxRunner):
     def _go_lm(self, ntry=1):
         fitclass=self._get_lm_fitter_class()
 
-        for i in xrange(ntry):
+        for i in range(ntry):
             guess=self.guesser()
             fitter=fitclass(
                 self.obs,
@@ -2856,7 +2849,7 @@ def replace_masked_pixels(mb_obs_list,
 
     nband = len(mbo)
 
-    for band in xrange(nband):
+    for band in range(nband):
         olist = mbo[band]
         for iobs,obs in enumerate(olist):
 

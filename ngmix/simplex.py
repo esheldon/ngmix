@@ -1,7 +1,6 @@
 """
 stolen from scipy to avoid dependency
 """
-from __future__ import print_function, absolute_import, division
 import numpy
 
 # standard status messages of optimizers

@@ -1,10 +1,6 @@
 import numpy
 from numba import njit
 
-try:
-    xrange
-except NameError:
-    xrange=range
 
 @njit
 def gmixnd_get_prob(log_pnorms,
@@ -39,19 +35,19 @@ def gmixnd_get_prob(log_pnorms,
     n_gauss = log_pnorms.size
     lnpmax=-9.99e9
 
-    for i in xrange(n_gauss):
+    for i in range(n_gauss):
 
         logpnorm = log_pnorms[i]
 
-        for idim1 in xrange(n_dim):
+        for idim1 in range(n_dim):
             par = pars[idim1]
             mean = means[i,idim1]
 
             xdiff[idim1] = par-mean
 
         chi2=0.0
-        for idim1 in xrange(n_dim):
-            for idim2 in xrange(n_dim):
+        for idim1 in range(n_dim):
+            for idim2 in range(n_dim):
                 icov = icovars[i,idim1,idim2]
 
                 chi2 += xdiff[idim1]*xdiff[idim2]*icov
@@ -63,7 +59,7 @@ def gmixnd_get_prob(log_pnorms,
         tmp_lnprob[i] = lnp
 
     p=0.0
-    for i in xrange(n_gauss):
+    for i in range(n_gauss):
         p += numpy.exp(tmp_lnprob[i] - lnpmax)
 
     if dolog:

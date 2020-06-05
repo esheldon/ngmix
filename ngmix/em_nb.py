@@ -1,10 +1,5 @@
 from numba import njit
 
-try:
-    xrange
-except NameError:
-    xrange=range
-
 from .gexceptions import GMixRangeError
 from .gmix_nb import (
     gauss2d_set,
@@ -47,7 +42,7 @@ def em_run(conf, pixels, sums, gmix):
 
     T_last = e1_last = e2_last = -9999.0
 
-    for i in xrange(conf['maxiter']):
+    for i in range(conf['maxiter']):
         skysum=0.0
         clear_sums(sums)
 
@@ -96,7 +91,7 @@ def do_scratch_sums(pixel, gmix, sums):
     gtot = 0.0
 
     n_gauss = gmix.size
-    for i in xrange(n_gauss):
+    for i in range(n_gauss):
         gauss = gmix[i]
         tsums = sums[i]
 
@@ -135,7 +130,7 @@ def do_sums(sums, igrat):
     """
 
     n_gauss=sums.size
-    for i in xrange(n_gauss):
+    for i in range(n_gauss):
         tsums = sums[i]
 
         # wtau is gi[pix]/gtot[pix]*imnorm[pix]
@@ -159,7 +154,7 @@ def gmix_set_from_sums(gmix, sums):
     """
 
     n_gauss=gmix.size
-    for i in xrange(n_gauss):
+    for i in range(n_gauss):
 
         tsums = sums[i]
         gauss = gmix[i]
