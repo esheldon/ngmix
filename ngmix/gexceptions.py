@@ -9,6 +9,7 @@ class GMixRangeError(Exception):
     def __str__(self):
         return repr(self.value)
 
+
 class GMixFatalError(Exception):
     """
     Some number was out of range
@@ -19,6 +20,7 @@ class GMixFatalError(Exception):
 
     def __str__(self):
         return repr(self.value)
+
 
 class GMixMaxIterEM(Exception):
     """
@@ -31,6 +33,7 @@ class GMixMaxIterEM(Exception):
     def __str__(self):
         return repr(self.value)
 
+
 class BootPSFFailure(Exception):
     """
     failure to bootstrap PSF
@@ -41,6 +44,7 @@ class BootPSFFailure(Exception):
 
     def __str__(self):
         return repr(self.value)
+
 
 class BootGalFailure(Exception):
     """
