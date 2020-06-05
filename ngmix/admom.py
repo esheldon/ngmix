@@ -35,7 +35,7 @@ class Admom(object):
     """
 
     def __init__(self, obs, maxiter=200, shiftmax=5.0,
-                 etol=1.0e-5, Ttol=0.001,
+                 etol=1.0e-5, Ttol=0.001,  # noqa
                  rng=None,
                  **unused_keys):
 
@@ -116,11 +116,11 @@ class Admom(object):
         if isinstance(guess, GMix):
             guess_gmix = guess
         else:
-            Tguess = guess
+            Tguess = guess  # noqa
             guess_gmix = self._generate_guess(Tguess)
         return guess_gmix
 
-    def _set_conf(self, maxiter, shiftmax, etol, Ttol):
+    def _set_conf(self, maxiter, shiftmax, etol, Ttol):  # noqa
         dt = numpy.dtype(_admom_conf_dtype, align=True)
         conf = numpy.zeros(1, dtype=dt)
 
@@ -141,7 +141,7 @@ class Admom(object):
 
         return self.rng
 
-    def _generate_guess(self, Tguess):
+    def _generate_guess(self, Tguess):  # noqa
         from .gmix import GMixModel
 
         rng = self._get_rng()
