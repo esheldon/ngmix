@@ -4,10 +4,10 @@ matrix:
   include:
   - os: linux
     sudo: required
-    env: TOXENV=py27
+    env: TOXENV=py36
   - os: linux
     sudo: required
-    env: TOXENV=py36
+    env: TOXENV=py37
 
 cache:
   directories:
