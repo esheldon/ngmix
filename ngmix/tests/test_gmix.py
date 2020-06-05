@@ -302,7 +302,7 @@ def test_gmix_convolve_gauss():
 def test_gmix_loglike_fdiff(start):
     """
     test that the approx fdiff calculation agrees well enough with that
-    calculated with the exp() value 
+    calculated with the exp() value
 
     restrict comparisons to the valid range, which is +/- 5 sigma
     """
@@ -327,8 +327,6 @@ def test_gmix_loglike_fdiff(start):
 
     row_range = int(cen[0] - 2*sigma), int(cen[0] + 2*sigma)+1
     col_range = int(cen[1] - 2*sigma), int(cen[1] + 2*sigma)+1
-
-    num = 10
 
     loc = start
 
