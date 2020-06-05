@@ -8,7 +8,7 @@ Placing a copy in this repo because that code is no longer maintained
 
 import warnings
 
-from numpy import array, take, eye, triu, transpose, dot, finfo
+from numpy import take, eye, triu, transpose, dot, finfo
 from numpy import empty_like, sqrt, cos, sin, arcsin, asarray
 from numpy import atleast_1d, shape, issubdtype, dtype, inexact
 from scipy.optimize import _minpack, leastsq
@@ -42,7 +42,7 @@ def _internal2external_func(bounds):
 
     def convert_i2e(xi):
         xe = empty_like(xi)
-        xe[:] = [l(p) for l, p in zip(ls, xi)]
+        xe[:] = [lam(p) for lam, p in zip(ls, xi)]
         return xe
 
     return convert_i2e
@@ -74,7 +74,7 @@ def _external2internal_func(bounds):
 
     def convert_e2i(xe):
         xi = empty_like(xe)
-        xi[:] = [l(p) for l, p in zip(ls, xe)]
+        xi[:] = [lam(p) for lam, p in zip(ls, xe)]
         return xi
 
     return convert_e2i
