@@ -123,6 +123,7 @@ class TFluxAndPriorGuesser(GuesserBase):
     """
 
     def __init__(self, T, fluxes, prior, scaling="linear"):
+
         fluxes = numpy.array(fluxes, dtype="f8", ndmin=1)
 
         self.T = T
@@ -145,22 +146,27 @@ class TFluxAndPriorGuesser(GuesserBase):
         """
         center, shape are just distributed around zero
         """
+
+        rng = self.prior.cen_prior.rng
+
         fluxes = self.fluxes
 
         nband = fluxes.size
 
         guess = self.prior.sample(n)
 
+        r = rng.uniform(low=-0.1, high=0.1, size=n)
         if self.scaling == "linear":
-            guess[:, 4] = self.T * (1.0 + 0.1 * srandu(n))
+            guess[:, 4] = self.T * (1.0 + r)
         else:
-            guess[:, 4] = self.log_T + 0.1 * srandu(n)
+            guess[:, 4] = self.log_T + r
 
         for band in range(nband):
+            r = rng.uniform(low=-0.1, high=0.1, size=n)
             if self.scaling == "linear":
-                guess[:, 5 + band] = fluxes[band] * (1.0 + 0.1 * srandu(n))
+                guess[:, 5 + band] = fluxes[band] * (1.0 + r)
             else:
-                guess[:, 5 + band] = self.log_fluxes[band] + 0.1 * srandu(n)
+                guess[:, 5 + band] = self.log_fluxes[band] + r
 
         self._fix_guess(guess, self.prior)
 
