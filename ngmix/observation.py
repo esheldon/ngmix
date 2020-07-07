@@ -1185,7 +1185,7 @@ def make_iilist(obs, **kw):
                     dim = 1 + psf_ii.getGoodImageSize(
                         psf_ii.nyquist_scale
                     )
-                psf_meta= obs.psf.meta
+                psf_meta = obs.psf.meta
 
             else:
                 # make dimensions odd
