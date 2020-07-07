@@ -1185,6 +1185,7 @@ def make_iilist(obs, **kw):
                     dim = 1 + psf_ii.getGoodImageSize(
                         psf_ii.nyquist_scale
                     )
+                psf_meta= obs.psf.meta
 
             else:
                 # make dimensions odd
@@ -1198,6 +1199,7 @@ def make_iilist(obs, **kw):
                     )
                 psf_ii = None
                 psf_weight = None
+                psf_meta = None
 
             if gsvers == 1:
                 dk = ii.stepK()
@@ -1215,7 +1217,7 @@ def make_iilist(obs, **kw):
                 'meta': obs.meta,
                 'psf_ii': psf_ii,
                 'psf_weight': psf_weight,
-                'psf_meta': obs.psf.meta,
+                'psf_meta': psf_meta,
                 'realspace_gsimage': gsimage,
             })
 

@@ -593,7 +593,13 @@ class MoffatFitter(GalsimSimple):
 
 
 class GalsimTemplateFluxFitter(TemplateFluxFitter):
-    def __init__(self, obs, model=None, psf_models=None, **keys):
+    def __init__(self, obs,
+                 model=None,
+                 psf_models=None,
+                 draw_method='auto',
+                 interp=observation.DEFAULT_XINTERP,
+                 simulate_err=False,
+                 rng=None):
         """
         parameters
         -----------
@@ -626,17 +632,11 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
         if self.model is not None:
             self.model = self.model.withFlux(1.0)
 
-        self.keys = keys
-        self.normalize_psf = keys.get("normalize_psf", True)
-        assert (
-            self.normalize_psf is True
-        ), "currently must have normalize_psf=True"
+        self.interp = interp
+        self.draw_method = draw_method
 
-        self.interp = keys.get("interp", observation.DEFAULT_XINTERP)
-
-        self.simulate_err = keys.get("simulate_err", False)
+        self.simulate_err = simulate_err
         if self.simulate_err:
-            rng = keys.get("rng", None)
             if rng is None:
                 rng = numpy.random.RandomState()
             self.rng = rng
@@ -744,7 +744,7 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
                 ny=nrow,
                 wcs=wcs,
                 offset=offset,
-                method="no_pixel",  # pixel is assumed to be in psf
+                method=self.draw_method,
             )
         except RuntimeError as err:
             # argh another generic exception
