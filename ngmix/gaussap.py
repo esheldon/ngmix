@@ -1,8 +1,6 @@
 """
 calculate gaussian aperture fluxes for a catalog of parameters
 """
-
-from __future__ import print_function
 import numpy as np
 from .gmix import GMixModel, GMixCM, GMixBDF
 from .gexceptions import GMixRangeError

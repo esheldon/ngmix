@@ -3,7 +3,7 @@ import pytest
 
 import ngmix
 
-# @pytest.mark.parametrize('model', ['gauss', 'exp', 'bdf', 'cm'])
+
 @pytest.mark.parametrize('model', ['gauss', 'exp', 'dev'])
 def test_gaussap_simple_smoke(model):
     rng = np.random.RandomState(seed=31415)
@@ -84,8 +84,6 @@ def test_gaussap_bdf_smoke():
     nobj = 10
     nband = 5
 
-    fracdev = rng.uniform(low=0.1, high=0.8, size=nobj)
-    TdByTe = rng.uniform(low=0.5, high=1.5, size=nobj)
     pars = np.zeros((nobj, 6+nband))
 
     for i in range(nobj):

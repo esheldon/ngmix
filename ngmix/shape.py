@@ -2,6 +2,7 @@ import numpy
 
 from .gexceptions import GMixRangeError
 
+
 def shear_reduced(g1, g2, s1, s2):
     """
     addition formula for reduced shear
@@ -18,17 +19,17 @@ def shear_reduced(g1, g2, s1, s2):
     g1,g2 after shear
     """
 
-    A = 1 + g1*s1 + g2*s2
-    B = g2*s1 - g1*s2
-    denom_inv = 1./(A*A + B*B)
+    A = 1 + g1 * s1 + g2 * s2
+    B = g2 * s1 - g1 * s2
+    denom_inv = 1.0 / (A * A + B * B)
 
-    g1o = A*(g1 + s1) + B*(g2 + s2)
-    g2o = A*(g2 + s2) - B*(g1 + s1)
+    g1o = A * (g1 + s1) + B * (g2 + s2)
+    g2o = A * (g2 + s2) - B * (g1 + s1)
 
     g1o *= denom_inv
     g2o *= denom_inv
 
-    return g1o,g2o
+    return g1o, g2o
 
 
 class Shape(object):
@@ -38,24 +39,25 @@ class Shape(object):
     This version is jitted, but inherits non-jitted methods
     from ShapeBase
     """
+
     def __init__(self, g1, g2):
         self.g1 = g1
         self.g2 = g2
 
         # can't call the other jitted methods
-        g=numpy.sqrt(g1*g1 + g2*g2)
+        g = numpy.sqrt(g1 * g1 + g2 * g2)
         if g >= 1.0:
             raise GMixRangeError("g out of range: %.16g" % g)
-        self.g=g
+        self.g = g
 
     def set_g1g2(self, g1, g2):
         """
         Set reduced shear style ellipticity
         """
-        self.g1=g1
-        self.g2=g2
+        self.g1 = g1
+        self.g2 = g2
 
-        g=numpy.sqrt(g1*g1 + g2*g2)
+        g = numpy.sqrt(g1 * g1 + g2 * g2)
         if g >= 1.0:
             raise GMixRangeError("g out of range: %.16g" % g)
 
@@ -64,7 +66,7 @@ class Shape(object):
         Get a new shape, sheared by the specified amount
         """
 
-        if isinstance(s1,Shape):
+        if isinstance(s1, Shape):
             sh = s1
             s1 = sh.g1
             s2 = sh.g2
@@ -72,7 +74,7 @@ class Shape(object):
             if s2 is None:
                 raise ValueError("send s1,s2 or a Shape")
 
-        g1,g2 = shear_reduced(self.g1,self.g2, s1, s2)
+        g1, g2 = shear_reduced(self.g1, self.g2, s1, s2)
         return Shape(g1, g2)
 
     def __neg__(self):
@@ -85,12 +87,12 @@ class Shape(object):
         """
         Rotate the shape by the input angle
         """
-        twotheta = 2.0*theta_radians
+        twotheta = 2.0 * theta_radians
 
         cos2angle = numpy.cos(twotheta)
         sin2angle = numpy.sin(twotheta)
-        g1rot =  self.g1*cos2angle + self.g2*sin2angle
-        g2rot = -self.g1*sin2angle + self.g2*cos2angle
+        g1rot = self.g1 * cos2angle + self.g2 * sin2angle
+        g2rot = -self.g1 * sin2angle + self.g2 * cos2angle
 
         return Shape(g1rot, g2rot)
 
@@ -100,12 +102,12 @@ class Shape(object):
 
         deprecated, use get_rotated()
         """
-        twotheta = 2.0*theta_radians
+        twotheta = 2.0 * theta_radians
 
         cos2angle = numpy.cos(twotheta)
         sin2angle = numpy.sin(twotheta)
-        g1rot =  self.g1*cos2angle + self.g2*sin2angle
-        g2rot = -self.g1*sin2angle + self.g2*cos2angle
+        g1rot = self.g1 * cos2angle + self.g2 * sin2angle
+        g2rot = -self.g1 * sin2angle + self.g2 * cos2angle
 
         self.set_g1g2(g1rot, g2rot)
 
@@ -117,7 +119,8 @@ class Shape(object):
         return s
 
     def __repr__(self):
-        return '(%.16g, %.16g)' % (self.g1,self.g2)
+        return "(%.16g, %.16g)" % (self.g1, self.g2)
+
 
 def g1g2_to_e1e2(g1, g2):
     """
@@ -138,45 +141,46 @@ def g1g2_to_e1e2(g1, g2):
     e1,e2: tuple of scalars
         shapes in (ixx-iyy)/(ixx+iyy) style space
     """
-    g=numpy.sqrt(g1*g1 + g2*g2)
+    g = numpy.sqrt(g1 * g1 + g2 * g2)
 
     if isinstance(g1, numpy.ndarray):
-        w,=numpy.where(g >= 1.0)
+        (w,) = numpy.where(g >= 1.0)
         if w.size != 0:
             raise GMixRangeError("some g were out of bounds")
 
-        eta = 2*numpy.arctanh(g)
+        eta = 2 * numpy.arctanh(g)
         e = numpy.tanh(eta)
 
         numpy.clip(e, 0.0, 0.99999999, e)
 
-        e1=numpy.zeros(g.size)
-        e2=numpy.zeros(g.size)
-        w,=numpy.where(g != 0.0)
+        e1 = numpy.zeros(g.size)
+        e2 = numpy.zeros(g.size)
+        (w,) = numpy.where(g != 0.0)
         if w.size > 0:
-            fac = e[w]/g[w]
+            fac = e[w] / g[w]
 
-            e1[w] = fac*g1[w]
-            e2[w] = fac*g2[w]
+            e1[w] = fac * g1[w]
+            e2[w] = fac * g2[w]
 
     else:
-        if g >= 1.:
+        if g >= 1.0:
             raise GMixRangeError("g out of bounds: %s" % g)
         if g == 0.0:
             return (0.0, 0.0)
 
-        eta = 2*numpy.arctanh(g)
+        eta = 2 * numpy.arctanh(g)
         e = numpy.tanh(eta)
-        if e >= 1.:
+        if e >= 1.0:
             # round off?
             e = 0.99999999
 
-        fac = e/g
+        fac = e / g
 
-        e1 = fac*g1
-        e2 = fac*g2
+        e1 = fac * g1
+        e2 = fac * g2
 
-    return e1,e2
+    return e1, e2
+
 
 def e1e2_to_g1g2(e1, e2):
     """
@@ -194,48 +198,47 @@ def e1e2_to_g1g2(e1, e2):
 
     """
 
-    e = numpy.sqrt(e1*e1 + e2*e2)
+    e = numpy.sqrt(e1 * e1 + e2 * e2)
     if isinstance(e1, numpy.ndarray):
-        w,=numpy.where(e >= 1.0)
+        (w,) = numpy.where(e >= 1.0)
         if w.size != 0:
             raise GMixRangeError("some e were out of bounds")
 
-        eta=numpy.arctanh(e)
-        g = numpy.tanh(0.5*eta)
+        eta = numpy.arctanh(e)
+        g = numpy.tanh(0.5 * eta)
 
         numpy.clip(g, 0.0, 0.99999999, g)
 
-        g1=numpy.zeros(g.size)
-        g2=numpy.zeros(g.size)
-        w,=numpy.where(e != 0.0)
+        g1 = numpy.zeros(g.size)
+        g2 = numpy.zeros(g.size)
+        (w,) = numpy.where(e != 0.0)
         if w.size > 0:
-            fac = g[w]/e[w]
+            fac = g[w] / e[w]
 
-            g1[w] = fac*e1[w]
-            g2[w] = fac*e2[w]
+            g1[w] = fac * e1[w]
+            g2[w] = fac * e2[w]
 
     else:
-        if e >= 1.:
+        if e >= 1.0:
             raise GMixRangeError("e out of bounds: %s" % e)
         if e == 0.0:
-            g1,g2=0.0,0.0
+            g1, g2 = 0.0, 0.0
 
         else:
 
-            eta=numpy.arctanh(e)
-            g = numpy.tanh(0.5*eta)
+            eta = numpy.arctanh(e)
+            g = numpy.tanh(0.5 * eta)
 
-            if g >= 1.:
+            if g >= 1.0:
                 # round off?
                 g = 0.99999999
 
+            fac = g / e
 
-            fac = g/e
+            g1 = fac * e1
+            g2 = fac * e2
 
-            g1 = fac*e1
-            g2 = fac*e2
-
-    return g1,g2
+    return g1, g2
 
 
 def g1g2_to_eta1eta2(g1, g2):
@@ -253,44 +256,43 @@ def g1g2_to_eta1eta2(g1, g2):
         eta space shapes
     """
 
-
     if isinstance(g1, numpy.ndarray):
 
-        g=numpy.sqrt(g1*g1 + g2*g2)
-        w,=numpy.where(g >= 1.0)
+        g = numpy.sqrt(g1 * g1 + g2 * g2)
+        (w,) = numpy.where(g >= 1.0)
         if w.size != 0:
             raise GMixRangeError("some g were out of bounds")
 
-        eta1=numpy.zeros(g.size)
-        eta2=eta1.copy()
+        eta1 = numpy.zeros(g.size)
+        eta2 = eta1.copy()
 
-        w,=numpy.where(g > 0.0)
+        (w,) = numpy.where(g > 0.0)
         if w.size > 0:
 
-            eta = 2*numpy.arctanh(g[w])
-            fac = eta[w]/g[w]
+            eta = 2 * numpy.arctanh(g[w])
+            fac = eta[w] / g[w]
 
-            eta1[w] = fac*g1[w]
-            eta2[w] = fac*g2[w]
+            eta1[w] = fac * g1[w]
+            eta2[w] = fac * g2[w]
 
     else:
-        g=numpy.sqrt(g1*g1 + g2*g2)
+        g = numpy.sqrt(g1 * g1 + g2 * g2)
 
-        if g >= 1.:
+        if g >= 1.0:
             raise GMixRangeError("g out of bounds: %s converting to eta" % g)
 
         if g == 0.0:
-            eta1, eta2=0.0, 0.0
+            eta1, eta2 = 0.0, 0.0
         else:
 
-            eta = 2*numpy.arctanh(g)
+            eta = 2 * numpy.arctanh(g)
 
-            fac = eta/g
+            fac = eta / g
 
-            eta1 = fac*g1
-            eta2 = fac*g2
+            eta1 = fac * g1
+            eta2 = fac * g2
 
-    return eta1,eta2
+    return eta1, eta2
 
 
 def e1e2_to_eta1eta2(e1, e2):
@@ -308,42 +310,38 @@ def e1e2_to_eta1eta2(e1, e2):
         eta space shapes
     """
 
-
     if not isinstance(e1, numpy.ndarray):
-        e1=numpy.array(e1, ndim=1, copy=False)
-        e2=numpy.array(e2, ndim=1, copy=False)
-        is_scalar=True
+        e1 = numpy.array(e1, ndim=1, copy=False)
+        e2 = numpy.array(e2, ndim=1, copy=False)
+        is_scalar = True
     else:
-        is_scalar=False
+        is_scalar = False
 
-    e=numpy.sqrt(e1*e1 + e2*e2)
-    w,=numpy.where(e >= 1.0)
+    e = numpy.sqrt(e1 * e1 + e2 * e2)
+    (w,) = numpy.where(e >= 1.0)
     if w.size != 0:
         raise GMixRangeError("some e were out of bounds")
 
-    eta1=numpy.zeros(e.size)
-    eta2=eta1.copy()
+    eta1 = numpy.zeros(e.size)
+    eta2 = eta1.copy()
 
-    w,=numpy.where(e > 0.0)
+    (w,) = numpy.where(e > 0.0)
     if w.size > 0:
 
-        eta=numpy.arctanh(e)
-        fac = eta[w]/e[w]
+        eta = numpy.arctanh(e)
+        fac = eta[w] / e[w]
 
-        eta1[w] = fac*e1[w]
-        eta2[w] = fac*e2[w]
+        eta1[w] = fac * e1[w]
+        eta2[w] = fac * e2[w]
 
     if is_scalar:
-        eta1=eta1[0]
-        eta2=eta2[0]
+        eta1 = eta1[0]
+        eta2 = eta2[0]
 
-    return eta1,eta2
-
-
+    return eta1, eta2
 
 
-
-def eta1eta2_to_g1g2(eta1,eta2):
+def eta1eta2_to_g1g2(eta1, eta2):
     """
     convert eta style shpaes to reduced shear shapes
 
@@ -358,36 +356,37 @@ def eta1eta2_to_g1g2(eta1,eta2):
         Reduced shear space shapes
     """
 
-    if not isinstance(eta1,numpy.ndarray):
-        eta1=numpy.array(eta1, ndmin=1, copy=False)
-        eta2=numpy.array(eta2, ndmin=1, copy=False)
-        is_scalar=True
+    if not isinstance(eta1, numpy.ndarray):
+        eta1 = numpy.array(eta1, ndmin=1, copy=False)
+        eta2 = numpy.array(eta2, ndmin=1, copy=False)
+        is_scalar = True
     else:
-        is_scalar=False
+        is_scalar = False
 
-    g1=numpy.zeros(eta1.size)
-    g2=g1.copy()
+    g1 = numpy.zeros(eta1.size)
+    g2 = g1.copy()
 
-    eta=numpy.sqrt(eta1*eta1 + eta2*eta2)
+    eta = numpy.sqrt(eta1 * eta1 + eta2 * eta2)
 
-    g = numpy.tanh(0.5*eta)
+    g = numpy.tanh(0.5 * eta)
 
-    w,=numpy.where( g >= 1.0 )
+    (w,) = numpy.where(g >= 1.0)
     if w.size != 0:
         raise GMixRangeError("some g were out of bounds")
 
-    w,=numpy.where( eta != 0.0)
+    (w,) = numpy.where(eta != 0.0)
     if w.size > 0:
-        fac = g[w]/eta[w]
+        fac = g[w] / eta[w]
 
-        g1[w] = fac*eta1[w]
-        g2[w] = fac*eta2[w]
+        g1[w] = fac * eta1[w]
+        g2[w] = fac * eta2[w]
 
     if is_scalar:
         g1 = g1[0]
         g2 = g2[0]
 
-    return g1,g2
+    return g1, g2
+
 
 def dgs_by_dgo_jacob(g1, g2, s1, s2):
     """
@@ -402,20 +401,24 @@ def dgs_by_dgo_jacob(g1, g2, s1, s2):
         shape pars for shear, applied negative
     """
 
-    ssq = s1*s1 + s2*s2
-    num = (ssq - 1)**2
-    denom=(1 + 2*g1*s1 + 2*g2*s2 + g1**2*ssq + g2**2*ssq)**2
+    ssq = s1 * s1 + s2 * s2
+    num = (ssq - 1) ** 2
+    denom = (
+        1 + 2 * g1 * s1 + 2 * g2 * s2 + g1 ** 2 * ssq + g2 ** 2 * ssq
+    ) ** 2
 
-    jacob = num/denom
+    jacob = num / denom
     return jacob
+
 
 def get_round_factor(g1, g2):
     """
     factor to convert T to round T under shear
     """
-    gsq  = g1**2 + g2**2
-    f = (1-gsq) / (1+gsq)
+    gsq = g1 ** 2 + g2 ** 2
+    f = (1 - gsq) / (1 + gsq)
     return f
+
 
 def rotate_shape(g1, g2, theta):
     """
@@ -429,11 +432,11 @@ def rotate_shape(g1, g2, theta):
         Angle in radians
     """
 
-    twotheta = 2.0*theta
+    twotheta = 2.0 * theta
 
     cos2angle = numpy.cos(twotheta)
     sin2angle = numpy.sin(twotheta)
-    g1rot =  g1*cos2angle + g2*sin2angle
-    g2rot = -g1*sin2angle + g2*cos2angle
+    g1rot = g1 * cos2angle + g2 * sin2angle
+    g2rot = -g1 * sin2angle + g2 * cos2angle
 
     return g1rot, g2rot

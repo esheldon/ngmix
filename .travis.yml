@@ -4,9 +4,6 @@ matrix:
   include:
   - os: linux
     sudo: required
-    env: TOXENV=py27
-  - os: linux
-    sudo: required
     env: TOXENV=py36
   - os: linux
     sudo: required
@@ -26,7 +23,7 @@ install:
 script:
   - pip install . --no-deps
   # files that pass flake8 should be added here as we go
-  - if [[ ${TOXENV} != "py27" ]]; then flake8 ngmix/jacobian.py ngmix/jacobian_nb.py ngmix/admom.py ngmix/admom_nb.py ngmix/fastexp.py; fi
+  - flake8 ngmix
   # the `--pyargs` stuff makes sure to run the tests from the installed package
   # we have to do this since we are using 2to3 to generate the python 3 code
   - pytest -vv --pyargs ngmix

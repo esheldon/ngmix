@@ -139,9 +139,8 @@ class NGMixMEDS(_MEDS):
             try:
                 obs = self.get_obs(iobj, icut, weight_type=weight_type)
                 obslist.append(obs)
-            except GMixFatalError as err:
+            except GMixFatalError:
                 print('zero weight observation found, skipping')
-
 
         if len(obslist) > 0:
             obs = obslist[0]
@@ -295,8 +294,6 @@ class NGMixMEDS(_MEDS):
         noise = psf_im.max() / 1000.0
         weight = psf_im*0 + 1.0/noise**2
         jacobian = self.get_ngmix_jacobian(iobj, icutout)
-
-        c = self._cat
 
         row, col = self._get_psf_cen(iobj, icutout)
         jacobian.set_cen(
