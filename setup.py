@@ -1,10 +1,10 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name="ngmix",
     author="Erin Sheldon",
     url="https://github.com/esheldon/ngmix",
     description="fast 2-d gaussian mixtures for modeling astronomical images",
-    packages=['ngmix', 'ngmix.tests'],
+    packages=find_packages(),
     version="2.0.0",
 )

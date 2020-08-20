@@ -1,3 +1,12 @@
+## unreleased (v2.0.0)
+
+### bug fixes
+
+### new features
+
+- expanded test suite and improved documentation for the following modules
+  * `ngmix.shape`
+
 ## v1.3.8
 
 ### bug fixes
