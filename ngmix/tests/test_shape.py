@@ -17,6 +17,13 @@ from ..shape import (
 
 @pytest.mark.parametrize("g1,g2,ang,rg1,rg2", [
     (0.1, 0.0, np.pi/2, -0.1, 0.0),
+    (0.1, 0.0, -np.pi/2, -0.1, 0.0),
+    (0.1, 0.0, np.pi, 0.1, 0.0),
+    (0.0, 0.2, np.pi/2, 0.0, -0.2),
+    (0.0, 0.2, -np.pi/2, 0.0, -0.2),
+    (0.0, 0.2, np.pi, 0.0, 0.2),
+    (0.1, 0.0, np.pi/4, 0.0, -0.1),
+    (0.1, 0.0, -np.pi/4, 0.0, 0.1),
 ])
 def test_rotate_shape(g1, g2, ang, rg1, rg2):
     trg1_trg2 = rotate_shape(g1, g2, ang)
