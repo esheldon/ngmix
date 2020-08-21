@@ -2,6 +2,8 @@ import numpy
 
 from .gexceptions import GMixRangeError
 
+ONE_MINUS_EPS = 0.9999999999999999
+
 
 def shear_reduced(g1, g2, s1, s2):
     """
@@ -151,7 +153,7 @@ def g1g2_to_e1e2(g1, g2):
         eta = 2 * numpy.arctanh(g)
         e = numpy.tanh(eta)
 
-        numpy.clip(e, 0.0, 0.99999999, e)
+        numpy.clip(e, 0.0, ONE_MINUS_EPS, e)
 
         e1 = numpy.zeros(g.size)
         e2 = numpy.zeros(g.size)
@@ -171,8 +173,7 @@ def g1g2_to_e1e2(g1, g2):
         eta = 2 * numpy.arctanh(g)
         e = numpy.tanh(eta)
         if e >= 1.0:
-            # round off?
-            e = 0.99999999
+            e = ONE_MINUS_EPS
 
         fac = e / g
 
@@ -207,7 +208,7 @@ def e1e2_to_g1g2(e1, e2):
         eta = numpy.arctanh(e)
         g = numpy.tanh(0.5 * eta)
 
-        numpy.clip(g, 0.0, 0.99999999, g)
+        numpy.clip(g, 0.0, ONE_MINUS_EPS, g)
 
         g1 = numpy.zeros(g.size)
         g2 = numpy.zeros(g.size)
@@ -231,7 +232,7 @@ def e1e2_to_g1g2(e1, e2):
 
             if g >= 1.0:
                 # round off?
-                g = 0.99999999
+                g = ONE_MINUS_EPS
 
             fac = g / e
 
