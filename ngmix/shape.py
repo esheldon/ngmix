@@ -38,8 +38,10 @@ class Shape(object):
     """
     Shape object.  Currently only for reduced shear style shapes
 
-    This version is jitted, but inherits non-jitted methods
-    from ShapeBase
+    parameters
+    ----------
+    g1,g2: scalar
+        "reduced shear" shapes
     """
 
     def __init__(self, g1, g2):
@@ -55,6 +57,11 @@ class Shape(object):
     def set_g1g2(self, g1, g2):
         """
         Set reduced shear style ellipticity
+
+        parameters
+        ----------
+        g1,g2: scalar
+            "reduced shear" shapes
         """
         self.g1 = g1
         self.g2 = g2
@@ -62,10 +69,24 @@ class Shape(object):
         g = numpy.sqrt(g1 * g1 + g2 * g2)
         if g >= 1.0:
             raise GMixRangeError("g out of range: %.16g" % g)
+        self.g = g
 
     def get_sheared(self, s1, s2=None):
         """
-        Get a new shape, sheared by the specified amount
+        Get a new shape, sheared by the specified amount.
+
+        parameters
+        ----------
+        s1: scalar or Shape
+            The first component of the shape or a Shape instance.
+        s2: scalar
+            If s1 is given as a scalar, you must send the second component
+            of the shape as s2.
+
+        outputs
+        -------
+        sheared_shape: Shape
+            A new shape sheared by (s1, s2).
         """
 
         if isinstance(s1, Shape):
@@ -87,7 +108,17 @@ class Shape(object):
 
     def get_rotated(self, theta_radians):
         """
-        Rotate the shape by the input angle
+        Rotate the shape by the input angle.
+
+        parameters
+        ----------
+        theta_radians: scalar
+            The rotation angle in radians.
+
+        outputs
+        -------
+        rot_shape: Shape
+            The rotated shape.
         """
         twotheta = 2.0 * theta_radians
 
@@ -102,7 +133,12 @@ class Shape(object):
         """
         In-place rotation of the shape by the input angle
 
-        deprecated, use get_rotated()
+        **deprecated, use get_rotated()**
+
+        parameters
+        ----------
+        theta_radians: scalar
+            The rotation angle in radians.
         """
         twotheta = 2.0 * theta_radians
 
@@ -115,7 +151,12 @@ class Shape(object):
 
     def copy(self):
         """
-        Make a new Shape object with the same ellipticity parameters
+        Make a new Shape object with the same ellipticity parameters.
+
+        outputs
+        -------
+        new_shape: Shape
+            A copy of the current Shape instance.
         """
         s = Shape(self.g1, self.g2)
         return s
@@ -196,7 +237,6 @@ def e1e2_to_g1g2(e1, e2):
     -------
     g1,g2: scalars
         Reduced shear space shapes
-
     """
 
     e = numpy.sqrt(e1 * e1 + e2 * e2)
@@ -271,7 +311,7 @@ def g1g2_to_eta1eta2(g1, g2):
         if w.size > 0:
 
             eta = 2 * numpy.arctanh(g[w])
-            fac = eta[w] / g[w]
+            fac = eta / g[w]
 
             eta1[w] = fac * g1[w]
             eta2[w] = fac * g2[w]
@@ -312,8 +352,8 @@ def e1e2_to_eta1eta2(e1, e2):
     """
 
     if not isinstance(e1, numpy.ndarray):
-        e1 = numpy.array(e1, ndim=1, copy=False)
-        e2 = numpy.array(e2, ndim=1, copy=False)
+        e1 = numpy.array(e1, ndmin=1, copy=False)
+        e2 = numpy.array(e2, ndmin=1, copy=False)
         is_scalar = True
     else:
         is_scalar = False
@@ -400,6 +440,11 @@ def dgs_by_dgo_jacob(g1, g2, s1, s2):
         shape pars for "observed" image
     s1,s2: numbers or arrays
         shape pars for shear, applied negative
+
+    outputs
+    -------
+    jacobian : number or array
+        The jacobian of the transformation.
     """
 
     ssq = s1 * s1 + s2 * s2
@@ -415,6 +460,18 @@ def dgs_by_dgo_jacob(g1, g2, s1, s2):
 def get_round_factor(g1, g2):
     """
     factor to convert T to round T under shear
+
+    Use by taking T_round = T * get_round_factor(g1, g2)
+
+    parameters
+    ----------
+    g1,g2: scalars
+        Reduced shear space shapes
+
+    outputs
+    -------
+    f: scalar
+        factor to convert T to round T under shear
     """
     gsq = g1 ** 2 + g2 ** 2
     f = (1 - gsq) / (1 + gsq)
@@ -425,12 +482,18 @@ def rotate_shape(g1, g2, theta):
     """
     rotate the shapes by the input angle
 
+    parameters
+    ----------
     g1: scalar or array
         Shape to be rotated
     g2: scalar or array
         Shape to be rotated
     theta: scalar or array
         Angle in radians
+
+    outputs
+    -------
+    g1,g2 after rotation
     """
 
     twotheta = 2.0 * theta

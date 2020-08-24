@@ -23,7 +23,7 @@ install:
 script:
   - pip install --no-deps -e .
   - flake8 ngmix
-  - pytest -v --cov=ngmix ngmix
+  - pytest -v --cov=ngmix --cov-report term-missing ngmix
   # make sure to uninstall so that we do not invalidate the build cache
   - pip uninstall ngmix -y
   - rm -rf ${HOME}/miniconda/envs/test-env/lib/python*/site-packages/ngmix*
