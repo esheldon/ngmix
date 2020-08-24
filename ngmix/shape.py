@@ -38,6 +38,16 @@ class Shape(object):
     """
     Shape object.  Currently only for reduced shear style shapes
 
+    examples
+    --------
+    >>> import numpy as np
+    >>> from ngmix.shape import Shape
+    >>> s = Shape(0.1, 0.2)
+    >>> neg_s = -s
+    >>> rot_s = s.get_rotated(np.pi/2)
+    >>> new_s = s.copy()
+    >>> sheared_s = s.get_sheared(-0.05, 0.0)
+
     parameters
     ----------
     g1,g2: scalar
