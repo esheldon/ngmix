@@ -12,7 +12,7 @@ def sigma_to_fwhm(sigma):
 
 def T_to_fwhm(T):
     """
-    convert sigma to fwhm for a gaussian
+    convert T to fwhm for a gaussian
     """
     sigma = numpy.sqrt(T / 2.0)
     return sigma_to_fwhm(sigma)
@@ -88,7 +88,7 @@ def moms_to_e1e2(M1, M2, T):
     returns
     -------
     e1,e2:
-        M1/T M2/T
+        M1/T M2/T also know as the standard ellipticity parameters
     """
     if isinstance(T, numpy.ndarray):
         (w,) = numpy.where(T <= 0.0)
@@ -115,6 +115,11 @@ def get_Tround(T, g1, g2):
         <x^2> + <y^2>
     g1,g2: float
         The reduced shear style shape
+
+    returns
+    -------
+    Tround: float
+        The round size.
     """
     gsq = g1 ** 2 + g2 ** 2
     return T * (1 - gsq) / (1 + gsq)
@@ -130,6 +135,11 @@ def get_T(Tround, g1, g2):
         <x^2> + <y^2>
     g1,g2: float
         The reduced shear style shape
+
+    returns
+    -------
+    T: float
+        The elliptical size <x^2 + y^2>
     """
     gsq = g1 ** 2 + g2 ** 2
     return Tround * (1 + gsq) / (1 - gsq)
@@ -147,6 +157,8 @@ def get_sheared_M1M2T(M1, M2, T, s1, s2):
         <2*xy>
     T:  float or array
         <x^2 + y^2>
+    s1,s2: float or array
+        The shear to apply.
 
     returns
     -------
@@ -171,7 +183,22 @@ def get_sheared_M1M2T(M1, M2, T, s1, s2):
 
 
 def get_sheared_g1g2T(g1, g2, T, s1, s2):
+    """
+    Get sheared g1, g2, T
 
+    parameters
+    ----------
+    g1,g2: float or array
+        The reduced shear style shape
+    T: float or array
+        <x^2 + y^2>
+    s1,s2: float or array
+        The shear to apply.
+
+    returns
+    -------
+    sheared g1, g2, T
+    """
     g1s, g2s = shape.shear_reduced(g1, g2, s1, s2)
 
     Tround = get_Tround(T, g1, g2)
@@ -181,6 +208,25 @@ def get_sheared_g1g2T(g1, g2, T, s1, s2):
 
 
 def get_sheared_moments(irr, irc, icc, s1, s2):
+    """
+    Get sheared raw moments
+
+    parameters
+    ----------
+    irr: scalar or array
+        <y^2>
+    irc: scalar or array
+        <xy>
+    icc: scalar or array
+        <x^2>
+    s1,s2: float or array
+        The shear to apply.
+
+    returns
+    -------
+    irr_s, irc_s, icc_s: scalar or array
+        The sheared moments.
+    """
     g1, g2, T = mom2g(irr, irc, icc)
     g1s, g2s, Ts = get_sheared_g1g2T(g1, g2, T, s1, s2)
     irr_s, irc_s, icc_s = g2mom(g1s, g2s, Ts)
@@ -188,6 +234,23 @@ def get_sheared_moments(irr, irc, icc, s1, s2):
 
 
 def mom2e(Irr, Irc, Icc):
+    """
+    Convert icc, irc, icc to e1,e2
+
+    parameters
+    ----------
+    irr: scalar or array
+        <y^2>
+    irc: scalar or array
+        <xy>
+    icc: scalar or array
+        <x^2>
+
+    returns
+    -------
+    e1,e2: scalar or array
+        The standard ellipticity parameters.
+    """
     T = Irr + Icc
     e1 = (Icc - Irr) / T
     e2 = 2.0 * Irc / T
@@ -196,6 +259,23 @@ def mom2e(Irr, Irc, Icc):
 
 
 def mom2g(Irr, Irc, Icc):
+    """
+    Convert icc, irc, icc to g1,g2
+
+    parameters
+    ----------
+    irr: scalar or array
+        <y^2>
+    irc: scalar or array
+        <xy>
+    icc: scalar or array
+        <x^2>
+
+    returns
+    -------
+    g1,g2: scalar or array
+        The reduced shear style shapes.
+    """
     e1, e2, T = mom2e(Irr, Irc, Icc)
     g1, g2 = shape.e1e2_to_g1g2(e1, e2)
 
@@ -203,7 +283,25 @@ def mom2g(Irr, Irc, Icc):
 
 
 def e2mom(e1, e2, T):
+    """
+    Convert e1,e2 to icc, irc, icc.
 
+    parameters
+    ----------
+    e1,e2: scalar or array
+        The standard ellipticity parameters
+    T: scalar or array
+        <x^2 + y^2>
+
+    returns
+    -------
+    irr: scalar or array
+        <y^2>
+    irc: scalar or array
+        <xy>
+    icc: scalar or array
+        <x^2>
+    """
     Irc = e2 * T / 2.0
     Icc = (1 + e1) * T / 2.0
     Irr = (1 - e1) * T / 2.0
@@ -212,7 +310,25 @@ def e2mom(e1, e2, T):
 
 
 def g2mom(g1, g2, T):
+    """
+    Convert g1,g2 to icc, irc, icc.
 
+    parameters
+    ----------
+    g1,g2: scalar or array
+        The reduced shear style shapes.
+    T: scalar or array
+        <x^2 + y^2>
+
+    returns
+    -------
+    irr: scalar or array
+        <y^2>
+    irc: scalar or array
+        <xy>
+    icc: scalar or array
+        <x^2>
+    """
     e1, e2 = shape.g1g2_to_e1e2(g1, g2)
     Irc = e2 * T / 2.0
     Icc = (1 + e1) * T / 2.0
