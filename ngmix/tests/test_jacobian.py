@@ -4,7 +4,7 @@ import pytest
 from ngmix.jacobian import Jacobian, UnitJacobian, DiagonalJacobian
 
 
-@pytest.mark.parametrize('kind', ['row-col', 'x-y', 'galsim'])
+@pytest.mark.parametrize('kind', ['row-col', 'x-y', 'row-col-galsim', 'x-y-galsim'])
 def test_jacobian_smoke(kind):
     dudcol = 0.25
     dudrow = 0.1
@@ -29,7 +29,14 @@ def test_jacobian_smoke(kind):
             dudy=dudrow,
             dvdx=dvdcol,
             dvdy=dvdrow)
-    else:
+    elif kind == "row-col-galsim":
+        wcs = galsim.JacobianWCS(
+            dudx=dudcol,
+            dudy=dudrow,
+            dvdx=dvdcol,
+            dvdy=dvdrow)
+        jac = Jacobian(col=col, row=row, wcs=wcs)
+    elif kind == "x-y-galsim":
         wcs = galsim.JacobianWCS(
             dudx=dudcol,
             dudy=dudrow,
@@ -70,11 +77,40 @@ def test_jacobian_smoke(kind):
     assert np.allclose(gs_wcs.dvdy, jac.dvdrow)
 
     cpy_jac = jac.copy()
-    cpy_jac.set_cen(row=-11, col=-12)
+    if "row-col" in kind:
+        cpy_jac.set_cen(row=-11, col=-12)
+    else:
+        cpy_jac.set_cen(y=-11, x=-12)
     assert np.allclose(jac.row0, row)
     assert np.allclose(jac.col0, col)
     assert np.allclose(cpy_jac.row0, -11)
     assert np.allclose(cpy_jac.col0, -12)
+    assert np.allclose(jac.get_cen(), [row, col])
+    assert np.allclose(cpy_jac.get_cen(), [-11, -12])
+
+    # do something simple here
+    assert "row" in repr(jac)
+    assert "col" in repr(jac)
+    assert "dudrow" in repr(jac)
+    assert "dudcol" in repr(jac)
+    assert "dvdrow" in repr(jac)
+    assert "dvdcol" in repr(jac)
+
+
+def test_jacobian_set_cen_raises():
+    jac = UnitJacobian(col=2, row=-1)
+
+    with pytest.raises(Exception):
+        jac.set_cen(x=-12, row=12)
+
+    with pytest.raises(Exception):
+        jac.set_cen(x=-12, col=12)
+
+    with pytest.raises(Exception):
+        jac.set_cen(y=-12, row=12)
+
+    with pytest.raises(Exception):
+        jac.set_cen(y=-12, col=12)
 
 
 @pytest.mark.parametrize('kind', ['row-col', 'x-y'])
@@ -131,11 +167,16 @@ def test_diagonal_jacobian_smoke(kind):
     assert np.allclose(gs_wcs.dvdy, jac.dvdrow)
 
     cpy_jac = jac.copy()
-    cpy_jac.set_cen(row=-11, col=-12)
+    if "row-col" in kind:
+        cpy_jac.set_cen(row=-11, col=-12)
+    else:
+        cpy_jac.set_cen(y=-11, x=-12)
     assert np.allclose(jac.row0, row)
     assert np.allclose(jac.col0, col)
     assert np.allclose(cpy_jac.row0, -11)
     assert np.allclose(cpy_jac.col0, -12)
+    assert np.allclose(jac.get_cen(), [row, col])
+    assert np.allclose(cpy_jac.get_cen(), [-11, -12])
 
 
 @pytest.mark.parametrize('kind', ['row-col', 'x-y'])
@@ -190,11 +231,16 @@ def test_unit_jacobian_smoke(kind):
     assert np.allclose(gs_wcs.dvdy, jac.dvdrow)
 
     cpy_jac = jac.copy()
-    cpy_jac.set_cen(row=-11, col=-12)
+    if "row-col" in kind:
+        cpy_jac.set_cen(row=-11, col=-12)
+    else:
+        cpy_jac.set_cen(y=-11, x=-12)
     assert np.allclose(jac.row0, row)
     assert np.allclose(jac.col0, col)
     assert np.allclose(cpy_jac.row0, -11)
     assert np.allclose(cpy_jac.col0, -12)
+    assert np.allclose(jac.get_cen(), [row, col])
+    assert np.allclose(cpy_jac.get_cen(), [-11, -12])
 
 
 @pytest.mark.parametrize('kind', ['row-col', 'x-y'])
@@ -234,20 +280,17 @@ def test_jacobian_missing_kwargs(kind):
 
 @pytest.mark.parametrize('kind', ['row-col', 'x-y'])
 def test_diagonal_jacobian_missing_kwargs(kind):
-    scale = 0.25
     col = 5.6
     row = -10.4
 
     if kind == 'row-col':
         kwargs = dict(
             col=col,
-            row=row,
-            scale=scale)
+            row=row)
     elif kind == 'x-y':
         kwargs = dict(
             x=col,
-            y=row,
-            scale=scale)
+            y=row)
 
     for key in kwargs:
         tst_kwargs = {}
@@ -255,7 +298,10 @@ def test_diagonal_jacobian_missing_kwargs(kind):
         del tst_kwargs[key]
 
         with pytest.raises(Exception):
-            Jacobian(**tst_kwargs)
+            DiagonalJacobian(**tst_kwargs)
+
+    with pytest.raises(Exception):
+        DiagonalJacobian(col=5, y=2)
 
 
 @pytest.mark.parametrize('kind', ['row-col', 'x-y'])
@@ -278,4 +324,7 @@ def test_unit_jacobian_missing_kwargs(kind):
         del tst_kwargs[key]
 
         with pytest.raises(Exception):
-            Jacobian(**tst_kwargs)
+            UnitJacobian(**tst_kwargs)
+
+    with pytest.raises(Exception):
+        UnitJacobian(col=5, y=2)
