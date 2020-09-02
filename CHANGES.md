@@ -12,6 +12,7 @@
 
 - expanded test suite and improved documentation for the following modules
   * `ngmix.shape`
+  * `ngmix.moments`
 
 ## v1.3.8
 
