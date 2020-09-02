@@ -284,7 +284,7 @@ def mom2g(Irr, Irc, Icc):
 
 def e2mom(e1, e2, T):
     """
-    Convert e1,e2 to icc, irc, icc.
+    Convert e1,e2,T to icc, irc, icc.
 
     parameters
     ----------
@@ -311,7 +311,7 @@ def e2mom(e1, e2, T):
 
 def g2mom(g1, g2, T):
     """
-    Convert g1,g2 to icc, irc, icc.
+    Convert g1,g2,T to icc, irc, icc.
 
     parameters
     ----------
