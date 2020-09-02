@@ -21,12 +21,9 @@ install:
   - conda clean --all
 
 script:
-  - pip install . --no-deps
-  # files that pass flake8 should be added here as we go
+  - pip install --no-deps -e .
   - flake8 ngmix
-  # the `--pyargs` stuff makes sure to run the tests from the installed package
-  # we have to do this since we are using 2to3 to generate the python 3 code
-  - pytest -vv --pyargs ngmix
+  - pytest -v --cov=ngmix --cov-report term-missing ngmix
   # make sure to uninstall so that we do not invalidate the build cache
   - pip uninstall ngmix -y
   - rm -rf ${HOME}/miniconda/envs/test-env/lib/python*/site-packages/ngmix*

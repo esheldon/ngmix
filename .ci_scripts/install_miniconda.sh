@@ -23,6 +23,6 @@ fi
 
 conda create -q -n test-env python=${pyver} pip setuptools \
     numpy numba flake8 pyyaml scipy pytest galsim \
-    scikit-learn statsmodels emcee
+    scikit-learn statsmodels emcee pytest-cov
 
 conda clean --all

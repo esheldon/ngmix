@@ -1,3 +1,18 @@
+## unreleased (v2.0.0)
+
+### bug fixes
+
+- the total shape amplitude `g` is now reset properly when using the
+  `Shape.set_g1g2` method
+- fixed large rounding errors in some shape conversions in `ngmix.shape`
+- fixed bug in `ngmix.shape.g1g2_to_eta1eta2` in handling numpy array inputs
+- fixed bug in `ngmix.shape.e1e2_to_eta1eta2` in handling numpy array inputs
+
+### new features
+
+- expanded test suite and improved documentation for the following modules
+  * `ngmix.shape`
+
 ## v1.3.8
 
 ### bug fixes
