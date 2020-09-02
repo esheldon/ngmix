@@ -34,7 +34,6 @@ class Jacobian(object):
     but internally row,col is used to make correspondence to C row-major arrays
     clear
 
-
     parameters
     -----------
     Note: You can always send wcs= instead of the individual derivatives, which
@@ -94,7 +93,9 @@ class Jacobian(object):
         Get the center of the coordinate system
 
         returns
-            (row,col)
+        -------
+        row,col: float
+            The row and column of the jacobian center.
         """
         return self._data['row0'][0], self._data['col0'][0]
 
@@ -155,6 +156,16 @@ class Jacobian(object):
     def get_vu(self, row, col):
         """
         get v,u given row,col
+
+        parameters
+        ----------
+        row,col: float or array
+            The row and column of the input points.
+
+        returns
+        -------
+        v,u: float or array
+            The output (v,u) locations in the tangent plane.
         """
         from .jacobian_nb import jacobian_get_vu
         return jacobian_get_vu(self._data, row, col)
@@ -162,6 +173,16 @@ class Jacobian(object):
     def get_rowcol(self, v, u):
         """
         get row,col given v,u
+
+        parameters
+        ----------
+        v,u: float or array
+            The v,u location of the input points in the tangent plane.
+
+        returns
+        -------
+        row,col: float or array
+            The row,col image location of the input points.
         """
         from .jacobian_nb import jacobian_get_rowcol
         return jacobian_get_rowcol(self._data, v, u)
@@ -187,6 +208,16 @@ class Jacobian(object):
     def set_cen(self, **kw):
         """
         reset the center
+
+        parameters
+        ----------
+        row,col: float
+            The row,col location of the center sent as keywords.
+
+        or
+
+        x,y: float
+            The x,y location of the center sent as keywords.
         """
 
         if 'row' in kw:
@@ -211,8 +242,7 @@ class Jacobian(object):
 
     def get_galsim_wcs(self):
         """
-        get a galsim.JacobianWCS object with the same contents
-        as self
+        get a galsim.JacobianWCS object with the same contents as self
         """
         import galsim
 
@@ -313,7 +343,7 @@ class DiagonalJacobian(Jacobian):
         The column of the jacobian center
 
     parameters for x,y mode
-    ---------------------------
+    ------------------------
     x: keyword
         The x (column) of the jacobian center
     y: keyword
@@ -363,6 +393,5 @@ class UnitJacobian(DiagonalJacobian):
     y: keyword
         The y (row) of the jacobian center
     """
-
     def __init__(self, **kw):
         super(UnitJacobian, self).__init__(scale=1.0, **kw)
