@@ -110,16 +110,50 @@ class GMixND(object):
 
     def plot_components(
         self, *,
-        data=None,
         min=None,
         max=None,
+        npts=None,
+        data=None,
         nbin=None,
         binsize=None,
-        npts=None,
         file=None,
+        dpi=100,
         show=False,
         **plot_kws
     ):
+        """
+        plot the model and each component.  Optionally plot a set of
+        data as well.  Currently only works for 1d
+
+        Parameters
+        ----------
+        min: float
+            Min value to plot, if data is sent then this can be left
+            out and the min value will be gotten from that data.
+        max: float
+            Max value to plot, if data is sent then this can be left
+            out and the max value will be gotten from that data.
+        npts: int, optional
+            Number of points to use for the plot.  If data are sent you
+            can leave this off and a suitable value will be chosen based
+            on the data binsize
+        data: array, optional
+            Optional data to plot as a histogram
+        nbin: int, optional
+            Optional number of bins for histogramming data
+        binsize: float, optional
+            Optional binsize for histogramming data
+        file: str, optional
+            Optionally write out a plot file
+        dpi: int, optional
+            Optional dpi for graphics like png, default 100
+        show: bool, optional
+            If True, show the plot on the screen
+
+        Returns
+        -------
+        plot object
+        """
         import esutil as eu
         import hickory
 
@@ -141,17 +175,18 @@ class GMixND(object):
             dsum = hd['hist'].sum()
             xvals = hd['center']
             dx_data = xvals[1] - xvals[0]
-            dx_model = dx_data/10
 
-            nbin_model = int((max - min)/dx_model)
+            if npts is None:
+                dx_model = dx_data/10
+                npts = int((max - min)/dx_model)
+
             xvals = numpy.linspace(
                 min,
                 max,
-                nbin_model,
+                npts,
             )
             dx_model = xvals[1] - xvals[0]
 
-            # plt.curve(hd['center'], hd['hist'], label='data')
             plt.bar(hd['center'], hd['hist'], label='data', width=dx_data,
                     alpha=0.5, color='#a6a6a6')
 
@@ -183,7 +218,7 @@ class GMixND(object):
             plt.show()
 
         if file is not None:
-            plt.savefig(file)
+            plt.savefig(file, dpi=dpi)
 
         return plt
 
