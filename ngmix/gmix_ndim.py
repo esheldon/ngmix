@@ -6,7 +6,7 @@ loading, as well as very fast likelihood evaluation
 
 """
 import numpy
-from .gmix_ndim_nb import gmixnd_get_prob
+from .gmix_ndim_nb import gmixnd_get_prob, gmixnd_get_prob_component
 
 
 class GMixND(object):
@@ -108,6 +108,85 @@ class GMixND(object):
             plt = self.plot_components(data=data, **keys)
             return plt
 
+    def plot_components(
+        self, *,
+        data=None,
+        min=None,
+        max=None,
+        nbin=None,
+        binsize=None,
+        npts=None,
+        file=None,
+        show=False,
+        **plot_kws
+    ):
+        import esutil as eu
+        import hickory
+
+        plt = hickory.Plot(
+            legend=True,
+            **plot_kws
+        )
+
+        if data is not None:
+
+            if min is None:
+                min = data.min()
+            if max is None:
+                max = data.max()
+
+            hd = eu.stat.histogram(
+                data, min=min, max=max, nbin=nbin, binsize=binsize, more=True,
+            )
+            dsum = hd['hist'].sum()
+            xvals = hd['center']
+            dx_data = xvals[1] - xvals[0]
+            dx_model = dx_data/10
+
+            nbin_model = int((max - min)/dx_model)
+            xvals = numpy.linspace(
+                min,
+                max,
+                nbin_model,
+            )
+            dx_model = xvals[1] - xvals[0]
+
+            # plt.curve(hd['center'], hd['hist'], label='data')
+            plt.bar(hd['center'], hd['hist'], label='data', width=dx_data,
+                    alpha=0.5, color='#a6a6a6')
+
+        else:
+            if npts is None:
+                raise ValueError('send npts if not sending data')
+            if min is None:
+                raise ValueError('send min if not sending data')
+            if max is None:
+                raise ValueError('send max if not sending data')
+
+            xvals = numpy.linspace(min, max, npts)
+
+        predicted = self.get_prob_array(xvals)
+
+        if data is not None:
+            psum = predicted.sum()
+            fac = dsum/psum * dx_data/dx_model
+            predicted *= fac
+
+        plt.curve(xvals, predicted, label='model')
+        for i in range(self.ngauss):
+            predicted = fac*self.get_prob_array(xvals, component=i)
+
+            label = 'component %d' % i
+            plt.curve(xvals, predicted, label=label)
+
+        if show:
+            plt.show()
+
+        if file is not None:
+            plt.savefig(file)
+
+        return plt
+
     def save_mixture(self, fname):
         """
         save the mixture to a file
@@ -133,21 +212,33 @@ class GMixND(object):
             covars = fits["covars"].read()
         self.set_mixture(weights, means, covars)
 
-    def _get_prob(self, pars, dolog):
+    def _get_prob(self, pars, dolog, component=None):
         """
         version with no checking
         """
-        return gmixnd_get_prob(
-            self.log_pnorms,
-            self.means,
-            self.icovars,
-            pars,
-            self.xdiff,
-            self.tmp_lnprob,
-            dolog,
-        )
 
-    def _get_prob_array(self, pars, dolog):
+        if component is None:
+            return gmixnd_get_prob(
+                self.log_pnorms,
+                self.means,
+                self.icovars,
+                pars,
+                self.xdiff,
+                self.tmp_lnprob,
+                dolog,
+            )
+        else:
+            return gmixnd_get_prob_component(
+                self.log_pnorms,
+                self.means,
+                self.icovars,
+                pars,
+                self.xdiff,
+                dolog,
+                component,
+            )
+
+    def _get_prob_array(self, pars, dolog, component=None):
         """
         version with no checking
         """
@@ -156,27 +247,27 @@ class GMixND(object):
         retvals = numpy.zeros(n)
 
         for i in range(n):
-            retvals[i] = self._get_prob(pars[i, :], dolog)
+            retvals[i] = self._get_prob(pars[i, :], dolog, component=component)
 
         return retvals
 
-    def get_lnprob_scalar(self, pars_in):
+    def get_lnprob_scalar(self, pars_in, component=None):
         """
         (x-xmean) icovar (x-xmean)
         """
         dolog = 1
         pars = numpy.array(pars_in, dtype="f8", ndmin=1, order="C")
-        return self._get_prob(pars, dolog)
+        return self._get_prob(pars, dolog, component=component)
 
-    def get_prob_scalar(self, pars_in):
+    def get_prob_scalar(self, pars_in, component=None):
         """
         (x-xmean) icovar (x-xmean)
         """
         dolog = 0
         pars = numpy.array(pars_in, dtype="f8", ndmin=1, order="C")
-        return self._get_prob(pars, dolog)
+        return self._get_prob(pars, dolog, component=component)
 
-    def get_lnprob_array(self, pars):
+    def get_lnprob_array(self, pars, component=None):
         """
         array input
         """
@@ -186,9 +277,9 @@ class GMixND(object):
         if len(pars.shape) == 1:
             pars = pars[:, numpy.newaxis]
 
-        return self._get_prob_array(pars, dolog)
+        return self._get_prob_array(pars, dolog, component=component)
 
-    def get_prob_array(self, pars):
+    def get_prob_array(self, pars, component=None):
         """
         array input
         """
@@ -198,7 +289,7 @@ class GMixND(object):
         if len(pars.shape) == 1:
             pars = pars[:, numpy.newaxis]
 
-        return self._get_prob_array(pars, dolog)
+        return self._get_prob_array(pars, dolog, component=component)
 
     def sample(self, n=None):
         """

@@ -68,3 +68,61 @@ def gmixnd_get_prob(log_pnorms,
         retval = p*numpy.exp(lnpmax)
 
     return retval
+
+
+@njit
+def gmixnd_get_prob_component(log_pnorms,
+                              means,
+                              icovars,
+                              pars,
+                              xdiff,
+                              dolog,
+                              component):
+    """
+    evaluate the gaussian mixture
+
+    parameters
+    ----------
+    log_pnorms: array
+        array of size number of gaussians
+    means: array
+        array of shape [n_gauss, n_dim]
+    icovars: array
+        array of shape [n_gauss, n_dim, n_dim]
+    pars: array
+        array of shape [n_dim]
+    xdiff: array
+        scratch array of shape [n_dim]
+    dolog: int
+        0 if the return value should be linear
+    component: int
+        Which component to evaluate
+    """
+
+    n_dim = means.shape[1]
+    n_gauss = log_pnorms.size
+    assert component >= 0 and component < n_gauss
+
+    logpnorm = log_pnorms[component]
+
+    for idim1 in range(n_dim):
+        par = pars[idim1]
+        mean = means[component, idim1]
+
+        xdiff[idim1] = par-mean
+
+    chi2 = 0.0
+    for idim1 in range(n_dim):
+        for idim2 in range(n_dim):
+            icov = icovars[component, idim1, idim2]
+
+            chi2 += xdiff[idim1]*xdiff[idim2]*icov
+
+    lnp = -0.5*chi2 + logpnorm
+
+    if dolog:
+        retval = lnp
+    else:
+        retval = numpy.exp(lnp)
+
+    return retval
