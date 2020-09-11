@@ -105,7 +105,7 @@ class GMixND(object):
         self.set_mixture(gmm.weights_, gmm.means_, gmm.covariances_)
 
         if doplot:
-            plt = self.plot_components(data=data, **keys)
+            plt = self.plot(data=data, **keys)
             return plt
 
     def plot(
