@@ -108,7 +108,7 @@ class GMixND(object):
             plt = self.plot_components(data=data, **keys)
             return plt
 
-    def plot_components(
+    def plot(
         self, *,
         min=None,
         max=None,
