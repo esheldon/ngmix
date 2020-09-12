@@ -157,10 +157,7 @@ class GMixND(object):
         import esutil as eu
         import hickory
 
-        plt = hickory.Plot(
-            legend=True,
-            **plot_kws
-        )
+        plt = hickory.Plot(**plot_kws)
 
         if data is not None:
 
@@ -369,19 +366,21 @@ class GMixND(object):
         """
         Make a GMM object for sampling
         """
-        from sklearn.mixture import gaussian_mixture
+        from sklearn.mixture._gaussian_mixture import (
+            _compute_precision_cholesky
+        )
 
         # these numbers are not used because we set the means, etc by hand
         ngauss = self.weights.size
 
         gmm = self._make_gmm(ngauss)
         gmm.means_ = self.means.copy()
-        # gmm.covars_ = self.covars.copy()
         gmm.covariances_ = self.covars.copy()
         gmm.weights_ = self.weights.copy()
 
-        gmm.precisions_cholesky_ = \
-            gaussian_mixture._compute_precision_cholesky(self.covars, "full")
+        gmm.precisions_cholesky_ = _compute_precision_cholesky(
+            self.covars, "full",
+        )
 
         self._gmm = gmm
 
