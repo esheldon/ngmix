@@ -94,6 +94,7 @@ class GMixND(object):
             max_iter=n_iter,
             reg_covar=min_covar,
             covariance_type="full",
+            random_state=self.rng,
         )
 
         gmm.fit(data)
