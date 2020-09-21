@@ -8,7 +8,57 @@ from .pixels import make_pixels
 DEFAULT_XINTERP = 'lanczos15'
 
 
-class Observation(object):
+class MetadataMixin(object):
+    @property
+    def meta(self):
+        """
+        get the metadata dictionary
+
+        currently this simply returns a reference
+        """
+        return self._meta
+
+    @meta.setter
+    def meta(self, meta):
+        """
+        set the metadata dictionary
+
+        This method does consistency checks and will raise a TypeError if the input is
+        not None or a Python dict.
+        """
+        self.set_meta(meta)
+
+    def set_meta(self, meta):
+        """
+        set the metadata dictionary
+
+        This method does consistency checks and will raise a TypeError if the input is
+        not None or a Python dict.
+        """
+        if meta is None:
+            meta = {}
+
+        if not isinstance(meta, dict):
+            raise TypeError("meta data must be in "
+                            "dictionary form, got %s" % type(meta))
+
+        self._meta = meta
+
+    def update_meta_data(self, meta):
+        """
+        Update the metadata dictionary
+
+        This method does consistency checks and will raise a TypeError if the input is
+        not a Python dict.
+        """
+        if not isinstance(meta, dict):
+            raise TypeError(
+                "meta data must be in dictionary form, got %s" % type(meta)
+            )
+        self.meta.update(meta)
+
+
+class Observation(MetadataMixin):
     """
     Represent an observation with an image and possibly a
     weight map and jacobian
@@ -39,8 +89,21 @@ class Observation(object):
     store_pixels: bool
         If True, store an array of pixels for use in fitting routines.
         If False, the ignore_zero_weight keyword is not used.
-    """
+    ignore_zero_weight: bool
+        Only relevant if store_pixels is True.
+        If ignore_zero_weight is True, then zero-weight pixels are ignored
+        when constructing the internal pixels array for fitting routines.
+        If False, then zero-weight pixels are included in the internal pixels
+        array.
 
+    notes
+    -----
+    Updates of the internal data of ngmix.Observation will only work in
+    a python context, e.g:
+
+        with obs.writeable():
+            obs.image[w] += 5
+    """
     def __init__(self,
                  image,
                  weight=None,
@@ -125,8 +188,7 @@ class Observation(object):
         getter for pixels
 
         this simply returns a reference.  Note the pixels array is *always*
-        read only.  To reset the pixels you must reset the
-        image/weight/jacobian
+        read only.  To reset the pixels you must reset the image/weight/jacobian
         """
         return self._pixels
 
@@ -194,22 +256,6 @@ class Observation(object):
         self.set_jacobian(jacobian)
 
     @property
-    def meta(self):
-        """
-        getter for meta
-
-        currently this simply returns a reference
-        """
-        return self._meta
-
-    @meta.setter
-    def meta(self, meta):
-        """
-        set the meta
-        """
-        self.set_meta(meta)
-
-    @property
     def gmix(self):
         """
         get a copy of the gaussian mixture
@@ -248,6 +294,10 @@ class Observation(object):
         parameters
         ----------
         image: ndarray (or None)
+            The new image.
+        update_pixels: bool
+            If True, update the internal pixels array. If False, do not
+            do this update. Default is True.
         """
 
         if hasattr(self, '_image'):
@@ -278,6 +328,10 @@ class Observation(object):
         parameters
         ----------
         weight: ndarray (or None)
+            The new weight image.
+        update_pixels: bool
+            If True, update the internal pixels array. If False, do not
+            do this update. Default is True.
         """
 
         image = self.image
@@ -303,6 +357,7 @@ class Observation(object):
         parameters
         ----------
         bmask: ndarray (or None)
+            The new bit mask image.
         """
         if bmask is None:
             if self.has_bmask():
@@ -336,6 +391,7 @@ class Observation(object):
         parameters
         ----------
         ormask: ndarray (or None)
+            The new "or" mask image.
         """
         if ormask is None:
             if self.has_ormask():
@@ -369,6 +425,7 @@ class Observation(object):
         parameters
         ----------
         noise: ndarray (or None)
+            The new noise image.
         """
         if noise is None:
             if self.has_noise():
@@ -403,6 +460,10 @@ class Observation(object):
         parameters
         ----------
         jacobian: Jacobian (or None)
+            The new jacobian.
+        update_pixels: bool
+            If True, update the internal pixels array. If False, do not
+            do this update. Default is True.
         """
         if jacobian is None:
             cen = (numpy.array(self.image.shape)-1.0)/2.0
@@ -473,7 +534,12 @@ class Observation(object):
 
     def set_gmix(self, gmix):
         """
-        Set a psf gmix.
+        Set the gmix.
+
+        parameters
+        ----------
+        gmix: ngmix.GMix
+            The GMix to use to set the internal GMix.
         """
 
         if self.has_gmix():
@@ -507,7 +573,7 @@ class Observation(object):
         returns
         -------
         s2n: float
-            The supid s/n estimator
+            The s/n of the images. Will retun -9999 if the s/n cannot be computed.
         """
 
         Isum, Vsum, Npix = self.get_s2n_sums()
@@ -525,7 +591,12 @@ class Observation(object):
 
         returns
         -------
-        Isum, Vsum, Npix
+        Isum: float
+            The value sum(I).
+        Vsum: float
+            The value sum(1/w)
+        Npix: int
+            The number of non-zero-weight pixels.
         """
 
         image = self.image
@@ -543,30 +614,6 @@ class Observation(object):
             Npix = 0
 
         return Isum, Vsum, Npix
-
-    def set_meta(self, meta):
-        """
-        Add some metadata
-        """
-
-        if meta is None:
-            meta = {}
-
-        if not isinstance(meta, dict):
-            raise TypeError("meta data must be in "
-                            "dictionary form, got %s" % type(meta))
-
-        self._meta = meta
-
-    def update_meta_data(self, meta):
-        """
-        Add some metadata
-        """
-
-        if not isinstance(meta, dict):
-            raise TypeError("meta data must be in "
-                            "dictionary form, got %s" % type(meta))
-        self._meta.update(meta)
 
     def copy(self):
         """
@@ -631,15 +678,24 @@ class Observation(object):
         self._pixels = pixels
 
     def _get_view(self, data):
+        """return a view of some numpy data.
+
+        The `_writeable` attribute is set by the context management methods
+        `__enter__` and `__exit__` so that the internal data of the Observation
+        can only be updated in place within a context manager.
+        """
         view = data.view()
         view.flags['WRITEABLE'] = self._writeable
         return view
 
     def writeable(self):
         """
-        returns self.  This will only work in a with context, e.g
-        with obs.writeable():
-            obs.image[w] += 5
+        returns self
+
+        This method is meant to be used when updating the data of an Observation,
+        e.g.,
+            with obs.writeable():
+                obs.image[w] += 5
         """
         return self
 
@@ -652,11 +708,16 @@ class Observation(object):
         self.update_pixels()
 
 
-class ObsList(list):
+class ObsList(list, MetadataMixin):
     """
     Hold a list of Observation objects
 
-    This class provides a bit of type safety and ease of type checking
+    This class provides a bit of type safety and ease of type checking.
+
+    parameters
+    ----------
+    meta: dict or None
+        Any metadata to attach to the `ObsList`. Optional.
     """
 
     def __init__(self, meta=None):
@@ -669,52 +730,16 @@ class ObsList(list):
         Add a new observation
 
         over-riding this for type safety
+
+        parameters
+        ----------
+        obs: ngmix.Observation
+            An observation. An AssertionError will be raised if `obs` is not
+            an `ngmix.Observation`.
         """
         mess = "obs should be of type Observation, got %s" % type(obs)
         assert isinstance(obs, Observation), mess
         super(ObsList, self).append(obs)
-
-    @property
-    def meta(self):
-        """
-        getter for meta
-
-        currently this simply returns a reference
-        """
-        return self._meta
-
-    @meta.setter
-    def meta(self, meta):
-        """
-        set the meta
-
-        this does consistency checks and can trigger an update
-        of the pixels array
-        """
-        self.set_meta(meta)
-
-    def set_meta(self, meta):
-        """
-        Add some metadata
-        """
-
-        if meta is None:
-            meta = {}
-
-        if not isinstance(meta, dict):
-            raise TypeError("meta data must be in "
-                            "dictionary form, got %s" % type(meta))
-
-        self._meta = meta
-
-    def update_meta_data(self, meta):
-        """
-        Add some metadata
-        """
-
-        if not isinstance(meta, dict):
-            raise TypeError("meta data must be in dictionary form")
-        self.meta.update(meta)
 
     def get_s2n(self):
         """
@@ -725,7 +750,7 @@ class ObsList(list):
         returns
         -------
         s2n: float
-            The supid s/n estimator
+            The s/n of the images. Will retun -9999 if the s/n cannot be computed.
         """
 
         Isum, Vsum, Npix = self.get_s2n_sums()
@@ -743,7 +768,13 @@ class ObsList(list):
 
         returns
         -------
-        Isum, Vsum, Npix
+        -------
+        Isum: float
+            The value sum(I).
+        Vsum: float
+            The value sum(1/w)
+        Npix: int
+            The number of non-zero-weight pixels.
         """
 
         Isum = 0.0
@@ -767,7 +798,7 @@ class ObsList(list):
         super(ObsList, self).__setitem__(index, obs)
 
 
-class MultiBandObsList(list):
+class MultiBandObsList(list, MetadataMixin):
     """
     Hold a list of lists of ObsList objects, each representing a filter
     band
@@ -790,48 +821,6 @@ class MultiBandObsList(list):
             'obs_list should be of type ObsList'
         super(MultiBandObsList, self).append(obs_list)
 
-    @property
-    def meta(self):
-        """
-        getter for meta
-
-        currently this simply returns a reference
-        """
-        return self._meta
-
-    @meta.setter
-    def meta(self, meta):
-        """
-        set the meta
-
-        this does consistency checks and can trigger an update
-        of the pixels array
-        """
-        self.set_meta(meta)
-
-    def set_meta(self, meta):
-        """
-        Add some metadata
-        """
-
-        if meta is None:
-            meta = {}
-
-        if not isinstance(meta, dict):
-            raise TypeError("meta data must be in "
-                            "dictionary form, got %s" % type(meta))
-
-        self._meta = meta
-
-    def update_meta_data(self, meta):
-        """
-        Add some metadata
-        """
-
-        if not isinstance(meta, dict):
-            raise TypeError("meta data must be in dictionary form")
-        self._meta.update(meta)
-
     def get_s2n(self):
         """
         get the the simple s/n estimator
@@ -841,7 +830,7 @@ class MultiBandObsList(list):
         returns
         -------
         s2n: float
-            The supid s/n estimator
+            The s/n of the images. Will retun -9999 if the s/n cannot be computed.
         """
 
         Isum, Vsum, Npix = self.get_s2n_sums()
@@ -859,7 +848,13 @@ class MultiBandObsList(list):
 
         returns
         -------
-        Isum, Vsum, Npix
+        -------
+        Isum: float
+            The value sum(I).
+        Vsum: float
+            The value sum(1/w)
+        Npix: int
+            The number of non-zero-weight pixels.
         """
 
         Isum = 0.0
@@ -917,7 +912,7 @@ def get_mb_obs(obs_in):
 #
 
 
-class KObservation(object):
+class KObservation(MetadataMixin):
     def __init__(self,
                  kimage,
                  weight=None,
@@ -930,9 +925,7 @@ class KObservation(object):
 
         self._set_jacobian()
 
-        self.meta = {}
-        if meta is not None:
-            self.update_meta_data(meta)
+        self.set_meta(meta)
 
     def _set_image(self, kimage):
         """
@@ -1025,17 +1018,8 @@ class KObservation(object):
             col=cen[1],
         )
 
-    def update_meta_data(self, meta):
-        """
-        Add some metadata
-        """
 
-        if not isinstance(meta, dict):
-            raise TypeError("meta data must be in dictionary form")
-        self.meta.update(meta)
-
-
-class KObsList(list):
+class KObsList(list, MetadataMixin):
     """
     Hold a list of Observation objects
 
@@ -1045,9 +1029,7 @@ class KObsList(list):
     def __init__(self, meta=None):
         super(KObsList, self).__init__()
 
-        self.meta = {}
-        if meta is not None:
-            self.update_meta_data(meta)
+        self.set_meta(meta)
 
     def append(self, kobs):
         """
@@ -1061,15 +1043,6 @@ class KObsList(list):
 
         super(KObsList, self).append(kobs)
 
-    def update_meta_data(self, meta):
-        """
-        Add some metadata
-        """
-
-        if not isinstance(meta, dict):
-            raise TypeError("meta data must be in dictionary form")
-        self.meta.update(meta)
-
     def __setitem__(self, index, kobs):
         """
         over-riding this for type safety
@@ -1079,7 +1052,7 @@ class KObsList(list):
         super(KObsList, self).__setitem__(index, kobs)
 
 
-class KMultiBandObsList(list):
+class KMultiBandObsList(list, MetadataMixin):
     """
     Hold a list of lists of ObsList objects, each representing a filter
     band
@@ -1090,9 +1063,7 @@ class KMultiBandObsList(list):
     def __init__(self, meta=None):
         super(KMultiBandObsList, self).__init__()
 
-        self.meta = {}
-        if meta is not None:
-            self.update_meta_data(meta)
+        self.set_meta(meta)
 
     def append(self, kobs_list):
         """
@@ -1103,15 +1074,6 @@ class KMultiBandObsList(list):
         assert isinstance(kobs_list, KObsList), \
             "kobs_list should be of type KObsList"
         super(KMultiBandObsList, self).append(kobs_list)
-
-    def update_meta_data(self, meta):
-        """
-        Add some metadata
-        """
-
-        if not isinstance(meta, dict):
-            raise TypeError("meta data must be in dictionary form")
-        self.meta.update(meta)
 
     def __setitem__(self, index, kobs_list):
         """
