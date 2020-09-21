@@ -129,17 +129,23 @@ def test_observation_set(image_data):
     assert np.all(obs.bmask != new_arr)
     obs.bmask = new_arr
     assert np.all(obs.bmask == new_arr)
+    obs.bmask = None
+    assert not obs.has_bmask()
 
     new_arr = (np.exp(rng.normal(size=image_data['image'].shape)) *
                100).astype(np.int32)
     assert np.all(obs.ormask != new_arr)
     obs.ormask = new_arr
     assert np.all(obs.ormask == new_arr)
+    obs.ormask = None
+    assert not obs.has_ormask()
 
     new_arr = rng.normal(size=image_data['image'].shape)
     assert np.all(obs.noise != new_arr)
     obs.noise = new_arr
     assert np.all(obs.noise == new_arr)
+    obs.noise = None
+    assert not obs.has_noise()
 
     new_jac = DiagonalJacobian(x=8, y=13, scale=1.2)
     assert new_jac.get_galsim_wcs() != obs.jacobian.get_galsim_wcs()
@@ -150,23 +156,40 @@ def test_observation_set(image_data):
     assert obs.meta != new_meta
     obs.meta = new_meta
     assert obs.meta == new_meta
+    with pytest.raises(TypeError):
+        obs.meta = [10]
+    obs.meta = None
+    assert len(obs.meta) == 0
 
     new_meta = {'blue': 10}
     new_meta.update(obs.meta)
     assert obs.meta != new_meta
     obs.update_meta_data({'blue': 10})
     assert obs.meta == new_meta
+    with pytest.raises(TypeError):
+        obs.update_meta_data([10])
 
     new_gmix = GMix(pars=rng.uniform(size=6))
     assert np.all(obs.gmix.get_full_pars() != new_gmix.get_full_pars())
     obs.gmix = new_gmix
     assert np.all(obs.gmix.get_full_pars() == new_gmix.get_full_pars())
+    obs.gmix = None
+    assert not obs.has_gmix()
+    with pytest.raises(RuntimeError):
+        obs.get_gmix()
 
     new_psf = Observation(
         image=rng.normal(size=obs.psf.image.shape), meta={'ispsf': True})
     assert np.all(obs.psf.image != new_psf.image)
     obs.psf = new_psf
     assert np.all(obs.psf.image == new_psf.image)
+    assert np.all(obs.get_psf().image == new_psf.image)
+    obs.psf = None
+    assert not obs.has_psf()
+    with pytest.raises(RuntimeError):
+        obs.get_psf()
+    with pytest.raises(RuntimeError):
+        obs.get_psf_gmix()
 
 
 def test_observation_s2n(image_data):
@@ -180,6 +203,15 @@ def test_observation_s2n(image_data):
         np.sqrt(np.sum(1.0/image_data['weight'])))
 
     assert np.allclose(s2n, s2n_true)
+
+    # if we are not storing pixels, when we can have an all zero weight map
+    # in this case s2n is -9999
+    obs = Observation(
+        image=image_data['image'],
+        weight=np.zeros_like(obs.weight),
+        store_pixels=False,
+    )
+    assert np.allclose(obs.get_s2n(), -9999)
 
 
 def test_observation_pixels(image_data):
