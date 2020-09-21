@@ -717,7 +717,7 @@ class ObsList(list, MetadataMixin):
     parameters
     ----------
     meta: dict or None
-        Any metadata to attach to the `ObsList`. Optional.
+        Any metadata keep in the `meta` attribute. Optional.
     """
 
     def __init__(self, meta=None):
@@ -804,6 +804,11 @@ class MultiBandObsList(list, MetadataMixin):
     band
 
     This class provides a bit of type safety and ease of type checking
+
+    parameters
+    ----------
+    meta: dict or None
+        Any metadata keep in the `meta` attribute. Optional.
     """
 
     def __init__(self, meta=None):
@@ -882,7 +887,15 @@ def get_mb_obs(obs_in):
     """
     convert the input to a MultiBandObsList
 
-    Input should be an Observation, ObsList, or MultiBandObsList
+    parameters
+    ----------
+    obs_in: ngmix.Observation, ngmix.ObsList, or ngmix.MultiBandObsList
+        Input data to convert to a MultiBandObsList.
+
+    returns
+    -------
+    mbobs: ngmix.MultiBandObsList
+        A MultiBandObsList containing the input data.
     """
 
     if isinstance(obs_in, Observation):
@@ -913,6 +926,21 @@ def get_mb_obs(obs_in):
 
 
 class KObservation(MetadataMixin):
+    """
+    a k-space observation
+
+    parameters
+    ----------
+    kimage: galsim.Image
+        A galsim image of the observation in k-space.
+    weight: galsim.Image or None
+        A real galsim image of the weight map. If None, the weights are all
+        set to unity. Optional.
+    psf: KObservation or None
+        A KObservation of the PSF. If None, no PSF is set. Optional.
+    meta: dict or None
+        Any metadata keep in the `meta` attribute. Optional.
+    """
     def __init__(self,
                  kimage,
                  weight=None,
@@ -1024,6 +1052,11 @@ class KObsList(list, MetadataMixin):
     Hold a list of Observation objects
 
     This class provides a bit of type safety and ease of type checking
+
+    parameters
+    ----------
+    meta: dict or None
+        Any metadata keep in the `meta` attribute. Optional.
     """
 
     def __init__(self, meta=None):
@@ -1054,10 +1087,14 @@ class KObsList(list, MetadataMixin):
 
 class KMultiBandObsList(list, MetadataMixin):
     """
-    Hold a list of lists of ObsList objects, each representing a filter
-    band
+    Hold a list of lists of ObsList objects, each representing a filter band
 
     This class provides a bit of type safety and ease of type checking
+
+    parameters
+    ----------
+    meta: dict or None
+        Any metadata keep in the `meta` attribute. Optional.
     """
 
     def __init__(self, meta=None):
@@ -1085,7 +1122,7 @@ class KMultiBandObsList(list, MetadataMixin):
         super(KMultiBandObsList, self).__setitem__(index, kobs_list)
 
 
-def make_iilist(obs, **kw):
+def make_iilist(obs, interp=DEFAULT_XINTERP):
     """
     make a multi-band interpolated image list, as well as the maximum of
     getGoodImageSize from each psf, and corresponding dk
@@ -1096,10 +1133,29 @@ def make_iilist(obs, **kw):
         Either Observation, ObsList or MultiBandObsList
     interp: string, optional
         The x interpolant, default 'lanczos15'
+
+    returns
+    -------
+    mb_iilist: list of list of dicts
+        A list of list of dictionaries containing the inteprolated image data
+        for each observations. The entries are
+
+            'wcs': the galsim WCS
+            'scale': pixel-scale of the WCS
+            'ii': the inteprolated image
+            'weight': the weight map
+            'meta': the metadata
+            'psf_ii': the interpolated PSF image
+            'psf_weight': the PSF weight map
+            'psf_meta': the PSF metadata
+            'realspace_gsimage': the galsim image data
+    dim: int
+        The maximum good image size over all PSFs in the data.
+    dk: float
+        The k-space spacing corresponding to dim.
     """
     import galsim
 
-    interp = kw.get('interp', DEFAULT_XINTERP)
     mb_obs = get_mb_obs(obs)
 
     dimlist = []
@@ -1196,20 +1252,25 @@ def make_iilist(obs, **kw):
     return mb_iilist, dim, dk
 
 
-def make_kobs(mb_obs, **kw):
+def make_kobs(mb_obs, interp=DEFAULT_XINTERP):
     """
     make k space observations from real space observations, with common
     dimensions and dk for each band and epoch
 
     parameters
     ----------
-    obs: real space obs list
+    obs: real space data
         Either Observation, ObsList or MultiBandObsList
     interp: string, optional
         The x interpolant, default 'lanczos15'
+
+    returns
+    -------
+    mb_kobs: KMultiBandObsList
+        The k-space data.
     """
 
-    mb_iilist, dim, dk = make_iilist(mb_obs, **kw)
+    mb_iilist, dim, dk = make_iilist(mb_obs, interp=interp)
 
     mb_kobs = KMultiBandObsList()
 
@@ -1276,9 +1337,17 @@ def make_kobs(mb_obs, **kw):
 
 def get_kmb_obs(obs_in):
     """
-    convert the input to a MultiBandObsList
+    convert the input to a KMultiBandObsList
 
-    Input should be an KObservation, KObsList, or KMultiBandObsList
+    parameters
+    ----------
+    obs_in: ngmix.KObservation, ngmix.KObsList, or ngmix.KMultiBandObsList
+        Input data to convert to a KMultiBandObsList.
+
+    returns
+    -------
+    kmb_obs: ngmix.KMultiBandObsList
+        A KMultiBandObsList containing the input data.
     """
 
     if isinstance(obs_in, KObservation):
