@@ -1035,10 +1035,12 @@ class KObservation(MetadataMixin):
         scale = self.kimage.scale
 
         dims = self.kimage.array.shape
-        if (dims[0] % 2) == 0:
-            cen = (numpy.array(dims)-1.0)/2.0 + 0.5
-        else:
-            cen = (numpy.array(dims)-1.0)/2.0
+        cen = numpy.zeros(2)
+        for i in range(2):
+            if (dims[i] % 2) == 0:
+                cen[i] = (dims[i]-1.0)/2.0 + 0.5
+            else:
+                cen[i] = (dims[i]-1.0)/2.0
 
         self.jacobian = DiagonalJacobian(
             scale=scale,

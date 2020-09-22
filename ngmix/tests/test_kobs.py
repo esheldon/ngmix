@@ -2,7 +2,66 @@ import numpy as np
 import pytest
 import galsim
 
+from ngmix.jacobian import DiagonalJacobian
 from ngmix.observation import KObservation, KObsList, KMultiBandObsList, get_kmb_obs
+
+
+def test_kobs():
+    rng = np.random.RandomState(seed=11)
+
+    with pytest.raises(ValueError):
+        KObservation(kimage={})
+
+    with pytest.raises(ValueError):
+        KObservation(kimage=galsim.ImageD(rng.normal(size=(11, 13)), scale=0.3))
+
+    with pytest.raises(AssertionError):
+        KObservation(
+            kimage=galsim.ImageCD(rng.normal(size=(11, 13)), scale=0.3),
+            weight={},
+        )
+
+    with pytest.raises(ValueError):
+        KObservation(
+            kimage=galsim.ImageCD(rng.normal(size=(11, 13)), scale=0.3),
+            weight=galsim.ImageD(rng.normal(size=(11, 12)), scale=0.3),
+        )
+
+    obs = KObservation(kimage=galsim.ImageCD(rng.normal(size=(11, 13)), scale=0.3))
+    assert np.all(obs.weight.array == 1)
+    assert obs.weight.array.shape == (11, 13)
+    assert not obs.has_psf()
+
+    psf_obs = KObservation(kimage=galsim.ImageCD(rng.normal(size=(11, 13)), scale=0.3))
+    obs.set_psf(psf_obs)
+    assert obs.has_psf()
+    assert obs.psf is psf_obs
+    obs.set_psf(None)
+    assert not obs.has_psf()
+
+    with pytest.raises(AssertionError):
+        obs.set_psf({})
+
+    psf_obs = KObservation(kimage=galsim.ImageCD(rng.normal(size=(11, 12)), scale=0.3))
+    with pytest.raises(ValueError):
+        obs.set_psf(psf_obs)
+
+    psf_obs = KObservation(kimage=galsim.ImageCD(rng.normal(size=(11, 13)), scale=0.4))
+    with pytest.raises(AssertionError):
+        obs.set_psf(psf_obs)
+
+    assert isinstance(obs.jacobian, DiagonalJacobian)
+    assert np.allclose(obs.jacobian.scale, 0.3)
+    assert np.array_equal(obs.jacobian.cen, [5, 6])
+
+    obs = KObservation(kimage=galsim.ImageCD(rng.normal(size=(10, 12)), scale=0.3))
+    assert np.array_equal(obs.jacobian.cen, [5, 6])
+
+    obs = KObservation(kimage=galsim.ImageCD(rng.normal(size=(7, 12)), scale=0.3))
+    assert np.array_equal(obs.jacobian.cen, [3, 6])
+
+    obs = KObservation(kimage=galsim.ImageCD(rng.normal(size=(6, 11)), scale=0.3))
+    assert np.array_equal(obs.jacobian.cen, [3, 5])
 
 
 def test_kobslist():
