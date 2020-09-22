@@ -2,7 +2,7 @@
 
 ### bug fixes
 
-- fixed computation of Jacobian center for KObservations with mixed
+- fixed computation of Jacobian center for `ngmix.KObservation`s with mixed
   even-odd dimensions
 - the total shape amplitude `g` is now reset properly when using the
   `Shape.set_g1g2` method
