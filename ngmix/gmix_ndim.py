@@ -204,6 +204,8 @@ class GMixND(object):
             psum = predicted.sum()
             fac = dsum/psum * dx_data/dx_model
             predicted *= fac
+        else:
+            fac = 1
 
         plt.curve(xvals, predicted, label='model')
         for i in range(self.ngauss):
