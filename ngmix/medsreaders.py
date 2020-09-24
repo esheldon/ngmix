@@ -247,7 +247,7 @@ class NGMixMEDS(_MEDS):
             orig_col=c['orig_col'][iobj, icutout],
             orig_start_row=c['orig_start_row'][iobj, icutout],
             orig_start_col=c['orig_start_col'][iobj, icutout],
-            scale = ii['scale'][file_id],
+            scale=ii['scale'][file_id],
         )
 
         if 'flux_auto' in c.dtype.names:
