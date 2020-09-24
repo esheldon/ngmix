@@ -55,8 +55,6 @@ from . import gaussmom  # noqa
 from . import observation  # noqa
 from .observation import Observation, ObsList, MultiBandObsList  # noqa
 
-from . import lensfit  # noqa
-
 from . import stats  # noqa
 
 from . import guessers  # noqa
