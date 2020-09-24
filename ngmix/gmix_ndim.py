@@ -6,7 +6,7 @@ loading, as well as very fast likelihood evaluation
 
 """
 import numpy
-from .gmix_ndim_nb import gmixnd_get_prob
+from .gmix_ndim_nb import gmixnd_get_prob, gmixnd_get_prob_component
 
 
 class GMixND(object):
@@ -94,6 +94,7 @@ class GMixND(object):
             max_iter=n_iter,
             reg_covar=min_covar,
             covariance_type="full",
+            random_state=self.rng,
         )
 
         gmm.fit(data)
@@ -105,8 +106,122 @@ class GMixND(object):
         self.set_mixture(gmm.weights_, gmm.means_, gmm.covariances_)
 
         if doplot:
-            plt = self.plot_components(data=data, **keys)
+            plt = self.plot(data=data, **keys)
             return plt
+
+    def plot(
+        self, *,
+        min=None,
+        max=None,
+        npts=None,
+        data=None,
+        nbin=None,
+        binsize=None,
+        file=None,
+        dpi=100,
+        show=False,
+        **plot_kws
+    ):
+        """
+        plot the model and each component.  Optionally plot a set of
+        data as well.  Currently only works for 1d
+
+        Parameters
+        ----------
+        min: float
+            Min value to plot, if data is sent then this can be left
+            out and the min value will be gotten from that data.
+        max: float
+            Max value to plot, if data is sent then this can be left
+            out and the max value will be gotten from that data.
+        npts: int, optional
+            Number of points to use for the plot.  If data are sent you
+            can leave this off and a suitable value will be chosen based
+            on the data binsize
+        data: array, optional
+            Optional data to plot as a histogram
+        nbin: int, optional
+            Optional number of bins for histogramming data
+        binsize: float, optional
+            Optional binsize for histogramming data
+        file: str, optional
+            Optionally write out a plot file
+        dpi: int, optional
+            Optional dpi for graphics like png, default 100
+        show: bool, optional
+            If True, show the plot on the screen
+
+        Returns
+        -------
+        plot object
+        """
+        import esutil as eu
+        import hickory
+
+        plt = hickory.Plot(**plot_kws)
+
+        if data is not None:
+
+            if min is None:
+                min = data.min()
+            if max is None:
+                max = data.max()
+
+            hd = eu.stat.histogram(
+                data, min=min, max=max, nbin=nbin, binsize=binsize, more=True,
+            )
+            dsum = hd['hist'].sum()
+            xvals = hd['center']
+            dx_data = xvals[1] - xvals[0]
+
+            if npts is None:
+                dx_model = dx_data/10
+                npts = int((max - min)/dx_model)
+
+            xvals = numpy.linspace(
+                min,
+                max,
+                npts,
+            )
+            dx_model = xvals[1] - xvals[0]
+
+            plt.bar(hd['center'], hd['hist'], label='data', width=dx_data,
+                    alpha=0.5, color='#a6a6a6')
+
+        else:
+            if npts is None:
+                raise ValueError('send npts if not sending data')
+            if min is None:
+                raise ValueError('send min if not sending data')
+            if max is None:
+                raise ValueError('send max if not sending data')
+
+            xvals = numpy.linspace(min, max, npts)
+
+        predicted = self.get_prob_array(xvals)
+
+        if data is not None:
+            psum = predicted.sum()
+            fac = dsum/psum * dx_data/dx_model
+            predicted *= fac
+        else:
+            fac = 1
+
+        plt.curve(xvals, predicted, label='model')
+        for i in range(self.ngauss):
+            predicted = fac*self.get_prob_array(xvals, component=i)
+
+            label = 'component %d' % i
+            plt.curve(xvals, predicted, label=label)
+
+        if show:
+            plt.show()
+
+        if file is not None:
+            print('writing:', file)
+            plt.savefig(file, dpi=dpi)
+
+        return plt
 
     def save_mixture(self, fname):
         """
@@ -133,21 +248,33 @@ class GMixND(object):
             covars = fits["covars"].read()
         self.set_mixture(weights, means, covars)
 
-    def _get_prob(self, pars, dolog):
+    def _get_prob(self, pars, dolog, component=None):
         """
         version with no checking
         """
-        return gmixnd_get_prob(
-            self.log_pnorms,
-            self.means,
-            self.icovars,
-            pars,
-            self.xdiff,
-            self.tmp_lnprob,
-            dolog,
-        )
 
-    def _get_prob_array(self, pars, dolog):
+        if component is None:
+            return gmixnd_get_prob(
+                self.log_pnorms,
+                self.means,
+                self.icovars,
+                pars,
+                self.xdiff,
+                self.tmp_lnprob,
+                dolog,
+            )
+        else:
+            return gmixnd_get_prob_component(
+                self.log_pnorms,
+                self.means,
+                self.icovars,
+                pars,
+                self.xdiff,
+                dolog,
+                component,
+            )
+
+    def _get_prob_array(self, pars, dolog, component=None):
         """
         version with no checking
         """
@@ -156,27 +283,27 @@ class GMixND(object):
         retvals = numpy.zeros(n)
 
         for i in range(n):
-            retvals[i] = self._get_prob(pars[i, :], dolog)
+            retvals[i] = self._get_prob(pars[i, :], dolog, component=component)
 
         return retvals
 
-    def get_lnprob_scalar(self, pars_in):
+    def get_lnprob_scalar(self, pars_in, component=None):
         """
         (x-xmean) icovar (x-xmean)
         """
         dolog = 1
         pars = numpy.array(pars_in, dtype="f8", ndmin=1, order="C")
-        return self._get_prob(pars, dolog)
+        return self._get_prob(pars, dolog, component=component)
 
-    def get_prob_scalar(self, pars_in):
+    def get_prob_scalar(self, pars_in, component=None):
         """
         (x-xmean) icovar (x-xmean)
         """
         dolog = 0
         pars = numpy.array(pars_in, dtype="f8", ndmin=1, order="C")
-        return self._get_prob(pars, dolog)
+        return self._get_prob(pars, dolog, component=component)
 
-    def get_lnprob_array(self, pars):
+    def get_lnprob_array(self, pars, component=None):
         """
         array input
         """
@@ -186,9 +313,9 @@ class GMixND(object):
         if len(pars.shape) == 1:
             pars = pars[:, numpy.newaxis]
 
-        return self._get_prob_array(pars, dolog)
+        return self._get_prob_array(pars, dolog, component=component)
 
-    def get_prob_array(self, pars):
+    def get_prob_array(self, pars, component=None):
         """
         array input
         """
@@ -198,7 +325,7 @@ class GMixND(object):
         if len(pars.shape) == 1:
             pars = pars[:, numpy.newaxis]
 
-        return self._get_prob_array(pars, dolog)
+        return self._get_prob_array(pars, dolog, component=component)
 
     def sample(self, n=None):
         """
@@ -243,19 +370,21 @@ class GMixND(object):
         """
         Make a GMM object for sampling
         """
-        from sklearn.mixture import gaussian_mixture
+        from sklearn.mixture._gaussian_mixture import (
+            _compute_precision_cholesky
+        )
 
         # these numbers are not used because we set the means, etc by hand
         ngauss = self.weights.size
 
         gmm = self._make_gmm(ngauss)
         gmm.means_ = self.means.copy()
-        # gmm.covars_ = self.covars.copy()
         gmm.covariances_ = self.covars.copy()
         gmm.weights_ = self.weights.copy()
 
-        gmm.precisions_cholesky_ = \
-            gaussian_mixture._compute_precision_cholesky(self.covars, "full")
+        gmm.precisions_cholesky_ = _compute_precision_cholesky(
+            self.covars, "full",
+        )
 
         self._gmm = gmm
 
