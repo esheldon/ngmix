@@ -15,6 +15,10 @@
   * `ngmix.jacobian`
   * `ngmix.moments`
 
+### deprecated/removed
+
+- `ngmix.lensfit` has been removed in v2.0.0
+
 ## v1.3.8
 
 ### bug fixes
