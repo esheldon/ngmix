@@ -821,6 +821,12 @@ class MultiBandObsList(list, MetadataMixin):
         Add a new ObsList
 
         over-riding this for type safety
+
+        parameters
+        ----------
+        obs_list: ngmix.ObsList
+            An ObsList. An AssertionError will be raised if `obs_list` is not
+            an `ngmix.ObsList`.
         """
         assert isinstance(obs_list, ObsList),\
             'obs_list should be of type ObsList'
@@ -852,7 +858,6 @@ class MultiBandObsList(list, MetadataMixin):
         sum(I)/sqrt( sum( 1/w ) ) = Isum/sqrt(Vsum)
 
         returns
-        -------
         -------
         Isum: float
             The value sum(I).
@@ -1008,7 +1013,11 @@ class KObservation(MetadataMixin):
         """
         set the psf KObservation.  can be None
 
-        Shape of psf image should match the image
+        parameters
+        ----------
+        psf: KObservation or None
+            The PSF as a KObservation. If not None, the shape of the psf image
+            should match the observation image.
         """
         if self.has_psf():
             del self._psf
@@ -1071,6 +1080,12 @@ class KObsList(list, MetadataMixin):
         Add a new KObservation
 
         over-riding this for type safety
+
+        parameters
+        ----------
+        kobs: ngmix.KObservation
+            A KObservation. An AssertionError will be raised if `kobs` is not
+            an `ngmix.KObservation`.
         """
         assert isinstance(kobs, KObservation), \
             ("kobs should be of type "
@@ -1109,6 +1124,12 @@ class KMultiBandObsList(list, MetadataMixin):
         Add a new ObsList
 
         over-riding this for type safety
+
+        parameters
+        ----------
+        kobs_list: ngmix.KObsList
+            An KObsList. An AssertionError will be raised if `kobs_list` is not
+            an `ngmix.KObsList`.
         """
         assert isinstance(kobs_list, KObsList), \
             "kobs_list should be of type KObsList"
