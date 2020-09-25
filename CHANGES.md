@@ -18,6 +18,10 @@
 ### deprecated/removed
 
 - `ngmix.lensfit` has been removed in v2.0.0
+- all `dbyg1_*`,  `dbyg2_*`, `dlnbyg1_*`, `dlnbyg2_*`, and `get_pqr*` methods,
+  along with the code used to test them, have been removed from the classes in
+  `ngmix.priors`
+
 
 ## v1.3.8
 
