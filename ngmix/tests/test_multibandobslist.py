@@ -38,11 +38,19 @@ def test_multibandobslist_set():
     new_meta = {'blah': 6}
     mbobs.meta = new_meta
     assert mbobs.meta == new_meta
+    mbobs.meta = None
+    assert len(mbobs.meta) == 0
+    with pytest.raises(TypeError):
+        mbobs.meta = [10]
+    with pytest.raises(TypeError):
+        mbobs.set_meta([10])
 
     new_meta = {'bla': 6}
     new_meta.update(mbobs.meta)
     mbobs.update_meta_data({'bla': 6})
     assert mbobs.meta == new_meta
+    with pytest.raises(TypeError):
+        mbobs.update_meta_data([10])
 
     rng = np.random.RandomState(seed=12)
     new_obs = Observation(image=rng.normal(size=(13, 15)))
@@ -81,6 +89,27 @@ def test_multibandobslist_s2n():
 
     s2n = mbobs.get_s2n()
     assert s2n == numer / np.sqrt(denom)
+
+
+def test_multibandobslist_s2n_zeroweight():
+    rng = np.random.RandomState(seed=11)
+    mbobs = MultiBandObsList()
+
+    for _ in range(5):
+        obslist = ObsList()
+        for _ in range(3):
+            img = rng.normal(size=(13, 15))
+            obslist.append(
+                Observation(
+                    image=img,
+                    weight=np.zeros((13, 15)),
+                    store_pixels=False,
+                )
+            )
+
+        mbobs.append(obslist)
+
+    assert np.allclose(mbobs.get_s2n(), -9999)
 
 
 def test_multibandobslist_append_err():

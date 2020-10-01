@@ -28,11 +28,19 @@ def test_obslist_set():
     new_meta = {'blah': 6}
     obslist.meta = new_meta
     assert obslist.meta == new_meta
+    obslist.meta = None
+    assert len(obslist.meta) == 0
+    with pytest.raises(TypeError):
+        obslist.meta = [10]
+    with pytest.raises(TypeError):
+        obslist.set_meta([10])
 
     new_meta = {'bla': 6}
     new_meta.update(obslist.meta)
     obslist.update_meta_data({'bla': 6})
     assert obslist.meta == new_meta
+    with pytest.raises(TypeError):
+        obslist.update_meta_data([10])
 
     rng = np.random.RandomState(seed=12)
     new_obs = Observation(image=rng.normal(size=(13, 15)))
@@ -56,6 +64,20 @@ def test_obslist_s2n():
 
     s2n = obslist.get_s2n()
     assert s2n == numer / np.sqrt(denom)
+
+
+def test_obslist_s2n_zeroweight():
+    rng = np.random.RandomState(seed=11)
+    obslist = ObsList()
+    for _ in range(3):
+        obs = Observation(
+            image=rng.normal(size=(13, 15)),
+            weight=np.zeros((13, 15)),
+            store_pixels=False,
+        )
+        obslist.append(obs)
+
+    assert np.allclose(obslist.get_s2n(), -9999)
 
 
 def test_obslist_append_err():
