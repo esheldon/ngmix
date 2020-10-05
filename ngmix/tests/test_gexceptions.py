@@ -1,3 +1,5 @@
+import pickle
+import io
 import pytest
 
 from ..gexceptions import (
@@ -49,3 +51,19 @@ def test_gexceptions_eval_repr(excp):
 def test_gexceptions_eval_str(excp):
     e = excp("blah blah")
     assert str(e) == "'blah blah'"
+
+
+@pytest.mark.parametrize('excp', [
+    GMixRangeError,
+    GMixFatalError,
+    GMixMaxIterEM,
+    BootPSFFailure,
+    BootGalFailure,
+])
+def test_gexceptions_pickle(excp):
+    e = excp("blah blah")
+    buff = io.BytesIO()
+    pickle.dump(e, buff)
+    buff.seek(0)
+    el = pickle.load(buff)
+    assert repr(e) == repr(el)
