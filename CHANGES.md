@@ -17,6 +17,8 @@
   * `ngmix.jacobian`
   * `ngmix.moments`
   * `ngmix.observation`
+  * `ngmix.gexceptions`
+- introduced `NGmixBaseException` as parent class for all ngmix-specific exceptions 
 
 ### deprecated/removed
 

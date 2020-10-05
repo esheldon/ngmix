@@ -1,58 +1,43 @@
-class GMixRangeError(Exception):
-    """
-    Some number was out of range
-    """
+class NGmixBaseException(Exception):
+    """Base exception class for ngmix"""
     def __init__(self, value):
-        super(GMixRangeError, self).__init__(value)
+        super(NGmixBaseException, self).__init__(value)
         self.value = value
 
     def __str__(self):
         return repr(self.value)
 
 
-class GMixFatalError(Exception):
+class GMixRangeError(NGmixBaseException):
     """
-    Some number was out of range
+    Some number was out of range.
     """
-    def __init__(self, value):
-        super(GMixFatalError, self).__init__(value)
-        self.value = value
-
-    def __str__(self):
-        return repr(self.value)
+    pass
 
 
-class GMixMaxIterEM(Exception):
+class GMixFatalError(NGmixBaseException):
     """
-    EM algorithm hit max iter
+    A fatal error in the Gaussian mixtures.
     """
-    def __init__(self, value):
-        super(GMixMaxIterEM, self).__init__(value)
-        self.value = value
-
-    def __str__(self):
-        return repr(self.value)
+    pass
 
 
-class BootPSFFailure(Exception):
+class GMixMaxIterEM(NGmixBaseException):
     """
-    failure to bootstrap PSF
+    EM algorithm hit max iter.
     """
-    def __init__(self, value):
-        super(BootPSFFailure, self).__init__(value)
-        self.value = value
-
-    def __str__(self):
-        return repr(self.value)
+    pass
 
 
-class BootGalFailure(Exception):
+class BootPSFFailure(NGmixBaseException):
     """
-    failure to bootstrap galaxy
+    Failure to bootstrap PSF
     """
-    def __init__(self, value):
-        super(BootGalFailure, self).__init__(value)
-        self.value = value
+    pass
 
-    def __str__(self):
-        return repr(self.value)
+
+class BootGalFailure(NGmixBaseException):
+    """
+    Failure to bootstrap galaxy
+    """
+    pass
