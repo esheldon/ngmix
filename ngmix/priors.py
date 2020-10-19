@@ -27,23 +27,90 @@ def make_rng(rng=None):
 
 
 class PriorBase(object):
+    """
+    Base object for priors.
+
+    parameters
+    ----------
+    bounds: 2-tuple of floats or None
+        The bounds of the parameter. Default of None means no bounds.
+    rng: np.random.RandomState or None
+        An RNG to use. If None, a new RNG is made using the numpy global RNG
+        to generate a seed.
+
+    attributes
+    ----------
+    bounds: 2-tuple of floats or None
+        The bounds of the parameter. Default of None means no bounds.
+    rng: np.random.RandomState or None
+        An RNG to use. If None, a new RNG is made using the numpy global RNG
+        to generate a seed.
+
+    methods
+    -------
+    has_bounds()
+        Returns True if the object has bounds defined and they are non-None, False
+        otherwise.
+    """
     def __init__(self, bounds=None, rng=None):
         self.bounds = bounds
         self.rng = make_rng(rng=rng)
 
     def has_bounds(self):
         """
-        returns True if the object has a bounds defined
+        returns True if the object has a bounds defined, False otherwise.
         """
         return hasattr(self, "bounds") and self.bounds is not None
 
 
 class GPriorBase(PriorBase):
     """
-    This is the base class.  You need to over-ride a few of
-    the functions, see below
-    """
+    Base object for priors on shear.
 
+    parameters
+    ----------
+    pars: array-like
+        Parameters for the prior.
+    rng: np.random.RandomState or None
+        An RNG to use. If None, a new RNG is made using the numpy global RNG
+        to generate a seed.
+
+    attributes
+    ----------
+    pars: array-like
+        Parameters for the prior.
+    gmax: float
+        The maximum value of the shear.
+
+    methods
+    -------
+    get_lnprob_scalar2d(g1, g2)
+        Get the 2d log prob
+    get_lnprob_array2d(g1arr, g2arr)
+        Get the 2d prior for the array inputs
+    get_prob_scalar2d(g1, g2)
+        Get the 2d prob
+    get_prob_array2d(g1arr, g2arr)
+        Get the 2d prior for the array inputs
+    get_prob_scalar1d(g)
+        Get the 1d prob
+    get_prob_array1d(garr)
+        Get the 1d prior for the array inputs
+    sample1d(nrand, maxguess=0.1)
+        Get random |g| from the 1d distribution
+    sample2d(nrand=None, maxguess=0.1)
+        Get random g1,g2 values by first drawing from the 1-d distribution
+    sample2d_brute(nrand)
+        Get random g1,g2 values using 2-d brute force method
+    set_maxval1d_scipy()
+        Use a simple minimizer to find the max value of the 1d distribution
+    set_maxval1d(maxguess=0.1)
+        Use a simple minimizer to find the max value of the 1d distribution
+    get_prob_scalar1d_neg(g, *args)
+        Helper function for the minimizer.
+    dofit(xdata, ydata, guess=None, show=False)
+        Fit the prior to data.
+    """
     def __init__(self, pars, rng=None):
         PriorBase.__init__(self, rng=rng)
 
@@ -51,6 +118,24 @@ class GPriorBase(PriorBase):
 
         # sub-class may want to over-ride this, see GPriorM
         self.gmax = 1.0
+
+    def fill_prob_array1d(g, output):
+        """
+        Fill the `output` array with the prob values at each `g`.
+        """
+        raise RuntimeError("over-ride me")
+
+    def fill_lnprob_array2d(g1arr, g2arr, output):
+        """
+        Fill the `output` array with the lnprob values at each `g1`, `g2` pair.
+        """
+        raise RuntimeError("over-ride me")
+
+    def fill_prob_array2d(g1arr, g2arr, output):
+        """
+        Fill the `output` array with the prob values at each `g1`, `g2` pair.
+        """
+        raise RuntimeError("over-ride me")
 
     def get_lnprob_scalar2d(self, g1, g2):
         """
@@ -115,8 +200,14 @@ class GPriorBase(PriorBase):
         ----------
         nrand: int
             Number to generate
-        """
+        maxguess : float
+            The guess for finding the maximum g value if it is needed.
 
+        returns
+        -------
+        g : array-like
+            The generated |g| values.
+        """
         rng = self.rng
 
         if not hasattr(self, "maxval1d"):
@@ -153,14 +244,22 @@ class GPriorBase(PriorBase):
     def sample2d(self, nrand=None, maxguess=0.1):
         """
         Get random g1,g2 values by first drawing
-        from the 1-d distribution
+        from the 1-d distribution and assuming rotational symmetry.
 
         parameters
         ----------
         nrand: int
             Number to generate
-        """
+        maxguess : float
+            The guess for finding the maximum g value if it is needed.
 
+        returns
+        -------
+        g1 : array-like
+            The generated g1 values.
+        g2 : array-like
+            The generated g2 values.
+        """
         rng = self.rng
 
         if nrand is None:
@@ -190,8 +289,14 @@ class GPriorBase(PriorBase):
         ----------
         nrand: int
             Number to generate
-        """
 
+        returns
+        -------
+        g1 : array-like
+            The generated g1 values.
+        g2 : array-like
+            The generated g2 values.
+        """
         rng = self.rng
 
         maxval2d = self.get_prob_scalar2d(0.0, 0.0)
@@ -238,6 +343,11 @@ class GPriorBase(PriorBase):
         """
         Use a simple minimizer to find the max value of the 1d
         distribution
+
+        parameters
+        ----------
+        maxguess : float
+            The guess for finding the maximum g value if it is needed.
         """
         from .simplex import minimize_neldermead
 
@@ -263,9 +373,19 @@ class GPriorBase(PriorBase):
 
     def dofit(self, xdata, ydata, guess=None, show=False):
         """
-        fit the prior to data
+        Fit the prior to data.
 
-        you might need to implement _get_guess
+        parameters
+        ----------
+        xdata : array-like
+            The x-values for the fit. Usually values of |g|.
+        ydata : array-like
+            The y-values for the fit. Usually values of p(|g|).
+        guess : array-like or None
+            The guess for the fitter. If you pass None, you will need to
+            implement `_get_guess`.
+        show : bool, optional
+            If True, show a plot of the fit and data.
         """
         from .fitting import run_leastsq
         from .fitting import print_pars
