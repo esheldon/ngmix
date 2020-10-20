@@ -84,6 +84,12 @@ class GPriorBase(PriorBase):
 
     methods
     -------
+    fill_prob_array1d(g, output)
+        Fill the `output` array with the prob values at each `g`.
+    fill_lnprob_array2d(g1arr, g2arr, output)
+        Fill the `output` array with the lnprob values at each `g1`, `g2` pair.
+    fill_prob_array2d(g1arr, g2arr, output)
+        Fill the `output` array with the prob values at each `g1`, `g2` pair.
     get_lnprob_scalar2d(g1, g2)
         Get the 2d log prob
     get_lnprob_array2d(g1arr, g2arr)
@@ -119,19 +125,19 @@ class GPriorBase(PriorBase):
         # sub-class may want to over-ride this, see GPriorM
         self.gmax = 1.0
 
-    def fill_prob_array1d(g, output):
+    def fill_prob_array1d(self, g, output):
         """
         Fill the `output` array with the prob values at each `g`.
         """
         raise RuntimeError("over-ride me")
 
-    def fill_lnprob_array2d(g1arr, g2arr, output):
+    def fill_lnprob_array2d(self, g1arr, g2arr, output):
         """
         Fill the `output` array with the lnprob values at each `g1`, `g2` pair.
         """
         raise RuntimeError("over-ride me")
 
-    def fill_prob_array2d(g1arr, g2arr, output):
+    def fill_prob_array2d(self, g1arr, g2arr, output):
         """
         Fill the `output` array with the prob values at each `g1`, `g2` pair.
         """
