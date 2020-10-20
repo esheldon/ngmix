@@ -67,6 +67,16 @@ class GPriorBase(PriorBase):
     """
     Base object for priors on shear.
 
+    Note that depending on your purpose, you may need to override the following
+    abstract methods:
+
+        fill_prob_array1d
+        fill_lnprob_array2d
+        fill_prob_array2d
+        get_lnprob_scalar2d
+        get_prob_scalar2d
+        get_prob_scalar1d
+
     parameters
     ----------
     pars: array-like
