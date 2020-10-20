@@ -1001,6 +1001,11 @@ class TwoSidedErf(PriorBase):
         return rvals
 
 
+############################################
+# MRB: I've gone through the first 1k lines.
+# I am going to stop and write tests, then split this module into pieces
+# and then do docs for the rest.
+
 class GPriorGreat3Exp(GPriorBase):
     """
     This doesn't fit very well
