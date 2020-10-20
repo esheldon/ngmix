@@ -216,12 +216,12 @@ class GPriorBase(PriorBase):
         ----------
         nrand: int
             Number to generate
-        maxguess : float
+        maxguess: float
             The guess for finding the maximum g value if it is needed.
 
         returns
         -------
-        g : array-like
+        g: array-like
             The generated |g| values.
         """
         rng = self.rng
@@ -266,14 +266,14 @@ class GPriorBase(PriorBase):
         ----------
         nrand: int
             Number to generate
-        maxguess : float
+        maxguess: float
             The guess for finding the maximum g value if it is needed.
 
         returns
         -------
-        g1 : array-like
+        g1: array-like
             The generated g1 values.
-        g2 : array-like
+        g2: array-like
             The generated g2 values.
         """
         rng = self.rng
@@ -308,9 +308,9 @@ class GPriorBase(PriorBase):
 
         returns
         -------
-        g1 : array-like
+        g1: array-like
             The generated g1 values.
-        g2 : array-like
+        g2: array-like
             The generated g2 values.
         """
         rng = self.rng
@@ -360,7 +360,7 @@ class GPriorBase(PriorBase):
 
         parameters
         ----------
-        maxguess : float
+        maxguess: float
             The guess for finding the maximum g value if it is needed.
         """
         from .simplex import minimize_neldermead
@@ -391,14 +391,14 @@ class GPriorBase(PriorBase):
 
         parameters
         ----------
-        xdata : array-like
+        xdata: array-like
             The x-values for the fit. Usually values of |g|.
-        ydata : array-like
+        ydata: array-like
             The y-values for the fit. Usually values of p(|g|).
-        guess : array-like or None
+        guess: array-like or None
             The guess for the fitter. If you pass None, you will need to
             implement `_get_guess`.
-        show : bool, optional
+        show: bool, optional
             If True, show a plot of the fit and data.
         """
         from .fitting import run_leastsq
@@ -458,8 +458,11 @@ class GPriorGauss(GPriorBase):
 
     parameters
     ----------
-    pars : float
+    pars: float
         The width of the Gaussian prior for g1, g2.
+    rng: np.random.RandomState or None
+        An RNG to use. If None, a new RNG is made using the numpy global RNG
+        to generate a seed.
     """
     def __init__(self, *args, **kw):
         super(GPriorGauss, self).__init__(*args, **kw)
@@ -483,9 +486,9 @@ class GPriorGauss(GPriorBase):
 
         returns
         -------
-        g1 : array-like
+        g1: array-like
             The generated g1 values.
-        g2 : array-like
+        g2: array-like
             The generated g2 values.
         """
         if nrand is None:
@@ -534,12 +537,15 @@ class GPriorBA(GPriorBase):
 
     parameters
     ----------
-    sigma : float, optional
+    sigma: float, optional
         The overall width of the prior on |g|, matches `gsimga` from the paper.
         Default is 0.3.
-    A : float, optional
+    A: float, optional
         The overall amplitude of the prior. This is used for fitting, but not
         when evaluating lnprob. Default is 1.0.
+    rng: np.random.RandomState or None
+        An RNG to use. If None, a new RNG is made using the numpy global RNG
+        to generate a seed.
     """
     def __init__(self, sigma=0.3, A=1.0, rng=None):
         PriorBase.__init__(self, rng=rng)
@@ -557,12 +563,12 @@ class GPriorBA(GPriorBase):
         ----------
         nrand: int
             Number to generate
-        maxguess : float
+        maxguess: float
             The guess for finding the maximum g value if it is needed.
 
         returns
         -------
-        g : array-like
+        g: array-like
             The generated |g| values.
         """
         if maxguess is None:
@@ -578,7 +584,7 @@ class GPriorBA(GPriorBase):
 
         parameters
         ----------
-        pars : array-like, length 2
+        pars: array-like, length 2
             The paraneters [`A`, and `sigma`].
         """
         # used for fitting
@@ -741,46 +747,20 @@ class GPriorBA(GPriorBase):
         return guess
 
 
-#
-# does not have the 2*pi*g in them
-def _gprior2d_exp_scalar(A, a, g0sq, gmax, g, gsq):
-
-    if g > gmax:
-        return 0.0
-
-    numer = A * (1 - numpy.exp((g - gmax) / a))
-    denom = (1 + g) * numpy.sqrt(gsq + g0sq)
-
-    prior = numer / denom
-
-    return prior
-
-
-def _gprior2d_exp_array(A, a, g0sq, gmax, g, gsq, output):
-
-    (w,) = where(g < gmax)
-    if w.size == 0:
-        return
-
-    numer = A * (1 - exp((g[w] - gmax) / a))
-    denom = (1 + g) * sqrt(gsq[w] + g0sq)
-
-    output[w] = numer / denom
-
-
-def _gprior1d_exp_scalar(A, a, g0sq, gmax, g, gsq, output):
-    (w,) = where(g < gmax)
-    if w.size == 0:
-        return
-
-    numer = A * (1 - exp((g[w] - gmax) / a))
-    denom = (1 + g) * sqrt(gsq[w] + g0sq)
-
-    output[w] = numer / denom
-    output[w] *= numpy.pi * g[w]
-
-
 class FlatPrior(PriorBase):
+    """
+    A flat prior between `minval` and `maxval`.
+
+    parameters
+    ----------
+    minval: float
+        The minimum value of the allowed range.
+    maxval: float
+        The maximum value of the allowed range.
+    rng: np.random.RandomState or None
+        An RNG to use. If None, a new RNG is made using the numpy global RNG
+        to generate a seed.
+    """
     def __init__(self, minval, maxval, rng=None):
         PriorBase.__init__(self, rng=rng)
 
@@ -789,7 +769,7 @@ class FlatPrior(PriorBase):
 
     def get_prob_scalar(self, val):
         """
-        returns 1 or raises a GMixRangeError
+        Returns 1 if the value is in [minval, maxval] or raises a GMixRangeError
         """
         retval = 1.0
         if val < self.minval or val > self.maxval:
@@ -801,7 +781,7 @@ class FlatPrior(PriorBase):
 
     def get_lnprob_scalar(self, val):
         """
-        returns 0.0 or raises a GMixRangeError
+        Returns 0.0 if the value is in [minval, maxval] or raises a GMixRangeError
         """
         retval = 0.0
         if val < self.minval or val > self.maxval:
@@ -813,7 +793,7 @@ class FlatPrior(PriorBase):
 
     def get_fdiff(self, val):
         """
-        returns 0.0 or raises a GMixRangeError
+        Compute -2ln(p) ~ (data - mode)/err for using with LM fitters.
         """
         retval = 0.0
         if val < self.minval or val > self.maxval:
@@ -825,7 +805,18 @@ class FlatPrior(PriorBase):
 
     def sample(self, n=None):
         """
-        returns samples uniformly on the interval
+        Returns samples uniformly on the interval.
+
+        parameters
+        ----------
+        n : int or None
+            The number of samples. If None, a single scalar sample is drawn.
+            Default is None.
+
+        returns
+        -------
+        samples : scalar or array-like
+            The samples with shape (`n`,). If `n` is None, then a scalar is returned.
         """
         if n is None:
             is_scalar = True
@@ -847,7 +838,11 @@ class TwoSidedErf(PriorBase):
     A two-sided error function that evaluates to 1 in the middle, zero at
     extremes.
 
-    A limitation seems to be the accuracy of the erf....
+    A limitation seems to be the accuracy of the erf implementation.
+
+    parameters
+    ----------
+
     """
 
     def __init__(self, minval, width_at_min, maxval, width_at_max, rng=None):
@@ -872,7 +867,7 @@ class TwoSidedErf(PriorBase):
 
     def get_lnprob_scalar(self, val):
         """
-        get the probability of the point
+        get the log probability of the point
         """
 
         p = self.get_prob_scalar(val)
@@ -885,7 +880,7 @@ class TwoSidedErf(PriorBase):
 
     def get_prob_array(self, vals):
         """
-        get the probability of the point
+        get the probability of a set of points
         """
 
         vals = array(vals, ndmin=1, dtype="f8", copy=False)
@@ -898,7 +893,7 @@ class TwoSidedErf(PriorBase):
 
     def get_lnprob_array(self, vals):
         """
-        get the probability of the point
+        get the log probability of a set of points
         """
 
         p = self.get_prob_array(vals)
@@ -911,18 +906,14 @@ class TwoSidedErf(PriorBase):
 
     def get_fdiff(self, x):
         """
-        for the LM fitter
+        Compute -2ln(p) ~ (data - mode)/err for using with LM fitters.
         """
         if isinstance(x, numpy.ndarray):
-            return self.get_fdiff_array(x)
+            return self._get_fdiff_array(x)
         else:
-            return self.get_fdiff_scalar(x)
+            return self._get_fdiff_scalar(x)
 
-    def get_fdiff_array(self, vals):
-        """
-        for the LM fitter
-        """
-
+    def _get_fdiff_array(self, vals):
         vals = array(vals, ndmin=1, dtype="f8", copy=False)
         fdiff = zeros(vals.size)
 
@@ -931,12 +922,10 @@ class TwoSidedErf(PriorBase):
 
         return fdiff
 
-    def get_fdiff_scalar(self, val):
-        """
-        get something similar to a (model-data)/err.  Note however that with
-        the current implementation, the *sign* of the difference is lost in
-        this case.
-        """
+    def _get_fdiff_scalar(self, val):
+        # get something similar to a (model-data)/err.  Note however that with
+        # the current implementation, the *sign* of the difference is lost in
+        # this case.
 
         p = self.get_lnprob_scalar(val)
 
@@ -945,21 +934,19 @@ class TwoSidedErf(PriorBase):
             p = 0.0
         return sqrt(p)
 
-        """
-        from math import erf
-
-        p1 = erf((self.maxval-val)/self.width_at_max)
-        p1 -= 1.0
-        #p1 *= -BIGVAL/2
-        p1 *= -1
-
-        p2 = erf((val-self.minval)/self.width_at_min)
-        p2 -= 1
-        #p2 *= -1
-        #p2 *= -BIGVAL/2
-
-        return p1+p2
-        """
+        # from math import erf
+        #
+        # p1 = erf((self.maxval-val)/self.width_at_max)
+        # p1 -= 1.0
+        # #p1 *= -BIGVAL/2
+        # p1 *= -1
+        #
+        # p2 = erf((val-self.minval)/self.width_at_min)
+        # p2 -= 1
+        # #p2 *= -1
+        # #p2 *= -BIGVAL/2
+        #
+        # return p1+p2
 
     def sample(self, nrand=None):
         """
@@ -1428,6 +1415,45 @@ def make_gprior_cosmos_sersic(type="erf"):
         return GPriorMErf(pars)
     else:
         raise ValueError("bad cosmos g prior: %s" % type)
+
+
+#
+# does not have the 2*pi*g in them
+def _gprior2d_exp_scalar(A, a, g0sq, gmax, g, gsq):
+
+    if g > gmax:
+        return 0.0
+
+    numer = A * (1 - numpy.exp((g - gmax) / a))
+    denom = (1 + g) * numpy.sqrt(gsq + g0sq)
+
+    prior = numer / denom
+
+    return prior
+
+
+def _gprior2d_exp_array(A, a, g0sq, gmax, g, gsq, output):
+
+    (w,) = where(g < gmax)
+    if w.size == 0:
+        return
+
+    numer = A * (1 - exp((g[w] - gmax) / a))
+    denom = (1 + g) * sqrt(gsq[w] + g0sq)
+
+    output[w] = numer / denom
+
+
+def _gprior1d_exp_scalar(A, a, g0sq, gmax, g, gsq, output):
+    (w,) = where(g < gmax)
+    if w.size == 0:
+        return
+
+    numer = A * (1 - exp((g[w] - gmax) / a))
+    denom = (1 + g) * sqrt(gsq[w] + g0sq)
+
+    output[w] = numer / denom
+    output[w] *= numpy.pi * g[w]
 
 
 class GPriorM(GPriorBase):
