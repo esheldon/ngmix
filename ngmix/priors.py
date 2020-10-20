@@ -79,7 +79,7 @@ class GPriorBase(PriorBase):
 
     parameters
     ----------
-    pars: array-like
+    pars: float or array-like
         Parameters for the prior.
     rng: np.random.RandomState or None
         An RNG to use. If None, a new RNG is made using the numpy global RNG
@@ -87,7 +87,7 @@ class GPriorBase(PriorBase):
 
     attributes
     ----------
-    pars: array-like
+    pars: float or array-like
         Parameters for the prior.
     gmax: float
         The maximum value of the shear.
@@ -342,8 +342,7 @@ class GPriorBase(PriorBase):
 
     def set_maxval1d_scipy(self):
         """
-        Use a simple minimizer to find the max value of the 1d
-        distribution
+        Use a simple minimizer to find the max value of the 1d distribution
         """
         import scipy.optimize
 
@@ -357,8 +356,7 @@ class GPriorBase(PriorBase):
 
     def set_maxval1d(self, maxguess=0.1):
         """
-        Use a simple minimizer to find the max value of the 1d
-        distribution
+        Use a simple minimizer to find the max value of the 1d distribution
 
         parameters
         ----------
@@ -383,7 +381,7 @@ class GPriorBase(PriorBase):
 
     def get_prob_scalar1d_neg(self, g, *args):
         """
-        So we can use the minimizer
+        Helper function so we can use the minimizer
         """
         return -self.get_prob_scalar1d(g)
 
@@ -432,10 +430,7 @@ class GPriorBase(PriorBase):
             self._compare_fit(res["pars"])
 
     def _calc_fdiff(self, pars):
-        """
-        for the fitter
-        """
-
+        # helper function for the fitter
         self.set_pars(pars)
         p = self.get_prob_array1d(self.xdata)
         fdiff = (p - self.ydata) * self.ierr
@@ -456,25 +451,43 @@ class GPriorBase(PriorBase):
 
 
 class GPriorGauss(GPriorBase):
+    """
+    Gaussian shear prior.
+
+    See `GPriorBase` for more documentation.
+
+    parameters
+    ----------
+    pars : float
+        The width of the Gaussian prior for g1, g2.
+    """
     def __init__(self, *args, **kw):
         super(GPriorGauss, self).__init__(*args, **kw)
         self.sigma = float(self.pars)
 
     def sample1d(self, nrand, **kw):
+        """
+        Not implemented for Gaussian shear priors.
+        """
         raise NotImplementedError("no 1d for gauss")
 
     def sample2d(self, nrand=None, **kw):
         """
-        Get random |g| from the 1d distribution
-
-        Set self.gmax appropriately
+        Get random g1,g2 values by first drawing
+        from the 1-d distribution and assuming rotational symmetry.
 
         parameters
         ----------
         nrand: int
             Number to generate
-        """
 
+        returns
+        -------
+        g1 : array-like
+            The generated g1 values.
+        g2 : array-like
+            The generated g2 values.
+        """
         if nrand is None:
             nrand = 1
             is_scalar = True
@@ -513,26 +526,45 @@ class GPriorGauss(GPriorBase):
 
 class GPriorBA(GPriorBase):
     """
-    g prior from Bernstein & Armstrong 2013
+    Bernstein & Armstrong 2013 shear prior.
 
-    automatically has max lnprob 0 and max prob 1
+    Note this prior automatically has max lnprob 0 and max prob 1.
+
+    See `GPriorBase` for more documentation.
+
+    parameters
+    ----------
+    sigma : float, optional
+        The overall width of the prior on |g|, matches `gsimga` from the paper.
+        Default is 0.3.
+    A : float, optional
+        The overall amplitude of the prior. This is used for fitting, but not
+        when evaluating lnprob. Default is 1.0.
     """
-
     def __init__(self, sigma=0.3, A=1.0, rng=None):
-        """
-        pars are scalar gsigma from B&A
-        """
         PriorBase.__init__(self, rng=rng)
 
         self.set_pars([A, sigma])
         self.gmax = 1.0
 
-        self.h = 1.0e-6
-        self.hhalf = 0.5 * self.h
-        self.hinv = 1.0 / self.h
-
     def sample1d(self, nrand, maxguess=None):
+        """
+        Get random |g| from the 1d distribution
 
+        Set self.gmax appropriately.
+
+        parameters
+        ----------
+        nrand: int
+            Number to generate
+        maxguess : float
+            The guess for finding the maximum g value if it is needed.
+
+        returns
+        -------
+        g : array-like
+            The generated |g| values.
+        """
         if maxguess is None:
             maxguess = self.sigma + 0.0001 * srandu(rng=self.rng)
 
@@ -540,15 +572,24 @@ class GPriorBA(GPriorBase):
 
     def set_pars(self, pars):
         """
-        for fitting
+        Set parameters of the prior.
+
+        This method is primarily used for fitting.
+
+        parameters
+        ----------
+        pars : array-like, length 2
+            The paraneters [`A`, and `sigma`].
         """
+        # used for fitting
         self.A = pars[0]
         self.set_sigma(pars[1])
 
     def set_sigma(self, sigma):
         """
-        some of this is for the analytical pqr calculation
+        Set sigma and its variants, sigma**2, sigma**4, etc.
         """
+        # some of this is for the analytical pqr calculation
         self.sigma = sigma
         self.sig2 = self.sigma ** 2
         self.sig4 = self.sigma ** 4
@@ -557,22 +598,19 @@ class GPriorBA(GPriorBase):
 
     def get_fdiff(self, g1, g2):
         """
-        for the LM fitter
+        Compute -2ln(p) ~ (data - mode)/err for using with LM fitters.
         """
         if isinstance(g1, numpy.ndarray):
-            return self.get_fdiff_array(g1, g2)
+            return self._get_fdiff_array(g1, g2)
         else:
-            return self.get_fdiff_scalar(g1, g2)
+            return self._get_fdiff_scalar(g1, g2)
 
-    def get_fdiff_scalar(self, g1, g2):
-        """
-        For use with LM fitter, which requires
-        (model-data)/width
-        so we need to fake it
-
-        In this case the fake fdiff works OK because the prior
-        is on |g|, so the sign doesn't matter
-        """
+    def _get_fdiff_scalar(self, g1, g2):
+        # For use with LM fitter, which requires
+        #     (model-data)/width
+        # so we need to fake it
+        # In this case the fake fdiff works OK because the prior
+        # is on |g|, so the sign doesn't matter
 
         lnp = self.get_lnprob_scalar2d(g1, g2)
         chi2 = -2 * lnp
@@ -581,16 +619,12 @@ class GPriorBA(GPriorBase):
         fdiffish = sqrt(chi2)
         return fdiffish
 
-    def get_fdiff_array(self, g1, g2):
-        """
-        For use with LM fitter, which requires
-        (model-data)/width
-        so we need to fake it
-
-        In this case the fake fdiff works OK because the prior
-        is on |g|, so the sign doesn't matter
-        """
-
+    def _get_fdiff_array(self, g1, g2):
+        # For use with LM fitter, which requires
+        #     (model-data)/width
+        # so we need to fake it
+        # In this case the fake fdiff works OK because the prior
+        # is on |g|, so the sign doesn't matter
         lnp = self.get_lnprob_scalar2d(g1, g2)
         chi2 = -2 * lnp
         chi2.clip(min=0.0, max=None, out=chi2)
@@ -610,8 +644,7 @@ class GPriorBA(GPriorBase):
 
     def get_prob_scalar2d(self, g1, g2):
         """
-        Get the 2d prob for the input g value
-        (1-g^2)^2 * exp(-0.5*g^2/sigma^2)
+        Get the 2d prob for the input g value: (1-g^2)^2 * exp(-0.5*g^2/sigma^2)
         """
         p = 0.0
 
@@ -630,7 +663,6 @@ class GPriorBA(GPriorBase):
         """
         Fill the output with the 2d prob for the input g value
         """
-
         gsq = g1arr * g1arr + g2arr * g2arr
         omgsq = 1.0 - gsq
 
@@ -646,7 +678,6 @@ class GPriorBA(GPriorBase):
         """
         Fill the output with the 2d prob for the input g value
         """
-
         gsq = g1arr * g1arr + g2arr * g2arr
         omgsq = 1.0 - gsq
         (w,) = where(omgsq > 0.0)
@@ -1416,10 +1447,6 @@ class GPriorM(GPriorBase):
         self.g0 = pars[2]
         self.g0sq = self.g0 ** 2
         self.gmax = pars[3]
-
-        self.h = 1.0e-6
-        self.hhalf = 0.5 * self.h
-        self.hinv = 1.0 / self.h
 
     def get_prob_scalar2d(self, g1, g2):
         """
