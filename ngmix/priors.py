@@ -803,21 +803,27 @@ class FlatPrior(PriorBase):
             )
         return retval
 
-    def sample(self, n=None):
+    def sample(self, nrand=None, n=None):
         """
         Returns samples uniformly on the interval.
 
         parameters
         ----------
-        n : int or None
+        nrand: int or None
             The number of samples. If None, a single scalar sample is drawn.
             Default is None.
 
         returns
         -------
-        samples : scalar or array-like
-            The samples with shape (`n`,). If `n` is None, then a scalar is returned.
+        samples: scalar or array-like
+            The samples with shape (`nrand`,). If `nrand` is None, then a
+            scalar is returned.
         """
+        if n is None and nrand is not None:
+            # if they have given nrand and not n, use that
+            # this keeps the API the same but allows ppl to use the new API of nrand
+            n = nrand
+
         if n is None:
             is_scalar = True
             n = 1
@@ -842,9 +848,18 @@ class TwoSidedErf(PriorBase):
 
     parameters
     ----------
-
+    minval: float
+        The minimum value. This is where p(x) = 0.5 at the lower end.
+    width_at_min: float
+        The width of the transition region from 0 to 1 at the lower end.
+    maxval: float
+        The maximum value. This is where p(x) = 0.5 at the upper end.
+    width_at_max: float
+        The width of the transition region from 1 to 0 at the upper end.
+    rng: np.random.RandomState or None
+        An RNG to use. If None, a new RNG is made using the numpy global RNG
+        to generate a seed.
     """
-
     def __init__(self, minval, width_at_min, maxval, width_at_max, rng=None):
         PriorBase.__init__(self, rng=rng)
 
@@ -934,26 +949,25 @@ class TwoSidedErf(PriorBase):
             p = 0.0
         return sqrt(p)
 
-        # from math import erf
-        #
-        # p1 = erf((self.maxval-val)/self.width_at_max)
-        # p1 -= 1.0
-        # #p1 *= -BIGVAL/2
-        # p1 *= -1
-        #
-        # p2 = erf((val-self.minval)/self.width_at_min)
-        # p2 -= 1
-        # #p2 *= -1
-        # #p2 *= -BIGVAL/2
-        #
-        # return p1+p2
-
     def sample(self, nrand=None):
         """
-        draw random samples; not perfect, only goes from
-        -5,5 sigma past each side
-        """
+        Draw random samples of the prior.
 
+        Note this function is not perfect in that it only goes from
+        -5,5 sigma past each side.
+
+        parameters
+        ----------
+        nrand: int or None
+            The number of samples. If None, a single scalar sample is drawn.
+            Default is None.
+
+        returns
+        -------
+        samples: scalar or array-like
+            The samples with shape (`nrand`,). If `nrand` is None, then a
+            scalar is returned.
+        """
         rng = self.rng
 
         if nrand is None:
