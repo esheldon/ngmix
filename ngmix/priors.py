@@ -604,7 +604,7 @@ class GPriorBA(GPriorBase):
 
     def get_fdiff(self, g1, g2):
         """
-        Compute -2ln(p) ~ (data - mode)/err for using with LM fitters.
+        Compute sqrt(-2ln(p)) ~ (data - mode)/err for using with LM fitters.
         """
         if isinstance(g1, numpy.ndarray):
             return self._get_fdiff_array(g1, g2)
@@ -793,7 +793,7 @@ class FlatPrior(PriorBase):
 
     def get_fdiff(self, val):
         """
-        Compute -2ln(p) ~ (data - mode)/err for using with LM fitters.
+        Compute sqrt(-2ln(p)) ~ (data - mode)/err for using with LM fitters.
         """
         retval = 0.0
         if val < self.minval or val > self.maxval:
@@ -921,7 +921,7 @@ class TwoSidedErf(PriorBase):
 
     def get_fdiff(self, x):
         """
-        Compute -2ln(p) ~ (data - mode)/err for using with LM fitters.
+        Compute sqrt(-2ln(p)) ~ (data - mode)/err for using with LM fitters.
         """
         if isinstance(x, numpy.ndarray):
             return self._get_fdiff_array(x)
