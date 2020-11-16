@@ -415,28 +415,12 @@ class GPriorBase(PriorBase):
         c = "[" + ", ".join(c) + "]"
         print(c)
 
-        if show:
-            self._compare_fit(res["pars"])
-
     def _calc_fdiff(self, pars):
         # helper function for the fitter
         self.set_pars(pars)
         p = self.get_prob_array1d(self.xdata)
         fdiff = (p - self.ydata) * self.ierr
         return fdiff
-
-    def _compare_fit(self, pars):
-        import biggles
-
-        self.set_pars(pars)
-
-        plt = biggles.plot(self.xdata, self.ydata, visible=False)
-
-        xvals = numpy.linspace(0.0, 1.0, 1000)
-        p = self.get_prob_array1d(xvals)
-
-        plt.add(biggles.Curve(xvals, p, color="red"))
-        plt.show()
 
 
 class GPriorGauss(GPriorBase):
