@@ -8,22 +8,11 @@ import numpy
 from numpy import where, array, exp, log, sqrt, cos, sin, zeros, diag
 from numpy import pi
 
-from .gexceptions import GMixRangeError
+from ..gexceptions import GMixRangeError
+from ._random import make_rng, srandu
 
 LOWVAL = -numpy.inf
 BIGVAL = 9999.0e47
-
-
-def make_rng(rng=None):
-    """
-    if the input rng is None, create a new RandomState
-    but with a seed generated from current numpy state
-    """
-    if rng is None:
-        seed = numpy.random.randint(0, 2 ** 30)
-        rng = numpy.random.RandomState(seed)
-
-    return rng
 
 
 class PriorBase(object):
@@ -3472,19 +3461,6 @@ class TFluxPriorCosmosDev(TFluxPriorCosmosBase):
             [[0.40151762, 0.05215542], [0.05215542, 0.01733399]],
         ]
     )
-
-
-def srandu(num=None, rng=None):
-    """
-    Generate random numbers in the symmetric distribution [-1,1]
-    """
-
-    if rng is None:
-        randu = numpy.random.uniform
-    else:
-        randu = rng.uniform
-
-    return randu(low=-1.0, high=1.0, size=num)
 
 
 class GPriorCosmosSersicSpline(GPriorMErf):
