@@ -9,7 +9,7 @@ from numpy import where, array, exp, log, sqrt, cos, sin, zeros, diag
 from numpy import pi
 
 from ..gexceptions import GMixRangeError
-from ._random import make_rng, srandu
+from .random import make_rng, srandu
 
 LOWVAL = -numpy.inf
 BIGVAL = 9999.0e47
