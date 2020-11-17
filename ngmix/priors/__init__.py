@@ -1,3 +1,3 @@
 # flake8: noqa
-from ._priors import *
-from ._random import make_rng, srandu
+from .priors import *
+from .random import make_rng, srandu
