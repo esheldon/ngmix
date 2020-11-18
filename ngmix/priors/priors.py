@@ -352,7 +352,7 @@ class GPriorBase(PriorBase):
         maxguess: float
             The guess for finding the maximum g value if it is needed.
         """
-        from .simplex import minimize_neldermead
+        from ..simplex import minimize_neldermead
 
         res = minimize_neldermead(
             self.get_prob_scalar1d_neg, maxguess, maxiter=4000, maxfev=4000

@@ -39,6 +39,21 @@ def test_priors_gpriorgauss():
 
 
 def test_priors_gpriorba():
-    pr = GPriorBA(A=1.0, sigma=0.5)
+    pr = GPriorBA(A=1.0, sigma=0.5, rng=np.random.RandomState(seed=4535))
     assert pr.sigma == 0.5
     assert pr.A == 1.0
+
+    # make sure histogram of 1d samples matches prob dist we expect
+    g_samps = pr.sample1d(200000)
+    h, be = np.histogram(g_samps, bins=np.linspace(0, 1, 100))
+    h = h / np.sum(h)
+    bc = (be[1:] + be[:-1])/2.0
+    g_probs = pr.get_prob_array1d(bc)
+    g_probs = g_probs / np.sum(g_probs)
+    assert np.allclose(h, g_probs, atol=1e-3, rtol=0), np.max(np.abs(h-g_probs))
+    for i in range(len(bc)):
+        g_probs[i] = pr.get_prob_scalar1d(bc[i])
+    g_probs = g_probs / np.sum(g_probs)
+    assert np.allclose(h, g_probs, atol=1e-3, rtol=0), np.max(np.abs(h-g_probs))
+
+    # do the same test but in 2d
