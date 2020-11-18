@@ -441,7 +441,7 @@ class GPriorGauss(GPriorBase):
         super(GPriorGauss, self).__init__(*args, **kw)
         self.sigma = float(self.pars)
 
-    def sample1d(self, nrand, **kw):
+    def sample1d(self, nrand=None, **kw):
         """
         Not implemented for Gaussian shear priors.
         """
