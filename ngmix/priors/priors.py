@@ -6,7 +6,6 @@ import math
 
 import numpy
 from numpy import where, array, exp, log, sqrt, cos, sin, zeros, diag
-from numpy import pi
 
 from ..gexceptions import GMixRangeError
 from .random import make_rng, srandu
