@@ -8,10 +8,14 @@ from ..gexceptions import GMixRangeError
 
 def test_priors_gpriorgauss():
     pr = GPriorGauss(0.1, rng=np.random.RandomState(seed=10))
+    _g1, _g2 = pr.sample2d()
 
+    pr = GPriorGauss(0.1, rng=np.random.RandomState(seed=10))
     g1, g2 = pr.sample2d()
     assert isinstance(g1, float)
     assert isinstance(g2, float)
+    assert g1 == _g1
+    assert g2 == _g2
 
     g1, g2 = pr.sample2d(nrand=1)
     assert isinstance(g1, np.ndarray)
@@ -41,12 +45,17 @@ def test_priors_gpriorgauss():
 
 def test_priors_gpriorba():
     pr = GPriorBA(A=1.0, sigma=0.5, rng=np.random.RandomState(seed=4535))
+    _g1, _g2 = pr.sample2d()
+
+    pr = GPriorBA(A=1.0, sigma=0.5, rng=np.random.RandomState(seed=4535))
     assert pr.sigma == 0.5
     assert pr.A == 1.0
 
     g1, g2 = pr.sample2d()
     assert isinstance(g1, float)
     assert isinstance(g2, float)
+    assert g1 == _g1
+    assert g2 == _g2
 
     # make sure histogram of samples matches prob dist we expect
     for i in range(3):

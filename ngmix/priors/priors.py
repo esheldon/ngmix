@@ -905,7 +905,7 @@ class TwoSidedErf(PriorBase):
         fdiff = zeros(vals.size)
 
         for i in range(vals.size):
-            fdiff[i] = self.get_fdiff_scalar(vals[i])
+            fdiff[i] = self._get_fdiff_scalar(vals[i])
 
         return fdiff
 
