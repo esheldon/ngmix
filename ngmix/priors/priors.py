@@ -62,8 +62,8 @@ class GPriorBase(PriorBase):
         fill_prob_array1d
         fill_lnprob_array2d
         fill_prob_array2d
-        get_lnprob_scalar2d
         get_prob_scalar2d
+        get_lnprob_scalar2d
         get_prob_scalar1d
 
     parameters
@@ -390,8 +390,8 @@ class GPriorBase(PriorBase):
         show: bool, optional
             If True, show a plot of the fit and data.
         """
-        from .fitting import run_leastsq
-        from .fitting import print_pars
+        from ..fitting import run_leastsq
+        from ..fitting import print_pars
 
         (w,) = where(ydata > 0)
         self.xdata = xdata[w]
@@ -407,13 +407,13 @@ class GPriorBase(PriorBase):
         self.fit_pars_cov = res["pars_cov"]
         self.fit_perr = res["pars_err"]
 
-        print("flags:", res["flags"], "nfev:", res["nfev"])
+        print("flags:", res["flags"], "\nnfev:", res["nfev"])
         print_pars(res["pars"], front="pars: ")
         print_pars(res["pars_err"], front="perr: ")
 
         c = ["%g" % p for p in res["pars"]]
         c = "[" + ", ".join(c) + "]"
-        print(c)
+        print("pars list:", c)
 
     def _calc_fdiff(self, pars):
         # helper function for the fitter
@@ -604,7 +604,7 @@ class GPriorBA(GPriorBase):
         # so we need to fake it
         # In this case the fake fdiff works OK because the prior
         # is on |g|, so the sign doesn't matter
-        lnp = self.get_lnprob_scalar2d(g1, g2)
+        lnp = self.get_lnprob_array2d(g1, g2)
         chi2 = -2 * lnp
         chi2.clip(min=0.0, max=None, out=chi2)
         fdiffish = sqrt(chi2)

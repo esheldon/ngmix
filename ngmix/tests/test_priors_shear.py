@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 
 from ..priors import GPriorGauss, GPriorBA
+from ..gexceptions import GMixRangeError
 
 
 def test_priors_gpriorgauss():
@@ -131,3 +132,23 @@ def test_priors_gpriorba():
     assert np.allclose(mv, pr.maxval1d, atol=1e-2, rtol=0)
 
     # finally try and fit samples of g1, g2 to get back the prior we put in
+    g_samps = pr.sample1d(200000)
+    h, be = np.histogram(g_samps, bins=np.linspace(0, 1, 100))
+    h = h / np.sum(h)
+    bc = (be[1:] + be[:-1])/2.0
+    pr.dofit(bc, h)
+    assert np.allclose(pr.fit_pars[1], 0.5, rtol=0, atol=3e-3)
+
+    # not sure what to test here - the real test is if the priors change
+    # things in a LM fit for an object which is poorly constrained
+    # for now we will make sure the outputs are the right shape etc
+    g1 = np.ones(10) * 0.1
+    g2 = np.ones(10) * 0.1
+    fdiff = pr.get_fdiff(g1, g2)
+    assert fdiff.shape == (10,)
+    fdiff = pr.get_fdiff(0.1, 0.1)
+    assert isinstance(fdiff, float)
+
+    # som additional exceptions this class raises
+    with pytest.raises(GMixRangeError):
+        pr.get_lnprob_scalar2d(0.5, 1)
