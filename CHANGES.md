@@ -19,6 +19,8 @@
   * `ngmix.moments`
   * `ngmix.observation`
   * `ngmix.priors`
+  * `ngmix.gexceptions`
+- introduced `NGmixBaseException` as parent class for all ngmix-specific exceptions 
 
 ### deprecated/removed
 
