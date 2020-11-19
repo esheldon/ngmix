@@ -9,6 +9,7 @@
 - fixed large rounding errors in some shape conversions in `ngmix.shape`
 - fixed bug in `ngmix.shape.g1g2_to_eta1eta2` in handling numpy array inputs
 - fixed bug in `ngmix.shape.e1e2_to_eta1eta2` in handling numpy array inputs
+- fixed bug in `ngmix.priors.GPriorBA.get_fdiff` in handling array inputs
 
 ### new features
 
@@ -17,6 +18,7 @@
   * `ngmix.jacobian`
   * `ngmix.moments`
   * `ngmix.observation`
+  * `ngmix.priors`
 
 ### deprecated/removed
 
