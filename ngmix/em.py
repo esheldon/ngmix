@@ -351,6 +351,8 @@ def test_1gauss_jacob(
 ):
     import time
 
+    rng = numpy.random.RandomState(42587)
+
     # import images
     dims = [25, 25]
     cen = [dims[0] / 2.0, dims[1] / 2.0]
@@ -389,11 +391,11 @@ def test_1gauss_jacob(
 
     gm_guess = gm.copy()
     gm_guess._data["p"] = 1.0
-    gm_guess._data["row"] += srandu()
-    gm_guess._data["col"] += srandu()
-    gm_guess._data["irr"] += srandu()
-    gm_guess._data["irc"] += srandu()
-    gm_guess._data["icc"] += srandu()
+    gm_guess._data["row"] += srandu(rng=rng)
+    gm_guess._data["col"] += srandu(rng=rng)
+    gm_guess._data["irr"] += srandu(rng=rng)
+    gm_guess._data["irc"] += srandu(rng=rng)
+    gm_guess._data["icc"] += srandu(rng=rng)
 
     print("guess:")
     print(gm_guess)
@@ -424,6 +426,8 @@ def test_1gauss_jacob(
 
 def test_2gauss(counts=100.0, noise=0.0, maxiter=100, show=False):
     import time
+
+    rng = numpy.random.RandomState(42587)
 
     dims = [25, 25]
 
@@ -477,11 +481,11 @@ def test_2gauss(counts=100.0, noise=0.0, maxiter=100, show=False):
 
     gm_guess = gm.copy()
     gm_guess._data["p"] = [0.5, 0.5]
-    gm_guess._data["row"] += 4 * srandu(2)
-    gm_guess._data["col"] += 4 * srandu(2)
-    gm_guess._data["irr"] += 0.5 * srandu(2)
-    gm_guess._data["irc"] += 0.5 * srandu(2)
-    gm_guess._data["icc"] += 0.5 * srandu(2)
+    gm_guess._data["row"] += 4 * srandu(2, rng=rng)
+    gm_guess._data["col"] += 4 * srandu(2, rng=rng)
+    gm_guess._data["irr"] += 0.5 * srandu(2, rng=rng)
+    gm_guess._data["irc"] += 0.5 * srandu(2, rng=rng)
+    gm_guess._data["icc"] += 0.5 * srandu(2, rng=rng)
 
     print("guess:")
     print(gm_guess)
