@@ -18,7 +18,7 @@
   * `ngmix.moments`
   * `ngmix.observation`
   * `ngmix.gexceptions`
-- introduced `NGmixBaseException` as parent class for all ngmix-specific exceptions 
+- introduced `NGmixBaseException` as parent class for all ngmix-specific exceptions
 
 ### deprecated/removed
 
@@ -26,6 +26,7 @@
 - all `dbyg1_*`,  `dbyg2_*`, `dlnbyg1_*`, `dlnbyg2_*`, and `get_pqr*` methods,
   along with the code used to test them, have been removed from the classes in
   `ngmix.priors`
+- removed travis-ci in favor of GitHub Actions
 
 
 ## v1.3.8
