@@ -5,6 +5,8 @@ from .gexceptions import GMixRangeError
 from .priors import srandu, LOWVAL
 from .shape import Shape
 
+RNG = numpy.random
+
 
 class GuesserBase(object):
     def _fix_guess(self, guess, prior, ntry=4):
@@ -80,23 +82,23 @@ class TFluxGuesser(GuesserBase):
         np = 5 + nband
 
         guess = numpy.zeros((n, np))
-        guess[:, 0] = 0.01 * srandu(n)
-        guess[:, 1] = 0.01 * srandu(n)
-        guess[:, 2] = 0.02 * srandu(n)
-        guess[:, 3] = 0.02 * srandu(n)
+        guess[:, 0] = 0.01 * srandu(n, rng=RNG)
+        guess[:, 1] = 0.01 * srandu(n, rng=RNG)
+        guess[:, 2] = 0.02 * srandu(n, rng=RNG)
+        guess[:, 3] = 0.02 * srandu(n, rng=RNG)
 
         if self.scaling == "linear":
-            guess[:, 4] = self.T * (1.0 + 0.1 * srandu(n))
+            guess[:, 4] = self.T * (1.0 + 0.1 * srandu(n, rng=RNG))
 
             fluxes = self.fluxes
             for band in range(nband):
-                guess[:, 5 + band] = fluxes[band] * (1.0 + 0.1 * srandu(n))
+                guess[:, 5 + band] = fluxes[band] * (1.0 + 0.1 * srandu(n, rng=RNG))
 
         else:
-            guess[:, 4] = self.log_T + 0.1 * srandu(n)
+            guess[:, 4] = self.log_T + 0.1 * srandu(n, rng=RNG)
 
             for band in range(nband):
-                guess[:, 5 + band] = self.log_fluxes[band] + 0.1 * srandu(n)
+                guess[:, 5 + band] = self.log_fluxes[band] + 0.1 * srandu(n, rng=RNG)
 
         if self.prior is not None:
             self._fix_guess(guess, self.prior)
@@ -319,8 +321,8 @@ class ParsGuesser(GuesserBase):
         widths = self.widths
 
         guess = numpy.zeros((n, self.np))
-        guess[:, 0] = pars[0] + widths[0] * srandu(n)
-        guess[:, 1] = pars[1] + widths[1] * srandu(n)
+        guess[:, 0] = pars[0] + widths[0] * srandu(n, rng=RNG)
+        guess[:, 1] = pars[1] + widths[1] * srandu(n, rng=RNG)
 
         # prevent from getting too large
         guess_shape = get_shape_guess(
@@ -331,9 +333,9 @@ class ParsGuesser(GuesserBase):
 
         for i in range(4, self.np):
             if self.scaling == "linear":
-                guess[:, i] = pars[i] * (1.0 + widths[i] * srandu(n))
+                guess[:, i] = pars[i] * (1.0 + widths[i] * srandu(n, rng=RNG))
             else:
-                guess[:, i] = pars[i] + widths[i] * srandu(n)
+                guess[:, i] = pars[i] + widths[i] * srandu(n, rng=RNG)
 
         if self.prior is not None:
             self._fix_guess(guess, self.prior)
@@ -377,14 +379,14 @@ class RoundParsGuesser(GuesserBase):
         widths = self.widths
 
         guess = numpy.zeros((n, self.np))
-        guess[:, 0] = pars[0] + widths[0] * srandu(n)
-        guess[:, 1] = pars[1] + widths[1] * srandu(n)
+        guess[:, 0] = pars[0] + widths[0] * srandu(n, rng=RNG)
+        guess[:, 1] = pars[1] + widths[1] * srandu(n, rng=RNG)
 
         for i in range(2, self.np):
             if self.scaling == "linear":
-                guess[:, i] = pars[i] * (1.0 + widths[i] * srandu(n))
+                guess[:, i] = pars[i] * (1.0 + widths[i] * srandu(n, rng=RNG))
             else:
-                guess[:, i] = pars[i] + widths[i] * srandu(n)
+                guess[:, i] = pars[i] + widths[i] * srandu(n, rng=RNG)
 
         if self.prior is not None:
             self._fix_guess(guess, self.prior)
@@ -414,8 +416,8 @@ def get_shape_guess(g1, g2, n, width, max=0.99):
 
         while True:
             try:
-                g1_offset = width[0] * srandu()
-                g2_offset = width[1] * srandu()
+                g1_offset = width[0] * srandu(rng=RNG)
+                g2_offset = width[1] * srandu(rng=RNG)
                 shape_new = shape.get_sheared(g1_offset, g2_offset)
                 break
             except GMixRangeError:
@@ -460,7 +462,7 @@ class MomGuesser(GuesserBase):
         guess = numpy.zeros((n, self.np))
 
         for i in range(self.np):
-            guess[:, i] = pars[i] + widths[i] * srandu(n)
+            guess[:, i] = pars[i] + widths[i] * srandu(n, rng=RNG)
 
         if self.prior is not None:
             self._fix_guess(guess, self.prior)

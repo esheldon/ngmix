@@ -15,7 +15,14 @@ def test_make_rng_ident():
 
 
 def test_srandu():
-    assert np.all((srandu(num=10000) > -1.0) & (srandu(num=10000) < 1.0))
+    rng = np.random.RandomState(seed=10)
+    assert isinstance(srandu(rng=rng), float)
+    assert isinstance(srandu(1, rng=rng), np.ndarray)
+
+    assert np.all(
+        (srandu(num=10000, rng=rng) > -1.0)
+        & (srandu(num=10000, rng=rng) < 1.0)
+    )
     rng = np.random.RandomState(seed=10)
     nums = srandu(num=10000, rng=rng)
     rng = np.random.RandomState(seed=10)
