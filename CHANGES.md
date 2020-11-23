@@ -29,6 +29,8 @@
 - all `dbyg1_*`,  `dbyg2_*`, `dlnbyg1_*`, `dlnbyg2_*`, and `get_pqr*` methods,
   along with the code used to test them, have been removed from the classes in
   `ngmix.priors`
+- the optional `rng` keyword for `ngmix.priors.srandu` has been removed in favor
+  of a required keyword
 
 
 ## v1.3.8
