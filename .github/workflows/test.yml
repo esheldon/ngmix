@@ -1,0 +1,57 @@
+name: tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request: null
+
+jobs:
+  tests:
+    name: tests
+    strategy:
+      matrix:
+        pyver: [3.6, 3.7, 3.8]
+
+    runs-on: "ubuntu-latest"
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          python-version: ${{ matrix.pyver }}
+          channels: conda-forge,defaults
+          channel-priority: strict
+          show-channel-urls: true
+
+      - name: configure conda and install code
+        shell: bash -l {0}
+        run: |
+          conda config --set always_yes yes
+          conda install --quiet \
+            pip \
+            setuptools \
+            numpy \
+            numba \
+            flake8 \
+            pyyaml \
+            scipy \
+            pytest \
+            galsim \
+            scikit-learn \
+            statsmodels \
+            emcee \
+            pytest-cov
+
+          python -m pip install -e .
+
+      - name: lint
+        shell: bash -l {0}
+        run: |
+          flake8 ngmix
+
+      - name: test
+        shell: bash -l {0}
+        run: |
+          pytest -v --cov=ngmix --cov-report term-missing ngmix

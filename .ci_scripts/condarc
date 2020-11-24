@@ -1,5 +1,0 @@
-always_yes: True
-channels:
-  - conda-forge
-  - defaults
-show_channel_urls: True
