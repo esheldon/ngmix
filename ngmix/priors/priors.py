@@ -973,18 +973,31 @@ class TwoSidedErf(PriorBase):
         return rvals
 
 
-############################################
-# MRB: I've gone through the first 1k lines.
-# I am going to stop and write tests, then split this module into pieces
-# and then do docs for the rest.
-
 class Normal(PriorBase):
     """
     A Normal distribution.
 
-    This class provides an interface consistent with LogNormal
-    """
+    This class provides an interface consistent with LogNormal.
 
+    parameters
+    ----------
+    mean : float
+        The mean of the Gaussian.
+    sigma : float
+        The standard deviation of the Gaussian.
+    bounds: 2-tuple of floats or None
+        The bounds of the parameter. Default of None means no bounds.
+    rng: np.random.RandomState or None
+        An RNG to use. If None, a new RNG is made using the numpy global RNG
+        to generate a seed.
+
+    attributes
+    ----------
+    mean : float
+        The mean of the Gaussian.
+    sigma : float
+        The standard deviation of the Gaussian.
+    """
     def __init__(self, mean, sigma, bounds=None, rng=None):
         super(Normal, self).__init__(rng=rng, bounds=bounds)
 
@@ -996,7 +1009,7 @@ class Normal(PriorBase):
 
     def get_lnprob(self, x):
         """
-        -0.5 * ( (x-mean)/sigma )**2
+        Compute -0.5 * ( (x-mean)/sigma )**2.
         """
         diff = self.mean - x
         return -0.5 * diff * diff * self.s2inv
@@ -1006,7 +1019,9 @@ class Normal(PriorBase):
 
     def get_prob(self, x):
         """
-        -0.5 * ( (x-mean)/sigma )**2
+        Compute exp(-0.5 * ( (x-mean)/sigma )**2)
+
+        Note that this function is missing the normalization factor.
         """
         diff = self.mean - x
         lnp = -0.5 * diff * diff * self.s2inv
@@ -1016,7 +1031,9 @@ class Normal(PriorBase):
 
     def get_prob_scalar(self, x):
         """
-        -0.5 * ( (x-mean)/sigma )**2
+        Compute exp(-0.5 * ( (x-mean)/sigma )**2).
+
+        Note that this function is missing the normalization factor.
         """
         from math import exp
 
@@ -1026,17 +1043,38 @@ class Normal(PriorBase):
 
     def get_fdiff(self, x):
         """
-        For use with LM fitter
-        (model-data)/width for both coordinates
+        Compute sqrt(-2ln(p)) ~ (data - mode)/err for use with LM fitter.
         """
         return (x - self.mean) * self.sinv
 
-    def sample(self, size=None):
+    def sample(self, nrand=None, size=None):
         """
-        Get samples.  Send no args to get a scalar.
+        Draw random samples of the prior.
+
+        parameters
+        ----------
+        nrand: int or None
+            The number of samples. If None, a single scalar sample is drawn.
+            Default is None.
+
+        returns
+        -------
+        samples: scalar or array-like
+            The samples with shape (`nrand`,). If `nrand` is None, then a
+            scalar is returned.
         """
+        if size is None and nrand is not None:
+            # if they have given nrand and not n, use that
+            # this keeps the API the same but allows ppl to use the new API of nrand
+            size = nrand
+
         return self.rng.normal(loc=self.mean, scale=self.sigma, size=size,)
 
+
+############################################
+# MRB: I've gone through the first 1k lines.
+# I am going to stop and write tests, then split this module into pieces
+# and then do docs for the rest.
 
 class LMBounds(PriorBase):
     """

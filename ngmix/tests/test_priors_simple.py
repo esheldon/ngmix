@@ -2,8 +2,45 @@ import numpy as np
 
 import pytest
 
-from ..priors import FlatPrior, LOWVAL, TwoSidedErf
+from ..priors import (
+    FlatPrior,
+    LOWVAL,
+    TwoSidedErf,
+    Normal,
+)
 from ..gexceptions import GMixRangeError
+
+
+def test_priors_normal():
+    pr = Normal(-0.5, 0.5, rng=np.random.RandomState(seed=10))
+    _s = pr.sample()
+
+    pr = Normal(-0.5, 0.5, rng=np.random.RandomState(seed=10))
+    assert pr.mean == -0.5
+    assert pr.sigma == 0.5
+    s = pr.sample()
+    assert isinstance(s, float)
+    assert s == _s
+
+    assert pr.get_prob_scalar(-0.5) == 1
+    assert pr.get_lnprob_scalar(-0.5) == 0
+
+    assert pr.get_prob_array(np.array([-0.5]))[0] == 1
+    assert pr.get_lnprob_array(np.array([-0.5]))[0] == 0
+
+    assert pr.get_fdiff(-0.5) == 0
+
+    s = pr.sample(nrand=1)
+    assert isinstance(s, np.ndarray)
+    assert s.shape == (1,)
+
+    s = pr.sample(nrand=10)
+    assert isinstance(s, np.ndarray)
+    assert s.shape == (10,)
+
+    s = pr.sample(nrand=1000000)
+    assert np.allclose(np.mean(s), -0.5, rtol=0, atol=1e-3)
+    assert np.allclose(np.std(s), 0.5, rtol=0, atol=1e-3)
 
 
 def test_priors_flatprior():
