@@ -973,18 +973,31 @@ class TwoSidedErf(PriorBase):
         return rvals
 
 
-############################################
-# MRB: I've gone through the first 1k lines.
-# I am going to stop and write tests, then split this module into pieces
-# and then do docs for the rest.
-
 class Normal(PriorBase):
     """
     A Normal distribution.
 
-    This class provides an interface consistent with LogNormal
-    """
+    This class provides an interface consistent with LogNormal.
 
+    parameters
+    ----------
+    mean: float
+        The mean of the Gaussian.
+    sigma: float
+        The standard deviation of the Gaussian.
+    bounds: 2-tuple of floats or None
+        The bounds of the parameter. Default of None means no bounds.
+    rng: np.random.RandomState or None
+        An RNG to use. If None, a new RNG is made using the numpy global RNG
+        to generate a seed.
+
+    attributes
+    ----------
+    mean: float
+        The mean of the Gaussian.
+    sigma: float
+        The standard deviation of the Gaussian.
+    """
     def __init__(self, mean, sigma, bounds=None, rng=None):
         super(Normal, self).__init__(rng=rng, bounds=bounds)
 
@@ -996,7 +1009,7 @@ class Normal(PriorBase):
 
     def get_lnprob(self, x):
         """
-        -0.5 * ( (x-mean)/sigma )**2
+        Compute -0.5 * ( (x-mean)/sigma )**2.
         """
         diff = self.mean - x
         return -0.5 * diff * diff * self.s2inv
@@ -1006,7 +1019,9 @@ class Normal(PriorBase):
 
     def get_prob(self, x):
         """
-        -0.5 * ( (x-mean)/sigma )**2
+        Compute exp(-0.5 * ( (x-mean)/sigma )**2)
+
+        Note that this function is missing the normalization factor.
         """
         diff = self.mean - x
         lnp = -0.5 * diff * diff * self.s2inv
@@ -1016,7 +1031,9 @@ class Normal(PriorBase):
 
     def get_prob_scalar(self, x):
         """
-        -0.5 * ( (x-mean)/sigma )**2
+        Compute exp(-0.5 * ( (x-mean)/sigma )**2).
+
+        Note that this function is missing the normalization factor.
         """
         from math import exp
 
@@ -1026,34 +1043,66 @@ class Normal(PriorBase):
 
     def get_fdiff(self, x):
         """
-        For use with LM fitter
-        (model-data)/width for both coordinates
+        Compute sqrt(-2ln(p)) ~ (data - mode)/err for use with LM fitter.
         """
         return (x - self.mean) * self.sinv
 
-    def sample(self, size=None):
+    def sample(self, nrand=None, size=None):
         """
-        Get samples.  Send no args to get a scalar.
+        Draw random samples of the prior.
+
+        parameters
+        ----------
+        nrand: int or None
+            The number of samples. If None, a single scalar sample is drawn.
+            Default is None.
+
+        returns
+        -------
+        samples: scalar or array-like
+            The samples with shape (`nrand`,). If `nrand` is None, then a
+            scalar is returned.
         """
+        if size is None and nrand is not None:
+            # if they have given nrand and not n, use that
+            # this keeps the API the same but allows ppl to use the new API of nrand
+            size = nrand
+
         return self.rng.normal(loc=self.mean, scale=self.sigma, size=size,)
 
 
 class LMBounds(PriorBase):
     """
-    class to hold simple bounds for the leastsqbound version
+    Class to hold simple bounds for the leastsqbound version
     of LM.
 
-    The fdiff is always zero, but the bounds  will be sent
-    to the minimizer
-    """
+    The fdiff is always zero, but the bounds will be sent
+    to the minimizer.
 
+    parameters
+    ----------
+    minval: float
+        The minimum bound.
+    maxval: float
+        The maximum bound.
+    rng: np.random.RandomState or None
+        An RNG to use. If None, a new RNG is made using the numpy global RNG
+        to generate a seed.
+
+    attributes
+    ----------
+    mean: float
+        The mean of the uniform distribution.
+    sigma: float
+        The standard deviation of the uniform distribution.
+    """
     def __init__(self, minval, maxval, rng=None):
 
         super(LMBounds, self).__init__(rng=rng)
 
         self.bounds = (minval, maxval)
         self.mean = (minval + maxval) / 2.0
-        self.sigma = (maxval - minval) * 0.28
+        self.sigma = (maxval - minval) * 0.28  # exact is 1/sqrt(12) ~ 0.28867513459
 
     def get_fdiff(self, val):
         """
@@ -1061,10 +1110,26 @@ class LMBounds(PriorBase):
         """
         return 0.0 * val
 
-    def sample(self, n=None):
+    def sample(self, nrand=None, n=None):
         """
-        returns samples uniformly on the interval
+        Returns samples uniformly on the interval.
+
+        parameters
+        ----------
+        nrand: int or None
+            The number of samples. If None, a single scalar sample is drawn.
+            Default is None.
+
+        returns
+        -------
+        samples: scalar or array-like
+            The samples with shape (`nrand`,). If `nrand` is None, then a
+            scalar is returned.
         """
+        if n is None and nrand is not None:
+            # if they have given nrand and not n, use that
+            # this keeps the API the same but allows ppl to use the new API of nrand
+            n = nrand
 
         return self.rng.uniform(
             low=self.bounds[0], high=self.bounds[1], size=n,
@@ -1073,15 +1138,69 @@ class LMBounds(PriorBase):
 
 class Bounded1D(PriorBase):
     """
-    wrap a pdf and limit samples to the input bounds
-    """
+    Wrap a pdf and limit samples to the input bounds.
 
+    parameters
+    ----------
+    pdf: object
+        A PDF object with a `sample` method.
+    bounds: 2-tuple of floats
+        A 2-tuple of floats.
+
+    attributes
+    ----------
+    pdf: object
+        A PDF object with a `sample` method.
+    """
     def __init__(self, pdf, bounds):
         self.pdf = pdf
-        self.bounds = bounds
-        assert len(bounds) == 2, "bounds must be length 2"
+        self.set_limits(bounds)
 
-    def sample(self, size=None):
+    def set_limits(self, limits):
+        """
+        set the limits
+        """
+
+        ok = False
+        try:
+            n = len(limits)
+            if n == 2:
+                ok = True
+        except TypeError:
+            pass
+
+        if ok is False:
+            raise ValueError(
+                "expected bounds to be 2-element sequence, got %s" % (limits,)
+            )
+
+        if limits[0] >= limits[1]:
+            raise ValueError(
+                "bounds[0] must be less than bounds[1], got: %s" % (limits,)
+            )
+        self.limits = limits
+        self.bounds = limits
+
+    def sample(self, nrand=None, size=None):
+        """
+        Draw random samples of the PDF with the bounds.
+
+        parameters
+        ----------
+        nrand: int or None
+            The number of samples. If None, a single scalar sample is drawn.
+            Default is None.
+
+        returns
+        -------
+        samples: scalar or array-like
+            The samples with shape (`nrand`,). If `nrand` is None, then a
+            scalar is returned.
+        """
+        if size is None and nrand is not None:
+            # if they have given nrand and not n, use that
+            # this keeps the API the same but allows ppl to use the new API of nrand
+            size = nrand
 
         bounds = self.bounds
 
@@ -1108,6 +1227,15 @@ class Bounded1D(PriorBase):
         if size is None:
             values = values[0]
         return values
+
+
+# keep this so that the API stays the same
+LimitPDF = Bounded1D
+
+############################################
+# MRB: I've gone through the first 1k lines.
+# I am going to stop and write tests, then split this module into pieces
+# and then do docs for the rest.
 
 
 class LogNormal(PriorBase):
@@ -2537,96 +2665,3 @@ class KDE(object):
             r = r[0]
 
         return r
-
-
-class LimitPDF(object):
-    """
-    wrapper class to limit the sampled range of a PDF
-
-    parameters
-    ----------
-    pdf: a pdf
-        A PDF with the sample(nrand=) method
-    limits: sequence
-        2-element sequence [min, max]
-    """
-
-    def __init__(self, pdf, limits):
-        self.pdf = pdf
-
-        self.set_limits(limits)
-
-    def sample(self, nrand=None):
-        """
-        sample from the distribution, limiting to the specified range
-        """
-
-        if nrand is None:
-            return self._sample_one()
-        else:
-            return self._sample_many(nrand)
-
-    def _sample_one(self):
-        """
-        sample a single value
-        """
-
-        limits = self.limits
-        pdf = self.pdf
-
-        while True:
-            val = pdf.sample()
-
-            if limits[0] < val < limits[1]:
-                break
-
-        return val
-
-    def _sample_many(self, nrand):
-        """
-        sample an array of values
-        """
-
-        limits = self.limits
-        pdf = self.pdf
-
-        samples = numpy.zeros(nrand)
-
-        ngood = 0
-        nleft = nrand
-
-        while ngood < nrand:
-
-            rvals = pdf.sample(nleft)
-
-            (w,) = numpy.where((rvals > limits[0]) & (rvals < limits[1]))
-            if w.size > 0:
-                samples[ngood:ngood + w.size] = rvals[w]
-                ngood += w.size
-                nleft -= w.size
-
-        return samples
-
-    def set_limits(self, limits):
-        """
-        set the limits
-        """
-
-        ok = False
-        try:
-            n = len(limits)
-            if n == 2:
-                ok = True
-        except TypeError:
-            pass
-
-        if ok is False:
-            raise ValueError(
-                "expected limits to be 2-element sequence, " "got %s" % limits
-            )
-
-        if limits[0] >= limits[1]:
-            raise ValueError(
-                "limits[0] must be less than " "limits[1], got: %s" % limits
-            )
-        self.limits = limits
