@@ -10,8 +10,14 @@ from ..priors import (
     LMBounds,
     Bounded1D,
     LimitPDF,
+    LogNormal,
 )
 from ..gexceptions import GMixRangeError
+
+
+@pytest.mark.parametrize('shift', [None, 0, 0.1])
+def test_priors_lognormal(shift):
+    assert False
 
 
 @pytest.mark.parametrize('klass', [Bounded1D, LimitPDF])

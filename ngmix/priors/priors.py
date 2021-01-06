@@ -1106,7 +1106,7 @@ class LMBounds(PriorBase):
 
     def get_fdiff(self, val):
         """
-        fdiff for the input val, always zero
+        Compute sqrt(-2ln(p)) ~ (data - mode)/err for use with LM fitter. Always zero.
         """
         return 0.0 * val
 
@@ -1232,11 +1232,6 @@ class Bounded1D(PriorBase):
 # keep this so that the API stays the same
 LimitPDF = Bounded1D
 
-############################################
-# MRB: I've gone through the first 1k lines.
-# I am going to stop and write tests, then split this module into pieces
-# and then do docs for the rest.
-
 
 class LogNormal(PriorBase):
     """
@@ -1244,31 +1239,49 @@ class LogNormal(PriorBase):
 
     parameters
     ----------
-    mean:
+    mean: float
         such that <x> in linear space is mean.  This implies the mean in log(x)
         is
             <log(x)> = log(mean) - 0.5*log( 1 + sigma**2/mean**2 )
-    sigma:
+    sigma: float
         such than the variace in linear space is sigma**2.  This implies
         the variance in log space is
             var(log(x)) = log( 1 + sigma**2/mean**2 )
-    norm: optional
-        When calling eval() the return value will be norm*prob(x)
+    shift: float
+        An optional shift to apply to the samples and the locations for
+        evaluating the PDF. The shift is added to samples from the underlying
+        log-normal.
+    rng: np.random.RandomState or None
+        An RNG to use. If None, a new RNG is made using the numpy global RNG
+        to generate a seed.
 
-
-    methods
-    -------
-    sample(nrand):
-        Get nrand random deviates from the distribution
-    lnprob(x):
-        Get the natural logarithm of the probability of x.  x can
-        be an array
-    prob(x):
-        Get the probability of x.  x can be an array
+    attributes
+    ----------
+    shift: float
+        An optional shift to apply to the samples and the locations for
+        evaluating the PDF. The shift is added to samples from the underlying
+        log-normal.
+    mean: float
+        The linear-space mean <x>.
+    sigma: float
+        The linear-space standard deviation.
+    logmean: float
+        The log-space mean.
+    logvar: float
+        The log-space variance.
+    logsigma: float
+        The log-space standard deviation.
+    logivar: float
+        The inverse of the log-space variace.
+    mode: float
+        The linear-space mode.
+    log_mode: float
+        The log-space mode.
+    lnprob_max: float
+        The log of the maximum value of the distribution.
     """
-
     def __init__(self, mean, sigma, shift=None, rng=None):
-        PriorBase.__init__(self, rng=rng)
+        super().__init__(self, rng=rng)
 
         if mean <= 0:
             raise ValueError("mean %s is < 0" % mean)
@@ -1300,9 +1313,8 @@ class LogNormal(PriorBase):
 
     def get_lnprob_scalar(self, x):
         """
-        This one has error checking
+        Get the log-probability of x.
         """
-
         if self.shift is not None:
             x = x - self.shift
 
@@ -1319,9 +1331,8 @@ class LogNormal(PriorBase):
 
     def get_lnprob_array(self, x):
         """
-        This one no error checking
+        Get the log-probability of x.
         """
-
         x = numpy.array(x, dtype="f8", copy=False)
         if self.shift is not None:
             x = x - self.shift
@@ -1348,7 +1359,7 @@ class LogNormal(PriorBase):
 
     def get_prob_array(self, x):
         """
-        Get the probability of x.  x can be an array
+        Get the probability of x.
         """
 
         lnp = self.get_lnprob_array(x)
@@ -1356,7 +1367,7 @@ class LogNormal(PriorBase):
 
     def get_fdiff(self, x):
         """
-        this is kind of hokey
+        Compute sqrt(-2ln(p)) ~ (data - mode)/err for use with LM fitter.
         """
         lnp = self.get_lnprob_scalar(x)
         chi2 = -2 * lnp
@@ -1367,10 +1378,19 @@ class LogNormal(PriorBase):
 
     def sample(self, nrand=None):
         """
-        Get nrand random deviates from the distribution
+        Draw random samples from the LogNormal.
 
-        If z is drawn from a normal random distribution, then
-        exp(logmean+logsigma*z) is drawn from lognormal
+        parameters
+        ----------
+        nrand: int or None
+            The number of samples. If None, a single scalar sample is drawn.
+            Default is None.
+
+        returns
+        -------
+        samples: scalar or array-like
+            The samples with shape (`nrand`,). If `nrand` is None, then a
+            scalar is returned.
         """
         z = self.rng.normal(size=nrand)
         r = numpy.exp(self.logmean + self.logsigma * z)
@@ -1382,12 +1402,24 @@ class LogNormal(PriorBase):
 
     def sample_brute(self, nrand=None, maxval=None):
         """
-        Get nrand random deviates from the distribution using brute force
+        Draw random samples from the LogNormal using a brute force algorithm.
 
-        This is really to check that our probabilities are being calculated
-        correctly, by comparing to the regular sampler
+        This method is used to help check other methods.
+
+        parameters
+        ----------
+        nrand: int or None
+            The number of samples. If None, a single scalar sample is drawn.
+            Default is None.
+        maxval: float or None
+            The maximum value to allow for draws.
+
+        returns
+        -------
+        samples: scalar or array-like
+            The samples with shape (`nrand`,). If `nrand` is None, then a
+            scalar is returned.
         """
-
         rng = self.rng
 
         if maxval is None:
@@ -1438,7 +1470,20 @@ class LogNormal(PriorBase):
 
     def fit(self, x, y):
         """
-        fit to the input x and y
+        Fit to the input x and y.
+
+        parameters
+        ----------
+        x: array-like
+            The x-values for the fit.
+        y: array-like
+            The y-values for the fit. Usually p(x).
+
+        returns
+        -------
+        res: dict
+            A dictionary with the best-fit parameters and other information
+            from the fit.
         """
         from .fitting import run_leastsq
 
@@ -1456,6 +1501,12 @@ class LogNormal(PriorBase):
                 break
 
         return res
+
+
+############################################
+# MRB: I've gone through the first 1k lines.
+# I am going to stop and write tests, then split this module into pieces
+# and then do docs for the rest.
 
 
 class MultivariateLogNormal(object):
