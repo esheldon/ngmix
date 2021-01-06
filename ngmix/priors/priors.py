@@ -437,7 +437,7 @@ class GPriorGauss(GPriorBase):
         to generate a seed.
     """
     def __init__(self, *args, **kw):
-        super(GPriorGauss, self).__init__(*args, **kw)
+        super().__init__(*args, **kw)
         self.sigma = float(self.pars)
 
     def sample1d(self, nrand=None, **kw):
@@ -546,7 +546,7 @@ class GPriorBA(GPriorBase):
         if maxguess is None:
             maxguess = self.sigma + 0.0001 * srandu(rng=self.rng)
 
-        return super(GPriorBA, self).sample1d(nrand, maxguess=maxguess)
+        return super().sample1d(nrand, maxguess=maxguess)
 
     def set_pars(self, pars):
         """
@@ -999,7 +999,7 @@ class Normal(PriorBase):
         The standard deviation of the Gaussian.
     """
     def __init__(self, mean, sigma, bounds=None, rng=None):
-        super(Normal, self).__init__(rng=rng, bounds=bounds)
+        super().__init__(rng=rng, bounds=bounds)
 
         self.mean = mean
         self.sigma = sigma
@@ -1098,7 +1098,7 @@ class LMBounds(PriorBase):
     """
     def __init__(self, minval, maxval, rng=None):
 
-        super(LMBounds, self).__init__(rng=rng)
+        super().__init__(rng=rng)
 
         self.bounds = (minval, maxval)
         self.mean = (minval + maxval) / 2.0
@@ -2038,7 +2038,7 @@ class StudentPositive(Student):
         nleft = nrand
         ngood = 0
         while nleft > 0:
-            r = super(StudentPositive, self).sample(nleft)
+            r = super().sample(nleft)
 
             (w,) = numpy.where(r > 0.0)
             nkeep = w.size
@@ -2056,7 +2056,7 @@ class StudentPositive(Student):
 
         if x <= 0:
             raise GMixRangeError("value less than zero")
-        return super(StudentPositive, self).get_lnprob_scalar(x)
+        return super().get_lnprob_scalar(x)
 
     def get_lnprob_array(self, x):
         """
@@ -2067,7 +2067,7 @@ class StudentPositive(Student):
         (w,) = numpy.where(x <= 0)
         if w.size != 0:
             raise GMixRangeError("values less than zero")
-        return super(StudentPositive, self).get_lnprob_array(x)
+        return super().get_lnprob_array(x)
 
 
 class Student2D(object):
@@ -2123,7 +2123,7 @@ class TruncatedStudentPolar(Student2D):
         self.reset(mean1, mean2, sigma1, sigma2, maxval)
 
     def reset(self, mean1, mean2, sigma1, sigma2, maxval):
-        super(TruncatedStudentPolar, self).reset(mean1, mean2, sigma1, sigma2)
+        super().reset(mean1, mean2, sigma1, sigma2)
         self.maxval = maxval
         self.maxval2 = maxval ** 2
 
@@ -2137,7 +2137,7 @@ class TruncatedStudentPolar(Student2D):
         nleft = nrand
         ngood = 0
         while nleft > 0:
-            r1, r2 = super(TruncatedStudentPolar, self).sample(nleft)
+            r1, r2 = super().sample(nleft)
 
             rsq = r1 ** 2 + r2 ** 2
 
@@ -2159,7 +2159,7 @@ class TruncatedStudentPolar(Student2D):
         x2 = x1 ** 2 + x2 ** 2
         if x2 > self.maxval2:
             raise GMixRangeError("square value out of range: %s" % x2)
-        lnp = super(TruncatedStudentPolar, self).get_lnprob_scalar(x1, x2)
+        lnp = super().get_lnprob_scalar(x1, x2)
         return lnp
 
     def get_lnprob_array(self, x1, x2):
@@ -2175,7 +2175,7 @@ class TruncatedStudentPolar(Student2D):
         if w.size > 0:
             raise GMixRangeError("values out of range")
 
-        lnp = super(TruncatedStudentPolar, self).get_lnprob_array(x1, x2)
+        lnp = super().get_lnprob_array(x1, x2)
         return lnp
 
 
@@ -2198,7 +2198,7 @@ class CenPrior(PriorBase):
     """
 
     def __init__(self, cen1, cen2, sigma1, sigma2, rng=None):
-        super(CenPrior, self).__init__(rng=rng)
+        super().__init__(rng=rng)
 
         self.cen1 = float(cen1)
         self.cen2 = float(cen2)
@@ -2500,7 +2500,7 @@ class ZAnnulus(ZDisk2D):
         assert rmin < rmax
 
         self.rmin = rmin
-        super(ZAnnulus, self).__init__(
+        super().__init__(
             rmax, rng=rng,
         )
 
@@ -2516,7 +2516,7 @@ class ZAnnulus(ZDisk2D):
         nleft = n
 
         while True:
-            rtmp = super(ZAnnulus, self).sample1d(nleft)
+            rtmp = super().sample1d(nleft)
 
             (w,) = numpy.where(rtmp > self.rmin)
             if w.size > 0:
