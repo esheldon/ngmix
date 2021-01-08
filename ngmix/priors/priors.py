@@ -2520,16 +2520,16 @@ class ZAnnulus(ZDisk2D):
             rmax, rng=rng,
         )
 
-    def sample1d(self, n=None):
-        if n is None:
-            n = 1
+    def sample1d(self, nrand=None):
+        if nrand is None:
+            nrand = 1
             is_scalar = True
         else:
             is_scalar = False
 
-        r = numpy.zeros(n)
+        r = numpy.zeros(nrand)
         ngood = 0
-        nleft = n
+        nleft = nrand
 
         while True:
             rtmp = super().sample1d(nleft)
@@ -2540,7 +2540,7 @@ class ZAnnulus(ZDisk2D):
                 ngood += w.size
                 nleft -= w.size
 
-            if ngood == n:
+            if ngood == nrand:
                 break
 
         if is_scalar:
