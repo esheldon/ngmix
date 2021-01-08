@@ -7,7 +7,9 @@ from ..priors import (
     CenPrior,
     TruncatedSimpleGauss2D,
     ZDisk2D,
+    ZDisk2DErf,
     ZAnnulus,
+    UDisk2DCut,
 )
 # from ..gexceptions import GMixRangeError
 
@@ -210,3 +212,27 @@ def test_priors_zannulus():
     assert np.all((r < rmax) & (r > rmin))
     assert np.allclose(s.mean(), expected_meanr, rtol=0, atol=2e-3)
     assert np.allclose(r.mean(), expected_meanr, rtol=0, atol=2e-3)
+
+
+def test_priors_zdisk2derf():
+    """
+    not much to test here
+    """
+    radius = 0.5
+    rolloff = 0.9*radius
+
+    pr = ZDisk2DErf(radius, rolloff_point=rolloff)
+
+    assert pr.radius == radius
+    assert pr.rolloff_point == rolloff
+
+
+def test_priors_udisk2dcut():
+    """
+    not much to test here
+    """
+    cutval = 0.5
+
+    pr = UDisk2DCut(cutval=cutval)
+
+    assert pr.cutval == cutval

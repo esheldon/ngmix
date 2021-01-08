@@ -2557,10 +2557,10 @@ class ZDisk2DErf(object):
     completely zero by the point of the radius
     """
 
-    def __init__(self, max_radius=1.0, rolloff_point=0.98, width=0.005):
+    def __init__(self, radius=1.0, rolloff_point=0.98, width=0.005):
         self.rolloff_point = rolloff_point
-        self.radius = max_radius
-        self.radius_sq = max_radius ** 2
+        self.radius = radius
+        self.radius_sq = radius ** 2
 
         self.width = width
 
@@ -2638,7 +2638,8 @@ class ZDisk2DErf(object):
 
 class UDisk2DCut(object):
     """
-    uniform over a disk centered at zero [0,0] with radius r
+    cuts off like arctanh, not sure this is ever used in the wild, should
+    remove
     """
 
     def __init__(self, cutval=0.97):
