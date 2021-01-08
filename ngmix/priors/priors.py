@@ -2459,18 +2459,18 @@ class ZDisk2D(object):
 
         return out
 
-    def sample1d(self, n=None):
+    def sample1d(self, nrand=None):
         """
         Get samples in 1-d radius
         """
 
-        if n is None:
-            n = 1
+        if nrand is None:
+            nrand = 1
             is_scalar = True
         else:
             is_scalar = False
 
-        r2 = self.radius_sq * self.rng.uniform(size=n)
+        r2 = self.radius_sq * self.rng.uniform(size=nrand)
 
         r = sqrt(r2)
 
@@ -2479,19 +2479,19 @@ class ZDisk2D(object):
 
         return r
 
-    def sample2d(self, n=None):
+    def sample2d(self, nrand=None):
         """
         Get samples.  Send no args to get a scalar.
         """
-        if n is None:
-            n = 1
+        if nrand is None:
+            nrand = 1
             is_scalar = True
         else:
             is_scalar = False
 
-        radius = self.sample1d(n)
+        radius = self.sample1d(nrand=nrand)
 
-        theta = 2.0 * numpy.pi * self.rng.uniform(size=n)
+        theta = 2.0 * numpy.pi * self.rng.uniform(size=nrand)
 
         x = radius * cos(theta)
         y = radius * sin(theta)
