@@ -7,6 +7,7 @@ from ..priors import (
     CenPrior,
     TruncatedSimpleGauss2D,
     ZDisk2D,
+    ZAnnulus,
 )
 # from ..gexceptions import GMixRangeError
 
@@ -160,5 +161,52 @@ def test_priors_zdisk2d():
     r = np.sqrt(s1**2 + s2**2)
     assert np.all(s < radius)
     assert np.all(r < radius)
+    assert np.allclose(s.mean(), expected_meanr, rtol=0, atol=2e-3)
+    assert np.allclose(r.mean(), expected_meanr, rtol=0, atol=2e-3)
+
+
+def test_priors_zannulus():
+    rmin = 0.5
+    rmax = 1.0
+
+    pr = ZAnnulus(rmin, rmax, rng=np.random.RandomState(seed=10))
+    _s = pr.sample1d()
+    _s1, _s2 = pr.sample2d()
+
+    pr = ZAnnulus(rmin, rmax, rng=np.random.RandomState(seed=10))
+
+    assert pr.radius == rmax
+    assert pr.rmin == rmin
+
+    s = pr.sample1d()
+    s1, s2 = pr.sample2d()
+    assert isinstance(s, float)
+    assert s == _s
+    assert s1 == _s1
+    assert s2 == _s2
+
+    s = pr.sample1d(nrand=1)
+    s1, s2 = pr.sample2d(nrand=1)
+    assert (
+        isinstance(s, np.ndarray) and isinstance(s1, np.ndarray) and
+        isinstance(s2, np.ndarray)
+    )
+    assert s1.shape == (1,) and s2.shape == (1,) and s.shape == (1,)
+
+    s = pr.sample1d(nrand=10)
+    s1, s2 = pr.sample2d(nrand=10)
+    assert s1.shape == (10,) and s2.shape == (10,) and s.shape == (10,)
+
+    s = pr.sample1d(nrand=1000000)
+    s1, s2 = pr.sample2d(nrand=1000000)
+    assert np.allclose(s1.mean(), 0, rtol=0, atol=2e-3)
+    assert np.allclose(s2.mean(), 0, rtol=0, atol=2e-3)
+
+    expected_meanr = 2.0 / 3.0 * (
+        (rmax**3 - rmin**3)/(rmax**2 - rmin**2)
+    )
+    r = np.sqrt(s1**2 + s2**2)
+    assert np.all((s < rmax) & (s > rmin))
+    assert np.all((r < rmax) & (r > rmin))
     assert np.allclose(s.mean(), expected_meanr, rtol=0, atol=2e-3)
     assert np.allclose(r.mean(), expected_meanr, rtol=0, atol=2e-3)
