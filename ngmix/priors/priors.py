@@ -1995,29 +1995,32 @@ class TruncatedGaussianPolar(PriorBase):
 
 
 class Student(object):
-    def __init__(self, mean, sigma):
+    def __init__(self, mean, sigma, rng=None):
         """
         sigma is not std(x)
         """
-        print("warning: cannot use local rng")
-        self.reset(mean, sigma)
 
-    def reset(self, mean, sigma):
+        self.reset(mean, sigma, rng=rng)
+
+    def reset(self, mean, sigma, rng=None):
         """
         complete reset
         """
         import scipy.stats
+
+        assert rng is not None
+        self.rng = rng
 
         self.mean = mean
         self.sigma = sigma
 
         self.tdist = scipy.stats.t(1.0, loc=mean, scale=sigma)
 
-    def sample(self, nrand):
+    def sample(self, nrand=None):
         """
         Draw samples from the distribution
         """
-        return self.tdist.rvs(nrand)
+        return self.tdist.rvs(size=nrand, random_state=self.rng)
 
     def get_lnprob_array(self, x):
         """
@@ -2029,10 +2032,15 @@ class Student(object):
 
 
 class StudentPositive(Student):
-    def sample(self, nrand):
+    def sample(self, nrand=None):
         """
         Draw samples from the distribution
         """
+        if nrand is None:
+            nrand = 1
+            is_scalar = True
+        else:
+            is_scalar = False
         vals = numpy.zeros(nrand)
 
         nleft = nrand
@@ -2046,6 +2054,9 @@ class StudentPositive(Student):
                 vals[ngood:ngood + nkeep] = r[w]
                 nleft -= nkeep
                 ngood += nkeep
+
+        if is_scalar:
+            vals = vals[0]
 
         return vals
 

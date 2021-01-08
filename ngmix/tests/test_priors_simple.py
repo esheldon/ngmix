@@ -13,6 +13,8 @@ from ..priors import (
     LogNormal,
     Sinh,
     TruncatedGaussian,
+    Student,
+    StudentPositive,
 )
 from ..gexceptions import GMixRangeError
 
@@ -335,3 +337,62 @@ def test_priors_truncated_gaussian():
         _ = pr.get_lnprob_scalar(minval - 0.1)
     with pytest.raises(GMixRangeError):
         _ = pr.get_lnprob_scalar(maxval + 0.1)
+
+
+def test_priors_student():
+    mean = 1.0
+    sigma = 0.5
+
+    pr = Student(
+        mean, sigma, rng=np.random.RandomState(seed=10),
+    )
+    _s = pr.sample()
+
+    pr = Student(
+        mean, sigma, rng=np.random.RandomState(seed=10),
+    )
+    assert pr.mean == mean
+    assert pr.sigma == sigma
+
+    s = pr.sample()
+    assert isinstance(s, float)
+    assert s == _s
+
+    s = pr.sample(nrand=1)
+    assert isinstance(s, np.ndarray)
+    assert s.shape == (1,)
+
+    s = pr.sample(nrand=10)
+    assert isinstance(s, np.ndarray)
+    assert s.shape == (10,)
+
+
+def test_priors_student_positive():
+    mean = 1.0
+    sigma = 0.5
+
+    pr = StudentPositive(
+        mean, sigma, rng=np.random.RandomState(seed=10),
+    )
+    _s = pr.sample()
+
+    pr = StudentPositive(
+        mean, sigma, rng=np.random.RandomState(seed=10),
+    )
+    assert pr.mean == mean
+    assert pr.sigma == sigma
+
+    s = pr.sample()
+    assert isinstance(s, float)
+    assert s == _s
+
+    s = pr.sample(nrand=1)
+    assert isinstance(s, np.ndarray)
+    assert s.shape == (1,)
+
+    s = pr.sample(nrand=10)
+    assert isinstance(s, np.ndarray)
+    assert s.shape == (10,)
+
+    s = pr.sample(nrand=10000)
+    assert np.all(s > 0)
