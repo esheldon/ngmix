@@ -1921,6 +1921,7 @@ class TruncatedGaussianPolar(PriorBase):
     """
 
     def __init__(self, mean1, mean2, sigma1, sigma2, maxval, rng=None):
+        raise NotImplementedError('this is wrong')
         PriorBase.__init__(self, rng=rng)
 
         self.mean1 = mean1
@@ -2082,26 +2083,29 @@ class StudentPositive(Student):
 
 
 class Student2D(object):
-    def __init__(self, mean1, mean2, sigma1, sigma2):
+    def __init__(self, mean1, mean2, sigma1, sigma2, rng=None):
         """
         circular student
         sigma is not std(x)
         """
-        self.reset(mean1, mean2, sigma1, sigma2)
+        self.reset(mean1, mean2, sigma1, sigma2, rng=rng)
 
-    def reset(self, mean1, mean2, sigma1, sigma2):
+    def reset(self, mean1, mean2, sigma1, sigma2, rng=None):
         """
         complete reset
         """
+        assert rng is not None
+
+        self.rng = rng
         self.mean1 = mean1
         self.sigma1 = sigma1
         self.mean2 = mean2
         self.sigma2 = sigma2
 
-        self.tdist1 = Student(mean1, sigma1)
-        self.tdist2 = Student(mean2, sigma2)
+        self.tdist1 = Student(mean1, sigma1, rng=rng)
+        self.tdist2 = Student(mean2, sigma2, rng=rng)
 
-    def sample(self, nrand):
+    def sample(self, nrand=None):
         """
         Draw samples from the distribution
         """
@@ -2131,6 +2135,7 @@ class TruncatedStudentPolar(Student2D):
         """
         sigma is not std(x)
         """
+        raise NotImplementedError('this is wrong')
         self.reset(mean1, mean2, sigma1, sigma2, maxval)
 
     def reset(self, mean1, mean2, sigma1, sigma2, maxval):
@@ -2257,15 +2262,15 @@ class CenPrior(PriorBase):
         lnp = -0.5 * d1 * d1 * self.s2inv1 - 0.5 * d2 * d2 * self.s2inv2
         return exp(lnp)
 
-    def sample(self, n=None):
+    def sample(self, nrand=None):
         """
         Get a single sample or arrays
         """
 
         rng = self.rng
 
-        rand1 = rng.normal(loc=self.cen1, scale=self.sigma1, size=n)
-        rand2 = rng.normal(loc=self.cen2, scale=self.sigma2, size=n)
+        rand1 = rng.normal(loc=self.cen1, scale=self.sigma1, size=nrand)
+        rand2 = rng.normal(loc=self.cen2, scale=self.sigma2, size=nrand)
 
         return rand1, rand2
 
