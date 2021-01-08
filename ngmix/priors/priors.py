@@ -1819,7 +1819,7 @@ class Sinh(PriorBase):
         """
         return numpy.sinh((x - self.mean) / self.scale)
 
-    def sample(self, nrand=1):
+    def sample(self, nrand=None):
         """
         sample around the mean, +/- a scale length
         """
