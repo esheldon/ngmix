@@ -325,3 +325,13 @@ def test_priors_truncated_gaussian():
     spdf = scipy.stats.truncnorm(a=a, b=b, loc=mean, scale=sigma)
     assert np.allclose(s.mean(), spdf.mean(), rtol=0, atol=1e-3)
     assert np.allclose(s.std(), spdf.std(), rtol=0, atol=1e-3)
+
+    # make sure these don't raise
+    for val in [mean, minval, maxval]:
+        _ = pr.get_lnprob_scalar(val)
+
+    # make sure these do raise
+    with pytest.raises(GMixRangeError):
+        _ = pr.get_lnprob_scalar(minval - 0.1)
+    with pytest.raises(GMixRangeError):
+        _ = pr.get_lnprob_scalar(maxval + 0.1)
