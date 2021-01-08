@@ -12,49 +12,9 @@ from ..priors import (
     LimitPDF,
     LogNormal,
     Sinh,
+    TruncatedGaussian,
 )
 from ..gexceptions import GMixRangeError
-
-
-@pytest.mark.parametrize('shift', [None, 0, 0.1])
-def test_priors_lognormal(shift):
-    mean = 1.0
-    sigma = 0.5
-
-    pr = LogNormal(mean, sigma, shift=shift, rng=np.random.RandomState(seed=10))
-    _s = pr.sample()
-
-    pr = LogNormal(mean, sigma, shift=shift, rng=np.random.RandomState(seed=10))
-    assert pr.mean == mean
-    assert pr.sigma == sigma
-    s = pr.sample()
-    assert isinstance(s, float)
-    assert s == _s
-
-    s = pr.sample(nrand=1)
-    assert isinstance(s, np.ndarray)
-    assert s.shape == (1,)
-
-    s = pr.sample(nrand=10)
-    assert isinstance(s, np.ndarray)
-    assert s.shape == (10,)
-
-    s = pr.sample(nrand=1000000)
-
-    if shift is None:
-        shiftval = 0.0
-    else:
-        shiftval = shift
-
-    assert np.allclose(s.mean(), mean + shiftval, rtol=0, atol=1e-3)
-    assert np.allclose(s.std(), sigma, rtol=0, atol=1e-3)
-
-    mode_val = pr.get_prob_scalar(pr.mode + shiftval)
-    low_val = pr.get_prob_scalar(pr.mode + shiftval - 1.0e-3)
-    high_val = pr.get_prob_scalar(pr.mode + shiftval + 1.0e-3)
-
-    assert mode_val > low_val
-    assert mode_val > high_val
 
 
 @pytest.mark.parametrize('klass', [Bounded1D, LimitPDF])
@@ -255,6 +215,47 @@ def test_priors_twosidederf():
     assert np.allclose(np.mean(s), 0.0, rtol=0, atol=1e-3)
 
 
+@pytest.mark.parametrize('shift', [None, 0, 0.1])
+def test_priors_lognormal(shift):
+    mean = 1.0
+    sigma = 0.5
+
+    pr = LogNormal(mean, sigma, shift=shift, rng=np.random.RandomState(seed=10))
+    _s = pr.sample()
+
+    pr = LogNormal(mean, sigma, shift=shift, rng=np.random.RandomState(seed=10))
+    assert pr.mean == mean
+    assert pr.sigma == sigma
+    s = pr.sample()
+    assert isinstance(s, float)
+    assert s == _s
+
+    s = pr.sample(nrand=1)
+    assert isinstance(s, np.ndarray)
+    assert s.shape == (1,)
+
+    s = pr.sample(nrand=10)
+    assert isinstance(s, np.ndarray)
+    assert s.shape == (10,)
+
+    s = pr.sample(nrand=1000000)
+
+    if shift is None:
+        shiftval = 0.0
+    else:
+        shiftval = shift
+
+    assert np.allclose(s.mean(), mean + shiftval, rtol=0, atol=1e-3)
+    assert np.allclose(s.std(), sigma, rtol=0, atol=1e-3)
+
+    mode_val = pr.get_prob_scalar(pr.mode + shiftval)
+    low_val = pr.get_prob_scalar(pr.mode + shiftval - 1.0e-3)
+    high_val = pr.get_prob_scalar(pr.mode + shiftval + 1.0e-3)
+
+    assert mode_val > low_val
+    assert mode_val > high_val
+
+
 def test_priors_sinh():
     mean = 1.0
     scale = 0.5
@@ -283,3 +284,44 @@ def test_priors_sinh():
     assert np.allclose(s.mean(), mean, rtol=0, atol=1e-3)
     assert s.max() < mean + scale
     assert s.min() > mean - scale
+
+
+def test_priors_truncated_gaussian():
+    import scipy.stats
+    mean = 1.0
+    sigma = 0.5
+    minval = 0.3
+    maxval = 1.1
+
+    pr = TruncatedGaussian(
+        mean, sigma, minval, maxval, rng=np.random.RandomState(seed=10),
+    )
+    _s = pr.sample()
+
+    pr = TruncatedGaussian(
+        mean, sigma, minval, maxval, rng=np.random.RandomState(seed=10),
+    )
+    assert pr.mean == mean
+    assert pr.sigma == sigma
+    assert pr.minval == minval
+    assert pr.maxval == maxval
+
+    s = pr.sample()
+    assert isinstance(s, float)
+    assert s == _s
+
+    s = pr.sample(nrand=1)
+    assert isinstance(s, np.ndarray)
+    assert s.shape == (1,)
+
+    s = pr.sample(nrand=10)
+    assert isinstance(s, np.ndarray)
+    assert s.shape == (10,)
+
+    s = pr.sample(nrand=1000000)
+
+    a = (minval - mean)/sigma
+    b = (maxval - mean)/sigma
+    spdf = scipy.stats.truncnorm(a=a, b=b, loc=mean, scale=sigma)
+    assert np.allclose(s.mean(), spdf.mean(), rtol=0, atol=1e-3)
+    assert np.allclose(s.std(), spdf.std(), rtol=0, atol=1e-3)

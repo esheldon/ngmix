@@ -1885,7 +1885,7 @@ class TruncatedGaussian(PriorBase):
             raise GMixRangeError("value out of range")
         return (x - self.mean) * self.sinv
 
-    def sample(self, nrand=1):
+    def sample(self, nrand=None):
 
         rng = self.rng
 
