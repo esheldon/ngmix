@@ -1503,12 +1503,6 @@ class LogNormal(PriorBase):
         return res
 
 
-############################################
-# MRB: I've gone through the first 1k lines.
-# I am going to stop and write tests, then split this module into pieces
-# and then do docs for the rest.
-
-
 class MultivariateLogNormal(object):
     """
     multi-variate log-normal distribution
