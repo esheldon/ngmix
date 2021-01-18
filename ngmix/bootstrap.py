@@ -1,7 +1,17 @@
 """
 TODO
     - rework the api for bootstrappers
+        - each bootstrapper should have two primary methods
+            - fit_psfs() (or something to fit models to the .psf observations of
+              the input observations
+            - go() to do primary work.
+        - remove unsupported extras like isample
     - rework the api for runners
+    - rework the psf fitting, don't need a lot of the options
+    - improve psf T guessing default; currently assumed to be 4 * pixel_scale which
+      makes no sense
+    - we are carrying around state, e.g. in psf_obs.meta["fitter"] which
+    I think was used mainly in the old MOF, do we need this sort of thing?
 """
 import numpy as np
 from numpy.linalg import LinAlgError
