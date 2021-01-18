@@ -86,10 +86,6 @@ class MeasurementBase(object):
         Returns
         -------
         None
-
-        Side Effects
-        -------------
-        the result attribute is set
         """
         raise NotImplementedError('implement go method for fitter')
 
