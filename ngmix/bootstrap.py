@@ -5,7 +5,7 @@ TODO
             - fit_psfs() (or something to fit models to the .psf observations of
               the input observations
             - go() to do primary work.
-        - remove unsupported extras like isample
+        - remove unsupported extras
     - rework the api for runners
     - rework the psf fitting, don't need a lot of the options
     - improve psf T guessing default; currently assumed to be 4 * pixel_scale which
@@ -59,22 +59,6 @@ class Bootstrapper(object):
         self.mb_obs_list = self.mb_obs_list_orig
 
         self.model_fits = {}
-
-    def get_isampler(self):
-        """
-        get the importance sampler
-        """
-        if not hasattr(self, "isampler"):
-            raise RuntimeError("you need to run isample() successfully first")
-        return self.isampler
-
-    def get_psampler(self):
-        """
-        get the prior samples sampler
-        """
-        if not hasattr(self, "psampler"):
-            raise RuntimeError("you need to run psample() successfully first")
-        return self.psampler
 
     def get_max_fitter(self):
         """
@@ -423,88 +407,6 @@ class Bootstrapper(object):
             raise BootGalFailure("failed to fit galaxy with maxlike")
 
         return fitter
-
-    def isample(self, ipars, prior=None):
-        """
-        bootstrap off the maxlike run
-        """
-
-        max_fitter = self.max_fitter
-        use_fitter = max_fitter
-
-        for i, nsample in enumerate(ipars["nsample"]):
-            sampler = self._make_isampler(use_fitter, ipars)
-            if sampler is None:
-                raise BootGalFailure("isampling failed")
-
-            sampler.make_samples(nsample)
-
-            sampler.set_iweights(max_fitter.calc_lnprob)
-            sampler.calc_result()
-
-            tres = sampler.get_result()
-
-            if self.verbose:
-                print("    eff iter %d: %.2f" % (i, tres["efficiency"]))
-            use_fitter = sampler
-
-        maxres = max_fitter.get_result()
-        tres["model"] = maxres["model"]
-
-        self.isampler = sampler
-
-    def _make_isampler(self, fitter, ipars):
-        from .fitting import ISampler
-
-        res = fitter.get_result()
-        icov = res["pars_cov"]
-
-        try:
-            sampler = ISampler(
-                res["pars"],
-                icov,
-                ipars["df"],
-                min_err=ipars["min_err"],
-                max_err=ipars["max_err"],
-                ifactor=ipars.get("ifactor", 1.0),
-                asinh_pars=ipars.get("asinh_pars", []),
-                verbose=self.verbose,
-            )
-
-        except LinAlgError:
-            print("        bad cov")
-            sampler = None
-
-        return sampler
-
-    def psample(self, psample_pars, samples):
-        """
-        bootstrap off the maxlike run
-        """
-        from .fitting import PSampler, MaxSimple
-
-        max_fitter = self.get_max_fitter()
-        res = max_fitter.get_result()
-
-        model = res["model"]
-        tfitter = MaxSimple(self.mb_obs_list, model)
-        tfitter._setup_data(res["pars"])
-
-        sampler = PSampler(
-            res["pars"],
-            res["pars_err"],
-            samples,
-            verbose=self.verbose,
-            **psample_pars
-        )
-
-        sampler.calc_loglikes(tfitter.calc_lnprob)
-
-        self.psampler = sampler
-
-        res = sampler.get_result()
-        if res["flags"] != 0:
-            raise BootGalFailure("psampling failed")
 
     def fit_gal_psf_flux(self, normalize_psf=True):
         """
