@@ -1,13 +1,10 @@
 """
 TODO
-
-    - make a tester for it
-    - test it in nsim
-    - make it possible to specify the guess type (not just psf)
-
+    - rework the api for bootstrappers
+    - rework the api for runners
+    - rework boot flags; don't seem to be used other than BOOT_S2N_LOW
 """
-import numpy
-from numpy import where, array, sqrt, zeros
+import numpy as np
 from numpy.linalg import LinAlgError
 
 from . import admom
@@ -514,8 +511,8 @@ class Bootstrapper(object):
         nband = len(mbo)
 
         flags = []
-        psf_flux = zeros(nband) - 9999.0
-        psf_flux_err = zeros(nband)
+        psf_flux = np.zeros(nband) - 9999.0
+        psf_flux_err = np.zeros(nband)
 
         for i, obs_list in enumerate(mbo):
 
@@ -806,9 +803,9 @@ class AdmomBootstrapper(Bootstrapper):
         # for each band
         nband = len(mb_obs_list)
         res = fitter.get_result()
-        res["flux"] = zeros(nband) - 9999
-        res["flux_err"] = zeros(nband) + 9999
-        res["flux_s2n"] = zeros(nband) - 9999
+        res["flux"] = np.zeros(nband) - 9999
+        res["flux_err"] = np.zeros(nband) + 9999
+        res["flux_s2n"] = np.zeros(nband) - 9999
 
         try:
             gmix = fitter.get_gmix()
@@ -923,7 +920,7 @@ class AdmomMetacalBootstrapper(AdmomBootstrapper):
 
                 wsum = 0.0
                 Tpsf_sum = 0.0
-                gpsf_sum = zeros(2)
+                gpsf_sum = np.zeros(2)
                 npsf = 0
                 for obslist in boot.mb_obs_list:
                     for obs in obslist:
@@ -1085,7 +1082,7 @@ class MaxMetacalBootstrapper(Bootstrapper):
 
             wsum = 0.0
             Tpsf_sum = 0.0
-            gpsf_sum = zeros(2)
+            gpsf_sum = np.zeros(2)
             npsf = 0
             for obslist in boot.mb_obs_list:
                 for obs in obslist:
@@ -1247,11 +1244,11 @@ class PSFRunner(object):
     def set_guess0(self, Tguess):
         Fguess = self.obs.image.sum()
         Fguess *= self.obs.jacobian.get_scale() ** 2
-        self.guess0 = array([0.0, 0.0, 0.0, 0.0, Tguess, Fguess])
+        self.guess0 = np.array([0.0, 0.0, 0.0, 0.0, Tguess, Fguess])
 
     def set_rng(self, rng):
         if rng is None:
-            rng = numpy.random.RandomState()
+            rng = np.random.RandomState()
 
         self.rng = rng
 
@@ -1292,7 +1289,7 @@ class EMRunner(object):
 
         self.ngauss = ngauss
         self.Tguess = Tguess
-        self.sigma_guess = sqrt(Tguess / 2)
+        self.sigma_guess = np.sqrt(Tguess / 2)
         self.set_obs(obs)
 
         self.em_pars = em_pars
@@ -1351,7 +1348,7 @@ class EMRunner(object):
         rng = self.rng
 
         sigma2 = self.sigma_guess ** 2
-        pars = array(
+        pars = np.array(
             [
                 1.0 + rng.uniform(low=-0.1, high=0.1),
                 rng.uniform(low=-0.1, high=0.1),
@@ -1369,7 +1366,7 @@ class EMRunner(object):
 
         sigma2 = self.sigma_guess ** 2
 
-        pars = array(
+        pars = np.array(
             [
                 _em2_pguess[0],
                 rng.uniform(low=-0.1, high=0.1),
@@ -1401,7 +1398,7 @@ class EMRunner(object):
 
         sigma2 = self.sigma_guess ** 2
 
-        pars = array(
+        pars = np.array(
             [
                 _em3_pguess[0] * (1.0 + rng.uniform(low=-0.1, high=0.1)),
                 rng.uniform(low=-0.1, high=0.1),
@@ -1443,7 +1440,7 @@ class EMRunner(object):
 
         sigma2 = self.sigma_guess ** 2
 
-        pars = array(
+        pars = np.array(
             [
                 _em4_pguess[0] * (1.0 + rng.uniform(low=-0.1, high=0.1)),
                 rng.uniform(low=-0.1, high=0.1),
@@ -1495,7 +1492,7 @@ class EMRunner(object):
 
         sigma2 = self.sigma_guess ** 2
 
-        pars = array(
+        pars = np.array(
             [
                 _em5_pguess[0] * (1.0 + rng.uniform(low=-0.1, high=0.1)),
                 rng.uniform(low=-0.1, high=0.1),
@@ -1554,7 +1551,7 @@ class EMRunner(object):
 
     def set_rng(self, rng):
         if rng is None:
-            rng = numpy.random.RandomState()
+            rng = np.random.RandomState()
 
         self.rng = rng
 
@@ -1605,7 +1602,7 @@ class PSFRunnerCoellip(object):
 
         rng = self.rng
 
-        guess = numpy.zeros(self.npars)
+        guess = np.zeros(self.npars)
 
         guess[0:0 + 2] += rng.uniform(low=-0.01, high=0.01, size=2)
         guess[2:2 + 2] += rng.uniform(low=-0.05, high=0.05, size=2)
@@ -1805,32 +1802,32 @@ class PSFRunnerCoellip(object):
 
     def set_rng(self, rng):
         if rng is None:
-            rng = numpy.random.RandomState()
+            rng = np.random.RandomState()
 
         self.rng = rng
 
 
-_moffat2_pguess = array([0.5, 0.5])
-_moffat2_fguess = array([0.48955064, 1.50658978])
+_moffat2_pguess = np.array([0.5, 0.5])
+_moffat2_fguess = np.array([0.48955064, 1.50658978])
 
-_moffat3_pguess = array([0.27559669, 0.55817131, 0.166232])
-_moffat3_fguess = array([0.36123609, 0.8426139, 2.58747785])
+_moffat3_pguess = np.array([0.27559669, 0.55817131, 0.166232])
+_moffat3_fguess = np.array([0.36123609, 0.8426139, 2.58747785])
 
-_moffat4_pguess = array([0.44534, 0.366951, 0.10506, 0.0826497])
-_moffat4_fguess = array([0.541019, 1.19701, 0.282176, 3.51086])
+_moffat4_pguess = np.array([0.44534, 0.366951, 0.10506, 0.0826497])
+_moffat4_fguess = np.array([0.541019, 1.19701, 0.282176, 3.51086])
 
-_moffat5_pguess = array([0.45, 0.25, 0.15, 0.1, 0.05])
-_moffat5_fguess = array([0.541019, 1.19701, 0.282176, 3.51086])
+_moffat5_pguess = np.array([0.45, 0.25, 0.15, 0.1, 0.05])
+_moffat5_fguess = np.array([0.541019, 1.19701, 0.282176, 3.51086])
 
-_moffat5_pguess = array(
+_moffat5_pguess = np.array(
     [0.57874897, 0.32273483, 0.03327272, 0.0341253, 0.03111819]
 )
-_moffat5_fguess = array(
+_moffat5_fguess = np.array(
     [0.27831284, 0.9959897, 5.86989779, 5.63590429, 4.17285878]
 )
 
-# _moffat3_pguess=array([0.45, 0.45, 0.1])
-# _moffat3_fguess=array([0.48955064,  1.50658978, 3.0])
+# _moffat3_pguess=np.array([0.45, 0.45, 0.1])
+# _moffat3_fguess=np.array([0.48955064,  1.50658978, 3.0])
 
 
 class MaxRunner(object):
@@ -2067,9 +2064,9 @@ def replace_masked_pixels(
                 weight = obs.weight
 
             if bmask is not None:
-                w = where((bmask != 0) | (weight == 0.0))
+                w = np.where((bmask != 0) | (weight == 0.0))
             else:
-                w = where(weight == 0.0)
+                w = np.where(weight == 0.0)
 
             if w[0].size > 0:
                 print(
@@ -2085,11 +2082,11 @@ def replace_masked_pixels(
                 im[w] = model_image[w]
 
                 if add_noise:
-                    wgood = where(weight > 0.0)
+                    wgood = np.where(weight > 0.0)
                     if wgood[0].size > 0:
-                        median_err = numpy.median(1.0 / weight[wgood])
+                        median_err = np.median(1.0 / weight[wgood])
 
-                        noise_image = numpy.random.normal(
+                        noise_image = np.random.normal(
                             loc=0.0, scale=median_err, size=im.shape
                         )
 
@@ -2101,30 +2098,30 @@ def replace_masked_pixels(
     return mbo
 
 
-_em2_pguess = array([0.596510042804182, 0.4034898268889178])
-_em2_fguess = array([0.5793612389470884, 1.621860687127999])
+_em2_pguess = np.array([0.596510042804182, 0.4034898268889178])
+_em2_fguess = np.array([0.5793612389470884, 1.621860687127999])
 
-_em3_pguess = array(
+_em3_pguess = np.array(
     [0.596510042804182, 0.4034898268889178, 1.303069003078001e-07]
 )
-_em3_fguess = array([0.5793612389470884, 1.621860687127999, 7.019347162356363])
+_em3_fguess = np.array([0.5793612389470884, 1.621860687127999, 7.019347162356363])
 
-_em4_pguess = array(
+_em4_pguess = np.array(
     [0.596510042804182, 0.4034898268889178, 1.303069003078001e-07, 1.0e-8]
 )
-_em4_fguess = array(
+_em4_fguess = np.array(
     [0.5793612389470884, 1.621860687127999, 7.019347162356363, 16.0]
 )
 
-_em5_pguess = array(
+_em5_pguess = np.array(
     [0.59453032, 0.35671819, 0.03567182, 0.01189061, 0.00118906]
 )
-_em5_fguess = array([0.5, 1.0, 3.0, 10.0, 20.0])
+_em5_fguess = np.array([0.5, 1.0, 3.0, 10.0, 20.0])
 
-# _em3_pguess = array([0.7189864,0.2347828,0.04623086])
-# _em3_fguess = array([0.4431912,1.354587,8.274546])
-# _em3_pguess = array([0.60,0.36,0.04])
-# _em3_fguess = array([0.58,1.62,3.0])
+# _em3_pguess = np.array([0.7189864,0.2347828,0.04623086])
+# _em3_fguess = np.array([0.4431912,1.354587,8.274546])
+# _em3_pguess = np.array([0.60,0.36,0.04])
+# _em3_fguess = np.array([0.58,1.62,3.0])
 
 
 def test_boot(model, **keys):
