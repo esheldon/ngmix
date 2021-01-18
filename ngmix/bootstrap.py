@@ -2,7 +2,6 @@
 TODO
     - rework the api for bootstrappers
     - rework the api for runners
-    - rework boot flags; don't seem to be used other than BOOT_S2N_LOW
 """
 import numpy as np
 from numpy.linalg import LinAlgError
@@ -23,11 +22,6 @@ from . import metacal
 from copy import deepcopy
 
 BOOT_S2N_LOW = 2 ** 0
-BOOT_R2_LOW = 2 ** 1
-BOOT_R4_LOW = 2 ** 2
-BOOT_TS2N_ROUND_FAIL = 2 ** 3
-BOOT_ROUND_CONVOLVE_FAIL = 2 ** 4
-BOOT_WEIGHTS_LOW = 2 ** 5
 
 
 class Bootstrapper(object):
