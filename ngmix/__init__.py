@@ -44,7 +44,7 @@ from . import simplex  # noqa
 from . import galsimfit  # noqa
 
 from . import bootstrap  # noqa
-from .bootstrap import Bootstrapper, CompositeBootstrapper  # noqa
+from .bootstrap import Bootstrapper
 
 from . import em  # noqa
 
@@ -58,8 +58,6 @@ from .observation import Observation, ObsList, MultiBandObsList  # noqa
 from . import stats  # noqa
 
 from . import guessers  # noqa
-
-from . import roundify  # noqa
 
 from . import metacal  # noqa
 

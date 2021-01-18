@@ -346,57 +346,6 @@ class ParsGuesser(GuesserBase):
         return guess
 
 
-class RoundParsGuesser(GuesserBase):
-    """
-    pars do not include g1,g2
-    """
-
-    def __init__(self, pars, scaling="linear", prior=None, widths=None):
-        self.pars = pars
-        self.scaling = scaling
-        self.prior = prior
-
-        self.np = pars.size
-
-        if widths is None:
-            self.widths = pars * 0 + 0.1
-            self.widths[0:0+2] = 0.02
-        else:
-            self.widths = widths
-
-    def __call__(self, n=None, **keys):
-        """
-        center, shape are just distributed around zero
-        """
-
-        if n is None:
-            is_scalar = True
-            n = 1
-        else:
-            is_scalar = False
-
-        pars = self.pars
-        widths = self.widths
-
-        guess = numpy.zeros((n, self.np))
-        guess[:, 0] = pars[0] + widths[0] * srandu(n, rng=RNG)
-        guess[:, 1] = pars[1] + widths[1] * srandu(n, rng=RNG)
-
-        for i in range(2, self.np):
-            if self.scaling == "linear":
-                guess[:, i] = pars[i] * (1.0 + widths[i] * srandu(n, rng=RNG))
-            else:
-                guess[:, i] = pars[i] + widths[i] * srandu(n, rng=RNG)
-
-        if self.prior is not None:
-            self._fix_guess(guess, self.prior)
-
-        if is_scalar:
-            guess = guess[0, :]
-
-        return guess
-
-
 def get_shape_guess(g1, g2, n, width, max=0.99):
     """
     Get guess, making sure in range
@@ -427,50 +376,6 @@ def get_shape_guess(g1, g2, n, width, max=0.99):
         guess[i, 1] = shape_new.g2
 
     return guess
-
-
-class MomGuesser(GuesserBase):
-    """
-    pars are [cen1,cen2,M1,M2,T,I]
-    """
-
-    def __init__(self, pars, prior=None, widths=None):
-        self.pars = pars
-        self.prior = prior
-
-        self.np = pars.size
-
-        if widths is None:
-            self.widths = pars * 0 + 0.1
-        else:
-            self.widths = widths
-
-    def __call__(self, n=None, **keys):
-        """
-        center, shape are just distributed around zero
-        """
-
-        if n is None:
-            is_scalar = True
-            n = 1
-        else:
-            is_scalar = False
-
-        pars = self.pars
-        widths = self.widths
-
-        guess = numpy.zeros((n, self.np))
-
-        for i in range(self.np):
-            guess[:, i] = pars[i] + widths[i] * srandu(n, rng=RNG)
-
-        if self.prior is not None:
-            self._fix_guess(guess, self.prior)
-
-        if is_scalar:
-            guess = guess[0, :]
-
-        return guess
 
 
 class R50FluxGuesser(object):
