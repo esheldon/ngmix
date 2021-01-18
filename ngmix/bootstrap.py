@@ -1732,9 +1732,6 @@ _moffat5_fguess = np.array(
     [0.27831284, 0.9959897, 5.86989779, 5.63590429, 4.17285878]
 )
 
-# _moffat3_pguess=np.array([0.45, 0.45, 0.1])
-# _moffat3_fguess=np.array([0.48955064,  1.50658978, 3.0])
-
 
 class MaxRunner(object):
     """
@@ -2023,11 +2020,6 @@ _em5_pguess = np.array(
     [0.59453032, 0.35671819, 0.03567182, 0.01189061, 0.00118906]
 )
 _em5_fguess = np.array([0.5, 1.0, 3.0, 10.0, 20.0])
-
-# _em3_pguess = np.array([0.7189864,0.2347828,0.04623086])
-# _em3_fguess = np.array([0.4431912,1.354587,8.274546])
-# _em3_pguess = np.array([0.60,0.36,0.04])
-# _em3_fguess = np.array([0.58,1.62,3.0])
 
 
 def test_boot(model, **keys):
