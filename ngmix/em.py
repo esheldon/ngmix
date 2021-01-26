@@ -505,11 +505,14 @@ def test_2gauss(counts=100.0, noise=0.0, maxiter=100, show=False):
     print(res)
 
     if show:
-        import images
+        try:
+            import images
+        except ImportError:
+            from espy import images
 
         imfit = gmfit.make_image(im.shape)
         imfit *= im0.sum() / imfit.sum()
 
-        images.compare_images(im, imfit)
+        images.compare_images(im, imfit, colorbar=True)
 
     return tm
