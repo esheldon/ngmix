@@ -5,6 +5,7 @@ from ngmix import DiagonalJacobian, GMix, GMixModel
 from ngmix.em import fit_em
 from ngmix import Observation
 from ngmix.priors import srandu
+from ngmix.bootstrap import PSFRunnerEM
 
 
 def get_obs(*, rng, ngauss, pixel_scale, noise=0.0, withpsf=False):
@@ -97,6 +98,21 @@ def get_obs(*, rng, ngauss, pixel_scale, noise=0.0, withpsf=False):
     obs = Observation(im, jacobian=jacob, psf=psf_obs)
 
     return obs, gm
+
+
+def get_psf_obs():
+    pixel_scale = 0.263
+    dims = [25, 25]
+    cen = (np.array(dims) - 1.0) / 2.0
+
+    jacob = DiagonalJacobian(scale=pixel_scale, row=cen[0], col=cen[1])
+
+    Tpsf = 0.27
+    psf_gm = GMixModel([0.0, 0.0, 0.0, 0.0, Tpsf, 1.0], "turb")
+    # psf_gm = GMixModel([0.0, 0.0, 0.0, 0.0, Tpsf, 1.0], "gauss")
+    psf_im = psf_gm.make_image(dims, jacobian=jacob)
+
+    return Observation(psf_im, jacobian=jacob), psf_gm
 
 
 @pytest.mark.parametrize('noise', [0.0, 0.05])
@@ -277,3 +293,35 @@ def test_2gauss_withpsf(noise):
     imfit = fitter.make_image()
     imtol = 0.001 / pixel_scale**2 + noise*5
     assert np.all(np.abs(imfit - obs.image) < imtol)
+
+
+def test_psf_fit_runner():
+    """
+    see if we can recover the input with and without noise to high precision
+    even with a bad guess
+
+    Use ngmix to make the image to make sure there are
+    no pixelization effects
+    """
+
+    rng = np.random.RandomState(8821)
+    psf_obs, psf_gm = get_psf_obs()
+
+    Tguess = psf_gm.get_T() * rng.uniform(low=-0.9, high=1.1)
+
+    # better tolerance needed for this psf fit
+    runner = PSFRunnerEM(
+        obs=psf_obs, Tguess=Tguess, ngauss=3, rng=rng,
+        em_pars={'tol': 1.0e-5},
+    )
+    runner.go()
+
+    fitter = runner.get_fitter()
+    res = fitter.get_result()
+    assert res['flags'] == 0
+
+    # check reconstructed image allowing for noise
+    imfit = fitter.make_image()
+    imtol = 0.001 / psf_obs.jacobian.scale**2
+    # assert np.all(np.abs(imfit - psf_obs.image) < imtol)
+    assert np.abs(imfit - psf_obs.image).max() < imtol

@@ -142,10 +142,10 @@ class GMixEM(object):
 
         The image should not have zero or negative pixels. You can
         use the ngmix.em.prep_image() function to ensure this.
-    minimum: number, optional
-        The minimum number of iterations, default 10
+    miniter: number, optional
+        The minimum number of iterations, default 40
     maxiter: number, optional
-        The maximum number of iterations, default 1000
+        The maximum number of iterations, default 500
     tol: number, optional
         The fractional change in the log likelihood that implies convergence,
         default 0.001
@@ -159,6 +159,9 @@ class GMixEM(object):
                  tol=0.001,
                  vary_sky=False):
 
+        assert isinstance(obs, Observation), (
+            'input obs must be an instance of Observation'
+        )
         self._obs = obs
 
         self.miniter = miniter
@@ -371,10 +374,10 @@ class GMixEMFixCen(GMixEM):
 
         The image should not have zero or negative pixels. You can
         use the ngmix.em.prep_image() function to ensure this.
-    minimum: number, optional
-        The minimum number of iterations, default 10
+    miniter: number, optional
+        The minimum number of iterations, default 40
     maxiter: number, optional
-        The maximum number of iterations, default 1000
+        The maximum number of iterations, default 500
     tol: number, optional
         The fractional change in the log likelihood that implies convergence,
         default 0.001
@@ -405,10 +408,10 @@ class GMixEMFluxOnly(GMixEMFixCen):
 
         The image should not have zero or negative pixels. You can
         use the prep_image() function to ensure this.
-    minimum: number, optional
-        The minimum number of iterations, default 10
+    miniter: number, optional
+        The minimum number of iterations, default 20
     maxiter: number, optional
-        The maximum number of iterations, default 1000
+        The maximum number of iterations, default 500
     tol: number, optional
         The fractional change in the log likelihood that implies convergence,
         default 0.001
