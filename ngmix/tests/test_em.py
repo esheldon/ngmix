@@ -323,5 +323,4 @@ def test_psf_fit_runner():
     # check reconstructed image allowing for noise
     imfit = fitter.make_image()
     imtol = 0.001 / psf_obs.jacobian.scale**2
-    # assert np.all(np.abs(imfit - psf_obs.image) < imtol)
     assert np.abs(imfit - psf_obs.image).max() < imtol
