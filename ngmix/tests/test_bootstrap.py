@@ -53,7 +53,12 @@ def _get_obs(rng):
     return obs
 
 
-@pytest.mark.parametrize('models', [('gauss', 'gauss'), ('gauss', 'exp')])
+@pytest.mark.parametrize('models', [
+    ('gauss', 'gauss'),
+    ('gauss', 'exp'),
+    ('em1', 'exp'),
+    ('em3', 'exp'),
+])
 def test_bootstrap_max_smoke(models):
 
     psf_model, obj_model = models
