@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 
 from ngmix import DiagonalJacobian, GMix, GMixModel
-from ngmix.em import GMixEM, prep_image
+from ngmix.em import fit_em
 from ngmix import Observation
 from ngmix.priors import srandu
 
@@ -93,7 +93,7 @@ def get_obs(*, rng, ngauss, pixel_scale, noise=0.0, withpsf=False):
         im0 = gm.make_image(dims, jacobian=jacob)
         psf_obs = None
 
-    im = im0 + noise * np.random.randn(im0.size).reshape(dims)
+    im = im0 + rng.normal(size=im0.shape, scale=noise)
     obs = Observation(im, jacobian=jacob, psf=psf_obs)
 
     return obs, gm
@@ -114,9 +114,6 @@ def test_1gauss(noise):
     ngauss = 1
     obs, gm = get_obs(rng=rng, ngauss=ngauss, pixel_scale=0.263, noise=noise)
 
-    imsky, sky = prep_image(obs.image)
-    obs_sky = Observation(imsky, jacobian=obs.jacobian)
-
     pars = gm.get_full_pars()
     counts = pars[0]
 
@@ -128,11 +125,10 @@ def test_1gauss(noise):
     gm_guess._data["irc"] += 0.5 * pixel_scale**2 * srandu(rng=rng)
     gm_guess._data["icc"] += 0.5 * pixel_scale**2 * srandu(rng=rng)
 
-    em = GMixEM(obs_sky)
-    em.go(gm_guess, sky)
+    fitter = fit_em(obs=obs, guess=gm_guess)
 
-    fit_gm = em.get_gmix()
-    res = em.get_result()
+    fit_gm = fitter.get_gmix()
+    res = fitter.get_result()
     assert res['flags'] == 0
 
     fitpars = fit_gm.get_full_pars()
@@ -145,7 +141,7 @@ def test_1gauss(noise):
         assert (fitpars[5]/pars[5]-1) < tol
 
     # check reconstructed image allowing for noise
-    imfit = em.make_image()
+    imfit = fitter.make_image()
     imtol = 0.001 / pixel_scale**2 + noise*5
     assert np.all(np.abs(imfit - obs.image) < imtol)
 
@@ -165,9 +161,6 @@ def test_2gauss(noise):
     ngauss = 2
     obs, gm = get_obs(rng=rng, ngauss=ngauss, pixel_scale=0.263, noise=noise)
 
-    imsky, sky = prep_image(obs.image)
-    obs_sky = Observation(imsky, jacobian=obs.jacobian)
-
     pars = gm.get_full_pars()
     counts_1 = pars[0]
 
@@ -179,11 +172,11 @@ def test_2gauss(noise):
     gm_guess._data["irc"] += 0.5 * pixel_scale**2 * srandu(2, rng=rng)
     gm_guess._data["icc"] += 0.5 * pixel_scale**2 * srandu(2, rng=rng)
 
-    em = GMixEM(obs_sky)
-    em.go(gm_guess, sky)
+    fitter = fit_em(obs=obs, guess=gm_guess)
 
-    fit_gm = em.get_gmix()
-    res = em.get_result()
+    fit_gm = fitter.get_gmix()
+
+    res = fitter.get_result()
     assert res['flags'] == 0
 
     fitpars = fit_gm.get_full_pars()
@@ -214,7 +207,7 @@ def test_2gauss(noise):
             assert (thispars[5]/truepars[5]-1) < tol
 
     # check reconstructed image allowing for noise
-    imfit = em.make_image()
+    imfit = fitter.make_image()
     imtol = 0.001 / pixel_scale**2 + noise*5
     assert np.all(np.abs(imfit - obs.image) < imtol)
 
@@ -236,9 +229,6 @@ def test_2gauss_withpsf(noise):
         rng=rng, ngauss=ngauss, pixel_scale=0.263, noise=noise, withpsf=True,
     )
 
-    imsky, sky = prep_image(obs.image)
-    obs_sky = Observation(imsky, jacobian=obs.jacobian, psf=obs.psf)
-
     pars = gm.get_full_pars()
     counts_1 = pars[0]
 
@@ -250,11 +240,10 @@ def test_2gauss_withpsf(noise):
     gm_guess._data["irc"] += 0.1 * pixel_scale**2 * srandu(2, rng=rng)
     gm_guess._data["icc"] += 0.1 * pixel_scale**2 * srandu(2, rng=rng)
 
-    em = GMixEM(obs_sky)
-    em.go(gm_guess, sky)
+    fitter = fit_em(obs=obs, guess=gm_guess)
 
-    fit_gm = em.get_gmix()
-    res = em.get_result()
+    fit_gm = fitter.get_gmix()
+    res = fitter.get_result()
     assert res['flags'] == 0
 
     fitpars = fit_gm.get_full_pars()
@@ -285,7 +274,6 @@ def test_2gauss_withpsf(noise):
             assert (thispars[5]/truepars[5]-1) < tol
 
     # check reconstructed image allowing for noise
-    imfit = em.make_image()
+    imfit = fitter.make_image()
     imtol = 0.001 / pixel_scale**2 + noise*5
-    # assert np.all(np.abs(imfit - obs.image) < imtol)
-    assert np.abs(imfit - obs.image).max() < imtol
+    assert np.all(np.abs(imfit - obs.image) < imtol)

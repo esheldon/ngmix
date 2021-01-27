@@ -29,28 +29,90 @@ EM_RANGE_ERROR = 2 ** 0
 EM_MAXITER = 2 ** 1
 
 
-def fit_em(obs, guess, **keys):
+def fit_em(*, obs, guess, fixcen=False, fluxonly=False, **kws):
     """
     fit the observation with EM
+
+    Parameters
+    ----------
+    obs: ngmix.Observation
+        The observation to fit
+    guess: ngmix.GMix
+        The initial guess as a gaussian mixture
+    fixcen: bool, optional
+        if True, use the fixed center fitter
+    fluxonly: bool, optional
+        if True, use the flxu only fitter
+    minimum: number, optional
+        The minimum number of iterations, default depends on the fitter
+    maxiter: number, optional
+        The maximum number of iterations, default depends on the fitter
+    tol: number, optional
+        The fractional change in the log likelihood that implies convergence,
+        default 0.001
+    vary_sky: bool
+        If True, fit for the sky level
+
+    Returns
+    -------
+    The EM fitter
     """
     im, sky = prep_image(obs.image)
-    newobs = Observation(im, jacobian=obs.jacobian)
-    fitter = GMixEM(newobs)
-    fitter.go(guess, sky, **keys)
+    newobs, sky = prep_obs(obs)
+
+    if fixcen:
+        fitter = GMixEMFixCen(newobs, **kws)
+    elif fluxonly:
+        fitter = GMixEMFluxOnly(newobs, **kws)
+    else:
+        fitter = GMixEM(newobs, **kws)
+
+    fitter.go(guess, sky)
 
     return fitter
+
+
+def prep_obs(obs):
+    """
+    Prep the image to fit with EM and produce a new observation.
+
+    Parameters
+    ----------
+    obs: ngmix.Observation
+        The observation to fit
+
+    Returns
+    ------
+    new_obs, sky: ngmix.Observation and sky
+        The obs with new background level and the applied background level
+    """
+
+    imsky, sky = prep_image(obs.image)
+    if obs.has_psf():
+        newobs = Observation(
+            imsky,
+            jacobian=obs.jacobian,
+            psf=obs.psf,
+        )
+    else:
+        newobs = Observation(
+            imsky,
+            jacobian=obs.jacobian,
+        )
+
+    return newobs, sky
 
 
 def prep_image(im0):
     """
     Prep an image to fit with EM.  Make sure there are no pixels < 0
 
-    parameters
+    Parameters
     ----------
     image: ndarray
         2d image
 
-    output
+    Returns
     ------
     new_image, sky:
         The image with new background level and the background level
@@ -85,7 +147,7 @@ class GMixEM(object):
     maxiter: number, optional
         The maximum number of iterations, default 1000
     tol: number, optional
-        The tolerance in the moments that implies convergence,
+        The fractional change in the log likelihood that implies convergence,
         default 0.001
     vary_sky: bool
         If True, fit for the sky level
@@ -121,6 +183,12 @@ class GMixEM(object):
     def get_gmix(self):
         """
         Get a copy of the gaussian mixture from the final iteration
+
+        Returns
+        ----------
+        gm: ngmix.GMix
+            The best fit mixture.  It will not be convolved by the PSF if a psf
+            was present
         """
         if not self.has_gmix():
             raise RuntimeError('no gmix set')
@@ -130,6 +198,12 @@ class GMixEM(object):
     def get_convolved_gmix(self):
         """
         Get the gaussian mixture from the final iteration
+
+        Returns
+        ----------
+        gm: ngmix.GMix
+            The best fit mixture.  It will be convolved by the
+            PSF if a psf was present
         """
         if not self.has_gmix():
             raise RuntimeError('no gmix set')
@@ -138,13 +212,35 @@ class GMixEM(object):
 
     def get_result(self):
         """
-        Get some stats about the processing
+        Get a dict with stats about the processing
+
+        Returns
+        ----------
+        result: dict
+            Some information about the processing, including
+            flags: int
+                Any processing flags
+            numiter: int
+                Number of iterations
+            fdiff: float
+                Fractional difference in the log likelihood between
+                the last two iterations
+            sky: float
+                Value of sky, may be different than input when the sky
+                is fit for
+            message: str
+                A string describing how the processing when, e.g. OK or maxit
         """
         return self._result
 
     def make_image(self):
         """
         Get an image of the best fit mixture
+
+        Returns
+        -------
+        image: array
+            Image of the model, including the PSF if a psf was sent
         """
         gm = self.get_convolved_gmix()
         return gm.make_image(
@@ -163,6 +259,10 @@ class GMixEM(object):
             guess for the algorithm.  This should be *before* psf convolution.
         sky: number
             The sky value added to the image
+
+        Returns
+        -------
+        None
         """
 
         if hasattr(self, '_gm'):
@@ -276,7 +376,7 @@ class GMixEMFixCen(GMixEM):
     maxiter: number, optional
         The maximum number of iterations, default 1000
     tol: number, optional
-        The tolerance in the moments that implies convergence,
+        The fractional change in the log likelihood that implies convergence,
         default 0.001
     vary_sky: bool
         If True, fit for the sky level
@@ -292,7 +392,7 @@ class GMixEMFixCen(GMixEM):
         self._runner = em_run_fixcen
 
 
-class GMixEMPOnly(GMixEMFixCen):
+class GMixEMFluxOnly(GMixEMFixCen):
     """
     Fit an image with a gaussian mixture using the EM algorithm,
     allowing only the fluxes to vary
@@ -310,7 +410,7 @@ class GMixEMPOnly(GMixEMFixCen):
     maxiter: number, optional
         The maximum number of iterations, default 1000
     tol: number, optional
-        The tolerance in the fluxes that implies convergence,
+        The fractional change in the log likelihood that implies convergence,
         default 0.001
     """
 
@@ -323,7 +423,7 @@ class GMixEMPOnly(GMixEMFixCen):
         """
         over-riding because we want a different default miniter
         """
-        super(GMixEMPOnly, self).__init__(
+        super().__init__(
             obs,
             miniter=miniter,
             maxiter=maxiter,
@@ -332,13 +432,13 @@ class GMixEMPOnly(GMixEMFixCen):
         )
 
     def _set_runner(self):
-        self._runner = em_run_ponly
+        self._runner = em_run_fluxonly
 
     def _make_sums(self, ngauss):
         """
         make the sum structure
         """
-        return np.zeros(ngauss, dtype=_sums_dtype_ponly)
+        return np.zeros(ngauss, dtype=_sums_dtype_fluxonly)
 
 
 @njit
@@ -350,15 +450,15 @@ def em_run(conf,
            gmix_conv,
            fill_zero_weight=False):
     """
-    run the EM algorithm, with fixed positions and a psf mixture to provide a
-    shapred minimim resolution
+    run the EM algorithm
 
     Parameters
     ----------
     conf: array
         Should have fields
 
-            tol: tolerance for stopping
+            tol: The fractional change in the log likelihood that implies
+                convergence
             miniter: minimum number of iterations
             maxiter: maximum number of iterations
             pixel_scale: pixel scale
@@ -378,6 +478,12 @@ def em_run(conf,
     fill_zero_weight: bool
         If True, fill the zero weight pixels with the model on
         each iteration
+
+    Returns
+    -------
+    numiter, frac_diff, sky
+        number of iterations, fractional difference in log likelihood between
+        last two steps, and sky.  The sky may have been fit for.
     """
 
     gmix_set_norms(gmix_conv)
@@ -458,6 +564,11 @@ def em_run(conf,
 def clear_sums(sums):
     """
     set all sums to zero
+
+    Parameters
+    ----------
+    sums: array
+        Array with dtype _sums_dtype
     """
     sums['gi'][:] = 0.0
 
@@ -486,6 +597,25 @@ def do_scratch_sums(pixel, gmix_conv, sums, ngauss_psf, taudata):
 
     we may have multiple components per "object" so we update the
     sums accordingly
+
+    Parameters
+    ----------
+    pixel: pixel structure
+        Dtype should be ngmix.pixels._pixels_dtype
+    gmix_conv: ngmix.GMix
+        The current mixture, convolved by the PSF
+    sums: sums structure
+        With dtype _sums_dtype
+    ngauss_psf: int
+        Number of gaussians in psf
+    taudata: tau data struct
+        With dtype _tau_dtype
+
+    Returns
+    -------
+    gsum, logL:
+        The total of the gaussians evaluated in the pixel and the
+        log likelihood
     """
 
     v = pixel['v']
@@ -553,6 +683,19 @@ def do_scratch_sums(pixel, gmix_conv, sums, ngauss_psf, taudata):
 def do_sums(sums, pixel, gtot):
     """
     do the sums based on the scratch values
+
+    Parameters
+    ----------
+    sums: sums structure
+        With dtype _sums_dtype_fixcen
+    pixel: pixel structure
+        Dtype should be ngmix.pixels._pixels_dtype
+    gtot: float
+        The sum over gaussian values
+
+    Returns
+    -------
+    None
     """
 
     factor = pixel['val']/gtot
@@ -582,10 +725,24 @@ def gmix_set_from_sums(gmix,
                        sums,
                        pix_area):
     """
-    fill the gaussian mixture from the em sums, requiring that the covariance
-    matrix before psf deconvolution is not singular
+    fill the gaussian mixture from the em sums
 
-    We may want to relax that
+    Parameters
+    ----------
+    gmix: ngmix.GMix
+        The gaussian mixture before psf convolution
+    gmix_psf: ngmix.GMix
+        The gaussian mixture of the PSF (can be zero size for no psf)
+    gmix_conv: ngmix.GMix
+        The final convolved mixture
+    sums: sums structure
+        With dtype _sums_dtype
+    pix_area: float
+        Area of pixel
+
+    Returns
+    -------
+    None
     """
 
     minval = 1.0e-4
@@ -653,15 +810,15 @@ def em_run_fixcen(conf,
                   gmix_conv,
                   fill_zero_weight=False):
     """
-    run the EM algorithm, with fixed positions and a psf mixture to provide a
-    shapred minimim resolution
+    run the EM algorithm with fixed positions
 
     Parameters
     ----------
     conf: array
         Should have fields
 
-            tol: tolerance for stopping
+            tol: The fractional change in the log likelihood that implies
+                convergence
             miniter: minimum number of iterations
             maxiter: maximum number of iterations
             pixel_scale: pixel scale
@@ -681,6 +838,12 @@ def em_run_fixcen(conf,
     fill_zero_weight: bool
         If True, fill the zero weight pixels with the model on
         each iteration
+
+    Returns
+    -------
+    numiter, frac_diff, sky
+        number of iterations, fractional difference in log likelihood between
+        last two steps, and sky.  The sky may have been fit for.
     """
 
     gmix_set_norms(gmix_conv)
@@ -758,24 +921,31 @@ def em_run_fixcen(conf,
 
 
 @njit
-def fill_zero_weight_pixels(gmix, pixels, sky):
-    """
-    fill zero weight pixels with the model
-    """
-
-    for pixel in pixels:
-        if pixel['ierr'] <= 0.0:
-            val = gmix_eval_pixel_fast(gmix, pixel)
-            pixel['val'] = sky + val
-
-
-@njit
 def do_scratch_sums_fixcen(pixel, gmix_conv, sums, ngauss_psf, taudata):
     """
     do the basic sums for this pixel, using scratch space in the sums struct
 
     we may have multiple components per "object" so we update the
     sums accordingly
+
+    Parameters
+    ----------
+    pixel: pixel structure
+        Dtype should be ngmix.pixels._pixels_dtype
+    gmix_conv: ngmix.GMix
+        The current mixture, convolved by the PSF
+    sums: sums structure
+        With dtype _sums_dtype_fixcen
+    ngauss_psf: int
+        Number of gaussians in psf
+    taudata: tau data struct
+        With dtype _tau_dtype
+
+    Returns
+    -------
+    gsum, logL:
+        The total of the gaussians evaluated in the pixel and the
+        log likelihood
     """
 
     v = pixel['v']
@@ -838,6 +1008,19 @@ def do_scratch_sums_fixcen(pixel, gmix_conv, sums, ngauss_psf, taudata):
 def do_sums_fixcen(sums, pixel, gtot):
     """
     do the sums based on the scratch values
+
+    Parameters
+    ----------
+    sums: sums structure
+        With dtype _sums_dtype_fixcen
+    pixel: pixel structure
+        Dtype should be ngmix.pixels._pixels_dtype
+    gtot: float
+        The sum over gaussian values
+
+    Returns
+    -------
+    None
     """
 
     factor = pixel['val']/gtot
@@ -863,10 +1046,24 @@ def gmix_set_from_sums_fixcen(gmix,
                               sums,
                               pix_area):
     """
-    fill the gaussian mixture from the em sums, requiring that the covariance
-    matrix before psf deconvolution is not singular
+    fill the gaussian mixture from the em sums
 
-    We may want to relax that
+    Parameters
+    ----------
+    gmix: ngmix.GMix
+        The gaussian mixture before psf convolution
+    gmix_psf: ngmix.GMix
+        The gaussian mixture of the PSF (can be zero size for no psf)
+    gmix_conv: ngmix.GMix
+        The final convolved mixture
+    sums: sums structure
+        With dtype _sums_dtype_fixcen
+    pix_area: float
+        Area of pixel
+
+    Returns
+    -------
+    None
     """
 
     minval = 1.0e-4
@@ -927,6 +1124,17 @@ def gmix_set_from_sums_fixcen(gmix,
 def set_logtau_logdet(gmix, sums):
     """
     set log(tau) and log(det) for every gaussian
+
+    Parameters
+    -----------
+    gmix: ngmix.Gmix
+        gaussian Mixture
+    sums: array
+        Array with sums
+
+    Returns
+    -------
+    None
     """
 
     for i in range(gmix.size):
@@ -940,6 +1148,15 @@ def set_logtau_logdet(gmix, sums):
 def clear_sums_fixcen(sums):
     """
     set all sums to zero
+
+    Parameters
+    ----------
+    sums: array
+        Array with dtype _sums_dtype_fixcen
+
+    Returns
+    -------
+    None
     """
     sums['gi'][:] = 0.0
 
@@ -955,13 +1172,15 @@ def clear_sums_fixcen(sums):
 
 
 @njit
-def em_run_ponly(conf,
-                 pixels,
-                 sums,
-                 gmix,
-                 gmix_psf,
-                 gmix_conv,
-                 fill_zero_weight=False):
+def em_run_fluxonly(
+    conf,
+    pixels,
+    sums,
+    gmix,
+    gmix_psf,
+    gmix_conv,
+    fill_zero_weight=False,
+):
     """
     run the EM algorithm, allowing only fluxes to vary
 
@@ -969,7 +1188,8 @@ def em_run_ponly(conf,
     ----------
     conf: array
         Should have fields
-            tol: tolerance for stopping
+            tol: The fractional change in the log likelihood that implies
+                convergence
             miniter: minimum number of iterations
             maxiter: maximum number of iterations
             pixel_scale: pixel scale
@@ -979,7 +1199,7 @@ def em_run_ponly(conf,
     pixels: pixel array
         for the image/jacobian
     sums: array with fields
-        The sums array, a type _sums_dtype_ponly
+        The sums array, a type _sums_dtype_fluxonly
     gmix: gauss2d array
         The initial mixture.  The final result is also stored in this array.
     gmix_psf: gauss2d array
@@ -989,6 +1209,12 @@ def em_run_ponly(conf,
     fill_zero_weight: bool
         If True, fill the zero weight pixels with the model on
         each iteration
+
+    Returns
+    -------
+    numiter, frac_diff, sky
+        number of iterations, fractional difference in log likelihood between
+        last two steps, and sky.  The sky may have been fit for.
     """
 
     gmix_set_norms(gmix_conv)
@@ -1005,7 +1231,7 @@ def em_run_ponly(conf,
 
     for i in range(conf['maxiter']):
         skysum = 0.0
-        clear_sums_ponly(sums)
+        clear_sums_fluxonly(sums)
 
         if fill_zero_weight:
             fill_zero_weight_pixels(gmix_conv, pixels, sky)
@@ -1013,7 +1239,7 @@ def em_run_ponly(conf,
         for pixel in pixels:
 
             # this fills some fields of sums, as well as return
-            gsum = do_scratch_sums_ponly(pixel, gmix_conv, sums, ngauss_psf)
+            gsum = do_scratch_sums_fluxonly(pixel, gmix_conv, sums, ngauss_psf)
 
             gtot = gsum + sky
             if gtot == 0.0:
@@ -1021,9 +1247,9 @@ def em_run_ponly(conf,
 
             skysum += sky*pixel['val']/gtot
 
-            do_sums_ponly(sums, pixel, gtot)
+            do_sums_fluxonly(sums, pixel, gtot)
 
-        gmix_set_from_sums_ponly(
+        gmix_set_from_sums_fluxonly(
             gmix,
             gmix_psf,
             gmix_conv,
@@ -1054,10 +1280,27 @@ def em_run_ponly(conf,
 
 
 @njit
-def do_scratch_sums_ponly(pixel, gmix_conv, sums, ngauss_psf):
+def do_scratch_sums_fluxonly(pixel, gmix_conv, sums, ngauss_psf):
     """
     do the basic sums for this pixel, using
     scratch space in the sums struct
+
+    Parameters
+    ----------
+    pixel: pixel structure
+        Dtype should be ngmix.pixels._pixels_dtype
+    gmix_conv: ngmix.GMix
+        The current mixture, convolved by the PSF
+    sums: sums structure
+        With dtype _sums_dtype_fluxonly
+    ngauss_psf: int
+        Number of gaussians in psf
+
+    Returns
+    -------
+    gsum, logL:
+        The total of the gaussians evaluated in the pixel and the
+        log likelihood
     """
 
     v = pixel['v']
@@ -1101,9 +1344,22 @@ def do_scratch_sums_ponly(pixel, gmix_conv, sums, ngauss_psf):
 
 
 @njit
-def do_sums_ponly(sums, pixel, gtot):
+def do_sums_fluxonly(sums, pixel, gtot):
     """
     do the sums based on the scratch values
+
+    Parameters
+    ----------
+    sums: sums structure
+        With dtype _sums_dtype_fluxonly
+    pixel: pixel structure
+        Dtype should be ngmix.pixels._pixels_dtype
+    gtot: float
+        The sum over gaussian values
+
+    Returns
+    -------
+    None
     """
 
     factor = pixel['val']/gtot
@@ -1119,13 +1375,32 @@ def do_sums_ponly(sums, pixel, gtot):
 
 
 @njit
-def gmix_set_from_sums_ponly(gmix,
-                             gmix_psf,
-                             gmix_conv,
-                             sums,
-                             pix_area):
+def gmix_set_from_sums_fluxonly(
+    gmix,
+    gmix_psf,
+    gmix_conv,
+    sums,
+    pix_area,
+):
     """
     fill the gaussian mixture from the em sums
+
+    Parameters
+    ----------
+    gmix: ngmix.GMix
+        The gaussian mixture before psf convolution
+    gmix_psf: ngmix.GMix
+        The gaussian mixture of the PSF (can be zero size for no psf)
+    gmix_conv: ngmix.GMix
+        The final convolved mixture
+    sums: sums structure
+        With dtype _sums_dtype_fluxonly
+    pix_area: float
+        Area of pixel
+
+    Returns
+    -------
+    None
     """
 
     n_gauss = gmix.size
@@ -1152,9 +1427,18 @@ def gmix_set_from_sums_ponly(gmix,
 
 
 @njit
-def clear_sums_ponly(sums):
+def clear_sums_fluxonly(sums):
     """
     set all sums to zero
+
+    Parameters
+    ----------
+    sums: array
+        Array with dtype _sums_dtype_fluxonly
+
+    Returns
+    -------
+    None
     """
     sums['gi'][:] = 0.0
 
@@ -1163,71 +1447,18 @@ def clear_sums_ponly(sums):
 
 
 @njit
-def em_convolve_1gauss(gmix, gmix_psf, fix=False):
-    psf_irr = gmix_psf['irr'][0]
-    psf_irc = gmix_psf['irc'][0]
-    psf_icc = gmix_psf['icc'][0]
-
-    for i in range(gmix.size):
-        gauss = gmix[i]
-
-        irr = gauss['irr'] + psf_irr
-        irc = gauss['irc'] + psf_irc
-        icc = gauss['icc'] + psf_icc
-
-        if fix:
-            det = irr*icc - irc**2
-            if det < GMIX_LOW_DETVAL:
-                T = irr + icc
-                irr = icc = T/2
-                irc = 0.0
-
-        gauss2d_set(
-            gauss,
-            gauss['p'],
-            gauss['row'],
-            gauss['col'],
-            irr,
-            irc,
-            icc,
-        )
-
-
-@njit
-def em_deconvolve_1gauss(gmix, gmix_psf):
-    psf_irr = gmix_psf['irr'][0]
-    psf_irc = gmix_psf['irc'][0]
-    psf_icc = gmix_psf['icc'][0]
-
-    for i in range(gmix.size):
-        gauss = gmix[i]
-
-        print('p:', gauss['p'])
-        print('T before:', gauss['irr'] + gauss['icc'])
-        gauss2d_set(
-            gauss,
-            gauss['p'],
-            gauss['row'],
-            gauss['col'],
-            gauss['irr'] - psf_irr,
-            gauss['irc'] - psf_irc,
-            gauss['icc'] - psf_icc,
-        )
-        print('T after:', gauss['irr'] + gauss['icc'])
-
-
-@njit
-def get_flux(gsum, g2sum, gIsum):
-    """
-    calculate the flux from the cross-correlation sums
-    """
-    return gsum*gIsum/g2sum
-
-
-@njit
 def gmix_get_moms(gmix):
     """
     get row, col, irr, irc, icc, psum
+
+    Parameters
+    ----------
+    gmix: ngmix.Gmix
+        Gaussian mixture
+
+    Returns
+    -------
+    return row, col, irr, irc, icc, psum
     """
 
     row, col, psum = gmix_get_cen(gmix)
@@ -1250,6 +1481,31 @@ def gmix_get_moms(gmix):
     icc /= psum
 
     return row, col, irr, irc, icc, psum
+
+
+@njit
+def fill_zero_weight_pixels(gmix, pixels, sky):
+    """
+    fill zero weight pixels with the model
+
+    Paramters
+    ---------
+    gmix: ngmix.Gmix
+        The mixture with which to evaluate in the zero weight pixels
+    pixels: array of pixels
+        The pixels to be modified
+    sky: float
+        Value of the sky in the pixels
+
+    Returns
+    -------
+    None
+    """
+
+    for pixel in pixels:
+        if pixel['ierr'] <= 0.0:
+            val = gmix_eval_pixel_fast(gmix, pixel)
+            pixel['val'] = sky + val
 
 
 _em_conf_dtype = [
@@ -1314,13 +1570,13 @@ _tau_dtype = [
 ]
 _tau_dtype = np.dtype(_tau_dtype)
 
-_sums_dtype_ponly = [
+_sums_dtype_fluxonly = [
     ('gi', 'f8'),
 
     # sums over all pixels
     ('pnew', 'f8'),
 ]
-_sums_dtype_ponly = np.dtype(_sums_dtype_ponly, align=True)
+_sums_dtype_fluxonly = np.dtype(_sums_dtype_fluxonly, align=True)
 
 
 def test_1gauss(
