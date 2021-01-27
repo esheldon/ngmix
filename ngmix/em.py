@@ -7,7 +7,7 @@ from numba import njit
 
 from .gexceptions import GMixRangeError, GMixMaxIterEM
 from .priors import srandu
-from .jacobian import Jacobian, UnitJacobian
+from .jacobian import Jacobian, UnitJacobian, DiagonalJacobian
 from .observation import Observation
 
 from .gmix import GMix, GMixModel
@@ -1533,7 +1533,7 @@ def test_1gauss_jacob(
     return gmfit
 
 
-def test_2gauss(counts=100.0, noise=0.0, show=False):
+def test_2gauss(counts=100.0, noise=0.0, show=False, scale=1.0):
     import time
 
     rng = np.random.RandomState(42587)
@@ -1614,6 +1614,7 @@ def test_2gauss(counts=100.0, noise=0.0, show=False):
     print("results")
     print(res)
 
+    print('im sum:', im.sum())
     if show:
         try:
             import images
@@ -1621,6 +1622,102 @@ def test_2gauss(counts=100.0, noise=0.0, show=False):
             from espy import images
 
         imfit = em.make_image()
+        print('imfit sum:', imfit.sum())
+        images.compare_images(im, imfit, colorbar=True)
+
+    return tm
+
+
+def test_2gauss_jacob(counts=100.0, noise=0.0, show=False, scale=0.263):
+    import time
+
+    rng = np.random.RandomState(3812)
+
+    dims = [25, 25]
+
+    cen = (np.array(dims) - 1.0) / 2.0
+    jacob = DiagonalJacobian(scale=scale, row=cen[0], col=cen[1])
+
+    cen1 = [-3.25*scale, -3.25*scale]
+    cen2 = [3.0*scale, 0.5*scale]
+
+    e1_1 = 0.1
+    e2_1 = 0.05
+    T_1 = 8.0 * scale**2
+    counts_1 = 0.4 * counts
+    irr_1 = T_1 / 2.0 * (1 - e1_1)
+    irc_1 = T_1 / 2.0 * e2_1
+    icc_1 = T_1 / 2.0 * (1 + e1_1)
+
+    e1_2 = -0.2
+    e2_2 = -0.1
+    T_2 = 4.0 * scale**2
+    counts_2 = 0.6 * counts
+    irr_2 = T_2 / 2.0 * (1 - e1_2)
+    irc_2 = T_2 / 2.0 * e2_2
+    icc_2 = T_2 / 2.0 * (1 + e1_2)
+
+    pars = [
+        counts_1,
+        cen1[0],
+        cen1[1],
+        irr_1,
+        irc_1,
+        icc_1,
+        counts_2,
+        cen2[0],
+        cen2[1],
+        irr_2,
+        irc_2,
+        icc_2,
+    ]
+
+    gm = GMix(pars=pars)
+    print("gmix true:")
+    print(gm)
+
+    im0 = gm.make_image(dims, jacobian=jacob)
+    im = im0 + noise * np.random.randn(im0.size).reshape(dims)
+
+    imsky, sky = prep_image(im)
+    print('sky:', sky)
+
+    obs = Observation(imsky, jacobian=jacob)
+
+    gm_guess = gm.copy()
+    gm_guess._data["p"] += counts_1/10 * srandu(2, rng=rng)
+    gm_guess._data["row"] += 4 * srandu(2, rng=rng)
+    gm_guess._data["col"] += 4 * srandu(2, rng=rng)
+    gm_guess._data["irr"] += 0.5 * srandu(2, rng=rng)
+    gm_guess._data["irc"] += 0.5 * srandu(2, rng=rng)
+    gm_guess._data["icc"] += 0.5 * srandu(2, rng=rng)
+
+    print("guess:")
+    print(gm_guess)
+
+    for i in range(2):
+        tm0 = time.time()
+        em = GMixEM(obs)
+        em.go(gm_guess, sky)
+        tm = time.time() - tm0
+    print("time:", tm, "seconds")
+
+    gmfit = em.get_gmix()
+    res = em.get_result()
+    print("best fit:")
+    print(gmfit)
+    print("results")
+    print(res)
+
+    print('im sum:', im.sum())
+    if show:
+        try:
+            import images
+        except ImportError:
+            from espy import images
+
+        imfit = em.make_image()
+        print('imfit sum:', imfit.sum())
         images.compare_images(im, imfit, colorbar=True)
 
     return tm
