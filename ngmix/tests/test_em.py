@@ -1,13 +1,13 @@
 import pytest
 import numpy as np
 
-from ngmix import DiagonalJacobian, GMix
+from ngmix import DiagonalJacobian, GMix, GMixModel
 from ngmix.em import GMixEM, prep_image
 from ngmix import Observation
 from ngmix.priors import srandu
 
 
-def get_obs(*, rng, ngauss, pixel_scale, noise=0.0):
+def get_obs(*, rng, ngauss, pixel_scale, noise=0.0, withpsf=False):
 
     counts = 100.0
     dims = [25, 25]
@@ -15,6 +15,10 @@ def get_obs(*, rng, ngauss, pixel_scale, noise=0.0):
     jacob = DiagonalJacobian(scale=pixel_scale, row=cen[0], col=cen[1])
 
     T_1 = 0.55  # arcsec**2
+    if withpsf:
+        Tpsf = 0.27
+        T_1 = T_1 - Tpsf
+        psf_gm = GMixModel([0.0, 0.0, 0.0, 0.0, Tpsf, 1.0], "turb")
 
     e1_1 = 0.1
     e2_1 = 0.05
@@ -77,9 +81,20 @@ def get_obs(*, rng, ngauss, pixel_scale, noise=0.0):
         ]
 
     gm = GMix(pars=pars)
-    im0 = gm.make_image(dims, jacobian=jacob)
+
+    if withpsf:
+        gmconv = gm.convolve(psf_gm)
+        psf_im = psf_gm.make_image(dims, jacobian=jacob)
+        psf_obs = Observation(psf_im, jacobian=jacob)
+        psf_obs.set_gmix(psf_gm)
+
+        im0 = gmconv.make_image(dims, jacobian=jacob)
+    else:
+        im0 = gm.make_image(dims, jacobian=jacob)
+        psf_obs = None
+
     im = im0 + noise * np.random.randn(im0.size).reshape(dims)
-    obs = Observation(im, jacobian=jacob)
+    obs = Observation(im, jacobian=jacob, psf=psf_obs)
 
     return obs, gm
 
@@ -87,8 +102,8 @@ def get_obs(*, rng, ngauss, pixel_scale, noise=0.0):
 @pytest.mark.parametrize('noise', [0.0, 0.05])
 def test_1gauss(noise):
     """
-    see if we can recover the input with no noise to
-    high precision even with a bad guess
+    see if we can recover the input with and without noise to high precision
+    even with a bad guess
 
     Use ngmix to make the image to make sure there are
     no pixelization effects
@@ -132,14 +147,14 @@ def test_1gauss(noise):
     # check reconstructed image allowing for noise
     imfit = em.make_image()
     imtol = 0.001 / pixel_scale**2 + noise*5
-    assert np.all((imfit - obs.image) < imtol)
+    assert np.all(np.abs(imfit - obs.image) < imtol)
 
 
 @pytest.mark.parametrize('noise', [0.0, 0.05])
 def test_2gauss(noise):
     """
-    see if we can recover the input with no noise to
-    high precision even with a bad guess
+    see if we can recover the input with and without noise to high precision
+    even with a bad guess
 
     Use ngmix to make the image to make sure there are
     no pixelization effects
@@ -201,4 +216,76 @@ def test_2gauss(noise):
     # check reconstructed image allowing for noise
     imfit = em.make_image()
     imtol = 0.001 / pixel_scale**2 + noise*5
-    assert np.all((imfit - obs.image) < imtol)
+    assert np.all(np.abs(imfit - obs.image) < imtol)
+
+
+@pytest.mark.parametrize('noise', [0.0, 0.05])
+def test_2gauss_withpsf(noise):
+    """
+    see if we can recover the input with and without noise to high precision
+    even with a bad guess, with a psf convolved
+
+    Use ngmix to make the image to make sure there are
+    no pixelization effects
+    """
+
+    pixel_scale = 0.263
+    rng = np.random.RandomState(42587)
+    ngauss = 2
+    obs, gm = get_obs(
+        rng=rng, ngauss=ngauss, pixel_scale=0.263, noise=noise, withpsf=True,
+    )
+
+    imsky, sky = prep_image(obs.image)
+    obs_sky = Observation(imsky, jacobian=obs.jacobian, psf=obs.psf)
+
+    pars = gm.get_full_pars()
+    counts_1 = pars[0]
+
+    gm_guess = gm.copy()
+    gm_guess._data["p"] += counts_1/10 * srandu(2, rng=rng)
+    gm_guess._data["row"] += pixel_scale * srandu(2, rng=rng)
+    gm_guess._data["col"] += pixel_scale * srandu(2, rng=rng)
+    gm_guess._data["irr"] += 0.1 * pixel_scale**2 * srandu(2, rng=rng)
+    gm_guess._data["irc"] += 0.1 * pixel_scale**2 * srandu(2, rng=rng)
+    gm_guess._data["icc"] += 0.1 * pixel_scale**2 * srandu(2, rng=rng)
+
+    em = GMixEM(obs_sky)
+    em.go(gm_guess, sky)
+
+    fit_gm = em.get_gmix()
+    res = em.get_result()
+    assert res['flags'] == 0
+
+    fitpars = fit_gm.get_full_pars()
+
+    f1 = pars[0]
+    f2 = pars[6]
+    if f1 > f2:
+        indices = [1, 0]
+    else:
+        indices = [0, 1]
+
+    # only check pars for no noise
+    if noise == 0.0:
+        for i in range(ngauss):
+            start = i*6
+            end = (i+1)*6
+
+            truepars = pars[start:end]
+
+            fitstart = indices[i]*6
+            fitend = (indices[i]+1)*6
+            thispars = fitpars[fitstart:fitend]
+
+            tol = 1.0e-4
+            assert (thispars[0]/truepars[0]-1) < tol
+            assert (thispars[3]/truepars[3]-1) < tol
+            assert (thispars[4]/truepars[4]-1) < tol
+            assert (thispars[5]/truepars[5]-1) < tol
+
+    # check reconstructed image allowing for noise
+    imfit = em.make_image()
+    imtol = 0.001 / pixel_scale**2 + noise*5
+    # assert np.all(np.abs(imfit - obs.image) < imtol)
+    assert np.abs(imfit - obs.image).max() < imtol

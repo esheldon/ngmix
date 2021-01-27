@@ -146,7 +146,8 @@ class GMixEM(object):
         """
         Get an image of the best fit mixture
         """
-        return self._gm.make_image(
+        gm = self.get_convolved_gmix()
+        return gm.make_image(
             self._obs.image.shape,
             jacobian=self._obs.jacobian,
         )
@@ -1534,7 +1535,6 @@ def test_1gauss_jacob(
 
 
 def test_2gauss(counts=100.0, noise=0.0, show=False, scale=1.0):
-    import time
 
     rng = np.random.RandomState(42587)
 
@@ -1600,12 +1600,8 @@ def test_2gauss(counts=100.0, noise=0.0, show=False, scale=1.0):
     print("guess:")
     print(gm_guess)
 
-    for i in range(2):
-        tm0 = time.time()
-        em = GMixEM(obs)
-        em.go(gm_guess, sky)
-        tm = time.time() - tm0
-    print("time:", tm, "seconds")
+    em = GMixEM(obs)
+    em.go(gm_guess, sky)
 
     gmfit = em.get_gmix()
     res = em.get_result()
@@ -1625,12 +1621,8 @@ def test_2gauss(counts=100.0, noise=0.0, show=False, scale=1.0):
         print('imfit sum:', imfit.sum())
         images.compare_images(im, imfit, colorbar=True)
 
-    return tm
-
 
 def test_2gauss_jacob(counts=100.0, noise=0.0, show=False, scale=0.263):
-    import time
-
     rng = np.random.RandomState(3812)
 
     dims = [25, 25]
@@ -1686,21 +1678,18 @@ def test_2gauss_jacob(counts=100.0, noise=0.0, show=False, scale=0.263):
 
     gm_guess = gm.copy()
     gm_guess._data["p"] += counts_1/10 * srandu(2, rng=rng)
-    gm_guess._data["row"] += 4 * srandu(2, rng=rng)
-    gm_guess._data["col"] += 4 * srandu(2, rng=rng)
-    gm_guess._data["irr"] += 0.5 * srandu(2, rng=rng)
-    gm_guess._data["irc"] += 0.5 * srandu(2, rng=rng)
-    gm_guess._data["icc"] += 0.5 * srandu(2, rng=rng)
+
+    gm_guess._data["row"] += 4 * scale * srandu(2, rng=rng)
+    gm_guess._data["col"] += 4 * scale * srandu(2, rng=rng)
+    gm_guess._data["irr"] += 0.1 * scale**2 * srandu(2, rng=rng)
+    gm_guess._data["irc"] += 0.1 * scale**2 * srandu(2, rng=rng)
+    gm_guess._data["icc"] += 0.1 * scale**2 * srandu(2, rng=rng)
 
     print("guess:")
     print(gm_guess)
 
-    for i in range(2):
-        tm0 = time.time()
-        em = GMixEM(obs)
-        em.go(gm_guess, sky)
-        tm = time.time() - tm0
-    print("time:", tm, "seconds")
+    em = GMixEM(obs)
+    em.go(gm_guess, sky)
 
     gmfit = em.get_gmix()
     res = em.get_result()
@@ -1720,4 +1709,101 @@ def test_2gauss_jacob(counts=100.0, noise=0.0, show=False, scale=0.263):
         print('imfit sum:', imfit.sum())
         images.compare_images(im, imfit, colorbar=True)
 
-    return tm
+
+def test_2gauss_psf(counts=100.0, noise=0.0, show=False):
+
+    rng = np.random.RandomState(3812)
+
+    dims = [25, 25]
+
+    cen = (np.array(dims) - 1.0) / 2.0
+    scale = 0.263
+    jacob = DiagonalJacobian(scale=scale, row=cen[0], col=cen[1])
+
+    cen1 = [-3.25*scale, -3.25*scale]
+    cen2 = [3.0*scale, 0.5*scale]
+
+    e1_1 = 0.1
+    e2_1 = 0.05
+    T_1 = 8.0/2 * scale**2
+    counts_1 = 0.4 * counts
+    irr_1 = T_1 / 2.0 * (1 - e1_1)
+    irc_1 = T_1 / 2.0 * e2_1
+    icc_1 = T_1 / 2.0 * (1 + e1_1)
+
+    e1_2 = -0.2
+    e2_2 = -0.1
+    T_2 = 4.0/2 * scale**2
+    counts_2 = 0.6 * counts
+    irr_2 = T_2 / 2.0 * (1 - e1_2)
+    irc_2 = T_2 / 2.0 * e2_2
+    icc_2 = T_2 / 2.0 * (1 + e1_2)
+
+    pars = [
+        counts_1,
+        cen1[0],
+        cen1[1],
+        irr_1,
+        irc_1,
+        icc_1,
+        counts_2,
+        cen2[0],
+        cen2[1],
+        irr_2,
+        irc_2,
+        icc_2,
+    ]
+
+    gm = GMix(pars=pars)
+
+    Tpsf = 4.0*scale**2
+    psf_gm = GMixModel([0.0, 0.0, 0.0, 0.0, Tpsf, 1.0], "turb")
+
+    gmconv = gm.convolve(psf_gm)
+    print("gmix true:")
+    print(gm)
+
+    im0 = gmconv.make_image(dims, jacobian=jacob)
+    im = im0 + noise * np.random.randn(im0.size).reshape(dims)
+
+    imsky, sky = prep_image(im)
+    print('sky:', sky)
+
+    psf_im = psf_gm.make_image(dims, jacobian=jacob)
+    psf_obs = Observation(psf_im, jacobian=jacob)
+    psf_obs.set_gmix(psf_gm)
+    obs = Observation(imsky, jacobian=jacob, psf=psf_obs)
+
+    gm_guess = gm.copy()
+    gm_guess._data["p"] += counts_1/10 * srandu(2, rng=rng)
+    gm_guess._data["row"] += 4 * scale * srandu(2, rng=rng)
+    gm_guess._data["col"] += 4 * scale * srandu(2, rng=rng)
+    gm_guess._data["irr"] += 0.1 * scale**2 * srandu(2, rng=rng)
+    gm_guess._data["irc"] += 0.1 * scale**2 * srandu(2, rng=rng)
+    gm_guess._data["icc"] += 0.1 * scale**2 * srandu(2, rng=rng)
+
+    print("guess:")
+    print(gm_guess)
+
+    em = GMixEM(obs)
+    # em = GMixEMFixCen(obs)
+    em.go(gm_guess, sky)
+
+    res = em.get_result()
+    if res['flags'] == 0:
+        gmfit = em.get_gmix()
+        print("best fit:")
+        print(gmfit)
+    print("results")
+    print(res)
+
+    print('im sum:', im.sum())
+    if show and res['flags'] == 0:
+        try:
+            import images
+        except ImportError:
+            from espy import images
+
+        imfit = em.make_image()
+        print('imfit sum:', imfit.sum())
+        images.compare_images(im, imfit, colorbar=True)
