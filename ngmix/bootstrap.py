@@ -1971,7 +1971,7 @@ class PSFRunnerEM(object):
         The guess for the overall T
     ngauss: int
         Number of gaussians, 1 to 5
-    em_pars: dict or array
+    em_pars: dict
         Can have entries
         miniter: The minimum number of iterations
         maxiter: The maximum number of iterations
