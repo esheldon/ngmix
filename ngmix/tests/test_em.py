@@ -116,7 +116,7 @@ def get_psf_obs():
 
 
 @pytest.mark.parametrize('noise', [0.0, 0.05])
-def test_1gauss(noise):
+def test_em_1gauss(noise):
     """
     see if we can recover the input with and without noise to high precision
     even with a bad guess
@@ -163,7 +163,7 @@ def test_1gauss(noise):
 
 
 @pytest.mark.parametrize('noise', [0.0, 0.05])
-def test_2gauss(noise):
+def test_em_2gauss(noise):
     """
     see if we can recover the input with and without noise to high precision
     even with a bad guess
@@ -229,7 +229,7 @@ def test_2gauss(noise):
 
 
 @pytest.mark.parametrize('noise', [0.0, 0.05])
-def test_2gauss_withpsf(noise):
+def test_em_2gauss_withpsf(noise):
     """
     see if we can recover the input with and without noise to high precision
     even with a bad guess, with a psf convolved
@@ -295,7 +295,7 @@ def test_2gauss_withpsf(noise):
     assert np.all(np.abs(imfit - obs.image) < imtol)
 
 
-def test_psf_fit_runner():
+def test_em_psf_fit_runner():
     """
     see if we can recover the input with and without noise to high precision
     even with a bad guess
