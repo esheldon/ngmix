@@ -262,10 +262,6 @@ class GMixEM(object):
             guess for the algorithm.  This should be *before* psf convolution.
         sky: number
             The sky value added to the image
-
-        Returns
-        -------
-        None
         """
 
         if hasattr(self, '_gm'):
@@ -695,10 +691,6 @@ def do_sums(sums, pixel, gtot):
         Dtype should be ngmix.pixels._pixels_dtype
     gtot: float
         The sum over gaussian values
-
-    Returns
-    -------
-    None
     """
 
     factor = pixel['val']/gtot
@@ -742,10 +734,6 @@ def gmix_set_from_sums(gmix,
         With dtype _sums_dtype
     pix_area: float
         Area of pixel
-
-    Returns
-    -------
-    None
     """
 
     minval = 1.0e-4
@@ -1020,10 +1008,6 @@ def do_sums_fixcen(sums, pixel, gtot):
         Dtype should be ngmix.pixels._pixels_dtype
     gtot: float
         The sum over gaussian values
-
-    Returns
-    -------
-    None
     """
 
     factor = pixel['val']/gtot
@@ -1063,10 +1047,6 @@ def gmix_set_from_sums_fixcen(gmix,
         With dtype _sums_dtype_fixcen
     pix_area: float
         Area of pixel
-
-    Returns
-    -------
-    None
     """
 
     minval = 1.0e-4
@@ -1134,10 +1114,6 @@ def set_logtau_logdet(gmix, sums):
         gaussian Mixture
     sums: array
         Array with sums
-
-    Returns
-    -------
-    None
     """
 
     for i in range(gmix.size):
@@ -1156,10 +1132,6 @@ def clear_sums_fixcen(sums):
     ----------
     sums: array
         Array with dtype _sums_dtype_fixcen
-
-    Returns
-    -------
-    None
     """
     sums['gi'][:] = 0.0
 
@@ -1359,10 +1331,6 @@ def do_sums_fluxonly(sums, pixel, gtot):
         Dtype should be ngmix.pixels._pixels_dtype
     gtot: float
         The sum over gaussian values
-
-    Returns
-    -------
-    None
     """
 
     factor = pixel['val']/gtot
@@ -1400,10 +1368,6 @@ def gmix_set_from_sums_fluxonly(
         With dtype _sums_dtype_fluxonly
     pix_area: float
         Area of pixel
-
-    Returns
-    -------
-    None
     """
 
     n_gauss = gmix.size
@@ -1438,10 +1402,6 @@ def clear_sums_fluxonly(sums):
     ----------
     sums: array
         Array with dtype _sums_dtype_fluxonly
-
-    Returns
-    -------
-    None
     """
     sums['gi'][:] = 0.0
 
@@ -1499,10 +1459,6 @@ def fill_zero_weight_pixels(gmix, pixels, sky):
         The pixels to be modified
     sky: float
         Value of the sky in the pixels
-
-    Returns
-    -------
-    None
     """
 
     for pixel in pixels:
