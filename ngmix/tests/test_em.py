@@ -152,6 +152,8 @@ def test_em_1gauss(noise):
     if noise == 0.0:
         tol = 1.0e-4
         assert (fitpars[0]/pars[0]-1) < tol
+        assert (fitpars[1]-pars[1]) < pixel_scale/10
+        assert (fitpars[2]-pars[2]) < pixel_scale/10
         assert (fitpars[3]/pars[3]-1) < tol
         assert (fitpars[4]/pars[4]-1) < tol
         assert (fitpars[5]/pars[5]-1) < tol
@@ -218,6 +220,8 @@ def test_em_2gauss(noise):
 
             tol = 1.0e-4
             assert (thispars[0]/truepars[0]-1) < tol
+            assert (thispars[1]-truepars[1]) < pixel_scale/10
+            assert (thispars[2]-truepars[2]) < pixel_scale/10
             assert (thispars[3]/truepars[3]-1) < tol
             assert (thispars[4]/truepars[4]-1) < tol
             assert (thispars[5]/truepars[5]-1) < tol
@@ -285,6 +289,8 @@ def test_em_2gauss_withpsf(noise):
 
             tol = 1.0e-4
             assert (thispars[0]/truepars[0]-1) < tol
+            assert (thispars[1]-truepars[1]) < pixel_scale/10
+            assert (thispars[2]-truepars[2]) < pixel_scale/10
             assert (thispars[3]/truepars[3]-1) < tol
             assert (thispars[4]/truepars[4]-1) < tol
             assert (thispars[5]/truepars[5]-1) < tol
