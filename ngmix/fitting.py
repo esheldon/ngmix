@@ -68,24 +68,11 @@ class FitterBase(object):
 
     """
 
-    def __init__(self, obs, model, **keys):
-        self.keys = keys
+    def __init__(self, *, model, prior=None):
 
-        self.use_round_T = keys.get("use_round_T", False)
-        assert self.use_round_T is False, "no longer support round T"
-
-        self.set_obs(obs)
-
-        self.prior = keys.get("prior", None)
-
-        # in this case, image, weight, jacobian, psf are going to
-        # be lists of lists.
-
+        self.prior = prior
         self.model = gmix.get_model_num(model)
         self.model_name = gmix.get_model_name(self.model)
-        self._set_npars()
-
-        self._set_totpix()
 
         self._gmix_all = None
 
@@ -127,7 +114,7 @@ class FitterBase(object):
             Band index, default 0
         """
         res = self.get_result()
-        pars = self.get_band_pars(res["pars"], band)
+        pars = self.get_band_pars(pars=res["pars"], band=band)
         return gmix.make_gmix_model(pars, self.model)
 
     def get_convolved_gmix(self, band=0, obsnum=0):
@@ -152,7 +139,7 @@ class FitterBase(object):
 
         return gm
 
-    def set_obs(self, obs_in):
+    def _set_obs(self, obs_in):
         """
         Input should be an Observation, ObsList, or MultiBandObsList
         """
@@ -241,7 +228,7 @@ class FitterBase(object):
 
                 for obs, gm in zip(obs_list, gmix_list):
 
-                    res = gm.get_loglike(obs, more=more,)
+                    res = gm.get_loglike(obs, more=more)
 
                     if more:
                         lnprob += res["loglike"]
@@ -319,7 +306,7 @@ class FitterBase(object):
             gmix_list = GMixList()
 
             # pars for this band, in linear space
-            band_pars = self.get_band_pars(pars, band)
+            band_pars = self.get_band_pars(pars=pars, band=band)
 
             for obs in obs_list:
                 gm0 = self._make_model(band_pars)
@@ -359,7 +346,7 @@ class FitterBase(object):
             gmix_list0 = self._gmix_all0[band]
             gmix_list = self._gmix_all[band]
 
-            band_pars = self.get_band_pars(pars, band)
+            band_pars = self.get_band_pars(pars=pars, band=band)
 
             for i, obs in enumerate(obs_list):
 
@@ -379,7 +366,7 @@ class FitterBase(object):
         for band, obs_list in enumerate(self.obs):
             gmix_list = self._gmix_all[band]
 
-            band_pars = self.get_band_pars(pars, band)
+            band_pars = self.get_band_pars(pars=pars, band=band)
 
             for i, obs in enumerate(obs_list):
 
@@ -604,7 +591,6 @@ class TemplateFluxFitter(FitterBase):
 
     def __init__(self, obs, **keys):
 
-        self.keys = keys
         self.do_psf = keys.get("do_psf", False)
         self.cen = keys.get("cen", None)
 
@@ -889,39 +875,51 @@ class MaxSimple(FitterBase):
 
     """
 
-    def __init__(self, obs, model, method="Nelder-Mead", options=None, **keys):
-        super(MaxSimple, self).__init__(obs, model, **keys)
-        self._obs = obs
+    def __init__(self, *, model, prior=None, fit_pars=None):
+        super().__init__(model=model, prior=prior)
 
-        self._model = model
-
-        self._band_pars = numpy.zeros(6)
-
-        self._method = method
-
-        if method == "Nelder-Mead":
-            if options is not None:
-                self._options = options
-            else:
-                self._options = {}
+        if fit_pars is None:
+            self.fit_pars = {}
         else:
-            self._options = options
+            self.fit_pars = fit_pars.copy()
 
-            self._max_keys = {}
-            tocheck = [
-                "jac",
-                "hess",
-                "hessp",
-                "bounds",
-                "constraints",
-                "tol",
-                "callback",
-            ]
-            for key in tocheck:
-                if key in keys:
-                    self._max_keys[key] = keys[key]
+    def go(self, *, obs, guess):
+        """
+        Run maximizer and set the result.
 
-    def _setup_data(self, guess):
+        parameters
+        ----------
+        guess: array/sequence
+            Starting guess for the fitter
+        """
+        import scipy.optimize
+
+        guess = numpy.array(guess, dtype="f8", copy=False)
+        self._setup_data(obs=obs, guess=guess)
+
+        result = scipy.optimize.minimize(
+            self.neglnprob,
+            guess,
+            **self.fit_pars
+        )
+        self._result = result
+
+        result["model"] = self.model_name
+        if result["success"]:
+            result["flags"] = 0
+        else:
+            result["flags"] = result["status"]
+
+        if "x" in result:
+            pars = result["x"]
+            result["pars"] = pars
+            result["g"] = pars[2:2+2]
+
+            # based on last entry
+            fit_stats = self.get_fit_stats(pars)
+            result.update(fit_stats)
+
+    def _setup_data(self, *, obs, guess):
         """
         initialize the gaussian mixtures
         """
@@ -929,7 +927,11 @@ class MaxSimple(FitterBase):
         if hasattr(self, "_result"):
             del self._result
 
-        self.flags = 0
+        self._set_obs(obs)
+        self._set_totpix()
+        self._set_npars()
+
+        self._band_pars = zeros(6)
 
         npars = guess.size
         mess = "guess has npars=%d, expected %d" % (npars, self.npars)
@@ -941,88 +943,60 @@ class MaxSimple(FitterBase):
         except ZeroDivisionError:
             raise GMixRangeError("got zero division")
 
-    def get_band_pars(self, pars_in, band):
+    def get_band_pars(self, *, pars, band):
         """
         Get linear pars for the specified band
         """
 
-        pars = self._band_pars
+        band_pars = self._band_pars
 
-        pars[:] = pars_in[:]
-        return pars
+        band_pars[0:5] = pars[0:5]
+        band_pars[5] = pars[5 + band]
+
+        return band_pars
 
     def neglnprob(self, pars):
         return -1.0 * self.calc_lnprob(pars)
 
-    def run_max(self, guess):
-        """
-        Run maximizer and set the result.
 
-        parameters
-        ----------
-        guess: array/sequence
-            Starting guess for the fitter
-        """
-        if self._method in ["nm", "Nelder-Mead"]:
-            self.run_max_nm(guess, **self._options)
+class NMSimple(FitterBase):
+    """
+    A class for direct maximization of the likelihood.
+    Useful for seeding model parameters.
+
+    some keywords to control fitting
+    -----------------------------------------------------
+    xtol: float, optional
+        Tolerance in the vertices, relative to the vertex with
+        the lowest function value.  Default 1.0e-4
+    ftol: float, optional
+        Tolerance in the function value, relative to the
+        lowest function value for all vertices.  Default 1.0e-4
+    maxiter: int, optional
+        Default is npars*200
+    maxfev:
+        Default is npars*200
+
+    """
+
+    def __init__(self, *, model, prior=None, fit_pars=None):
+        super().__init__(model=model, prior=prior)
+
+        if fit_pars is None:
+            self.fit_pars = {}
         else:
-            import scipy.optimize
+            self.fit_pars = fit_pars.copy()
 
-            guess = numpy.array(guess, dtype="f8", copy=False)
-            self._setup_data(guess)
-
-            result = scipy.optimize.minimize(
-                self.neglnprob,
-                guess,
-                method=self._method,
-                options=self._options,
-                **self._max_keys
-            )
-            self._result = result
-
-            result["model"] = self.model_name
-            if result["success"]:
-                result["flags"] = 0
-            else:
-                result["flags"] = result["status"]
-
-            if "x" in result:
-                pars = result["x"]
-                result["pars"] = pars
-                result["g"] = pars[2:2+2]
-
-                # based on last entry
-                fit_stats = self.get_fit_stats(pars)
-                result.update(fit_stats)
-
-    go = run_max
-
-    def run_max_nm(self, guess, **keys):
+    def go(self, *, obs, guess):
         """
         Run maximizer and set the result.
-
-        extra keywords to override those sent on construction
-        -----------------------------------------------------
-        xtol: float, optional
-            Tolerance in the vertices, relative to the vertex with
-            the lowest function value.  Default 1.0e-4
-        ftol: float, optional
-            Tolerance in the function value, relative to the
-            lowest function value for all vertices.  Default 1.0e-4
-        maxiter: int, optional
-            Default is npars*200
-        maxfev:
-            Default is npars*200
         """
         from .simplex import minimize_neldermead
 
-        options = self._options
-        options.update(keys)
-
         guess = numpy.array(guess, dtype="f8", copy=False)
-        self._setup_data(guess)
+        self._setup_data(obs=obs, guess=guess)
 
-        result = minimize_neldermead(self.neglnprob, guess, **keys)
+        result = minimize_neldermead(self.neglnprob, guess, **self.fit_pars)
         self._result = result
 
         result["model"] = self.model_name
@@ -1043,6 +1017,45 @@ class MaxSimple(FitterBase):
             h = 1.0e-3
             m = 5.0
             self.calc_cov(h, m)
+
+    def _setup_data(self, *, obs, guess):
+        """
+        initialize the gaussian mixtures
+        """
+
+        if hasattr(self, "_result"):
+            del self._result
+
+        self._set_obs(obs)
+        self._set_totpix()
+        self._set_npars()
+
+        self._band_pars = zeros(6)
+
+        npars = guess.size
+        mess = "guess has npars=%d, expected %d" % (npars, self.npars)
+        assert npars == self.npars, mess
+
+        try:
+            # this can raise GMixRangeError
+            self._init_gmix_all(guess)
+        except ZeroDivisionError:
+            raise GMixRangeError("got zero division")
+
+    def get_band_pars(self, *, pars, band):
+        """
+        Get linear pars for the specified band
+        """
+
+        band_pars = self._band_pars
+
+        band_pars[0:5] = pars[0:5]
+        band_pars[5] = pars[5 + band]
+
+        return band_pars
+
+    def neglnprob(self, pars):
+        return -1.0 * self.calc_lnprob(pars)
 
 
 class MaxCoellip(MaxSimple):
@@ -1069,15 +1082,15 @@ class MaxCoellip(MaxSimple):
         """
         self.npars = 4 + 2 * self._ngauss
 
-    def get_band_pars(self, pars_in, band):
+    def get_band_pars(self, *, pars, band):
         """
         Get linear pars for the specified band
         """
 
-        pars = self._band_pars
+        band_pars = self._band_pars
 
-        pars[:] = pars_in[:]
-        return pars
+        band_pars[:] = pars[:]
+        return band_pars
 
 
 _default_lm_pars = {"maxfev": 4000, "ftol": 1.0e-5, "xtol": 1.0e-5}
@@ -1089,23 +1102,14 @@ class LMSimple(FitterBase):
 
     """
 
-    def __init__(self, obs, model, **keys):
-        super(LMSimple, self).__init__(obs, model, **keys)
+    def __init__(self, *, model, prior=None, fit_pars=None):
 
-        # this is a dict
-        # can contain maxfev, ftol (tol in sum of squares)
-        # xtol (tol in solution), etc
+        super().__init__(model=model, prior=prior)
 
-        lm_pars = keys.get("lm_pars", None)
-        if lm_pars is None:
-            lm_pars = _default_lm_pars
-        self.lm_pars = lm_pars
-
-        self._set_n_prior_pars()
-
-        self._set_fdiff_size()
-
-        self._band_pars = zeros(6)
+        if fit_pars is not None:
+            self.fit_pars = fit_pars.copy()
+        else:
+            self.fit_pars = _default_lm_pars.copy()
 
     def _set_n_prior_pars(self):
         # center1 + center2 + shape + T + fluxes
@@ -1117,13 +1121,13 @@ class LMSimple(FitterBase):
     def _set_fdiff_size(self):
         self.fdiff_size = self.totpix + self.n_prior_pars
 
-    def go(self, guess):
+    def go(self, *, obs, guess):
         """
         Run leastsq and set the result
         """
 
         guess = array(guess, dtype="f8", copy=False)
-        self._setup_data(guess)
+        self._setup_data(obs=obs, guess=guess)
 
         self._make_lists()
 
@@ -1134,7 +1138,7 @@ class LMSimple(FitterBase):
             guess,
             self.n_prior_pars,
             bounds=bounds,
-            **self.lm_pars
+            **self.fit_pars
         )
 
         result["model"] = self.model_name
@@ -1174,15 +1178,22 @@ class LMSimple(FitterBase):
             res["flux_cov"] = res["pars_cov"][5:, 5:]
             res["flux_err"] = sqrt(diag(res["flux_cov"]))
 
-    def _setup_data(self, guess):
+    def _setup_data(self, *, obs, guess):
         """
-        try very hard to initialize the mixtures
+        Set up for the fit.  We need to know the size of the fdiff array and we
+        need to initialize the mixtures
         """
 
         if hasattr(self, "_result"):
             del self._result
 
-        self.flags = 0
+        self._set_obs(obs)
+        self._set_totpix()
+        self._set_n_prior_pars()
+        self._set_npars()
+        self._set_fdiff_size()
+
+        self._band_pars = zeros(6)
 
         npars = guess.size
         mess = "guess has npars=%d, expected %d" % (npars, self.npars)
@@ -1194,17 +1205,17 @@ class LMSimple(FitterBase):
         except ZeroDivisionError:
             raise GMixRangeError("got zero division")
 
-    def get_band_pars(self, pars_in, band):
+    def get_band_pars(self, *, pars, band):
         """
         Get linear pars for the specified band
         """
 
-        pars = self._band_pars
+        band_pars = self._band_pars
 
-        pars[0:5] = pars_in[0:5]
-        pars[5] = pars_in[5 + band]
+        band_pars[0:5] = pars[0:5]
+        band_pars[5] = pars[5 + band]
 
-        return pars
+        return band_pars
 
     def get_T_s2n(self):
         """
@@ -1259,7 +1270,7 @@ class LMSimple(FitterBase):
             # all norms are set after fill
             self._fill_gmix_all(pars)
 
-            start = self._fill_priors(pars, fdiff)
+            start = self._fill_priors(pars=pars, fdiff=fdiff)
 
             for pixels, gm in zip(self._pixels_list, self._gmix_data_list):
                 fill_fdiff(
@@ -1273,7 +1284,7 @@ class LMSimple(FitterBase):
 
         return fdiff
 
-    def _fill_priors(self, pars, fdiff):
+    def _fill_priors(self, *, pars, fdiff):
         """
         Fill priors at the beginning of the array.
 
@@ -1321,15 +1332,15 @@ class LMCoellip(LMSimple):
         """
         self.npars = 4 + 2 * self._ngauss
 
-    def get_band_pars(self, pars_in, band):
+    def get_band_pars(self, *, pars, band):
         """
         Get linear pars for the specified band
         """
 
-        pars = self._band_pars
+        band_pars = self._band_pars
 
-        pars[:] = pars_in[:]
-        return pars
+        band_pars[:] = pars[:]
+        return band_pars
 
 
 class LMComposite(LMSimple):
@@ -1349,7 +1360,7 @@ class LMComposite(LMSimple):
         definition depends on the sub-class
         """
         res = self.get_result()
-        pars = self.get_band_pars(res["pars"], band)
+        pars = self.get_band_pars(pars=res["pars"], band=band)
         return gmix.GMixCM(self.fracdev, self.TdByTe, pars)
 
     def _make_model(self, band_pars):
@@ -1380,20 +1391,20 @@ class LMBD(LMSimple):
         definition depends on the sub-class
         """
         res = self.get_result()
-        pars = self.get_band_pars(res["pars"], band)
+        pars = self.get_band_pars(pars=res["pars"], band=band)
         return self._make_model(pars)
 
-    def get_band_pars(self, pars_in, band):
+    def get_band_pars(self, *, pars, band):
         """
         Get linear pars for the specified band
         """
 
-        pars = self._band_pars
+        band_pars = self._band_pars
 
-        pars[0:7] = pars_in[0:7]
-        pars[7] = pars_in[7 + band]
+        band_pars[0:7] = pars[0:7]
+        band_pars[7] = pars[7 + band]
 
-        return pars
+        return band_pars
 
     def _make_model(self, band_pars):
         """
@@ -1435,20 +1446,20 @@ class LMBDF(LMSimple):
         definition depends on the sub-class
         """
         res = self.get_result()
-        pars = self.get_band_pars(res["pars"], band)
+        pars = self.get_band_pars(pars=res["pars"], band=band)
         return self._make_model(pars)
 
-    def get_band_pars(self, pars_in, band):
+    def get_band_pars(self, pars, band):
         """
         Get linear pars for the specified band
         """
 
-        pars = self._band_pars
+        band_pars = self._band_pars
 
-        pars[0:6] = pars_in[0:6]
-        pars[6] = pars_in[6 + band]
+        band_pars[0:6] = pars[0:6]
+        band_pars[6] = pars[6 + band]
 
-        return pars
+        return band_pars
 
     def _make_model(self, band_pars):
         """
@@ -1971,15 +1982,15 @@ class MCMCSimple(MCMCBase):
             g1i:g1i + 2, g2i:g2i + 2
         ].copy()
 
-    def get_band_pars(self, pars_in, band):
+    def get_band_pars(self, *, pars, band):
         """
         Get linear pars for the specified band
         """
 
-        pars = self._band_pars
+        band_pars = self._band_pars
 
-        pars[:] = pars_in[:]
-        return pars
+        band_pars[:] = pars[:]
+        return band_pars
 
     def get_par_names(self, dolog=False):
         names = ["cen1", "cen2", "g1", "g2", "T"]

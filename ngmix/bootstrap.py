@@ -17,7 +17,6 @@ from . import fitting
 from .gmix import GMix, GMixModel, GMixCM, get_coellip_npars
 from . import em
 from .observation import ObsList, MultiBandObsList, get_mb_obs
-from .shape import get_round_factor
 from .guessers import (
     TFluxGuesser,
     TFluxAndPriorGuesser,
@@ -25,7 +24,6 @@ from .guessers import (
 )
 from .gexceptions import GMixRangeError, BootPSFFailure, BootGalFailure
 
-from . import roundify
 from . import metacal
 
 from copy import deepcopy
@@ -98,129 +96,6 @@ class Bootstrapper(object):
             self.fit_gal_psf_flux()
 
         return self.psf_flux_res
-
-    def get_round_result(self):
-        """
-        get result of set_round_s2n()
-        """
-        if not hasattr(self, "round_res"):
-            raise RuntimeError("you need to run set_round_s2n")
-        return self.round_res
-
-    def set_round_s2n(self):
-        """
-        set the s/n and (s/n)_T for the round model
-        """
-
-        fitter = self.get_max_fitter()
-
-        res = fitter.get_result()
-
-        pars, pars_lin = self._get_round_pars(res["pars"])
-
-        s2n, psf_T, flags = self._get_s2n_round(pars, fitter)
-
-        T_r = pars_lin[4]
-        self.round_res = {
-            "pars": pars,
-            "pars_lin": pars_lin,
-            "flags": flags,
-            "s2n_r": s2n,
-            "T_r": T_r,
-            "psf_T_r": psf_T,
-        }
-
-    def _get_s2n_round(self, pars_round, fitter):
-        s2n = -9999.0
-        psf_T = -9999.0
-        flags = 0
-
-        s2n_sum = 0.0
-        psf_T_sum = 0.0
-        wsum = 0.0
-
-        try:
-            for band, obslist in enumerate(self.mb_obs_list):
-
-                # pars_round could be in log and include all bands
-                # this is unconvolved by a psf
-                gm_round_band0 = self._get_gmix_round(fitter, pars_round, band)
-
-                for obs in obslist:
-                    # note psf does not use round T
-                    psf_round = obs.psf.gmix.make_round()
-                    gmix = gm_round_band0.convolve(psf_round)
-
-                    # only the weight map is used
-                    s2n_sum += gmix.get_model_s2n_sum(obs)
-
-                    wt = obs.weight.sum()
-                    psf_T = psf_round.get_T()
-                    psf_T_sum += wt * psf_T
-                    wsum += wt
-
-            if s2n_sum <= 0.0:
-                print("    failure: s2n_sum <= 0.0 :", s2n_sum)
-                flags |= BOOT_S2N_LOW
-            elif wsum <= 0.0:
-                print("    failure: wsum <= 0.0 :", wsum)
-                flags |= BOOT_WEIGHTS_LOW
-            else:
-                s2n = sqrt(s2n_sum)
-                psf_T = psf_T_sum / wsum
-
-        except GMixRangeError:
-            print("    failure convolving round gmixes")
-            flags |= BOOT_ROUND_CONVOLVE_FAIL
-
-        return s2n, psf_T, flags
-
-    def _fit_sim_round(
-        self, fitter, pars_round, mb_obs_list, ntry, max_pars, round_prior=None
-    ):
-
-        res = fitter.get_result()
-        runner = MaxRunnerRound(
-            pars_round, mb_obs_list, res["model"], max_pars, prior=round_prior,
-        )
-
-        runner.go(ntry=ntry)
-
-        return runner.fitter
-
-    def _get_gmix_round(self, fitter, pars, band):
-        """
-        input pars are round
-        """
-        res = fitter.get_result()
-        band_pars = fitter.get_band_pars(pars, band)
-        gm_round = GMixModel(band_pars, res["model"])
-        return gm_round
-
-    def _get_gmix_round_old(self, res, pars):
-        gm_round = GMixModel(pars, res["model"])
-        return gm_round
-
-    def _get_round_pars(self, pars_in):
-
-        pars = pars_in.copy()
-        pars_lin = pars.copy()
-
-        g1, g2, T = pars_lin[2], pars_lin[3], pars_lin[4]
-
-        f = get_round_factor(g1, g2)
-        Tround = T * f
-
-        pars[2] = 0.0
-        pars[3] = 0.0
-        pars_lin[2] = 0.0
-        pars_lin[3] = 0.0
-
-        pars_lin[4] = Tround
-
-        pars[4] = pars_lin[4]
-
-        return pars, pars_lin
 
     def fit_psfs(
         self,
@@ -858,7 +733,7 @@ class AdmomBootstrapper(Bootstrapper):
         if Tguess is None:
             Tguess = self._get_Tguess()
 
-        fitter = self._fit_one(self.mb_obs_list, Tguess, doround=True)
+        fitter = self._fit_one(self.mb_obs_list, Tguess)
         res = fitter.get_result()
 
         if res["flags"] != 0:
@@ -971,7 +846,7 @@ class AdmomBootstrapper(Bootstrapper):
         gmix = fitter.get_gmix()
         obs.set_gmix(gmix)
 
-    def _fit_one(self, obs, Tguess, doround=False):
+    def _fit_one(self, obs, Tguess):
         """
         Fit the observation(s) using adaptive moments
 
@@ -981,8 +856,6 @@ class AdmomBootstrapper(Bootstrapper):
             A Observation, ObsList, or MultiBandObsList
         Tguess: float
             Initial guess; random guesses are generated based on this
-        doround: bool, optional
-            Optionally set round parameters
         """
         from . import admom
 
@@ -1000,11 +873,6 @@ class AdmomBootstrapper(Bootstrapper):
                 print(str(err))
                 res = {"flags": 1}
 
-            if doround:
-                if res["flags"] != 0:
-                    continue
-                self._set_flux(obs, fitter)
-
             if res["flags"] == 0:
                 break
 
@@ -1013,8 +881,6 @@ class AdmomBootstrapper(Bootstrapper):
             res["g"] = res["e"]
             res["g_cov"] = res["e_cov"]
 
-            if doround:
-                self._set_round_s2n(obs, fitter)
         return fitter
 
     def _set_flux(self, mb_obs_list, fitter):
@@ -1052,15 +918,6 @@ class AdmomBootstrapper(Bootstrapper):
 
         except GMixRangeError as err:
             raise BootPSFFailure(str(err))
-
-    def _set_round_s2n(self, obs, fitter):
-        """
-        not yet implemented
-        for now just copy the regular values
-        """
-        res = fitter.get_result()
-        res["s2n_r"] = res["s2n"]
-        res["T_r"] = res["T"]
 
     def _get_psf_Tguess(self, obs):
         scale = obs.jacobian.get_scale()
@@ -1306,17 +1163,10 @@ class MaxMetacalBootstrapper(Bootstrapper):
             boot.fit_max(
                 gal_model, pars, guesser=guesser, prior=prior, ntry=ntry,
             )
-            boot.set_round_s2n()
 
             tres = boot.get_max_fitter().get_result()
-            rres = boot.get_round_result()
 
             res["mcal_flags"] |= tres["flags"]
-            res["mcal_flags"] |= rres["flags"]
-
-            tres["s2n_r"] = rres["s2n_r"]
-            tres["T_r"] = rres["T_r"]
-            tres["psf_T_r"] = rres["psf_T_r"]
 
             wsum = 0.0
             Tpsf_sum = 0.0
@@ -1448,6 +1298,11 @@ class PSFRunner(object):
 
         from .fitting import LMSimple
 
+        fitter = LMSimple(
+            model=self.model,
+            prior=self.prior,
+            fit_pars=self.lm_pars,
+        )
         for i in range(ntry):
 
             if i == 0 and guess is not None:
@@ -1455,11 +1310,7 @@ class PSFRunner(object):
             else:
                 this_guess = self.get_guess()
 
-            fitter = LMSimple(
-                self.obs, self.model, lm_pars=self.lm_pars, prior=self.prior,
-            )
-
-            fitter.go(this_guess)
+            fitter.go(obs=self.obs, guess=this_guess)
 
             res = fitter.get_result()
             if res["flags"] == 0:
@@ -2129,8 +1980,8 @@ class MaxRunner(object):
 
         self.obs = obs
 
-        self.max_pars = max_pars
-        self.method = max_pars.get("method", "lm")
+        self.max_pars = max_pars.copy()
+        self.method = max_pars.pop("method", "lm")
         if self.method == "lm":
             self.send_pars = max_pars["lm_pars"]
 
