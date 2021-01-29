@@ -7,7 +7,7 @@ TODO
 
 """
 from pprint import pprint
-import numpy
+import numpy as np
 from numpy import where, array, sqrt, log, linspace, zeros
 from numpy import isfinite
 from numpy.linalg import LinAlgError
@@ -15,8 +15,8 @@ from numpy.linalg import LinAlgError
 from . import admom
 from . import fitting
 from .gmix import GMix, GMixModel, GMixCM, get_coellip_npars
-from .em import GMixEM, prep_image
-from .observation import Observation, ObsList, MultiBandObsList, get_mb_obs
+from . import em
+from .observation import ObsList, MultiBandObsList, get_mb_obs
 from .shape import get_round_factor
 from .guessers import (
     TFluxGuesser,
@@ -356,7 +356,7 @@ class Bootstrapper(object):
         self, psf_obs, psf_model, Tguess, ntry, fit_pars, norm_key=None
     ):
         """
-        fit the psf using a PSFRunner or EMRunner
+        fit the psf using a PSFRunner or PSFRunnerEM
 
         TODO: add bootstrapping T guess as well, from unweighted moments
         """
@@ -399,7 +399,9 @@ class Bootstrapper(object):
         if fit_pars is not None:
             em_pars.update(fit_pars)
 
-        runner = EMRunner(psf_obs, Tguess, ngauss, em_pars)
+        runner = PSFRunnerEM(
+            obs=psf_obs, Tguess=Tguess, ngauss=ngauss, em_pars=em_pars,
+        )
         runner.go(ntry=ntry)
 
         return runner
@@ -845,7 +847,7 @@ class BootstrapperGaussMom(Bootstrapper):
 
     def _make_isampler(self, fitter, ipars):
         from .fitting import ISamplerMom
-        from numpy.linalg import LinAlgError
+        from np.linalg import LinAlgError
 
         res = fitter.get_result()
         icov = res["pars_cov"]
@@ -1601,7 +1603,7 @@ class CompositeBootstrapper(Bootstrapper):
 
         TdByTe_raw = self._get_TdByTe(exp_fitter, dev_fitter)
         TdByTe_range = pars.get("TdByTe_range", [-1.0e9, 1.0e9])
-        TdByTe = numpy.clip(TdByTe_raw, TdByTe_range[0], TdByTe_range[1])
+        TdByTe = np.clip(TdByTe_raw, TdByTe_range[0], TdByTe_range[1])
 
         if self.verbose:
             mess = "        nfev: %d fracdev: %.3f +/- %.3f clipped: %.3f"
@@ -1864,8 +1866,6 @@ class BestBootstrapper(Bootstrapper):
 class PSFRunner(object):
     """
     wrapper to generate guesses and run the psf fitter a few times
-
-    I never use "round_T"
     """
 
     def __init__(self, obs, model, Tguess, lm_pars, prior=None, rng=None):
@@ -1923,7 +1923,7 @@ class PSFRunner(object):
 
     def set_rng(self, rng):
         if rng is None:
-            rng = numpy.random.RandomState()
+            rng = np.random.RandomState()
 
         self.rng = rng
 
@@ -1955,18 +1955,46 @@ class AMRunner(object):
         self.fitter = fitter
 
 
-class EMRunner(object):
+class PSFRunnerEM(object):
     """
-    wrapper to generate guesses and run the psf fitter a few times
+    wrapper to generate guesses and run the psf fitter a few times. Does
+    not support running in fixed center or fluxonly modes
+
+    The guesses are tuned for fitting PSFs, with the centers all near the
+    jacobian center
+
+    Parameters
+    ----------
+    obs: ngmix.Observation
+        The observation to fit
+    Tguess: float
+        The guess for the overall T
+    ngauss: int
+        Number of gaussians, 1 to 5
+    em_pars: dict
+        Can have entries
+        miniter: The minimum number of iterations
+        maxiter: The maximum number of iterations
+        tol: The fractional change in the log likelihood that implies convergence
+        vary_sky: If True, fit for the sky level
+    rng: np.random.RandomState
+        A random number generator, used for generating guesses
     """
 
-    def __init__(self, obs, Tguess, ngauss, em_pars, rng=None):
+    def __init__(self, *,
+                 obs,
+                 Tguess,
+                 ngauss,
+                 em_pars=None,
+                 rng=None):
 
         self.ngauss = ngauss
         self.Tguess = Tguess
         self.sigma_guess = sqrt(Tguess / 2)
         self.set_obs(obs)
 
+        if em_pars is None:
+            em_pars = {}
         self.em_pars = em_pars
         self.set_rng(rng)
 
@@ -1974,17 +2002,35 @@ class EMRunner(object):
         """
         set a new observation with sky
         """
-        im_with_sky, sky = prep_image(obsin.image)
-
-        self.obs = Observation(im_with_sky, jacobian=obsin.jacobian)
-        self.sky = sky
+        self.obs, self.sky = em.prep_obs(obsin)
 
     def get_fitter(self):
+        """
+        get the fitter used for the processing
+
+        Returns
+        --------
+        ngmix.em.GMixEM
+            The fitter
+        """
         return self.fitter
 
     def go(self, ntry=1, guess=None):
+        """
+        run the fitter
 
-        fitter = GMixEM(self.obs)
+        Parameters
+        ----------
+        ntry: int
+            Number of times to try the fit, Default 1
+        guess: ngmix.GMix
+            Use the input mixture for the first guess
+
+        Returns
+        -------
+        None
+        """
+        fitter = em.GMixEM(self.obs, **self.em_pars)
         for i in range(ntry):
 
             if i == 0 and guess is not None:
@@ -1992,7 +2038,7 @@ class EMRunner(object):
             else:
                 this_guess = self.get_guess()
 
-            fitter.go(this_guess, self.sky, **self.em_pars)
+            fitter.go(this_guess, self.sky)
 
             res = fitter.get_result()
             if res["flags"] == 0:
@@ -2003,7 +2049,13 @@ class EMRunner(object):
 
     def get_guess(self):
         """
-        Guess for the EM algorithm
+        Get a guess for the EM algorithm
+
+        Returns
+        -------
+        ngmix.GMix
+            The guess mixture, with the number of gaussians
+            as specified in the constructor
         """
 
         if self.ngauss == 1:
@@ -2226,7 +2278,7 @@ class EMRunner(object):
 
     def set_rng(self, rng):
         if rng is None:
-            rng = numpy.random.RandomState()
+            rng = np.random.RandomState()
 
         self.rng = rng
 
@@ -2277,7 +2329,7 @@ class PSFRunnerCoellip(object):
 
         rng = self.rng
 
-        guess = numpy.zeros(self.npars)
+        guess = np.zeros(self.npars)
 
         guess[0:0 + 2] += rng.uniform(low=-0.01, high=0.01, size=2)
         guess[2:2 + 2] += rng.uniform(low=-0.05, high=0.05, size=2)
@@ -2477,7 +2529,7 @@ class PSFRunnerCoellip(object):
 
     def set_rng(self, rng):
         if rng is None:
-            rng = numpy.random.RandomState()
+            rng = np.random.RandomState()
 
         self.rng = rng
 
@@ -3006,9 +3058,9 @@ def replace_masked_pixels(
                 if add_noise:
                     wgood = where(weight > 0.0)
                     if wgood[0].size > 0:
-                        median_err = numpy.median(1.0 / weight[wgood])
+                        median_err = np.median(1.0 / weight[wgood])
 
-                        noise_image = numpy.random.normal(
+                        noise_image = np.random.normal(
                             loc=0.0, scale=median_err, size=im.shape
                         )
 
@@ -3061,3 +3113,48 @@ def test_boot(model, **keys):
 
     pars = {"method": "lm", "lm_pars": {"maxfev": 4000}}
     boot.fit_max(model, pars)
+
+
+def demo_psfrunner_em(show=False):
+    from .jacobian import DiagonalJacobian
+    from .observation import Observation
+
+    rng = np.random.RandomState(8821)
+
+    pixel_scale = 0.263
+    dims = [25, 25]
+    cen = (np.array(dims) - 1.0) / 2.0
+
+    jacob = DiagonalJacobian(scale=pixel_scale, row=cen[0], col=cen[1])
+
+    Tpsf = 0.27
+    psf_gm = GMixModel([0.0, 0.0, 0.0, 0.0, Tpsf, 1.0], "turb")
+    # psf_gm = GMixModel([0.0, 0.0, 0.0, 0.0, Tpsf, 1.0], "gauss")
+    psf_im = psf_gm.make_image(dims, jacobian=jacob)
+
+    psf_obs = Observation(psf_im, jacobian=jacob)
+
+    Tguess = psf_gm.get_T() * rng.uniform(low=-0.9, high=1.1)
+
+    runner = PSFRunnerEM(
+        obs=psf_obs, Tguess=Tguess, ngauss=3, rng=rng,
+        em_pars={'tol': 1.0e-5, 'maxiter': 10000},
+    )
+    runner.go()
+
+    fitter = runner.get_fitter()
+    res = fitter.get_result()
+    print(res)
+    assert res['flags'] == 0
+
+    if show:
+        try:
+            import images
+        except ImportError:
+            from espy import images
+
+        imfit = fitter.make_image()
+
+        maxdiff = np.abs(imfit - psf_obs.image).max()
+        print('maxdiff:', maxdiff)
+        images.compare_images(psf_obs.image, imfit)

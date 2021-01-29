@@ -65,6 +65,4 @@ from . import metacal  # noqa
 
 from . import simobs  # noqa
 
-from . import test  # noqa
-
 from . import gaussap  # noqa
