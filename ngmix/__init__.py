@@ -44,7 +44,7 @@ from . import simplex  # noqa
 from . import galsimfit  # noqa
 
 from . import bootstrap  # noqa
-from .bootstrap import Bootstrapper, CompositeBootstrapper  # noqa
+from .bootstrap import Bootstrapper  # noqa
 
 from . import em  # noqa
 
