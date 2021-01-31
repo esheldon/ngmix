@@ -6,17 +6,15 @@ TODO
     - make it possible to specify the guess type (not just psf)
 
 """
-from pprint import pprint
 import numpy as np
-from numpy import where, array, sqrt, log, linspace, zeros
-from numpy import isfinite
+from numpy import where, array, sqrt, zeros
 from numpy.linalg import LinAlgError
 
 from . import admom
 from . import fitting
-from .gmix import GMix, GMixModel, GMixCM, get_coellip_npars
+from .gmix import GMix, GMixModel, get_coellip_npars
 from . import em
-from .observation import ObsList, MultiBandObsList, get_mb_obs
+from .observation import Observation, ObsList, MultiBandObsList, get_mb_obs
 from .guessers import (
     TFluxGuesser,
     TFluxAndPriorGuesser,
@@ -34,6 +32,182 @@ BOOT_R4_LOW = 2 ** 2
 BOOT_TS2N_ROUND_FAIL = 2 ** 3
 BOOT_ROUND_CONVOLVE_FAIL = 2 ** 4
 BOOT_WEIGHTS_LOW = 2 ** 5
+
+
+def bootstrap(
+    *,
+    obs,
+    runner,
+    psf_runner,
+    ignore_failed_psf=True,
+):
+    """
+    Run a fitter on the input observations, possibly bootstrapping the fit
+    based on information inferred from the data or the psf model
+
+    Parameters
+    ----------
+    obs: ngmix Observation(s)
+        Observation, ObsList, or MultiBandObsList
+    runner: ngmix Runner
+        A runner or measurement to run the fit.
+    psf_runner: ngmix PSFRunner
+        A runner to run the psf fits
+    ignore_failed_psf: bool, optional
+        If set to True, remove observations where the psf fit fails, and
+        only fit the remaining.  Default True.
+
+    Returns
+    -------
+    result dict
+
+    Side effects
+    ------------
+    the psf.meta['result'] and the .psf.gmix may be set if a psf runner is sent
+    and the internal fitter has a get_gmix method.  gmix are only set for
+    successful fits
+
+    Note the only place where side effects should be occurring is
+    in the call to store_psf_results.
+    """
+
+    if psf_runner is not None:
+        psf_result = psf_runner.go(obs=obs)
+
+        if ignore_failed_psf:
+            obs, psf_result = remove_failed_psf_obs(
+                obs=obs, result=psf_result,
+            )
+
+        if result_has_gmix(psf_result):
+            set_gmix = True
+        else:
+            set_gmix = False
+
+        store_psf_results(
+            obs=obs, result=psf_result, set_gmix=set_gmix,
+        )
+
+    return runner.go(obs=obs)
+
+
+def result_has_gmix(result):
+    """
+    check if a gmix is present.  Not all are checked
+    """
+    try:
+        if 'gmix' in result:
+            return True
+        else:
+            return False
+    except TypeError:
+        return result_has_gmix(result[0])
+
+
+def remove_failed_psf_obs(*, obs, result):
+    """
+    remove observations from the input that failed
+
+    Parameters
+    ----------
+    obs: observation(s)
+        Observation, ObsList, or MultiBandObsList
+    result: result dict, or list or list of lists
+        The results for the psf fits
+
+    Returns
+    --------
+    obs, result:
+        new observations, same type as input, as well
+        as new results
+    """
+    if isinstance(obs, MultiBandObsList):
+        new_mbobs = MultiBandObsList(meta=obs.meta)
+        new_mbobs_result = []
+        for tobslist, treslist in zip(obs, result):
+
+            new_obslist = ObsList(meta=tobslist.meta)
+            new_obslist_result = []
+            for tobs, tres in zip(tobslist, treslist):
+                if tres['flags'] == 0:
+                    new_obslist.append(tobs)
+                    new_obslist_result.append(tres)
+
+            if len(new_obslist) == 0:
+                raise BootPSFFailure('no good psf fits')
+
+            new_mbobs.append(new_obslist)
+            new_mbobs_result.append(new_obslist_result)
+
+        return new_mbobs, new_mbobs_result
+
+    elif isinstance(obs, ObsList):
+        new_obslist = ObsList(meta=tobslist.meta)
+        new_obslist_result = []
+        for tobs, tres in zip(obs, result):
+            if tres['flags'] == 0:
+                new_obslist.append(tobs)
+                new_obslist_result.append(tres)
+
+        if len(tobslist) == 0:
+            raise BootPSFFailure('no good psf fits')
+
+        return new_obslist, new_obslist_result
+    else:
+        if result['flags'] != 0:
+            raise BootPSFFailure('no good psf fits')
+
+        return obs, result
+
+
+def store_psf_results(*, obs, result, set_gmix=True):
+    """
+    store the psf results in the obs meta and possibly set the gmix
+    for the psf
+
+    Parameters
+    ----------
+    obs: ngmix Observation(s)
+        Observation, ObsList, or MultiBandObsList
+    result: result dict, list or list of lists
+        The results to store
+    set_gmix: bool, optional
+        If set to True, the gmix is constructed for the psf and
+        set
+
+    Returns
+    -------
+    None, the result will be stored in the meta for each observation
+
+    Side Effects
+    ------------
+    .meta['result'] is set to the fit result and the psf.gmix attribuite is set
+    for each successful psf fit
+    """
+
+    if isinstance(obs, MultiBandObsList):
+        for tobslist, tresult in zip(obs, result):
+            store_psf_results(obs=tobslist, result=tresult, set_gmix=set_gmix)
+
+    elif isinstance(obs, ObsList):
+        for tobs, tresult in zip(obs, result):
+            store_psf_results(obs=tobs, result=tresult, set_gmix=set_gmix)
+
+    elif isinstance(obs, Observation):
+        if result['flags'] != 0:
+            raise ValueError('cannot set gmix for failed fit')
+
+        obs.psf.meta['result'] = result
+        if set_gmix:
+            if 'gmix' not in result:
+                raise ValueError('result has no gmix item')
+
+            obs.psf.gmix = result['gmix']
+
+    else:
+        raise ValueError(
+            'obs must be an Observation, ObsList, or MultiBandObsList'
+        )
 
 
 class Bootstrapper(object):
@@ -385,86 +559,6 @@ class Bootstrapper(object):
             guess_widths=guess_widths,
         )
 
-    def fit_max_fixT(
-        self,
-        gal_model,
-        pars,
-        T,
-        guess=None,
-        prior=None,
-        extra_priors=None,
-        ntry=1,
-    ):
-        """
-        fit the galaxy.  You must run fit_psf() successfully first
-
-        extra_priors is ignored here but used in composite
-        """
-
-        if not hasattr(self, "psf_flux_res"):
-            self.fit_gal_psf_flux()
-
-        guesser = self._get_max_guesser(guess=guess, prior=prior)
-
-        runner = MaxRunnerFixT(
-            self.mb_obs_list, gal_model, pars, guesser, T, prior=prior
-        )
-
-        runner.go(ntry=ntry)
-
-        fitter = runner.fitter
-
-        res = fitter.get_result()
-
-        if res["flags"] != 0:
-            raise BootGalFailure("failed to fit galaxy with maxlike")
-
-        self.max_fitter = fitter
-
-    def fit_max_gonly(
-        self,
-        gal_model,
-        max_pars,
-        pars_in,
-        guess=None,
-        prior=None,
-        extra_priors=None,
-        ntry=1,
-    ):
-        """
-        fit the galaxy.  You must run fit_psf() successfully first
-
-        extra_priors is ignored here but used in composite
-        """
-
-        if not hasattr(self, "psf_flux_res"):
-            self.fit_gal_psf_flux()
-
-        if prior is not None:
-            guesser = prior.sample
-        else:
-            guesser = self._get_max_guesser(guess=guess, prior=prior)
-
-        runner = MaxRunnerGOnly(
-            self.mb_obs_list,
-            gal_model,
-            max_pars,
-            guesser,
-            pars_in,
-            prior=prior,
-        )
-
-        runner.go(ntry=ntry)
-
-        fitter = runner.fitter
-
-        res = fitter.get_result()
-
-        if res["flags"] != 0:
-            raise BootGalFailure("failed to fit galaxy with maxlike")
-
-        self.max_fitter = fitter
-
     def _fit_one_model_max(
         self,
         gal_model,
@@ -639,10 +733,8 @@ class Bootstrapper(object):
         generate a guess, drawing from priors on the other parameters
         """
 
-        scaling = "linear"
-
         if guess is not None:
-            guesser = ParsGuesser(guess, scaling=scaling, widths=widths)
+            guesser = ParsGuesser(guess, widths=widths)
         else:
             psf_T = self.mb_obs_list[0][0].psf.gmix.get_T()
 
@@ -650,11 +742,11 @@ class Bootstrapper(object):
 
             if prior is None:
                 guesser = TFluxGuesser(
-                    psf_T, pres["psf_flux"], scaling=scaling
+                    psf_T, pres["psf_flux"],
                 )
             else:
                 guesser = TFluxAndPriorGuesser(
-                    psf_T, pres["psf_flux"], prior, scaling=scaling
+                    psf_T, pres["psf_flux"], prior,
                 )
         return guesser
 
@@ -1281,36 +1373,48 @@ class PSFRunner(object):
     wrapper to generate guesses and run the psf fitter a few times
     """
 
-    def __init__(self, obs, model, Tguess, lm_pars, prior=None, rng=None):
+    def __init__(self, *, model, guesser, fit_pars=None, prior=None, rng=None, ntry=1):
 
-        self.obs = obs
+        self.guesser = guesser
         self.prior = prior
+        self.ntry = ntry
         self.set_rng(rng)
 
         mess = "psf model should be turb or gauss,got '%s'" % model
         assert model in ["turb", "gauss"], mess
 
         self.model = model
-        self.lm_pars = lm_pars
-        self.set_guess0(Tguess)
+        self.fit_pars = fit_pars
 
-    def go(self, ntry=1, guess=None):
+    def go(self, *, obs, guess=None, Tguess=None):
+        """
+        Run the fitter with an initial guess for the mixture
+        or T.  Random guesses are made
+
+        Parameters
+        ----------
+        obs: ngmix.Observation
+            The observation to fit
+        guess: GMix, optional
+            The guess, either a mixture or a guess for T
+        """
 
         from .fitting import LMSimple
 
+        self.set_guess0(guess)
         fitter = LMSimple(
             model=self.model,
             prior=self.prior,
             fit_pars=self.lm_pars,
         )
-        for i in range(ntry):
+        for i in range(self.ntry):
 
             if i == 0 and guess is not None:
                 this_guess = guess.copy()
             else:
                 this_guess = self.get_guess()
 
-            fitter.go(obs=self.obs, guess=this_guess)
+            fitter.go(obs=obs, guess=this_guess)
 
             res = fitter.get_result()
             if res["flags"] == 0:

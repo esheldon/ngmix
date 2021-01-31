@@ -260,8 +260,6 @@ class FitterBase(object):
     def get_fit_stats(self, pars):
         """
         Get some fit statistics for the input pars.
-
-        pars must be in the log scaling!
         """
 
         res = self.calc_lnprob(pars, more=True)

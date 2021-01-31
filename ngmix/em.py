@@ -29,7 +29,7 @@ EM_RANGE_ERROR = 2 ** 0
 EM_MAXITER = 2 ** 1
 
 
-def fit_em(*, obs, guess, fixcen=False, fluxonly=False, **kws):
+def fit_em(*, obs, guess, sky=None, fixcen=False, fluxonly=False, **kws):
     """
     fit the observation with EM
 
@@ -39,6 +39,10 @@ def fit_em(*, obs, guess, fixcen=False, fluxonly=False, **kws):
         The observation to fit
     guess: ngmix.GMix
         The initial guess as a gaussian mixture
+    sky: number, optional
+        The sky value for the image.  If you don't send this, it is assumed the
+        true sky in the image is zero, and the prep_obs code is used to set a
+        sky such that there are no negative pixels.
     fixcen: bool, optional
         if True, use the fixed center fitter
     fluxonly: bool, optional
@@ -57,17 +61,15 @@ def fit_em(*, obs, guess, fixcen=False, fluxonly=False, **kws):
     -------
     The EM fitter
     """
-    im, sky = prep_image(obs.image)
-    newobs, sky = prep_obs(obs)
 
     if fixcen:
-        fitter = GMixEMFixCen(newobs, **kws)
+        fitter = GMixEMFixCen(**kws)
     elif fluxonly:
-        fitter = GMixEMFluxOnly(newobs, **kws)
+        fitter = GMixEMFluxOnly(**kws)
     else:
-        fitter = GMixEM(newobs, **kws)
+        fitter = GMixEM(**kws)
 
-    fitter.go(guess, sky)
+    fitter.go(obs=obs, guess=guess, sky=sky)
 
     return fitter
 
@@ -137,11 +139,6 @@ class GMixEM(object):
 
     Parameters
     ----------
-    obs: Observation
-        An ngmix.Observation object
-
-        The image should not have zero or negative pixels. You can
-        use the ngmix.em.prep_image() function to ensure this.
     miniter: number, optional
         The minimum number of iterations, default 40
     maxiter: number, optional
@@ -153,16 +150,10 @@ class GMixEM(object):
         If True, fit for the sky level
     """
     def __init__(self,
-                 obs,
                  miniter=40,
                  maxiter=500,
                  tol=0.001,
                  vary_sky=False):
-
-        assert isinstance(obs, Observation), (
-            'input obs must be an instance of Observation'
-        )
-        self._obs = obs
 
         self.miniter = miniter
         self.maxiter = maxiter
@@ -251,24 +242,35 @@ class GMixEM(object):
             jacobian=self._obs.jacobian,
         )
 
-    def go(self, gmix_guess, sky):
+    def go(self, *, obs, guess, sky=None):
         """
         Run the em algorithm from the input starting guesses
 
         parameters
         ----------
-        gmix_guess: GMix
+        obs: Observation
+            An ngmix.Observation object
+        guess: GMix
             A gaussian mixture (GMix or child class) representing a starting
             guess for the algorithm.  This should be *before* psf convolution.
-        sky: number
-            The sky value added to the image
+        sky: number, optional
+            The sky value for the image.  If you don't send this, it is assumed the
+            true sky in the image is zero, and the prep_obs code is used to set a
+            sky such that there are no negative pixels.
         """
 
         if hasattr(self, '_gm'):
             del self._gm
             del self._gm_conv
 
-        obs = self._obs
+        assert isinstance(obs, Observation), (
+            'input obs must be an instance of Observation'
+        )
+
+        if sky is None:
+            obs, sky = prep_obs(obs)
+
+        self._obs = obs
 
         # makes a copy
         if not obs.has_psf() or not obs.psf.has_gmix():
@@ -281,7 +283,7 @@ class GMixEM(object):
         conf = self._make_conf()
         conf['sky'] = sky
 
-        gm = gmix_guess.copy()
+        gm = guess.copy()
         gm_conv = gm.convolve(gmix_psf)
 
         sums = self._make_sums(len(gm))
