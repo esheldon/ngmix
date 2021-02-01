@@ -1,5 +1,5 @@
 import numpy as np
-from .gmix import GMix, GMixModel
+from .gmix import GMix, GMixModel, get_coellip_npars
 from .fitting import print_pars
 from .gexceptions import GMixRangeError
 from .priors import srandu, LOWVAL
@@ -564,15 +564,15 @@ class GuesserEMPSF(object):
             T, flux = self._get_T_flux(obs=obs)
 
         if self.ngauss == 1:
-            return self._get_em_guess_1gauss(flux=flux, T=T)
+            return self._get_guess_1gauss(flux=flux, T=T)
         elif self.ngauss == 2:
-            return self._get_em_guess_2gauss(flux=flux, T=T)
+            return self._get_guess_2gauss(flux=flux, T=T)
         elif self.ngauss == 3:
-            return self._get_em_guess_3gauss(flux=flux, T=T)
+            return self._get_guess_3gauss(flux=flux, T=T)
         elif self.ngauss == 4:
-            return self._get_em_guess_4gauss(flux=flux, T=T)
+            return self._get_guess_4gauss(flux=flux, T=T)
         elif self.ngauss == 5:
-            return self._get_em_guess_5gauss(flux=flux, T=T)
+            return self._get_guess_5gauss(flux=flux, T=T)
         else:
             raise ValueError("bad ngauss: %d" % self.ngauss)
 
@@ -617,7 +617,7 @@ class GuesserEMPSF(object):
 
         return T, flux
 
-    def _get_em_guess_1gauss(self, *, flux, T):
+    def _get_guess_1gauss(self, *, flux, T):
         rng = self.rng
 
         sigma2 = T/2
@@ -631,10 +631,9 @@ class GuesserEMPSF(object):
             sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
         ])
 
-        pars[0] *= self.flux
         return GMix(pars=pars)
 
-    def _get_em_guess_2gauss(self, *, flux, T):
+    def _get_guess_2gauss(self, *, flux, T):
         rng = self.rng
 
         sigma2 = T/2
@@ -657,7 +656,7 @@ class GuesserEMPSF(object):
 
         return GMix(pars=pars)
 
-    def _get_em_guess_3gauss(self, *, flux, T):
+    def _get_guess_3gauss(self, *, flux, T):
         rng = self.rng
 
         sigma2 = T/2
@@ -687,7 +686,7 @@ class GuesserEMPSF(object):
 
         return GMix(pars=pars)
 
-    def _get_em_guess_4gauss(self, *, flux, T):
+    def _get_guess_4gauss(self, *, flux, T):
         rng = self.rng
 
         sigma2 = T/2
@@ -724,7 +723,7 @@ class GuesserEMPSF(object):
 
         return GMix(pars=pars)
 
-    def _get_em_guess_5gauss(self, *, flux, T):
+    def _get_guess_5gauss(self, *, flux, T):
         rng = self.rng
 
         sigma2 = T/2
@@ -788,3 +787,123 @@ _em5_pguess = np.array(
     [0.59453032, 0.35671819, 0.03567182, 0.01189061, 0.00118906]
 )
 _em5_fguess = np.array([0.5, 1.0, 3.0, 10.0, 20.0])
+
+
+class GuesserCoellipPSF(GuesserEMPSF):
+    """
+    guesser for coelliptical psf fitting
+
+    Parameters
+    ----------
+    rng: numpy.random.RandomState
+        Random state for generating guesses
+    ngauss: int
+        number of gaussians
+    guess_from_moms: bool, optional
+        If set to True, use weighted moments to generate the starting flux and
+        T for the guess.  If set to False, the starting flux is gotten from
+        summing the image and the fwhm of the guess isset to 3.5 times the
+        pixel scale
+    """
+    def __init__(self, *, rng, ngauss, guess_from_moms=False):
+
+        self.rng = rng
+        self.ngauss = ngauss
+        self.guess_from_moms = guess_from_moms
+        self.npars = get_coellip_npars(ngauss)
+
+    def _make_guess_array(self):
+        rng = self.rng
+        guess = np.zeros(self.npars)
+
+        guess[0:0 + 2] += rng.uniform(low=-0.01, high=0.01, size=2)
+        guess[2:2 + 2] += rng.uniform(low=-0.05, high=0.05, size=2)
+        return guess
+
+    def _get_guess_1gauss(self, *, flux, T):
+        rng = self.rng
+        guess = self._make_guess_array()
+
+        guess[4] = T * rng.uniform(low=0.9, high=1.1)
+        guess[5] = flux * rng.uniform(low=0.9, high=1.1)
+        return guess
+
+    def _get_guess_2gauss(self, *, flux, T):
+        rng = self.rng
+        guess = self._make_guess_array()
+
+        low, high = 0.99, 1.01
+        guess[4] = T * _moffat2_fguess[0] * rng.uniform(low=low, high=high)
+        guess[5] = T * _moffat2_fguess[1] * rng.uniform(low=low, high=high)
+        guess[6] = flux * _moffat2_pguess[0] * rng.uniform(low=low, high=high)
+        guess[7] = flux * _moffat2_pguess[1] * rng.uniform(low=low, high=high)
+
+        return guess
+
+    def _get_guess_3gauss(self, *, flux, T):
+        rng = self.rng
+        guess = self._make_guess_array()
+
+        low, high = 0.99, 1.01
+        guess[4] = T * _moffat3_fguess[0] * rng.uniform(low=low, high=high)
+        guess[5] = T * _moffat3_fguess[1] * rng.uniform(low=low, high=high)
+        guess[6] = T * _moffat3_fguess[2] * rng.uniform(low=low, high=high)
+
+        guess[7] = flux * _moffat3_pguess[0] * rng.uniform(low=low, high=high)
+        guess[8] = flux * _moffat3_pguess[1] * rng.uniform(low=low, high=high)
+        guess[9] = flux * _moffat3_pguess[2] * rng.uniform(low=low, high=high)
+        return guess
+
+    def _get_guess_4gauss(self, *, flux, T):
+        rng = self.rng
+        guess = self._make_guess_array()
+
+        low, high = 0.99, 1.01
+        guess[4] = T * _moffat4_fguess[0] * rng.uniform(low=low, high=high)
+        guess[5] = T * _moffat4_fguess[1] * rng.uniform(low=low, high=high)
+        guess[6] = T * _moffat4_fguess[2] * rng.uniform(low=low, high=high)
+        guess[7] = T * _moffat4_fguess[3] * rng.uniform(low=low, high=high)
+
+        guess[8] = flux * _moffat4_pguess[0] * rng.uniform(low=low, high=high)
+        guess[9] = flux * _moffat4_pguess[1] * rng.uniform(low=low, high=high)
+        guess[10] = flux * _moffat4_pguess[2] * rng.uniform(low=low, high=high)
+        guess[11] = flux * _moffat4_pguess[3] * rng.uniform(low=low, high=high)
+        return guess
+
+    def _get_guess_5gauss(self, *, flux, T):
+        rng = self.rng
+        guess = self._make_guess_array()
+
+        low, high = 0.99, 1.01
+        guess[4] = T * _moffat5_fguess[0] * rng.uniform(low=low, high=high)
+        guess[5] = T * _moffat5_fguess[1] * rng.uniform(low=low, high=high)
+        guess[6] = T * _moffat5_fguess[2] * rng.uniform(low=low, high=high)
+        guess[7] = T * _moffat5_fguess[3] * rng.uniform(low=low, high=high)
+        guess[8] = T * _moffat5_fguess[4] * rng.uniform(low=low, high=high)
+
+        guess[9] = flux * _moffat5_pguess[0] * rng.uniform(low=low, high=high)
+        guess[10] = flux * _moffat5_pguess[1] * rng.uniform(low=low, high=high)
+        guess[11] = flux * _moffat5_pguess[2] * rng.uniform(low=low, high=high)
+        guess[12] = flux * _moffat5_pguess[3] * rng.uniform(low=low, high=high)
+        guess[13] = flux * _moffat5_pguess[4] * rng.uniform(low=low, high=high)
+        return guess
+
+
+_moffat2_pguess = np.array([0.5, 0.5])
+_moffat2_fguess = np.array([0.48955064, 1.50658978])
+
+_moffat3_pguess = np.array([0.27559669, 0.55817131, 0.166232])
+_moffat3_fguess = np.array([0.36123609, 0.8426139, 2.58747785])
+
+_moffat4_pguess = np.array([0.44534, 0.366951, 0.10506, 0.0826497])
+_moffat4_fguess = np.array([0.541019, 1.19701, 0.282176, 3.51086])
+
+_moffat5_pguess = np.array([0.45, 0.25, 0.15, 0.1, 0.05])
+_moffat5_fguess = np.array([0.541019, 1.19701, 0.282176, 3.51086])
+
+_moffat5_pguess = np.array(
+    [0.57874897, 0.32273483, 0.03327272, 0.0341253, 0.03111819]
+)
+_moffat5_fguess = np.array(
+    [0.27831284, 0.9959897, 5.86989779, 5.63590429, 4.17285878]
+)

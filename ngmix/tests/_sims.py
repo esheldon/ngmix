@@ -104,13 +104,13 @@ def get_obs(*, rng, ngauss, noise=0.0, with_psf=False):
     return ret
 
 
-def get_psf_obs():
+def get_psf_obs(T=TPSF):
     dims = [25, 25]
     cen = (np.array(dims) - 1.0) / 2.0
 
     jacob = DiagonalJacobian(scale=PIXEL_SCALE, row=cen[0], col=cen[1])
 
-    gm = GMixModel([0.0, 0.0, 0.0, 0.0, TPSF, 1.0], "turb")
+    gm = GMixModel([0.0, 0.0, 0.0, 0.0, T, 1.0], "turb")
     im = gm.make_image(dims, jacobian=jacob)
 
     return {

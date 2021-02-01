@@ -194,11 +194,11 @@ def store_psf_results(*, obs, result, set_gmix=True):
             store_psf_results(obs=tobs, result=tresult, set_gmix=set_gmix)
 
     elif isinstance(obs, Observation):
-        if result['flags'] != 0:
-            raise ValueError('cannot set gmix for failed fit')
 
         obs.psf.meta['result'] = result
         if set_gmix:
+            if result['flags'] != 0:
+                raise ValueError('cannot set gmix for failed fit')
             if 'gmix' not in result:
                 raise ValueError('result has no gmix item')
 

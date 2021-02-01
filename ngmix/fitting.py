@@ -1189,9 +1189,9 @@ class LMSimple(FitterBase):
         self._set_totpix()
         self._set_n_prior_pars()
         self._set_npars()
+        self._set_band_pars()
         self._set_fdiff_size()
 
-        self._band_pars = zeros(6)
 
         npars = guess.size
         mess = "guess has npars=%d, expected %d" % (npars, self.npars)
@@ -1202,6 +1202,26 @@ class LMSimple(FitterBase):
             self._init_gmix_all(guess)
         except ZeroDivisionError:
             raise GMixRangeError("got zero division")
+
+    def _set_band_pars(self):
+        n_band_pars = 6
+        self._band_pars = zeros(self._n_band_pars)
+
+    def make_image(self, band=0, obsnum=0):
+        """
+        Get an image of the best fit mixture
+
+        Returns
+        -------
+        image: array
+            Image of the model, including the PSF if a psf was sent
+        """
+        gm = self.get_convolved_gmix(band=band, obsnum=obsnum)
+        obs = self.obs[band][obsnum]
+        return gm.make_image(
+            obs.image.shape,
+            jacobian=obs.jacobian,
+        )
 
     def get_band_pars(self, *, pars, band):
         """
@@ -1309,26 +1329,28 @@ class LMCoellip(LMSimple):
     TODO make special set_flux and set_T methods
     """
 
-    def __init__(self, obs, ngauss, **keys):
+    def __init__(self, *, ngauss, prior=None, fit_pars=None):
         self._ngauss = ngauss
-        super(LMCoellip, self).__init__(obs, "coellip", **keys)
+        super().__init__(model="coellip", prior=prior, fit_pars=fit_pars)
 
-        if self.nband != 1:
-            raise ValueError("MaxCoellip only supports one band")
+    def _set_n_prior_pars(self):
+        assert self.nband == 1, "LMCoellip can only fit one band"
 
-        #                 c1 + c2 + g + Ts     + Fs
-        self.n_prior_pars = 1 + 1 + 1 + ngauss + ngauss
-
-        self.fdiff_size = self.totpix + self.n_prior_pars
-
-        # over-write the band pars created by MaxSimple
-        self._band_pars = zeros(self.npars)
+        if self.prior is None:
+            self.n_prior_pars = 0
+        else:
+            ngauss = self._ngauss
+            self.n_prior_pars = 1 + 1 + 1 + ngauss + ngauss
 
     def _set_npars(self):
         """
         single band, npars determined from ngauss
         """
         self.npars = 4 + 2 * self._ngauss
+
+    def _set_band_pars(self):
+        n_band_pars = self.npars
+        self._band_pars = zeros(n_band_pars)
 
     def get_band_pars(self, *, pars, band):
         """
