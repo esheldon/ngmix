@@ -7,7 +7,8 @@ from ._sims import get_obs, get_psf_obs
 
 
 @pytest.mark.parametrize('with_psf_obs', [False, True])
-def test_em_psf_runner(with_psf_obs):
+@pytest.mark.parametrize('guess_from_moms', [False, True])
+def test_em_psf_runner(with_psf_obs, guess_from_moms):
     """
     see if we can recover the input with and without noise to high precision
     even with a bad guess
@@ -33,6 +34,7 @@ def test_em_psf_runner(with_psf_obs):
     guesser = GuesserEMPSF(
         rng=rng,
         ngauss=3,
+        guess_from_moms=guess_from_moms,
     )
     # better tolerance needed for this psf fit
     fitter = GMixEM(tol=1.0e-5)

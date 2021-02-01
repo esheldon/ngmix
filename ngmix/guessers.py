@@ -521,11 +521,24 @@ class R50NuFluxGuesser(R50FluxGuesser):
 class GuesserEMPSF(object):
     """
     guesser for EM psf fitting
+
+    Parameters
+    ----------
+    rng: numpy.random.RandomState
+        Random state for generating guesses
+    ngauss: int
+        number of gaussians
+    guess_from_moms: bool, optional
+        If set to True, use weighted moments to generate the starting flux and
+        T for the guess.  If set to False, the starting flux is gotten from
+        summing the image and the fwhm of the guess isset to 3.5 times the
+        pixel scale
     """
-    def __init__(self, *, rng, ngauss):
+    def __init__(self, *, rng, ngauss, guess_from_moms=False):
 
         self.rng = rng
         self.ngauss = ngauss
+        self.guess_from_moms = guess_from_moms
 
     def __call__(self, *, obs):
         """
@@ -534,22 +547,21 @@ class GuesserEMPSF(object):
         Parameters
         ----------
         obs: Observation, ignored
-            The flux and T guess are derived from
-            the input observation
+            Starting flux and T for the overall mixture are derived from the
+            input observation.  How depends on the gauss_from_moms constructor
+            argument
 
         Returns
         -------
         ngmix.GMix
-            The guess mixture, with the number of gaussians
-            as specified in the constructor
+            The guess mixture, with the number of gaussians as specified in the
+            constructor
         """
 
-        flux = obs.image.sum() * obs.jacobian.scale**2
-        # T = self._get_Tguess(obs=obs)
-
-        # for DES 0.9/0.263 = 3.42
-        fwhm = obs.jacobian.scale * 3.5
-        T = moments.fwhm_to_T(fwhm)
+        if self.guess_from_moms:
+            T, flux = self._get_T_flux_from_moms(obs=obs)
+        else:
+            T, flux = self._get_T_flux(obs=obs)
 
         if self.ngauss == 1:
             return self._get_em_guess_1gauss(flux=flux, T=T)
@@ -564,20 +576,46 @@ class GuesserEMPSF(object):
         else:
             raise ValueError("bad ngauss: %d" % self.ngauss)
 
-    def _get_Tguess(self, *, obs):
+    def _get_T_flux(self, *, obs):
+        """
+        get starting T and flux from a multiple of the pixel scale and the sum
+        of the image
+        """
+        scale = obs.jacobian.scale
+        flux = obs.image.sum() * scale**2
+        # for DES 0.9/0.263 = 3.42
+        fwhm = scale * 3.5
+        T = moments.fwhm_to_T(fwhm)
+        return T, flux
+
+    def _get_T_flux_from_moms(self, *, obs):
+        """
+        get starting T and flux from weighted moments, deweighted
+
+        if the measured T is too small, fall back to the _get_T_flux method
+        """
+        scale = obs.jacobian.scale
+
         # 0.9/0.263 = 3.42
-        fwhm = obs.jacobian.scale * 3.5
+        fwhm = scale * 3.5
+
         Tweight = moments.fwhm_to_T(fwhm)
         wt = GMixModel([0.0, 0.0, 0.0, 0.0, Tweight, 1.0], "gauss")
-        moms = wt.get_weighted_moments(obs, 1.e9)
 
-        Tmeas = moms['T']
-        if Tmeas < 1.0e-3:
-            Tguess = Tweight
+        res = wt.get_weighted_moments(obs=obs, maxrad=1.0e9)
+
+        Tmeas = res['T']
+
+        fwhm_meas = moments.T_to_fwhm(Tmeas)
+        if fwhm_meas < scale:
+            # something probably went wrong
+            T, flux = self._get_T_flux(obs=obs)
         else:
-            Tguess = 1.0/(1/Tmeas - 1/Tweight)
+            # deweight assuming true profile is a gaussian
+            T = 1.0/(1/Tmeas - 1/Tweight)
+            flux = res['flux'] * scale**2 * np.pi * (Tweight + T)
 
-        return Tguess
+        return T, flux
 
     def _get_em_guess_1gauss(self, *, flux, T):
         rng = self.rng
@@ -729,218 +767,6 @@ class GuesserEMPSF(object):
         ])
 
         return GMix(pars=pars)
-
-    def set_rng(self, rng):
-        if rng is None:
-            rng = np.random.RandomState()
-
-        self.rng = rng
-
-
-class TFluxGuesserEMPSF(object):
-    """
-    guesser for EM psf fitting
-    """
-    def __init__(self, *, rng, T, flux, ngauss):
-
-        self.rng = rng
-        self.ngauss = ngauss
-        self.Tguess = T
-        self.flux = flux
-        self.sigma_guess = np.sqrt(T/2)
-
-    def __call__(self, obs=None):
-        """
-        Get a guess for the EM algorithm
-
-        Parameters
-        ----------
-        obs: Observation, ignored
-            The obs is ignored for this guesser
-
-        Returns
-        -------
-        ngmix.GMix
-            The guess mixture, with the number of gaussians
-            as specified in the constructor
-        """
-
-        if self.ngauss == 1:
-            return self._get_em_guess_1gauss()
-        elif self.ngauss == 2:
-            return self._get_em_guess_2gauss()
-        elif self.ngauss == 3:
-            return self._get_em_guess_3gauss()
-        elif self.ngauss == 4:
-            return self._get_em_guess_4gauss()
-        elif self.ngauss == 5:
-            return self._get_em_guess_5gauss()
-        else:
-            raise ValueError("bad ngauss: %d" % self.ngauss)
-
-    def _get_em_guess_1gauss(self):
-        rng = self.rng
-
-        sigma2 = self.sigma_guess ** 2
-        flux = self.flux
-
-        pars = np.array(
-            [
-                flux * rng.uniform(low=0.9, high=1.1),
-                rng.uniform(low=-0.1, high=0.1),
-                rng.uniform(low=-0.1, high=0.1),
-                sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-                rng.uniform(low=-0.2 * sigma2, high=0.2 * sigma2),
-                sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            ]
-        )
-
-        pars[0] *= self.flux
-        return GMix(pars=pars)
-
-    def _get_em_guess_2gauss(self):
-        rng = self.rng
-
-        sigma2 = self.sigma_guess ** 2
-        flux = self.flux
-
-        pars = np.array([
-            _em2_pguess[0] * flux,
-            rng.uniform(low=-0.1, high=0.1),
-            rng.uniform(low=-0.1, high=0.1),
-            _em2_fguess[0] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            0.0,
-            _em2_fguess[0] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-
-            _em2_pguess[1] * flux,
-            rng.uniform(low=-0.1, high=0.1),
-            rng.uniform(low=-0.1, high=0.1),
-            _em2_fguess[1] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            0.0,
-            _em2_fguess[1] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-        ])
-
-        return GMix(pars=pars)
-
-    def _get_em_guess_3gauss(self):
-        rng = self.rng
-
-        sigma2 = self.sigma_guess ** 2
-        flux = self.flux
-
-        pars = np.array([
-            flux * _em3_pguess[0] * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.1, high=0.1),
-            rng.uniform(low=-0.1, high=0.1),
-            _em3_fguess[0] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.01, high=0.01),
-            _em3_fguess[0] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-
-            flux * _em3_pguess[1] * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.1, high=0.1),
-            rng.uniform(low=-0.1, high=0.1),
-            _em3_fguess[1] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.01, high=0.01),
-            _em3_fguess[1] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-
-            flux * _em3_pguess[2] * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.1, high=0.1),
-            rng.uniform(low=-0.1, high=0.1),
-            _em3_fguess[2] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.01, high=0.01),
-            _em3_fguess[2] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-        ])
-
-        return GMix(pars=pars)
-
-    def _get_em_guess_4gauss(self):
-        rng = self.rng
-
-        sigma2 = self.sigma_guess ** 2
-        flux = self.flux
-
-        pars = np.array([
-            flux * _em4_pguess[0] * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.1, high=0.1),
-            rng.uniform(low=-0.1, high=0.1),
-            _em4_fguess[0] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.01, high=0.01),
-            _em4_fguess[0] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-
-            flux * _em4_pguess[1] * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.1, high=0.1),
-            rng.uniform(low=-0.1, high=0.1),
-            _em4_fguess[1] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.01, high=0.01),
-            _em4_fguess[1] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-
-            flux * _em4_pguess[2] * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.1, high=0.1),
-            rng.uniform(low=-0.1, high=0.1),
-            _em4_fguess[2] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.01, high=0.01),
-            _em4_fguess[2] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-
-            flux * _em4_pguess[2] * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.1, high=0.1),
-            rng.uniform(low=-0.1, high=0.1),
-            _em4_fguess[2] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.01, high=0.01),
-            _em4_fguess[2] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-        ])
-
-        return GMix(pars=pars)
-
-    def _get_em_guess_5gauss(self):
-        rng = self.rng
-
-        sigma2 = self.sigma_guess ** 2
-        flux = self.flux
-
-        pars = np.array([
-            flux * _em5_pguess[0] * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.1, high=0.1),
-            rng.uniform(low=-0.1, high=0.1),
-            _em5_fguess[0] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.01, high=0.01),
-            _em5_fguess[0] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-
-            flux * _em5_pguess[1] * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.1, high=0.1),
-            rng.uniform(low=-0.1, high=0.1),
-            _em5_fguess[1] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.01, high=0.01),
-            _em5_fguess[1] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-
-            flux * _em5_pguess[2] * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.1, high=0.1),
-            rng.uniform(low=-0.1, high=0.1),
-            _em5_fguess[2] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.01, high=0.01),
-            _em5_fguess[2] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-
-            flux * _em5_pguess[2] * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.1, high=0.1),
-            rng.uniform(low=-0.1, high=0.1),
-            _em5_fguess[2] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.01, high=0.01),
-            _em5_fguess[2] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-
-            flux * _em5_pguess[2] * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.1, high=0.1),
-            rng.uniform(low=-0.1, high=0.1),
-            _em5_fguess[2] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-            rng.uniform(low=-0.01, high=0.01),
-            _em5_fguess[2] * sigma2 * (1.0 + rng.uniform(low=-0.1, high=0.1)),
-        ])
-
-        return GMix(pars=pars)
-
-    def set_rng(self, rng):
-        if rng is None:
-            rng = np.random.RandomState()
-
-        self.rng = rng
 
 
 _em2_pguess = np.array([0.596510042804182, 0.4034898268889178])
