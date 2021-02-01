@@ -49,7 +49,7 @@ class TFluxGuesser(GuesserBase):
         If sent, "fix-up" guesses if they are not allowed by the prior
     """
 
-    def __init__(self, rng, T, fluxes, prior=None):
+    def __init__(self, *, rng, T, fluxes, prior=None):
         self.rng = rng
         self.T = T
 
@@ -59,12 +59,7 @@ class TFluxGuesser(GuesserBase):
         self.fluxes = fluxes
         self.prior = prior
 
-        lfluxes = fluxes.copy()
-        (w,) = np.where(fluxes < 0.0)
-        if w.size > 0:
-            lfluxes[w[:]] = 1.0e-10
-
-    def __call__(self, n=1, **keys):
+    def __call__(self, *, obs, n=1):
         """
         center, shape are just distributed around zero
         """
@@ -73,9 +68,9 @@ class TFluxGuesser(GuesserBase):
 
         fluxes = self.fluxes
         nband = fluxes.size
-        np = 5 + nband
+        npars = 5 + nband
 
-        guess = np.zeros((n, np))
+        guess = np.zeros((n, npars))
         guess[:, 0] = rng.uniform(low=-0.01, high=0.01, size=n)
         guess[:, 1] = rng.uniform(low=-0.01, high=0.01, size=n)
         guess[:, 2] = rng.uniform(low=-0.02, high=0.02, size=n)
@@ -93,6 +88,7 @@ class TFluxGuesser(GuesserBase):
 
         if n == 1:
             guess = guess[0, :]
+
         return guess
 
 

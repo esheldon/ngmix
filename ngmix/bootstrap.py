@@ -57,54 +57,23 @@ def bootstrap(
         If set to True, remove observations where the psf fit fails, and
         only fit the remaining.  Default True.
 
-    Returns
-    -------
-    result dict
-
     Side effects
     ------------
-    the psf.meta['result'] and the .psf.gmix may be set if a psf runner is sent
-    and the internal fitter has a get_gmix method.  gmix are only set for
-    successful fits
-
-    Note the only place where side effects should be occurring is
-    in the call to store_psf_results.
+    the obs.psf.meta['result'] and the obs.psf.gmix may be set if a psf runner
+    is sent and the internal fitter has a get_gmix method.  gmix are only set
+    for successful fits
     """
 
     if psf_runner is not None:
-        psf_result = psf_runner.go(obs=obs)
+        psf_runner.go(obs=obs, set_result=True)
 
         if ignore_failed_psf:
-            obs, psf_result = remove_failed_psf_obs(
-                obs=obs, result=psf_result,
-            )
+            obs = remove_failed_psf_obs(obs=obs)
 
-        if result_has_gmix(psf_result):
-            set_gmix = True
-        else:
-            set_gmix = False
-
-        store_psf_results(
-            obs=obs, result=psf_result, set_gmix=set_gmix,
-        )
-
-    return runner.go(obs=obs)
+    runner.go(obs=obs)
 
 
-def result_has_gmix(result):
-    """
-    check if a gmix is present.  Not all are checked
-    """
-    try:
-        if 'gmix' in result:
-            return True
-        else:
-            return False
-    except TypeError:
-        return result_has_gmix(result[0])
-
-
-def remove_failed_psf_obs(*, obs, result):
+def remove_failed_psf_obs(*, obs):
     """
     remove observations from the input that failed
 
@@ -112,102 +81,49 @@ def remove_failed_psf_obs(*, obs, result):
     ----------
     obs: observation(s)
         Observation, ObsList, or MultiBandObsList
-    result: result dict, or list or list of lists
-        The results for the psf fits
 
     Returns
     --------
-    obs, result:
-        new observations, same type as input, as well
-        as new results
+    obs: observation(s)
+        new observations, same type as input
     """
     if isinstance(obs, MultiBandObsList):
         new_mbobs = MultiBandObsList(meta=obs.meta)
-        new_mbobs_result = []
         for tobslist, treslist in zip(obs, result):
 
             new_obslist = ObsList(meta=tobslist.meta)
-            new_obslist_result = []
-            for tobs, tres in zip(tobslist, treslist):
-                if tres['flags'] == 0:
+            for tobs in tobslist:
+                if tobs.psf.meta['result']['flags'] == 0:
                     new_obslist.append(tobs)
-                    new_obslist_result.append(tres)
 
             if len(new_obslist) == 0:
                 raise BootPSFFailure('no good psf fits')
 
             new_mbobs.append(new_obslist)
-            new_mbobs_result.append(new_obslist_result)
 
-        return new_mbobs, new_mbobs_result
+        return new_mbobs
 
     elif isinstance(obs, ObsList):
         new_obslist = ObsList(meta=tobslist.meta)
-        new_obslist_result = []
-        for tobs, tres in zip(obs, result):
-            if tres['flags'] == 0:
+        for tobs in obs:
+            if tobs.psf.meta['result']['flags'] == 0:
                 new_obslist.append(tobs)
-                new_obslist_result.append(tres)
 
         if len(tobslist) == 0:
             raise BootPSFFailure('no good psf fits')
 
-        return new_obslist, new_obslist_result
-    else:
-        if result['flags'] != 0:
-            raise BootPSFFailure('no good psf fits')
-
-        return obs, result
-
-
-def store_psf_results(*, obs, result, set_gmix=True):
-    """
-    store the psf results in the obs meta and possibly set the gmix
-    for the psf
-
-    Parameters
-    ----------
-    obs: ngmix Observation(s)
-        Observation, ObsList, or MultiBandObsList
-    result: result dict, list or list of lists
-        The results to store
-    set_gmix: bool, optional
-        If set to True, the gmix is constructed for the psf and
-        set
-
-    Returns
-    -------
-    None, the result will be stored in the meta for each observation
-
-    Side Effects
-    ------------
-    .meta['result'] is set to the fit result and the psf.gmix attribuite is set
-    for each successful psf fit
-    """
-
-    if isinstance(obs, MultiBandObsList):
-        for tobslist, tresult in zip(obs, result):
-            store_psf_results(obs=tobslist, result=tresult, set_gmix=set_gmix)
-
-    elif isinstance(obs, ObsList):
-        for tobs, tresult in zip(obs, result):
-            store_psf_results(obs=tobs, result=tresult, set_gmix=set_gmix)
-
+        return new_obslist
     elif isinstance(obs, Observation):
-
-        obs.psf.meta['result'] = result
-        if set_gmix:
-            if result['flags'] != 0:
-                raise ValueError('cannot set gmix for failed fit')
-            if 'gmix' not in result:
-                raise ValueError('result has no gmix item')
-
-            obs.psf.gmix = result['gmix']
-
+        if obs.psf.meta['result']['flags'] != 0:
+            raise BootPSFFailure('no good psf fits')
+        return obs
     else:
-        raise ValueError(
-            'obs must be an Observation, ObsList, or MultiBandObsList'
+        mess=(
+            'got obs input type: "%s", should be '
+            'Observation, ObsList, or MulitiBandObsList' % type(obs)
         )
+        raise ValueError(mess)
+
 
 
 class Bootstrapper(object):

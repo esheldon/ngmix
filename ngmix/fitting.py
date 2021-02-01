@@ -1205,7 +1205,7 @@ class LMSimple(FitterBase):
 
     def _set_band_pars(self):
         n_band_pars = 6
-        self._band_pars = zeros(self._n_band_pars)
+        self._band_pars = zeros(n_band_pars)
 
     def make_image(self, band=0, obsnum=0):
         """

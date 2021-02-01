@@ -7,7 +7,7 @@ PIXEL_SCALE = 0.263
 TPSF = 0.27
 
 
-def get_obs(*, rng, ngauss, noise=0.0, with_psf=False):
+def get_ngauss_obs(*, rng, ngauss, noise=0.0, with_psf=False):
 
     counts = 100.0
     dims = [25, 25]
@@ -101,6 +101,37 @@ def get_obs(*, rng, ngauss, noise=0.0, with_psf=False):
     if with_psf:
         ret['psf_gmix'] = psf_ret['gmix']
 
+    return ret
+
+
+def get_model_obs(*, rng, model, noise=0.0):
+
+    cen1, cen2 = rng.uniform(low=0.5*PIXEL_SCALE, high=0.5*PIXEL_SCALE, size=2)
+    T = 0.27
+    g1 = 0.1
+    g2 = 0.05
+    flux = 100.0
+
+    dims = [32, 32]
+    jcen = (np.array(dims) - 1.0) / 2.0
+    jacob = DiagonalJacobian(scale=PIXEL_SCALE, row=jcen[0], col=jcen[1])
+
+    pars = [cen1, cen2, g1, g2, T, flux]
+    gm = GMixModel(pars, model)
+
+    psf_ret = get_psf_obs()
+    gmconv = gm.convolve(psf_ret['gmix'])
+
+    im0 = gmconv.make_image(dims, jacobian=jacob)
+
+    im = im0 + rng.normal(size=im0.shape, scale=noise)
+    obs = Observation(im, jacobian=jacob, psf=psf_ret['obs'])
+
+    ret = {
+        'obs': obs,
+        'gmix': gm,
+        'pars': pars,
+    }
     return ret
 
 

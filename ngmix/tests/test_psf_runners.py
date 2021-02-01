@@ -4,18 +4,14 @@ from ngmix.runners import PSFRunner
 from ngmix.guessers import GuesserEMPSF, GuesserCoellipPSF
 from ngmix.em import GMixEM
 from ngmix.fitting import LMCoellip
-from ._sims import get_obs, get_psf_obs
+from ._sims import get_ngauss_obs, get_psf_obs
 
 
 @pytest.mark.parametrize('guess_from_moms', [False, True])
 @pytest.mark.parametrize('ngauss', [1, 2, 3, 4, 5])
 def test_em_psf_runner_smoke(ngauss, guess_from_moms):
     """
-    see if we can recover the input with and without noise to high precision
-    even with a bad guess
-
-    Use ngmix to make the image to make sure there are
-    no pixelization effects
+    Smoke test a PSFRunner running the EM fitter
     """
 
     rng = np.random.RandomState(8821)
@@ -48,17 +44,13 @@ def test_em_psf_runner_smoke(ngauss, guess_from_moms):
 @pytest.mark.parametrize('guess_from_moms', [False, True])
 def test_em_psf_runner(with_psf_obs, guess_from_moms):
     """
-    see if we can recover the input with and without noise to high precision
-    even with a bad guess
-
-    Use ngmix to make the image to make sure there are
-    no pixelization effects
+    Test a PSFRunner running the EM fitter
     """
 
     rng = np.random.RandomState(8821)
 
     if with_psf_obs:
-        data = get_obs(
+        data = get_ngauss_obs(
             rng=rng,
             ngauss=1,
             noise=0.0,
@@ -104,11 +96,7 @@ def test_em_psf_runner(with_psf_obs, guess_from_moms):
 @pytest.mark.parametrize('ngauss', [1, 2, 3, 4, 5])
 def test_coellip_psf_runner_smoke(ngauss, guess_from_moms):
     """
-    see if we can recover the input with and without noise to high precision
-    even with a bad guess
-
-    Use ngmix to make the image to make sure there are
-    no pixelization effects
+    Smoke test a PSFRunner running the coelliptical fitter
     """
 
     rng = np.random.RandomState(9321)
@@ -148,17 +136,13 @@ def test_coellip_psf_runner_smoke(ngauss, guess_from_moms):
 @pytest.mark.parametrize('guess_from_moms', [False, True])
 def test_coellip_psf_runner(with_psf_obs, guess_from_moms):
     """
-    see if we can recover the input with and without noise to high precision
-    even with a bad guess
-
-    Use ngmix to make the image to make sure there are
-    no pixelization effects
+    Test a PSFRunner running the coelliptical fitter
     """
 
     rng = np.random.RandomState(21)
 
     if with_psf_obs:
-        data = get_obs(
+        data = get_ngauss_obs(
             rng=rng,
             ngauss=1,
             noise=0.0,
