@@ -12,7 +12,7 @@ class Runner(object):
     Parameters
     ----------
     fitter: ngmix fitter or measurer
-        An object to perform measurements, must have a go(obs=obs, ntry=ntry)
+        An object to perform measurements, must have a go(obs=obs, guess=guess)
         method.
     guesser: ngmix guesser object
         Must be a callable returning an array of parameters
@@ -51,7 +51,7 @@ class PSFRunner(Runner):
     Parameters
     ----------
     fitter: ngmix fitter or measurer
-        An object to perform measurements, must have a go(obs=obs, ntry=ntry)
+        An object to perform measurements, must have a go(obs=obs, guess=guess)
         method.
     guesser: ngmix guesser object
         Must be a callable returning an array of parameters
@@ -96,7 +96,7 @@ def run_fitter(*, obs, fitter, guesser, ntry=1):
     obs: ngmix Observation(s)
         Observation, ObsList, or MultiBandObsList
     fitter: ngmix fitter or measurer
-        An object to perform measurements, must have a go(obs=obs, ntry=ntry)
+        An object to perform measurements, must have a go(obs=obs, guess=guess)
         method.
     guesser: ngmix guesser object
         Must be a callable returning an array of parameters
@@ -130,7 +130,7 @@ def run_psf_fitter(*, obs, fitter, guesser, ntry=1, set_result=False):
     obs: ngmix Observation(s)
         Observation, ObsList, or MultiBandObsList
     fitter: ngmix fitter or measurer
-        An object to perform measurements, must have a go(obs=obs, ntry=ntry)
+        An object to perform measurements, must have a go(obs=obs, guess=guess)
         method.
     guesser: ngmix guesser object
         Must be a callable returning an array of parameters

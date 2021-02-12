@@ -9,7 +9,7 @@ from ngmix.guessers import EMPSFGuesser, TFluxGuesser, CoellipPSFGuesser
 from ngmix.fitting import LMCoellip
 from ngmix.em import GMixEM
 from ngmix.fitting import LMSimple
-from ngmix.bootstrap import bootstrap
+from ngmix.bootstrap import bootstrap, Bootstrapper
 from ._sims import get_model_obs
 
 FRAC_TOL = 5.0e-4
@@ -38,7 +38,9 @@ def get_prior(*, rng, cen, cen_width, T_range, F_range):
 @pytest.mark.parametrize('noise', [1.0e-8, 0.01])
 @pytest.mark.parametrize('guess_from_moms', [True, False])
 @pytest.mark.parametrize('use_prior', [False, True])
-def test_bootstrap(model, psf_model_type, guess_from_moms, noise, use_prior):
+@pytest.mark.parametrize('use_bootstrapper', [False, True])
+def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
+                   use_prior, use_bootstrapper):
     """
     Smoke test a Runner running the LMSimple fitter
     """
@@ -97,7 +99,11 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise, use_prior):
         ntry=2,
     )
 
-    bootstrap(obs=obs, runner=runner, psf_runner=psf_runner)
+    if use_bootstrapper:
+        boot = Bootstrapper(runner=runner, psf_runner=psf_runner)
+        boot.go(obs)
+    else:
+        bootstrap(obs=obs, runner=runner, psf_runner=psf_runner)
 
     fitter = runner.fitter
     res = fitter.get_result()
