@@ -885,10 +885,12 @@ class MaxSimple(FitterBase):
         """
         Run maximizer and set the result.
 
-        parameters
+        Parameters
         ----------
-        guess: array/sequence
-            Starting guess for the fitter
+        obs: Observation, ObsList, or MultiBandObsList
+            Observation(s) to fit
+        guess: array
+            Array of initial parameters for the fit
         """
         import scipy.optimize
 
@@ -988,6 +990,13 @@ class NMSimple(FitterBase):
     def go(self, *, obs, guess):
         """
         Run maximizer and set the result.
+
+        Parameters
+        ----------
+        obs: Observation, ObsList, or MultiBandObsList
+            Observation(s) to fit
+        guess: array
+            Array of initial parameters for the fit
         """
         from .simplex import minimize_neldermead
 
@@ -1122,6 +1131,13 @@ class LMSimple(FitterBase):
     def go(self, *, obs, guess):
         """
         Run leastsq and set the result
+
+        Parameters
+        ----------
+        obs: Observation, ObsList, or MultiBandObsList
+            Observation(s) to fit
+        guess: array
+            Array of initial parameters for the fit
         """
 
         guess = array(guess, dtype="f8", copy=False)

@@ -75,12 +75,12 @@ class TFluxGuesser(GuesserBase):
         guess[:, 1] = rng.uniform(low=-0.01, high=0.01, size=n)
         guess[:, 2] = rng.uniform(low=-0.02, high=0.02, size=n)
         guess[:, 3] = rng.uniform(low=-0.02, high=0.02, size=n)
-        guess[:, 4] = self.T * rng.uniform(low=-0.9, high=1.1, size=n)
+        guess[:, 4] = self.T * rng.uniform(low=0.9, high=1.1, size=n)
 
         fluxes = self.fluxes
         for band in range(nband):
             guess[:, 5 + band] = (
-                fluxes[band] * rng.uniform(low=-0.9, high=1.1, size=n)
+                fluxes[band] * rng.uniform(low=0.9, high=1.1, size=n)
             )
 
         if self.prior is not None:

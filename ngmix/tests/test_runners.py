@@ -29,14 +29,14 @@ def test_runner_lm_simple_smoke(model, psf_model_type):
     if psf_model_type == 'em':
         psf_guesser = EMPSFGuesser(
             rng=rng,
-            ngauss=3,
+            ngauss=psf_ngauss,
         )
 
         psf_fitter = GMixEM(tol=1.0e-5)
     else:
         psf_guesser = CoellipPSFGuesser(
             rng=rng,
-            ngauss=3,
+            ngauss=psf_ngauss,
         )
 
         psf_fitter = LMCoellip(ngauss=psf_ngauss)
@@ -88,14 +88,14 @@ def test_runner_lm_simple(model, psf_model_type, noise):
     if psf_model_type == 'em':
         psf_guesser = EMPSFGuesser(
             rng=rng,
-            ngauss=3,
+            ngauss=psf_ngauss,
         )
 
         psf_fitter = GMixEM(tol=1.0e-5)
     else:
         psf_guesser = CoellipPSFGuesser(
             rng=rng,
-            ngauss=3,
+            ngauss=psf_ngauss,
         )
 
         psf_fitter = LMCoellip(ngauss=psf_ngauss)

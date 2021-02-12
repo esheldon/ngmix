@@ -99,7 +99,7 @@ def test_em_psf_runner(with_psf_obs, guess_from_moms):
 @pytest.mark.parametrize('model', ["gauss", "turb"])
 def test_simple_psf_runner_smoke(model, guess_from_moms):
     """
-    Smoke test a PSFRunner running the coelliptical fitter
+    Smoke test a PSFRunner running the simple fitter
     """
 
     rng = np.random.RandomState(3893)
@@ -130,7 +130,7 @@ def test_simple_psf_runner_smoke(model, guess_from_moms):
 @pytest.mark.parametrize('model', ["gauss", "turb"])
 def test_simple_psf_runner(model, guess_from_moms):
     """
-    Smoke test a PSFRunner running the coelliptical fitter
+    Smoke test a PSFRunner running the simple fitter
     """
 
     rng = np.random.RandomState(3893)

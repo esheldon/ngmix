@@ -3,122 +3,129 @@ just test moment errors
 """
 import pytest
 import numpy as np
-import ngmix
+from ngmix import priors, joint_prior
+from ngmix.runners import Runner, PSFRunner
+from ngmix.guessers import EMPSFGuesser, TFluxGuesser, CoellipPSFGuesser
+from ngmix.fitting import LMCoellip
+from ngmix.em import GMixEM
+from ngmix.fitting import LMSimple
+from ngmix.bootstrap import bootstrap
+from ._sims import get_model_obs
+
+FRAC_TOL = 5.0e-4
 
 
-def _get_obs(rng):
-    import galsim
+def get_prior(*, rng, cen, cen_width, T_range, F_range):
+    """
+    For testing
 
-    noise = 0.001
-    psf_noise = 1.0e-6
+    Make PriorSimpleSep uniform in all priors except the
+    center, which is gaussian
+    """
+    cen_prior = priors.CenPrior(
+        cen[0], cen[1], cen_width, cen_width, rng=rng,
+    )
+    g_prior = priors.GPriorBA(0.3, rng=rng)
+    T_prior = priors.FlatPrior(T_range[0], T_range[1], rng=rng)
+    F_prior = priors.FlatPrior(F_range[0], F_range[1], rng=rng)
 
-    scale = 0.263
+    pr = joint_prior.PriorSimpleSep(cen_prior, g_prior, T_prior, F_prior)
+    return pr
 
-    psf_fwhm = 0.9
-    gal_fwhm = 0.7
 
-    psf = galsim.Gaussian(fwhm=psf_fwhm)
-    obj0 = galsim.Gaussian(fwhm=gal_fwhm)
+@pytest.mark.parametrize('psf_model_type', ['em', 'coellip'])
+@pytest.mark.parametrize('model', ['gauss', 'exp', 'dev'])
+@pytest.mark.parametrize('noise', [1.0e-8, 0.01])
+@pytest.mark.parametrize('guess_from_moms', [True, False])
+@pytest.mark.parametrize('use_prior', [False, True])
+def test_bootstrap(model, psf_model_type, guess_from_moms, noise, use_prior):
+    """
+    Smoke test a Runner running the LMSimple fitter
+    """
 
-    obj = galsim.Convolve(psf, obj0)
+    rng = np.random.RandomState(2830)
 
-    psf_im = psf.drawImage(scale=scale).array
-    im = obj.drawImage(scale=scale).array
+    data = get_model_obs(
+        rng=rng,
+        model=model,
+        noise=noise,
+    )
+    obs = data['obs']
 
-    psf_im += rng.normal(scale=psf_noise, size=psf_im.shape)
-    im += rng.normal(scale=noise, size=im.shape)
+    psf_ngauss = 3
 
-    cen = (np.array(im.shape)-1.0)/2.0
-    psf_cen = (np.array(psf_im.shape)-1.0)/2.0
+    if psf_model_type == 'em':
+        psf_guesser = EMPSFGuesser(
+            rng=rng,
+            ngauss=psf_ngauss,
+            guess_from_moms=guess_from_moms,
+        )
 
-    j = ngmix.DiagonalJacobian(row=cen[0], col=cen[1], scale=scale)
-    pj = ngmix.DiagonalJacobian(row=psf_cen[0], col=psf_cen[1], scale=scale)
+        psf_fitter = GMixEM(tol=1.0e-5)
+    else:
+        psf_guesser = CoellipPSFGuesser(
+            rng=rng,
+            ngauss=psf_ngauss,
+            guess_from_moms=guess_from_moms,
+        )
 
-    wt = im*0 + 1.0/noise**2
-    psf_wt = psf_im*0 + 1.0/psf_noise**2
+        psf_fitter = LMCoellip(ngauss=psf_ngauss)
 
-    psf_obs = ngmix.Observation(
-        psf_im,
-        weight=psf_wt,
-        jacobian=pj,
+    psf_runner = PSFRunner(
+        fitter=psf_fitter,
+        guesser=psf_guesser,
+        ntry=2,
     )
 
-    obs = ngmix.Observation(
-        im,
-        weight=wt,
-        jacobian=j,
-        psf=psf_obs,
+    guesser = TFluxGuesser(
+        rng=rng,
+        T=0.25,
+        fluxes=100.0,
+    )
+    prior = get_prior(
+        rng=rng,
+        cen=[0.0, 0.0],
+        cen_width=obs.jacobian.scale,
+        T_range=[-1.0, 1.e3],
+        F_range=[0.01, 1000.0],
+    )
+    fitter = LMSimple(model=model, prior=prior)
+
+    runner = Runner(
+        fitter=fitter,
+        guesser=guesser,
+        ntry=2,
     )
 
-    return obs
+    bootstrap(obs=obs, runner=runner, psf_runner=psf_runner)
 
-
-@pytest.mark.parametrize('models', [
-    ('gauss', 'gauss'),
-    ('gauss', 'exp'),
-    ('em1', 'exp'),
-    ('em3', 'exp'),
-])
-def test_bootstrap_max_smoke(models):
-
-    psf_model, obj_model = models
-
-    rng = np.random.RandomState(3421)
-    obs = _get_obs(rng)
-
-    boot = ngmix.bootstrap.Bootstrapper(obs)
-
-    psf_Tguess = 0.9*0.263**2
-    boot.fit_psfs(
-        psf_model,
-        psf_Tguess,
-    )
-
-    pars = {
-        'method': 'lm',
-        'lm_pars': {},
-    }
-    boot.fit_max(
-        obj_model,
-        pars,
-    )
-
-    res = boot.get_fitter().get_result()
+    fitter = runner.fitter
+    res = fitter.get_result()
     assert res['flags'] == 0
 
+    pixel_scale = obs.jacobian.scale
+    if noise <= 1.0e-8:
+        assert abs(res['pars'][0]-data['pars'][0]) < pixel_scale/10
+        assert abs(res['pars'][1]-data['pars'][1]) < pixel_scale/10
 
-@pytest.mark.parametrize('fixnoise', [True, False])
-def test_bootstrap_mcal_smoke(fixnoise):
+        assert abs(res['pars'][2]-data['pars'][2]) < 0.01
+        assert abs(res['pars'][3]-data['pars'][3]) < 0.01
 
-    psf_model = 'gauss'
-    obj_model = 'gauss'
+        # dev is hard to get right
+        if model != 'dev':
+            assert abs(res['pars'][4]/data['pars'][4] - 1) < FRAC_TOL
 
-    rng = np.random.RandomState(481)
-    obs = _get_obs(rng)
+        assert abs(res['pars'][5]/data['pars'][5] - 1) < FRAC_TOL
 
-    mcal_boot = ngmix.bootstrap.MaxMetacalBootstrapper(obs)
+    # check reconstructed image allowing for noise
+    imfit = fitter.make_image()
+    maxdiff = np.abs(imfit - obs.image).max()
+    immax = obs.image.max()
+    # imtol = 0.001 / pixel_scale**2 + noise*5
+    max_reldiff = maxdiff/immax - 1
+    reltol = 0.001 + noise * 5 / immax
+    if max_reldiff > reltol:
+        from espy import images
+        images.compare_images(obs.image, imfit)
 
-    psf_Tguess = 0.9*0.263**2
-    pars = {
-        'method': 'lm',
-        'lm_pars': {},
-    }
-
-    types = ['noshear', '1p', '1m', '2p', '2m']
-    mcal_boot.fit_metacal(
-        psf_model,
-        obj_model,
-        pars,
-        psf_Tguess,
-        metacal_pars={
-            'psf': 'fitgauss',
-            'types': types,
-            'fixnoise': fixnoise,
-        },
-    )
-
-    res = mcal_boot.get_metacal_result()
-    for type in types:
-        assert type in res
-
-        assert res[type]['flags'] == 0
+    assert max_reldiff < reltol

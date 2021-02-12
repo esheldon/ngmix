@@ -106,7 +106,9 @@ def get_ngauss_obs(*, rng, ngauss, noise=0.0, with_psf=False):
 
 def get_model_obs(*, rng, model, noise=0.0):
 
-    cen1, cen2 = rng.uniform(low=0.5*PIXEL_SCALE, high=0.5*PIXEL_SCALE, size=2)
+    off = 0.5
+    off1_pix, off2_pix = rng.uniform(low=-off, high=off, size=2)
+    off1, off2 = off1_pix * PIXEL_SCALE, off2_pix * PIXEL_SCALE
     T = 0.27
     g1 = 0.1
     g2 = 0.05
@@ -114,9 +116,14 @@ def get_model_obs(*, rng, model, noise=0.0):
 
     dims = [32, 32]
     jcen = (np.array(dims) - 1.0) / 2.0
-    jacob = DiagonalJacobian(scale=PIXEL_SCALE, row=jcen[0], col=jcen[1])
+    jacob = DiagonalJacobian(
+        scale=PIXEL_SCALE,
+        row=jcen[0] + off1_pix,
+        col=jcen[1] + off2_pix,
+    )
 
-    pars = [cen1, cen2, g1, g2, T, flux]
+    # not offset from the jacobian center
+    pars = [0.0, 0.0, g1, g2, T, flux]
     gm = GMixModel(pars, model)
 
     psf_ret = get_psf_obs(rng=rng)
