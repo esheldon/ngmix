@@ -81,7 +81,7 @@ def get_ngauss_obs(*, rng, ngauss, noise=0.0, with_psf=False):
     gm = GMix(pars=pars)
 
     if with_psf:
-        psf_ret = get_psf_obs()
+        psf_ret = get_psf_obs(rng=rng)
         gmconv = gm.convolve(psf_ret['gmix'])
 
         im0 = gmconv.make_image(dims, jacobian=jacob)
@@ -119,7 +119,7 @@ def get_model_obs(*, rng, model, noise=0.0):
     pars = [cen1, cen2, g1, g2, T, flux]
     gm = GMixModel(pars, model)
 
-    psf_ret = get_psf_obs()
+    psf_ret = get_psf_obs(rng=rng)
     gmconv = gm.convolve(psf_ret['gmix'])
 
     im0 = gmconv.make_image(dims, jacobian=jacob)
@@ -135,16 +135,18 @@ def get_model_obs(*, rng, model, noise=0.0):
     return ret
 
 
-def get_psf_obs(T=TPSF):
+def get_psf_obs(*, rng, T=TPSF, model="turb", noise=1.0e-6):
     dims = [25, 25]
     cen = (np.array(dims) - 1.0) / 2.0
 
     jacob = DiagonalJacobian(scale=PIXEL_SCALE, row=cen[0], col=cen[1])
 
-    gm = GMixModel([0.0, 0.0, 0.0, 0.0, T, 1.0], "turb")
+    gm = GMixModel([0.0, 0.0, 0.0, 0.0, T, 1.0], model)
     im = gm.make_image(dims, jacobian=jacob)
 
+    im += rng.normal(scale=noise, size=im.shape)
+    weight = im*0 + 1.0/noise**2
     return {
-        'obs': Observation(im, jacobian=jacob),
+        'obs': Observation(im, weight=weight, jacobian=jacob),
         'gmix': gm,
     }

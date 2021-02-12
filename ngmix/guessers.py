@@ -513,8 +513,7 @@ class R50NuFluxGuesser(R50FluxGuesser):
             guess = guess[0, :]
         return guess
 
-
-class GuesserEMPSF(object):
+class EMPSFGuesser(object):
     """
     guesser for EM psf fitting
 
@@ -553,11 +552,10 @@ class GuesserEMPSF(object):
             The guess mixture, with the number of gaussians as specified in the
             constructor
         """
+        return self._get_guess(obs=obs)
 
-        if self.guess_from_moms:
-            T, flux = self._get_T_flux_from_moms(obs=obs)
-        else:
-            T, flux = self._get_T_flux(obs=obs)
+    def _get_guess(self, *, obs):
+        T, flux = self._get_T_flux(obs=obs)
 
         if self.ngauss == 1:
             return self._get_guess_1gauss(flux=flux, T=T)
@@ -573,6 +571,14 @@ class GuesserEMPSF(object):
             raise ValueError("bad ngauss: %d" % self.ngauss)
 
     def _get_T_flux(self, *, obs):
+        if self.guess_from_moms:
+            T, flux = self._get_T_flux_from_moms(obs=obs)
+        else:
+            T, flux = self._get_T_flux_default(obs=obs)
+
+        return T, flux
+
+    def _get_T_flux_default(self, *, obs):
         """
         get starting T and flux from a multiple of the pixel scale and the sum
         of the image
@@ -785,7 +791,59 @@ _em5_pguess = np.array(
 _em5_fguess = np.array([0.5, 1.0, 3.0, 10.0, 20.0])
 
 
-class GuesserCoellipPSF(GuesserEMPSF):
+class SimplePSFGuesser(EMPSFGuesser):
+    """
+    guesser for simple psf fitting
+
+    Parameters
+    ----------
+    rng: numpy.random.RandomState
+        Random state for generating guesses
+    guess_from_moms: bool, optional
+        If set to True, use weighted moments to generate the starting flux and
+        T for the guess.  If set to False, the starting flux is gotten from
+        summing the image and the fwhm of the guess isset to 3.5 times the
+        pixel scale
+    """
+    def __init__(self, *, rng, guess_from_moms=False):
+
+        self.rng = rng
+        self.guess_from_moms = guess_from_moms
+        self.npars = 6
+
+    def __call__(self, *, obs):
+        """
+        Get a guess for the simple psf
+
+        Parameters
+        ----------
+        obs: Observation, ignored
+            Starting flux and T for the overall mixture are derived from the
+            input observation.  How depends on the gauss_from_moms constructor
+            argument
+
+        Returns
+        -------
+        guess: array
+            The guess array [cen1, cen2, g1, g2, T, flux]
+        """
+        return self._get_guess(obs=obs)
+
+    def _get_guess(self, *, obs):
+        rng = self.rng
+        T, flux = self._get_T_flux(obs=obs)
+
+        guess = np.zeros(self.npars)
+
+        guess[0:0 + 2] += rng.uniform(low=-0.01, high=0.01, size=2)
+        guess[2:2 + 2] += rng.uniform(low=-0.05, high=0.05, size=2)
+
+        guess[4] = T * rng.uniform(low=0.9, high=1.1)
+        guess[5] = flux * rng.uniform(low=0.9, high=1.1)
+        return guess
+
+
+class CoellipPSFGuesser(EMPSFGuesser):
     """
     guesser for coelliptical psf fitting
 
@@ -807,6 +865,24 @@ class GuesserCoellipPSF(GuesserEMPSF):
         self.ngauss = ngauss
         self.guess_from_moms = guess_from_moms
         self.npars = get_coellip_npars(ngauss)
+
+    def __call__(self, *, obs):
+        """
+        Get a guess for the EM algorithm
+
+        Parameters
+        ----------
+        obs: Observation, ignored
+            Starting flux and T for the overall mixture are derived from the
+            input observation.  How depends on the gauss_from_moms constructor
+            argument
+
+        Returns
+        -------
+        guess: array
+            The guess array, [cen1, cen2, g1, g2, T1, T2, ..., F1, F2, ...]
+        """
+        return self._get_guess(obs=obs)
 
     def _make_guess_array(self):
         rng = self.rng

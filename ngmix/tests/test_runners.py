@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from ngmix.runners import Runner, PSFRunner
-from ngmix.guessers import GuesserEMPSF, TFluxGuesser
+from ngmix.guessers import EMPSFGuesser, TFluxGuesser
 from ngmix.em import GMixEM
 from ngmix.fitting import LMSimple
 from ._sims import get_model_obs
@@ -23,7 +23,7 @@ def test_runner_lm_simple_smoke(model):
         noise=1.0e-4,
     )
 
-    psf_guesser = GuesserEMPSF(
+    psf_guesser = EMPSFGuesser(
         rng=rng,
         ngauss=3,
     )
@@ -71,7 +71,7 @@ def test_runner_lm_simple(model, noise):
     )
     obs = data['obs']
 
-    psf_guesser = GuesserEMPSF(
+    psf_guesser = EMPSFGuesser(
         rng=rng,
         ngauss=3,
     )
