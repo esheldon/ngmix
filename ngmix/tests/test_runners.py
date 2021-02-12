@@ -1,16 +1,18 @@
 import pytest
 import numpy as np
 from ngmix.runners import Runner, PSFRunner
-from ngmix.guessers import EMPSFGuesser, TFluxGuesser
+from ngmix.guessers import EMPSFGuesser, TFluxGuesser, CoellipPSFGuesser
+from ngmix.fitting import LMCoellip
 from ngmix.em import GMixEM
 from ngmix.fitting import LMSimple
 from ._sims import get_model_obs
 
-FRAC_TOL = 3.0e-4
+FRAC_TOL = 5.0e-4
 
 
+@pytest.mark.parametrize('psf_model_type', ['em', 'coellip'])
 @pytest.mark.parametrize('model', ['exp', 'dev'])
-def test_runner_lm_simple_smoke(model):
+def test_runner_lm_simple_smoke(model, psf_model_type):
     """
     Smoke test a Runner running the LMSimple fitter
     """
@@ -23,12 +25,22 @@ def test_runner_lm_simple_smoke(model):
         noise=1.0e-4,
     )
 
-    psf_guesser = EMPSFGuesser(
-        rng=rng,
-        ngauss=3,
-    )
+    psf_ngauss = 3
+    if psf_model_type == 'em':
+        psf_guesser = EMPSFGuesser(
+            rng=rng,
+            ngauss=3,
+        )
 
-    psf_fitter = GMixEM(tol=1.0e-5)
+        psf_fitter = GMixEM(tol=1.0e-5)
+    else:
+        psf_guesser = CoellipPSFGuesser(
+            rng=rng,
+            ngauss=3,
+        )
+
+        psf_fitter = LMCoellip(ngauss=psf_ngauss)
+
     psf_runner = PSFRunner(
         fitter=psf_fitter,
         guesser=psf_guesser,
@@ -55,9 +67,10 @@ def test_runner_lm_simple_smoke(model):
     assert res['flags'] == 0
 
 
+@pytest.mark.parametrize('psf_model_type', ['em', 'coellip'])
 @pytest.mark.parametrize('model', ['exp', 'dev'])
 @pytest.mark.parametrize('noise', [1.0e-8, 0.01])
-def test_runner_lm_simple(model, noise):
+def test_runner_lm_simple(model, psf_model_type, noise):
     """
     Smoke test a Runner running the LMSimple fitter
     """
@@ -71,12 +84,22 @@ def test_runner_lm_simple(model, noise):
     )
     obs = data['obs']
 
-    psf_guesser = EMPSFGuesser(
-        rng=rng,
-        ngauss=3,
-    )
+    psf_ngauss = 3
+    if psf_model_type == 'em':
+        psf_guesser = EMPSFGuesser(
+            rng=rng,
+            ngauss=3,
+        )
 
-    psf_fitter = GMixEM(tol=1.0e-5)
+        psf_fitter = GMixEM(tol=1.0e-5)
+    else:
+        psf_guesser = CoellipPSFGuesser(
+            rng=rng,
+            ngauss=3,
+        )
+
+        psf_fitter = LMCoellip(ngauss=psf_ngauss)
+
     psf_runner = PSFRunner(
         fitter=psf_fitter,
         guesser=psf_guesser,
