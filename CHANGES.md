@@ -11,6 +11,8 @@
 - fixed bug in `ngmix.shape.e1e2_to_eta1eta2` in handling numpy array inputs
 - fixed bug in `ngmix.priors.GPriorBA.get_fdiff` in handling array inputs
 - fixed a bug in `ngmix.priors.TwoSidedErf.get_fdiff` in handling array inputs
+- fixed bug in `TruncatedSimpleGauss2D` where the truncation radius was applied about
+  zero in some methods and not about the center
 
 ### new features
 
@@ -32,6 +34,8 @@
 - removed travis-ci in favor of GitHub Actions
 - the optional `rng` keyword for `ngmix.priors.srandu` has been removed in favor
   of a required keyword
+- removed priors `ZDisk2DErf`, `ZAnnulus`, `UDisk2DCut`, `TruncatedStudentPolar`,
+  `TruncatedStudentPolar`
 
 
 ## v1.3.8
