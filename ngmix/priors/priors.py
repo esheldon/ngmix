@@ -611,7 +611,7 @@ class LogNormal(PriorBase):
         The log of the maximum value of the distribution.
     """
     def __init__(self, mean, sigma, shift=None, rng=None):
-        super().__init__(self, rng=rng)
+        super().__init__(rng=rng)
 
         if mean <= 0:
             raise ValueError("mean %s is < 0" % mean)
@@ -857,7 +857,7 @@ class Sinh(PriorBase):
         The value such that fdiff  of `mean` +/- `scale` is +/-1.
     """
     def __init__(self, mean, scale, rng=None):
-        super().__init__(self, rng=rng)
+        super().__init__(rng=rng)
         self.mean = mean
         self.scale = scale
 
@@ -929,7 +929,7 @@ class TruncatedGaussian(PriorBase):
         The maximum of the distribution.
     """
     def __init__(self, mean, sigma, minval, maxval, rng=None):
-        super().__init__(self, rng=rng)
+        super().__init__(rng=rng)
         self.mean = mean
         self.sigma = sigma
         self.ivar = 1.0 / sigma ** 2
@@ -1018,7 +1018,7 @@ class Student(PriorBase):
     parameters
     ----------
     mean: float
-        The mean of the Gaussian.
+        The mean of the distribution.
     sigma: float
         The scale of the distribution. Not Std(x).
     rng: np.random.RandomState or None
@@ -1028,14 +1028,14 @@ class Student(PriorBase):
     attributes
     ----------
     mean: float
-        The mean of the Gaussian.
+        The mean of the distribution.
     sigma: float
         The scale of the distribution. Not Std(x).
     tdist: scipy.stats.t
         The underlying scipy distribution.
     """
     def __init__(self, mean, sigma, rng=None):
-        super().__init__(self, rng=rng)
+        super().__init__(rng=rng)
         self.reset(mean, sigma, rng=self.rng)
 
     def reset(self, mean, sigma, rng=None):
@@ -1045,7 +1045,7 @@ class Student(PriorBase):
         parameters
         ----------
         mean: float
-            The mean of the Gaussian.
+            The mean of the distribution.
         sigma: float
             The scale of the distribution. Not Std(x).
         rng: np.random.RandomState or None
@@ -1096,7 +1096,7 @@ class StudentPositive(Student):
     parameters
     ----------
     mean: float
-        The mean of the Gaussian.
+        The mean of the distribution.
     sigma: float
         The scale of the distribution. Not Std(x).
     rng: np.random.RandomState or None
@@ -1106,7 +1106,7 @@ class StudentPositive(Student):
     attributes
     ----------
     mean: float
-        The mean of the Gaussian.
+        The mean of the distribution.
     sigma: float
         The scale of the distribution. Not Std(x).
     tdist: scipy.stats.t

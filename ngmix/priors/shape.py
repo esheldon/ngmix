@@ -3,7 +3,7 @@ Convention is that all priors should have peak ln(prob)==0. This
 helps use in priors for LM fitting
 """
 import numpy
-from numpy import where, array, exp, log, sqrt, zeros
+from numpy import where, array, exp, log, sqrt, zeros, sin, cos
 
 from ..gexceptions import GMixRangeError
 from .random import srandu
@@ -682,3 +682,145 @@ class GPriorBA(GPriorBase):
         if is_scalar:
             guess = guess[0, :]
         return guess
+
+
+class ZDisk2D(PriorBase):
+    """
+    Uniform prior over a disk centered at zero [0,0] with radius r.
+
+    parameters
+    ----------
+    radius: float
+        The maximum raidus of the disk.
+    rng: np.random.RandomState or None
+        An RNG to use. If None, a new RNG is made using the numpy global RNG
+        to generate a seed.
+
+    attributes
+    ----------
+    radius: float
+        The maximum raidus of the disk.
+    """
+    def __init__(self, radius, rng=None):
+        super().__init__(rng=rng)
+
+        self.radius = radius
+        self.radius_sq = radius ** 2
+
+    def get_lnprob_scalar1d(self, r):
+        """
+        get ln(prob) at radius r=sqrt(x^2 + y^2)
+        """
+        if r >= self.radius:
+            raise GMixRangeError("position out of bounds")
+        return 0.0
+
+    def get_prob_scalar1d(self, r):
+        """
+        get prob at radius r=sqrt(x^2 + y^2)
+        """
+        if r >= self.radius:
+            return 0.0
+        else:
+            return 1.0
+
+    def get_lnprob_scalar2d(self, x, y):
+        """
+        get ln(prob) at the input position
+        """
+        r2 = x ** 2 + y ** 2
+        if r2 >= self.radius_sq:
+            raise GMixRangeError("position out of bounds")
+
+        return 0.0
+
+    def get_prob_scalar2d(self, x, y):
+        """
+        get prob at the input position
+        """
+
+        r2 = x ** 2 + y ** 2
+        if r2 >= self.radius_sq:
+            return 0.0
+        else:
+            return 1.0
+
+    def get_prob_array2d(self, x, y):
+        """
+        get prob at the input positions
+        """
+        x = numpy.array(x, dtype="f8", ndmin=1, copy=False)
+        y = numpy.array(y, dtype="f8", ndmin=1, copy=False)
+        out = numpy.zeros(x.size, dtype="f8")
+
+        r2 = x ** 2 + y ** 2
+        (w,) = numpy.where(r2 < self.radius_sq)
+        if w.size > 0:
+            out[w] = 1.0
+
+        return out
+
+    def sample1d(self, nrand=None):
+        """
+        Get random |g| from the 1d distribution.
+
+        parameters
+        ----------
+        nrand: int
+            Number to generate
+
+        returns
+        -------
+        g: array-like
+            The generated |g| values.
+        """
+        if nrand is None:
+            nrand = 1
+            is_scalar = True
+        else:
+            is_scalar = False
+
+        r2 = self.radius_sq * self.rng.uniform(size=nrand)
+
+        r = sqrt(r2)
+
+        if is_scalar:
+            r = r[0]
+
+        return r
+
+    def sample2d(self, nrand=None):
+        """
+        Get random g1,g2 values by first drawing
+        from the 1-d distribution and assuming rotational symmetry.
+
+        parameters
+        ----------
+        nrand: int
+            Number to generate
+
+        returns
+        -------
+        g1: array-like
+            The generated g1 values.
+        g2: array-like
+            The generated g2 values.
+        """
+        if nrand is None:
+            nrand = 1
+            is_scalar = True
+        else:
+            is_scalar = False
+
+        radius = self.sample1d(nrand=nrand)
+
+        theta = 2.0 * numpy.pi * self.rng.uniform(size=nrand)
+
+        x = radius * cos(theta)
+        y = radius * sin(theta)
+
+        if is_scalar:
+            x = x[0]
+            y = y[0]
+
+        return x, y

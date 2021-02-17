@@ -3,10 +3,9 @@ Convention is that all priors should have peak ln(prob)==0. This
 helps use in priors for LM fitting
 """
 import numpy
-from numpy import where, array, exp, log, sqrt, zeros, diag, cos, sin
+from numpy import where, array, exp, log, sqrt, zeros, diag
 
 from ..gexceptions import GMixRangeError
-from .random import make_rng
 from .priors import PriorBase, LOWVAL, Student
 
 
@@ -285,93 +284,37 @@ class MVNMom(object):
         return cen_offsets
 
 
-class TruncatedGaussianPolar(PriorBase):
+class Student2D(PriorBase):
+    """Student's t prior in 2d.
+
+    parameters
+    ----------
+    mean1: float
+        The mean of the distribution in the first dimension.
+    mean1: float
+        The mean of the distribution in the second dimension.
+    sigma1: float
+        The scale of the distribution in the first dimension. Not Std(x).
+    sigma2: float
+        The scale of the distribution in the second dimension. Not Std(x).
+    rng: np.random.RandomState or None
+        An RNG to use. If None, a new RNG is made using the numpy global RNG
+        to generate a seed.
+
+    attributes
+    ----------
+    mean1: float
+        The mean of the distribution in the first dimension.
+    mean1: float
+        The mean of the distribution in the second dimension.
+    sigma1: float
+        The scale of the distribution in the first dimension. Not Std(x).
+    sigma2: float
+        The scale of the distribution in the second dimension. Not Std(x).
     """
-    Truncated gaussian on a circle
-    """
-
-    def __init__(self, mean1, mean2, sigma1, sigma2, maxval, rng=None):
-        raise NotImplementedError('this is wrong')
-        PriorBase.__init__(self, rng=rng)
-
-        self.mean1 = mean1
-        self.mean2 = mean2
-        self.sigma1 = sigma1
-        self.sigma2 = sigma2
-        self.ivar1 = 1.0 / sigma1 ** 2
-        self.ivar2 = 1.0 / sigma2 ** 2
-
-        self.maxval = maxval
-        self.maxval2 = maxval ** 2
-
-    def sample(self, nrand):
-        """
-        Sample from truncated gaussian
-        """
-
-        rng = self.rng
-
-        x1 = numpy.zeros(nrand)
-        x2 = numpy.zeros(nrand)
-
-        nleft = nrand
-        ngood = 0
-        while nleft > 0:
-            r1 = rng.normal(loc=self.mean1, scale=self.sigma1, size=nleft)
-            r2 = rng.normal(loc=self.mean2, scale=self.sigma2, size=nleft)
-
-            rsq = r1 ** 2 + r2 ** 2
-
-            (w,) = numpy.where(rsq < self.maxval2)
-            nkeep = w.size
-            if nkeep > 0:
-                x1[ngood:ngood + nkeep] = r1[w]
-                x2[ngood:ngood + nkeep] = r2[w]
-                nleft -= nkeep
-                ngood += nkeep
-
-        return x1, x2
-
-    def get_lnprob_scalar(self, x1, x2):
-        """
-        ln(p) for scalar inputs
-        """
-        xsq = x1 ** 2 + x2 ** 2
-        if xsq > self.maxval2:
-            raise GMixRangeError("square value out of range: %s" % xsq)
-        diff1 = x1 - self.mean1
-        diff2 = x2 - self.mean2
-        return (
-            -0.5 * diff1 * diff1 * self.ivar1
-            - 0.5 * diff2 * diff2 * self.ivar2
-        )
-
-    def get_lnprob_array(self, x1, x2):
-        """
-        ln(p) for a array inputs
-        """
-        x1 = numpy.array(x1, dtype="f8", copy=False)
-        x2 = numpy.array(x2, dtype="f8", copy=False)
-
-        x2 = x1 ** 2 + x2 ** 2
-        (w,) = numpy.where(x2 > self.maxval2)
-        if w.size > 0:
-            raise GMixRangeError("values out of range")
-        diff1 = x1 - self.mean1
-        diff2 = x2 - self.mean2
-        return (
-            -0.5 * diff1 * diff1 * self.ivar1
-            - 0.5 * diff2 * diff2 * self.ivar2
-        )
-
-
-class Student2D(object):
     def __init__(self, mean1, mean2, sigma1, sigma2, rng=None):
-        """
-        circular student
-        sigma is not std(x)
-        """
-        self.reset(mean1, mean2, sigma1, sigma2, rng=rng)
+        super().__init__(rng=rng)
+        self.reset(mean1, mean2, sigma1, sigma2, rng=self.rng)
 
     def reset(self, mean1, mean2, sigma1, sigma2, rng=None):
         """
@@ -390,7 +333,19 @@ class Student2D(object):
 
     def sample(self, nrand=None):
         """
-        Draw samples from the distribution
+        Draw samples from the distribution.
+
+        parameters
+        ----------
+        nrand: int or None
+            The number of samples. If None, a single scalar sample is drawn.
+            Default is None.
+
+        returns
+        -------
+        samples: scalar or array-like
+            The samples with shape (`nrand`,). If `nrand` is None, then a
+            scalar is returned.
         """
         r1 = self.tdist1.sample(nrand)
         r2 = self.tdist2.sample(nrand)
@@ -399,7 +354,7 @@ class Student2D(object):
 
     def get_lnprob_array(self, x1, x2):
         """
-        get ln(prob)
+        get ln(prob) of an array
         """
         lnp1 = self.tdist1.get_lnprob_array(x1)
         lnp2 = self.tdist2.get_lnprob_array(x2)
@@ -409,80 +364,35 @@ class Student2D(object):
     get_lnprob_scalar = get_lnprob_array
 
 
-class TruncatedStudentPolar(Student2D):
-    """
-    Truncated gaussian on a circle
-    """
-
-    def __init__(self, mean1, mean2, sigma1, sigma2, maxval):
-        """
-        sigma is not std(x)
-        """
-        raise NotImplementedError('this is wrong')
-        self.reset(mean1, mean2, sigma1, sigma2, maxval)
-
-    def reset(self, mean1, mean2, sigma1, sigma2, maxval):
-        super().reset(mean1, mean2, sigma1, sigma2)
-        self.maxval = maxval
-        self.maxval2 = maxval ** 2
-
-    def sample(self, nrand):
-        """
-        Sample from truncated gaussian
-        """
-        x1 = numpy.zeros(nrand)
-        x2 = numpy.zeros(nrand)
-
-        nleft = nrand
-        ngood = 0
-        while nleft > 0:
-            r1, r2 = super().sample(nleft)
-
-            rsq = r1 ** 2 + r2 ** 2
-
-            (w,) = numpy.where(rsq < self.maxval2)
-            nkeep = w.size
-            if nkeep > 0:
-                x1[ngood:ngood + nkeep] = r1[w]
-                x2[ngood:ngood + nkeep] = r2[w]
-                nleft -= nkeep
-                ngood += nkeep
-
-        return x1, x2
-
-    def get_lnprob_scalar(self, x1, x2):
-        """
-        ln(p) for scalar inputs
-        """
-
-        x2 = x1 ** 2 + x2 ** 2
-        if x2 > self.maxval2:
-            raise GMixRangeError("square value out of range: %s" % x2)
-        lnp = super().get_lnprob_scalar(x1, x2)
-        return lnp
-
-    def get_lnprob_array(self, x1, x2):
-        """
-        ln(p) for a array inputs
-        """
-
-        x1 = numpy.array(x1, dtype="f8", copy=False)
-        x2 = numpy.array(x2, dtype="f8", copy=False)
-
-        x2 = x1 ** 2 + x2 ** 2
-        (w,) = numpy.where(x2 > self.maxval2)
-        if w.size > 0:
-            raise GMixRangeError("values out of range")
-
-        lnp = super().get_lnprob_array(x1, x2)
-        return lnp
-
-
 class CenPrior(PriorBase):
     """
-    Independent gaussians in each dimension
-    """
+    Prior for independent gaussians in each dimension.
 
+    parameters
+    ----------
+    cen1: float
+        The mean in the first dimension.
+    cen2: float
+        The mean in the second dimension.
+    sigma1: float
+        The width in the first dimension.
+    sigma2: float
+        The width in the second dimension.
+    rng: np.random.RandomState or None
+        An RNG to use. If None, a new RNG is made using the numpy global RNG
+        to generate a seed.
+
+    attributes
+    ----------
+    cen1: float
+        The mean in the first dimension.
+    cen2: float
+        The mean in the second dimension.
+    sigma1: float
+        The width in the first dimension.
+    sigma2: float
+        The width in the second dimension.
+    """
     def __init__(self, cen1, cen2, sigma1, sigma2, rng=None):
         super().__init__(rng=rng)
 
@@ -497,8 +407,7 @@ class CenPrior(PriorBase):
 
     def get_fdiff(self, x1, x2):
         """
-        For use with LM fitter
-        (model-data)/width for both coordinates
+        Compute sqrt(-2ln(p)) ~ (data - mode)/err for using with LM fitters.
         """
         d1 = (x1 - self.cen1) * self.sinv1
         d2 = (x2 - self.cen2) * self.sinv2
@@ -523,7 +432,7 @@ class CenPrior(PriorBase):
 
     def get_prob_scalar(self, x1, x2):
         """
-        log probability at the specified point
+        probability at the specified point
         """
         from math import exp
 
@@ -534,9 +443,20 @@ class CenPrior(PriorBase):
 
     def sample(self, nrand=None):
         """
-        Get a single sample or arrays
-        """
+        Get a single sample or arrays.
 
+        parameters
+        ----------
+        nrand: int or None
+            The number of samples. If None, a single scalar sample is drawn.
+            Default is None.
+
+        returns
+        -------
+        samples: scalar or array-like
+            The samples with shape (`nrand`,). If `nrand` is None, then a
+            scalar is returned.
+        """
         rng = self.rng
 
         rand1 = rng.normal(loc=self.cen1, scale=self.sigma1, size=nrand)
@@ -553,11 +473,39 @@ SimpleGauss2D = CenPrior
 class TruncatedSimpleGauss2D(PriorBase):
     """
     Independent gaussians in each dimension, with a specified
-    maximum length
-    """
+    maximum length.
 
+    parameters
+    ----------
+    cen1: float
+        The mean in the first dimension.
+    cen2: float
+        The mean in the second dimension.
+    sigma1: float
+        The width in the first dimension.
+    sigma2: float
+        The width in the second dimension.
+    maxval: float
+        The maximum/minimum value in each dimension.
+    rng: np.random.RandomState or None
+        An RNG to use. If None, a new RNG is made using the numpy global RNG
+        to generate a seed.
+
+    attributes
+    ----------
+    cen1: float
+        The mean in the first dimension.
+    cen2: float
+        The mean in the second dimension.
+    sigma1: float
+        The width in the first dimension.
+    sigma2: float
+        The width in the second dimension.
+    maxval: float
+        The maximum/minimum value in each dimension.
+    """
     def __init__(self, cen1, cen2, sigma1, sigma2, maxval, rng=None):
-        PriorBase.__init__(self, rng=rng)
+        super().__init__(rng=rng)
 
         self.cen1 = cen1
         self.cen2 = cen2
@@ -571,25 +519,26 @@ class TruncatedSimpleGauss2D(PriorBase):
 
     def get_lnprob_nothrow(self, p1, p2):
         """
-        log probability
+        get log probability and do not throw an error.
         """
+        d1 = self.cen1 - p1
+        d2 = self.cen2 - p2
 
-        psq = p1 ** 2 + p2 ** 2
+        psq = d1 ** 2 + d2 ** 2
         if psq >= self.maxval_sq:
             lnp = LOWVAL
         else:
-            d1 = self.cen1 - p1
-            d2 = self.cen2 - p2
             lnp = -0.5 * d1 * d1 * self.s2inv1 - 0.5 * d2 * d2 * self.s2inv2
 
         return lnp
 
     def get_lnprob_scalar(self, p1, p2):
         """
-        log probability
+        get log probability of a point - raises if point is beyond `maxval`
         """
-
-        psq = p1 ** 2 + p2 ** 2
+        d1 = self.cen1 - p1
+        d2 = self.cen2 - p2
+        psq = d1 ** 2 + d2 ** 2
         if psq >= self.maxval_sq:
             raise GMixRangeError("value too big")
 
@@ -601,33 +550,46 @@ class TruncatedSimpleGauss2D(PriorBase):
 
     def get_lnprob_array(self, p1, p2):
         """
-        log probability
+        log probability of an array
         """
-
         lnp = zeros(p1.size) - numpy.inf
 
-        psq = p1 ** 2 + p2 ** 2
+        d1 = self.cen1 - p1
+        d2 = self.cen2 - p2
+
+        psq = d1 ** 2 + d2 ** 2
         (w,) = where(psq < self.maxval_sq)
         if w.size > 0:
-
-            d1 = self.cen1 - p1[w]
-            d2 = self.cen2 - p2[w]
-            lnp[w] = -0.5 * d1 * d1 * self.s2inv1 - 0.5 * d2 * d2 * self.s2inv2
+            lnp[w] = (
+                -0.5 * d1[w] * d1[w] * self.s2inv1
+                - 0.5 * d2[w] * d2[w] * self.s2inv2
+            )
 
         return lnp
 
     def get_prob_scalar(self, p1, p2):
         """
-        linear probability
+        probability of a point
         """
-        lnp = self.get_lnprob(p1, p2)
+        lnp = self.get_lnprob_scalar(p1, p2)
         return numpy.exp(lnp)
 
     def sample(self, nrand=None):
         """
-        Get nrand random deviates from the distribution
-        """
+        Get random deviates from the distribution.
 
+        parameters
+        ----------
+        nrand: int or None
+            The number of samples. If None, a single scalar sample is drawn.
+            Default is None.
+
+        returns
+        -------
+        samples: scalar or array-like
+            The samples with shape (`nrand`,). If `nrand` is None, then a
+            scalar is returned.
+        """
         rng = self.rng
 
         if nrand is None:
@@ -660,305 +622,3 @@ class TruncatedSimpleGauss2D(PriorBase):
             r2 = r2[0]
 
         return r1, r2
-
-
-class ZDisk2D(object):
-    """
-    uniform over a disk centered at zero [0,0] with radius r
-    """
-
-    def __init__(self, radius, rng=None):
-
-        self.rng = make_rng(rng=rng)
-
-        self.radius = radius
-        self.radius_sq = radius ** 2
-
-    def get_lnprob_scalar1d(self, r):
-        """
-        get ln(prob) at radius r=sqrt(x^2 + y^2)
-        """
-        if r >= self.radius:
-            raise GMixRangeError("position out of bounds")
-        return 0.0
-
-    def get_prob_scalar1d(self, r):
-        """
-        get prob at radius r=sqrt(x^2 + y^2)
-        """
-        if r >= self.radius:
-            return 0.0
-        else:
-            return 1.0
-
-    def get_lnprob_scalar2d(self, x, y):
-        """
-        get ln(prob) at the input position
-        """
-        r2 = x ** 2 + y ** 2
-        if r2 >= self.radius_sq:
-            raise GMixRangeError("position out of bounds")
-
-        return 0.0
-
-    def get_prob_scalar2d(self, x, y):
-        """
-        get ln(prob) at the input position
-        """
-
-        r2 = x ** 2 + y ** 2
-        if r2 >= self.radius_sq:
-            return 0.0
-        else:
-            return 1.0
-
-    def get_prob_array2d(self, x, y):
-        """
-        probability, 1.0 inside disk, outside raises exception
-
-        does not raise an exception
-        """
-        x = numpy.array(x, dtype="f8", ndmin=1, copy=False)
-        y = numpy.array(y, dtype="f8", ndmin=1, copy=False)
-        out = numpy.zeros(x.size, dtype="f8")
-
-        r2 = x ** 2 + y ** 2
-        (w,) = numpy.where(r2 < self.radius_sq)
-        if w.size > 0:
-            out[w] = 1.0
-
-        return out
-
-    def sample1d(self, nrand=None):
-        """
-        Get samples in 1-d radius
-        """
-
-        if nrand is None:
-            nrand = 1
-            is_scalar = True
-        else:
-            is_scalar = False
-
-        r2 = self.radius_sq * self.rng.uniform(size=nrand)
-
-        r = sqrt(r2)
-
-        if is_scalar:
-            r = r[0]
-
-        return r
-
-    def sample2d(self, nrand=None):
-        """
-        Get samples.  Send no args to get a scalar.
-        """
-        if nrand is None:
-            nrand = 1
-            is_scalar = True
-        else:
-            is_scalar = False
-
-        radius = self.sample1d(nrand=nrand)
-
-        theta = 2.0 * numpy.pi * self.rng.uniform(size=nrand)
-
-        x = radius * cos(theta)
-        y = radius * sin(theta)
-
-        if is_scalar:
-            x = x[0]
-            y = y[0]
-
-        return x, y
-
-
-class ZAnnulus(ZDisk2D):
-    """
-    uniform over an annulus
-
-    Note get_lnprob_scalar1d and get_prob_scalar1d and 2d are already
-    part of base class
-    """
-
-    def __init__(self, rmin, rmax, rng=None):
-
-        assert rmin < rmax
-
-        self.rmin = rmin
-        super().__init__(
-            rmax, rng=rng,
-        )
-
-    def sample1d(self, nrand=None):
-        if nrand is None:
-            nrand = 1
-            is_scalar = True
-        else:
-            is_scalar = False
-
-        r = numpy.zeros(nrand)
-        ngood = 0
-        nleft = nrand
-
-        while True:
-            rtmp = super().sample1d(nleft)
-
-            (w,) = numpy.where(rtmp > self.rmin)
-            if w.size > 0:
-                r[ngood:ngood + w.size] = rtmp[w]
-                ngood += w.size
-                nleft -= w.size
-
-            if ngood == nrand:
-                break
-
-        if is_scalar:
-            r = r[0]
-
-        return r
-
-
-class ZDisk2DErf(object):
-    """
-    uniform over a disk centered at zero [0,0] with radius r
-
-    the cutoff begins at radius-6*width so that the prob is
-    completely zero by the point of the radius
-    """
-
-    def __init__(self, radius=1.0, rolloff_point=0.98, width=0.005):
-        self.rolloff_point = rolloff_point
-        self.radius = radius
-        self.radius_sq = radius ** 2
-
-        self.width = width
-
-    def get_prob_scalar1d(self, val):
-        """
-        scalar only
-        """
-        from .._gmix import erf
-
-        if val > self.radius:
-            return 0.0
-
-        erf_val = erf((val - self.rolloff_point) / self.width)
-        retval = 0.5 * (1.0 + erf_val)
-
-        return retval
-
-    def get_lnprob_scalar1d(self, val):
-        """
-        scalar only
-        """
-        from .._gmix import erf
-
-        if val > self.radius:
-            return LOWVAL
-
-        erf_val = erf((val - self.rolloff_point) / self.width)
-        linval = 0.5 * (1.0 + erf_val)
-
-        if linval <= 0.0:
-            retval = LOWVAL
-        else:
-            retval = log(linval)
-
-        return retval
-
-    def get_lnprob_scalar2d(self, g1, g2):
-        g = sqrt(g1 ** 2 + g2 ** 2)
-        return self.get_lnprob_scalar1d(g)
-
-    def get_prob_array1d(self, vals):
-        """
-        works for both array and scalar
-        """
-        from .._gmix import erf_array
-
-        vals = numpy.array(vals, ndmin=1, dtype="f8", copy=False)
-
-        arg = (self.rolloff_point - vals) / self.width
-        erf_vals = numpy.zeros(vals.size)
-
-        erf_array(arg, erf_vals)
-        prob = 0.5 * (1.0 + erf_vals)
-
-        (w,) = numpy.where(vals >= self.radius)
-        if w.size > 0:
-            prob[w] = 0.0
-
-        return prob
-
-    def get_lnprob_array1d(self, vals):
-        """
-        works for both array and scalar
-        """
-
-        prob = self.get_prob_array1d(vals)
-
-        lnprob = LOWVAL + zeros(prob.size)
-        (w,) = numpy.where(prob > 0.0)
-        if w.size > 0:
-            lnprob[w] = log(prob[w])
-
-        return lnprob
-
-
-class UDisk2DCut(object):
-    """
-    cuts off like arctanh, not sure this is ever used in the wild, should
-    remove
-    """
-
-    def __init__(self, cutval=0.97):
-
-        self.cutval = cutval
-        self.fac = 1.0 / (1.0 - cutval)
-
-    def get_lnprob_scalar1d(self, val):
-        """
-        works for both array and scalar
-        """
-
-        cutval = self.cutval
-        if val > cutval:
-            vdiff = (val - cutval) * self.fac
-            retval = -numpy.arctanh(vdiff) ** 2
-        else:
-            retval = 0.0
-
-        return retval
-
-    def get_lnprob_scalar2d(self, x1, x2):
-        """
-        works for both array and scalar
-        """
-
-        x = sqrt(x1 ** 2 + x2 ** 2)
-        return self.get_lnprob_scalar1d(x)
-
-    def get_lnprob_array1d(self, vals):
-        """
-        works for both array and scalar
-        """
-
-        vals = numpy.array(vals, ndmin=1, copy=False)
-        retvals = zeros(vals.size)
-
-        cutval = self.cutval
-        (w,) = numpy.where(vals > cutval)
-        if w.size > 0:
-            vdiff = (vals[w] - cutval) * self.fac
-            retvals[w] = -numpy.arctanh(vdiff) ** 2
-
-        return retvals
-
-    def get_lnprob_array2d(self, x1, x2):
-        """
-        works for both array and scalar
-        """
-
-        x = sqrt(x1 ** 2 + x2 ** 2)
-        return self.get_lnprob_array1d(x)

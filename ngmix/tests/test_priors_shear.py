@@ -2,7 +2,9 @@ import numpy as np
 
 import pytest
 
-from ..priors import GPriorGauss, GPriorBA
+from ..priors import (
+    GPriorGauss, GPriorBA, ZDisk2D
+)
 from ..gexceptions import GMixRangeError
 
 
@@ -161,3 +163,74 @@ def test_priors_gpriorba():
     # som additional exceptions this class raises
     with pytest.raises(GMixRangeError):
         pr.get_lnprob_scalar2d(0.5, 1)
+
+
+def test_priors_zdisk2d():
+    radius = 0.5
+
+    pr = ZDisk2D(radius, rng=np.random.RandomState(seed=10))
+    _s = pr.sample1d()
+    _s1, _s2 = pr.sample2d()
+
+    pr = ZDisk2D(radius, rng=np.random.RandomState(seed=10))
+
+    assert pr.radius == radius
+
+    s = pr.sample1d()
+    s1, s2 = pr.sample2d()
+    assert isinstance(s, float)
+    assert s == _s
+    assert s1 == _s1
+    assert s2 == _s2
+
+    s = pr.sample1d(nrand=1)
+    s1, s2 = pr.sample2d(nrand=1)
+    assert (
+        isinstance(s, np.ndarray) and isinstance(s1, np.ndarray) and
+        isinstance(s2, np.ndarray)
+    )
+    assert s1.shape == (1,) and s2.shape == (1,) and s.shape == (1,)
+
+    s = pr.sample1d(nrand=10)
+    s1, s2 = pr.sample2d(nrand=10)
+    assert s1.shape == (10,) and s2.shape == (10,) and s.shape == (10,)
+
+    s = pr.sample1d(nrand=1000000)
+    s1, s2 = pr.sample2d(nrand=1000000)
+    assert np.allclose(s1.mean(), 0, rtol=0, atol=2e-3)
+    assert np.allclose(s2.mean(), 0, rtol=0, atol=2e-3)
+
+    expected_meanr = 2.0 / 3.0 * radius
+    r = np.sqrt(s1**2 + s2**2)
+    assert np.all(s < radius)
+    assert np.all(r < radius)
+    assert np.allclose(s.mean(), expected_meanr, rtol=0, atol=2e-3)
+    assert np.allclose(r.mean(), expected_meanr, rtol=0, atol=2e-3)
+
+    p = pr.get_lnprob_scalar1d(0.4)
+    assert np.allclose(p, 0)
+    with pytest.raises(GMixRangeError):
+        pr.get_lnprob_scalar1d(1.4)
+
+    p = pr.get_prob_scalar1d(0.4)
+    assert np.allclose(p, 1)
+    p = pr.get_prob_scalar1d(1.4)
+    assert np.allclose(p, 0)
+
+    p = pr.get_lnprob_scalar2d(0.4, 0)
+    assert np.allclose(p, 0)
+    with pytest.raises(GMixRangeError):
+        pr.get_lnprob_scalar2d(0.4, 0.4)
+
+    p = pr.get_prob_scalar2d(0.4, 0)
+    assert np.allclose(p, 1)
+    p = pr.get_prob_scalar2d(0.4, 0.4)
+    assert np.allclose(p, 0)
+
+    p = pr.get_prob_array2d(0.4, 0)
+    assert np.allclose(p, 1)
+    p = pr.get_prob_array2d(0.4, 0.4)
+    assert np.allclose(p, 0)
+
+    p = pr.get_prob_array2d(np.array([0.4, 1.4]), np.array([0, 1]))
+    assert np.allclose(p, [1, 0])

@@ -1,14 +1,14 @@
 import numpy as np
 
+import pytest
+
 from ..priors import (
     Student2D,
     CenPrior,
     TruncatedSimpleGauss2D,
-    ZDisk2D,
-    ZDisk2DErf,
-    ZAnnulus,
-    UDisk2DCut,
+    LOWVAL,
 )
+from ..gexceptions import GMixRangeError
 
 
 def test_priors_student2d():
@@ -41,6 +41,15 @@ def test_priors_student2d():
     s1, s2 = pr.sample(nrand=10)
     assert isinstance(s1, np.ndarray) and isinstance(s2, np.ndarray)
     assert s1.shape == (10,) and s2.shape == (10,)
+
+    arr = pr.get_lnprob_array(np.array([1, 2, 3]), np.array([3, 2, 1]))
+    assert arr.shape == (3,)
+
+    arr = pr.get_lnprob_array(np.array([1, 2, 3]), np.array([3, 2, 1]))
+    assert arr.shape == (3,)
+
+    arr = pr.get_lnprob_scalar(1, 2)
+    assert isinstance(arr, float)
 
 
 def test_priors_cenprior():
@@ -79,6 +88,28 @@ def test_priors_cenprior():
     assert np.allclose(s2.mean(), cen2, rtol=0, atol=2e-3)
     assert np.allclose(s1.std(), sigma1, rtol=0, atol=2e-3)
     assert np.allclose(s2.std(), sigma2, rtol=0, atol=2e-3)
+
+    lm1, lm2 = pr.get_fdiff(cen1, cen2)
+    assert np.allclose(lm1, 0)
+    assert np.allclose(lm2, 0)
+    lm1, lm2 = pr.get_fdiff(0, 0)
+    assert np.allclose(lm1, -cen1/sigma1)
+    assert np.allclose(lm2, -cen2/sigma2)
+
+    lps = pr.get_lnprob_scalar(cen1, cen2)
+    assert np.allclose(lps, 0)
+    lps = pr.get_lnprob_scalar(0, 0)
+    assert np.allclose(lps, -0.5*cen1**2/sigma1**2 - 0.5*cen2**2/sigma2**2)
+
+    lps = pr.get_lnprob_scalar_sep(cen1, cen2)
+    assert np.allclose(lps, 0)
+    lps = pr.get_lnprob_scalar_sep(0, 0)
+    assert np.allclose(lps, [-0.5*cen1**2/sigma1**2, -0.5*cen2**2/sigma2**2])
+
+    assert np.allclose(
+        np.exp(pr.get_lnprob_scalar(cen1, 0)),
+        pr.get_prob_scalar(cen1, 0),
+    )
 
 
 def test_priors_truncgauss2d():
@@ -120,116 +151,27 @@ def test_priors_truncgauss2d():
     r2 = (s1 - cen1)**2 + (s2 - cen2)**2
     assert np.all(r2 < maxval**2)
 
+    lps = pr.get_lnprob_nothrow(cen1, cen2)
+    assert np.allclose(lps, 0)
+    lps = pr.get_lnprob_nothrow(0, 0)
+    assert np.allclose(lps, LOWVAL)
 
-def test_priors_zdisk2d():
-    radius = 0.5
+    lps = pr.get_lnprob_scalar(cen1, cen2)
+    assert np.allclose(lps, 0)
+    lps = pr.get_lnprob_scalar(0.9*cen1, 0.9*cen2)
+    assert np.allclose(lps, -0.5*(0.1*cen1)**2/sigma1**2 - 0.5*(0.1*cen2)**2/sigma2**2)
 
-    pr = ZDisk2D(radius, rng=np.random.RandomState(seed=10))
-    _s = pr.sample1d()
-    _s1, _s2 = pr.sample2d()
+    with pytest.raises(GMixRangeError):
+        pr.get_lnprob_scalar(0, 0)
 
-    pr = ZDisk2D(radius, rng=np.random.RandomState(seed=10))
-
-    assert pr.radius == radius
-
-    s = pr.sample1d()
-    s1, s2 = pr.sample2d()
-    assert isinstance(s, float)
-    assert s == _s
-    assert s1 == _s1
-    assert s2 == _s2
-
-    s = pr.sample1d(nrand=1)
-    s1, s2 = pr.sample2d(nrand=1)
-    assert (
-        isinstance(s, np.ndarray) and isinstance(s1, np.ndarray) and
-        isinstance(s2, np.ndarray)
+    lps = pr.get_lnprob_array(
+        np.array([0, 0.9*cen1, cen1]), np.array([0.9*cen2, 0, cen2])
     )
-    assert s1.shape == (1,) and s2.shape == (1,) and s.shape == (1,)
+    assert lps.shape == (3,)
+    assert not np.isfinite(lps[0])
+    assert not np.isfinite(lps[1])
 
-    s = pr.sample1d(nrand=10)
-    s1, s2 = pr.sample2d(nrand=10)
-    assert s1.shape == (10,) and s2.shape == (10,) and s.shape == (10,)
-
-    s = pr.sample1d(nrand=1000000)
-    s1, s2 = pr.sample2d(nrand=1000000)
-    assert np.allclose(s1.mean(), 0, rtol=0, atol=2e-3)
-    assert np.allclose(s2.mean(), 0, rtol=0, atol=2e-3)
-
-    expected_meanr = 2.0 / 3.0 * radius
-    r = np.sqrt(s1**2 + s2**2)
-    assert np.all(s < radius)
-    assert np.all(r < radius)
-    assert np.allclose(s.mean(), expected_meanr, rtol=0, atol=2e-3)
-    assert np.allclose(r.mean(), expected_meanr, rtol=0, atol=2e-3)
-
-
-def test_priors_zannulus():
-    rmin = 0.5
-    rmax = 1.0
-
-    pr = ZAnnulus(rmin, rmax, rng=np.random.RandomState(seed=10))
-    _s = pr.sample1d()
-    _s1, _s2 = pr.sample2d()
-
-    pr = ZAnnulus(rmin, rmax, rng=np.random.RandomState(seed=10))
-
-    assert pr.radius == rmax
-    assert pr.rmin == rmin
-
-    s = pr.sample1d()
-    s1, s2 = pr.sample2d()
-    assert isinstance(s, float)
-    assert s == _s
-    assert s1 == _s1
-    assert s2 == _s2
-
-    s = pr.sample1d(nrand=1)
-    s1, s2 = pr.sample2d(nrand=1)
-    assert (
-        isinstance(s, np.ndarray) and isinstance(s1, np.ndarray) and
-        isinstance(s2, np.ndarray)
+    assert np.allclose(
+        np.exp(pr.get_lnprob_scalar(0.9*cen1, 0.8*cen2)),
+        pr.get_prob_scalar(0.9*cen1, 0.8*cen2),
     )
-    assert s1.shape == (1,) and s2.shape == (1,) and s.shape == (1,)
-
-    s = pr.sample1d(nrand=10)
-    s1, s2 = pr.sample2d(nrand=10)
-    assert s1.shape == (10,) and s2.shape == (10,) and s.shape == (10,)
-
-    s = pr.sample1d(nrand=1000000)
-    s1, s2 = pr.sample2d(nrand=1000000)
-    assert np.allclose(s1.mean(), 0, rtol=0, atol=2e-3)
-    assert np.allclose(s2.mean(), 0, rtol=0, atol=2e-3)
-
-    expected_meanr = 2.0 / 3.0 * (
-        (rmax**3 - rmin**3)/(rmax**2 - rmin**2)
-    )
-    r = np.sqrt(s1**2 + s2**2)
-    assert np.all((s < rmax) & (s > rmin))
-    assert np.all((r < rmax) & (r > rmin))
-    assert np.allclose(s.mean(), expected_meanr, rtol=0, atol=2e-3)
-    assert np.allclose(r.mean(), expected_meanr, rtol=0, atol=2e-3)
-
-
-def test_priors_zdisk2derf():
-    """
-    not much to test here
-    """
-    radius = 0.5
-    rolloff = 0.9*radius
-
-    pr = ZDisk2DErf(radius, rolloff_point=rolloff)
-
-    assert pr.radius == radius
-    assert pr.rolloff_point == rolloff
-
-
-def test_priors_udisk2dcut():
-    """
-    not much to test here
-    """
-    cutval = 0.5
-
-    pr = UDisk2DCut(cutval=cutval)
-
-    assert pr.cutval == cutval
