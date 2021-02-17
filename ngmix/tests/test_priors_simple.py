@@ -52,6 +52,12 @@ def test_priors_bounded1d(klass):
             (1.0, -1.0),
         )
 
+    with pytest.raises(ValueError):
+        klass(
+            Normal(-0.5, 0.5, rng=np.random.RandomState(seed=10)),
+            1.0,
+        )
+
 
 def test_priors_lmbounds():
     pr = LMBounds(-0.5, 0.5, rng=np.random.RandomState(seed=10))
@@ -219,6 +225,9 @@ def test_priors_twosidederf():
 
 @pytest.mark.parametrize('shift', [None, 0, 0.1])
 def test_priors_lognormal(shift):
+    with pytest.raises(ValueError):
+        LogNormal(-10, 1, shift=shift, rng=np.random.RandomState(seed=10))
+
     mean = 1.0
     sigma = 0.5
 
@@ -240,6 +249,17 @@ def test_priors_lognormal(shift):
     assert isinstance(s, np.ndarray)
     assert s.shape == (10,)
 
+    s = pr.sample_brute()
+    assert isinstance(s, float)
+
+    s = pr.sample_brute(nrand=1)
+    assert isinstance(s, np.ndarray)
+    assert s.shape == (1,)
+
+    s = pr.sample_brute(nrand=10)
+    assert isinstance(s, np.ndarray)
+    assert s.shape == (10,)
+
     s = pr.sample(nrand=1000000)
 
     if shift is None:
@@ -250,12 +270,41 @@ def test_priors_lognormal(shift):
     assert np.allclose(s.mean(), mean + shiftval, rtol=0, atol=1e-3)
     assert np.allclose(s.std(), sigma, rtol=0, atol=1e-3)
 
+    with pytest.raises(GMixRangeError):
+        pr.get_prob_scalar(-10)
+
     mode_val = pr.get_prob_scalar(pr.mode + shiftval)
     low_val = pr.get_prob_scalar(pr.mode + shiftval - 1.0e-3)
     high_val = pr.get_prob_scalar(pr.mode + shiftval + 1.0e-3)
 
     assert mode_val > low_val
     assert mode_val > high_val
+
+    mode_val_arr = pr.get_lnprob_array(np.array([pr.mode + shiftval]))
+    assert isinstance(mode_val_arr, np.ndarray)
+    assert np.allclose(mode_val_arr, 0)
+
+    with pytest.raises(GMixRangeError):
+        pr.get_lnprob_array(np.array([pr.mode + shiftval, -10]))
+
+    mode_val_arr = pr.get_prob_array(np.array([pr.mode + shiftval]))
+    assert isinstance(mode_val_arr, np.ndarray)
+    assert np.allclose(mode_val_arr, 1)
+
+    assert pr.get_fdiff(pr.mode + shiftval) == 0
+
+
+def test_priors_lognormal_fit():
+    mean = 1.0
+    sigma = 0.5
+
+    pr = LogNormal(mean, sigma, rng=np.random.RandomState(seed=10))
+    samps = pr.sample(2000000)
+    h, be = np.histogram(samps, bins=np.linspace(0, 10, 500))
+    h = h / np.sum(h)
+    bc = (be[1:] + be[:-1])/2.0
+    res = pr.fit(bc, h)
+    assert np.allclose(res['pars'][:2], [mean, sigma], rtol=0, atol=1e-3)
 
 
 def test_priors_sinh():
@@ -330,13 +379,22 @@ def test_priors_truncated_gaussian():
 
     # make sure these don't raise
     for val in [mean, minval, maxval]:
-        _ = pr.get_lnprob_scalar(val)
+        pr.get_lnprob_scalar(val)
 
     # make sure these do raise
     with pytest.raises(GMixRangeError):
-        _ = pr.get_lnprob_scalar(minval - 0.1)
+        pr.get_lnprob_scalar(minval - 0.1)
     with pytest.raises(GMixRangeError):
-        _ = pr.get_lnprob_scalar(maxval + 0.1)
+        pr.get_lnprob_scalar(maxval + 0.1)
+
+    arr = pr.get_lnprob_array(np.array([minval, mean, maxval]))
+    assert arr.shape == (3,)
+    assert arr[0] < arr[1]
+    assert arr[2] < arr[1]
+
+    assert pr.get_fdiff(0.4*mean) == -0.6*mean/sigma
+    with pytest.raises(GMixRangeError):
+        pr.get_fdiff(minval - mean)
 
 
 def test_priors_student():
@@ -365,6 +423,14 @@ def test_priors_student():
     s = pr.sample(nrand=10)
     assert isinstance(s, np.ndarray)
     assert s.shape == (10,)
+
+    arr = pr.get_lnprob_array(np.array([mean-sigma, mean, mean+sigma]))
+    assert arr.shape == (3,)
+    assert arr[0] < arr[1]
+    assert arr[2] < arr[1]
+
+    s = pr.get_lnprob_scalar(mean)
+    assert isinstance(s, float)
 
 
 def test_priors_student_positive():
@@ -396,3 +462,15 @@ def test_priors_student_positive():
 
     s = pr.sample(nrand=10000)
     assert np.all(s > 0)
+
+    arr = pr.get_lnprob_array(np.array([mean-sigma, mean, mean+sigma]))
+    assert arr.shape == (3,)
+    assert arr[0] < arr[1]
+    assert arr[2] < arr[1]
+    with pytest.raises(GMixRangeError):
+        pr.get_lnprob_array(np.array([-1, mean+sigma]))
+
+    s = pr.get_lnprob_scalar(mean)
+    assert isinstance(s, float)
+    with pytest.raises(GMixRangeError):
+        pr.get_lnprob_scalar(-1)

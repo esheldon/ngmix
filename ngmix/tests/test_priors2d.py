@@ -1,7 +1,5 @@
 import numpy as np
 
-# import pytest
-
 from ..priors import (
     Student2D,
     CenPrior,
@@ -11,7 +9,6 @@ from ..priors import (
     ZAnnulus,
     UDisk2DCut,
 )
-# from ..gexceptions import GMixRangeError
 
 
 def test_priors_student2d():
