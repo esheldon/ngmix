@@ -35,7 +35,7 @@
 - the optional `rng` keyword for `ngmix.priors.srandu` has been removed in favor
   of a required keyword
 - removed priors `ZDisk2DErf`, `ZAnnulus`, `UDisk2DCut`, `TruncatedStudentPolar`,
-  `TruncatedStudentPolar`
+  `TruncatedGaussianPolar`
 
 
 ## v1.3.8
