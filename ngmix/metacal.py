@@ -1017,22 +1017,22 @@ class MetacalFitGaussPSF(Metacal):
 
         if the above all fail, rase BootPSFFailure
         """
-        from .bootstrap import AMRunner, PSFRunner
+        from .admom import Admom
+        from .guessers import PSFGMixGuesser, CoellipPSFGuesser
+        from .runners import run_psf_fitter
+        from .fitting import LMSimple
         from .gexceptions import BootPSFFailure
-
-        ntry = 4
 
         psfobs = self.obs.psf
 
-        fwhm_guess = 0.9
-        Tguess = moments.fwhm_to_T(fwhm_guess)
+        ntry = 4
+        guesser = PSFGMixGuesser(rng=self.rng, ngauss=1)
 
         # try adaptive moments first
-        runner = AMRunner(psfobs, Tguess, rng=self.rng)
+        fitter = Admom(rng=self.rng)
 
-        runner.go(ntry=ntry)
+        run_psf_fitter(obs=psfobs, fitter=fitter, guesser=guesser, ntry=ntry)
 
-        fitter = runner.fitter
         res = fitter.get_result()
 
         if res['flags'] == 0:
@@ -1046,17 +1046,11 @@ class MetacalFitGaussPSF(Metacal):
                 'xtol': 1.0e-05,
             }
 
-            runner = PSFRunner(
-                psfobs,
-                'gauss',
-                Tguess,
-                lm_pars,
-                rng=self.rng,
-            )
+            fitter = LMSimple(model='gauss', fit_pars=lm_pars)
+            guesser = CoellipPSFGuesser(rng=self.rng, ngauss=1)
 
-            runner.go(ntry=ntry)
+            run_psf_fitter(obs=psfobs, fitter=fitter, guesser=guesser, ntry=ntry)
 
-            fitter = runner.fitter
             res = fitter.get_result()
 
             if res['flags'] == 0:
