@@ -40,6 +40,7 @@ def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
     g1arr = []
     g2arr = []
     Tarr = []
+    fitter = Admom(rng=rng)
     for _ in range(50):
         shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
         xy = gs_wcs.toImage(galsim.PositionD(shift))
@@ -63,9 +64,9 @@ def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
             image=_im,
             weight=wgt,
             jacobian=jac)
-        fitter = Admom(obs, rng=rng)
         try:
-            fitter.go(fwhm_to_T(fwhm) + rng.normal()*0.01)
+            Tguess = fwhm_to_T(fwhm) + rng.normal()*0.01
+            fitter.go(obs=obs, guess=Tguess)
             res = fitter.get_result()
             if res['flags'] == 0:
                 gm = fitter.get_gmix()
