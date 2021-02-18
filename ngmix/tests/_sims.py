@@ -7,7 +7,7 @@ PIXEL_SCALE = 0.263
 TPSF = 0.27
 
 
-def get_ngauss_obs(*, rng, ngauss, noise=0.0, with_psf=False):
+def get_ngauss_obs(*, rng, ngauss, noise=0.0, with_psf=False, psf_model='turb'):
 
     counts = 100.0
     dims = [25, 25]
@@ -81,7 +81,7 @@ def get_ngauss_obs(*, rng, ngauss, noise=0.0, with_psf=False):
     gm = GMix(pars=pars)
 
     if with_psf:
-        psf_ret = get_psf_obs(rng=rng)
+        psf_ret = get_psf_obs(rng=rng, model=psf_model)
         gmconv = gm.convolve(psf_ret['gmix'])
 
         im0 = gmconv.make_image(dims, jacobian=jacob)
@@ -104,11 +104,10 @@ def get_ngauss_obs(*, rng, ngauss, noise=0.0, with_psf=False):
     return ret
 
 
-def get_model_obs(*, rng, model, noise=0.0):
+def get_model_obs(*, rng, model, noise=0.0, psf_model='turb'):
 
     off = 0.5
     off1_pix, off2_pix = rng.uniform(low=-off, high=off, size=2)
-    off1, off2 = off1_pix * PIXEL_SCALE, off2_pix * PIXEL_SCALE
     T = 0.27
     g1 = 0.1
     g2 = 0.05
@@ -126,7 +125,7 @@ def get_model_obs(*, rng, model, noise=0.0):
     pars = [0.0, 0.0, g1, g2, T, flux]
     gm = GMixModel(pars, model)
 
-    psf_ret = get_psf_obs(rng=rng)
+    psf_ret = get_psf_obs(rng=rng, model=psf_model)
     gmconv = gm.convolve(psf_ret['gmix'])
 
     im0 = gmconv.make_image(dims, jacobian=jacob)
