@@ -1,8 +1,9 @@
 import pytest
 import numpy as np
 from ngmix.runners import PSFRunner
-from ngmix.guessers import EMPSFGuesser, SimplePSFGuesser, CoellipPSFGuesser
+from ngmix.guessers import PSFGMixGuesser, SimplePSFGuesser, CoellipPSFGuesser
 from ngmix.em import GMixEM
+from ngmix.admom import Admom
 from ngmix.fitting import LMCoellip, LMSimple
 from ._sims import get_ngauss_obs, get_psf_obs
 
@@ -20,7 +21,7 @@ def test_em_psf_runner_smoke(ngauss, guess_from_moms):
 
     obs = data['obs']
 
-    guesser = EMPSFGuesser(
+    guesser = PSFGMixGuesser(
         rng=rng,
         ngauss=ngauss,
         guess_from_moms=guess_from_moms,
@@ -64,7 +65,7 @@ def test_em_psf_runner(with_psf_obs, guess_from_moms):
 
     obs = data['obs']
 
-    guesser = EMPSFGuesser(
+    guesser = PSFGMixGuesser(
         rng=rng,
         ngauss=3,
         guess_from_moms=guess_from_moms,
@@ -253,6 +254,96 @@ def test_coellip_psf_runner(with_psf_obs, guess_from_moms):
         comp_image = obs.psf.image
     else:
         comp_image = obs.image
+
+    imtol = 0.001 / obs.jacobian.scale**2
+    assert np.abs(imfit - comp_image).max() < imtol
+
+
+@pytest.mark.parametrize('guess_from_moms', [False, True])
+@pytest.mark.parametrize('ngauss', [1, 2, 3, 4, 5])
+def test_admom_psf_runner_smoke(ngauss, guess_from_moms):
+    """
+    Smoke test a PSFRunner running the Admom fitter
+    """
+
+    rng = np.random.RandomState(5661)
+
+    data = get_psf_obs(rng=rng, model='gauss')
+
+    obs = data['obs']
+
+    guesser = PSFGMixGuesser(
+        rng=rng,
+        ngauss=1,
+        guess_from_moms=guess_from_moms,
+    )
+    fitter = Admom()
+
+    runner = PSFRunner(
+        fitter=fitter,
+        guesser=guesser,
+        ntry=2,
+    )
+    runner.go(obs=obs)
+
+    fitter = runner.fitter
+    res = fitter.get_result()
+    assert res['flags'] == 0
+
+
+@pytest.mark.parametrize('with_psf_obs', [False, True])
+@pytest.mark.parametrize('guess_from_moms', [False, True])
+def test_admom_psf_runner(with_psf_obs, guess_from_moms):
+    """
+    Test a PSFRunner running the EM fitter
+
+    with_psf_obs means it is an ordinary obs with a psf obs also.
+    The code knows to fit the psf obs not the main obs
+    """
+
+    rng = np.random.RandomState(8821)
+
+    if with_psf_obs:
+        data = get_ngauss_obs(
+            rng=rng,
+            ngauss=1,
+            noise=0.0,
+            with_psf=True,
+            psf_model='gauss',
+        )
+    else:
+        data = get_psf_obs(rng=rng, model='gauss')
+
+    obs = data['obs']
+
+    guesser = PSFGMixGuesser(
+        rng=rng,
+        ngauss=1,
+        guess_from_moms=guess_from_moms,
+    )
+    fitter = Admom()
+
+    runner = PSFRunner(
+        fitter=fitter,
+        guesser=guesser,
+        ntry=2,
+    )
+    runner.go(obs=obs)
+
+    fitter = runner.fitter
+    res = fitter.get_result()
+    assert res['flags'] == 0
+
+    # check reconstructed image allowing for noise
+    imfit = fitter.make_image()
+
+    if with_psf_obs:
+        comp_image = obs.psf.image
+    else:
+        comp_image = obs.image
+
+    from espy import images
+    images.compare_images(comp_image, imfit)
 
     imtol = 0.001 / obs.jacobian.scale**2
     assert np.abs(imfit - comp_image).max() < imtol
