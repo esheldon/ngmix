@@ -15,7 +15,7 @@ from ngmix.shape import e1e2_to_g1g2
 @pytest.mark.parametrize('wcs_g2', [-0.2, 0, 0.5])
 @pytest.mark.parametrize('g1_true', [-0.1, 0, 0.2])
 @pytest.mark.parametrize('g2_true', [-0.2, 0, 0.1])
-def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
+def test_gaussmom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
     rng = np.random.RandomState(seed=100)
 
     fwhm = 0.9
