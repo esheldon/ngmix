@@ -1,0 +1,53 @@
+name: mdet
+
+on:
+  push:
+    branches:
+      - master
+  pull_request: null
+
+jobs:
+  tests:
+    name: mdet
+    runs-on: "ubuntu-latest"
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          python-version: 3.8
+          channels: conda-forge,defaults
+          channel-priority: strict
+          show-channel-urls: true
+
+      - name: configure conda and install code
+        shell: bash -l {0}
+        run: |
+          conda config --set always_yes yes
+          conda install --quiet \
+            pip \
+            setuptools \
+            numpy \
+            numba \
+            flake8 \
+            pyyaml \
+            scipy \
+            pytest \
+            galsim \
+            scikit-learn \
+            statsmodels \
+            emcee \
+            pytest-cov \
+            meds \
+            fitsio
+
+          pip install git+https://github.com/esheldon/metadetect.git \
+            --force-reinstall --no-deps --no-cache-dir
+
+          python -m pip install -e .
+
+      - name: test
+        shell: bash -l {0}
+        run: |
+          pytest -vvs mdet_tests
