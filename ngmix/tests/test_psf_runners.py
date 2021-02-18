@@ -342,8 +342,5 @@ def test_admom_psf_runner(with_psf_obs, guess_from_moms):
     else:
         comp_image = obs.image
 
-    from espy import images
-    images.compare_images(comp_image, imfit)
-
     imtol = 0.001 / obs.jacobian.scale**2
     assert np.abs(imfit - comp_image).max() < imtol
