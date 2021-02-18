@@ -3,21 +3,23 @@ from numpy import diag
 
 from .gmix import GMix, GMixModel
 from .shape import e1e2_to_g1g2
-from .observation import ObsList, MultiBandObsList
+from .observation import Observation
+
+DEFAULT_MAXITER = 200
+DEFAULT_SHIFTMAX = 5.0  # pixels
+DEFAULT_ETOL = 1.0e-5
+DEFAULT_TTOL = 1.0e-3
 
 
-def run_admom(obs, guess, **kw):
-    am = Admom(obs, **kw)
-    am.go(guess)
-    return am
-
-
-class Admom(object):
+def run_admom(
+    *, obs, guess,
+    maxiter=DEFAULT_MAXITER,
+    shiftmax=DEFAULT_SHIFTMAX,
+    etol=DEFAULT_ETOL,
+    Ttol=DEFAULT_TTOL,
+    rng=None,
+):
     """
-    Measure adaptive moments for the input observation
-
-    parameters
-    ----------
     obs: Observation
         ngmix.Observation
     maxiter: integer, optional
@@ -32,46 +34,81 @@ class Admom(object):
         Largest allowed shift in the centroid, relative to
         the initial guess.  Default 5.0 (5 pixels if the jacobian
         scale is 1)
+    guess: ngmix.GMix or a float
+        A guess for the fitter.  Can be a full gaussian mixture or a single
+        value for T, in which case the rest of the parameters for the
+        gaussian are generated.
+    rng: numpy.random.RandomState
+        Random state for creating full gaussian guesses based
+        on a T guess
     """
 
-    def __init__(self, obs, maxiter=200, shiftmax=5.0,
-                 etol=1.0e-5, Ttol=0.001,  # noqa
+    am = Admom(
+        maxiter=maxiter,
+        shiftmax=shiftmax,
+        etol=etol,
+        Ttol=Ttol,
+        rng=rng,
+    )
+    am.go(obs=obs, guess=guess)
+    return am
+
+
+class Admom(object):
+    """
+    Measure adaptive moments for the input observation
+
+    parameters
+    ----------
+    maxiter: integer, optional
+        Maximum number of iterations, default 200
+    etol: float, optional
+        absolute tolerance in e1 or e2 to determine convergence,
+        default 1.0e-5
+    Ttol: float, optional
+        relative tolerance in T <x^2> + <y^2> to determine
+        convergence, default 1.0e-3
+    shiftmax: float, optional
+        Largest allowed shift in the centroid, relative to
+        the initial guess.  Default 5.0 (5 pixels if the jacobian
+        scale is 1)
+    rng: numpy.random.RandomState
+        Random state for creating full gaussian guesses based
+        on a T guess
+    """
+
+    def __init__(self,
+                 maxiter=DEFAULT_MAXITER,
+                 shiftmax=DEFAULT_SHIFTMAX,
+                 etol=DEFAULT_ETOL,
+                 Ttol=DEFAULT_TTOL,
                  rng=None,
                  **unused_keys):
 
-        if isinstance(obs, ObsList):
-            if len(obs) != 1:
-                raise ValueError("at most one epoch can be fit")
-            obs = obs[0]
-        elif isinstance(obs, MultiBandObsList):
-            if len(obs) > 1:
-                raise ValueError("at most one band can be fit")
-            else:
-                obs = obs[0]
-                if len(obs) != 1:
-                    raise ValueError("at most one epoch can be fit")
-                obs = obs[0]
-
-        self._obs = obs
         self._set_conf(maxiter, shiftmax, etol, Ttol)
 
         self.rng = rng
 
-    def go(self, guess):
+    def go(self, *, obs, guess):
         """
         run the adpative moments
 
         parameters
         ----------
-        guess_gmix: ngmix.GMix or a float
-            A guess for the fitter.  Can be a full gaussian
-            mixture or a single value for T, in which case
-            the rest of the parameters are random numbers
-            about the jacobian center and zero ellipticity
+        obs: Observation
+            ngmix.Observation
+        guess: ngmix.GMix or a float
+            A guess for the fitter.  Can be a full gaussian mixture or a single
+            value for T, in which case the rest of the parameters for the
+            gaussian are generated.
         """
         from .admom_nb import admom
 
-        guess_gmix = self._get_guess(guess)
+        if not isinstance(obs, Observation):
+            raise ValueError("input obs must be an Observation")
+        self._obs = obs
+
+        guess_gmix = self._get_guess(obs=obs, guess=guess)
 
         ares = self._get_am_result()
 
@@ -79,7 +116,7 @@ class Admom(object):
         admom(
             self.conf,
             wt_gmix,
-            self._obs.pixels,
+            obs.pixels,
             ares,
         )
 
@@ -89,7 +126,6 @@ class Admom(object):
         """
         get the result
         """
-
         if not hasattr(self, 'result'):
             raise RuntimeError("run go() first")
 
@@ -112,12 +148,33 @@ class Admom(object):
 
         return GMixModel(pars, "gauss")
 
-    def _get_guess(self, guess):
+    def make_image(self):
+        """
+        Get an image of the best fit mixture
+
+        Returns
+        -------
+        image: array
+            Image of the model, including the PSF if a psf was sent
+        """
+        obs = self._obs
+        jac = obs.jacobian
+
+        gm = self.get_gmix()
+        gm.set_flux(obs.image.sum() * jac.scale**2)
+
+        im = gm.make_image(
+            obs.image.shape,
+            jacobian=jac,
+        )
+        return im
+
+    def _get_guess(self, *, obs, guess):
         if isinstance(guess, GMix):
             guess_gmix = guess
         else:
             Tguess = guess  # noqa
-            guess_gmix = self._generate_guess(Tguess)
+            guess_gmix = self._generate_guess(obs=obs, Tguess=Tguess)
         return guess_gmix
 
     def _set_conf(self, maxiter, shiftmax, etol, Ttol):  # noqa
@@ -141,12 +198,12 @@ class Admom(object):
 
         return self.rng
 
-    def _generate_guess(self, Tguess):  # noqa
+    def _generate_guess(self, *, obs, Tguess):  # noqa
         from .gmix import GMixModel
 
         rng = self._get_rng()
 
-        scale = self._obs.jacobian.get_scale()
+        scale = obs.jacobian.get_scale()
         pars = numpy.zeros(6)
         pars[0:0+2] = rng.uniform(low=-0.5*scale, high=0.5*scale, size=2)
         pars[2:2+2] = rng.uniform(low=-0.3, high=0.3, size=2)
