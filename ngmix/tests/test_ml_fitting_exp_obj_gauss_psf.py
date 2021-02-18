@@ -72,6 +72,8 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
     farr = []
     xarr = []
     yarr = []
+
+    fitter = LMSimple(model='exp', prior=prior)
     for _ in range(50):
         shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
         xy = gs_wcs.toImage(galsim.PositionD(shift))
@@ -96,8 +98,8 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
             weight=wgt,
             jacobian=jac,
             psf=psf_obs)
-        fitter = LMSimple(obs, 'exp', prior=prior)
-        fitter.go(guess + rng.normal(size=6) * 0.01)
+
+        fitter.go(obs=obs, guess=guess + rng.normal(size=6) * 0.01)
         res = fitter.get_result()
         if res['flags'] == 0:
             _g1, _g2, _ = res['g'][0], res['g'][1], res['pars'][4]
