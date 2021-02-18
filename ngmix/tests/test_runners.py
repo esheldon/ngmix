@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from ngmix.runners import Runner, PSFRunner
-from ngmix.guessers import PSFGMixGuesser, TFluxGuesser, CoellipPSFGuesser
+from ngmix.guessers import GMixPSFGuesser, TFluxGuesser, CoellipPSFGuesser
 from ngmix.fitting import LMCoellip
 from ngmix.em import GMixEM
 from ngmix.fitting import LMSimple
@@ -27,7 +27,7 @@ def test_runner_lm_simple_smoke(model, psf_model_type):
 
     psf_ngauss = 3
     if psf_model_type == 'em':
-        psf_guesser = PSFGMixGuesser(
+        psf_guesser = GMixPSFGuesser(
             rng=rng,
             ngauss=psf_ngauss,
         )
@@ -86,7 +86,7 @@ def test_runner_lm_simple(model, psf_model_type, noise):
 
     psf_ngauss = 3
     if psf_model_type == 'em':
-        psf_guesser = PSFGMixGuesser(
+        psf_guesser = GMixPSFGuesser(
             rng=rng,
             ngauss=psf_ngauss,
         )

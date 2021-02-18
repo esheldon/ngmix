@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from ngmix.runners import PSFRunner
-from ngmix.guessers import PSFGMixGuesser, SimplePSFGuesser, CoellipPSFGuesser
+from ngmix.guessers import GMixPSFGuesser, SimplePSFGuesser, CoellipPSFGuesser
 from ngmix.em import GMixEM
 from ngmix.admom import Admom
 from ngmix.fitting import LMCoellip, LMSimple
@@ -21,7 +21,7 @@ def test_em_psf_runner_smoke(ngauss, guess_from_moms):
 
     obs = data['obs']
 
-    guesser = PSFGMixGuesser(
+    guesser = GMixPSFGuesser(
         rng=rng,
         ngauss=ngauss,
         guess_from_moms=guess_from_moms,
@@ -65,7 +65,7 @@ def test_em_psf_runner(with_psf_obs, guess_from_moms):
 
     obs = data['obs']
 
-    guesser = PSFGMixGuesser(
+    guesser = GMixPSFGuesser(
         rng=rng,
         ngauss=3,
         guess_from_moms=guess_from_moms,
@@ -272,7 +272,7 @@ def test_admom_psf_runner_smoke(ngauss, guess_from_moms):
 
     obs = data['obs']
 
-    guesser = PSFGMixGuesser(
+    guesser = GMixPSFGuesser(
         rng=rng,
         ngauss=1,
         guess_from_moms=guess_from_moms,
@@ -316,7 +316,7 @@ def test_admom_psf_runner(with_psf_obs, guess_from_moms):
 
     obs = data['obs']
 
-    guesser = PSFGMixGuesser(
+    guesser = GMixPSFGuesser(
         rng=rng,
         ngauss=1,
         guess_from_moms=guess_from_moms,
