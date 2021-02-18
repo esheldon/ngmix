@@ -40,7 +40,8 @@ jobs:
             emcee \
             pytest-cov \
             meds \
-            fitsio
+            fitsio \
+            sep
 
           pip install git+https://github.com/esheldon/metadetect.git \
             --force-reinstall --no-deps --no-cache-dir
