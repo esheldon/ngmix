@@ -223,7 +223,8 @@ def test_mdet_regression(write=False):
         for fname in fnames:
             old_data = fitsio.read(fname)
             for col in old_data.dtype.names:
-                assert np.array_equal(all_res[col], old_data[col])
+                if np.issubdtype(old_data[col].dtype, np.number):
+                    assert np.allclose(all_res[col], old_data[col]), col
 
 
 if __name__ == "__main__":
