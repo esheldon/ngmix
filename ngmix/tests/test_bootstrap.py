@@ -5,7 +5,7 @@ import pytest
 import numpy as np
 from ngmix import priors, joint_prior
 from ngmix.runners import Runner, PSFRunner
-from ngmix.guessers import EMPSFGuesser, TFluxGuesser, CoellipPSFGuesser
+from ngmix.guessers import PSFGMixGuesser, TFluxGuesser, CoellipPSFGuesser
 from ngmix.fitting import LMCoellip
 from ngmix.em import GMixEM
 from ngmix.fitting import LMSimple
@@ -57,7 +57,7 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
     psf_ngauss = 3
 
     if psf_model_type == 'em':
-        psf_guesser = EMPSFGuesser(
+        psf_guesser = PSFGMixGuesser(
             rng=rng,
             ngauss=psf_ngauss,
             guess_from_moms=guess_from_moms,
