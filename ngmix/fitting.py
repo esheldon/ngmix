@@ -1208,7 +1208,6 @@ class LMSimple(FitterBase):
         self._set_band_pars()
         self._set_fdiff_size()
 
-
         npars = guess.size
         mess = "guess has npars=%d, expected %d" % (npars, self.npars)
         assert npars == self.npars, mess
