@@ -29,13 +29,33 @@ BOOT_WEIGHTS_LOW = 2 ** 5
 
 
 class Bootstrapper(object):
-    def __init__(self, *, runner, psf_runner,
-                 ignore_failed_psf=True):
+    """
+    bootstrap fits to psf and object
+
+    Parameters
+    ----------
+    runner: fit runner for object
+        Must have go(obs=obs) method
+    psf_runner: fit runner for psfs
+        Must have go(obs=obs, set_result=) method
+    ignore_failed_psf: bool, optional
+        If set to True, remove observations where the psf fit fails, and
+        only fit the remaining.  Default True.
+    """
+    def __init__(self, *, runner, psf_runner, ignore_failed_psf=True):
         self.runner = runner
         self.psf_runner = psf_runner
         self.ignore_failed_psf = ignore_failed_psf
 
     def go(self, obs):
+        """
+        Run the runners on the input observation(s)
+
+        Parameters
+        ----------
+        obs: ngmix Observation(s)
+            Observation, ObsList, or MultiBandObsList
+        """
         bootstrap(
             obs=obs,
             runner=self.runner,
@@ -45,13 +65,22 @@ class Bootstrapper(object):
 
     @property
     def fitter(self):
+        """
+        get a reference to the fitter
+        """
         return self.runner.fitter
 
     def get_result(self):
+        """
+        get the result dict for the last fit
+        """
         return self.fitter.get_result()
 
     @property
     def result(self):
+        """
+        get the result dict for the last fit
+        """
         return self.get_result()
 
 
@@ -71,9 +100,9 @@ def bootstrap(
     obs: ngmix Observation(s)
         Observation, ObsList, or MultiBandObsList
     runner: ngmix Runner
-        A runner or measurement to run the fit.
+        Must have go(obs=obs) method
     psf_runner: ngmix PSFRunner
-        A runner to run the psf fits
+        Must have go(obs=obs, set_result=) method
     ignore_failed_psf: bool, optional
         If set to True, remove observations where the psf fit fails, and
         only fit the remaining.  Default True.
