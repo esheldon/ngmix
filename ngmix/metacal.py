@@ -1018,7 +1018,7 @@ class MetacalFitGaussPSF(Metacal):
         if the above all fail, rase BootPSFFailure
         """
         from .admom import Admom
-        from .guessers import PSFGMixGuesser, CoellipPSFGuesser
+        from .guessers import GMixPSFGuesser, SimplePSFGuesser
         from .runners import run_psf_fitter
         from .fitting import LMSimple
         from .gexceptions import BootPSFFailure
@@ -1026,7 +1026,7 @@ class MetacalFitGaussPSF(Metacal):
         psfobs = self.obs.psf
 
         ntry = 4
-        guesser = PSFGMixGuesser(rng=self.rng, ngauss=1)
+        guesser = GMixPSFGuesser(rng=self.rng, ngauss=1)
 
         # try adaptive moments first
         fitter = Admom(rng=self.rng)
@@ -1047,7 +1047,7 @@ class MetacalFitGaussPSF(Metacal):
             }
 
             fitter = LMSimple(model='gauss', fit_pars=lm_pars)
-            guesser = CoellipPSFGuesser(rng=self.rng, ngauss=1)
+            guesser = SimplePSFGuesser(rng=self.rng)
 
             run_psf_fitter(obs=psfobs, fitter=fitter, guesser=guesser, ntry=ntry)
 
