@@ -513,9 +513,10 @@ class R50NuFluxGuesser(R50FluxGuesser):
             guess = guess[0, :]
         return guess
 
-class EMPSFGuesser(object):
+
+class PSFGMixGuesser(object):
     """
-    guesser for EM psf fitting
+    guesser a full gaussian mixture for a psf.  Useful for EM and admom
 
     Parameters
     ----------
@@ -791,7 +792,7 @@ _em5_pguess = np.array(
 _em5_fguess = np.array([0.5, 1.0, 3.0, 10.0, 20.0])
 
 
-class SimplePSFGuesser(EMPSFGuesser):
+class SimplePSFGuesser(PSFGMixGuesser):
     """
     guesser for simple psf fitting
 
@@ -843,7 +844,7 @@ class SimplePSFGuesser(EMPSFGuesser):
         return guess
 
 
-class CoellipPSFGuesser(EMPSFGuesser):
+class CoellipPSFGuesser(PSFGMixGuesser):
     """
     guesser for coelliptical psf fitting
 
