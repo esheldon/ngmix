@@ -1,7 +1,7 @@
 import numpy as np
 
 from ngmix import DiagonalJacobian, GMix, GMixModel
-from ngmix import Observation
+from ngmix import Observation, ObsList
 
 PIXEL_SCALE = 0.263
 TPSF = 0.27
@@ -104,40 +104,69 @@ def get_ngauss_obs(*, rng, ngauss, noise=0.0, with_psf=False, psf_model='turb'):
     return ret
 
 
-def get_model_obs(*, rng, model, noise=0.0, psf_model='turb'):
+def get_model_obs(
+    *, rng, model,
+    noise=0.0, psf_model='turb', set_psf_gmix=False, nepoch=None,
+    star=False,
+):
 
-    off = 0.5
-    off1_pix, off2_pix = rng.uniform(low=-off, high=off, size=2)
-    T = 0.27
+    if nepoch is not None:
+        do_obslist = True
+    else:
+        do_obslist = False
+        nepoch = 1
+
+    if star:
+        T = 0.0
+    else:
+        T = 0.27
+
     g1 = 0.1
     g2 = 0.05
     flux = 100.0
-
-    dims = [32, 32]
-    jcen = (np.array(dims) - 1.0) / 2.0
-    jacob = DiagonalJacobian(
-        scale=PIXEL_SCALE,
-        row=jcen[0] + off1_pix,
-        col=jcen[1] + off2_pix,
-    )
+    off = 0.5
 
     # not offset from the jacobian center
     pars = [0.0, 0.0, g1, g2, T, flux]
     gm = GMixModel(pars, model)
 
-    psf_ret = get_psf_obs(rng=rng, model=psf_model)
-    gmconv = gm.convolve(psf_ret['gmix'])
+    obslist = ObsList()
+    for i in range(nepoch):
 
-    im0 = gmconv.make_image(dims, jacobian=jacob)
+        off1_pix, off2_pix = rng.uniform(low=-off, high=off, size=2)
+        dims = [32, 32]
+        jcen = (np.array(dims) - 1.0) / 2.0
+        jacob = DiagonalJacobian(
+            scale=PIXEL_SCALE,
+            row=jcen[0] + off1_pix,
+            col=jcen[1] + off2_pix,
+        )
 
-    im = im0 + rng.normal(size=im0.shape, scale=noise)
-    obs = Observation(im, jacobian=jacob, psf=psf_ret['obs'])
+        psf_ret = get_psf_obs(rng=rng, model=psf_model)
+        if set_psf_gmix:
+            psf_ret['obs'].set_gmix(psf_ret['gmix'])
+
+        gmconv = gm.convolve(psf_ret['gmix'])
+
+        im0 = gmconv.make_image(dims, jacobian=jacob)
+
+        im = im0 + rng.normal(size=im0.shape, scale=noise)
+        obs = Observation(im, jacobian=jacob, psf=psf_ret['obs'])
+
+        obslist.append(obs)
 
     ret = {
-        'obs': obs,
         'gmix': gm,
         'pars': pars,
+        'psf_data': psf_ret,
     }
+
+    if not do_obslist:
+        obs = obslist[0]
+        ret['obs'] = obs
+    else:
+        ret['obslist'] = obslist
+
     return ret
 
 
