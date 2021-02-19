@@ -18,7 +18,6 @@ def test_template_psf_flux(noise):
     """
 
     rng = np.random.RandomState(42587)
-    ngauss = 1
     data = get_model_obs(
         model='gauss',  # it has T=0 for a star
         rng=rng, noise=noise, star=True,
