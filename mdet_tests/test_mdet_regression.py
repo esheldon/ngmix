@@ -120,6 +120,10 @@ def make_sim(seed=42):
     vs = rng.uniform(low=-inner_shape/2, high=inner_shape/2, size=ngals) * scale
     wcs = galsim.PixelScale(scale)
     psf = galsim.Gaussian(fwhm=0.8)
+    size_fac = rng.uniform(low=1.0, high=1.5, size=ngals)
+    g1s = rng.normal(size=ngals) * 0.2
+    g2s = rng.normal(size=ngals) * 0.2
+    flux_fac = 10**rng.uniform(low=-2, high=0, size=ngals)
 
     # PSF image
     psf_img = psf.drawImage(nx=33, ny=33, wcs=wcs).array
@@ -139,11 +143,11 @@ def make_sim(seed=42):
 
     # gals
     gals = []
-    for u, v in zip(us, vs):
+    for u, v, sf, g1, g2, ff in zip(us, vs, size_fac, g1s, g2s, flux_fac):
         gals.append(galsim.Convolve([
-            galsim.Exponential(half_light_radius=0.5),
+            galsim.Exponential(half_light_radius=0.5 * sf),
             psf,
-        ]).withFlux(flux).shift(u, v))
+        ]).shear(g1=g1, g2=g2).withFlux(flux*ff).shift(u, v))
     gals = galsim.Sum(gals)
 
     img = gals.drawImage(nx=shape, ny=shape, wcs=wcs).array
