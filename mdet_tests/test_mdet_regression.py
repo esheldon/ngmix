@@ -212,9 +212,13 @@ def test_mdet_regression(write=False):
 
     if write:
         print("ngmix path:", ngmix.__file__)
+        if isinstance(write, str):
+            ver = write
+        else:
+            ver = ngmix.__version__
         pth = os.path.join(
             os.path.abspath(os.path.dirname(__file__)),
-            "mdet_test_data_%s.fits" % ngmix.__version__,
+            "mdet_test_data_%s.fits" % ver,
         )
         fitsio.write(pth, all_res, clobber=True)
     else:
@@ -231,10 +235,17 @@ def test_mdet_regression(write=False):
                     assert np.allclose(
                         all_res[col], old_data[col],
                         atol=2e-6, rtol=1e-5,
-                    ), {col: np.abs(all_res[col] - old_data[col])}
+                    ), {
+                        col+os.path.basename(fname): np.max(
+                            np.abs(all_res[col] - old_data[col])
+                        ),
+                    }
                 else:
                     assert col in ["shear"]
 
 
 if __name__ == "__main__":
-    test_mdet_regression(write=True)
+    if len(sys.argv) > 1:
+        test_mdet_regression(write=sys.argv[1])
+    else:
+        test_mdet_regression(write=True)
