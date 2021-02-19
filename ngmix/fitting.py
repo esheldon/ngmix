@@ -577,46 +577,38 @@ class TemplateFluxFitter(FitterBase):
     obs: Observation or ObsList
         See ngmix.observation.Observation.  The observation should
         have a gmix set.
+    do_psf: bool, optional
+        If True, use the gaussian mixtures in the psf observation as templates.
+        In this mode the code calculates a "psf flux".  Default False.
     cen: 2-element sequence, optional
         The center in sky coordinates, relative to the jacobian center(s).  If
         not sent, the gmix (or psf gmix) object(s) in the observation(s) should
-        be set to the wanted center.
+        be set to the wanted center.  Default None.
     normalize_psf: True or False
         if True, then normalize PSF gmix to flux of unity, otherwise use input
-        normalization.
-
+        normalization.  Default True
     """
 
-    def __init__(self, obs, **keys):
+    def __init__(self, do_psf=False, cen=None, normalize_psf=True):
 
-        self.do_psf = keys.get("do_psf", False)
-        self.cen = keys.get("cen", None)
+        self.do_psf = do_psf
+        self.cen = cen
 
-        self.normalize_psf = keys.get("normalize_psf", True)
-        self.simulate_err = keys.get("simulate_err", False)
-
-        if self.simulate_err:
-            rng = keys.get("rng", None)
-            if rng is None:
-                rng = numpy.random.RandomState()
-            self.rng = rng
+        self.normalize_psf = normalize_psf
 
         if self.cen is None:
             self.cen_was_sent = False
         else:
             self.cen_was_sent = True
 
-        self._set_obs(obs)
-
         self.model_name = "template"
         self.npars = 1
 
-        self._set_totpix()
-
-    def go(self):
+    def go(self, *, obs):
         """
         calculate the flux using zero-lag cross-correlation
         """
+        self._set_obs(obs)
 
         flags = 0
 
@@ -685,16 +677,7 @@ class TemplateFluxFitter(FitterBase):
 
         we can simulate when needed
         """
-        if self.simulate_err:
-            err = numpy.zeros(model.shape)
-            w = numpy.where(wt > 0)
-            err[w] = numpy.sqrt(1.0 / wt[w])
-            noisy_model = model.copy()
-            noisy_model += self.rng.normal(size=model.shape) * err
-            chi2 = ((model - noisy_model) ** 2 * wt).sum()
-        else:
-            chi2 = ((model - im) ** 2 * wt).sum()
-
+        chi2 = ((model - im) ** 2 * wt).sum()
         return chi2
 
     def _get_model(self, iobs, flux=None):
@@ -761,6 +744,8 @@ class TemplateFluxFitter(FitterBase):
             self._set_gmix_and_norms()
         else:
             self._set_templates_and_norms()
+
+        self._set_totpix()
 
     def _set_gmix_and_norms(self):
         self.use_template = False
