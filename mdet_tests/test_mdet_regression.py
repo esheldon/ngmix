@@ -224,7 +224,10 @@ def test_mdet_regression(write=False):
             old_data = fitsio.read(fname)
             for col in old_data.dtype.names:
                 if np.issubdtype(old_data[col].dtype, np.number):
-                    assert np.allclose(all_res[col], old_data[col]), col
+                    assert np.allclose(
+                        all_res[col], old_data[col],
+                        atol=1e-5, rtol=1e-5
+                    ), {col: np.abs(all_res[col] - old_data[col])}
 
 
 if __name__ == "__main__":
