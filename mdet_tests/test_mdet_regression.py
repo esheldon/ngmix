@@ -4,6 +4,8 @@ import copy
 import glob
 import logging
 
+import pytest
+
 import numpy as np
 import galsim
 import fitsio
@@ -201,7 +203,11 @@ def combine_arrays(md):
     return np.sort(d, order=["sx_col", "sx_row", "shear"])
 
 
-def test_mdet_regression(write=False):
+@pytest.mark.parametrize("fname", glob.glob(os.path.join(
+    os.path.abspath(os.path.dirname(__file__)),
+    "mdet_test_data_*.fits",
+)))
+def test_mdet_regression(fname, write=False):
     mbobs = make_sim()
     rng = np.random.RandomState(seed=42)
 
@@ -222,30 +228,23 @@ def test_mdet_regression(write=False):
         )
         fitsio.write(pth, all_res, clobber=True)
     else:
-        pth = os.path.join(
-            os.path.abspath(os.path.dirname(__file__)),
-            "mdet_test_data_*.fits",
-        )
-        fnames = glob.glob(pth)
-        assert len(fnames) > 0
-        for fname in fnames:
-            old_data = fitsio.read(fname)
-            for col in old_data.dtype.names:
-                if np.issubdtype(old_data[col].dtype, np.number):
-                    assert np.allclose(
-                        all_res[col], old_data[col],
-                        atol=2e-6, rtol=1e-5,
-                    ), {
-                        col+os.path.basename(fname): np.max(
-                            np.abs(all_res[col] - old_data[col])
-                        ),
-                    }
-                else:
-                    assert col in ["shear"]
+        old_data = fitsio.read(fname)
+        for col in old_data.dtype.names:
+            if np.issubdtype(old_data[col].dtype, np.number):
+                assert np.allclose(
+                    all_res[col], old_data[col],
+                    atol=2e-6, rtol=1e-5,
+                ), {
+                    col+os.path.basename(fname): np.max(
+                        np.abs(all_res[col] - old_data[col])
+                    ),
+                }
+            else:
+                assert col in ["shear"]
 
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        test_mdet_regression(write=sys.argv[1])
+        test_mdet_regression(None, write=sys.argv[1])
     else:
-        test_mdet_regression(write=True)
+        test_mdet_regression(None, write=True)
