@@ -230,7 +230,7 @@ def test_mdet_regression(write=False):
                 if np.issubdtype(old_data[col].dtype, np.number):
                     assert np.allclose(
                         all_res[col], old_data[col],
-                        atol=1e-5, rtol=1e-5,
+                        atol=2e-6, rtol=1e-5,
                     ), {col: np.abs(all_res[col] - old_data[col])}
                 else:
                     assert col in ["shear"]
