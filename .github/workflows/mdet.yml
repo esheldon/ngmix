@@ -56,6 +56,13 @@ jobs:
           python test_mdet_regression.py master
           popd
 
+          pip uninstall ngmix -y
+          conda install ngmix==1.3.8 -y
+          pushd mdet_tests
+          python test_mdet_regression.py v1.3.8
+          popd
+          conda uninstall ngmix -y
+
           pip install -e .
 
           pytest -vvs mdet_tests
