@@ -56,7 +56,7 @@ class TFluxGuesser(GuesserBase):
         self.rng = rng
         self.T = T
 
-        self.fluxes = fluxes = np.array(flux, dtype="f8", ndmin=1)
+        self.fluxes = np.array(flux, dtype="f8", ndmin=1)
         self.prior = prior
 
     def __call__(self, *, obs, n=1):
@@ -109,6 +109,16 @@ class TPSFFluxGuesser(GuesserBase):
         self.rng = rng
         self.T = T
         self.prior = prior
+        self._id_last = None
+        self._psf_fluxes = None
+
+    def _get_psf_fluxes(self, *, obs):
+        oid = id(obs)
+        if oid != self._id_last:
+            self._id_last = oid
+            fdict = _get_psf_fluxes(rng=self.rng, obs=obs)
+            self._psf_fluxes = fdict['flux']
+        return self._psf_fluxes
 
     def __call__(self, *, obs, n=1):
         """
@@ -117,8 +127,7 @@ class TPSFFluxGuesser(GuesserBase):
 
         rng = self.rng
 
-        fdict = _get_psf_fluxes(rng=self.rng, obs=obs)
-        fluxes = fdict['flux']
+        fluxes = self._get_psf_fluxes(obs=obs)
 
         nband = fluxes.size
         npars = 5 + nband
