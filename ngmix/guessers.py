@@ -1,7 +1,7 @@
 import numpy as np
 from .gmix import GMix, GMixModel, get_coellip_npars
 from .fitting import print_pars
-from .gexceptions import GMixRangeError
+from .gexceptions import GMixRangeError, PSFFluxFailure
 from .priors import srandu, LOWVAL
 from .shape import Shape
 from . import moments
@@ -41,22 +41,22 @@ class TFluxGuesser(GuesserBase):
 
     parameters
     ----------
+    rng: numpy.random.RandomState
+        Random state for generating guesses
     T: float
-        Center for T guesses
-    fluxes: float or sequences
-        Center for flux guesses
+        Central value for T guesses
+    flux: float or sequence
+        Central value for flux guesses.  Can be a single float or a sequence/array
+        for multiple bands
     prior: optional
         If sent, "fix-up" guesses if they are not allowed by the prior
     """
 
-    def __init__(self, *, rng, T, fluxes, prior=None):
+    def __init__(self, *, rng, T, flux, prior=None):
         self.rng = rng
         self.T = T
 
-        if np.isscalar(fluxes):
-            fluxes = np.array(fluxes, dtype="f8", ndmin=1)
-
-        self.fluxes = fluxes
+        self.fluxes = fluxes = np.array(flux, dtype="f8", ndmin=1)
         self.prior = prior
 
     def __call__(self, *, obs, n=1):
@@ -77,7 +77,6 @@ class TFluxGuesser(GuesserBase):
         guess[:, 3] = rng.uniform(low=-0.02, high=0.02, size=n)
         guess[:, 4] = self.T * rng.uniform(low=0.9, high=1.1, size=n)
 
-        fluxes = self.fluxes
         for band in range(nband):
             guess[:, 5 + band] = (
                 fluxes[band] * rng.uniform(low=0.9, high=1.1, size=n)
@@ -92,23 +91,136 @@ class TFluxGuesser(GuesserBase):
         return guess
 
 
+class TPSFFluxGuesser(GuesserBase):
+    """
+    get full guesses from just the input T and fluxes based on psf fluxes
+
+    parameters
+    ----------
+    rng: numpy.random.RandomState
+        Random state for generating guesses
+    T: float
+        Central value for T guesses
+    prior: optional
+        If sent, "fix-up" guesses if they are not allowed by the prior
+    """
+
+    def __init__(self, *, rng, T, prior=None):
+        self.rng = rng
+        self.T = T
+        self.prior = prior
+
+    def __call__(self, *, obs, n=1):
+        """
+        center, shape are just distributed around zero
+        """
+
+        rng = self.rng
+
+        fdict = _get_psf_fluxes(rng=self.rng, obs=obs)
+        fluxes = fdict['flux']
+
+        nband = fluxes.size
+        npars = 5 + nband
+
+        guess = np.zeros((n, npars))
+        guess[:, 0] = rng.uniform(low=-0.01, high=0.01, size=n)
+        guess[:, 1] = rng.uniform(low=-0.01, high=0.01, size=n)
+        guess[:, 2] = rng.uniform(low=-0.02, high=0.02, size=n)
+        guess[:, 3] = rng.uniform(low=-0.02, high=0.02, size=n)
+        guess[:, 4] = self.T * rng.uniform(low=0.9, high=1.1, size=n)
+
+        for band in range(nband):
+            guess[:, 5 + band] = (
+                fluxes[band] * rng.uniform(low=0.9, high=1.1, size=n)
+            )
+
+        if self.prior is not None:
+            self._fix_guess(guess, self.prior)
+
+        if n == 1:
+            guess = guess[0, :]
+
+        return guess
+
+
+def _get_psf_fluxes(*, rng, obs):
+    """
+    Get psf fluxes for the input observations
+
+    The result is cached with cache size 64
+
+    Parameters
+    ----------
+    rng: numpy.random.RandomState
+        Random state for generating guesses
+    obs: Observation, Obslist, MultiBandObsList
+        The observations
+
+    Returns
+    -------
+    a dict with 'flags' 'flux' 'flux_err' for each band
+    """
+    from .fitting import TemplateFluxFitter
+    from .observation import get_mb_obs
+
+    mbobs = get_mb_obs(obs)
+
+    nband = len(mbobs)
+    flux = np.zeros(nband)
+    flux_err = np.zeros(nband)
+    flags = np.zeros(nband, dtype='i4')
+
+    fitter = TemplateFluxFitter(do_psf=True)
+
+    for iband, obslist in enumerate(mbobs):
+        fitter.go(obs=obslist)
+        res = fitter.get_result()
+
+        # flags are set for all zero weight pixels, so there isn't anything we
+        # can do, we'll have to fix it up
+        flags[iband] = res['flags']
+        flux[iband] = res['flux']
+        flux_err[iband] = res['flux_err']
+
+    logic = (flags == 0) & np.isfinite(flux)
+    wgood, = np.where(logic)
+    if wgood.size != nband:
+        if wgood.size == 0:
+            # no good fluxes due to flags. This means we have no information
+            # to use for a fit or measurement, so there is no point in
+            # generating a guess
+            raise PSFFluxFailure("no good psf fluxes")
+        else:
+            # make a guess based on the good ones
+            wbad, = np.where(~logic)
+            fac = 1.0 + rng.uniform(low=-0.1, high=0.1, size=wbad.size)
+            flux[wbad] = flux[wgood].mean()*fac
+
+    return {
+        'flags': flags,
+        'flux': flux,
+        'flux_err': flux_err,
+    }
+
+
 class TFluxAndPriorGuesser(GuesserBase):
     """
-    Make guesses from the input T, fluxes and prior
+    Make guesses from the input T, flux and prior
 
     parameters
     ----------
     T: float
         Center for T guesses
-    fluxes: float or sequences
+    flux: float or sequences
         Center for flux guesses
     prior:
         cen, g drawn from this prior
     """
 
-    def __init__(self, T, fluxes, prior):
+    def __init__(self, T, flux, prior):
 
-        fluxes = np.array(fluxes, dtype="f8", ndmin=1)
+        fluxes = np.array(flux, dtype="f8", ndmin=1)
 
         self.T = T
         self.fluxes = fluxes
@@ -176,9 +288,9 @@ class TFluxAndPriorGuesser(GuesserBase):
 
 
 class BDFGuesser(TFluxAndPriorGuesser):
-    def __init__(self, Tguess, fluxes, prior):
+    def __init__(self, Tguess, flux, prior):
         self.T = Tguess
-        self.fluxes = np.array(fluxes, ndmin=1)
+        self.fluxes = np.array(flux, ndmin=1)
         self.prior = prior
 
     def __call__(self, n=1, **keys):
@@ -212,9 +324,9 @@ class BDFGuesser(TFluxAndPriorGuesser):
 
 
 class BDGuesser(TFluxAndPriorGuesser):
-    def __init__(self, Tguess, fluxes, prior):
+    def __init__(self, Tguess, flux, prior):
         self.T = Tguess
-        self.fluxes = np.array(fluxes, ndmin=1)
+        self.fluxes = np.array(flux, ndmin=1)
         self.prior = prior
 
     def __call__(self, n=1, **keys):
@@ -349,23 +461,20 @@ class R50FluxGuesser(object):
     ----------
     r50: float
         Center for r50 (half light radius )guesses
-    fluxes: float or sequences
+    flux: float or sequences
         Center for flux guesses
     prior: optional
         If sent, "fix-up" guesses if they are not allowed by the prior
     """
 
-    def __init__(self, r50, fluxes, prior=None, rng=None):
+    def __init__(self, r50, flux, prior=None, rng=None):
 
         if r50 < 0.0:
             raise GMixRangeError("r50 <= 0: %g" % r50)
 
         self.r50 = r50
 
-        if np.isscalar(fluxes):
-            fluxes = np.array(fluxes, dtype="f8", ndmin=1)
-
-        self.fluxes = fluxes
+        self.fluxes = np.array(flux, dtype="f8", ndmin=1)
         self.prior = prior
 
         if prior is not None and hasattr(prior, "cen_prior"):
@@ -453,7 +562,7 @@ class R50NuFluxGuesser(R50FluxGuesser):
         Center for r50 (half light radius )guesses
     nu: float
         Index for the spergel function
-    fluxes: float or sequences
+    flux: float or sequences
         Center for flux guesses
     prior: optional
         If sent, "fix-up" guesses if they are not allowed by the prior
@@ -462,9 +571,9 @@ class R50NuFluxGuesser(R50FluxGuesser):
     NUMIN = -0.99
     NUMAX = 3.5
 
-    def __init__(self, r50, nu, fluxes, prior=None, rng=None):
+    def __init__(self, r50, nu, flux, prior=None, rng=None):
         super(R50NuFluxGuesser, self).__init__(
-            r50, fluxes, prior=prior, rng=rng,
+            r50, flux, prior=prior, rng=rng,
         )
 
         if nu < self.NUMIN:
