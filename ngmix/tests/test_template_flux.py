@@ -4,8 +4,6 @@ import numpy as np
 from ngmix.fitting import TemplateFluxFitter
 from ._sims import get_model_obs
 
-FRAC_TOL = 0.001
-
 
 @pytest.mark.parametrize('noise', [1.0, 5.0, 100.0])
 def test_template_psf_flux(noise):
