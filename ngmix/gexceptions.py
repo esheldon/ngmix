@@ -44,6 +44,7 @@ class BootPSFFailure(NGmixBaseException):
     """
     pass
 
+
 class BootGalFailure(NGmixBaseException):
     """
     Failure to bootstrap galaxy
