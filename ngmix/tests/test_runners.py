@@ -51,7 +51,7 @@ def test_runner_lm_simple_smoke(model, psf_model_type):
     guesser = TFluxGuesser(
         rng=rng,
         T=0.25,
-        fluxes=100.0,
+        flux=100.0,
     )
     fitter = LMSimple(model=model)
 
@@ -110,7 +110,7 @@ def test_runner_lm_simple(model, psf_model_type, noise):
     guesser = TFluxGuesser(
         rng=rng,
         T=0.25,
-        fluxes=100.0,
+        flux=100.0,
     )
     fitter = LMSimple(model=model)
 

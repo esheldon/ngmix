@@ -4,9 +4,12 @@ import numpy as np
 from ngmix.fitting import TemplateFluxFitter
 from ._sims import get_model_obs
 
+NSIG = 4
+
 
 @pytest.mark.parametrize('noise', [1.0, 5.0, 100.0])
-def test_template_psf_flux(noise):
+@pytest.mark.parametrize('nband', [None, 1, 2])
+def test_template_psf_flux(noise, nband):
     """
     see if we can recover the psf flux within errors
     """
@@ -15,17 +18,21 @@ def test_template_psf_flux(noise):
     data = get_model_obs(
         model='gauss',  # it has T=0 for a star
         rng=rng, noise=noise, star=True,
-        set_psf_gmix=True, nepoch=10,
+        set_psf_gmix=True, nepoch=10, nband=nband,
     )
 
-    obslist = data['obslist']
-
     fitter = TemplateFluxFitter(do_psf=True)
-    fitter.go(obs=obslist)
 
-    res = fitter.get_result()
-    assert res['flags'] == 0
+    nband_use = nband if nband is not None else 1
 
-    flux = res['flux']
-    flux_err = res['flux_err']
-    assert abs(flux - data['pars'][5]) < 5*flux_err
+    if nband is None:
+        fitter.go(obs=data['obslist'])
+        res = fitter.get_result()
+        assert res['flags'] == 0
+        assert (res['flux'] - data['pars'][5]) < NSIG*res['flux_err']
+    else:
+        for iband, obslist in enumerate(data['mbobs']):
+            fitter.go(obs=obslist)
+            res = fitter.get_result()
+            assert res['flags'] == 0
+            assert (res['flux'] - data['pars'][5+iband]) < NSIG*res['flux_err']

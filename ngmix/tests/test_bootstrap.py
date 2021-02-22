@@ -82,7 +82,7 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
     guesser = TFluxGuesser(
         rng=rng,
         T=0.25,
-        fluxes=100.0,
+        flux=100.0,
     )
     prior = get_prior(
         rng=rng,
