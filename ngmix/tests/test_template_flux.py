@@ -10,11 +10,7 @@ FRAC_TOL = 0.001
 @pytest.mark.parametrize('noise', [1.0, 5.0, 100.0])
 def test_template_psf_flux(noise):
     """
-    see if we can recover the input with and without noise to high precision
-    even with a bad guess
-
-    Use ngmix to make the image to make sure there are
-    no pixelization effects
+    see if we can recover the psf flux within errors
     """
 
     rng = np.random.RandomState(42587)
