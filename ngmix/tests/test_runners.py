@@ -1,7 +1,9 @@
 import pytest
 import numpy as np
 from ngmix.runners import Runner, PSFRunner
-from ngmix.guessers import GMixPSFGuesser, TFluxGuesser, CoellipPSFGuesser
+from ngmix.guessers import (
+    GMixPSFGuesser, TFluxGuesser, TPSFFluxGuesser, CoellipPSFGuesser,
+)
 from ngmix.fitting import LMCoellip
 from ngmix.em import GMixEM
 from ngmix.fitting import LMSimple
@@ -67,10 +69,11 @@ def test_runner_lm_simple_smoke(model, psf_model_type):
     assert res['flags'] == 0
 
 
+@pytest.mark.parametrize('guesser_type', ['TF', 'TPSFFlux'])
 @pytest.mark.parametrize('psf_model_type', ['em', 'coellip'])
 @pytest.mark.parametrize('model', ['exp', 'dev'])
 @pytest.mark.parametrize('noise', [1.0e-8, 0.01])
-def test_runner_lm_simple(model, psf_model_type, noise):
+def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
     """
     Smoke test a Runner running the LMSimple fitter
     """
@@ -107,11 +110,20 @@ def test_runner_lm_simple(model, psf_model_type, noise):
     )
     psf_runner.go(obs=obs, set_result=True)
 
-    guesser = TFluxGuesser(
-        rng=rng,
-        T=0.25,
-        flux=100.0,
-    )
+    if guesser_type == 'TF':
+        guesser = TFluxGuesser(
+            rng=rng,
+            T=0.25,
+            flux=100.0,
+        )
+    elif guesser_type == 'TPSFFlux':
+        guesser = TPSFFluxGuesser(
+            rng=rng,
+            T=0.25,
+        )
+    else:
+        raise ValueError('bad guesser')
+
     fitter = LMSimple(model=model)
 
     runner = Runner(
