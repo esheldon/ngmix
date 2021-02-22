@@ -1,7 +1,7 @@
 import numpy as np
 
 from ngmix import DiagonalJacobian, GMix, GMixModel
-from ngmix import Observation, ObsList
+from ngmix import Observation, ObsList, MultiBandObsList
 
 PIXEL_SCALE = 0.263
 TPSF = 0.27
@@ -106,9 +106,17 @@ def get_ngauss_obs(*, rng, ngauss, noise=0.0, with_psf=False, psf_model='turb'):
 
 def get_model_obs(
     *, rng, model,
-    noise=0.0, psf_model='turb', set_psf_gmix=False, nepoch=None,
+    noise=0.0, psf_model='turb', set_psf_gmix=False, nepoch=None, nband=None,
     star=False,
 ):
+
+    if nband is not None:
+        do_mbobs = True
+        if nepoch is None:
+            nepoch = 1
+    else:
+        do_mbobs = False
+        nband = 1
 
     if nepoch is not None:
         do_obslist = True
@@ -127,33 +135,36 @@ def get_model_obs(
     off = 0.5
 
     # not offset from the jacobian center
-    pars = [0.0, 0.0, g1, g2, T, flux]
-    gm = GMixModel(pars, model)
+    pars = [0.0, 0.0, g1, g2, T] + [flux]*nband
+    gm = GMixModel(pars[0:6], model)
 
+    mbobs = MultiBandObsList()
     obslist = ObsList()
-    for i in range(nepoch):
+    for iband in range(nband):
+        for i in range(nepoch):
 
-        off1_pix, off2_pix = rng.uniform(low=-off, high=off, size=2)
-        dims = [32, 32]
-        jcen = (np.array(dims) - 1.0) / 2.0
-        jacob = DiagonalJacobian(
-            scale=PIXEL_SCALE,
-            row=jcen[0] + off1_pix,
-            col=jcen[1] + off2_pix,
-        )
+            off1_pix, off2_pix = rng.uniform(low=-off, high=off, size=2)
+            dims = [32, 32]
+            jcen = (np.array(dims) - 1.0) / 2.0
+            jacob = DiagonalJacobian(
+                scale=PIXEL_SCALE,
+                row=jcen[0] + off1_pix,
+                col=jcen[1] + off2_pix,
+            )
 
-        psf_ret = get_psf_obs(rng=rng, model=psf_model)
-        if set_psf_gmix:
-            psf_ret['obs'].set_gmix(psf_ret['gmix'])
+            psf_ret = get_psf_obs(rng=rng, model=psf_model)
+            if set_psf_gmix:
+                psf_ret['obs'].set_gmix(psf_ret['gmix'])
 
-        gmconv = gm.convolve(psf_ret['gmix'])
+            gmconv = gm.convolve(psf_ret['gmix'])
 
-        im0 = gmconv.make_image(dims, jacobian=jacob)
+            im0 = gmconv.make_image(dims, jacobian=jacob)
 
-        im = im0 + rng.normal(size=im0.shape, scale=noise)
-        obs = Observation(im, jacobian=jacob, psf=psf_ret['obs'])
+            im = im0 + rng.normal(size=im0.shape, scale=noise)
+            obs = Observation(im, jacobian=jacob, psf=psf_ret['obs'])
 
-        obslist.append(obs)
+            obslist.append(obs)
+        mbobs.append(obslist)
 
     ret = {
         'gmix': gm,
@@ -161,11 +172,15 @@ def get_model_obs(
         'psf_data': psf_ret,
     }
 
-    if not do_obslist:
-        obs = obslist[0]
-        ret['obs'] = obs
+    if do_mbobs:
+        ret['mbobs'] = mbobs
     else:
-        ret['obslist'] = obslist
+        obslist = mbobs[0]
+        if not do_obslist:
+            obs = obslist[0]
+            ret['obs'] = obs
+        else:
+            ret['obslist'] = obslist
 
     return ret
 
