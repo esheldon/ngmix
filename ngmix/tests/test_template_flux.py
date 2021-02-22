@@ -23,8 +23,6 @@ def test_template_psf_flux(noise, nband):
 
     fitter = TemplateFluxFitter(do_psf=True)
 
-    nband_use = nband if nband is not None else 1
-
     if nband is None:
         fitter.go(obs=data['obslist'])
         res = fitter.get_result()
