@@ -42,6 +42,9 @@ def test_gaussmom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
     g1arr = []
     g2arr = []
     Tarr = []
+
+    fitter = GaussMom(fwhm=fwhm * weight_fac)
+
     for _ in range(50):
         shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
         xy = gs_wcs.toImage(galsim.PositionD(shift))
@@ -66,9 +69,8 @@ def test_gaussmom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
             weight=wgt,
             jacobian=jac)
         # use a huge weight so that we get the raw moments back out
-        fitter = GaussMom(obs, fwhm * weight_fac, rng=rng)
         try:
-            fitter.go()
+            fitter.go(obs=obs)
             res = fitter.get_result()
             if res['flags'] == 0:
                 if weight_fac > 1:
