@@ -37,7 +37,7 @@ class GuesserBase(object):
 
 class TFluxGuesser(GuesserBase):
     """
-    get full guesses from just T,fluxes
+    get full guesses from just T, fluxes
 
     parameters
     ----------
@@ -59,9 +59,17 @@ class TFluxGuesser(GuesserBase):
         self.fluxes = np.array(flux, dtype="f8", ndmin=1)
         self.prior = prior
 
-    def __call__(self, *, obs, n=1):
+    def __call__(self, *, obs=None, n=1):
         """
-        center, shape are just distributed around zero
+        Generate a guess.  The center, shape are distributed tightly around
+        zero
+
+        Parameters
+        ----------
+        obs: ignored
+            This keyword is here to conform to the interface
+        n: int, optional
+            Number of samples to draw.  Default 1
         """
 
         rng = self.rng
@@ -227,7 +235,7 @@ class TFluxAndPriorGuesser(GuesserBase):
         cen, g drawn from this prior
     """
 
-    def __init__(self, T, flux, prior):
+    def __init__(self, *, rng, T, flux, prior):
 
         fluxes = np.array(flux, dtype="f8", ndmin=1)
 
@@ -240,9 +248,16 @@ class TFluxAndPriorGuesser(GuesserBase):
         if w.size > 0:
             lfluxes[w[:]] = 1.0e-10
 
-    def __call__(self, n=1, **keys):
+    def __call__(self, *, obs=None, n=1):
         """
-        center, shape are just distributed around zero
+        Generate a guess, with center and shape drawn from the prior.
+
+        Parameters
+        ----------
+        obs: ignored
+            This keyword is here to conform to the interface
+        n: int, optional
+            Number of samples to draw.  Default 1
         """
 
         rng = self.prior.cen_prior.rng
