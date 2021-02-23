@@ -74,8 +74,11 @@ def test_gaussmom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
             res = fitter.get_result()
             if res['flags'] == 0:
                 if weight_fac > 1:
+                    # for unweighted we need to convert e to g
                     _g1, _g2 = e1e2_to_g1g2(res['e'][0], res['e'][1])
                 else:
+                    # we are weighting by the round gaussian before shearing.
+                    # Turns out this gives e that equals the shear g
                     _g1, _g2 = res['e'][0], res['e'][1]
                 g1arr.append(_g1)
                 g2arr.append(_g2)
