@@ -9,6 +9,7 @@ from numpy import exp, sqrt, where, isfinite
 from numpy import linalg
 from numpy.linalg import LinAlgError
 from pprint import pformat
+import logging
 
 from . import gmix
 from .gmix import GMixList, MultiBandGMixList
@@ -24,6 +25,8 @@ from . import stats
 
 from .gmix_nb import gmix_convolve_fill
 from .fitting_nb import fill_fdiff
+
+LOGGER = logging.getLogger(__name__)
 
 MAX_TAU = 0.1
 MIN_ARATE = 0.2
@@ -493,15 +496,15 @@ class FitterBase(object):
                 err = sqrt(cdiag)
                 (w,) = where(isfinite(err))
                 if w.size != err.size:
-                    print_pars(err, front="diagonals not finite:")
+                    print_pars(err, front="diagonals not finite:", log=True)
                 else:
                     # everything looks OK
                     bad = False
             else:
-                print_pars(cdiag, front="    diagonals negative:")
+                print_pars(cdiag, front="    diagonals negative:", log=True)
 
         except LinAlgError:
-            print("caught LinAlgError")
+            LOGGER.debug("caught LinAlgError")
 
         if bad:
             res["flags"] |= EIG_NOTFINITE
@@ -2035,14 +2038,14 @@ def run_leastsq(func, guess, n_prior_pars, **keys):
         if ier > 4:
             flags = 2 ** (ier - 5)
             pars, pcov, perr = _get_def_stuff(npars)
-            print("    ", errmsg)
+            LOGGER.debug(errmsg)
 
         elif pcov0 is None:
             # why on earth is this not in the flags?
             flags += LM_SINGULAR_MATRIX
             errmsg = "singular covariance"
-            print("    ", errmsg)
-            print_pars(pars, front="    pars at singular:")
+            LOGGER.debug(errmsg)
+            print_pars(pars, front="    pars at singular:", log=True)
             junk, pcov, perr = _get_def_stuff(npars)
         else:
             # Scale the covariance matrix returned from leastsq; this will
@@ -2067,7 +2070,7 @@ def run_leastsq(func, guess, n_prior_pars, **keys):
                 if cflags != 0:
                     flags += cflags
                     errmsg = "bad covariance matrix"
-                    print("    ", errmsg)
+                    LOGGER.debug(errmsg)
                     junk1, junk2, perr = _get_def_stuff(npars)
                 else:
                     # only if we reach here did everything go well
@@ -2094,7 +2097,7 @@ def run_leastsq(func, guess, n_prior_pars, **keys):
             res["nfev"] = -1
             res["flags"] = LM_FUNC_NOTFINITE
             res["errmsg"] = "not finite"
-            print("    not finite")
+            LOGGER.debug("not finite")
         else:
             raise e
 
@@ -2108,7 +2111,7 @@ def run_leastsq(func, guess, n_prior_pars, **keys):
 
         res["flags"] = DIV_ZERO
         res["errmsg"] = "zero division"
-        print("    zero division")
+        LOGGER.debug("zero division")
 
     return res
 
@@ -2447,7 +2450,7 @@ class MCMCBase(FitterBase):
                 )
                 pdict["triangle"] = figure
             except ImportError:
-                print("could not do triangle")
+                LOGGER.debug("could not do triangle")
 
         if show and prompt:
             key = input("hit a key: ")
@@ -3022,7 +3025,7 @@ class MHTempSimple(MHSimple):
     def __init__(self, obs, model, step_sizes, **keys):
         super(MHTempSimple, self).__init__(obs, model, step_sizes, **keys)
         self.temp = keys.get("temp", 1.0)
-        print("MHTempSimple doing temperature:", self.temp)
+        LOGGER.debug("MHTempSimple doing temperature: %s", self.temp)
 
     def get_weights(self):
         """
@@ -3401,21 +3404,25 @@ class ISampler(object):
 GCovSamplerT = ISampler
 
 
-def print_pars(pars, stream=stdout, fmt="%8.3g", front=None):
+def print_pars(pars, stream=stdout, fmt="%8.3g", front=None, log=False):
     """
     print the parameters with a uniform width
     """
+    txt = ""
     if front is not None:
-        stream.write(front)
-        stream.write(" ")
+        txt += front
+        txt += " "
     if pars is None:
-        stream.write("%s\n" % None)
+        txt += "%s\n" % None
     else:
-        # fmt = ' '.join( [fmt+' ']*len(pars) )
-        # stream.write(fmt % tuple(pars))
         s = format_pars(pars, fmt=fmt)
-        stream.write(s)
-        stream.write("\n")
+        txt += s
+        txt += "\n"
+
+    if log:
+        LOGGER.debug(txt)
+    else:
+        stream.write(txt)
 
 
 def format_pars(pars, fmt="%8.3g"):
