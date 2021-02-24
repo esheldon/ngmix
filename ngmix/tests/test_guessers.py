@@ -2,16 +2,16 @@ import pytest
 import numpy as np
 
 import ngmix
-from ngmix.guessers import TFluxGuesser, TFluxAndPriorGuesser, TPSFFluxGuesser
+from ngmix import guessers
 from ._sims import get_model_obs
 
 
+@pytest.mark.parametrize(
+    'guesser_type',
+    ['TFlux', 'TPSFFlux', 'Pars', 'R50Flux', 'R50NuFlux'],
+)
 @pytest.mark.parametrize('nband', [None, 1, 2])
-def test_template_T_flux_guesser_smoke(nband):
-    """
-    see if we can recover the psf flux within errors
-    """
-
+def test_noprior_guessers_smoke(guesser_type, nband):
     rng = np.random.RandomState(587)
     data = get_model_obs(
         model='gauss',  # it has T=0 for a star
@@ -21,10 +21,35 @@ def test_template_T_flux_guesser_smoke(nband):
     )
 
     nband_use = nband if nband is not None else 1
-    T_center = 0.001
-    flux_center = [1.0]*nband_use
 
-    guesser = TFluxGuesser(rng=rng, T=T_center, flux=flux_center)
+    if guesser_type == 'TFlux':
+        T_center = 0.001
+        flux_center = [1.0]*nband_use
+        guesser = guessers.TFluxGuesser(rng=rng, T=T_center, flux=flux_center)
+        npars = 5 + nband_use
+    elif guesser_type == 'TPSFFlux':
+        T_center = 0.001
+        guesser = guessers.TPSFFluxGuesser(rng=rng, T=T_center)
+        npars = 5 + nband_use
+    elif guesser_type == 'Pars':
+        pars = [0.0, 0.0, 0.0, 0.0, 0.1] + [1.0]*nband_use
+        guesser = guessers.ParsGuesser(rng=rng, pars=pars)
+        npars = 5 + nband_use
+    elif guesser_type == 'R50Flux':
+        r50_center = 0.2
+        flux_center = [1.0]*nband_use
+        guesser = guessers.R50FluxGuesser(rng=rng, r50=r50_center, flux=flux_center)
+        npars = 5 + nband_use
+    elif guesser_type == 'R50NuFlux':
+        r50_center = 0.2
+        flux_center = [1.0]*nband_use
+        nu_center = 1
+        guesser = guessers.R50NuFluxGuesser(
+            rng=rng, r50=r50_center, nu=nu_center, flux=flux_center,
+        )
+        npars = 6 + nband_use
+    else:
+        raise ValueError('bad guesser %s' % guesser_type)
 
     if nband is None:
         obs_use = data['obslist']
@@ -32,16 +57,11 @@ def test_template_T_flux_guesser_smoke(nband):
         obs_use = data['mbobs']
 
     guess = guesser(obs=obs_use)
-    nband_use = nband if nband is not None else 1
-    assert guess.size == 5 + nband_use
+    assert guess.size == npars
 
 
 @pytest.mark.parametrize('nband', [None, 1, 2])
-def test_template_T_flux_prior_guesser_smoke(nband):
-    """
-    see if we can recover the psf flux within errors
-    """
-
+def test_T_flux_prior_guesser_smoke(nband):
     nband_use = nband if nband is not None else 1
 
     rng = np.random.RandomState(19487)
@@ -61,36 +81,9 @@ def test_template_T_flux_prior_guesser_smoke(nband):
     T_center = 0.001
     flux_center = [1.0]*nband_use
 
-    guesser = TFluxAndPriorGuesser(
+    guesser = guessers.TFluxAndPriorGuesser(
         rng=rng, T=T_center, flux=flux_center, prior=prior,
     )
-
-    if nband is None:
-        obs_use = data['obslist']
-    else:
-        obs_use = data['mbobs']
-
-    guess = guesser(obs=obs_use)
-    nband_use = nband if nband is not None else 1
-    assert guess.size == 5 + nband_use
-
-
-@pytest.mark.parametrize('nband', [None, 1, 2])
-def test_template_T_psf_flux_guesser_smoke(nband):
-    """
-    see if we can recover the psf flux within errors
-    """
-
-    rng = np.random.RandomState(458)
-    data = get_model_obs(
-        model='gauss',  # it has T=0 for a star
-        rng=rng, star=True,
-        set_psf_gmix=True, nepoch=10,
-        nband=nband,
-    )
-
-    T_center = 0.001
-    guesser = TPSFFluxGuesser(rng=rng, T=T_center)
 
     if nband is None:
         obs_use = data['obslist']
