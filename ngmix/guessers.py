@@ -112,7 +112,6 @@ class TPSFFluxGuesser(object):
             Number of samples to draw.  Default 1
         """
 
-
         rng = self.rng
 
         fluxes = self._get_psf_fluxes(obs=obs)
@@ -580,7 +579,6 @@ class R50FluxGuesser(object):
         obs: ignored
             This keyword is here to conform to the interface
         """
-
 
         rng = self.rng
 
