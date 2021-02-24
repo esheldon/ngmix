@@ -7,17 +7,9 @@ TODO
 
 """
 import numpy as np
-from numpy import where, array, sqrt, zeros
 
-from . import admom
-from . import fitting
-from .gmix import GMix, GMixModel, get_coellip_npars
-from . import em
-from .observation import Observation, ObsList, MultiBandObsList, get_mb_obs
-from .gexceptions import GMixRangeError, BootPSFFailure, BootGalFailure
-
-from . import metacal
-
+from .observation import Observation, ObsList, MultiBandObsList
+from .gexceptions import BootPSFFailure
 from copy import deepcopy
 
 BOOT_S2N_LOW = 2 ** 0
@@ -287,9 +279,9 @@ def replace_masked_pixels(
                 weight = obs.weight
 
             if bmask is not None:
-                w = where((bmask != 0) | (weight == 0.0))
+                w = np.where((bmask != 0) | (weight == 0.0))
             else:
-                w = where(weight == 0.0)
+                w = np.where(weight == 0.0)
 
             if w[0].size > 0:
                 print(
@@ -305,7 +297,7 @@ def replace_masked_pixels(
                 im[w] = model_image[w]
 
                 if add_noise:
-                    wgood = where(weight > 0.0)
+                    wgood = np.where(weight > 0.0)
                     if wgood[0].size > 0:
                         median_err = np.median(1.0 / weight[wgood])
 
