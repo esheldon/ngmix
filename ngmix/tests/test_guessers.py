@@ -3,7 +3,8 @@ import numpy as np
 
 import ngmix
 from ngmix import guessers
-from ._sims import get_model_obs
+from ngmix.gmix import get_coellip_npars
+from ._sims import get_model_obs, get_psf_obs
 
 
 @pytest.mark.parametrize(
@@ -132,3 +133,42 @@ def test_prior_guessers_smoke(guesser_type, nband):
 
     guess = guesser(obs=obs_use)
     assert guess.size == npars
+
+
+@pytest.mark.parametrize(
+    'guesser_type',
+    ['GMix', 'Simple', 'Coellip'],
+)
+@pytest.mark.parametrize(
+    'ngauss', [1, 2, 3, 4, 5],
+)
+@pytest.mark.parametrize(
+    'guess_from_moms', [False, True],
+)
+def test_psf_guessers_smoke(guesser_type, ngauss, guess_from_moms):
+
+    rng = np.random.RandomState(19487)
+    data = get_psf_obs(rng=rng)
+
+    if guesser_type == 'GMix':
+        guesser = guessers.GMixPSFGuesser(
+            rng=rng, ngauss=ngauss, guess_from_moms=guess_from_moms,
+        )
+        npars = ngauss
+    elif guesser_type == 'Simple':
+        # note actually redundant for each ngauss
+        guesser = guessers.SimplePSFGuesser(
+            rng=rng, guess_from_moms=guess_from_moms,
+        )
+        npars = 6
+    elif guesser_type == 'Coellip':
+        # note actually redundant for each ngauss
+        guesser = guessers.CoellipPSFGuesser(
+            rng=rng, ngauss=ngauss, guess_from_moms=guess_from_moms,
+        )
+        npars = get_coellip_npars(ngauss)
+    else:
+        raise ValueError('bad guesser %s' % guesser_type)
+
+    guess = guesser(obs=data['obs'])
+    assert len(guess) == npars
