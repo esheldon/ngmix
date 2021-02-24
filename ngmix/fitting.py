@@ -3413,11 +3413,10 @@ def print_pars(pars, stream=stdout, fmt="%8.3g", front=None, log=False):
         txt += front
         txt += " "
     if pars is None:
-        txt += "%s\n" % None
+        txt += "%s" % None
     else:
         s = format_pars(pars, fmt=fmt)
         txt += s
-        txt += "\n"
 
     if log:
         LOGGER.debug(txt)
