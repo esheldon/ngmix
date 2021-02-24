@@ -7,35 +7,7 @@ from .shape import Shape
 from . import moments
 
 
-class GuesserBase(object):
-    def _fix_guess(self, guess, prior, ntry=4):
-        """
-        Fix a guess for out-of-bounds values according the the input prior
-
-        Bad guesses are replaced by a sample from the prior
-        """
-
-        n = guess.shape[0]
-        for j in range(n):
-            for itry in range(ntry):
-                try:
-                    lnp = prior.get_lnprob_scalar(guess[j, :])
-
-                    if lnp <= LOWVAL:
-                        dosample = True
-                    else:
-                        dosample = False
-                except GMixRangeError:
-                    dosample = True
-
-                if dosample:
-                    print_pars(guess[j, :], front="bad guess:")
-                    guess[j, :] = prior.sample()
-                else:
-                    break
-
-
-class TFluxGuesser(GuesserBase):
+class TFluxGuesser(object):
     """
     get full guesses from just T, fluxes
 
@@ -59,17 +31,17 @@ class TFluxGuesser(GuesserBase):
         self.fluxes = np.array(flux, dtype="f8", ndmin=1)
         self.prior = prior
 
-    def __call__(self, *, obs=None, n=1):
+    def __call__(self, *, n=1, obs=None):
         """
         Generate a guess.  The center, shape are distributed tightly around
         zero
 
         Parameters
         ----------
-        obs: ignored
-            This keyword is here to conform to the interface
         n: int, optional
             Number of samples to draw.  Default 1
+        obs: ignored
+            This keyword is here to conform to the interface
         """
 
         rng = self.rng
@@ -91,7 +63,7 @@ class TFluxGuesser(GuesserBase):
             )
 
         if self.prior is not None:
-            self._fix_guess(guess, self.prior)
+            _fix_guess(guess, self.prior)
 
         if n == 1:
             guess = guess[0, :]
@@ -99,7 +71,7 @@ class TFluxGuesser(GuesserBase):
         return guess
 
 
-class TPSFFluxGuesser(GuesserBase):
+class TPSFFluxGuesser(object):
     """
     get full guesses from just the input T and fluxes based on psf fluxes
 
@@ -130,8 +102,16 @@ class TPSFFluxGuesser(GuesserBase):
 
     def __call__(self, *, obs, n=1):
         """
-        center, shape are just distributed around zero
+        Generate a guess.
+
+        Parameters
+        ----------
+        obs: Observation
+            The observation(s) used for psf fluxes
+        n: int, optional
+            Number of samples to draw.  Default 1
         """
+
 
         rng = self.rng
 
@@ -153,7 +133,65 @@ class TPSFFluxGuesser(GuesserBase):
             )
 
         if self.prior is not None:
-            self._fix_guess(guess, self.prior)
+            _fix_guess(guess, self.prior)
+
+        if n == 1:
+            guess = guess[0, :]
+
+        return guess
+
+
+class TPSFFluxAndPriorGuesser(TPSFFluxGuesser):
+    """
+    get full guesses from just the T guess, psf fluxes and the prior
+
+    parameters
+    ----------
+    rng: numpy.random.RandomState
+        Random state for generating guesses
+    T: float
+        Central value for T guesses
+    prior: joint prior
+        cen, g drawn from this prior
+    """
+
+    def __init__(self, *, rng, T, prior):
+        self.rng = rng
+        self.T = T
+        self.prior = prior
+        self._id_last = None
+        self._psf_fluxes = None
+
+    def __call__(self, *, obs, n=1):
+        """
+        Generate a guess.
+
+        Parameters
+        ----------
+        obs: Observation
+            The observation(s) used for psf fluxes
+        n: int, optional
+            Number of samples to draw.  Default 1
+        """
+
+        rng = self.rng
+
+        fluxes = self._get_psf_fluxes(obs=obs)
+
+        nband = fluxes.size
+
+        guess = self.prior.sample(n)
+
+        r = rng.uniform(low=-0.1, high=0.1, size=n)
+        guess[:, 4] = self.T * (1.0 + r)
+
+        for band in range(nband):
+            guess[:, 5 + band] = (
+                fluxes[band] * rng.uniform(low=0.9, high=1.1, size=n)
+            )
+
+        if self.prior is not None:
+            _fix_guess_TFlux(guess, self.prior)
 
         if n == 1:
             guess = guess[0, :]
@@ -221,7 +259,7 @@ def _get_psf_fluxes(*, rng, obs):
     }
 
 
-class TFluxAndPriorGuesser(GuesserBase):
+class TFluxAndPriorGuesser(object):
     """
     Make guesses from the input T, flux and prior
 
@@ -248,16 +286,16 @@ class TFluxAndPriorGuesser(GuesserBase):
         if w.size > 0:
             lfluxes[w[:]] = 1.0e-10
 
-    def __call__(self, *, obs=None, n=1):
+    def __call__(self, *, n=1, obs=None):
         """
         Generate a guess, with center and shape drawn from the prior.
 
         Parameters
         ----------
-        obs: ignored
-            This keyword is here to conform to the interface
         n: int, optional
             Number of samples to draw.  Default 1
+        obs: ignored
+            This keyword is here to conform to the interface
         """
 
         rng = self.prior.cen_prior.rng
@@ -275,51 +313,40 @@ class TFluxAndPriorGuesser(GuesserBase):
             r = rng.uniform(low=-0.1, high=0.1, size=n)
             guess[:, 5 + band] = fluxes[band] * (1.0 + r)
 
-        self._fix_guess(guess, self.prior)
+        _fix_guess_TFlux(guess, self.prior)
 
         if n == 1:
             guess = guess[0, :]
         return guess
 
-    def _fix_guess(self, guess, prior, ntry=4):
-        """
-        just fix T and flux
-        """
 
-        n = guess.shape[0]
-        for j in range(n):
-            for itry in range(ntry):
-                try:
-                    lnp = prior.get_lnprob_scalar(guess[j, :])
+class BDFGuesser(object):
+    """
+    Make BDF guesses from the input T, flux and prior
 
-                    if lnp <= LOWVAL:
-                        dosample = True
-                    else:
-                        dosample = False
-                except GMixRangeError:
-                    dosample = True
+    parameters
+    ----------
+    T: float
+        Center for T guesses
+    flux: float or sequences
+        Center for flux guesses
+    prior:
+        cen, g drawn from this prior
+    """
 
-                if dosample:
-                    print_pars(guess[j, :], front="bad guess:")
-                    if itry < ntry:
-                        tguess = prior.sample()
-                        guess[j, 4:] = tguess[4:]
-                    else:
-                        # give up and just drawn a sample
-                        guess[j, :] = prior.sample()
-                else:
-                    break
-
-
-class BDFGuesser(TFluxAndPriorGuesser):
-    def __init__(self, Tguess, flux, prior):
-        self.T = Tguess
+    def __init__(self, *, T, flux, prior):
+        self.T = T
         self.fluxes = np.array(flux, ndmin=1)
         self.prior = prior
 
-    def __call__(self, n=1, **keys):
+    def __call__(self, n=1, obs=None):
         """
         center, shape are just distributed around zero
+
+        n: int, optional
+            Number of samples to draw.  Default 1
+        obs: ignored
+            This keyword is here to conform to the interface
         """
         rng = self.prior.cen_prior.rng
 
@@ -340,23 +367,44 @@ class BDFGuesser(TFluxAndPriorGuesser):
             guess[:, 6 + band] = fluxes[band] * (1.0 + r)
 
         if self.prior is not None:
-            self._fix_guess(guess, self.prior)
+            _fix_guess(guess, self.prior)
 
         if n == 1:
             guess = guess[0, :]
         return guess
 
 
-class BDGuesser(TFluxAndPriorGuesser):
-    def __init__(self, Tguess, flux, prior):
-        self.T = Tguess
+class BDGuesser(object):
+    """
+    Make BD guesses from the input T, flux and prior
+
+    parameters
+    ----------
+    T: float
+        Center for T guesses
+    flux: float or sequences
+        Center for flux guesses
+    prior:
+        cen, g drawn from this prior
+    """
+
+    def __init__(self, *, T, flux, prior):
+        self.T = T
         self.fluxes = np.array(flux, ndmin=1)
         self.prior = prior
 
-    def __call__(self, n=1, **keys):
+    def __call__(self, *, n=1, obs=None):
         """
-        center, shape are just distributed around zero
+        Generate a guess from the T, flux and prior for the rest
+
+        Parameters
+        ----------
+        n: int, optional
+            Number of samples to draw.  Default 1
+        obs: ignored
+            This keyword is here to conform to the interface
         """
+
         rng = self.prior.cen_prior.rng
 
         fluxes = self.fluxes
@@ -376,34 +424,53 @@ class BDGuesser(TFluxAndPriorGuesser):
             guess[:, 7 + band] = fluxes[band] * (1.0 + r)
 
         if self.prior is not None:
-            self._fix_guess(guess, self.prior)
+            _fix_guess(guess, self.prior)
 
         if n == 1:
             guess = guess[0, :]
         return guess
 
 
-class ParsGuesser(GuesserBase):
+class ParsGuesser(object):
     """
-    pars include g1,g2
+    Make BD guesses from the input T, flux and prior
+
+    parameters
+    ----------
+    rng: numpy.random.RandomState
+        Random state for generating guesses
+    pars: array/sequence
+        Parameters upon which to base the guess
+    widths: array/sequence
+        Widths for random guesses, default is 0.1, absolute
+        for cen, g but relative for T, flux
+    prior: joint prior, optional
+        If sent, "fix-up" guesses if they are not allowed by the prior
     """
 
-    def __init__(self, rng, pars, prior=None, widths=None):
+    def __init__(self, *, rng, pars, prior=None, widths=None):
         self.rng = rng
-        self.pars = pars
+        self.pars = np.array(pars)
         self.prior = prior
 
-        self.np = pars.size
+        self.np = self.pars.size
 
         if widths is None:
-            self.widths = pars * 0 + 0.1
+            self.widths = self.pars * 0 + 0.1
             self.widths[0:0+2] = 0.02
         else:
             self.widths = widths
 
-    def __call__(self, n=None, **keys):
+    def __call__(self, n=None, obs=None):
         """
-        center, shape are just distributed around zero
+        Generate a guess
+
+        Parameters
+        ----------
+        n: int, optional
+            Number of samples to draw.  Default 1
+        obs: ignored
+            This keyword is here to conform to the interface
         """
 
         rng = self.rng
@@ -437,7 +504,7 @@ class ParsGuesser(GuesserBase):
             guess[:, i] = pars[i] * (1.0 + widths[i] * srandu(n, rng=rng))
 
         if self.prior is not None:
-            self._fix_guess(guess, self.prior)
+            _fix_guess(guess, self.prior)
 
         if is_scalar:
             guess = guess[0, :]
@@ -447,7 +514,7 @@ class ParsGuesser(GuesserBase):
 
 def get_shape_guess(*, rng, g1, g2, n, width, max=0.99):
     """
-    Get guess, making sure in range
+    Get guess, making sure the range is OK
     """
 
     g = np.sqrt(g1 ** 2 + g2 ** 2)
@@ -491,8 +558,9 @@ class R50FluxGuesser(object):
         If sent, "fix-up" guesses if they are not allowed by the prior
     """
 
-    def __init__(self, r50, flux, prior=None, rng=None):
+    def __init__(self, *, rng, r50, flux, prior=None):
 
+        self.rng = rng
         if r50 < 0.0:
             raise GMixRangeError("r50 <= 0: %g" % r50)
 
@@ -501,26 +569,26 @@ class R50FluxGuesser(object):
         self.fluxes = np.array(flux, dtype="f8", ndmin=1)
         self.prior = prior
 
-        if prior is not None and hasattr(prior, "cen_prior"):
-            rng = prior.cen_prior.rng
-
-        if rng is None:
-            rng = np.random.RandomState()
-
-        self.rng = rng
-
-    def __call__(self, n=1, **keys):
+    def __call__(self, n=1, obs=None):
         """
-        center, shape are just distributed around zero
+        Generate a guess.
+
+        Parameters
+        ----------
+        n: int, optional
+            Number of samples to draw.  Default 1
+        obs: ignored
+            This keyword is here to conform to the interface
         """
+
 
         rng = self.rng
 
         fluxes = self.fluxes
         nband = fluxes.size
-        np = 5 + nband
+        npars = 5 + nband
 
-        guess = np.zeros((n, np))
+        guess = np.zeros((n, npars))
         guess[:, 0] = 0.01 * srandu(n, rng=rng)
         guess[:, 1] = 0.01 * srandu(n, rng=rng)
         guess[:, 2] = 0.02 * srandu(n, rng=rng)
@@ -535,44 +603,32 @@ class R50FluxGuesser(object):
             )
 
         if self.prior is not None:
-            self._fix_guess(guess, self.prior)
+            _fix_guess(guess, self.prior)
 
         if n == 1:
             guess = guess[0, :]
         return guess
 
-    def _fix_guess(self, guess, prior, ntry=4):
-        """
-        Fix a guess for out-of-bounds values according the the input prior
-
-        Bad guesses are replaced by a sample from the prior
-        """
-
-        n = guess.shape[0]
-        for j in range(n):
-            for itry in range(ntry):
-                try:
-                    lnp = prior.get_lnprob_scalar(guess[j, :])
-
-                    if lnp <= LOWVAL:
-                        dosample = True
-                    else:
-                        dosample = False
-                except GMixRangeError:
-                    dosample = True
-
-                if dosample:
-                    print_pars(guess[j, :], front="bad guess:")
-                    guess[j, :] = prior.sample()
-                else:
-                    break
-
 
 class PriorGuesser(object):
+    """
+    get guesses simply sampling from a prior
+
+    Parameters
+    ----------
+    prior: joint prior
+        A joint prior for all parameters
+    """
     def __init__(self, prior):
         self.prior = prior
 
-    def __call__(self, n=None):
+    def __call__(self, obs=None, n=None):
+        """
+        n: int, optional
+            Number of samples to draw.  Default 1
+        obs: ignored
+            This keyword is here to conform to the interface
+        """
         return self.prior.sample(n)
 
 
@@ -595,9 +651,9 @@ class R50NuFluxGuesser(R50FluxGuesser):
     NUMIN = -0.99
     NUMAX = 3.5
 
-    def __init__(self, r50, nu, flux, prior=None, rng=None):
+    def __init__(self, *, rng, r50, nu, flux, prior=None):
         super(R50NuFluxGuesser, self).__init__(
-            r50, flux, prior=prior, rng=rng,
+            rng=rng, r50=r50, flux=flux, prior=prior,
         )
 
         if nu < self.NUMIN:
@@ -607,18 +663,25 @@ class R50NuFluxGuesser(R50FluxGuesser):
 
         self.nu = nu
 
-    def __call__(self, n=1, **keys):
+    def __call__(self, n=1, obs=None):
         """
-        center, shape are just distributed around zero
+        Generate a guess
+
+        Parameters
+        ----------
+        n: int, optional
+            Number of samples to draw.  Default 1
+        obs: ignored
+            This keyword is here to conform to the interface
         """
 
         rng = self.rng
 
         fluxes = self.fluxes
         nband = fluxes.size
-        np = 6 + nband
+        npars = 6 + nband
 
-        guess = np.zeros((n, np))
+        guess = np.zeros((n, npars))
         guess[:, 0] = 0.01 * srandu(n, rng=rng)
         guess[:, 1] = 0.01 * srandu(n, rng=rng)
         guess[:, 2] = 0.02 * srandu(n, rng=rng)
@@ -640,7 +703,7 @@ class R50NuFluxGuesser(R50FluxGuesser):
             )
 
         if self.prior is not None:
-            self._fix_guess(guess, self.prior)
+            _fix_guess(guess, self.prior)
 
         if n == 1:
             guess = guess[0, :]
@@ -675,7 +738,7 @@ class GMixPSFGuesser(object):
 
         Parameters
         ----------
-        obs: Observation, ignored
+        obs: Observation
             Starting flux and T for the overall mixture are derived from the
             input observation.  How depends on the gauss_from_moms constructor
             argument
@@ -951,7 +1014,7 @@ class SimplePSFGuesser(GMixPSFGuesser):
 
         Parameters
         ----------
-        obs: Observation, ignored
+        obs: Observation
             Starting flux and T for the overall mixture are derived from the
             input observation.  How depends on the gauss_from_moms constructor
             argument
@@ -1006,7 +1069,7 @@ class CoellipPSFGuesser(GMixPSFGuesser):
 
         Parameters
         ----------
-        obs: Observation, ignored
+        obs: Observation
             Starting flux and T for the overall mixture are derived from the
             input observation.  How depends on the gauss_from_moms constructor
             argument
@@ -1113,3 +1176,60 @@ _moffat5_pguess = np.array(
 _moffat5_fguess = np.array(
     [0.27831284, 0.9959897, 5.86989779, 5.63590429, 4.17285878]
 )
+
+
+def _fix_guess_TFlux(guess, prior, ntry=4):
+    """
+    just fix T and flux
+    """
+
+    n = guess.shape[0]
+    for j in range(n):
+        for itry in range(ntry):
+            try:
+                lnp = prior.get_lnprob_scalar(guess[j, :])
+
+                if lnp <= LOWVAL:
+                    dosample = True
+                else:
+                    dosample = False
+            except GMixRangeError:
+                dosample = True
+
+            if dosample:
+                print_pars(guess[j, :], front="bad guess:")
+                if itry < ntry:
+                    tguess = prior.sample()
+                    guess[j, 4:] = tguess[4:]
+                else:
+                    # give up and just drawn a sample
+                    guess[j, :] = prior.sample()
+            else:
+                break
+
+
+def _fix_guess(guess, prior, ntry=4):
+    """
+    Fix a guess for out-of-bounds values according the the input prior
+
+    Bad guesses are replaced by a sample from the prior
+    """
+
+    n = guess.shape[0]
+    for j in range(n):
+        for itry in range(ntry):
+            try:
+                lnp = prior.get_lnprob_scalar(guess[j, :])
+
+                if lnp <= LOWVAL:
+                    dosample = True
+                else:
+                    dosample = False
+            except GMixRangeError:
+                dosample = True
+
+            if dosample:
+                print_pars(guess[j, :], front="bad guess:")
+                guess[j, :] = prior.sample()
+            else:
+                break
