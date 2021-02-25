@@ -51,7 +51,8 @@
 - the optional `rng` keyword for `ngmix.priors.srandu` has been removed in favor
   of a required keyword
 - removed priors `ZDisk2DErf`, `ZAnnulus`, `UDisk2DCut`, `TruncatedStudentPolar`,
-  `TruncatedGaussianPolar`, `Student`, `Student2D`
+  `TruncatedGaussianPolar`, `Student`, `Student2D`, `MultivariateLogNormal`,
+  `MVNMom`, `TruncatedSimpleGauss2D`
 - removed `GMixBDF` class.  The "bdf" is now supported by the `GMixModel` class
 - removed the `roundify` and `stats` modules
 
