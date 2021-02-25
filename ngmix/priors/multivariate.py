@@ -6,7 +6,7 @@ import numpy
 from numpy import where, array, exp, log, sqrt, zeros, diag
 
 from ..gexceptions import GMixRangeError
-from .priors import PriorBase, LOWVAL, Student
+from .priors import PriorBase, LOWVAL
 
 
 class MultivariateLogNormal(object):
@@ -282,86 +282,6 @@ class MVNMom(object):
                 cen_offsets[i] = rng[i] - cen[i]
 
         return cen_offsets
-
-
-class Student2D(PriorBase):
-    """Student's t prior in 2d.
-
-    parameters
-    ----------
-    mean1: float
-        The mean of the distribution in the first dimension.
-    mean1: float
-        The mean of the distribution in the second dimension.
-    sigma1: float
-        The scale of the distribution in the first dimension. Not Std(x).
-    sigma2: float
-        The scale of the distribution in the second dimension. Not Std(x).
-    rng: np.random.RandomState or None
-        An RNG to use. If None, a new RNG is made using the numpy global RNG
-        to generate a seed.
-
-    attributes
-    ----------
-    mean1: float
-        The mean of the distribution in the first dimension.
-    mean1: float
-        The mean of the distribution in the second dimension.
-    sigma1: float
-        The scale of the distribution in the first dimension. Not Std(x).
-    sigma2: float
-        The scale of the distribution in the second dimension. Not Std(x).
-    """
-    def __init__(self, mean1, mean2, sigma1, sigma2, rng=None):
-        super().__init__(rng=rng)
-        self.reset(mean1, mean2, sigma1, sigma2, rng=self.rng)
-
-    def reset(self, mean1, mean2, sigma1, sigma2, rng=None):
-        """
-        complete reset
-        """
-        assert rng is not None
-
-        self.rng = rng
-        self.mean1 = mean1
-        self.sigma1 = sigma1
-        self.mean2 = mean2
-        self.sigma2 = sigma2
-
-        self.tdist1 = Student(mean1, sigma1, rng=rng)
-        self.tdist2 = Student(mean2, sigma2, rng=rng)
-
-    def sample(self, nrand=None):
-        """
-        Draw samples from the distribution.
-
-        parameters
-        ----------
-        nrand: int or None
-            The number of samples. If None, a single scalar sample is drawn.
-            Default is None.
-
-        returns
-        -------
-        samples: scalar or array-like
-            The samples with shape (`nrand`,). If `nrand` is None, then a
-            scalar is returned.
-        """
-        r1 = self.tdist1.sample(nrand)
-        r2 = self.tdist2.sample(nrand)
-
-        return r1, r2
-
-    def get_lnprob_array(self, x1, x2):
-        """
-        get ln(prob) of an array
-        """
-        lnp1 = self.tdist1.get_lnprob_array(x1)
-        lnp2 = self.tdist2.get_lnprob_array(x2)
-
-        return lnp1 + lnp2
-
-    get_lnprob_scalar = get_lnprob_array
 
 
 class CenPrior(PriorBase):

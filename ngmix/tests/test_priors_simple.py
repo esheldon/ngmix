@@ -13,8 +13,6 @@ from ..priors import (
     LogNormal,
     Sinh,
     TruncatedGaussian,
-    Student,
-    StudentPositive,
 )
 from ..gexceptions import GMixRangeError
 
@@ -395,82 +393,3 @@ def test_priors_truncated_gaussian():
     assert pr.get_fdiff(0.4*mean) == -0.6*mean/sigma
     with pytest.raises(GMixRangeError):
         pr.get_fdiff(minval - mean)
-
-
-def test_priors_student():
-    mean = 1.0
-    sigma = 0.5
-
-    pr = Student(
-        mean, sigma, rng=np.random.RandomState(seed=10),
-    )
-    _s = pr.sample()
-
-    pr = Student(
-        mean, sigma, rng=np.random.RandomState(seed=10),
-    )
-    assert pr.mean == mean
-    assert pr.sigma == sigma
-
-    s = pr.sample()
-    assert isinstance(s, float)
-    assert s == _s
-
-    s = pr.sample(nrand=1)
-    assert isinstance(s, np.ndarray)
-    assert s.shape == (1,)
-
-    s = pr.sample(nrand=10)
-    assert isinstance(s, np.ndarray)
-    assert s.shape == (10,)
-
-    arr = pr.get_lnprob_array(np.array([mean-sigma, mean, mean+sigma]))
-    assert arr.shape == (3,)
-    assert arr[0] < arr[1]
-    assert arr[2] < arr[1]
-
-    s = pr.get_lnprob_scalar(mean)
-    assert isinstance(s, float)
-
-
-def test_priors_student_positive():
-    mean = 1.0
-    sigma = 0.5
-
-    pr = StudentPositive(
-        mean, sigma, rng=np.random.RandomState(seed=10),
-    )
-    _s = pr.sample()
-
-    pr = StudentPositive(
-        mean, sigma, rng=np.random.RandomState(seed=10),
-    )
-    assert pr.mean == mean
-    assert pr.sigma == sigma
-
-    s = pr.sample()
-    assert isinstance(s, float)
-    assert s == _s
-
-    s = pr.sample(nrand=1)
-    assert isinstance(s, np.ndarray)
-    assert s.shape == (1,)
-
-    s = pr.sample(nrand=10)
-    assert isinstance(s, np.ndarray)
-    assert s.shape == (10,)
-
-    s = pr.sample(nrand=10000)
-    assert np.all(s > 0)
-
-    arr = pr.get_lnprob_array(np.array([mean-sigma, mean, mean+sigma]))
-    assert arr.shape == (3,)
-    assert arr[0] < arr[1]
-    assert arr[2] < arr[1]
-    with pytest.raises(GMixRangeError):
-        pr.get_lnprob_array(np.array([-1, mean+sigma]))
-
-    s = pr.get_lnprob_scalar(mean)
-    assert isinstance(s, float)
-    with pytest.raises(GMixRangeError):
-        pr.get_lnprob_scalar(-1)
