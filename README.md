@@ -20,9 +20,6 @@ optional dependencies
 * scipy: for image fitting using the Levenberg-Marquardt fitter
 * galsim: for performing metacalibration operations.
 * scikit-learn: for sampling multivariate PDFs
-* statsmodels: for importance sampling (multivariate student
-    T distribution)
-* emcee: for exploring full posterior using mcmc
 
 installation
 ------------

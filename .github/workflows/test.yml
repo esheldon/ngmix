@@ -40,7 +40,6 @@ jobs:
             pytest \
             galsim \
             scikit-learn \
-            statsmodels \
             emcee \
             pytest-cov
 
