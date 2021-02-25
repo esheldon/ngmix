@@ -53,7 +53,6 @@ from .observation import Observation, ObsList, MultiBandObsList
 
 from . import stats
 from . import guessers
-from . import roundify
 from . import metacal
 from . import simobs
 from . import gaussap
