@@ -1,5 +1,16 @@
 ## unreleased (v2.0.0)
 
+### breaking API changes
+
+- The fitters no longer take the observation in the constructor.
+  The `go` method now takes the observation and possibly a guess.
+- The bootstrap and runner code has been completely replaced by a new api.
+  The bootstrappers are now generic, wrapping runners that are themselves
+  generic wrappers for fitters and guessers.  Thus the bootstrap/runner
+  code is completely generic and can work with any of the fitters/guessers.
+- The guessers now optionally take the observation as argument when called; this
+  facilitates the cases where a guess can be made based on the observations.
+
 ### bug fixes
 
 - fixed computation of Jacobian center for `ngmix.KObservation`s with mixed
@@ -24,9 +35,14 @@
   * `ngmix.priors`
   * `ngmix.gexceptions`
 - introduced `NGmixBaseException` as parent class for all ngmix-specific exceptions
+- New guessers `TPSFFluxGuesser`, `TPSFFluxAndPriorGuesser`, `GmixPSFGuesser`,
+  `SimplePSFGuesser`, `CoellipPSFGuesser`
 
 ### deprecated/removed
 
+- The `LMSimple` class now supports the "bdf" and "bd" models and has been
+  renamed to `LM`.  The `LMSimple` is now an alias for `LM` and is considered
+  deprecated.  The `LMBDF` and `LMBD` classes have been removed.
 - `ngmix.lensfit` has been removed in v2.0.0
 - all `dbyg1_*`,  `dbyg2_*`, `dlnbyg1_*`, `dlnbyg2_*`, and `get_pqr*` methods,
   along with the code used to test them, have been removed from the classes in
@@ -35,8 +51,9 @@
 - the optional `rng` keyword for `ngmix.priors.srandu` has been removed in favor
   of a required keyword
 - removed priors `ZDisk2DErf`, `ZAnnulus`, `UDisk2DCut`, `TruncatedStudentPolar`,
-  `TruncatedGaussianPolar`
-
+  `TruncatedGaussianPolar`, `Student`, `Student2D`
+- removed `GMixBDF` class.  The "bdf" is now supported by the `GMixModel` class
+- removed the `roundify` and `stats` modules
 
 ## v1.3.8
 
