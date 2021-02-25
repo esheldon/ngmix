@@ -20,17 +20,15 @@ class PriorBase(object):
     ----------
     bounds: 2-tuple of floats or None
         The bounds of the parameter. Default of None means no bounds.
-    rng: np.random.RandomState or None
-        An RNG to use. If None, a new RNG is made using the numpy global RNG
-        to generate a seed.
+    rng: np.random.RandomState
+        An random number generator (RNG) to use.
 
     attributes
     ----------
     bounds: 2-tuple of floats or None
         The bounds of the parameter. Default of None means no bounds.
-    rng: np.random.RandomState or None
-        An RNG to use. If None, a new RNG is made using the numpy global RNG
-        to generate a seed.
+    rng: np.random.RandomState
+        The RNG.
 
     methods
     -------
@@ -38,7 +36,9 @@ class PriorBase(object):
         Returns True if the object has bounds defined and they are non-None, False
         otherwise.
     """
-    def __init__(self, bounds=None, rng=None):
+    def __init__(self, rng, bounds=None):
+        assert rng is not None, 'rng is a required argument'
+
         self.bounds = bounds
         self.rng = make_rng(rng=rng)
 
@@ -59,11 +59,10 @@ class FlatPrior(PriorBase):
         The minimum value of the allowed range.
     maxval: float
         The maximum value of the allowed range.
-    rng: np.random.RandomState or None
-        An RNG to use. If None, a new RNG is made using the numpy global RNG
-        to generate a seed.
+    rng: np.random.RandomState
+        An random number generator (RNG) to use.
     """
-    def __init__(self, minval, maxval, rng=None):
+    def __init__(self, minval, maxval, rng):
         PriorBase.__init__(self, rng=rng)
 
         self.minval = minval
@@ -158,12 +157,11 @@ class TwoSidedErf(PriorBase):
         The maximum value. This is where p(x) = 0.5 at the upper end.
     width_at_max: float
         The width of the transition region from 1 to 0 at the upper end.
-    rng: np.random.RandomState or None
-        An RNG to use. If None, a new RNG is made using the numpy global RNG
-        to generate a seed.
+    rng: np.random.RandomState
+        An random number generator (RNG) to use.
     """
-    def __init__(self, minval, width_at_min, maxval, width_at_max, rng=None):
-        PriorBase.__init__(self, rng=rng)
+    def __init__(self, minval, width_at_min, maxval, width_at_max, rng):
+        PriorBase.__init__(self, rng)
 
         self.minval = minval
         self.width_at_min = width_at_min
@@ -317,9 +315,8 @@ class Normal(PriorBase):
         The standard deviation of the Gaussian.
     bounds: 2-tuple of floats or None
         The bounds of the parameter. Default of None means no bounds.
-    rng: np.random.RandomState or None
-        An RNG to use. If None, a new RNG is made using the numpy global RNG
-        to generate a seed.
+    rng: np.random.RandomState
+        An random number generator (RNG) to use.
 
     attributes
     ----------
@@ -328,7 +325,7 @@ class Normal(PriorBase):
     sigma: float
         The standard deviation of the Gaussian.
     """
-    def __init__(self, mean, sigma, bounds=None, rng=None):
+    def __init__(self, mean, sigma, rng, bounds=None):
         super().__init__(rng=rng, bounds=bounds)
 
         self.mean = mean
@@ -415,9 +412,8 @@ class LMBounds(PriorBase):
         The minimum bound.
     maxval: float
         The maximum bound.
-    rng: np.random.RandomState or None
-        An RNG to use. If None, a new RNG is made using the numpy global RNG
-        to generate a seed.
+    rng: np.random.RandomState
+        An random number generator (RNG) to use.
 
     attributes
     ----------
@@ -426,9 +422,9 @@ class LMBounds(PriorBase):
     sigma: float
         The standard deviation of the uniform distribution.
     """
-    def __init__(self, minval, maxval, rng=None):
+    def __init__(self, minval, maxval, rng):
 
-        super().__init__(rng=rng)
+        super().__init__(rng)
 
         self.bounds = (minval, maxval)
         self.mean = (minval + maxval) / 2.0
@@ -581,9 +577,8 @@ class LogNormal(PriorBase):
         An optional shift to apply to the samples and the locations for
         evaluating the PDF. The shift is added to samples from the underlying
         log-normal.
-    rng: np.random.RandomState or None
-        An RNG to use. If None, a new RNG is made using the numpy global RNG
-        to generate a seed.
+    rng: np.random.RandomState
+        An random number generator (RNG) to use.
 
     attributes
     ----------
@@ -610,7 +605,7 @@ class LogNormal(PriorBase):
     lnprob_max: float
         The log of the maximum value of the distribution.
     """
-    def __init__(self, mean, sigma, shift=None, rng=None):
+    def __init__(self, mean, sigma, rng, shift=None):
         super().__init__(rng=rng)
 
         if mean <= 0:
@@ -789,7 +784,7 @@ class LogNormal(PriorBase):
 
     def _calc_fdiff(self, pars):
         try:
-            ln = LogNormal(pars[0], pars[1])
+            ln = LogNormal(pars[0], pars[1], rng=self.rng)
             model = ln.get_prob_array(self._fitx) * pars[2]
         except (GMixRangeError, ValueError):
             return self._fity * 0 - numpy.inf
@@ -845,9 +840,8 @@ class Sinh(PriorBase):
         The mean value where the value of fdiff is zero.
     scale: float
         The value such that fdiff  of `mean` +/- `scale` is +/-1.
-    rng: np.random.RandomState or None
-        An RNG to use. If None, a new RNG is made using the numpy global RNG
-        to generate a seed.
+    rng: np.random.RandomState
+        An random number generator (RNG) to use.
 
     attributes
     ----------
@@ -856,7 +850,7 @@ class Sinh(PriorBase):
     scale: float
         The value such that fdiff  of `mean` +/- `scale` is +/-1.
     """
-    def __init__(self, mean, scale, rng=None):
+    def __init__(self, mean, scale, rng):
         super().__init__(rng=rng)
         self.mean = mean
         self.scale = scale
@@ -913,9 +907,8 @@ class TruncatedGaussian(PriorBase):
         The minimum of the distribution.
     maxval: float
         The maximum of the distribution.
-    rng: np.random.RandomState or None
-        An RNG to use. If None, a new RNG is made using the numpy global RNG
-        to generate a seed.
+    rng: np.random.RandomState
+        An random number generator (RNG) to use.
 
     attributes
     ----------
@@ -928,7 +921,7 @@ class TruncatedGaussian(PriorBase):
     maxval: float
         The maximum of the distribution.
     """
-    def __init__(self, mean, sigma, minval, maxval, rng=None):
+    def __init__(self, mean, sigma, minval, maxval, rng):
         super().__init__(rng=rng)
         self.mean = mean
         self.sigma = sigma

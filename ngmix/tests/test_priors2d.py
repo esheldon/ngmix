@@ -1,12 +1,6 @@
 import numpy as np
 
-import pytest
-
-from ..priors import (
-    CenPrior,
-    LOWVAL,
-)
-from ..gexceptions import GMixRangeError
+from ..priors import CenPrior
 
 
 def test_priors_cenprior():

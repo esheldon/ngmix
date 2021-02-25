@@ -26,15 +26,18 @@ def test_ml_max_fitting_gauss_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
         0.25, galsim.Shear(g1=wcs_g1, g2=wcs_g2)).jacobian()
     scale = np.sqrt(gs_wcs.pixelArea())
 
-    g_prior = ngmix.priors.GPriorBA(0.2)
-    cen_prior = ngmix.priors.CenPrior(0, 0, scale, scale)
-    T_prior = ngmix.priors.FlatPrior(0.1, 2)
-    F_prior = ngmix.priors.FlatPrior(1e-4, 1e9)
+    g_prior = ngmix.priors.GPriorBA(sigma=0.2, rng=rng)
+    cen_prior = ngmix.priors.CenPrior(
+        cen1=0, cen2=0, sigma1=scale, sigma2=scale, rng=rng,
+    )
+    T_prior = ngmix.priors.FlatPrior(minval=0.1, maxval=2, rng=rng)
+    F_prior = ngmix.priors.FlatPrior(minval=1e-4, maxval=1e9, rng=rng)
     prior = ngmix.joint_prior.PriorSimpleSep(
-        cen_prior,
-        g_prior,
-        T_prior,
-        F_prior)
+        cen_prior=cen_prior,
+        g_prior=g_prior,
+        T_prior=T_prior,
+        F_prior=F_prior,
+    )
 
     obj = galsim.Gaussian(
         fwhm=0.9

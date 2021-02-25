@@ -2,9 +2,7 @@
 Convention is that all priors should have peak ln(prob)==0. This
 helps use in priors for LM fitting
 """
-import numpy as np
-from ..gexceptions import GMixRangeError
-from .priors import PriorBase, LOWVAL
+from .priors import PriorBase
 
 
 class CenPrior(PriorBase):
@@ -21,9 +19,8 @@ class CenPrior(PriorBase):
         The width in the first dimension.
     sigma2: float
         The width in the second dimension.
-    rng: np.random.RandomState or None
-        An RNG to use. If None, a new RNG is made using the numpy global RNG
-        to generate a seed.
+    rng: np.random.RandomState
+        An random number generator (RNG) to use.
 
     attributes
     ----------
@@ -36,7 +33,7 @@ class CenPrior(PriorBase):
     sigma2: float
         The width in the second dimension.
     """
-    def __init__(self, cen1, cen2, sigma1, sigma2, rng=None):
+    def __init__(self, cen1, cen2, sigma1, sigma2, rng):
         super().__init__(rng=rng)
 
         self.cen1 = float(cen1)

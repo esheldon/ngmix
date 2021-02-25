@@ -2,14 +2,16 @@ import ngmix
 
 
 def get_prior(*, fit_model, rng, scale):
-    g_prior = ngmix.priors.GPriorBA(0.1, rng=rng)
-    cen_prior = ngmix.priors.CenPrior(0, 0, scale, scale, rng=rng)
-    T_prior = ngmix.priors.FlatPrior(0.01, 2, rng=rng)
-    F_prior = ngmix.priors.FlatPrior(1e-4, 1e9, rng=rng)
+    g_prior = ngmix.priors.GPriorBA(sigma=0.1, rng=rng)
+    cen_prior = ngmix.priors.CenPrior(
+        cen1=0, cen2=0, sigma1=scale, sigma2=scale, rng=rng,
+    )
+    T_prior = ngmix.priors.FlatPrior(minval=0.01, maxval=2, rng=rng)
+    F_prior = ngmix.priors.FlatPrior(minval=1e-4, maxval=1e9, rng=rng)
 
     if fit_model == 'bd':
-        fracdev_prior = ngmix.priors.Normal(0.5, 0.1, rng=rng)
-        lrat_prior = ngmix.priors.Normal(0.0, 0.1, rng=rng)
+        fracdev_prior = ngmix.priors.Normal(mean=0.5, sigma=0.1, rng=rng)
+        lrat_prior = ngmix.priors.Normal(mean=0.0, sigma=0.1, rng=rng)
         prior = ngmix.joint_prior.PriorBDSep(
             cen_prior=cen_prior,
             g_prior=g_prior,
@@ -20,7 +22,7 @@ def get_prior(*, fit_model, rng, scale):
         )
 
     elif fit_model == 'bdf':
-        fracdev_prior = ngmix.priors.Normal(0.5, 0.1, rng=rng)
+        fracdev_prior = ngmix.priors.Normal(mean=0.5, sigma=0.1, rng=rng)
         prior = ngmix.joint_prior.PriorBDFSep(
             cen_prior=cen_prior,
             g_prior=g_prior,
