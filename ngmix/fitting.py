@@ -3,9 +3,8 @@
     - remove old unused fitters
 """
 from sys import stdout
-import numpy
-from numpy import array, zeros, diag
-from numpy import exp, sqrt, where, isfinite
+import numpy as np
+from numpy import diag, sqrt
 from numpy import linalg
 from numpy.linalg import LinAlgError
 from pprint import pformat
@@ -20,17 +19,10 @@ from .gexceptions import GMixRangeError
 
 from .observation import Observation, ObsList, get_mb_obs
 
-from . import stats
-
-
 from .gmix_nb import gmix_convolve_fill
 from .fitting_nb import fill_fdiff
 
 LOGGER = logging.getLogger(__name__)
-
-MAX_TAU = 0.1
-MIN_ARATE = 0.2
-MCMC_NTRY = 1
 
 # default values
 PDEF = -9.999e9  # parameter defaults
@@ -39,7 +31,6 @@ CDEF = 9.999e9  # covariance or error defaults
 # flags
 
 BAD_VAR = 2 ** 0  # variance not positive definite
-LOW_ARATE = 2 ** 1  # info flag about arate
 
 # error codes in LM start at 2**0 and go to 2**3
 # this is because we set 2**(ier-5)
@@ -173,6 +164,12 @@ class FitterBase(object):
         nband should be set in set_lists, called before this
         """
         self.npars = gmix.get_model_npars(self.model) + self.nband - 1
+
+    def get_band_pars(self, *, pars, band):
+        """
+        get pars for the specified band
+        """
+        return get_band_pars(model=self.model_name, pars=pars, band=band)
 
     def get_effective_npix_old(self):
         """
@@ -475,11 +472,11 @@ class FitterBase(object):
 
             cdiag = diag(cov)
 
-            (w,) = where(cdiag <= 0)
+            (w,) = np.where(cdiag <= 0)
             if w.size == 0:
 
                 err = sqrt(cdiag)
-                (w,) = where(isfinite(err))
+                (w,) = np.where(np.isfinite(err))
                 if w.size != err.size:
                     print_pars(err, front="diagonals not finite:", log=True)
                 else:
@@ -531,7 +528,7 @@ class FitterBase(object):
         import covmatrix
 
         # get a copy as an array
-        pars = numpy.array(pars)
+        pars = np.array(pars)
 
         g1 = pars[2]
         g2 = pars[3]
@@ -820,7 +817,7 @@ class TemplateFluxFitter(FitterBase):
             for obs in self.obs:
                 wt = obs.weight
 
-                w = where(wt > 0)
+                w = np.where(wt > 0)
                 npix += w[0].size
 
             self.eff_npix = npix
@@ -841,257 +838,10 @@ class TemplateFluxFitter(FitterBase):
         return self._npix
 
 
-class MaxSimple(FitterBase):
-    """
-    A class for direct maximization of the likelihood.
-    Useful for seeding model parameters.
-
-    some keywords to control fitting
-    -----------------------------------------------------
-    xtol: float, optional
-        Tolerance in the vertices, relative to the vertex with
-        the lowest function value.  Default 1.0e-4
-    ftol: float, optional
-        Tolerance in the function value, relative to the
-        lowest function value for all vertices.  Default 1.0e-4
-    maxiter: int, optional
-        Default is npars*200
-    maxfev:
-        Default is npars*200
-
-    """
-
-    def __init__(self, *, model, prior=None, fit_pars=None):
-        super().__init__(model=model, prior=prior)
-
-        if fit_pars is None:
-            self.fit_pars = {}
-        else:
-            self.fit_pars = fit_pars.copy()
-
-    def go(self, *, obs, guess):
-        """
-        Run maximizer and set the result.
-
-        Parameters
-        ----------
-        obs: Observation, ObsList, or MultiBandObsList
-            Observation(s) to fit
-        guess: array
-            Array of initial parameters for the fit
-        """
-        import scipy.optimize
-
-        guess = numpy.array(guess, dtype="f8", copy=False)
-        self._setup_data(obs=obs, guess=guess)
-
-        result = scipy.optimize.minimize(
-            self.neglnprob,
-            guess,
-            **self.fit_pars
-        )
-        self._result = result
-
-        result["model"] = self.model_name
-        if result["success"]:
-            result["flags"] = 0
-        else:
-            result["flags"] = result["status"]
-
-        if "x" in result:
-            pars = result["x"]
-            result["pars"] = pars
-            result["g"] = pars[2:2+2]
-
-            # based on last entry
-            fit_stats = self.get_fit_stats(pars)
-            result.update(fit_stats)
-
-    def _setup_data(self, *, obs, guess):
-        """
-        initialize the gaussian mixtures
-        """
-
-        if hasattr(self, "_result"):
-            del self._result
-
-        self._set_obs(obs)
-        self._set_totpix()
-        self._set_npars()
-
-        self._band_pars = zeros(6)
-
-        npars = guess.size
-        mess = "guess has npars=%d, expected %d" % (npars, self.npars)
-        assert npars == self.npars, mess
-
-        try:
-            # this can raise GMixRangeError
-            self._init_gmix_all(guess)
-        except ZeroDivisionError:
-            raise GMixRangeError("got zero division")
-
-    def get_band_pars(self, *, pars, band):
-        """
-        Get linear pars for the specified band
-        """
-
-        band_pars = self._band_pars
-
-        band_pars[0:5] = pars[0:5]
-        band_pars[5] = pars[5 + band]
-
-        return band_pars
-
-    def neglnprob(self, pars):
-        return -1.0 * self.calc_lnprob(pars)
-
-
-class NMSimple(FitterBase):
-    """
-    A class for direct maximization of the likelihood.
-    Useful for seeding model parameters.
-
-    some keywords to control fitting
-    -----------------------------------------------------
-    xtol: float, optional
-        Tolerance in the vertices, relative to the vertex with
-        the lowest function value.  Default 1.0e-4
-    ftol: float, optional
-        Tolerance in the function value, relative to the
-        lowest function value for all vertices.  Default 1.0e-4
-    maxiter: int, optional
-        Default is npars*200
-    maxfev:
-        Default is npars*200
-
-    """
-
-    def __init__(self, *, model, prior=None, fit_pars=None):
-        super().__init__(model=model, prior=prior)
-
-        if fit_pars is None:
-            self.fit_pars = {}
-        else:
-            self.fit_pars = fit_pars.copy()
-
-    def go(self, *, obs, guess):
-        """
-        Run maximizer and set the result.
-
-        Parameters
-        ----------
-        obs: Observation, ObsList, or MultiBandObsList
-            Observation(s) to fit
-        guess: array
-            Array of initial parameters for the fit
-        """
-        from .simplex import minimize_neldermead
-
-        guess = numpy.array(guess, dtype="f8", copy=False)
-        self._setup_data(obs=obs, guess=guess)
-
-        result = minimize_neldermead(self.neglnprob, guess, **self.fit_pars)
-        self._result = result
-
-        result["model"] = self.model_name
-        if result["success"]:
-            result["flags"] = 0
-        else:
-            result["flags"] = 1
-
-        if "x" in result:
-            pars = result["x"]
-            result["pars"] = pars
-            result["g"] = pars[2:2+2]
-
-            # based on last entry
-            fit_stats = self.get_fit_stats(pars)
-            result.update(fit_stats)
-
-            h = 1.0e-3
-            m = 5.0
-            self.calc_cov(h, m)
-
-    def _setup_data(self, *, obs, guess):
-        """
-        initialize the gaussian mixtures
-        """
-
-        if hasattr(self, "_result"):
-            del self._result
-
-        self._set_obs(obs)
-        self._set_totpix()
-        self._set_npars()
-
-        self._band_pars = zeros(6)
-
-        npars = guess.size
-        mess = "guess has npars=%d, expected %d" % (npars, self.npars)
-        assert npars == self.npars, mess
-
-        try:
-            # this can raise GMixRangeError
-            self._init_gmix_all(guess)
-        except ZeroDivisionError:
-            raise GMixRangeError("got zero division")
-
-    def get_band_pars(self, *, pars, band):
-        """
-        Get linear pars for the specified band
-        """
-
-        band_pars = self._band_pars
-
-        band_pars[0:5] = pars[0:5]
-        band_pars[5] = pars[5 + band]
-
-        return band_pars
-
-    def neglnprob(self, pars):
-        return -1.0 * self.calc_lnprob(pars)
-
-
-class MaxCoellip(MaxSimple):
-    """
-    A class for direct maximization of the likelihood.
-    Useful for seeding model parameters.
-    """
-
-    def __init__(self, obs, ngauss, method="Nelder-Mead", **keys):
-
-        self._ngauss = ngauss
-
-        super(MaxCoellip, self).__init__(obs, "coellip", method=method, **keys)
-
-        if self.nband != 1:
-            raise ValueError("MaxCoellip only supports one band")
-
-        # over-write the band pars created by MaxSimple
-        self._band_pars = zeros(self.npars)
-
-    def _set_npars(self):
-        """
-        single band, npars determined from ngauss
-        """
-        self.npars = 4 + 2 * self._ngauss
-
-    def get_band_pars(self, *, pars, band):
-        """
-        Get linear pars for the specified band
-        """
-
-        band_pars = self._band_pars
-
-        band_pars[:] = pars[:]
-        return band_pars
-
-
 _default_lm_pars = {"maxfev": 4000, "ftol": 1.0e-5, "xtol": 1.0e-5}
 
 
-class LMSimple(FitterBase):
+class LM(FitterBase):
     """
     A class for doing a fit using levenberg marquardt
 
@@ -1111,7 +861,9 @@ class LMSimple(FitterBase):
         if self.prior is None:
             self.n_prior_pars = 0
         else:
-            self.n_prior_pars = 1 + 1 + 1 + 1 + self.nband
+            self.n_prior_pars = get_lm_n_prior_pars(
+                model=self.model_name, nband=self.nband,
+            )
 
     def _set_fdiff_size(self):
         self.fdiff_size = self.totpix + self.n_prior_pars
@@ -1128,7 +880,7 @@ class LMSimple(FitterBase):
             Array of initial parameters for the fit
         """
 
-        guess = array(guess, dtype="f8", copy=False)
+        guess = np.array(guess, dtype="f8", copy=False)
         self._setup_data(obs=obs, guess=guess)
 
         self._make_lists()
@@ -1154,6 +906,9 @@ class LMSimple(FitterBase):
 
         self._result = result
 
+    def _set_flux(self, res):
+        _set_flux(res=res, nband=self.nband)
+
     def _get_bounds(self):
         """
         get bounds on parameters
@@ -1171,15 +926,6 @@ class LMSimple(FitterBase):
         res["T"] = res["pars"][4]
         res["T_err"] = sqrt(res["pars_cov"][4, 4])
 
-    def _set_flux(self, res):
-        if self.nband == 1:
-            res["flux"] = res["pars"][5]
-            res["flux_err"] = sqrt(res["pars_cov"][5, 5])
-        else:
-            res["flux"] = res["pars"][5:]
-            res["flux_cov"] = res["pars_cov"][5:, 5:]
-            res["flux_err"] = sqrt(diag(res["flux_cov"]))
-
     def _setup_data(self, *, obs, guess):
         """
         Set up for the fit.  We need to know the size of the fdiff array and we
@@ -1193,7 +939,6 @@ class LMSimple(FitterBase):
         self._set_totpix()
         self._set_n_prior_pars()
         self._set_npars()
-        self._set_band_pars()
         self._set_fdiff_size()
 
         npars = guess.size
@@ -1205,10 +950,6 @@ class LMSimple(FitterBase):
             self._init_gmix_all(guess)
         except ZeroDivisionError:
             raise GMixRangeError("got zero division")
-
-    def _set_band_pars(self):
-        n_band_pars = 6
-        self._band_pars = zeros(n_band_pars)
 
     def make_image(self, band=0, obsnum=0):
         """
@@ -1225,18 +966,6 @@ class LMSimple(FitterBase):
             obs.image.shape,
             jacobian=obs.jacobian,
         )
-
-    def get_band_pars(self, *, pars, band):
-        """
-        Get linear pars for the specified band
-        """
-
-        band_pars = self._band_pars
-
-        band_pars[0:5] = pars[0:5]
-        band_pars[5] = pars[5 + band]
-
-        return band_pars
 
     def get_T_s2n(self):
         """
@@ -1284,7 +1013,7 @@ class LMSimple(FitterBase):
         """
 
         # we cannot keep sending existing array into leastsq, don't know why
-        fdiff = zeros(self.fdiff_size)
+        fdiff = np.zeros(self.fdiff_size)
 
         try:
 
@@ -1325,7 +1054,10 @@ class LMSimple(FitterBase):
         return nprior
 
 
-class LMCoellip(LMSimple):
+LMSimple = LM
+
+
+class LMCoellip(LM):
     """
     class to run the LM leastsq code for the coelliptical model
 
@@ -1335,6 +1067,9 @@ class LMCoellip(LMSimple):
     def __init__(self, *, ngauss, prior=None, fit_pars=None):
         self._ngauss = ngauss
         super().__init__(model="coellip", prior=prior, fit_pars=fit_pars)
+
+    def _set_flux(self, res):
+        pass
 
     def _set_n_prior_pars(self):
         assert self.nband == 1, "LMCoellip can only fit one band"
@@ -1351,157 +1086,12 @@ class LMCoellip(LMSimple):
         """
         self.npars = 4 + 2 * self._ngauss
 
-    def _set_band_pars(self):
-        n_band_pars = self.npars
-        self._band_pars = zeros(n_band_pars)
-
     def get_band_pars(self, *, pars, band):
         """
         Get linear pars for the specified band
         """
 
-        band_pars = self._band_pars
-
-        band_pars[:] = pars[:]
-        return band_pars
-
-
-class LMComposite(LMSimple):
-    """
-    exp+dev model with pre-determined fracdev and ratio Tdev/Texp
-    """
-
-    def __init__(self, obs, fracdev, TdByTe, **keys):
-        super(LMComposite, self).__init__(obs, "cm", **keys)
-
-        self.fracdev = fracdev
-        self.TdByTe = TdByTe
-
-    def get_gmix(self, band=0):
-        """
-        Get a gaussian mixture at the "best" parameter set, which
-        definition depends on the sub-class
-        """
-        res = self.get_result()
-        pars = self.get_band_pars(pars=res["pars"], band=band)
-        return gmix.GMixCM(self.fracdev, self.TdByTe, pars)
-
-    def _make_model(self, band_pars):
-        gm0 = gmix.GMixCM(self.fracdev, self.TdByTe, band_pars)
-        return gm0
-
-
-class LMBD(LMSimple):
-    """
-    exp+dev model with Td/Te and fracdev free
-    """
-
-    def __init__(self, obs, **keys):
-        super(LMBD, self).__init__(obs, "bd", **keys)
-
-        self._band_pars = zeros(8)
-
-    def _set_n_prior_pars(self):
-        # center1 + center2 + shape + T + TdByTe + fracdev + fluxes
-        if self.prior is None:
-            self.n_prior_pars = 0
-        else:
-            self.n_prior_pars = 1 + 1 + 1 + 1 + 1 + 1 + self.nband
-
-    def get_gmix(self, band=0):
-        """
-        Get a gaussian mixture at the "best" parameter set, which
-        definition depends on the sub-class
-        """
-        res = self.get_result()
-        pars = self.get_band_pars(pars=res["pars"], band=band)
-        return self._make_model(pars)
-
-    def get_band_pars(self, *, pars, band):
-        """
-        Get linear pars for the specified band
-        """
-
-        band_pars = self._band_pars
-
-        band_pars[0:7] = pars[0:7]
-        band_pars[7] = pars[7 + band]
-
-        return band_pars
-
-    def _make_model(self, band_pars):
-        """
-        incoming parameters are
-            [c1,c2,g1,g2,T,TdByTe,fracdev,F]
-        """
-        return gmix.GMixModel(band_pars, "bd")
-
-    def _set_flux(self, res):
-        if self.nband == 1:
-            res["flux"] = res["pars"][7]
-            res["flux_err"] = sqrt(res["pars_cov"][7, 7])
-        else:
-            res["flux"] = res["pars"][7:]
-            res["flux_cov"] = res["pars_cov"][7:, 7:]
-            res["flux_err"] = sqrt(diag(res["flux_cov"]))
-
-
-class LMBDF(LMSimple):
-    """
-    exp+dev model with Tdev/Texp=1 but fracdev free
-    """
-
-    def __init__(self, obs, **keys):
-        super(LMBDF, self).__init__(obs, "bdf", **keys)
-
-        self._band_pars = zeros(7)
-
-    def _set_n_prior_pars(self):
-        # center1 + center2 + shape + T + fracdev + fluxes
-        if self.prior is None:
-            self.n_prior_pars = 0
-        else:
-            self.n_prior_pars = 1 + 1 + 1 + 1 + 1 + self.nband
-
-    def get_gmix(self, band=0):
-        """
-        Get a gaussian mixture at the "best" parameter set, which
-        definition depends on the sub-class
-        """
-        res = self.get_result()
-        pars = self.get_band_pars(pars=res["pars"], band=band)
-        return self._make_model(pars)
-
-    def get_band_pars(self, pars, band):
-        """
-        Get linear pars for the specified band
-        """
-
-        band_pars = self._band_pars
-
-        band_pars[0:6] = pars[0:6]
-        band_pars[6] = pars[6 + band]
-
-        return band_pars
-
-    def _make_model(self, band_pars):
-        """
-        incoming parameters are
-            [c1,c2,g1,g2,T,fracdev,F]
-        """
-        return gmix.GMixBDF(band_pars)
-
-    def _set_flux(self, res):
-        if self.nband == 1:
-            res["flux"] = res["pars"][6]
-            res["flux_err"] = sqrt(res["pars_cov"][6, 6])
-        else:
-            res["flux"] = res["pars"][6:]
-            res["flux_cov"] = res["pars_cov"][6:, 6:]
-            res["flux_err"] = sqrt(diag(res["flux_cov"]))
-
-
-NOTFINITE_BIT = 11
+        return pars.copy()
 
 
 def run_leastsq(func, guess, n_prior_pars, **keys):
@@ -1630,1291 +1220,94 @@ def run_leastsq(func, guess, n_prior_pars, **keys):
 
 
 def _get_def_stuff(npars):
-    pars = zeros(npars) + PDEF
-    cov = zeros((npars, npars)) + CDEF
-    err = zeros(npars) + CDEF
+    pars = np.zeros(npars) + PDEF
+    cov = np.zeros((npars, npars)) + CDEF
+    err = np.zeros(npars) + CDEF
     return pars, cov, err
 
 
 def _test_cov(pcov):
     flags = 0
     try:
-        e, v = numpy.linalg.eig(pcov)
-        (weig,) = numpy.where(e < 0)
+        e, v = np.linalg.eig(pcov)
+        (weig,) = np.where(e < 0)
         if weig.size > 0:
             flags += LM_NEG_COV_EIG
 
-        (wneg,) = numpy.where(numpy.diag(pcov) < 0)
+        (wneg,) = np.where(np.diag(pcov) < 0)
         if wneg.size > 0:
             flags += LM_NEG_COV_DIAG
 
-    except numpy.linalg.linalg.LinAlgError:
+    except np.linalg.linalg.LinAlgError:
         flags |= EIG_NOTFINITE
 
     return flags
 
 
-class MCMCBase(FitterBase):
+def get_band_pars(*, model, pars, band):
     """
-    A base class for MCMC runs using emcee.
+    extract parameters for given band
 
-    Extra user-facing methods are
-    run_mcmc(), calc_result(), get_trials(), get_sampler(), make_plots()
-    """
-
-    def __init__(self, obs, model, **keys):
-        super(MCMCBase, self).__init__(obs, model, **keys)
-
-        # this should be a numpy.random.RandomState object, unlike emcee which
-        # through the random_state parameter takes the tuple state
-        self.random_state = keys.get("random_state", None)
-
-        # emcee specific
-        self.nwalkers = keys["nwalkers"]
-        self.mca_a = keys.get("mca_a", 2.0)
-
-    def get_trials(self):
-        """
-        Get the set of trials
-        """
-
-        if not hasattr(self, "_trials"):
-            raise RuntimeError("you need to run the mcmc chain first")
-
-        return self._trials
-
-    def get_lnprobs(self):
-        """
-        Get the set of ln(prob) values
-        """
-
-        if not hasattr(self, "_lnprobs"):
-            raise RuntimeError("you need to run the mcmc chain first")
-
-        return self._lnprobs
-
-    def get_best_pars(self):
-        """
-        get the parameters with the highest probability
-        """
-        if not hasattr(self, "_lnprobs"):
-            raise RuntimeError("you need to run the mcmc chain first")
-
-        return self._best_pars.copy()
-
-    def get_best_lnprob(self):
-        """
-        get the highest probability
-        """
-        if not hasattr(self, "_lnprobs"):
-            raise RuntimeError("you need to run the mcmc chain first")
-
-        return self._best_lnprob
-
-    def get_sampler(self):
-        """
-        get the emcee sampler
-        """
-        return self.sampler
-
-    def get_arate(self):
-        """
-        get the acceptance rate
-        """
-        return self._arate
-
-    def get_tau(self):
-        """
-        2*tau/nstep
-        """
-        return self._tau
-
-    def run_mcmc(self, pos0, nstep, thin=1, **kw):
-        """
-        run steps, starting at the input position(s)
-
-        input and output pos are in linear space
-
-        keywords to run_mcmc/sample are passed along, such as thin
-        """
-
-        pos0 = array(pos0, dtype="f8")
-
-        if not hasattr(self, "sampler"):
-            self._setup_sampler_and_data(pos0)
-
-        sampler = self.sampler
-        sampler.reset()
-        pos, prob, state = sampler.run_mcmc(pos0, nstep, thin=thin, **kw)
-
-        trials = sampler.flatchain
-        lnprobs = sampler.lnprobability.reshape(self.nwalkers * nstep // thin)
-
-        self._trials = trials
-        self._lnprobs = lnprobs
-
-        w = lnprobs.argmax()
-        bp = lnprobs[w]
-        if self._best_lnprob is None or bp > self._best_lnprob:
-            self._best_lnprob = bp
-            self._best_pars = trials[w, :]
-
-        arates = sampler.acceptance_fraction
-        self._arate = arates.mean()
-        self._set_tau()
-
-        self._last_pos = pos
-        return pos
-
-    go = run_mcmc
-
-    def get_last_pos(self):
-        return self._last_pos
-
-    def get_weights(self):
-        """
-        default weights are none
-        """
-        return None
-
-    def get_stats(self, sigma_clip=False, weights=None, **kw):
-        """
-        get mean and covariance.
-
-        parameters
-        ----------
-        weights: array
-            Extra weights to apply.
-        """
-        this_weights = self.get_weights()
-
-        if this_weights is not None and weights is not None:
-            weights = this_weights * weights
-        elif this_weights is not None:
-            weights = this_weights
-        else:
-            # input weights are used, None or no
-            pass
-
-        trials = self.get_trials()
-
-        pars, pars_cov = stats.calc_mcmc_stats(
-            trials, sigma_clip=sigma_clip, weights=weights, **kw
-        )
-
-        return pars, pars_cov
-
-    def calc_result(self, sigma_clip=False, weights=None, **kw):
-        """
-        Calculate the mcmc stats and the "best fit" stats
-        """
-
-        pars, pars_cov = self.get_stats(
-            sigma_clip=sigma_clip, weights=weights, **kw
-        )
-        pars_err = sqrt(diag(pars_cov))
-        res = {
-            "model": self.model_name,
-            "flags": self.flags,
-            "pars": pars,
-            "pars_cov": pars_cov,
-            "pars_err": pars_err,
-            "tau": self._tau,
-            "arate": self._arate,
-        }
-
-        # note get_fits_stats expects pars in log space
-        fit_stats = self.get_fit_stats(pars)
-        res.update(fit_stats)
-
-        self._result = res
-
-    def _setup_sampler_and_data(self, pos):
-        """
-        try very hard to initialize the mixtures
-
-        we work in T,F as log(1+x) so watch for low values
-        """
-
-        self.flags = 0
-        self._tau = 0.0
-
-        npars = pos.shape[1]
-        mess = "pos has npars=%d, expected %d" % (npars, self.npars)
-        assert npars == self.npars, mess
-
-        self.sampler = self._make_sampler()
-        self._best_lnprob = None
-
-        ok = False
-        gerror = None
-        for i in range(self.nwalkers):
-            try:
-                self._init_gmix_all(pos[i, :])
-                ok = True
-                break
-            except GMixRangeError:
-                continue
-            except ZeroDivisionError:
-                continue
-
-        if not ok:
-            print("failed init gmix from input guess: %s" % str(gerror))
-            raise gerror
-
-    def _set_tau(self):
-        """
-        auto-correlation for emcee
-        """
-        self._tau = 1.0e9
-
-    def _make_sampler(self):
-        """
-        Instantiate the sampler
-        """
-        import emcee
-
-        sampler = emcee.EnsembleSampler(
-            self.nwalkers, self.npars, self.calc_lnprob, a=self.mca_a
-        )
-
-        if self.random_state is not None:
-
-            # this is a property, runs set_state internally. sadly this will
-            # fail silently which is the stupidest thing I have ever seen in my
-            # entire life.  If I want to set the state it is important to me!
-
-            # print('            replacing random state')
-            # sampler.random_state=self.random_state.get_state()
-
-            # OK, we will just hope that _random doesn't change names in the
-            # future.  but at least we get control back
-            sampler._random = self.random_state
-
-        return sampler
-
-    def make_plots(
-        self,
-        show=False,
-        prompt=False,
-        do_residual=False,
-        do_triangle=False,
-        width=1200,
-        height=1200,
-        separate=False,
-        title=None,
-        weights=None,
-        **keys
-    ):
-        """
-        Plot the mcmc chain and some residual plots
-        """
-        import mcmc
-        import biggles
-
-        biggles.configure("screen", "width", width)
-        biggles.configure("screen", "height", height)
-
-        names = self.get_par_names()
-
-        if separate:
-            # returns a tuple burn_plt, hist_plt
-            plotfunc = mcmc.plot_results_separate
-        else:
-            plotfunc = mcmc.plot_results
-
-        trials = self.get_trials()
-        pdict = {}
-        pdict["trials"] = plotfunc(
-            trials, names=names, title=title, show=show, **keys
-        )
-
-        if weights is not None:
-            pdict["wtrials"] = plotfunc(
-                trials,
-                weights=weights,
-                names=names,
-                title="%s weighted" % title,
-                show=show,
-            )
-
-        if do_residual:
-            pdict["resid"] = self.plot_residuals(
-                title=title, show=show, width=width, height=height, **keys
-            )
-
-        if do_triangle:
-            try:
-                # we will crash on a batch job if we don't do this.
-                # also if pyplot has already been imported, it will
-                # crash (god I hate matplotlib)
-                import matplotlib as mpl
-
-                mpl.use("Agg")
-                import triangle
-
-                figure = triangle.corner(
-                    trials,
-                    labels=names,
-                    quantiles=[0.16, 0.5, 0.84],
-                    show_titles=True,
-                    title_args={"fontsize": 12},
-                    bins=25,
-                )
-                pdict["triangle"] = figure
-            except ImportError:
-                LOGGER.debug("could not do triangle")
-
-        if show and prompt:
-            key = input("hit a key: ")
-            if key == "q":
-                KeyboardInterrupt("stopping")
-
-        return pdict
-
-    def get_par_names(self):
-        raise RuntimeError("over-ride me")
-
-
-class MCMCSimple(MCMCBase):
-    """
-    Add additional features to the base class to support simple models
-    """
-
-    def __init__(self, obs, model, **keys):
-        super(MCMCSimple, self).__init__(obs, model, **keys)
-
-        # where g1,g2 are located in a pars array
-        self.g1i = 2
-        self.g2i = 3
-
-        self._band_pars = zeros(6)
-
-    def calc_result(self, **kw):
-        """
-        Some extra stats for simple models
-        """
-
-        super(MCMCSimple, self).calc_result(**kw)
-
-        g1i = self.g1i
-        g2i = self.g2i
-
-        self._result["g"] = self._result["pars"][g1i:g1i + 2].copy()
-        self._result["g_cov"] = self._result["pars_cov"][
-            g1i:g1i + 2, g2i:g2i + 2
-        ].copy()
-
-    def get_band_pars(self, *, pars, band):
-        """
-        Get linear pars for the specified band
-        """
-
-        band_pars = self._band_pars
-
-        band_pars[:] = pars[:]
-        return band_pars
-
-    def get_par_names(self, dolog=False):
-        names = ["cen1", "cen2", "g1", "g2", "T"]
-        if self.nband == 1:
-            names += ["F"]
-        else:
-            for band in range(self.nband):
-                names += ["F_%s" % band]
-
-        return names
-
-
-class MH(object):
-    """
-    Run a Monte Carlo Markov Chain (MCMC) using metropolis hastings.
-
-    parameters
+    Parameters
     ----------
-    lnprob_func: function or method
-        A function to calculate the log proability given the input
-        parameters.  Can be a method of a class.
-            ln_prob = lnprob_func(pars)
+    model: string
+        Model name
+    pars: all parameters
+        Parameters for all bands
+    band: int
+        Band number
 
-    stepper: function or method
-        A function to take a step given the input parameters.
-        Can be a method of a class.
-            newpars = stepper(pars)
-
-    seed: floating point, optional
-        An optional seed for the random number generator.
-    random_state: optional
-        A random number generator with method .uniform()
-        e.g. numpy.random.RandomState.  Takes precedence over
-        seed
-
-    examples
-    ---------
-    m=mcmc.MH(lnprob_func, stepper, seed=34231)
-    m.run(pars_start, nstep)
-
-    means, cov = m.get_stats()
-
-    trials = m.get_trials()
-    loglike = m.get_loglike()
-    arate = m.get_acceptance_rate()
-
+    Returns
+    -------
+    the subset of parameters for this band
     """
 
-    def __init__(self, lnprob_func, stepper, seed=None, random_state=None):
-        self._lnprob_func = lnprob_func
-        self._stepper = stepper
+    num = gmix.get_model_npars(model)
+    band_pars = np.zeros(num)
 
-        self.set_random_state(seed=seed, state=random_state)
+    assert model != 'coellip'
 
-    def get_trials(self):
-        """
-        Get the trials array
-        """
-        return self._trials
+    if model == 'bd':
+        band_pars[0:7] = pars[0:7]
+        band_pars[7] = pars[7 + band]
+    elif model == 'bdf':
+        band_pars = np.zeros(num)
+        band_pars[0:6] = pars[0:6]
+        band_pars[6] = pars[6 + band]
+    else:
+        band_pars[0:5] = pars[0:5]
+        band_pars[5] = pars[5 + band]
 
-    def get_loglike(self):
-        """
-        Get the log like array
-        """
-        return self._loglike
-
-    get_lnprob = get_loglike
-
-    def get_acceptance_rate(self):
-        """
-        Get the acceptance rate
-        """
-        return self._arate
-
-    get_arate = get_acceptance_rate
-
-    def get_accepted(self):
-        """
-        Get the accepted array
-        """
-        return self._accepted
-
-    def get_stats(self, sigma_clip=False, weights=None, **kw):
-        """
-        get mean and covariance.
-
-        parameters
-        ----------
-        weights: array
-            Extra weights to apply.
-        """
-        from .stats import calc_mcmc_stats
-
-        stats = calc_mcmc_stats(
-            self._trials, sigma_clip=sigma_clip, weights=weights, **kw
-        )
-        return stats
-
-    def set_random_state(self, seed=None, state=None):
-        """
-        set the random state
-
-        parameters
-        ----------
-        seed: integer, optional
-            If state= is not set, the random state is set to
-            numpy.random.RandomState(seed=seed)
-        state: optional
-            A random number generator with method .uniform()
-            e.g. numpy.random.RandomState.  Takes precedence over
-            seed
-        """
-        if state is not None:
-            self._random_state = state
-        else:
-            self._random_state = numpy.random.RandomState(seed=seed)
-
-    def run_mcmc(self, pars_start, nstep):
-        """
-        Run the MCMC chain.  Append new steps if trials already
-        exist in the chain.
-
-        parameters
-        ----------
-        pars_start: sequence
-            Starting point for the chain in the n-d parameter space.
-        nstep: integer
-            Number of steps in the chain.
-        """
-
-        self._init_data(pars_start, nstep)
-
-        for i in range(1, nstep):
-            self._step()
-
-        self._arate = self._accepted.sum() / float(self._accepted.size)
-        return self._trials[-1, :]
-
-    def _step(self):
-        """
-        Take the next step in the MCMC chain.
-
-        Calls the stepper lnprob_func methods sent during construction.  If the
-        new loglike is not greater than the previous, or a uniformly generated
-        random number is greater than the the ratio of new to old likelihoods,
-        the new step is not used, and the new parameters are the same as the
-        old.  Otherwise the new step is kept.
-
-        This is an internal function that is called by the .run method.
-        It is not intended for call by the user.
-        """
-
-        index = self._current
-
-        oldpars = self._oldpars
-        oldlike = self._oldlike
-
-        # Take a step and evaluate the likelihood
-        newpars = self._stepper(oldpars)
-        newlike = self._lnprob_func(newpars)
-
-        log_likeratio = newlike - oldlike
-
-        randnum = self._random_state.uniform()
-        log_randnum = numpy.log(randnum)
-
-        # we allow use of -infinity as a sign we are out of bounds
-        if isfinite(newlike) and (
-            (newlike > oldlike) | (log_randnum < log_likeratio)
-        ):
-
-            self._accepted[index] = 1
-            self._loglike[index] = newlike
-            self._trials[index, :] = newpars
-
-            self._oldpars = newpars
-            self._oldlike = newlike
-
-        else:
-            self._accepted[index] = 0
-            self._loglike[index] = oldlike
-            self._trials[index, :] = oldpars
-
-        self._current += 1
-
-    def _init_data(self, pars_start, nstep):
-        """
-        Set the trials and accept array.
-        """
-
-        pars_start = array(pars_start, dtype="f8", copy=False)
-        npars = pars_start.size
-
-        self._trials = numpy.zeros((nstep, npars))
-        self._loglike = numpy.zeros(nstep)
-        self._accepted = numpy.zeros(nstep, dtype="i1")
-        self._current = 1
-
-        self._oldpars = pars_start.copy()
-        self._oldlike = self._lnprob_func(pars_start)
-
-        self._trials[0, :] = pars_start
-        self._loglike[0] = self._oldlike
-        self._accepted[0] = 1
+    return band_pars
 
 
-class MHTemp(MH):
+def get_lm_n_prior_pars(*, model, nband):
     """
-    Run a Monte Carlo Markov Chain (MCMC) using metropolis hastings
-    with the specified temperature.
+    get the number of slots for priors in LM
 
-    parameters
+    Parameters
     ----------
-    lnprob_func: function or method
-        A function to calculate the log proability given the input
-        parameters.  Can be a method of a class.
-            ln_prob = lnprob_func(pars)
-    stepper: function or method
-        A function to take a step given the input parameters.
-        Can be a method of a class.
-            newpars = stepper(pars)
-    T: float
-        Temperature.
-
-    seed: floating point, optional
-        An optional seed for the random number generator.
-    state: optional
-        A random number generator with method .uniform()
-        e.g. numpy.random.RandomState.  Takes precedence over
-        seed
-
-    examples
-    ---------
-    T=1.5
-    m=mcmc.MHTemp(lnprob_func, stepper, T, seed=34231)
-    m.run(pars_start, nstep)
-    trials = m.get_trials()
-
-    means,cov = m.get_stats()
-
-    # the above uses the weights, so is equivalent to
-    # the following
-
-    weights = m.get_weights()
-
-    wsum=weights.sum()
-    mean0 = (weights*trials[:,0]).sum()/wsum
-
-    fdiff0 = trials[:,0]-mean0
-    var00 = (weights*fdiff0*fdiff0).sum()/wsum
-
-    fdiff1 = trials[:,1]-mean1
-
-    var01 = (weights*fdiff0*fdiff1).sum()/wsum
-
-    etc. for the other parameters and covariances
+    model: string
+        The model being fit
+    nband: int
+        Number of bands
+    prior: joint prior, optional
+        If None, the result is always zero
     """
 
-    def __init__(self, lnprob_func, stepper, T, seed=None, random_state=None):
-
-        super(MHTemp, self).__init__(
-            lnprob_func, stepper, seed=seed, random_state=random_state
-        )
-        self.T = T
-        self.Tinv = 1.0 / self.T
-
-    def get_stats(self, weights=None):
-        """
-        get mean and covariance.
-
-        parameters
-        ----------
-        weights: array
-            Extra weights to apply.
-        """
-        this_weights = self.get_weights()
-
-        if weights is not None:
-            weights = this_weights * weights
-        else:
-            weights = this_weights
-
-        return super(MHTemp, self).get_stats(weights=weights)
-
-    def get_loglike_T(self):
-        """
-        Get the log like array ln(like)/T
-        """
-        return self._loglike_T
-
-    def get_weights(self):
-        """
-        get weights that put the loglike back at temp=1
-        """
-        if not hasattr(self, "_weights"):
-            self._max_loglike = self._loglike.max()
-            logdiff = self._loglike - self._max_loglike
-            self._weights = exp(logdiff * (1.0 - self.Tinv))
-        return self._weights
-
-    def _step(self):
-        """
-        Take the next step in the MCMC chain.
-
-        Calls the stepper lnprob_func methods sent during construction.  If the
-        new loglike is not greater than the previous, or a uniformly generated
-        random number is greater than the the ratio of new to old likelihoods,
-        the new step is not used, and the new parameters are the same as the
-        old.  Otherwise the new step is kept.
-
-        This is an internal function that is called by the .run method.
-        It is not intended for call by the user.
-        """
-
-        index = self._current
-
-        oldpars = self._oldpars
-        oldlike = self._oldlike
-        oldlike_T = self._oldlike_T
-
-        # Take a step and evaluate the likelihood
-        newpars = self._stepper(oldpars)
-        newlike = self._lnprob_func(newpars)
-        newlike_T = newlike * self.Tinv
-
-        log_likeratio = newlike_T - oldlike_T
-
-        randnum = self._random_state.uniform()
-        log_randnum = numpy.log(randnum)
-
-        # we allow use of -infinity as a sign we are out of bounds
-        if isfinite(newlike_T) and (
-            (newlike_T > oldlike_T) | (log_randnum < log_likeratio)
-        ):
-
-            self._accepted[index] = 1
-            self._loglike[index] = newlike
-            self._loglike_T[index] = newlike_T
-            self._trials[index, :] = newpars
-
-            self._oldpars = newpars
-            self._oldlike = newlike
-            self._oldlike_T = newlike_T
-
-        else:
-            self._accepted[index] = 0
-            self._loglike[index] = oldlike
-            self._loglike_T[index] = oldlike_T
-            self._trials[index, :] = oldpars
-
-        self._current += 1
-
-    def _init_data(self, pars_start, nstep):
-        """
-        Set the trials and accept array.
-        """
-        super(MHTemp, self)._init_data(pars_start, nstep)
-
-        oldlike_T = self._oldlike * self.Tinv
-
-        loglike_T = self._loglike.copy()
-        loglike_T[0] = oldlike_T
-
-        self._oldlike_T = oldlike_T
-        self._loglike_T = loglike_T
-
-
-class MHSimple(MCMCSimple):
-    def __init__(self, obs, model, step_sizes, **keys):
-        """
-        not inheriting init from MCMCSsimple or MCMCbase
-
-        step sizes in linear space
-        """
-        FitterBase.__init__(self, obs, model, **keys)
-
-        # where g1,g2 are located in a pars array
-        self.g1i = 2
-        self.g2i = 3
-
-        self._band_pars = zeros(6)
-
-        self.set_step_sizes(step_sizes)
-
-        seed = keys.get("seed", None)
-        state = keys.get("random_state", None)
-        self.set_random_state(seed=seed, state=state)
-
-    def set_step_sizes(self, step_sizes):
-        """
-        set the step sizes to the input
-        """
-        step_sizes = numpy.asanyarray(step_sizes, dtype="f8")
-        sdim = step_sizes.shape
-        if len(sdim) == 1:
-            ns = step_sizes.size
-            mess = "step_sizes has size=%d, expected %d" % (ns, self.npars)
-            assert ns == self.npars, mess
-
-            mess = "step sizes must all be > 0"
-            assert numpy.all(step_sizes > 0), mess
-
-        elif len(sdim) == 2:
-            mess = (
-                "step_sizes needs to be a square "
-                "matrix, has dims %dx%d." % sdim
-            )
-            assert sdim[0] == sdim[1], mess
-            ns = sdim[0]
-            mess = "step_sizes has size=%d, expected %d" % (ns, self.npars)
-            assert ns == self.npars, mess
-            assert numpy.all(
-                numpy.linalg.eigvals(step_sizes) > 0
-            ), "step_sizes must be positive definite."
-        else:
-            assert len(sdim) <= 2, (
-                "step_sizes cannot have dimension greater than "
-                "2, has %d dims." % len(sdim)
-            )
-        self._step_sizes = step_sizes
-        self._ndim_step_sizes = len(sdim)
-
-    def set_random_state(self, seed=None, state=None):
-        """
-        set the random state
-
-        parameters
-        ----------
-        state: optional
-            A random number generator with method .uniform()
-            e.g. an instance of numpy.random.RandomState
-        seed: integer, optional
-            If state= is not set, the random state is set to
-            numpy.random.RandomState(seed=seed)
-        """
-        if state is not None:
-            self.random_state = state
-        else:
-            self.random_state = numpy.random.RandomState(seed=seed)
-
-    def run_mcmc(self, pos0, nstep):
-        """
-        run steps, starting at the input position
-        """
-
-        pos0 = array(pos0, dtype="f8", copy=False)
-
-        if not hasattr(self, "sampler"):
-            self._setup_sampler_and_data(pos0)
-
-        sampler = self.sampler
-
-        pos = sampler.run_mcmc(pos0, nstep)
-
-        trials = sampler.get_trials()
-        lnprobs = sampler.get_lnprob()
-
-        self._trials = trials
-        self._lnprobs = lnprobs
-
-        w = lnprobs.argmax()
-        bp = lnprobs[w]
-        if self._best_lnprob is None or bp > self._best_lnprob:
-            self._best_lnprob = bp
-            self._best_pars = trials[w, :]
-
-        self._arate = sampler.get_arate()
-        self._set_tau()
-
-        self._last_pos = pos
-        return pos
-
-    def take_step(self, pos):
-        """
-        Take gaussian steps
-        """
-        if self._ndim_step_sizes == 1:
-            r = self.random_state.normal(size=self.npars)
-            return pos + self._step_sizes * r
-        else:
-            return numpy.random.multivariate_normal(pos, self._step_sizes)
-
-    def _setup_sampler_and_data(self, pos):
-        """
-        pos in linear space
-
-        Try to initialize the gaussian mixtures. If failure, most
-        probablly a GMixRangeError will be raised
-        """
-
-        self.flags = 0
-
-        npars = pos.size
-        mess = "pos has npars=%d, expected %d" % (npars, self.npars)
-        assert npars == self.npars, mess
-
-        # initialize all the gmix objects; may raise an error
-        self._init_gmix_all(pos)
-
-        self.sampler = MH(
-            self.calc_lnprob, self.take_step, random_state=self.random_state
-        )
-        self._best_lnprob = None
-
-    def _set_tau(self):
-        """
-        auto-correlation scale lenght*2 divided by the number of steps
-        """
-
-        # need to figure out how to make this work.
-        # could not find good examples on line
-
-        self._tau = 1.0e9
-
-
-class MHTempSimple(MHSimple):
-    """
-    Run with a temperature != 1.  Use the weights when
-    getting stats
-    """
-
-    def __init__(self, obs, model, step_sizes, **keys):
-        super(MHTempSimple, self).__init__(obs, model, step_sizes, **keys)
-        self.temp = keys.get("temp", 1.0)
-        LOGGER.debug("MHTempSimple doing temperature: %s", self.temp)
-
-    def get_weights(self):
-        """
-        Get the temperature weights
-        """
-        return self.sampler.get_weights()
-
-    def _setup_sampler_and_data(self, pos):
-        """
-        Try to initialize the gaussian mixtures. If failure, most
-        probablly a GMixRangeError will be raised
-        """
-
-        self.flags = 0
-        self.pos = pos
-
-        npars = pos.size
-        mess = "pos has npars=%d, expected %d" % (npars, self.npars)
-        assert npars == self.npars, mess
-
-        # initialize all the gmix objects; may raise an error
-        self._init_gmix_all(pos)
-
-        self.sampler = MHTemp(
-            self.calc_lnprob,
-            self.take_step,
-            self.temp,
-            random_state=self.random_state,
-        )
-        self._best_lnprob = None
-
-
-_default_min_err = array([1.0e-4, 1.0e-4, 1.0e-3, 1.0e-3, 1.0e-4, 1.0e-4])
-_default_max_err = array([1.0, 1.0, 5.0, 5.0, 1.0, 1.0])
-
-
-class ISampler(object):
-    """
-    sampler using multivariate T distribution
-    """
-
-    def __init__(
-        self,
-        pars,
-        cov,
-        df,
-        min_err=_default_min_err,
-        max_err=_default_max_err,
-        ifactor=1.0,
-        asinh_pars=[],
-        verbose=True,
-    ):
-        """
-        min_err=0.001 for s/n=1000 T=4*Tpsf
-        max_err=0.5 for small T s/n ~5
-        """
-        self._pars_orig = array(pars)
-        self._cov_orig = array(cov)
-        self._ifac = ifactor
-        self._asinh_pars = asinh_pars
-        self._npars = self._pars_orig.size
-        self._set_pars_and_cov()
-
-        self.verbose = verbose
-        self._set_minmax_err(min_err, max_err)
-
-        self._clip_cov()
-
-        self._df = df
-        self._set_pdf()
-
-    def _set_pars_and_cov(self):
-        from math import asinh
-
-        self._pars = self._pars_orig.copy()
-        self._cov = self._cov_orig.copy()
-        jac = numpy.ones(self._npars)
-
-        for ind in self._asinh_pars:
-            self._pars[ind] = asinh(self._pars_orig[ind])
-            jac[ind] = 1.0 / numpy.sqrt(
-                1.0 + self._pars_orig[ind] * self._pars_orig[ind]
-            )
-
-        for i in range(self._npars):
-            for j in range(self._npars):
-                self._cov[i, j] = jac[i] * jac[j] * self._cov_orig[i, j]
-
-        self._cov = self._cov * self._ifac * self._ifac
-
-    def _lndetjac(self, pars_orig):
-        npars = pars_orig.shape[0]
-        logdetjac = zeros(npars)
-        for ind in self._asinh_pars:
-            logdetjac += numpy.log(
-                1.0 / numpy.sqrt(1.0 + pars_orig[:, ind] * pars_orig[:, ind])
-            )
-        return logdetjac
-
-    def pars_to_pars_orig(self, pars):
-        pars_orig = pars.copy()
-        for ind in self._asinh_pars:
-            pars_orig[:, ind] = numpy.sinh(pars[:, ind])
-        return pars_orig
-
-    def make_samples(self, n=None):
-        """
-        run sample() and set internal trials attribute
-        """
-        self._trials = self.sample(n)
-        self._trials_orig = self.pars_to_pars_orig(self._trials)
-
-    make_trials = make_samples
-
-    def get_result(self):
-        """
-        get the result dict
-        """
-        return self._result
-
-    def calc_result(self, weights=None):
-        """
-        Calculate the mcmc stats and the "best fit" stats
-        """
-        from numpy import diag
-
-        pars, pars_cov, neff = self.get_stats(weights=weights)
-        pars_err = sqrt(diag(pars_cov))
-
-        trials = self.get_trials()
-        nsample = trials.shape[0]
-        efficiency = neff / nsample
-
-        res = {
-            "flags": 0,
-            "pars": pars,
-            "pars_cov": pars_cov,
-            "pars_err": pars_err,
-            "g": pars[2:2+2],
-            "g_cov": pars_cov[2:2+2, 2:2+2],
-            "nsample": nsample,
-            "neff": neff,
-            "efficiency": efficiency,
-        }
-
-        self._result = res
-
-    def get_stats(self, weights=None):
-        """
-        get expectation values and covariance for
-        g from the trials
-        """
-        from ngmix import stats
-
-        trials = self.get_trials()
-        iweights = self.get_iweights()
-
-        # should we modify this for extra input weights?
-        # maybe not: we want to know how well we sample
-        # what was input
-        # neff = iweights.sum()
-
-        if weights is not None:
-            weights = weights * iweights
-            neff = weights.sum() / weights.max()
-        else:
-            weights = iweights
-            neff = weights.sum()
-
-        pars, pars_cov = stats.calc_mcmc_stats(trials, weights=weights)
-
-        return pars, pars_cov, neff
-
-    def get_trials(self):
-        """
-        return a ref to the trials
-        """
-        return self._trials_orig
-
-    get_samples = get_trials
-
-    def get_prob(self, pars):
-        """
-        get probability for input points
-
-        depends on scipy
-        """
-        if not hasattr(self, "_pdf"):
-            self._set_pdf()
-
-        return self._pdf.pdf(pars)
-
-    def get_lnprob(self, pars):
-        """
-        get log probability for input points
-
-        depends on scipy
-        """
-        if not hasattr(self, "_pdf"):
-            self._set_pdf()
-
-        return self._pdf.logpdf(pars)
-
-    def get_iweights(self):
-        """
-        set self._iweights for self._trials given the
-        lnprob_func.  You need to run make_trials first
-        """
-        return self._iweights
-
-    def set_iweights(self, lnprob_func):
-        """
-        get importance sample weights for the input
-        samples and lnprob function
-        """
-
-        proposed_lnprob = self.get_lnprob(self._trials)
-        lndetjac = self._lndetjac(self._trials_orig)
-
-        samples = self._trials_orig
-        nsample = samples.shape[0]
-        lnprob = zeros(nsample)
-        for i in range(nsample):
-            lnprob[i] = lnprob_func(samples[i, :])
-
-        lnpdiff = lnprob - proposed_lnprob - lndetjac
-        lnpdiff -= lnpdiff.max()
-        self._iweights = exp(lnpdiff)
-
-    def sample(self, nrand=None):
-        """
-        Get nrand random deviates from the distribution
-        """
-
-        if nrand is None:
-            is_scalar = True
-            nrand = 1
-        else:
-            is_scalar = False
-
-        vals = numpy.zeros((nrand, self._npars))
-
-        ngood = 0
-        nleft = nrand
-        while ngood < nrand:
-
-            samples = self._sample_raw(nleft)
-
-            gtot = samples[:, 2] ** 2 + samples[:, 3] ** 2
-
-            (w,) = numpy.where(gtot < 1.0)
-            if w.size > 0:
-                vals[ngood:ngood + w.size, :] = samples[w, :]
-                ngood += w.size
-                nleft -= w.size
-
-        if is_scalar:
-            vals = vals[0, :]
-
-        return vals
-
-    def make_plots(
-        self,
-        title=None,
-        separate=False,
-        width=1200,
-        height=1200,
-        show=False,
-        prompt=False,
-        **keys
-    ):
-        import mcmc
-        import biggles
-
-        weights = self._iweights
-
-        biggles.configure("screen", "width", width)
-        biggles.configure("screen", "height", height)
-
-        if separate:
-            # returns a tuple burn_plt, hist_plt
-            plotfunc = mcmc.plot_results_separate
-        else:
-            plotfunc = mcmc.plot_results
-
-        trials = self.get_trials()
-        pdict = {}
-        pdict["trials"] = plotfunc(trials, title=title, show=show, **keys)
-
-        if weights is not None:
-            pdict["wtrials"] = plotfunc(
-                trials,
-                weights=weights,
-                title="%s weighted" % title,
-                show=show,
-                **keys
-            )
-
-        if show and prompt:
-            key = input("hit a key: ")
-            if key == "q":
-                KeyboardInterrupt("stopping")
-
-        return pdict
-
-    def _sample_raw(self, n):
-        """
-        sample without truncation
-        """
-        return self._pdf.rvs(n)
-
-    def _set_pdf(self):
-        from statsmodels.sandbox.distributions.mv_normal import MVT
-
-        self._pdf = MVT(self._pars, self._cov, self._df)
-
-    def _clip_cov(self):
-        """
-        clip the steps to a desired range.  Can work with
-        either diagonals or cov
-        """
-        from numpy import sqrt, diag
-
-        cov = self._cov
-
-        # correlation matrix
-        dsigma = sqrt(diag(cov))
-        corr = cov.copy()
-        for i in range(cov.shape[0]):
-            for j in range(cov.shape[1]):
-                corr[i, j] /= dsigma[i]
-                corr[i, j] /= dsigma[j]
-
-        (w,) = numpy.where(dsigma < self._min_err)
-        if w.size > 0:
-            dsigma[w] = self._min_err[w]
-        (w,) = numpy.where(dsigma > self._max_err)
-        if w.size > 0:
-            dsigma[w] = self._max_err[w]
-
-        # remake the covariance matrix
-        for i in range(corr.shape[0]):
-            for j in range(corr.shape[1]):
-                corr[i, j] *= dsigma[i]
-                corr[i, j] *= dsigma[j]
-
-        cov = corr.copy()
-
-        # make sure the matrix is well behavied
-        if numpy.all(numpy.isfinite(cov)):
-            eigvals = numpy.linalg.eigvals(cov)
-            if numpy.any(eigvals <= 0):
-                raise LinAlgError("bad cov")
-
-        if self.verbose:
-            print_pars(sqrt(diag(cov)), front="    using err:")
-
-        self._cov = cov
-
-    def _set_minmax_err(self, min_err, max_err):
-        min_err = array(min_err, copy=False)
-        max_err = array(max_err, copy=False)
-
-        assert (
-            min_err.size == self._pars.size
-        ), "min_err must be same size as pars"
-        assert (
-            max_err.size == self._pars.size
-        ), "max_err must be same size as pars"
-
-        self._min_err = min_err
-        self._max_err = max_err
-
-
-# alias
-GCovSamplerT = ISampler
+    if model == 'bd':
+        # center1 + center2 + shape + T + log10(Td/Te) + fracdev + fluxes
+        npp = 1 + 1 + 1 + 1 + 1 + 1 + nband
+    elif model == 'bdf':
+        # center1 + center2 + shape + T + fracdev + fluxes
+        npp = 1 + 1 + 1 + 1 + 1 + nband
+    elif model in ['exp', 'dev', 'gauss', 'turb']:
+        # simple models
+        npp = 1 + 1 + 1 + 1 + 1 + nband
+    else:
+        raise ValueError('bad model: %s' % model)
+
+    return npp
 
 
 def print_pars(pars, stream=stdout, fmt="%8.3g", front=None, log=False):
@@ -2943,3 +1336,23 @@ def format_pars(pars, fmt="%8.3g"):
     """
     fmt = " ".join([fmt + " "] * len(pars))
     return fmt % tuple(pars)
+
+
+def _set_flux(*, res, nband):
+    model = res['model']
+    assert model != 'coellip'
+
+    if model == 'bd':
+        start = 7
+    elif model == 'bdf':
+        start = 6
+    else:
+        start = 5
+
+    if nband == 1:
+        res["flux"] = res["pars"][start]
+        res["flux_err"] = sqrt(res["pars_cov"][start, start])
+    else:
+        res["flux"] = res["pars"][start:]
+        res["flux_cov"] = res["pars_cov"][start:, start:]
+        res["flux_err"] = sqrt(diag(res["flux_cov"]))

@@ -4,7 +4,7 @@ fitting using galsim to create the models
 import numpy
 
 from .fitting import (
-    LMSimple,
+    LM,
     TemplateFluxFitter,
     run_leastsq,
     _default_lm_pars,
@@ -95,7 +95,7 @@ class GalsimRunner(object):
             )
 
 
-class GalsimSimple(LMSimple):
+class GalsimSimple(LM):
     """
     Fit using galsim 6 parameter models
 

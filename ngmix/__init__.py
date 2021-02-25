@@ -6,7 +6,6 @@ from . import gmix
 from .gmix import (
     GMix,
     GMixModel,
-    GMixBDF,
     GMixCoellip,
     GMixList,
     MultiBandGMixList,

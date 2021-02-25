@@ -1020,7 +1020,7 @@ class MetacalFitGaussPSF(Metacal):
         from .admom import Admom
         from .guessers import GMixPSFGuesser, SimplePSFGuesser
         from .runners import run_psf_fitter
-        from .fitting import LMSimple
+        from .fitting import LM
         from .gexceptions import BootPSFFailure
 
         psfobs = self.obs.psf
@@ -1046,7 +1046,7 @@ class MetacalFitGaussPSF(Metacal):
                 'xtol': 1.0e-05,
             }
 
-            fitter = LMSimple(model='gauss', fit_pars=lm_pars)
+            fitter = LM(model='gauss', fit_pars=lm_pars)
             guesser = SimplePSFGuesser(rng=self.rng)
 
             run_psf_fitter(obs=psfobs, fitter=fitter, guesser=guesser, ntry=ntry)

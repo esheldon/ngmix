@@ -4,7 +4,7 @@ from ngmix.runners import PSFRunner
 from ngmix.guessers import GMixPSFGuesser, SimplePSFGuesser, CoellipPSFGuesser
 from ngmix.em import GMixEM
 from ngmix.admom import Admom
-from ngmix.fitting import LMCoellip, LMSimple
+from ngmix.fitting import LMCoellip, LM
 from ._sims import get_ngauss_obs, get_psf_obs
 
 
@@ -113,7 +113,7 @@ def test_simple_psf_runner_smoke(model, guess_from_moms):
         rng=rng,
         guess_from_moms=guess_from_moms,
     )
-    fitter = LMSimple(model=model)
+    fitter = LM(model=model)
 
     runner = PSFRunner(
         fitter=fitter,
@@ -144,7 +144,7 @@ def test_simple_psf_runner(model, guess_from_moms):
         rng=rng,
         guess_from_moms=guess_from_moms,
     )
-    fitter = LMSimple(model=model)
+    fitter = LM(model=model)
 
     runner = PSFRunner(
         fitter=fitter,

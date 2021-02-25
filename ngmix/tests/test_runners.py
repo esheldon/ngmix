@@ -6,7 +6,7 @@ from ngmix.guessers import (
 )
 from ngmix.fitting import LMCoellip
 from ngmix.em import GMixEM
-from ngmix.fitting import LMSimple
+from ngmix.fitting import LM
 from ._sims import get_model_obs
 
 FRAC_TOL = 5.0e-4
@@ -16,7 +16,7 @@ FRAC_TOL = 5.0e-4
 @pytest.mark.parametrize('model', ['exp', 'dev'])
 def test_runner_lm_simple_smoke(model, psf_model_type):
     """
-    Smoke test a Runner running the LMSimple fitter
+    Smoke test a Runner running the LM fitter
     """
 
     rng = np.random.RandomState(17710)
@@ -55,7 +55,7 @@ def test_runner_lm_simple_smoke(model, psf_model_type):
         T=0.25,
         flux=100.0,
     )
-    fitter = LMSimple(model=model)
+    fitter = LM(model=model)
 
     runner = Runner(
         fitter=fitter,
@@ -75,7 +75,7 @@ def test_runner_lm_simple_smoke(model, psf_model_type):
 @pytest.mark.parametrize('noise', [1.0e-8, 0.01])
 def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
     """
-    Smoke test a Runner running the LMSimple fitter
+    Smoke test a Runner running the LM fitter
     """
 
     rng = np.random.RandomState(283)
@@ -124,7 +124,7 @@ def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
     else:
         raise ValueError('bad guesser')
 
-    fitter = LMSimple(model=model)
+    fitter = LM(model=model)
 
     runner = Runner(
         fitter=fitter,

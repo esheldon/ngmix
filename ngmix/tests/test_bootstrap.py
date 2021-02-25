@@ -8,7 +8,7 @@ from ngmix.runners import Runner, PSFRunner
 from ngmix.guessers import GMixPSFGuesser, TFluxGuesser, CoellipPSFGuesser
 from ngmix.fitting import LMCoellip
 from ngmix.em import GMixEM
-from ngmix.fitting import LMSimple
+from ngmix.fitting import LM
 from ngmix.bootstrap import bootstrap, Bootstrapper
 from ._sims import get_model_obs
 
@@ -42,7 +42,7 @@ def get_prior(*, rng, cen, cen_width, T_range, F_range):
 def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
                    use_prior, use_bootstrapper):
     """
-    Smoke test a Runner running the LMSimple fitter
+    Smoke test a Runner running the LM fitter
     """
 
     rng = np.random.RandomState(2830)
@@ -91,7 +91,7 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
         T_range=[-1.0, 1.e3],
         F_range=[0.01, 1000.0],
     )
-    fitter = LMSimple(model=model, prior=prior)
+    fitter = LM(model=model, prior=prior)
 
     runner = Runner(
         fitter=fitter,

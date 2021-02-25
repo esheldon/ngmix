@@ -38,8 +38,6 @@ def make_gmix_model(pars, model, **kw):
     model = get_model_num(model)
     if model == GMIX_COELLIP:
         return GMixCoellip(pars)
-    elif model == GMIX_BDF:
-        return GMixBDF(pars=pars, **kw)
     elif model == GMIX_FULL:
         return GMix(pars=pars)
     else:
@@ -907,8 +905,6 @@ class GMixModel(GMix):
     """
 
     def __init__(self, pars, model):
-
-        assert model != "bdf", "use GMixBDF for bdf model"
         self._do_init(pars, model)
 
     def _do_init(self, pars, model):
@@ -994,64 +990,6 @@ class GMixCM(GMixModel):
         rep = super(GMixCM, self).__repr__()
         rep = [
             "fracdev: %g" % self._fracdev,
-            "TdByTe:  %g" % self._TdByTe,
-            rep,
-        ]
-        return "\n".join(rep)
-
-
-class GMixBDF(GMixModel):
-    """
-    Gaussian mixture representing a bulge+disk with
-    fixed size ratio
-
-    Parameters
-    ----------
-    pars: sequence
-        [c1,c2,g1,g2,T,fracdev,flux]
-    TdByTe: number, optional
-        Optionally set TdByTe.  Defaults to 1.0
-
-        Notes: a value of 1.0 is not the most common value for real world
-        galaxies.  It is more typically ~0.3 when fitting to COSMOS galaxies.
-        But 1.0 provides much more stable fits generally and does not reduce
-        accuracy much.
-    """
-
-    def __init__(self, pars=None, TdByTe=1.0):
-        assert pars is not None, "send pars="
-        assert TdByTe is not None, "send TdByTe="
-
-        self._TdByTe = float(TdByTe)
-        super(GMixBDF, self)._do_init(pars, "bdf")
-
-    def copy(self):
-        """
-        Get a new GMix with the same parameters
-        """
-        return GMixBDF(pars=self._pars.copy(), TdByTe=self._TdByTe,)
-
-    def _fill(self, pars):
-        """
-        Fill in the gaussian mixture with new parameters, with
-        no error checking
-
-        parameters
-        ----------
-        pars: ndarray or sequence
-            The parameters
-        """
-
-        self._pars[:] = pars
-
-        gm = self.get_data()
-        self._fill_func(
-            gm, self._pars, self._TdByTe,
-        )
-
-    def __repr__(self):
-        rep = super(GMixBDF, self).__repr__()
-        rep = [
             "TdByTe:  %g" % self._TdByTe,
             rep,
         ]

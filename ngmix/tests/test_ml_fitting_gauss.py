@@ -3,18 +3,17 @@ import numpy as np
 import pytest
 
 import ngmix
-from ngmix.fitting import LMSimple, MaxSimple
+from ngmix.fitting import LM
 from ngmix import Jacobian
 from ngmix import Observation
 from ngmix.moments import fwhm_to_T
 
 
-@pytest.mark.parametrize('fitclass', ['lm', 'max'])
 @pytest.mark.parametrize('wcs_g1', [-0.5, 0, 0.2])
 @pytest.mark.parametrize('wcs_g2', [-0.2, 0, 0.5])
 @pytest.mark.parametrize('g1_true', [-0.1, 0, 0.2])
 @pytest.mark.parametrize('g2_true', [-0.2, 0, 0.1])
-def test_ml_max_fitting_gauss_smoke(fitclass, g1_true, g2_true, wcs_g1, wcs_g2):
+def test_ml_max_fitting_gauss_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
     rng = np.random.RandomState(seed=42)
 
     # allow some small relative bias due to approximate exp function
@@ -87,15 +86,7 @@ def test_ml_max_fitting_gauss_smoke(fitclass, g1_true, g2_true, wcs_g1, wcs_g2):
         )
 
         prior = None
-        if fitclass == 'lm':
-            fitter = LMSimple(model='gauss', prior=prior)
-        else:
-            fit_pars = {
-                'tol': 0.0001,
-                'method': 'Nelder-Mead',
-                'options': {'maxiter': 1000},
-            }
-            fitter = MaxSimple(model='gauss', prior=prior, fit_pars=fit_pars)
+        fitter = LM(model='gauss', prior=prior)
 
         guess = np.zeros(6)
         guess[0:2] = rng.uniform(low=-0.1*scale, high=0.1*scale, size=2)
