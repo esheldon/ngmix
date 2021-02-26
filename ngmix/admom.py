@@ -12,7 +12,7 @@ DEFAULT_TTOL = 1.0e-3
 
 
 def run_admom(
-    *, obs, guess,
+    obs, guess,
     maxiter=DEFAULT_MAXITER,
     shiftmax=DEFAULT_SHIFTMAX,
     etol=DEFAULT_ETOL,
@@ -89,7 +89,7 @@ class Admom(object):
 
         self.rng = rng
 
-    def go(self, *, obs, guess):
+    def go(self, obs, guess):
         """
         run the adpative moments
 
@@ -169,7 +169,7 @@ class Admom(object):
         )
         return im
 
-    def _get_guess(self, *, obs, guess):
+    def _get_guess(self, obs, guess):
         if isinstance(guess, GMix):
             guess_gmix = guess
         else:
@@ -198,7 +198,7 @@ class Admom(object):
 
         return self.rng
 
-    def _generate_guess(self, *, obs, Tguess):  # noqa
+    def _generate_guess(self, obs, Tguess):  # noqa
         from .gmix import GMixModel
 
         rng = self._get_rng()

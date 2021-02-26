@@ -29,7 +29,7 @@ EM_RANGE_ERROR = 2 ** 0
 EM_MAXITER = 2 ** 1
 
 
-def fit_em(*, obs, guess, sky=None, fixcen=False, fluxonly=False, **kws):
+def fit_em(obs, guess, sky=None, fixcen=False, fluxonly=False, **kws):
     """
     fit the observation with EM
 
@@ -242,7 +242,7 @@ class GMixEM(object):
             jacobian=self._obs.jacobian,
         )
 
-    def go(self, *, obs, guess, sky=None):
+    def go(self, obs, guess, sky=None):
         """
         Run the em algorithm from the input starting guesses
 

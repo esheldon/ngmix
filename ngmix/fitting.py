@@ -62,7 +62,7 @@ class FitterBase(object):
 
     """
 
-    def __init__(self, *, model, prior=None):
+    def __init__(self, model, prior=None):
 
         self.prior = prior
         self.model = gmix.get_model_num(model)
@@ -165,7 +165,7 @@ class FitterBase(object):
         """
         self.npars = gmix.get_model_npars(self.model) + self.nband - 1
 
-    def get_band_pars(self, *, pars, band):
+    def get_band_pars(self, pars, band):
         """
         get pars for the specified band
         """
@@ -604,7 +604,7 @@ class TemplateFluxFitter(FitterBase):
         self.model_name = "template"
         self.npars = 1
 
-    def go(self, *, obs):
+    def go(self, obs):
         """
         calculate the flux using zero-lag cross-correlation
         """
@@ -847,7 +847,7 @@ class LM(FitterBase):
 
     """
 
-    def __init__(self, *, model, prior=None, fit_pars=None):
+    def __init__(self, model, prior=None, fit_pars=None):
 
         super().__init__(model=model, prior=prior)
 
@@ -868,7 +868,7 @@ class LM(FitterBase):
     def _set_fdiff_size(self):
         self.fdiff_size = self.totpix + self.n_prior_pars
 
-    def go(self, *, obs, guess):
+    def go(self, obs, guess):
         """
         Run leastsq and set the result
 
@@ -926,7 +926,7 @@ class LM(FitterBase):
         res["T"] = res["pars"][4]
         res["T_err"] = sqrt(res["pars_cov"][4, 4])
 
-    def _setup_data(self, *, obs, guess):
+    def _setup_data(self, obs, guess):
         """
         Set up for the fit.  We need to know the size of the fdiff array and we
         need to initialize the mixtures
@@ -1034,7 +1034,7 @@ class LM(FitterBase):
 
         return fdiff
 
-    def _fill_priors(self, *, pars, fdiff):
+    def _fill_priors(self, pars, fdiff):
         """
         Fill priors at the beginning of the array.
 
@@ -1064,7 +1064,7 @@ class LMCoellip(LM):
     TODO make special set_flux and set_T methods
     """
 
-    def __init__(self, *, ngauss, prior=None, fit_pars=None):
+    def __init__(self, ngauss, prior=None, fit_pars=None):
         self._ngauss = ngauss
         super().__init__(model="coellip", prior=prior, fit_pars=fit_pars)
 
@@ -1086,7 +1086,7 @@ class LMCoellip(LM):
         """
         self.npars = 4 + 2 * self._ngauss
 
-    def get_band_pars(self, *, pars, band):
+    def get_band_pars(self, pars, band):
         """
         Get linear pars for the specified band
         """
@@ -1244,7 +1244,7 @@ def _test_cov(pcov):
     return flags
 
 
-def get_band_pars(*, model, pars, band):
+def get_band_pars(model, pars, band):
     """
     extract parameters for given band
 
@@ -1281,7 +1281,7 @@ def get_band_pars(*, model, pars, band):
     return band_pars
 
 
-def get_lm_n_prior_pars(*, model, nband):
+def get_lm_n_prior_pars(model, nband):
     """
     get the number of slots for priors in LM
 
@@ -1338,7 +1338,7 @@ def format_pars(pars, fmt="%8.3g"):
     return fmt % tuple(pars)
 
 
-def _set_flux(*, res, nband):
+def _set_flux(res, nband):
     model = res['model']
     assert model != 'coellip'
 

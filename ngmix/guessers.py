@@ -24,14 +24,14 @@ class TFluxGuesser(object):
         If sent, "fix-up" guesses if they are not allowed by the prior
     """
 
-    def __init__(self, *, rng, T, flux, prior=None):
+    def __init__(self, rng, T, flux, prior=None):
         self.rng = rng
         self.T = T
 
         self.fluxes = np.array(flux, dtype="f8", ndmin=1)
         self.prior = prior
 
-    def __call__(self, *, n=1, obs=None):
+    def __call__(self, n=1, obs=None):
         """
         Generate a guess.  The center, shape are distributed tightly around
         zero
@@ -85,14 +85,14 @@ class TPSFFluxGuesser(object):
         If sent, "fix-up" guesses if they are not allowed by the prior
     """
 
-    def __init__(self, *, rng, T, prior=None):
+    def __init__(self, rng, T, prior=None):
         self.rng = rng
         self.T = T
         self.prior = prior
         self._id_last = None
         self._psf_fluxes = None
 
-    def _get_psf_fluxes(self, *, obs):
+    def _get_psf_fluxes(self, obs):
         oid = id(obs)
         if oid != self._id_last:
             self._id_last = oid
@@ -100,7 +100,7 @@ class TPSFFluxGuesser(object):
             self._psf_fluxes = fdict['flux']
         return self._psf_fluxes
 
-    def __call__(self, *, obs, n=1):
+    def __call__(self, obs, n=1):
         """
         Generate a guess.
 
@@ -154,14 +154,14 @@ class TPSFFluxAndPriorGuesser(TPSFFluxGuesser):
         cen, g drawn from this prior
     """
 
-    def __init__(self, *, rng, T, prior):
+    def __init__(self, rng, T, prior):
         self.rng = rng
         self.T = T
         self.prior = prior
         self._id_last = None
         self._psf_fluxes = None
 
-    def __call__(self, *, obs, n=1):
+    def __call__(self, obs, n=1):
         """
         Generate a guess.
 
@@ -198,7 +198,7 @@ class TPSFFluxAndPriorGuesser(TPSFFluxGuesser):
         return guess
 
 
-def _get_psf_fluxes(*, rng, obs):
+def _get_psf_fluxes(rng, obs):
     """
     Get psf fluxes for the input observations
 
@@ -272,7 +272,7 @@ class TFluxAndPriorGuesser(object):
         cen, g drawn from this prior
     """
 
-    def __init__(self, *, rng, T, flux, prior):
+    def __init__(self, rng, T, flux, prior):
 
         fluxes = np.array(flux, dtype="f8", ndmin=1)
 
@@ -285,7 +285,7 @@ class TFluxAndPriorGuesser(object):
         if w.size > 0:
             lfluxes[w[:]] = 1.0e-10
 
-    def __call__(self, *, n=1, obs=None):
+    def __call__(self, n=1, obs=None):
         """
         Generate a guess, with center and shape drawn from the prior.
 
@@ -333,7 +333,7 @@ class BDFGuesser(object):
         cen, g drawn from this prior
     """
 
-    def __init__(self, *, T, flux, prior):
+    def __init__(self, T, flux, prior):
         self.T = T
         self.fluxes = np.array(flux, ndmin=1)
         self.prior = prior
@@ -387,12 +387,12 @@ class BDGuesser(object):
         cen, g drawn from this prior
     """
 
-    def __init__(self, *, T, flux, prior):
+    def __init__(self, T, flux, prior):
         self.T = T
         self.fluxes = np.array(flux, ndmin=1)
         self.prior = prior
 
-    def __call__(self, *, n=1, obs=None):
+    def __call__(self, n=1, obs=None):
         """
         Generate a guess from the T, flux and prior for the rest
 
@@ -447,7 +447,7 @@ class ParsGuesser(object):
         If sent, "fix-up" guesses if they are not allowed by the prior
     """
 
-    def __init__(self, *, rng, pars, prior=None, widths=None):
+    def __init__(self, rng, pars, prior=None, widths=None):
         self.rng = rng
         self.pars = np.array(pars)
         self.prior = prior
@@ -511,7 +511,7 @@ class ParsGuesser(object):
         return guess
 
 
-def get_shape_guess(*, rng, g1, g2, n, width, max=0.99):
+def get_shape_guess(rng, g1, g2, n, width, max=0.99):
     """
     Get guess, making sure the range is OK
     """
@@ -557,7 +557,7 @@ class R50FluxGuesser(object):
         If sent, "fix-up" guesses if they are not allowed by the prior
     """
 
-    def __init__(self, *, rng, r50, flux, prior=None):
+    def __init__(self, rng, r50, flux, prior=None):
 
         self.rng = rng
         if r50 < 0.0:
@@ -649,7 +649,7 @@ class R50NuFluxGuesser(R50FluxGuesser):
     NUMIN = -0.99
     NUMAX = 3.5
 
-    def __init__(self, *, rng, r50, nu, flux, prior=None):
+    def __init__(self, rng, r50, nu, flux, prior=None):
         super(R50NuFluxGuesser, self).__init__(
             rng=rng, r50=r50, flux=flux, prior=prior,
         )
@@ -724,13 +724,13 @@ class GMixPSFGuesser(object):
         summing the image and the fwhm of the guess isset to 3.5 times the
         pixel scale
     """
-    def __init__(self, *, rng, ngauss, guess_from_moms=False):
+    def __init__(self, rng, ngauss, guess_from_moms=False):
 
         self.rng = rng
         self.ngauss = ngauss
         self.guess_from_moms = guess_from_moms
 
-    def __call__(self, *, obs):
+    def __call__(self, obs):
         """
         Get a guess for the EM algorithm
 
@@ -749,7 +749,7 @@ class GMixPSFGuesser(object):
         """
         return self._get_guess(obs=obs)
 
-    def _get_guess(self, *, obs):
+    def _get_guess(self, obs):
         T, flux = self._get_T_flux(obs=obs)
 
         if self.ngauss == 1:
@@ -765,7 +765,7 @@ class GMixPSFGuesser(object):
         else:
             raise ValueError("bad ngauss: %d" % self.ngauss)
 
-    def _get_T_flux(self, *, obs):
+    def _get_T_flux(self, obs):
         if self.guess_from_moms:
             T, flux = self._get_T_flux_from_moms(obs=obs)
         else:
@@ -773,7 +773,7 @@ class GMixPSFGuesser(object):
 
         return T, flux
 
-    def _get_T_flux_default(self, *, obs):
+    def _get_T_flux_default(self, obs):
         """
         get starting T and flux from a multiple of the pixel scale and the sum
         of the image
@@ -785,7 +785,7 @@ class GMixPSFGuesser(object):
         T = moments.fwhm_to_T(fwhm)
         return T, flux
 
-    def _get_T_flux_from_moms(self, *, obs):
+    def _get_T_flux_from_moms(self, obs):
         """
         get starting T and flux from weighted moments, deweighted
 
@@ -814,7 +814,7 @@ class GMixPSFGuesser(object):
 
         return T, flux
 
-    def _get_guess_1gauss(self, *, flux, T):
+    def _get_guess_1gauss(self, flux, T):
         rng = self.rng
 
         sigma2 = T/2
@@ -830,7 +830,7 @@ class GMixPSFGuesser(object):
 
         return GMix(pars=pars)
 
-    def _get_guess_2gauss(self, *, flux, T):
+    def _get_guess_2gauss(self, flux, T):
         rng = self.rng
 
         sigma2 = T/2
@@ -853,7 +853,7 @@ class GMixPSFGuesser(object):
 
         return GMix(pars=pars)
 
-    def _get_guess_3gauss(self, *, flux, T):
+    def _get_guess_3gauss(self, flux, T):
         rng = self.rng
 
         sigma2 = T/2
@@ -883,7 +883,7 @@ class GMixPSFGuesser(object):
 
         return GMix(pars=pars)
 
-    def _get_guess_4gauss(self, *, flux, T):
+    def _get_guess_4gauss(self, flux, T):
         rng = self.rng
 
         sigma2 = T/2
@@ -920,7 +920,7 @@ class GMixPSFGuesser(object):
 
         return GMix(pars=pars)
 
-    def _get_guess_5gauss(self, *, flux, T):
+    def _get_guess_5gauss(self, flux, T):
         rng = self.rng
 
         sigma2 = T/2
@@ -1000,13 +1000,13 @@ class SimplePSFGuesser(GMixPSFGuesser):
         summing the image and the fwhm of the guess isset to 3.5 times the
         pixel scale
     """
-    def __init__(self, *, rng, guess_from_moms=False):
+    def __init__(self, rng, guess_from_moms=False):
 
         self.rng = rng
         self.guess_from_moms = guess_from_moms
         self.npars = 6
 
-    def __call__(self, *, obs):
+    def __call__(self, obs):
         """
         Get a guess for the simple psf
 
@@ -1024,7 +1024,7 @@ class SimplePSFGuesser(GMixPSFGuesser):
         """
         return self._get_guess(obs=obs)
 
-    def _get_guess(self, *, obs):
+    def _get_guess(self, obs):
         rng = self.rng
         T, flux = self._get_T_flux(obs=obs)
 
@@ -1054,14 +1054,14 @@ class CoellipPSFGuesser(GMixPSFGuesser):
         summing the image and the fwhm of the guess isset to 3.5 times the
         pixel scale
     """
-    def __init__(self, *, rng, ngauss, guess_from_moms=False):
+    def __init__(self, rng, ngauss, guess_from_moms=False):
 
         self.rng = rng
         self.ngauss = ngauss
         self.guess_from_moms = guess_from_moms
         self.npars = get_coellip_npars(ngauss)
 
-    def __call__(self, *, obs):
+    def __call__(self, obs):
         """
         Get a guess for the EM algorithm
 
@@ -1087,7 +1087,7 @@ class CoellipPSFGuesser(GMixPSFGuesser):
         guess[2:2 + 2] += rng.uniform(low=-0.05, high=0.05, size=2)
         return guess
 
-    def _get_guess_1gauss(self, *, flux, T):
+    def _get_guess_1gauss(self, flux, T):
         rng = self.rng
         guess = self._make_guess_array()
 
@@ -1095,7 +1095,7 @@ class CoellipPSFGuesser(GMixPSFGuesser):
         guess[5] = flux * rng.uniform(low=0.9, high=1.1)
         return guess
 
-    def _get_guess_2gauss(self, *, flux, T):
+    def _get_guess_2gauss(self, flux, T):
         rng = self.rng
         guess = self._make_guess_array()
 
@@ -1107,7 +1107,7 @@ class CoellipPSFGuesser(GMixPSFGuesser):
 
         return guess
 
-    def _get_guess_3gauss(self, *, flux, T):
+    def _get_guess_3gauss(self, flux, T):
         rng = self.rng
         guess = self._make_guess_array()
 
@@ -1121,7 +1121,7 @@ class CoellipPSFGuesser(GMixPSFGuesser):
         guess[9] = flux * _moffat3_pguess[2] * rng.uniform(low=low, high=high)
         return guess
 
-    def _get_guess_4gauss(self, *, flux, T):
+    def _get_guess_4gauss(self, flux, T):
         rng = self.rng
         guess = self._make_guess_array()
 
@@ -1137,7 +1137,7 @@ class CoellipPSFGuesser(GMixPSFGuesser):
         guess[11] = flux * _moffat4_pguess[3] * rng.uniform(low=low, high=high)
         return guess
 
-    def _get_guess_5gauss(self, *, flux, T):
+    def _get_guess_5gauss(self, flux, T):
         rng = self.rng
         guess = self._make_guess_array()
 

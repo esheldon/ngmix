@@ -34,7 +34,7 @@ class Bootstrapper(object):
         If set to True, remove observations where the psf fit fails, and
         only fit the remaining.  Default True.
     """
-    def __init__(self, *, runner, psf_runner, ignore_failed_psf=True):
+    def __init__(self, runner, psf_runner, ignore_failed_psf=True):
         self.runner = runner
         self.psf_runner = psf_runner
         self.ignore_failed_psf = ignore_failed_psf
@@ -77,7 +77,6 @@ class Bootstrapper(object):
 
 
 def bootstrap(
-    *,
     obs,
     runner,
     psf_runner,
@@ -115,65 +114,7 @@ def bootstrap(
     runner.go(obs=obs)
 
 
-def bootstrap_alt(
-    *,
-    obs,
-    fitter,
-    guesser,
-    psf_fitter=None,
-    psf_guesser=None,
-    ignore_failed_psf=True,
-    ntry=1,
-):
-    """
-    Run a fitter on the input observations, possibly bootstrapping the fit
-    based on information inferred from the data or the psf model
-
-    Parameters
-    ----------
-    obs: ngmix Observation(s)
-        Observation, ObsList, or MultiBandObsList
-    fitter: ngmix fitter or measurer
-        An object to perform measurements, must have a go(obs=obs, guess=guess)
-        method.
-    guesser: ngmix guesser object
-        Must be a callable returning an array of parameters
-    psf_fitter: ngmix fitter or measurer, optional
-        An object to psf perform measurements, must have a go(obs=obs,
-        guess=guess) method.
-    psf_guesser: ngmix guesser object, optional
-        Must be a callable returning an array of parameters
-    ntry: int, optional
-        Number of times to try if there is failure.  Default 1
-    ignore_failed_psf: bool, optional
-        If set to True, remove observations where the psf fit fails, and
-        only fit the remaining.  Default True.
-
-    Side effects
-    ------------
-    the obs.psf.meta['result'] and the obs.psf.gmix may be set if a psf runner
-    is sent and the internal fitter has a get_gmix method.  gmix are only set
-    for successful fits
-    """
-    from .runner import run_fitter, run_psf_fitter
-
-    if psf_fitter is not None:
-        assert psf_guesser is not None, "send psf_guesser with psf_fitter"
-
-        run_psf_fitter(
-            obs=obs, fitter=psf_fitter, guesser=psf_guesser, ntry=ntry,
-            set_result=True,
-        )
-
-        if ignore_failed_psf:
-            obs = remove_failed_psf_obs(obs=obs)
-
-    run_fitter(
-        obs=obs, fitter=fitter, guesser=guesser, ntry=ntry,
-    )
-
-
-def remove_failed_psf_obs(*, obs):
+def remove_failed_psf_obs(obs):
     """
     remove observations from the input that failed
 

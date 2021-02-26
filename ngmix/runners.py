@@ -19,12 +19,12 @@ class Runner(object):
     ntry: int, optional
         Number of times to try if there is failure
     """
-    def __init__(self, *, fitter, guesser, ntry=1):
+    def __init__(self, fitter, guesser, ntry=1):
         self.fitter = fitter
         self.guesser = guesser
         self.ntry = ntry
 
-    def go(self, *, obs):
+    def go(self, obs):
         """
         Run the fitter on the input observation(s), possibly multiple times
         using guesses generated from the guesser
@@ -59,7 +59,7 @@ class PSFRunner(Runner):
         Number of times to try if there is failure
     """
 
-    def go(self, *, obs, set_result=False):
+    def go(self, obs, set_result=False):
         """
         Run the fitter on the psf observations associated with the input
         observation(s), possibly multiple times using guesses generated from
@@ -86,7 +86,7 @@ class PSFRunner(Runner):
         )
 
 
-def run_fitter(*, obs, fitter, guesser, ntry=1):
+def run_fitter(obs, fitter, guesser, ntry=1):
     """
     run a fitter multiple times if needed, with guesses generated from the
     input guesser
@@ -118,7 +118,7 @@ def run_fitter(*, obs, fitter, guesser, ntry=1):
             break
 
 
-def run_psf_fitter(*, obs, fitter, guesser, ntry=1, set_result=False):
+def run_psf_fitter(obs, fitter, guesser, ntry=1, set_result=False):
     """
     run a fitter on each observation in the input observation(s).  The
     fitter will be run multiple times if needed, with guesses generated from
