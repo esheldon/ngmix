@@ -2,9 +2,9 @@ import numpy as np
 
 import pytest
 
+from ..defaults import LOWVAL
 from ..priors import (
     FlatPrior,
-    LOWVAL,
     TwoSidedErf,
     Normal,
     LMBounds,

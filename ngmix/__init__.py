@@ -2,6 +2,11 @@
 
 __version__ = 'v2.0.0'
 
+from . import util
+from .util import print_pars
+from . import flags
+from . import defaults
+
 from . import gmix
 from .gmix import (
     GMix,
@@ -39,7 +44,6 @@ from .gexceptions import (
 )
 
 from . import fitting
-from .fitting import print_pars, format_pars
 from . import simplex
 
 from . import galsimfit

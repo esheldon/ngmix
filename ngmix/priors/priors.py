@@ -7,9 +7,7 @@ from numpy import where, array, log, sqrt, zeros
 
 from ..gexceptions import GMixRangeError
 from .random import make_rng
-
-LOWVAL = -numpy.inf
-BIGVAL = 9999.0e47
+from ..defaults import LOWVAL
 
 
 class PriorBase(object):
@@ -809,7 +807,7 @@ class LogNormal(PriorBase):
             A dictionary with the best-fit parameters and other information
             from the fit.
         """
-        from ..fitting import run_leastsq
+        from ..leastsqbound import run_leastsq
 
         rng = self.rng
 

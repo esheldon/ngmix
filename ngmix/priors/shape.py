@@ -8,9 +8,11 @@ from numpy import where, array, exp, log, sqrt, zeros, sin, cos
 from ..gexceptions import GMixRangeError
 from .random import srandu
 from .priors import PriorBase
+import logging
+from ..util import print_pars
+from ..defaults import LOWVAL
 
-LOWVAL = -numpy.inf
-BIGVAL = 9999.0e47
+LOGGER = logging.getLogger(__name__)
 
 
 class GPriorBase(PriorBase):
@@ -350,8 +352,7 @@ class GPriorBase(PriorBase):
         show: bool, optional
             If True, show a plot of the fit and data.
         """
-        from ..fitting import run_leastsq
-        from ..fitting import print_pars
+        from ..leastsqbound import run_leastsq
 
         (w,) = where(ydata > 0)
         self.xdata = xdata[w]
@@ -368,8 +369,8 @@ class GPriorBase(PriorBase):
         self.fit_perr = res["pars_err"]
 
         print("flags:", res["flags"], "\nnfev:", res["nfev"])
-        print_pars(res["pars"], front="pars: ")
-        print_pars(res["pars_err"], front="perr: ")
+        print_pars(res["pars"], front="pars: ", logger=LOGGER)
+        print_pars(res["pars_err"], front="perr: ", logger=LOGGER)
 
         c = ["%g" % p for p in res["pars"]]
         c = "[" + ", ".join(c) + "]"

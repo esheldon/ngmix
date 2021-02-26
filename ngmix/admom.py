@@ -22,6 +22,10 @@ def run_admom(
     """
     obs: Observation
         ngmix.Observation
+    guess: ngmix.GMix or a float
+        A guess for the fitter.  Can be a full gaussian mixture or a single
+        value for T, in which case the rest of the parameters for the
+        gaussian are generated.
     maxiter: integer, optional
         Maximum number of iterations, default 200
     etol: float, optional
@@ -34,10 +38,6 @@ def run_admom(
         Largest allowed shift in the centroid, relative to
         the initial guess.  Default 5.0 (5 pixels if the jacobian
         scale is 1)
-    guess: ngmix.GMix or a float
-        A guess for the fitter.  Can be a full gaussian mixture or a single
-        value for T, in which case the rest of the parameters for the
-        gaussian are generated.
     rng: numpy.random.RandomState
         Random state for creating full gaussian guesses based
         on a T guess

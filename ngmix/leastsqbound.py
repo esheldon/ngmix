@@ -6,12 +6,176 @@ Copied from https://github.com/jjhelmus/leastsqbound-scipy
 Placing a copy in this repo because that code is no longer maintained
 """
 
+import numpy as np
+from numpy import diag
+import logging
 import warnings
 
 from numpy import take, eye, triu, transpose, dot, finfo
 from numpy import empty_like, sqrt, cos, sin, arcsin, asarray
 from numpy import atleast_1d, shape, issubdtype, dtype, inexact
 from scipy.optimize import _minpack, leastsq
+from .util import print_pars
+from .flags import (
+    ZERO_DOF,
+    DIV_ZERO,
+    LM_SINGULAR_MATRIX,
+    LM_NEG_COV_EIG,
+    LM_NEG_COV_DIAG,
+    EIG_NOTFINITE,
+    LM_FUNC_NOTFINITE,
+)
+from .defaults import PDEF, CDEF
+
+LOGGER = logging.getLogger(__name__)
+
+
+def run_leastsq(func, guess, n_prior_pars, **keys):
+    """
+    run leastsq from scipy.optimize.  Deal with certain
+    types of errors
+
+    TODO make this do all the checking and fill in cov etc.  return
+    a dict
+
+    Parameters
+    ----------
+    func:
+        the function to minimize
+    guess:
+        guess at pars
+    n_prior_pars:
+        number of slots in fdiff for priors
+
+    some useful keywords
+    maxfev:
+        maximum number of function evaluations. e.g. 1000
+    epsfcn:
+        Step for jacobian estimation (derivatives). 1.0e-6
+    ftol:
+        Relative error desired in sum of squares, 1.0e06
+    xtol:
+        Relative error desired in solution. 1.0e-6
+    """
+
+    npars = guess.size
+    k_space = keys.pop("k_space", False)
+
+    res = {}
+    try:
+        lm_tup = leastsqbound(func, guess, full_output=1, **keys)
+
+        pars, pcov0, infodict, errmsg, ier = lm_tup
+
+        if ier == 0:
+            # wrong args, this is a bug
+            raise ValueError(errmsg)
+
+        flags = 0
+        if ier > 4:
+            flags = 2 ** (ier - 5)
+            pars, pcov, perr = _get_def_stuff(npars)
+            LOGGER.debug(errmsg)
+
+        elif pcov0 is None:
+            # why on earth is this not in the flags?
+            flags += LM_SINGULAR_MATRIX
+            errmsg = "singular covariance"
+            LOGGER.debug(errmsg)
+            print_pars(pars, front="    pars at singular:", logger=LOGGER)
+            junk, pcov, perr = _get_def_stuff(npars)
+        else:
+            # Scale the covariance matrix returned from leastsq; this will
+            # recover the covariance of the parameters in the right units.
+            fdiff = func(pars)
+
+            # npars: to remove priors
+
+            if k_space:
+                dof = (fdiff.size - n_prior_pars) // 2 - npars
+            else:
+                dof = fdiff.size - n_prior_pars - npars
+
+            if dof == 0:
+                junk, pcov, perr = _get_def_stuff(npars)
+                flags |= ZERO_DOF
+            else:
+                s_sq = (fdiff[n_prior_pars:] ** 2).sum() / dof
+                pcov = pcov0 * s_sq
+
+                cflags = _test_cov(pcov)
+                if cflags != 0:
+                    flags += cflags
+                    errmsg = "bad covariance matrix"
+                    LOGGER.debug(errmsg)
+                    junk1, junk2, perr = _get_def_stuff(npars)
+                else:
+                    # only if we reach here did everything go well
+                    perr = sqrt(diag(pcov))
+
+        res["flags"] = flags
+        res["nfev"] = infodict["nfev"]
+        res["ier"] = ier
+        res["errmsg"] = errmsg
+
+        res["pars"] = pars
+        res["pars_err"] = perr
+        res["pars_cov0"] = pcov0
+        res["pars_cov"] = pcov
+
+    except ValueError as e:
+        serr = str(e)
+        if "NaNs" in serr or "infs" in serr:
+            pars, pcov, perr = _get_def_stuff(npars)
+
+            res["pars"] = pars
+            res["pars_cov0"] = pcov
+            res["pars_cov"] = pcov
+            res["nfev"] = -1
+            res["flags"] = LM_FUNC_NOTFINITE
+            res["errmsg"] = "not finite"
+            LOGGER.debug("not finite")
+        else:
+            raise e
+
+    except ZeroDivisionError:
+        pars, pcov, perr = _get_def_stuff(npars)
+
+        res["pars"] = pars
+        res["pars_cov0"] = pcov
+        res["pars_cov"] = pcov
+        res["nfev"] = -1
+
+        res["flags"] = DIV_ZERO
+        res["errmsg"] = "zero division"
+        LOGGER.debug("zero division")
+
+    return res
+
+
+def _get_def_stuff(npars):
+    pars = np.zeros(npars) + PDEF
+    cov = np.zeros((npars, npars)) + CDEF
+    err = np.zeros(npars) + CDEF
+    return pars, cov, err
+
+
+def _test_cov(pcov):
+    flags = 0
+    try:
+        e, v = np.linalg.eig(pcov)
+        (weig,) = np.where(e < 0)
+        if weig.size > 0:
+            flags += LM_NEG_COV_EIG
+
+        (wneg,) = np.where(np.diag(pcov) < 0)
+        if wneg.size > 0:
+            flags += LM_NEG_COV_DIAG
+
+    except np.linalg.linalg.LinAlgError:
+        flags |= EIG_NOTFINITE
+
+    return flags
 
 
 def _internal2external_grad(xi, bounds):

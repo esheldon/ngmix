@@ -1,10 +1,14 @@
 import numpy as np
 from .gmix import GMix, GMixModel, get_coellip_npars
-from .fitting import print_pars
+from .util import print_pars
 from .gexceptions import GMixRangeError, PSFFluxFailure
-from .priors import srandu, LOWVAL
+from .priors import srandu
+from .defaults import LOWVAL
 from .shape import Shape
 from . import moments
+import logging
+
+LOGGER = logging.getLogger(__name__)
 
 
 class TFluxGuesser(object):
@@ -1195,7 +1199,7 @@ def _fix_guess_TFlux(guess, prior, ntry=4):
                 dosample = True
 
             if dosample:
-                print_pars(guess[j, :], front="bad guess:")
+                print_pars(guess[j, :], front="bad guess:", logger=LOGGER)
                 if itry < ntry:
                     tguess = prior.sample()
                     guess[j, 4:] = tguess[4:]
@@ -1227,7 +1231,7 @@ def _fix_guess(guess, prior, ntry=4):
                 dosample = True
 
             if dosample:
-                print_pars(guess[j, :], front="bad guess:")
+                print_pars(guess[j, :], front="bad guess:", logger=LOGGER)
                 guess[j, :] = prior.sample()
             else:
                 break

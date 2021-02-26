@@ -6,14 +6,15 @@ import numpy
 from .fitting import (
     LM,
     TemplateFluxFitter,
-    run_leastsq,
     _default_lm_pars,
 )
+from .leastsqbound import run_leastsq
 
 from . import observation
 from .observation import Observation, ObsList, MultiBandObsList
 
-from .priors import LOWVAL
+from .defaults import LOWVAL
+
 from .gexceptions import GMixRangeError
 
 
