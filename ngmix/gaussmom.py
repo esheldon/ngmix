@@ -10,9 +10,6 @@ class GaussMom(object):
 
     parameters
     ----------
-    obs: Observation, ObsList or MultiBandObsList
-        The observations to fit. Note that if an ObsList or a MultiBandObsList
-        is passed, the observations are coadded assuming perfect registration.
     fwhm: float
         The FWHM of the Gaussian weight function.
     """
@@ -23,6 +20,12 @@ class GaussMom(object):
     def go(self, obs):
         """
         run moments measurements on all objects
+
+        Parameters
+        ----------
+        obs: Observation, ObsList or MultiBandObsList
+            The observations to fit. Note that if an ObsList or a MultiBandObsList
+            is passed, the observations are coadded assuming perfect registration.
         """
         res = self._measure_moments(obs=obs)
 
