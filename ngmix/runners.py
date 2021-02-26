@@ -5,7 +5,7 @@ from .observation import (
 )
 
 
-class Runner(object):
+class RunnerBase(object):
     """
     Run a fitter and guesser on observations
 
@@ -14,16 +14,31 @@ class Runner(object):
     fitter: ngmix fitter or measurer
         An object to perform measurements, must have a go(obs=obs, guess=guess)
         method.
-    guesser: ngmix guesser object
-        Must be a callable returning an array of parameters
+    guesser: ngmix guesser object, optional
+        Must be a callable returning an array of parameters.
     ntry: int, optional
         Number of times to try if there is failure
     """
-    def __init__(self, fitter, guesser, ntry=1):
+    def __init__(self, fitter, guesser=None, ntry=1):
         self.fitter = fitter
         self.guesser = guesser
         self.ntry = ntry
 
+
+class Runner(RunnerBase):
+    """
+    Run a fitter and guesser on observations
+
+    Parameters
+    ----------
+    fitter: ngmix fitter or measurer
+        An object to perform measurements, must have a go(obs=obs, guess=guess)
+        method.
+    guesser: ngmix guesser object, optional
+        Must be a callable returning an array of parameters.
+    ntry: int, optional
+        Number of times to try if there is failure
+    """
     def go(self, obs):
         """
         Run the fitter on the input observation(s), possibly multiple times
@@ -43,8 +58,14 @@ class Runner(object):
             obs=obs, fitter=self.fitter, guesser=self.guesser, ntry=self.ntry,
         )
 
+    def get_result(self):
+        """
+        get the result dict
+        """
+        return self.fitter.get_result()
 
-class PSFRunner(Runner):
+
+class PSFRunner(RunnerBase):
     """
     Run a fitter on each psf observation.
 
@@ -86,7 +107,7 @@ class PSFRunner(Runner):
         )
 
 
-def run_fitter(obs, fitter, guesser, ntry=1):
+def run_fitter(obs, fitter, guesser=None, ntry=1):
     """
     run a fitter multiple times if needed, with guesses generated from the
     input guesser
@@ -98,7 +119,7 @@ def run_fitter(obs, fitter, guesser, ntry=1):
     fitter: ngmix fitter or measurer
         An object to perform measurements, must have a go(obs=obs, guess=guess)
         method.
-    guesser: ngmix guesser object
+    guesser: ngmix guesser object, optional
         Must be a callable returning an array of parameters
     ntry: int, optional
         Number of times to try if there is failure
@@ -110,20 +131,23 @@ def run_fitter(obs, fitter, guesser, ntry=1):
 
     for i in range(ntry):
 
-        guess = guesser(obs=obs)
-        fitter.go(obs=obs, guess=guess)
+        if guesser is not None:
+            guess = guesser(obs=obs)
+            fitter.go(obs=obs, guess=guess)
+        else:
+            fitter.go(obs=obs)
 
         res = fitter.get_result()
         if res['flags'] == 0:
             break
 
 
-def run_psf_fitter(obs, fitter, guesser, ntry=1, set_result=False):
+def run_psf_fitter(obs, fitter, guesser=None, ntry=1, set_result=False):
     """
-    run a fitter on each observation in the input observation(s).  The
-    fitter will be run multiple times if needed, with guesses generated from
-    the input guesser.  If a psf obs is set that is fit rather than
-    the primary observation.
+    run a fitter on each observation in the input observation(s).  The fitter
+    will be run multiple times if needed, with guesses generated from the input
+    guesser if one is sent.  If a psf obs is set that is fit rather than the
+    primary observation.
 
     Parameters
     ----------
@@ -132,7 +156,7 @@ def run_psf_fitter(obs, fitter, guesser, ntry=1, set_result=False):
     fitter: ngmix fitter or measurer
         An object to perform measurements, must have a go(obs=obs, guess=guess)
         method.
-    guesser: ngmix guesser object
+    guesser: ngmix guesser object, optional
         Must be a callable returning an array of parameters
     ntry: int, optional
         Number of times to try if there is failure
