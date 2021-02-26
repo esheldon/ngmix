@@ -1,5 +1,6 @@
 import pytest
 import numpy as np
+import ngmix
 from ngmix.runners import Runner, PSFRunner
 from ngmix.guessers import (
     GMixPSFGuesser, TFluxGuesser, TPSFFluxGuesser, CoellipPSFGuesser,
@@ -64,8 +65,7 @@ def test_runner_lm_simple_smoke(model, psf_model_type):
     )
     runner.go(obs=data['obs'])
 
-    fitter = runner.fitter
-    res = fitter.get_result()
+    res = runner.get_result()
     assert res['flags'] == 0
 
 
@@ -152,3 +152,28 @@ def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
     imfit = fitter.make_image()
     imtol = 0.001 / pixel_scale**2 + noise*5
     assert np.all(np.abs(imfit - obs.image) < imtol)
+
+
+def test_gaussmom_runner():
+    """
+    Test a Runner using GaussMom
+    """
+
+    rng = np.random.RandomState(8821)
+
+    data = get_model_obs(
+        rng=rng,
+        model='gauss',
+        noise=0.1,
+    )
+
+    obs = data['obs']
+
+    fitter = ngmix.gaussmom.GaussMom(fwhm=1.2)
+
+    runner = Runner(fitter=fitter)
+    runner.go(obs=obs)
+
+    res = runner.get_result()
+    assert res['flags'] == 0
+    assert res['pars'].size == 6

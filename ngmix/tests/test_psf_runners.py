@@ -1,11 +1,12 @@
 import pytest
 import numpy as np
+import ngmix
 from ngmix.runners import PSFRunner
 from ngmix.guessers import GMixPSFGuesser, SimplePSFGuesser, CoellipPSFGuesser
 from ngmix.em import GMixEM
 from ngmix.admom import Admom
 from ngmix.fitting import LMCoellip, LM
-from ._sims import get_ngauss_obs, get_psf_obs
+from ._sims import get_ngauss_obs, get_psf_obs, get_model_obs
 
 
 @pytest.mark.parametrize('guess_from_moms', [False, True])
@@ -344,3 +345,43 @@ def test_admom_psf_runner(with_psf_obs, guess_from_moms):
 
     imtol = 0.001 / obs.jacobian.scale**2
     assert np.abs(imfit - comp_image).max() < imtol
+
+
+@pytest.mark.parametrize('nband', [None, 3])
+@pytest.mark.parametrize('nepoch', [None, 1, 3])
+def test_gaussmom_psf_runner(nband, nepoch):
+    """
+    Test a PSFRunner using GaussMom
+    """
+
+    rng = np.random.RandomState(8821)
+
+    data = get_model_obs(
+        rng=rng,
+        model='gauss',
+        noise=0.1,
+        nband=nband,
+        nepoch=nepoch,
+    )
+
+    if nband is not None:
+        obs = data['mbobs']
+    elif nepoch is not None:
+        obs = data['obslist']
+    else:
+        obs = data['obs']
+
+    fitter = ngmix.gaussmom.GaussMom(fwhm=1.2)
+
+    runner = PSFRunner(fitter=fitter)
+    runner.go(obs=obs, set_result=True)
+
+    if nband is not None:
+        for tobslist in obs:
+            for tobs in tobslist:
+                assert 'result' in tobs.psf.meta
+    elif nepoch is not None:
+        for tobs in obs:
+            assert 'result' in tobs.psf.meta
+    else:
+        assert 'result' in obs.psf.meta
