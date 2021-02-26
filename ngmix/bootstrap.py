@@ -34,7 +34,7 @@ class Bootstrapper(object):
         If set to True, remove observations where the psf fit fails, and
         only fit the remaining.  Default True.
     """
-    def __init__(self, runner, psf_runner, ignore_failed_psf=True):
+    def __init__(self, runner, psf_runner=None, ignore_failed_psf=True):
         self.runner = runner
         self.psf_runner = psf_runner
         self.ignore_failed_psf = ignore_failed_psf
@@ -79,7 +79,7 @@ class Bootstrapper(object):
 def bootstrap(
     obs,
     runner,
-    psf_runner,
+    psf_runner=None,
     ignore_failed_psf=True,
 ):
     """
@@ -92,7 +92,7 @@ def bootstrap(
         Observation, ObsList, or MultiBandObsList
     runner: ngmix Runner
         Must have go(obs=obs) method
-    psf_runner: ngmix PSFRunner
+    psf_runner: ngmix PSFRunner, optional
         Must have go(obs=obs, set_result=) method
     ignore_failed_psf: bool, optional
         If set to True, remove observations where the psf fit fails, and
