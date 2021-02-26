@@ -15,14 +15,12 @@ class GaussMom(object):
         is passed, the observations are coadded assuming perfect registration.
     fwhm: float
         The FWHM of the Gaussian weight function.
-    rng: np.random.RandomState, optional
-        If not None, the RNG to use. Otherwise a new RNG will be made.
     """
-    def __init__(self, *, fwhm):
+    def __init__(self, fwhm):
         self.fwhm = fwhm
         self._set_mompars()
 
-    def go(self, *, obs):
+    def go(self, obs):
         """
         run moments measurements on all objects
         """
@@ -31,19 +29,19 @@ class GaussMom(object):
         if res['flags'] != 0:
             logger.debug("        moments failed: %s" % res['flagstr'])
 
-        self.result = res
+        self._result = res
 
     def get_result(self):
         """
         get the result
         """
 
-        if not hasattr(self, 'result'):
+        if not hasattr(self, '_result'):
             raise RuntimeError("run go() first")
 
-        return self.result
+        return self._result
 
-    def _measure_moments(self, *, obs):
+    def _measure_moments(self, obs):
         """
         measure weighted moments
         """
