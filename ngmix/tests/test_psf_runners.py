@@ -364,12 +364,7 @@ def test_gaussmom_psf_runner(nband, nepoch):
         nepoch=nepoch,
     )
 
-    if nband is not None:
-        obs = data['mbobs']
-    elif nepoch is not None:
-        obs = data['obslist']
-    else:
-        obs = data['obs']
+    obs = data['obs']
 
     fitter = ngmix.gaussmom.GaussMom(fwhm=1.2)
 

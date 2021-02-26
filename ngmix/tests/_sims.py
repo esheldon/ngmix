@@ -173,14 +173,14 @@ def get_model_obs(
     }
 
     if do_mbobs:
-        ret['mbobs'] = mbobs
+        ret['obs'] = mbobs
     else:
         obslist = mbobs[0]
         if not do_obslist:
             obs = obslist[0]
             ret['obs'] = obs
         else:
-            ret['obslist'] = obslist
+            ret['obs'] = obslist
 
     return ret
 

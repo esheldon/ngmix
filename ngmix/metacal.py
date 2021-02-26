@@ -35,11 +35,7 @@ METACAL_REQUIRED_TYPES = METACAL_MINIMAL_TYPES
 logger = logging.getLogger(__name__)
 
 
-def get_all_metacal(obs,
-                    step=0.01,
-                    fixnoise=True,
-                    cheatnoise=None,
-                    **kw):
+def get_all_metacal(obs, step=0.01, fixnoise=True, **kw):
     """
     Get all combinations of metacal images in a dict
 
@@ -88,16 +84,6 @@ def get_all_metacal(obs,
     else:
         logger.debug("    not doing fixnoise")
         odict = _get_all_metacal(obs, step=step, **kw)
-
-        if cheatnoise is not None:
-            logger.debug("    cheatnoise:", cheatnoise)
-            # add the noise *after* the metacal process,
-            # cheating the correlated noise effect.  This is
-            # useful for testing the increase in noise
-            #
-            # only works if the images are all the same size, and
-            # noise is all the same
-            _add_noise_odict(odict, cheatnoise)
 
     return odict
 

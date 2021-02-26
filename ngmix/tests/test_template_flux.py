@@ -24,12 +24,12 @@ def test_template_psf_flux(noise, nband):
     fitter = TemplateFluxFitter(do_psf=True)
 
     if nband is None:
-        fitter.go(obs=data['obslist'])
+        fitter.go(obs=data['obs'])
         res = fitter.get_result()
         assert res['flags'] == 0
         assert (res['flux'] - data['pars'][5]) < NSIG*res['flux_err']
     else:
-        for iband, obslist in enumerate(data['mbobs']):
+        for iband, obslist in enumerate(data['obs']):
             fitter.go(obs=obslist)
             res = fitter.get_result()
             assert res['flags'] == 0

@@ -52,12 +52,7 @@ def test_noprior_guessers_smoke(guesser_type, nband):
     else:
         raise ValueError('bad guesser %s' % guesser_type)
 
-    if nband is None:
-        obs_use = data['obslist']
-    else:
-        obs_use = data['mbobs']
-
-    guess = guesser(obs=obs_use)
+    guess = guesser(obs=data['obs'])
     assert guess.size == npars
 
 
@@ -126,12 +121,7 @@ def test_prior_guessers_smoke(guesser_type, nband):
     else:
         raise ValueError('bad guesser %s' % guesser_type)
 
-    if nband is None:
-        obs_use = data['obslist']
-    else:
-        obs_use = data['mbobs']
-
-    guess = guesser(obs=obs_use)
+    guess = guesser(obs=data['obs'])
     assert guess.size == npars
 
 
