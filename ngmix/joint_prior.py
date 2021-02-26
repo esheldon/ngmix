@@ -89,6 +89,11 @@ class PriorSimpleSep(object):
     def get_prob_scalar(self, pars):
         """
         probability for scalar input (meaning one point)
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
         """
 
         lnp = self.get_lnprob_scalar(pars)
@@ -98,6 +103,11 @@ class PriorSimpleSep(object):
     def get_lnprob_scalar(self, pars):
         """
         log probability for scalar input (meaning one point)
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
         """
 
         lnp = self.cen_prior.get_lnprob_scalar(pars[0], pars[1])
@@ -112,6 +122,13 @@ class PriorSimpleSep(object):
     def fill_fdiff(self, pars, fdiff):
         """
         set sqrt(-2ln(p)) ~ (model-data)/err
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
+        fdiff: array
+            the fdiff array to fill
         """
         index = 0
 
@@ -143,6 +160,11 @@ class PriorSimpleSep(object):
     def get_prob_array(self, pars):
         """
         probability for array input [N,ndims]
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
         """
 
         lnp = self.get_lnprob_array(pars)
@@ -153,6 +175,11 @@ class PriorSimpleSep(object):
     def get_lnprob_array(self, pars):
         """
         log probability for array input [N,ndims]
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
         """
 
         lnp = self.cen_prior.get_lnprob_array(pars[:, 0], pars[:, 1])
@@ -168,6 +195,12 @@ class PriorSimpleSep(object):
     def sample(self, n=None):
         """
         Get random samples
+
+        Parameters
+        ----------
+        n: int, optional
+            Number of samples, default to a single set with size [npars].  If n
+            is sent the result will have shape [n, npars]
         """
 
         if n is None:
@@ -289,6 +322,11 @@ class PriorBDSep(PriorSimpleSep):
     def get_lnprob_scalar(self, pars):
         """
         log probability for scalar input (meaning one point)
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
         """
 
         lnp = self.cen_prior.get_lnprob_scalar(pars[0], pars[1])
@@ -306,6 +344,13 @@ class PriorBDSep(PriorSimpleSep):
         """
         (model-data)/err
         but "data" here is the central value of a prior.
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
+        fdiff: array
+            the fdiff array to fill
         """
         index = 0
 
@@ -339,6 +384,11 @@ class PriorBDSep(PriorSimpleSep):
     def get_lnprob_array(self, pars):
         """
         log probability for array input [N,ndims]
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
         """
 
         lnp = self.cen_prior.get_lnprob_array(pars[:, 0], pars[:, 1])
@@ -356,6 +406,12 @@ class PriorBDSep(PriorSimpleSep):
     def sample(self, n=None):
         """
         Get random samples
+
+        Parameters
+        ----------
+        n: int, optional
+            Number of samples, default to a single set with size [npars].  If n
+            is sent the result will have shape [n, npars]
         """
 
         if n is None:
@@ -475,6 +531,11 @@ class PriorBDFSep(PriorSimpleSep):
     def get_lnprob_scalar(self, pars):
         """
         log probability for scalar input (meaning one point)
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
         """
 
         lnp = self.cen_prior.get_lnprob_scalar(pars[0], pars[1])
@@ -491,6 +552,13 @@ class PriorBDFSep(PriorSimpleSep):
         """
         (model-data)/err
         but "data" here is the central value of a prior.
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
+        fdiff: array
+            the fdiff array to fill
         """
         index = 0
 
@@ -521,6 +589,11 @@ class PriorBDFSep(PriorSimpleSep):
     def get_lnprob_array(self, pars):
         """
         log probability for array input [N,ndims]
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
         """
 
         lnp = self.cen_prior.get_lnprob_array(pars[:, 0], pars[:, 1])
@@ -537,8 +610,13 @@ class PriorBDFSep(PriorSimpleSep):
     def sample(self, n=None):
         """
         Get random samples
-        """
 
+        Parameters
+        ----------
+        n: int, optional
+            Number of samples, default to a single set with size [npars].  If n
+            is sent the result will have shape [n, npars]
+        """
         if n is None:
             is_scalar = True
             n = 1
@@ -622,6 +700,11 @@ class PriorSpergelSep(PriorSimpleSep):
     def get_lnprob_scalar(self, pars):
         """
         log probability for scalar input (meaning one point)
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
         """
 
         lnp = self.cen_prior.get_lnprob_scalar(pars[0], pars[1])
@@ -637,6 +720,13 @@ class PriorSpergelSep(PriorSimpleSep):
     def fill_fdiff(self, pars, fdiff):
         """
         set sqrt(-2ln(p)) ~ (model-data)/err
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
+        fdiff: array
+            the fdiff array to fill
         """
         index = 0
 
@@ -671,6 +761,11 @@ class PriorSpergelSep(PriorSimpleSep):
     def get_lnprob_array(self, pars):
         """
         log probability for array input [N,ndims]
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
         """
 
         lnp = self.cen_prior.get_lnprob_array(pars[:, 0], pars[:, 1])
@@ -687,6 +782,12 @@ class PriorSpergelSep(PriorSimpleSep):
     def sample(self, n=None):
         """
         Get random samples
+
+        Parameters
+        ----------
+        n: int, optional
+            Number of samples, default to a single set with size [npars].  If n
+            is sent the result will have shape [n, npars]
         """
 
         if n is None:
@@ -778,6 +879,11 @@ class PriorCoellipSame(PriorSimpleSep):
     def get_lnprob_scalar(self, pars):
         """
         log probability for scalar input (meaning one point)
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
         """
 
         ngauss = self.ngauss
@@ -797,6 +903,13 @@ class PriorCoellipSame(PriorSimpleSep):
     def fill_fdiff(self, pars, fdiff):
         """
         set sqrt(-2ln(p)) ~ (model-data)/err
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
+        fdiff: array
+            the fdiff array to fill
         """
 
         ngauss = self.ngauss

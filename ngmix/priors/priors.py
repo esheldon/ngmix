@@ -14,7 +14,7 @@ class PriorBase(object):
     """
     Base object for priors.
 
-    parameters
+    Parameters
     ----------
     bounds: 2-tuple of floats or None
         The bounds of the parameter. Default of None means no bounds.
@@ -42,7 +42,7 @@ class PriorBase(object):
 
     def has_bounds(self):
         """
-        returns True if the object has a bounds defined, False otherwise.
+        Returns True if the object has a bounds defined, False otherwise.
         """
         return hasattr(self, "bounds") and self.bounds is not None
 
@@ -51,7 +51,7 @@ class FlatPrior(PriorBase):
     """
     A flat prior between `minval` and `maxval`.
 
-    parameters
+    Parameters
     ----------
     minval: float
         The minimum value of the allowed range.
@@ -69,6 +69,11 @@ class FlatPrior(PriorBase):
     def get_prob_scalar(self, val):
         """
         Returns 1 if the value is in [minval, maxval] or raises a GMixRangeError
+
+        Parameters
+        ----------
+        val: number
+            The location at which to evaluate
         """
         retval = 1.0
         if val < self.minval or val > self.maxval:
@@ -81,6 +86,11 @@ class FlatPrior(PriorBase):
     def get_lnprob_scalar(self, val):
         """
         Returns 0.0 if the value is in [minval, maxval] or raises a GMixRangeError
+
+        Parameters
+        ----------
+        val: number
+            The location at which to evaluate
         """
         retval = 0.0
         if val < self.minval or val > self.maxval:
@@ -93,6 +103,11 @@ class FlatPrior(PriorBase):
     def get_fdiff(self, val):
         """
         Compute sqrt(-2ln(p)) ~ (data - mode)/err for using with LM fitters.
+
+        Parameters
+        ----------
+        val: number
+            The location at which to evaluate
         """
         retval = 0.0
         if val < self.minval or val > self.maxval:
@@ -106,13 +121,13 @@ class FlatPrior(PriorBase):
         """
         Returns samples uniformly on the interval.
 
-        parameters
+        Parameters
         ----------
         nrand: int or None
             The number of samples. If None, a single scalar sample is drawn.
             Default is None.
 
-        returns
+        Returns
         -------
         samples: scalar or array-like
             The samples with shape (`nrand`,). If `nrand` is None, then a
@@ -145,7 +160,7 @@ class TwoSidedErf(PriorBase):
 
     A limitation seems to be the accuracy of the erf implementation.
 
-    parameters
+    Parameters
     ----------
     minval: float
         The minimum value. This is where p(x) = 0.5 at the lower end.
@@ -170,6 +185,11 @@ class TwoSidedErf(PriorBase):
     def get_prob_scalar(self, val):
         """
         get the probability of the point
+
+        Parameters
+        ----------
+        val: number
+            The location at which to evaluate
         """
         from math import erf
 
@@ -181,6 +201,11 @@ class TwoSidedErf(PriorBase):
     def get_lnprob_scalar(self, val):
         """
         get the log probability of the point
+
+        Parameters
+        ----------
+        val: number
+            The location at which to evaluate
         """
 
         p = self.get_prob_scalar(val)
@@ -194,6 +219,11 @@ class TwoSidedErf(PriorBase):
     def get_prob_array(self, vals):
         """
         get the probability of a set of points
+
+        Parameters
+        ----------
+        vals: number
+            The locations at which to evaluate
         """
 
         vals = array(vals, ndmin=1, dtype="f8", copy=False)
@@ -207,6 +237,11 @@ class TwoSidedErf(PriorBase):
     def get_lnprob_array(self, vals):
         """
         get the log probability of a set of points
+
+        Parameters
+        ----------
+        vals: array
+            The locations at which to evaluate
         """
 
         p = self.get_prob_array(vals)
@@ -217,16 +252,29 @@ class TwoSidedErf(PriorBase):
             lnp[w] = numpy.log(p[w])
         return lnp
 
-    def get_fdiff(self, x):
+    def get_fdiff(self, val):
         """
         Compute sqrt(-2ln(p)) ~ (data - mode)/err for using with LM fitters.
+
+        Parameters
+        ----------
+        val: number
+            The location at which to evaluate
         """
-        if isinstance(x, numpy.ndarray):
-            return self._get_fdiff_array(x)
+        if isinstance(val, numpy.ndarray):
+            return self._get_fdiff_array(val)
         else:
-            return self._get_fdiff_scalar(x)
+            return self._get_fdiff_scalar(val)
 
     def _get_fdiff_array(self, vals):
+        """
+        get diff array by evaluating one at a time
+
+        Parameters
+        ----------
+        vals: number
+            The locations at which to evaluate
+        """
         vals = array(vals, ndmin=1, dtype="f8", copy=False)
         fdiff = zeros(vals.size)
 
@@ -236,9 +284,16 @@ class TwoSidedErf(PriorBase):
         return fdiff
 
     def _get_fdiff_scalar(self, val):
-        # get something similar to a (model-data)/err.  Note however that with
-        # the current implementation, the *sign* of the difference is lost in
-        # this case.
+        """
+        get something similar to a (model-data)/err.  Note however that with
+        the current implementation, the *sign* of the difference is lost in
+        this case.
+
+        Parameters
+        ----------
+        val: number
+            The location at which to evaluate
+        """
 
         p = self.get_lnprob_scalar(val)
 
@@ -254,13 +309,13 @@ class TwoSidedErf(PriorBase):
         Note this function is not perfect in that it only goes from
         -5,5 sigma past each side.
 
-        parameters
+        Parameters
         ----------
         nrand: int or None
             The number of samples. If None, a single scalar sample is drawn.
             Default is None.
 
-        returns
+        Returns
         -------
         samples: scalar or array-like
             The samples with shape (`nrand`,). If `nrand` is None, then a
@@ -305,7 +360,7 @@ class Normal(PriorBase):
 
     This class provides an interface consistent with LogNormal.
 
-    parameters
+    Parameters
     ----------
     mean: float
         The mean of the Gaussian.
@@ -332,57 +387,77 @@ class Normal(PriorBase):
         self.s2inv = 1.0 / sigma ** 2
         self.ndim = 1
 
-    def get_lnprob(self, x):
+    def get_lnprob(self, val):
         """
-        Compute -0.5 * ( (x-mean)/sigma )**2.
+        Compute -0.5 * ( (val-mean)/sigma )**2.
+
+        Parameters
+        ----------
+        val: number
+            Location at which to evaluate
         """
-        diff = self.mean - x
+        diff = self.mean - val
         return -0.5 * diff * diff * self.s2inv
 
     get_lnprob_scalar = get_lnprob
     get_lnprob_array = get_lnprob
 
-    def get_prob(self, x):
+    def get_prob(self, val):
         """
-        Compute exp(-0.5 * ( (x-mean)/sigma )**2)
+        Compute exp(-0.5 * ( (val-mean)/sigma )**2)
 
         Note that this function is missing the normalization factor.
+
+        Parameters
+        ----------
+        val: number
+            Location at which to evaluate
         """
-        diff = self.mean - x
+        diff = self.mean - val
         lnp = -0.5 * diff * diff * self.s2inv
         return numpy.exp(lnp)
 
     get_prob_array = get_prob
 
-    def get_prob_scalar(self, x):
+    def get_prob_scalar(self, val):
         """
         Compute exp(-0.5 * ( (x-mean)/sigma )**2).
 
         Note that this function is missing the normalization factor.
+
+        Parameters
+        ----------
+        val: number
+            The location at which to evaluate
         """
         from math import exp
 
-        diff = self.mean - x
+        diff = self.mean - val
         lnp = -0.5 * diff * diff * self.s2inv
         return exp(lnp)
 
-    def get_fdiff(self, x):
+    def get_fdiff(self, val):
         """
         Compute sqrt(-2ln(p)) ~ (data - mode)/err for use with LM fitter.
+
+        Parameters
+        ----------
+        val: number
+            The location at which to evaluate
         """
-        return (x - self.mean) * self.sinv
+        return (val - self.mean) * self.sinv
 
     def sample(self, nrand=None, size=None):
         """
         Draw random samples of the prior.
 
-        parameters
+        Parameters
         ----------
         nrand: int or None
             The number of samples. If None, a single scalar sample is drawn.
             Default is None.
 
-        returns
+        Returns
         -------
         samples: scalar or array-like
             The samples with shape (`nrand`,). If `nrand` is None, then a
@@ -404,7 +479,7 @@ class LMBounds(PriorBase):
     The fdiff is always zero, but the bounds will be sent
     to the minimizer.
 
-    parameters
+    Parameters
     ----------
     minval: float
         The minimum bound.
@@ -431,6 +506,11 @@ class LMBounds(PriorBase):
     def get_fdiff(self, val):
         """
         Compute sqrt(-2ln(p)) ~ (data - mode)/err for use with LM fitter. Always zero.
+
+        Parameters
+        ----------
+        val: number
+            The location at which to evaluate
         """
         return 0.0 * val
 
@@ -438,13 +518,13 @@ class LMBounds(PriorBase):
         """
         Returns samples uniformly on the interval.
 
-        parameters
+        Parameters
         ----------
         nrand: int or None
             The number of samples. If None, a single scalar sample is drawn.
             Default is None.
 
-        returns
+        Returns
         -------
         samples: scalar or array-like
             The samples with shape (`nrand`,). If `nrand` is None, then a
@@ -464,7 +544,7 @@ class Bounded1D(PriorBase):
     """
     Wrap a pdf and limit samples to the input bounds.
 
-    parameters
+    Parameters
     ----------
     pdf: object
         A PDF object with a `sample` method.
@@ -483,6 +563,11 @@ class Bounded1D(PriorBase):
     def set_limits(self, limits):
         """
         set the limits
+
+        Parameters
+        ----------
+        limits: sequence
+            Limits to set
         """
 
         ok = False
@@ -509,13 +594,13 @@ class Bounded1D(PriorBase):
         """
         Draw random samples of the PDF with the bounds.
 
-        parameters
+        Parameters
         ----------
         nrand: int or None
             The number of samples. If None, a single scalar sample is drawn.
             Default is None.
 
-        returns
+        Returns
         -------
         samples: scalar or array-like
             The samples with shape (`nrand`,). If `nrand` is None, then a
@@ -561,7 +646,7 @@ class LogNormal(PriorBase):
     """
     Lognormal distribution
 
-    parameters
+    Parameters
     ----------
     mean: float
         such that <x> in linear space is mean.  This implies the mean in log(x)
@@ -634,65 +719,90 @@ class LogNormal(PriorBase):
 
         self.log_mode = log_mode
 
-    def get_lnprob_scalar(self, x):
+    def get_lnprob_scalar(self, val):
         """
-        Get the log-probability of x.
+        Get the log-probability of val
+
+        Parameters
+        ----------
+        val: number
+            The location at which to evaluate
         """
         if self.shift is not None:
-            x = x - self.shift
+            val = val - self.shift
 
-        if x <= 0:
-            raise GMixRangeError("values of x must be > 0")
+        if val <= 0:
+            raise GMixRangeError("values of val must be > 0")
 
-        logx = numpy.log(x)
-        chi2 = self.logivar * (logx - self.logmean) ** 2
+        logval = numpy.log(val)
+        chi2 = self.logivar * (logval - self.logmean) ** 2
 
         # subtract mode to make max 0.0
-        lnprob = -0.5 * chi2 - logx - self.lnprob_max
+        lnprob = -0.5 * chi2 - logval - self.lnprob_max
 
         return lnprob
 
-    def get_lnprob_array(self, x):
+    def get_lnprob_array(self, vals):
         """
-        Get the log-probability of x.
-        """
-        x = numpy.array(x, dtype="f8", copy=False)
-        if self.shift is not None:
-            x = x - self.shift
+        Get the log-probability of vals.
 
-        (w,) = where(x <= 0)
+        Parameters
+        ----------
+        vals: array
+            The locations at which to evaluate
+        """
+        vals = numpy.array(vals, dtype="f8", copy=False)
+        if self.shift is not None:
+            vals = vals - self.shift
+
+        (w,) = where(vals <= 0)
         if w.size > 0:
-            raise GMixRangeError("values of x must be > 0")
+            raise GMixRangeError("values must be > 0")
 
-        logx = numpy.log(x)
-        chi2 = self.logivar * (logx - self.logmean) ** 2
+        logvals = numpy.log(vals)
+        chi2 = self.logivar * (logvals - self.logmean) ** 2
 
         # subtract mode to make max 0.0
-        lnprob = -0.5 * chi2 - logx - self.lnprob_max
+        lnprob = -0.5 * chi2 - logvals - self.lnprob_max
 
         return lnprob
 
-    def get_prob_scalar(self, x):
+    def get_prob_scalar(self, val):
         """
         Get the probability of x.
+
+        Parameters
+        ----------
+        val: number
+            The location at which to evaluate
         """
 
-        lnprob = self.get_lnprob_scalar(x)
+        lnprob = self.get_lnprob_scalar(val)
         return numpy.exp(lnprob)
 
-    def get_prob_array(self, x):
+    def get_prob_array(self, vals):
         """
-        Get the probability of x.
+        Get the probability of val.
+
+        Parameters
+        ----------
+        vals: number
+            The locations at which to evaluate
         """
 
-        lnp = self.get_lnprob_array(x)
+        lnp = self.get_lnprob_array(vals)
         return numpy.exp(lnp)
 
-    def get_fdiff(self, x):
+    def get_fdiff(self, val):
         """
         Compute sqrt(-2ln(p)) ~ (data - mode)/err for use with LM fitter.
+
+        Parameters
+        ----------
+        val: number
+            The location at which to evaluate
         """
-        lnp = self.get_lnprob_scalar(x)
+        lnp = self.get_lnprob_scalar(val)
         chi2 = -2 * lnp
         if chi2 < 0.0:
             chi2 = 0.0
@@ -703,13 +813,13 @@ class LogNormal(PriorBase):
         """
         Draw random samples from the LogNormal.
 
-        parameters
+        Parameters
         ----------
         nrand: int or None
             The number of samples. If None, a single scalar sample is drawn.
             Default is None.
 
-        returns
+        Returns
         -------
         samples: scalar or array-like
             The samples with shape (`nrand`,). If `nrand` is None, then a
@@ -729,7 +839,7 @@ class LogNormal(PriorBase):
 
         This method is used to help check other methods.
 
-        parameters
+        Parameters
         ----------
         nrand: int or None
             The number of samples. If None, a single scalar sample is drawn.
@@ -737,7 +847,7 @@ class LogNormal(PriorBase):
         maxval: float or None
             The maximum value to allow for draws.
 
-        returns
+        Returns
         -------
         samples: scalar or array-like
             The samples with shape (`nrand`,). If `nrand` is None, then a
@@ -781,6 +891,14 @@ class LogNormal(PriorBase):
         return samples
 
     def _calc_fdiff(self, pars):
+        """
+        calculate fdiff for fitting the parameters of the distribution
+
+        Parameters
+        ----------
+        pars: array
+            parameters at which to evaluate
+        """
         try:
             ln = LogNormal(pars[0], pars[1], rng=self.rng)
             model = ln.get_prob_array(self._fitx) * pars[2]
@@ -794,14 +912,14 @@ class LogNormal(PriorBase):
         """
         Fit to the input x and y.
 
-        parameters
+        Parameters
         ----------
         x: array-like
             The x-values for the fit.
         y: array-like
             The y-values for the fit. Usually p(x).
 
-        returns
+        Returns
         -------
         res: dict
             A dictionary with the best-fit parameters and other information
@@ -832,7 +950,7 @@ class Sinh(PriorBase):
     Currently only supports "fdiff" style usage as a prior,
     e.g. for LM.
 
-    parameters
+    Parameters
     ----------
     mean: float
         The mean value where the value of fdiff is zero.
@@ -853,23 +971,28 @@ class Sinh(PriorBase):
         self.mean = mean
         self.scale = scale
 
-    def get_fdiff(self, x):
+    def get_fdiff(self, val):
         """
         For use with LM fitter - computes sinh((model-data)/width)
+
+        Parameters
+        ----------
+        val: number
+            The location at which to evaluate
         """
-        return numpy.sinh((x - self.mean) / self.scale)
+        return numpy.sinh((val - self.mean) / self.scale)
 
     def sample(self, nrand=None):
         """
         sample around the mean, +/- a scale length
 
-        parameters
+        Parameters
         ----------
         nrand: int or None
             The number of samples. If None, a single scalar sample is drawn.
             Default is None.
 
-        returns
+        Returns
         -------
         samples: scalar or array-like
             The samples with shape (`nrand`,). If `nrand` is None, then a
@@ -895,7 +1018,7 @@ class TruncatedGaussian(PriorBase):
     """
     Truncated gaussian between [minval, maxval].
 
-    parameters
+    Parameters
     ----------
     mean: float
         The mean of the Gaussian.
@@ -928,47 +1051,62 @@ class TruncatedGaussian(PriorBase):
         self.minval = minval
         self.maxval = maxval
 
-    def get_lnprob_scalar(self, x):
+    def get_lnprob_scalar(self, val):
         """
         get the log probability of the point - raises if not in [minval, maxval]
+
+        Parameters
+        ----------
+        val: number
+            The location at which to evaluate
         """
-        if x < self.minval or x > self.maxval:
+        if val < self.minval or val > self.maxval:
             raise GMixRangeError("value out of range")
-        diff = x - self.mean
+        diff = val - self.mean
         return -0.5 * diff * diff * self.ivar
 
-    def get_lnprob_array(self, x):
+    def get_lnprob_array(self, val):
         """
-        get the log probability of an array - raises if not in [minval, maxval]
+        get the log probability of an array - raises if not in [minval, maval]
+
+        Parameters
+        ----------
+        val: array
+            The locations at which to evaluate
         """
-        lnp = zeros(x.size)
+        lnp = zeros(val.size)
         lnp -= numpy.inf
-        (w,) = where((x > self.minval) & (x < self.maxval))
+        (w,) = where((val > self.minval) & (val < self.maxval))
         if w.size > 0:
-            diff = x[w] - self.mean
+            diff = val[w] - self.mean
             lnp[w] = -0.5 * diff * diff * self.ivar
 
         return lnp
 
-    def get_fdiff(self, x):
+    def get_fdiff(self, val):
         """
         Compute sqrt(-2ln(p)) ~ (data - mode)/err for use with LM fitter.
+
+        Parameters
+        ----------
+        val: number
+            The location at which to evaluate
         """
-        if x < self.minval or x > self.maxval:
+        if val < self.minval or val > self.maxval:
             raise GMixRangeError("value out of range")
-        return (x - self.mean) * self.sinv
+        return (val - self.mean) * self.sinv
 
     def sample(self, nrand=None):
         """
         Sample from the truncated Gaussian.
 
-        parameters
+        Parameters
         ----------
         nrand: int or None
             The number of samples. If None, a single scalar sample is drawn.
             Default is None.
 
-        returns
+        Returns
         -------
         samples: scalar or array-like
             The samples with shape (`nrand`,). If `nrand` is None, then a
