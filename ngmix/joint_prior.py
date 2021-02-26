@@ -513,40 +513,6 @@ class PriorBDFSep(PriorSimpleSep):
 
         return index
 
-    def fill_fdiff_old(self, pars, fdiff, **keys):
-        """
-        set sqrt(-2ln(p)) ~ (model-data)/err
-        """
-        index = 0
-
-        # fdiff[index] = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
-
-        lnp1, lnp2 = self.cen_prior.get_lnprob_scalar_sep(pars[0], pars[1])
-
-        fdiff[index] = lnp1
-        index += 1
-        fdiff[index] = lnp2
-        index += 1
-
-        fdiff[index] = self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
-        index += 1
-        fdiff[index] = self.T_prior.get_lnprob_scalar(pars[4], **keys)
-        index += 1
-
-        fdiff[index] = self.fracdev_prior.get_lnprob_scalar(pars[5], **keys)
-        index += 1
-
-        for i in range(self.nband):
-            F_prior = self.F_priors[i]
-            fdiff[index] = F_prior.get_lnprob_scalar(pars[6 + i], **keys)
-            index += 1
-
-        chi2 = -2 * fdiff[0:index]
-        chi2.clip(min=0.0, max=None, out=chi2)
-        fdiff[0:index] = sqrt(chi2)
-
-        return index
-
     def get_lnprob_array(self, pars, **keys):
         """
         log probability for array input [N,ndims]

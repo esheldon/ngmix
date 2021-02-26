@@ -4,12 +4,9 @@
 """
 import numpy as np
 from numpy import diag, sqrt
-from numpy import linalg
-from numpy.linalg import LinAlgError
 from pprint import pformat
 import logging
 
-from .util import print_pars
 from .leastsqbound import run_leastsq
 from . import gmix
 from .gmix import GMixList, MultiBandGMixList
@@ -25,7 +22,6 @@ from .fitting_nb import fill_fdiff
 from .flags import (
     ZERO_DOF,
     DIV_ZERO,
-    EIG_NOTFINITE,
     BAD_VAR,
 )
 from .defaults import PDEF, CDEF, LOWVAL, BIGVAL
@@ -158,38 +154,6 @@ class FitterBase(object):
         get pars for the specified band
         """
         return get_band_pars(model=self.model_name, pars=pars, band=band)
-
-    def get_effective_npix_old(self):
-        """
-        Because of the weight map, each pixel gets a different weight in the
-        chi^2.  This changes the effective degrees of freedom.  The extreme
-        case is when the weight is zero; these pixels are essentially not used.
-
-        We replace the number of pixels with
-
-            eff_npix = sum(weights)maxweight
-        """
-        raise RuntimeError("this is bogus")
-        if not hasattr(self, "eff_npix"):
-            wtmax = 0.0
-            wtsum = 0.0
-
-            for obs_list in self.obs:
-                for obs in obs_list:
-                    wt = obs.weight
-
-                    this_wtmax = wt.max()
-                    if this_wtmax > wtmax:
-                        wtmax = this_wtmax
-
-                    wtsum += wt.sum()
-
-            self.eff_npix = wtsum / wtmax
-
-        if self.eff_npix <= 0:
-            self.eff_npix = 1.0e-6
-
-        return self.eff_npix
 
     def calc_lnprob(self, pars, more=False):
         """
@@ -433,122 +397,6 @@ class FitterBase(object):
 
             plist.append(band_list)
         return plist
-
-    def calc_cov(self, h, m, diag_on_fail=True):
-        """
-        Run get_cov() to calculate the covariance matrix at the best-fit point.
-        If all goes well, add 'pars_cov', 'pars_err', and 'g_cov' to the result
-        array
-
-        Note in get_cov, if the Hessian is singular, a diagonal cov matrix is
-        attempted to be inverted. If that finally fails LinAlgError is raised.
-        In that case we catch it and set a flag EIG_NOTFINITE and the cov is
-        not added to the result dict
-
-        Also if there are negative diagonal elements of the cov matrix, the
-        EIG_NOTFINITE flag is set and the cov is not added to the result dict
-        """
-
-        res = self.get_result()
-
-        bad = True
-
-        try:
-            cov = self.get_cov(
-                res["pars"], h=h, m=m, diag_on_fail=diag_on_fail,
-            )
-
-            cdiag = diag(cov)
-
-            (w,) = np.where(cdiag <= 0)
-            if w.size == 0:
-
-                err = sqrt(cdiag)
-                (w,) = np.where(np.isfinite(err))
-                if w.size != err.size:
-                    print_pars(err, front="diagonals not finite:", logger=LOGGER)
-                else:
-                    # everything looks OK
-                    bad = False
-            else:
-                print_pars(cdiag, front="    diagonals negative:", logger=LOGGER)
-
-        except LinAlgError:
-            LOGGER.debug("caught LinAlgError")
-
-        if bad:
-            res["flags"] |= EIG_NOTFINITE
-        else:
-            res["pars_cov"] = cov
-            res["pars_err"] = err
-
-            if len(err) >= 6:
-                res["g_cov"] = cov[2:2+2, 2:2+2]
-
-    def get_cov(self, pars, h, m, diag_on_fail=True):
-        """
-        calculate the covariance matrix at the specified point
-
-        This method understands the natural bounds on ellipticity.
-        If the ellipticity is larger than 1-m*h then it is scaled
-        back, perserving the angle.
-
-        If the Hessian is singular, an attempt is made to invert
-        a diagonal version. If that fails, LinAlgError is raised.
-
-        Parameters
-        ----------
-        pars: array
-            Array of parameters at which to evaluate the cov matrix
-        h: step size, optional
-            Step size for finite differences, default 1.0e-3
-        m: scalar
-            The max allowed ellipticity is 1-m*h.
-            Note the derivatives require evaluations at +/- h,
-            so m should be greater than 1.
-
-        Raises
-        ------
-        LinAlgError:
-            If the hessian is singular a diagonal version is tried
-            and if that fails finally a LinAlgError is raised.
-        """
-        import covmatrix
-
-        # get a copy as an array
-        pars = np.array(pars)
-
-        g1 = pars[2]
-        g2 = pars[3]
-
-        g = sqrt(g1 ** 2 + g2 ** 2)
-
-        maxg = 1.0 - m * h
-
-        if g > maxg:
-            fac = maxg / g
-            g1 *= fac
-            g2 *= fac
-            pars[2] = g1
-            pars[3] = g2
-
-        # we could call covmatrix.get_cov directly but we want to fall back
-        # to a diagonal hessian if it is singular
-
-        hess = covmatrix.calc_hess(self.calc_lnprob, pars, h)
-
-        try:
-            cov = -linalg.inv(hess)
-        except LinAlgError:
-            # pull out a diagonal version of the hessian
-            # this might still fail
-
-            if diag_on_fail:
-                hdiag = diag(diag(hess))
-                cov = -linalg.inv(hdiag)
-            else:
-                raise
-        return cov
 
 
 class TemplateFluxFitter(FitterBase):
