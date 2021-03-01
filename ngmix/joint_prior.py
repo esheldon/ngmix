@@ -241,6 +241,34 @@ class PriorSimpleSep(object):
         return rep
 
 
+class PriorGalsimSimpleSep(PriorSimpleSep):
+    """
+    Separate priors on each parameter.  Wraps the T-based
+    prior for ngmix models to provide a clear interface for
+    r50
+
+    Parameters
+    ----------
+    cen_prior:
+        The center prior
+    g_prior:
+        The prior on g (g1,g2).
+    r50_prior:
+        Prior on T or some size parameter
+    F_prior:
+        Prior on Flux.  Can be a list for a multi-band prior.
+    """
+
+    def __init__(self, cen_prior, g_prior, r50_prior, F_prior):
+        # re-use the name
+        super().__init__(
+            cen_prior=cen_prior,
+            g_prior=g_prior,
+            T_prior=r50_prior,
+            F_prior=F_prior,
+        )
+
+
 class PriorBDSep(PriorSimpleSep):
     """
     Separate priors on each parameter
