@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 EM_RANGE_ERROR = 2 ** 0
 EM_MAXITER = 2 ** 1
 
+DEFAULT_TOL = 1.0e-5
+
 
 def fit_em(obs, guess, sky=None, fixcen=False, fluxonly=False, **kws):
     """
@@ -152,7 +154,7 @@ class GMixEM(object):
     def __init__(self,
                  miniter=40,
                  maxiter=500,
-                 tol=0.001,
+                 tol=DEFAULT_TOL,
                  vary_sky=False):
 
         self.miniter = miniter
@@ -419,7 +421,7 @@ class GMixEMFluxOnly(GMixEMFixCen):
                  obs,
                  miniter=20,
                  maxiter=500,
-                 tol=0.001,
+                 tol=DEFAULT_TOL,
                  vary_sky=False):
         """
         over-riding because we want a different default miniter
