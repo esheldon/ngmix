@@ -398,8 +398,8 @@ class GalsimLMSpergel(GalsimLM):
     Fit the spergel profile to the input observations
     """
 
-    def __init__(self, obs, **keys):
-        super().__init__(obs, "spergel", **keys)
+    def __init__(self, prior=None, fit_pars=None):
+        super().__init__(model="spergel", fit_pars=fit_pars)
 
     def _set_model_class(self):
         import galsim
@@ -453,8 +453,8 @@ class GalsimLMMoffat(GalsimLM):
     Fit the moffat profile with free beta to the input observations
     """
 
-    def __init__(self, obs, **keys):
-        super().__init__(obs, "moffat", **keys)
+    def __init__(self, prior=None, fit_pars=None):
+        super().__init__(model="moffat", fit_pars=fit_pars)
 
     def _set_model_class(self):
         import galsim
@@ -504,9 +504,8 @@ class GalsimLMMoffat(GalsimLM):
 
 
 class GalsimTemplateFluxFitter(TemplateFluxFitter):
-    def __init__(self, obs,
+    def __init__(self,
                  model=None,
-                 psf_models=None,
                  draw_method='auto',
                  interp=observation.DEFAULT_XINTERP,
                  simulate_err=False,
@@ -519,9 +518,6 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
         model: galsim model, optional
             A Galsim model, e.g. Exponential.  If not sent,
             a psf flux is measured
-        psf_models: galsim model or list thereof, optional
-            If not sent, the psf images from the observations
-            are used.
 
         interp: string
             type of interpolation when using the PSF image
@@ -538,7 +534,6 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
         """
 
         self.model = model
-        self.psf_models = psf_models
 
         if self.model is not None:
             self.model = self.model.withFlux(1.0)
@@ -552,15 +547,8 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
                 rng = numpy.random.RandomState()
             self.rng = rng
 
-        self._set_obs(obs)
-        self._set_psf_models()
-
         self.model_name = "template"
         self.npars = 1
-
-        self._set_totpix()
-
-        self._set_template_images()
 
     def _get_model(self, iobs, flux=None):
         """
@@ -575,18 +563,52 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
 
         return model
 
-    def _set_psf_models(self):
-        if self.psf_models is not None:
-            if len(self.psf_models) != len(self.obs):
-                raise ValueError(
-                    "psf models must be same " "size as observations "
-                )
+    def _do_draw(self, obj, ncol, nrow, jac):
+        wcs = jac.get_galsim_wcs()
 
-            self.psf_models = [p.withFlux(1.0) for p in self.psf_models]
+        # note reverse for galsim
+        canonical_center = (numpy.array((ncol, nrow)) - 1.0) / 2.0
+        jrow, jcol = jac.get_cen()
+        offset = (jcol, jrow) - canonical_center
+        try:
+            gim = obj.drawImage(
+                nx=ncol,
+                ny=nrow,
+                wcs=wcs,
+                offset=offset,
+                method=self.draw_method,
+            )
+        except RuntimeError as err:
+            # argh another generic exception
+            raise GMixRangeError(str(err))
+
+        return gim
+
+    def _set_obs(self, obs_in):
+        """
+        Input should be an Observation, ObsList
+        """
+
+        if isinstance(obs_in, Observation):
+            obs_list = ObsList()
+            obs_list.append(obs_in)
+
+            if self.psf_models is not None:
+                if not isinstance(self.psf_models, (list, tuple)):
+                    self.psf_models = [self.psf_models]
+
+        elif isinstance(obs_in, ObsList):
+            obs_list = obs_in
+
         else:
-            self._set_psf_models_from_images()
+            raise ValueError("obs should be Observation or ObsList")
 
-    def _set_psf_models_from_images(self):
+        self.obs = obs_list
+        self._set_totpix()
+        self._set_psf_models()
+        self._set_template_images()
+
+    def _set_psf_models(self):
         """
         we use the psfs stored in the observations as
         the psf model
@@ -641,48 +663,6 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
             image_list.append(gim.array)
 
         self.template_list = image_list
-
-    def _do_draw(self, obj, ncol, nrow, jac):
-        wcs = jac.get_galsim_wcs()
-
-        # note reverse for galsim
-        canonical_center = (numpy.array((ncol, nrow)) - 1.0) / 2.0
-        jrow, jcol = jac.get_cen()
-        offset = (jcol, jrow) - canonical_center
-        try:
-            gim = obj.drawImage(
-                nx=ncol,
-                ny=nrow,
-                wcs=wcs,
-                offset=offset,
-                method=self.draw_method,
-            )
-        except RuntimeError as err:
-            # argh another generic exception
-            raise GMixRangeError(str(err))
-
-        return gim
-
-    def _set_obs(self, obs_in):
-        """
-        Input should be an Observation, ObsList
-        """
-
-        if isinstance(obs_in, Observation):
-            obs_list = ObsList()
-            obs_list.append(obs_in)
-
-            if self.psf_models is not None:
-                if not isinstance(self.psf_models, (list, tuple)):
-                    self.psf_models = [self.psf_models]
-
-        elif isinstance(obs_in, ObsList):
-            obs_list = obs_in
-
-        else:
-            raise ValueError("obs should be Observation or ObsList")
-
-        self.obs = obs_list
 
 
 def get_galsim_npars(model, nband):
