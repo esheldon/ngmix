@@ -53,7 +53,6 @@ def test_template_psf_flux_galsim(noise, nband):
 
     fitter = GalsimTemplateFluxFitter()
 
-
     if nband is None:
         fitter.go(obs=data['obs'])
         scale = data['obs'][0].jacobian.scale
