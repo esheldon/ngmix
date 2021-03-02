@@ -43,7 +43,8 @@ jobs:
             fitsio \
             sep
 
-          pip install git+https://github.com/esheldon/metadetect.git \
+          # using ngmix2 branch for now
+          pip install git+https://github.com/esheldon/metadetect.git@ngmix2 \
             --force-reinstall --no-deps --no-cache-dir
 
           python -m pip install -e .
