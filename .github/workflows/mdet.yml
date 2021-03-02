@@ -52,7 +52,8 @@ jobs:
       - name: test
         shell: bash -l {0}
         run: |
-          pip install git+https://github.com/esheldon/ngmix.git@master
+          # testing on ngmix2
+          pip install git+https://github.com/esheldon/ngmix.git@api-proposal
           pushd mdet_tests
           python test_mdet_regression.py master
           popd
