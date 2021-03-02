@@ -42,7 +42,7 @@ jobs:
             meds \
             fitsio \
             sep \
-            sxdes
+            des-sxdes
 
           # using ngmix2 branch for now
           pip install git+https://github.com/esheldon/metadetect.git@ngmix2 \
