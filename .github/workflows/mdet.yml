@@ -41,11 +41,9 @@ jobs:
             pytest-cov \
             meds \
             fitsio \
-            sep \
-            des-sxdes
+            sep
 
-          # using ngmix2 branch for now
-          pip install git+https://github.com/esheldon/metadetect.git@ngmix2 \
+          pip install git+https://github.com/esheldon/metadetect.git \
             --force-reinstall --no-deps --no-cache-dir
 
           python -m pip install -e .
@@ -53,8 +51,7 @@ jobs:
       - name: test
         shell: bash -l {0}
         run: |
-          # testing on ngmix2
-          pip install git+https://github.com/esheldon/ngmix.git@api-proposal
+          pip install git+https://github.com/esheldon/ngmix.git@master
           pushd mdet_tests
           python test_mdet_regression.py master
           popd
