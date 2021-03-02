@@ -48,14 +48,16 @@ from . import simplex
 
 from . import galsimfit
 
+from . import runners
 from . import bootstrap
+from . import guessers
+
 from . import em
 from . import admom
 from . import gaussmom
 from . import observation
 from .observation import Observation, ObsList, MultiBandObsList
 
-from . import guessers
 from . import metacal
 from . import metacal_bootstrap
 from . import simobs
