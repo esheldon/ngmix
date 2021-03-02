@@ -4,6 +4,9 @@ from .observation import Observation, ObsList, MultiBandObsList
 from .gmix import GMix
 
 from copy import deepcopy
+import logging
+
+LOGGER = logging.getLogger(__name__)
 
 
 def simulate_obs(
@@ -188,7 +191,9 @@ def _simulate_obs(
     weight = obs.weight.copy()
 
     if noise_factor is not None:
-        print("    Modding weight with noise factor:", noise_factor)
+        LOGGER.debug(
+            "Modding weight with noise factor: %s" % noise_factor
+        )
         weight *= 1.0 / noise_factor ** 2
 
     new_obs = Observation(
@@ -228,7 +233,6 @@ def _get_noisy_image(obs, sim_image, rng, add_all=True, noise_factor=None,
     # correct noise
 
     if hasattr(obs, "weight_raw") and use_raw_weight:
-        # print("        using weight raw for simobs noise")
         weight = obs.weight_raw
     else:
         weight = obs.weight
@@ -260,7 +264,6 @@ def get_noise_image(weight, rng, add_all=True, noise_factor=None):
         err[w] = sqrt(1.0 / weight[w])
 
         if add_all and (w[0].size != weight.size):
-            # print("adding noise to all")
             # there were some zero weight pixels, and we
             # want to add noise there anyway
             median_err = numpy.median(err[w])
@@ -269,11 +272,11 @@ def get_noise_image(weight, rng, add_all=True, noise_factor=None):
             err[wzero] = median_err
 
         if noise_factor is not None:
-            print("    Adding noise factor:", noise_factor)
+            LOGGER.debug("Adding noise factor: %s" % noise_factor)
             err *= noise_factor
 
     else:
-        print("    All weight is zero!  Setting noise to", BIGNOISE)
+        LOGGER.debug("All weight is zero!  Setting noise to %s" % BIGNOISE)
         err[:, :] = BIGNOISE
 
     noise_image *= err
