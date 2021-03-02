@@ -41,6 +41,7 @@ jobs:
             pytest-cov \
             meds \
             fitsio \
+            des-sxdes \
             sep
 
           pip install git+https://github.com/esheldon/metadetect.git \
