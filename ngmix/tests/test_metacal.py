@@ -56,15 +56,17 @@ def _get_obs(rng, set_noise_image=False):
     return obs
 
 
-def test_metacal_smoke():
+@pytest.mark.parametrize('psf', [None, 'gauss', 'fitgauss', 'galsim_obj'])
+def test_metacal_smoke(psf):
     rng = np.random.RandomState(seed=100)
 
     obs = _get_obs(rng)
 
-    mpars = {
-        'psf': 'fitgauss',
-    }
-    ngmix.metacal.get_all_metacal(obs, **mpars)
+    if psf == 'galsim_obj':
+        psf = galsim.Gaussian(fwhm=0.9)
+
+    mpars = {'psf': psf}
+    ngmix.metacal.get_all_metacal(obs, rng=rng, **mpars)
 
 
 @pytest.mark.parametrize('fixnoise', [True, False])
@@ -77,7 +79,7 @@ def test_metacal_fixnoise(fixnoise):
         'psf': 'fitgauss',
         'fixnoise': fixnoise,
     }
-    mdict = ngmix.metacal.get_all_metacal(obs, **mpars)
+    mdict = ngmix.metacal.get_all_metacal(obs, rng=rng, **mpars)
 
     for key, mobs in mdict.items():
         if fixnoise:
@@ -97,7 +99,7 @@ def test_metacal_fixnoise_noise_image():
         'psf': 'fitgauss',
         'use_noise_image': True,
     }
-    mdict = ngmix.metacal.get_all_metacal(obs, **mpars)
+    mdict = ngmix.metacal.get_all_metacal(obs, rng=rng, **mpars)
 
     for key, mobs in mdict.items():
         assert mobs.weight[0, 0] == obs.weight[0, 0]/2

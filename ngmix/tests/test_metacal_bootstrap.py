@@ -93,13 +93,17 @@ def test_metacal_bootstrap_max_smoke(noise, use_bootstrapper, nband, nepoch):
     mcal_kws = {'psf': 'gauss'}
     if use_bootstrapper:
         boot = MetacalBootstrapper(
-            runner=runner, psf_runner=psf_runner, **mcal_kws,
+            runner=runner, psf_runner=psf_runner,
+            rng=rng,
+            **mcal_kws,
         )
         boot.go(obs)
         resdict = boot.get_result()
     else:
         resdict = metacal_bootstrap(
-            obs=obs, runner=runner, psf_runner=psf_runner, **mcal_kws,
+            obs=obs, runner=runner, psf_runner=psf_runner,
+            rng=rng,
+            **mcal_kws,
         )
 
     for key in ['noshear', '1p', '1m', '2p', '2m']:
@@ -133,13 +137,17 @@ def test_metacal_bootstrap_gaussmom_smoke(noise, use_bootstrapper):
     mcal_kws = {'psf': 'gauss'}
     if use_bootstrapper:
         boot = MetacalBootstrapper(
-            runner=runner, psf_runner=psf_runner, **mcal_kws,
+            runner=runner, psf_runner=psf_runner,
+            rng=rng,
+            **mcal_kws,
         )
         boot.go(obs)
         resdict = boot.get_result()
     else:
         resdict = metacal_bootstrap(
-            obs=obs, runner=runner, psf_runner=psf_runner, **mcal_kws,
+            obs=obs, runner=runner, psf_runner=psf_runner,
+            rng=rng,
+            **mcal_kws,
         )
 
     for key in ['noshear', '1p', '1m', '2p', '2m']:

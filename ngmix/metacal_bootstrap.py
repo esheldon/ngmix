@@ -21,11 +21,13 @@ class MetacalBootstrapper(object):
         Keywords to send to get_all_metacal
     """
     def __init__(self, runner, psf_runner, ignore_failed_psf=True,
+                 rng=None,
                  **metacal_kws):
         self.runner = runner
         self.psf_runner = psf_runner
         self.ignore_failed_psf = ignore_failed_psf
         self.metacal_kws = metacal_kws
+        self.rng = rng
 
     def go(self, obs):
         """
@@ -41,6 +43,7 @@ class MetacalBootstrapper(object):
             runner=self.runner,
             psf_runner=self.psf_runner,
             ignore_failed_psf=self.ignore_failed_psf,
+            rng=self.rng,
             **self.metacal_kws
         )
 
@@ -73,6 +76,7 @@ def metacal_bootstrap(
     runner,
     psf_runner=None,
     ignore_failed_psf=True,
+    rng=None,
     **metacal_kws
 ):
     """
@@ -101,7 +105,7 @@ def metacal_bootstrap(
     for successful fits
     """
 
-    obsdict = get_all_metacal(obs=obs, **metacal_kws)
+    obsdict = get_all_metacal(obs=obs, rng=rng, **metacal_kws)
 
     resdict = {}
 

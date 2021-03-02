@@ -31,10 +31,22 @@ METACAL_MINIMAL_TYPES = [
 # for backward compatibility
 METACAL_REQUIRED_TYPES = METACAL_MINIMAL_TYPES
 
+DEFAULT_STEP = 0.01
+
 logger = logging.getLogger(__name__)
 
 
-def get_all_metacal(obs, step=0.01, fixnoise=True, **kw):
+def get_all_metacal(
+    obs,
+    step=DEFAULT_STEP,
+    fixnoise=True,
+    rng=None,
+    use_noise_image=False,
+    psf=None,
+    symmetrize_psf=False,
+    symmetrize_dilation=None,
+    types=None,
+):
     """
     Get all combinations of metacal images in a dict
 
@@ -44,7 +56,18 @@ def get_all_metacal(obs, step=0.01, fixnoise=True, **kw):
         The values in the dict correspond to these
     step: float, optional
         The shear step value to use for metacal.  Default 0.01
-    psf: string, optional
+    fixnoise: bool, optional
+        If set to True, add a compensating noise field to cancel the effect of
+        the sheared, correlated noise component.  Default True
+    rng: np.random.RandomState
+        A random number generator; this is required if fixnoise is True and
+        use_noise_image is False.  It is also required when psf= is sent, in
+        order to add a small amount of noise to the rendered image of the
+        psf.
+    use_noise_image: bool, optional
+        If set to True, use the .noise attribute of the observation
+        for fixing the noise when fixnoise=True.
+    psf: string or galsim object, optional
         PSF to use for metacal. Default is a dilated version
         of the original psf, but you can also set psf to
 
@@ -52,7 +75,14 @@ def get_all_metacal(obs, step=0.01, fixnoise=True, **kw):
                      the original and round.
             'fitgauss': fit a gaussian to the PSF and make
                         use round, dilated version for reconvolution
-
+            galsim object: any arbitrary galsim object
+    symmetrize_psf: bool, optional
+        Perform symmetrization of the image.  This only works well
+        under certain conditionns, for example perfectly centered psfs.
+        It is not a good general solution.
+    symmetrize_dilation: float, optional
+        Dilate by this amount rather than based on the ellipticity
+        of the psf
     types: list, optional
         If psf='gauss' or 'fitgauss', then the default set is the minimal
         set ['noshear','1p','1m','2p','2m']
@@ -60,12 +90,6 @@ def get_all_metacal(obs, step=0.01, fixnoise=True, **kw):
         Otherwise, the default is the full possible set listed in
         ['noshear','1p','1m','2p','2m',
          '1p_psf','1m_psf','2p_psf','2m_psf']
-
-    fixnoise: bool
-        If set to True, add a compensating noise field to cancel the correlated
-        noise component.  Default True
-    **kw:
-        other keywords for metacal and simobs.
 
     returns
     -------
@@ -79,15 +103,36 @@ def get_all_metacal(obs, step=0.01, fixnoise=True, **kw):
     """
 
     if fixnoise:
-        odict = _get_all_metacal_fixnoise(obs, step=step, **kw)
+        odict = _get_all_metacal_fixnoise(
+            obs, step=step, rng=rng,
+            use_noise_image=use_noise_image,
+            psf=psf,
+            symmetrize_psf=symmetrize_psf,
+            symmetrize_dilation=symmetrize_dilation,
+            types=types,
+        )
     else:
         logger.debug("    not doing fixnoise")
-        odict = _get_all_metacal(obs, step=step, **kw)
+        odict = _get_all_metacal(
+            obs, step=step, rng=rng,
+            psf=psf,
+            symmetrize_psf=symmetrize_psf,
+            symmetrize_dilation=symmetrize_dilation,
+            types=types,
+        )
 
     return odict
 
 
-def _get_all_metacal(obs, step=0.01, **kw):
+def _get_all_metacal(
+    obs,
+    step=DEFAULT_STEP,
+    rng=None,
+    psf=None,
+    symmetrize_psf=False,
+    symmetrize_dilation=None,
+    types=None,
+):
     """
     internal routine
 
@@ -95,28 +140,43 @@ def _get_all_metacal(obs, step=0.01, **kw):
     """
     if isinstance(obs, Observation):
 
-        psf = kw.get('psf', None)
         if psf is not None:
 
             if psf == 'gauss':
                 # we default to only shear terms, not psf shear terms
-                kw['types'] = kw.get('types', METACAL_MINIMAL_TYPES)
-                m = MetacalGaussPSF(obs, **kw)
+                types = METACAL_MINIMAL_TYPES
+                m = MetacalGaussPSF(obs=obs, rng=rng)
             elif psf == 'fitgauss':
                 # we default to only shear terms, not psf shear terms
-                kw['types'] = kw.get('types', METACAL_MINIMAL_TYPES)
-                m = MetacalFitGaussPSF(obs, **kw)
+                types = METACAL_MINIMAL_TYPES
+                m = MetacalFitGaussPSF(obs=obs, rng=rng)
             else:
-                psf = kw.pop('psf')
-                m = MetacalAnalyticPSF(obs, psf, **kw)
+                m = MetacalAnalyticPSF(obs=obs, psf=psf, rng=rng)
         else:
-            m = Metacal(obs, **kw)
+            m = Metacal(
+                obs,
+                symmetrize_psf=symmetrize_psf,
+                symmetrize_dilation=symmetrize_dilation,
+            )
 
-        odict = m.get_all(step, **kw)
+        odict = m.get_all(step=step, types=types)
+
     elif isinstance(obs, MultiBandObsList):
-        odict = _make_metacal_mb_obs_list_dict(obs, step, **kw)
+        odict = _make_metacal_mb_obs_list_dict(
+            mb_obs_list=obs, step=step, rng=rng,
+            psf=psf,
+            symmetrize_psf=symmetrize_psf,
+            symmetrize_dilation=symmetrize_dilation,
+            types=types,
+        )
     elif isinstance(obs, ObsList):
-        odict = _make_metacal_obs_list_dict(obs, step, **kw)
+        odict = _make_metacal_obs_list_dict(
+            obs, step, rng=rng,
+            psf=psf,
+            symmetrize_psf=symmetrize_psf,
+            symmetrize_dilation=symmetrize_dilation,
+            types=types,
+        )
     else:
         raise ValueError("obs must be Observation, ObsList, "
                          "or MultiBandObsList")
@@ -187,25 +247,45 @@ def _doadd_single_obs(obs, nobs):
             obs.weight[wpos] = 1.0/tvar[wpos]
 
 
-def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
+def _get_all_metacal_fixnoise(
+    obs,
+    step=DEFAULT_STEP,
+    rng=None,
+    use_noise_image=False,
+    psf=None,
+    symmetrize_psf=False,
+    symmetrize_dilation=None,
+    types=None,
+):
     """
     internal routine
     Add a sheared noise field to cancel the correlated noise
     """
 
     # Using None for the model means we get just noise
-    use_noise_image = kw.get('use_noise_image', False)
     if use_noise_image:
         noise_obs = _replace_image_with_noise(obs)
         logger.debug("    Doing fixnoise with input noise image")
     else:
-        noise_obs = simobs.simulate_obs(None, obs, **kw)
+        noise_obs = simobs.simulate_obs(gmix=None, obs=obs, rng=rng)
 
     # rotate by 90
     _rotate_obs_image_square(noise_obs, k=1)
 
-    obsdict = _get_all_metacal(obs, step=step, **kw)
-    noise_obsdict = _get_all_metacal(noise_obs, step=step, **kw)
+    obsdict = _get_all_metacal(
+        obs, step=step, rng=rng,
+        psf=psf,
+        symmetrize_psf=symmetrize_psf,
+        symmetrize_dilation=symmetrize_dilation,
+        types=types,
+    )
+    noise_obsdict = _get_all_metacal(
+        noise_obs, step=step, rng=rng,
+        psf=psf,
+        symmetrize_psf=symmetrize_psf,
+        symmetrize_dilation=symmetrize_dilation,
+        types=types,
+    )
 
     for type in obsdict:
 
@@ -281,14 +361,22 @@ class Metacal(object):
     Rpsf_obs2p = mc.get_obs_psfshear(sh2p)
     """
 
-    def __init__(self, obs, **kw):
+    def __init__(self, obs, symmetrize_psf=False, symmetrize_dilation=None):
 
         self.obs = obs
 
-        self._setup(**kw)
+        if not obs.has_psf():
+            raise ValueError("observation must have a psf observation set")
+
+        # if None, we will calculate it from the PSF ellipticity
+        self.symmetrize_dilation = symmetrize_dilation
+        self.symmetrize_psf = symmetrize_psf
+
+        self._set_pixel()
+        self._set_interp()
         self._set_data()
 
-    def get_all(self, step=0.01, types=None, **kw):
+    def get_all(self, step=DEFAULT_STEP, types=None):
         """
         Get all the "usual" combinations of metacal images in a dict
 
@@ -508,19 +596,12 @@ class Metacal(object):
 
         psf_grown_nopix = self._do_dilate(self.psf_int_nopix, shear)
 
-        if doshear and not self.shear_pixelized_psf:
+        if doshear:
             psf_grown_nopix = psf_grown_nopix.shear(g1=shear.g1,
                                                     g2=shear.g2)
 
-        if self.prepix:
-            p1, p2 = psf_grown_nopix, psf_grown_nopix
-        else:
-            psf_grown = galsim.Convolve(psf_grown_nopix, self.pixel)
-            p1, p2 = psf_grown, psf_grown_nopix
-
-        if doshear and self.shear_pixelized_psf:
-            p1 = p1.shear(g1=shear.g1, g2=shear.g2)
-            p2 = p2.shear(g1=shear.g1, g2=shear.g2)
+        psf_grown = galsim.Convolve(psf_grown_nopix, self.pixel)
+        p1, p2 = psf_grown, psf_grown_nopix
 
         return p1, p2
 
@@ -589,27 +670,6 @@ class Metacal(object):
         # this is the interpolated, devonvolved image
         sheared_image = self.image_int_nopsf.shear(g1=shear.g1, g2=shear.g2)
         return sheared_image
-
-    def _setup(self, **kw):
-        """
-        set up the Galsim objects, Galsim version of Jacobian/wcs, and
-        the interpolation
-        """
-
-        # if None, we will calculate it from the PSF ellipticity
-        self.symmetrize_dilation = kw.get('symmetrize_dilation', None)
-
-        self.prepix = kw.get('prepix', False)
-        self.symmetrize_psf = kw.get('symmetrize_psf', False)
-
-        self.shear_pixelized_psf = kw.get('shear_pixelized_psf', False)
-
-        obs = self.obs
-        if not obs.has_psf():
-            raise ValueError("observation must have a psf observation set")
-
-        self._set_pixel()
-        self._set_interp()
 
     def _set_data(self):
         """
@@ -801,20 +861,14 @@ class Metacal(object):
 
 
 class MetacalGaussPSF(Metacal):
-    def __init__(self, *args, **kw):
-        super().__init__(*args, **kw)
 
-        if 'rng' in kw:
-            self.rng = kw['rng']
-        else:
-            self.rng = np.random.RandomState()
+    def __init__(self, obs, rng):
+
+        super().__init__(obs=obs)
+        assert rng is not None
+        self.rng = rng
 
         self.psf_flux = self.obs.psf.image.sum()
-
-        assert self.symmetrize_psf is False,\
-            "no symmetrize for GaussPSF"
-        assert self.shear_pixelized_psf is False,\
-            "no shear pixelized psf for GaussPSF"
 
     def _do_dilate(self, psf, shear):
         newpsf = _get_gauss_target_psf(psf, flux=self.psf_flux)
@@ -874,8 +928,8 @@ class MetacalGaussPSF(Metacal):
 
     def _make_psf_obs(self, gsim):
 
-        noise = 1.0e-6
         psf_im = gsim.array.copy()
+        noise = psf_im.max()/50000.0
         psf_im += self.rng.normal(scale=noise, size=psf_im.shape)
         obs = self.obs
 
@@ -901,24 +955,21 @@ class MetacalFitGaussPSF(Metacal):
     base the new PSF off of a simple gaussian fit
 
     this version does not support shearing the PSF
+
+    Parameters
+    ----------
+    obs: ngmix.Observation
+        Observation on which to run metacal
+    rng: numpy.random.RandomState
+        Random number generator for adding a small amount of noise to the
+        gaussian psf image
     """
-    def __init__(self, *args, **kw):
-        super().__init__(*args, **kw)
+    def __init__(self, obs, rng):
+        super().__init__(obs=obs)
 
-        if 'rng' in kw:
-            self.rng = kw['rng']
-        else:
-            self.rng = np.random.RandomState()
-
+        assert rng is not None
+        self.rng = rng
         self._setup_psf()
-
-        assert not self.prepix, 'no prepix for fit gauss psf'
-        assert not self.shear_pixelized_psf,\
-            'no shear_pixelized_psf for fit gauss psf'
-        assert self.symmetrize_psf is False,\
-            'no symmetrize for fit gauss psf'
-        assert self.shear_pixelized_psf is False,\
-            'no shear pixelized psf for fit gauss psf'
 
     def get_target_psf(self, shear, type, get_nopix=False):
         """
@@ -987,7 +1038,7 @@ class MetacalFitGaussPSF(Metacal):
         set the noise image to be used for all PSFs
         """
         pim = self.obs.psf.image
-        self.psf_noise = pim.max()/10000.0
+        self.psf_noise = pim.max()/50000.0
 
         self.psf_noise_image = self.rng.normal(
             size=pim.shape,
@@ -1105,10 +1156,13 @@ class MetacalAnalyticPSF(Metacal):
 
     this is just for the reconvolution
     """
-    def __init__(self, obs, psf_obj, **kw):
+    def __init__(self, obs, psf, rng):
+        super().__init__(obs=obs)
 
-        self._set_psf(obs, psf_obj)
-        super().__init__(obs, **kw)
+        assert rng is not None
+        self.rng = rng
+
+        self._set_psf(obs, psf)
 
     def _set_psf(self, obs, psf_in):
         if isinstance(psf_in, dict):
@@ -1187,18 +1241,22 @@ class MetacalAnalyticPSF(Metacal):
                                         g2=shear.g2)
         return psf_grown
 
-    def _make_psf_obs(self, psf_im):
+    def _make_psf_obs(self, gsim):
         obs = self.obs
-        wtval = np.median(obs.psf.weight)
 
-        wtim = np.zeros(psf_im.array.shape) + wtval
+        psf_im = gsim.array.copy()
+
+        noise = psf_im.max()/50000.0
+        psf_im += self.rng.normal(scale=noise, size=psf_im.shape)
+
+        wtim = np.zeros(psf_im.shape) + 1.0/noise**2
 
         jacob = obs.psf.jacobian.copy()
         cen = (np.array(wtim.shape) - 1.0)/2.0
         jacob.set_cen(row=cen[0], col=cen[1])
 
         psf_obs = Observation(
-            psf_im.array,
+            psf_im,
             weight=wtim,
             jacobian=jacob,
         )
@@ -1461,11 +1519,13 @@ def get_shear(data, dgamma=0.02):
     return out
 
 
-def _make_metacal_mb_obs_list_dict(mb_obs_list, step, **kw):
+def _make_metacal_mb_obs_list_dict(mb_obs_list, step, rng=None, **kw):
 
     new_dict = None
     for obs_list in mb_obs_list:
-        odict = _make_metacal_obs_list_dict(obs_list, step, **kw)
+        odict = _make_metacal_obs_list_dict(
+            obs_list=obs_list, step=step, rng=rng, **kw,
+        )
 
         if new_dict is None:
             new_dict = _init_mb_obs_list_dict(odict.keys())
@@ -1476,11 +1536,11 @@ def _make_metacal_mb_obs_list_dict(mb_obs_list, step, **kw):
     return new_dict
 
 
-def _make_metacal_obs_list_dict(obs_list, step, **kw):
+def _make_metacal_obs_list_dict(obs_list, step, rng=None, **kw):
     odict = None
     for obs in obs_list:
 
-        todict = _get_all_metacal(obs, step=step, **kw)
+        todict = _get_all_metacal(obs, step=step, rng=rng, **kw)
 
         if odict is None:
             odict = _init_obs_list_dict(todict.keys())
