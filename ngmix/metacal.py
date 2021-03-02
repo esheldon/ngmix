@@ -803,7 +803,12 @@ class Metacal(object):
 
 class MetacalGaussPSF(Metacal):
     def __init__(self, *args, **kw):
-        super(MetacalGaussPSF, self).__init__(*args, **kw)
+        super().__init__(*args, **kw)
+
+        if 'rng' in kw:
+            self.rng = kw['rng']
+        else:
+            self.rng = numpy.random.RandomState()
 
         self.psf_flux = self.obs.psf.image.sum()
 
@@ -872,7 +877,7 @@ class MetacalGaussPSF(Metacal):
 
         noise = 1.0e-6
         psf_im = gsim.array.copy()
-        psf_im += numpy.random.normal(scale=noise, size=psf_im.shape)
+        psf_im += self.rng.normal(scale=noise, size=psf_im.shape)
         obs = self.obs
 
         cen = (numpy.array(psf_im.shape)-1.0)/2.0
@@ -899,7 +904,7 @@ class MetacalFitGaussPSF(Metacal):
     this version does not support shearing the PSF
     """
     def __init__(self, *args, **kw):
-        super(MetacalFitGaussPSF, self).__init__(*args, **kw)
+        super().__init__(*args, **kw)
 
         if 'rng' in kw:
             self.rng = kw['rng']
@@ -1104,7 +1109,7 @@ class MetacalAnalyticPSF(Metacal):
     def __init__(self, obs, psf_obj, **kw):
 
         self._set_psf(obs, psf_obj)
-        super(MetacalAnalyticPSF, self).__init__(obs, **kw)
+        super().__init__(obs, **kw)
 
     def _set_psf(self, obs, psf_in):
         if isinstance(psf_in, dict):
