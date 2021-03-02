@@ -1566,32 +1566,6 @@ def _rotate_obs_image_square(obs, k=1):
                          "or MultiBandObsList")
 
 
-def _add_noise_odict(odict, noise):
-    """
-    ony
-    """
-
-    noise_image = None
-
-    for key in odict:
-        tobs = odict[key]
-
-        if noise_image is None:
-            if isinstance(tobs, Observation):
-                shape = tobs.weight.shape
-            elif isinstance(tobs, ObsList):
-                shape = tobs[0].weight.shape
-            elif isinstance(tobs, MultiBandObsList):
-                shape = tobs[0][0].weight.shape
-
-            noise_image = np.random.normal(
-                scale=noise,
-                size=shape,
-            )
-
-        _add_noise_obs(tobs, noise, noise_image)
-
-
 def _add_noise_obs(obs, noise, noise_image):
     """
     add extra noise and modify the weight map
