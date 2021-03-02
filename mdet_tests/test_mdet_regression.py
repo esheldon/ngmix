@@ -230,12 +230,19 @@ def test_mdet_regression(fname, write=False):
     else:
         old_data = fitsio.read(fname)
         for col in old_data.dtype.names:
+            if ('psf_' in col or 'ratio' in col) and '1.3.8' in fname:
+                rtol = 1.0e-4
+                atol = 1.0e-4
+            else:
+                rtol = 1.0e-5
+                atol = 2e-6
+
             if np.issubdtype(old_data[col].dtype, np.number):
                 assert np.allclose(
                     all_res[col], old_data[col],
-                    atol=2e-6, rtol=1e-5,
+                    atol=atol, rtol=rtol,
                 ), {
-                    col+os.path.basename(fname): np.max(
+                    col+' '+os.path.basename(fname): np.max(
                         np.abs(all_res[col] - old_data[col])
                     ),
                 }
