@@ -5,8 +5,7 @@ Originally based off reading through Eric Huffs code; it has departed
 significantly.
 """
 import copy
-import numpy
-from numpy import zeros, sqrt, diag
+import numpy as np
 from .observation import Observation, ObsList, MultiBandObsList
 from .shape import Shape
 from . import simobs
@@ -174,7 +173,7 @@ def _doadd_single_obs(obs, nobs):
     with obs.writeable():
         obs.image += nobs.image
 
-        wpos = numpy.where(
+        wpos = np.where(
             (obs.weight != 0.0) &
             (nobs.weight != 0.0)
         )
@@ -555,7 +554,7 @@ class Metacal(object):
                 nx=nx,
                 ny=ny,
                 wcs=self.image.wcs,
-                dtype=numpy.float64,
+                dtype=np.float64,
             )
         except RuntimeError as err:
             # argh, galsim uses generic exceptions
@@ -679,16 +678,16 @@ class Metacal(object):
 
         irr, irc, icc = moments.e2mom(e1, e2, T)
 
-        mat = numpy.zeros((2, 2))
+        mat = np.zeros((2, 2))
         mat[0, 0] = irr
         mat[0, 1] = irc
         mat[1, 0] = irc
         mat[1, 1] = icc
 
-        eigs = numpy.linalg.eigvals(mat)
+        eigs = np.linalg.eigvals(mat)
 
         dilation = eigs.max()/(T/2.)
-        dilation = sqrt(dilation)
+        dilation = np.sqrt(dilation)
 
         dilation = 1.0 + 2*(dilation-1.0)
         if dilation > 1.1:
@@ -808,7 +807,7 @@ class MetacalGaussPSF(Metacal):
         if 'rng' in kw:
             self.rng = kw['rng']
         else:
-            self.rng = numpy.random.RandomState()
+            self.rng = np.random.RandomState()
 
         self.psf_flux = self.obs.psf.image.sum()
 
@@ -880,7 +879,7 @@ class MetacalGaussPSF(Metacal):
         psf_im += self.rng.normal(scale=noise, size=psf_im.shape)
         obs = self.obs
 
-        cen = (numpy.array(psf_im.shape)-1.0)/2.0
+        cen = (np.array(psf_im.shape)-1.0)/2.0
 
         j = obs.psf.jacobian.copy()
         j.set_cen(
@@ -909,7 +908,7 @@ class MetacalFitGaussPSF(Metacal):
         if 'rng' in kw:
             self.rng = kw['rng']
         else:
-            self.rng = numpy.random.RandomState()
+            self.rng = np.random.RandomState()
 
         self._setup_psf()
 
@@ -943,7 +942,7 @@ class MetacalFitGaussPSF(Metacal):
         assert type == 'gal_shear',\
             'psf_shear is not supported for MetacalFitGaussPSF'
 
-        g = sqrt(shear.g1**2 + shear.g2**2)
+        g = np.sqrt(shear.g1**2 + shear.g2**2)
         if g not in self._psf_cache:
 
             psf_grown = self._get_dilated_psf(shear)
@@ -1060,7 +1059,7 @@ class MetacalFitGaussPSF(Metacal):
 
         dilation = _get_ellip_dilation(e1, e2, T)
         T_dilated = T*dilation
-        sigma = sqrt(T_dilated/2.0)
+        sigma = np.sqrt(T_dilated/2.0)
 
         self.gauss_psf = galsim.Gaussian(
             sigma=sigma,
@@ -1084,7 +1083,7 @@ class MetacalFitGaussPSF(Metacal):
         """
         psf_im = gsim.array.copy()
 
-        cen = (numpy.array(psf_im.shape)-1.0)/2.0
+        cen = (np.array(psf_im.shape)-1.0)/2.0
 
         j = self.obs.psf.jacobian.copy()
         j.set_cen(
@@ -1190,12 +1189,12 @@ class MetacalAnalyticPSF(Metacal):
 
     def _make_psf_obs(self, psf_im):
         obs = self.obs
-        wtval = numpy.median(obs.psf.weight)
+        wtval = np.median(obs.psf.weight)
 
-        wtim = numpy.zeros(psf_im.array.shape) + wtval
+        wtim = np.zeros(psf_im.array.shape) + wtval
 
         jacob = obs.psf.jacobian.copy()
-        cen = (numpy.array(wtim.shape) - 1.0)/2.0
+        cen = (np.array(wtim.shape) - 1.0)/2.0
         jacob.set_cen(row=cen[0], col=cen[1])
 
         psf_obs = Observation(
@@ -1249,16 +1248,16 @@ def _get_ellip_dilation(e1, e2, T):
     """
     irr, irc, icc = moments.e2mom(e1, e2, T)
 
-    mat = numpy.zeros((2, 2))
+    mat = np.zeros((2, 2))
     mat[0, 0] = irr
     mat[0, 1] = irc
     mat[1, 0] = irc
     mat[1, 1] = icc
 
-    eigs = numpy.linalg.eigvals(mat)
+    eigs = np.linalg.eigvals(mat)
 
     dilation = eigs.max()/(T/2.)
-    dilation = sqrt(dilation)
+    dilation = np.sqrt(dilation)
 
     dilation = 1.0 + 2*(dilation-1.0)
 
@@ -1282,7 +1281,7 @@ def _do_dilate(obj, shear):
     shear: ngmix.Shape
         The shape to use for dilation
     """
-    g = sqrt(shear.g1**2 + shear.g2**2)
+    g = np.sqrt(shear.g1**2 + shear.g2**2)
     dilation = 1.0 + 2.0*g
     return obj.dilate(dilation)
 
@@ -1309,9 +1308,9 @@ def _make_symmetrized_image(im_input):
     add a version of itself roated by 90,180,270 degrees
     """
     im = im_input.copy()
-    im += numpy.rot90(im_input, k=1)
-    im += numpy.rot90(im_input, k=2)
-    im += numpy.rot90(im_input, k=3)
+    im += np.rot90(im_input, k=1)
+    im += np.rot90(im_input, k=2)
+    im += np.rot90(im_input, k=3)
 
     im *= (1.0/4.0)
 
@@ -1333,7 +1332,6 @@ def _get_gauss_target_psf(psf, flux):
 
     assumes the psf is centered
     """
-    from numpy import meshgrid, arange, min, sqrt, log
 
     if hasattr(psf, 'stepk'):
         dk = psf.stepk/4.0
@@ -1347,16 +1345,16 @@ def _get_gauss_target_psf(psf, flux):
     karr_r = kim.real.array
     # Find the smallest r where the kval < small_kval
     nk = karr_r.shape[0]
-    kx, ky = meshgrid(arange(-nk/2, nk/2), arange(-nk/2, nk/2))
+    kx, ky = np.meshgrid(np.arange(-nk/2, nk/2), np.arange(-nk/2, nk/2))
     ksq = (kx**2 + ky**2) * dk**2
-    ksq_max = min(ksq[karr_r < small_kval * psf.flux])
+    ksq_max = np.min(ksq[karr_r < small_kval * psf.flux])
 
     # We take our target PSF to be the (round) Gaussian that is even smaller at
     # this ksq
     # exp(-0.5 * ksq_max * sigma_sq) = smaller_kval
-    sigma_sq = -2. * log(smaller_kval) / ksq_max
+    sigma_sq = -2. * np.log(smaller_kval) / ksq_max
 
-    return galsim.Gaussian(sigma=sqrt(sigma_sq), flux=flux)
+    return galsim.Gaussian(sigma=np.sqrt(sigma_sq), flux=flux)
 
 
 def jackknife_shear(data, chunksize=1, dgamma=0.02):
@@ -1375,7 +1373,7 @@ def jackknife_shear(data, chunksize=1, dgamma=0.02):
 
     g = data['mcal_g']
 
-    R = numpy.zeros((data.size, 2))
+    R = np.zeros((data.size, 2))
 
     R[:, 0] = (data['mcal_g_1p'][:, 0] - data['mcal_g_1m'][:, 0])/dgamma
     R[:, 1] = (data['mcal_g_2p'][:, 1] - data['mcal_g_2m'][:, 1])/dgamma
@@ -1389,7 +1387,7 @@ def jackknife_shear(data, chunksize=1, dgamma=0.02):
 
     shear = g_sum/R_sum
 
-    shears = zeros((nchunks, 2))
+    shears = np.zeros((nchunks, 2))
     for i in range(nchunks):
 
         beg = i*chunksize
@@ -1403,7 +1401,7 @@ def jackknife_shear(data, chunksize=1, dgamma=0.02):
 
         shears[i, :] = j_g_sum/j_R_sum
 
-    shear_cov = zeros((2, 2))
+    shear_cov = np.zeros((2, 2))
     fac = (nchunks-1)/float(nchunks)
 
     shear_cov[0, 0] = fac*(((shear[0]-shears[:, 0])**2).sum())
@@ -1415,7 +1413,7 @@ def jackknife_shear(data, chunksize=1, dgamma=0.02):
     out = {
         'shear': shear,
         'shear_cov': shear_cov,
-        'shear_err': sqrt(diag(shear_cov)),
+        'shear_err': np.sqrt(np.diag(shear_cov)),
         'g_sum': g_sum,
         'R_sum': R_sum,
         'R': R_sum/ntot,
@@ -1439,7 +1437,7 @@ def get_shear(data, dgamma=0.02):
 
     g = data['mcal_g']
 
-    R = numpy.zeros((data.size, 2))
+    R = np.zeros((data.size, 2))
 
     R[:, 0] = (data['mcal_g_1p'][:, 0] - data['mcal_g_1m'][:, 0])/dgamma
     R[:, 1] = (data['mcal_g_2p'][:, 1] - data['mcal_g_2m'][:, 1])/dgamma
@@ -1449,11 +1447,11 @@ def get_shear(data, dgamma=0.02):
     g_mean = g.mean(axis=0)
     R_mean = R.mean(axis=0)
 
-    g_err = g.std(axis=0)/sqrt(ntot)
-    R_err = R.std(axis=0)/sqrt(ntot)
+    g_err = g.std(axis=0)/np.sqrt(ntot)
+    R_err = R.std(axis=0)/np.sqrt(ntot)
 
     shear = g_mean/R_mean
-    shear_err = numpy.abs(shear)*sqrt((g_err/g_mean)**2 + (R_err/R_mean)**2)
+    shear_err = np.abs(shear)*np.sqrt((g_err/g_mean)**2 + (R_err/R_mean)**2)
 
     out = {
         'shear': shear,
@@ -1514,10 +1512,10 @@ def _rotate_obs_image_nonsquare(obs, k=1):
 
     if isinstance(obs, Observation):
 
-        image = numpy.rot90(obs.image, k=k)
-        weight = numpy.rot90(obs.weight, k=k)
+        image = np.rot90(obs.image, k=k)
+        weight = np.rot90(obs.weight, k=k)
         if obs.has_bmask():
-            bmask = numpy.rot90(obs.bmask, k=k)
+            bmask = np.rot90(obs.bmask, k=k)
         else:
             bmask = None
 
@@ -1556,7 +1554,7 @@ def _rotate_obs_image_square(obs, k=1):
     """
 
     if isinstance(obs, Observation):
-        obs.set_image(numpy.rot90(obs.image, k=k))
+        obs.set_image(np.rot90(obs.image, k=k))
     elif isinstance(obs, ObsList):
         for tobs in obs:
             _rotate_obs_image_square(tobs, k=k)
@@ -1586,7 +1584,7 @@ def _add_noise_odict(odict, noise):
             elif isinstance(tobs, MultiBandObsList):
                 shape = tobs[0][0].weight.shape
 
-            noise_image = numpy.random.normal(
+            noise_image = np.random.normal(
                 scale=noise,
                 size=shape,
             )
@@ -1603,9 +1601,9 @@ def _add_noise_obs(obs, noise, noise_image):
 
         weight = obs.weight
 
-        err2 = numpy.zeros(weight.shape) + noise**2
+        err2 = np.zeros(weight.shape) + noise**2
 
-        w = numpy.where(weight > 0)
+        w = np.where(weight > 0)
         if w[0].size > 0:
             err2[w] += 1.0/weight[w]
 
