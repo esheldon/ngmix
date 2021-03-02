@@ -41,7 +41,8 @@ jobs:
             pytest-cov \
             meds \
             fitsio \
-            sep
+            sep \
+            sxdes
 
           # using ngmix2 branch for now
           pip install git+https://github.com/esheldon/metadetect.git@ngmix2 \
