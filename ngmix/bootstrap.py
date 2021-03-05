@@ -145,12 +145,12 @@ def remove_failed_psf_obs(obs):
         return new_mbobs
 
     elif isinstance(obs, ObsList):
-        new_obslist = ObsList(meta=tobslist.meta)
+        new_obslist = ObsList(meta=obs.meta)
         for tobs in obs:
             if tobs.psf.meta['result']['flags'] == 0:
                 new_obslist.append(tobs)
 
-        if len(tobslist) == 0:
+        if len(new_obslist) == 0:
             raise BootPSFFailure('no good psf fits')
 
         return new_obslist
