@@ -17,7 +17,7 @@ FRAC_TOL = 5.0e-4
 @pytest.mark.parametrize('convolve_psf', [True, False])
 @pytest.mark.parametrize('nband', [None, 2])
 @pytest.mark.parametrize('nepoch', [None, 2])
-def test_metacal_bootstrap_max_smoke(
+def test_simobs_smoke(
     with_gmix, add_noise, add_all,
     noise_factor, use_raw_weight, convolve_psf,
     nband, nepoch,
