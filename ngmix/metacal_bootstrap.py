@@ -13,7 +13,7 @@ class MetacalBootstrapper(object):
     runner: fit runner for object
         Must have go(obs=obs) method
     psf_runner: fit runner for psfs
-        Must have go(obs=obs, set_result=) method
+        Must have go(obs=obs) method
     ignore_failed_psf: bool, optional
         If set to True, remove observations where the psf fit fails, and
         only fit the remaining.  Default True.
@@ -94,7 +94,7 @@ def metacal_bootstrap(
     runner: ngmix Runner
         Must have go(obs=obs) method
     psf_runner: ngmix PSFRunner, optional
-        Must have go(obs=obs, set_result=) method
+        Must have go(obs=obs) method
     ignore_failed_psf: bool, optional
         If set to True, remove observations where the psf fit fails, and
         only fit the remaining.  Default True.

@@ -80,7 +80,7 @@ class PSFRunner(RunnerBase):
         Number of times to try if there is failure
     """
 
-    def go(self, obs, set_result=False):
+    def go(self, obs):
         """
         Run the fitter on the psf observations associated with the input
         observation(s), possibly multiple times using guesses generated from
@@ -92,18 +92,15 @@ class PSFRunner(RunnerBase):
             Observation, ObsList, or MultiBandObsList
         ntry: int, optional
             Number of times to try if there is failure
-        set_result: bool, optional
-            If set to True, the meta['result'] and the .gmix attribute
 
         Side Effects
         ------------
-        If set_result is True then .meta['result'] is set to the fit result and the
-        .gmix attribuite is set for each successful fit
+        .meta['result'] is set to the fit result and the .gmix attribuite is
+        set for each successful fit, if appropriate
         """
 
         run_psf_fitter(
             obs=obs, fitter=self.fitter, guesser=self.guesser, ntry=self.ntry,
-            set_result=set_result,
         )
 
 
@@ -142,7 +139,7 @@ def run_fitter(obs, fitter, guesser=None, ntry=1):
             break
 
 
-def run_psf_fitter(obs, fitter, guesser=None, ntry=1, set_result=False):
+def run_psf_fitter(obs, fitter, guesser=None, ntry=1):
     """
     run a fitter on each observation in the input observation(s).  The fitter
     will be run multiple times if needed, with guesses generated from the input
@@ -160,27 +157,23 @@ def run_psf_fitter(obs, fitter, guesser=None, ntry=1, set_result=False):
         Must be a callable returning an array of parameters
     ntry: int, optional
         Number of times to try if there is failure
-    set_result: bool, optional
-        If set to True, the meta['result'] and the .gmix attribute
 
     Side Effects
     ------------
-    If set_result is True then .meta['result'] is set to the fit result and the
-    .gmix attribuite is set for each successful fit
+    .meta['result'] is set to the fit result and the .gmix attribuite is set
+    for each successful fit, if appropriate
     """
 
     if isinstance(obs, MultiBandObsList):
         for tobslist in obs:
             run_psf_fitter(
                 obs=tobslist, fitter=fitter, guesser=guesser, ntry=ntry,
-                set_result=set_result,
             )
 
     elif isinstance(obs, ObsList):
         for tobs in obs:
             run_psf_fitter(
                 obs=tobs, fitter=fitter, guesser=guesser, ntry=ntry,
-                set_result=set_result,
             )
 
     elif isinstance(obs, Observation):
@@ -194,13 +187,12 @@ def run_psf_fitter(obs, fitter, guesser=None, ntry=1, set_result=False):
             obs=obs_to_fit, fitter=fitter, guesser=guesser, ntry=ntry,
         )
 
-        if set_result:
-            res = fitter.get_result()
-            obs_to_fit.meta['result'] = res
+        res = fitter.get_result()
+        obs_to_fit.meta['result'] = res
 
-            if res['flags'] == 0 and hasattr(fitter, 'get_gmix'):
-                gmix = fitter.get_gmix()
-                obs_to_fit.gmix = gmix
+        if res['flags'] == 0 and hasattr(fitter, 'get_gmix'):
+            gmix = fitter.get_gmix()
+            obs_to_fit.gmix = gmix
 
     else:
         raise ValueError(
