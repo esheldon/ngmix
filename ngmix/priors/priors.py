@@ -61,7 +61,7 @@ class FlatPrior(PriorBase):
         An random number generator (RNG) to use.
     """
     def __init__(self, minval, maxval, rng):
-        PriorBase.__init__(self, rng=rng)
+        super().__init__(rng=rng)
 
         self.minval = minval
         self.maxval = maxval
@@ -174,7 +174,7 @@ class TwoSidedErf(PriorBase):
         An random number generator (RNG) to use.
     """
     def __init__(self, minval, width_at_min, maxval, width_at_max, rng):
-        PriorBase.__init__(self, rng)
+        super().__init__(rng=rng)
 
         self.minval = minval
         self.width_at_min = width_at_min
