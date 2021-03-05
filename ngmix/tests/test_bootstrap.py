@@ -3,6 +3,7 @@ just test moment errors
 """
 import pytest
 import numpy as np
+import ngmix
 from ngmix.runners import Runner, PSFRunner
 from ngmix.guessers import GMixPSFGuesser, TFluxGuesser, CoellipPSFGuesser
 from ngmix.fitting import LMCoellip
@@ -125,3 +126,59 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
         images.compare_images(obs.image, imfit)
 
     assert max_reldiff < reltol
+
+
+@pytest.mark.parametrize('nband', [None, 2])
+def test_remove_failed_psf(nband):
+    """
+    test removing obs with bad fits
+    """
+
+    rng = np.random.RandomState(2830)
+
+    nepoch = 10
+    data = get_model_obs(
+        rng=rng,
+        model='gauss',
+        noise=0.01,
+        nepoch=nepoch,
+        nband=nband,
+    )
+
+    if isinstance(data['obs'], ngmix.MultiBandObsList):
+        mbobs = data['obs']
+        for obslist in mbobs:
+            assert len(obslist) == nepoch
+
+            index = rng.randint(len(obslist))
+            for i, obs in enumerate(obslist):
+                if i == index:
+                    flags = 1
+                else:
+                    flags = 0
+                obs.psf.meta['result'] = {'flags': flags}
+
+        new_mbobs = ngmix.bootstrap.remove_failed_psf_obs(mbobs)
+        for obslist in new_mbobs:
+            assert len(obslist) == nepoch-1
+    elif isinstance(data['obs'], ngmix.ObsList):
+        obslist = data['obs']
+        assert len(obslist) == nepoch
+
+        index = rng.randint(len(obslist))
+        for i, obs in enumerate(obslist):
+            if i == index:
+                flags = 1
+            else:
+                flags = 0
+            obs.psf.meta['result'] = {'flags': flags}
+
+        new_obslist = ngmix.bootstrap.remove_failed_psf_obs(obslist)
+        assert len(new_obslist) == nepoch-1
+    else:
+        obs = data['obs']
+
+        obs.psf.meta['result'] = {'flags': flags}
+
+        with pytest.raises(ngmix.gexceptions.BootPSFFailure):
+            _ = ngmix.bootstrap.remove_failed_psf_obs(obslist)
