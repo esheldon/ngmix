@@ -3,7 +3,8 @@
 ### breaking API changes
 
 - The fitters no longer take the observation in the constructor.
-  The `go` method now takes the observation and possibly a guess.
+  All fitting/measurement conform to a common interface.  The classes have a `go`
+  method that takes the observation and possibly a guess.
 - The bootstrap and runner code has been completely replaced by a new api.
   The bootstrappers are now generic, wrapping runners that are themselves
   generic wrappers for fitters and guessers.  Thus the bootstrap/runner
@@ -47,6 +48,8 @@
 - New guessers `TPSFFluxGuesser`, `TPSFFluxAndPriorGuesser`, `GmixPSFGuesser`,
   `SimplePSFGuesser`, `CoellipPSFGuesser`
 - New joint prior `PriorGalsimSimpleSep` 
+- Added guessers `TPSFFluxGuesser`, `TPSFFluxAndPriorGuesser`, `GMixPSFGuesser`,
+  `SimplePSFGuesser`, `CoellipPSFGuesser`, 
 
 ### deprecated/removed
 
@@ -67,10 +70,11 @@
   `FlatEtaPrior`, `BFrac`, `TFluxPriorCosmosExp`, `TFluxPriorCosmosDev`,
   `GPriorCosmosSersicSpline`
 - Removed all the old bootstrapper and runner classes; replaced with generic
-    Bootstrapper, Runner, PSFRuner, and MetacalBootstrapper`, and associated functions
+    `Bootstrapper, Runner, PSFRuner, and MetacalBootstrapper`, and associated functions
 - removed `GMixBDF` class.  The "bdf" is now supported by the `GMixModel` class
 - removed the `roundify` and `stats` modules
 - removed the "prepix" option for metacal
+- removed guessers `RoundParsGuesser`, `MomGuesser`, 
 
 ## v1.3.8
 
