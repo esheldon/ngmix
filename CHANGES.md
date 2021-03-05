@@ -27,6 +27,15 @@
 
 ### new features
 
+- All fitters and measurement classes adhere to a common interface.
+  `fitter.go(obs=obs)` or `fitter.go(obs=obs, guess=guess)`.  The obs
+  is no longer taken in the constructor so the same object can be reused
+  in the runners/bootstrappers for multiple measurements.
+- Replaced boostrapper/runner classes with generic classes/functions that
+  expect fitters/measurements and runners to provide common interfaces
+  For fitters `fitter.go(obs=obs)` or `fitter.go(obs=obs, guess=guess)`
+  For runners `runner.go(obs=obs)`.  New classes are bootstrap.Bootstrapper
+  runners.Runner, runners.PSFRunner
 - expanded test suite and improved documentation for the following modules
   * `ngmix.shape`
   * `ngmix.jacobian`
@@ -56,8 +65,9 @@
   `MVNMom`, `TruncatedSimpleGauss2D`, `GPriorGreat3Exp`, `GPriorGreatDES`,
   `GPriorGreatDES2`, `GPriorGreatDESNoExp`, `GPriorM`, `GPriorMErf`, `GPriorMErf2`,
   `FlatEtaPrior`, `BFrac`, `TFluxPriorCosmosExp`, `TFluxPriorCosmosDev`,
-  `GPriorCosmosSersicSpline
-
+  `GPriorCosmosSersicSpline`
+- Removed all the old bootstrapper and runner classes; replaced with generic
+    Bootstrapper, Runner, PSFRuner, and MetacalBootstrapper`, and associated functions
 - removed `GMixBDF` class.  The "bdf" is now supported by the `GMixModel` class
 - removed the `roundify` and `stats` modules
 - removed the "prepix" option for metacal
