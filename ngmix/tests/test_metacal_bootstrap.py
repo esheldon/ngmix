@@ -20,7 +20,7 @@ FRAC_TOL = 5.0e-4
 @pytest.mark.parametrize('nepoch', [None, 2])
 def test_metacal_bootstrap_max_smoke(noise, use_bootstrapper, nband, nepoch):
     """
-    Smoke test a Runner running the LM fitter
+    test a metacal bootstrapper with maxlike fitting
     """
 
     rng = np.random.RandomState(2830)
@@ -92,7 +92,7 @@ def test_metacal_bootstrap_max_smoke(noise, use_bootstrapper, nband, nepoch):
 @pytest.mark.parametrize('use_bootstrapper', [False, True])
 def test_metacal_bootstrap_gaussmom_smoke(noise, use_bootstrapper):
     """
-    Smoke test a Runner running the LM fitter
+    test a metacal bootstrapper with gaussian moments
     """
 
     rng = np.random.RandomState(2830)
