@@ -47,9 +47,9 @@
 - introduced `NGmixBaseException` as parent class for all ngmix-specific exceptions
 - New guessers `TPSFFluxGuesser`, `TPSFFluxAndPriorGuesser`, `GmixPSFGuesser`,
   `SimplePSFGuesser`, `CoellipPSFGuesser`
-- New joint prior `PriorGalsimSimpleSep` 
+- New joint prior `PriorGalsimSimpleSep`
 - Added guessers `TPSFFluxGuesser`, `TPSFFluxAndPriorGuesser`, `GMixPSFGuesser`,
-  `SimplePSFGuesser`, `CoellipPSFGuesser`, 
+  `SimplePSFGuesser`, `CoellipPSFGuesser`,
 
 ### deprecated/removed
 
@@ -74,7 +74,7 @@
 - removed `GMixBDF` class.  The "bdf" is now supported by the `GMixModel` class
 - removed the `roundify` and `stats` modules
 - removed the "prepix" option for metacal
-- removed guessers `RoundParsGuesser`, `MomGuesser`, 
+- removed guessers `RoundParsGuesser`, `MomGuesser`,
 
 ## v1.3.8
 
