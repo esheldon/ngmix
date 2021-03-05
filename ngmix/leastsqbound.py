@@ -32,11 +32,9 @@ LOGGER = logging.getLogger(__name__)
 
 def run_leastsq(func, guess, n_prior_pars, **keys):
     """
-    run leastsq from scipy.optimize.  Deal with certain
-    types of errors
-
-    TODO make this do all the checking and fill in cov etc.  return
-    a dict
+    run leastsq from scipy.optimize.  Deal with certain types of errors.  Allow
+    the user to input boundaries for parameters, dealt with in a robust way
+    using the leastsqbound code that wraps leastsq
 
     Parameters
     ----------
@@ -46,6 +44,10 @@ def run_leastsq(func, guess, n_prior_pars, **keys):
         guess at pars
     n_prior_pars:
         number of slots in fdiff for priors
+    bounds : list, optional
+        ``(min, max)`` pairs for each element in ``x``, defining
+        the bounds on that parameter. Use None for one of ``min`` or
+        ``max`` when there is no bound in that direction.
 
     some useful keywords
     maxfev:
@@ -79,7 +81,7 @@ def run_leastsq(func, guess, n_prior_pars, **keys):
 
         elif pcov0 is None:
             # why on earth is this not in the flags?
-            flags += LM_SINGULAR_MATRIX
+            flags |= LM_SINGULAR_MATRIX
             errmsg = "singular covariance"
             LOGGER.debug(errmsg)
             print_pars(pars, front="    pars at singular:", logger=LOGGER)
@@ -105,7 +107,7 @@ def run_leastsq(func, guess, n_prior_pars, **keys):
 
                 cflags = _test_cov(pcov)
                 if cflags != 0:
-                    flags += cflags
+                    flags |= cflags
                     errmsg = "bad covariance matrix"
                     LOGGER.debug(errmsg)
                     junk1, junk2, perr = _get_def_stuff(npars)
@@ -166,11 +168,11 @@ def _test_cov(pcov):
         e, v = np.linalg.eig(pcov)
         (weig,) = np.where(e < 0)
         if weig.size > 0:
-            flags += LM_NEG_COV_EIG
+            flags |= LM_NEG_COV_EIG
 
         (wneg,) = np.where(np.diag(pcov) < 0)
         if wneg.size > 0:
-            flags += LM_NEG_COV_DIAG
+            flags |= LM_NEG_COV_DIAG
 
     except np.linalg.linalg.LinAlgError:
         flags |= EIG_NOTFINITE
