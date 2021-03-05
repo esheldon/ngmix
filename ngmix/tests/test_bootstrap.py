@@ -3,7 +3,6 @@ just test moment errors
 """
 import pytest
 import numpy as np
-from ngmix import priors, joint_prior
 from ngmix.runners import Runner, PSFRunner
 from ngmix.guessers import GMixPSFGuesser, TFluxGuesser, CoellipPSFGuesser
 from ngmix.fitting import LMCoellip
@@ -11,26 +10,9 @@ from ngmix.em import GMixEM
 from ngmix.fitting import LM
 from ngmix.bootstrap import bootstrap, Bootstrapper
 from ._sims import get_model_obs
+from ._priors import get_prior
 
 FRAC_TOL = 5.0e-4
-
-
-def get_prior(*, rng, cen, cen_width, T_range, F_range):
-    """
-    For testing
-
-    Make PriorSimpleSep uniform in all priors except the
-    center, which is gaussian
-    """
-    cen_prior = priors.CenPrior(
-        cen[0], cen[1], cen_width, cen_width, rng=rng,
-    )
-    g_prior = priors.GPriorBA(0.3, rng=rng)
-    T_prior = priors.FlatPrior(T_range[0], T_range[1], rng=rng)
-    F_prior = priors.FlatPrior(F_range[0], F_range[1], rng=rng)
-
-    pr = joint_prior.PriorSimpleSep(cen_prior, g_prior, T_prior, F_prior)
-    return pr
 
 
 @pytest.mark.parametrize('psf_model_type', ['em', 'coellip'])
@@ -84,13 +66,21 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
         T=0.25,
         flux=100.0,
     )
+    # prior = get_prior(
+    #     rng=rng,
+    #     cen=[0.0, 0.0],
+    #     cen_width=obs.jacobian.scale,
+    #     T_range=[-1.0, 1.e3],
+    #     F_range=[0.01, 1000.0],
+    # )
     prior = get_prior(
+        fit_model=model,
         rng=rng,
-        cen=[0.0, 0.0],
-        cen_width=obs.jacobian.scale,
+        scale=obs.jacobian.scale,
         T_range=[-1.0, 1.e3],
         F_range=[0.01, 1000.0],
     )
+
     fitter = LM(model=model, prior=prior)
 
     runner = Runner(

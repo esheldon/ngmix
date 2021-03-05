@@ -49,7 +49,7 @@ def test_runner_lm_simple_smoke(model, psf_model_type):
         guesser=psf_guesser,
         ntry=2,
     )
-    psf_runner.go(obs=data['obs'], set_result=True)
+    psf_runner.go(obs=data['obs'])
 
     guesser = TFluxGuesser(
         rng=rng,
@@ -108,7 +108,7 @@ def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
         guesser=psf_guesser,
         ntry=2,
     )
-    psf_runner.go(obs=obs, set_result=True)
+    psf_runner.go(obs=obs)
 
     if guesser_type == 'TF':
         guesser = TFluxGuesser(

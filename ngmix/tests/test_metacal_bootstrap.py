@@ -3,41 +3,15 @@ just test moment errors
 """
 import pytest
 import numpy as np
-from ngmix import priors, joint_prior
 from ngmix.runners import Runner, PSFRunner
 from ngmix.guessers import SimplePSFGuesser, TFluxAndPriorGuesser
 from ngmix.fitting import LM
 from ngmix.gaussmom import GaussMom
 from ngmix.metacal_bootstrap import metacal_bootstrap, MetacalBootstrapper
 from ._sims import get_model_obs
+from ._priors import get_prior
 
 FRAC_TOL = 5.0e-4
-
-
-def get_prior(*, rng, cen, cen_width, T_range, F_range, nband):
-    """
-    For testing
-
-    Make PriorSimpleSep uniform in all priors except the
-    center, which is gaussian
-    """
-    cen_prior = priors.CenPrior(
-        cen[0], cen[1], cen_width, cen_width, rng=rng,
-    )
-    g_prior = priors.GPriorBA(0.3, rng=rng)
-    T_prior = priors.FlatPrior(T_range[0], T_range[1], rng=rng)
-    F_prior = priors.FlatPrior(F_range[0], F_range[1], rng=rng)
-
-    if nband is not None:
-        F_prior = [F_prior]*nband
-
-    pr = joint_prior.PriorSimpleSep(
-        cen_prior=cen_prior,
-        g_prior=g_prior,
-        T_prior=T_prior,
-        F_prior=F_prior,
-    )
-    return pr
 
 
 @pytest.mark.parametrize('noise', [1.0e-8, 0.01])
@@ -51,9 +25,12 @@ def test_metacal_bootstrap_max_smoke(noise, use_bootstrapper, nband, nepoch):
 
     rng = np.random.RandomState(2830)
 
+    model = 'gauss'
+    fit_model = 'gauss'
+
     data = get_model_obs(
         rng=rng,
-        model='gauss',
+        model=model,
         noise=noise,
         nepoch=nepoch,
         nband=nband,
@@ -61,9 +38,9 @@ def test_metacal_bootstrap_max_smoke(noise, use_bootstrapper, nband, nepoch):
     obs = data['obs']
 
     prior = get_prior(
+        fit_model=fit_model,
         rng=rng,
-        cen=[0.0, 0.0],
-        cen_width=1.0,
+        scale=0.2,
         T_range=[-1.0, 1.e3],
         F_range=[0.01, 1000.0],
         nband=nband,
@@ -76,7 +53,7 @@ def test_metacal_bootstrap_max_smoke(noise, use_bootstrapper, nband, nepoch):
     )
     psf_guesser = SimplePSFGuesser(rng=rng)
 
-    fitter = LM(model="gauss", prior=prior)
+    fitter = LM(model=fit_model, prior=prior)
     psf_fitter = LM(model='gauss')
 
     psf_runner = PSFRunner(

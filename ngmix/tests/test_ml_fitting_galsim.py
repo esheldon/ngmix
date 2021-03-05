@@ -2,28 +2,10 @@ import galsim
 import numpy as np
 import pytest
 
-import ngmix
 from ngmix.galsimfit import GalsimLM
 from ngmix import Jacobian
 from ngmix import Observation
-
-
-def get_prior(*, rng, scale):
-    g_prior = ngmix.priors.GPriorBA(sigma=0.1, rng=rng)
-    cen_prior = ngmix.priors.CenPrior(
-        cen1=0, cen2=0, sigma1=scale, sigma2=scale, rng=rng,
-    )
-    r50_prior = ngmix.priors.FlatPrior(minval=0.01, maxval=10, rng=rng)
-    F_prior = ngmix.priors.FlatPrior(minval=1e-4, maxval=1e9, rng=rng)
-
-    prior = ngmix.joint_prior.PriorGalsimSimpleSep(
-        cen_prior=cen_prior,
-        g_prior=g_prior,
-        r50_prior=r50_prior,
-        F_prior=F_prior,
-    )
-
-    return prior
+from ._priors import get_prior_galsimfit
 
 
 @pytest.mark.parametrize('wcs_g1', [-0.03, 0.0, 0.03])
@@ -33,7 +15,7 @@ def test_ml_fitting_galsim(wcs_g1, wcs_g2, model):
 
     rng = np.random.RandomState(seed=2312)
     scale = 0.263
-    prior = get_prior(rng=rng, scale=scale)
+    prior = get_prior_galsimfit(rng=rng, scale=scale)
 
     psf_fwhm = 0.9
     psf_image_size = 33

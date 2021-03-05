@@ -369,7 +369,7 @@ def test_gaussmom_psf_runner(nband, nepoch):
     fitter = ngmix.gaussmom.GaussMom(fwhm=1.2)
 
     runner = PSFRunner(fitter=fitter)
-    runner.go(obs=obs, set_result=True)
+    runner.go(obs=obs)
 
     if nband is not None:
         for tobslist in obs:
