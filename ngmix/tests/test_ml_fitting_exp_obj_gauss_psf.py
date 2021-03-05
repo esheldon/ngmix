@@ -10,16 +10,11 @@ from ngmix.moments import fwhm_to_T
 from ._priors import get_prior
 
 
-# @pytest.mark.parametrize('wcs_g1', [-0.5, 0, 0.2])
-# @pytest.mark.parametrize('wcs_g2', [-0.2, 0, 0.5])
-# @pytest.mark.parametrize('g1_true', [-0.1, 0, 0.2])
-# @pytest.mark.parametrize('g2_true', [-0.2, 0, 0.1])
 @pytest.mark.parametrize('wcs_g1', [-0.5, 0])
 @pytest.mark.parametrize('wcs_g2', [-0.2, 0])
 @pytest.mark.parametrize('g1_true', [-0.1, 0])
 @pytest.mark.parametrize('g2_true', [-0.2, 0])
 @pytest.mark.parametrize('fit_model', ['exp', 'bdf', 'bd'])
-# @pytest.mark.parametrize('fit_model', ['bd'])
 def test_ml_fitting_exp_obj_gauss_psf_smoke(
         g1_true, g2_true, wcs_g1, wcs_g2, fit_model):
 
@@ -122,6 +117,8 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
     g2 = np.mean(g2arr)
 
     if fit_model == 'bd':
+        # bd fitting is highly degenerate, we don't recover the
+        # ellipticity with as much accuracy
         gtol = 0.002
     else:
         gtol = 1.0e-5
