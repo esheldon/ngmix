@@ -55,6 +55,7 @@
   `MVNMom`, `TruncatedSimpleGauss2D`
 - removed `GMixBDF` class.  The "bdf" is now supported by the `GMixModel` class
 - removed the `roundify` and `stats` modules
+- removed the "prepix" option for metacal
 
 ## v1.3.8
 
