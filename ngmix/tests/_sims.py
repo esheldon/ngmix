@@ -139,8 +139,8 @@ def get_model_obs(
     gm = GMixModel(pars[0:6], model)
 
     mbobs = MultiBandObsList()
-    obslist = ObsList()
     for iband in range(nband):
+        obslist = ObsList()
         for i in range(nepoch):
 
             off1_pix, off2_pix = rng.uniform(low=-off, high=off, size=2)
