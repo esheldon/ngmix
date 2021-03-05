@@ -17,6 +17,9 @@ class MetacalBootstrapper(object):
     ignore_failed_psf: bool, optional
         If set to True, remove observations where the psf fit fails, and
         only fit the remaining.  Default True.
+    rng: numpy.random.RandomState
+        Random state for generating noise fields.  Not needed if metacal if
+        using the noise field in the observations
     **metacal_kws:  keywords
         Keywords to send to get_all_metacal
     """
@@ -95,6 +98,9 @@ def metacal_bootstrap(
     ignore_failed_psf: bool, optional
         If set to True, remove observations where the psf fit fails, and
         only fit the remaining.  Default True.
+    rng: numpy.random.RandomState
+        Random state for generating noise fields.  Not needed if metacal if
+        using the noise field in the observations
     **metacal_kws:  keywords
         Keywords to send to get_all_metacal
 
