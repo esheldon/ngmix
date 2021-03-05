@@ -75,83 +75,90 @@ def test_runner_lm_simple_smoke(model, psf_model_type):
 @pytest.mark.parametrize('noise', [1.0e-8, 0.01])
 def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
     """
-    Smoke test a Runner running the LM fitter
+    Test a Runner running the LM fitter
     """
 
-    rng = np.random.RandomState(283)
+    res_old = None
+    for i in range(2):
+        rng = np.random.RandomState(283)
 
-    data = get_model_obs(
-        rng=rng,
-        model=model,
-        noise=noise,
-    )
-    obs = data['obs']
-
-    psf_ngauss = 3
-    if psf_model_type == 'em':
-        psf_guesser = GMixPSFGuesser(
+        data = get_model_obs(
             rng=rng,
-            ngauss=psf_ngauss,
+            model=model,
+            noise=noise,
         )
+        obs = data['obs']
 
-        psf_fitter = GMixEM(tol=1.0e-5)
-    else:
-        psf_guesser = CoellipPSFGuesser(
-            rng=rng,
-            ngauss=psf_ngauss,
+        psf_ngauss = 3
+        if psf_model_type == 'em':
+            psf_guesser = GMixPSFGuesser(
+                rng=rng,
+                ngauss=psf_ngauss,
+            )
+
+            psf_fitter = GMixEM(tol=1.0e-5)
+        else:
+            psf_guesser = CoellipPSFGuesser(
+                rng=rng,
+                ngauss=psf_ngauss,
+            )
+
+            psf_fitter = LMCoellip(ngauss=psf_ngauss)
+
+        psf_runner = PSFRunner(
+            fitter=psf_fitter,
+            guesser=psf_guesser,
+            ntry=2,
         )
+        psf_runner.go(obs=obs)
 
-        psf_fitter = LMCoellip(ngauss=psf_ngauss)
+        if guesser_type == 'TF':
+            guesser = TFluxGuesser(
+                rng=rng,
+                T=0.25,
+                flux=100.0,
+            )
+        elif guesser_type == 'TPSFFlux':
+            guesser = TPSFFluxGuesser(
+                rng=rng,
+                T=0.25,
+            )
+        else:
+            raise ValueError('bad guesser')
 
-    psf_runner = PSFRunner(
-        fitter=psf_fitter,
-        guesser=psf_guesser,
-        ntry=2,
-    )
-    psf_runner.go(obs=obs)
+        fitter = LM(model=model)
 
-    if guesser_type == 'TF':
-        guesser = TFluxGuesser(
-            rng=rng,
-            T=0.25,
-            flux=100.0,
+        runner = Runner(
+            fitter=fitter,
+            guesser=guesser,
+            ntry=2,
         )
-    elif guesser_type == 'TPSFFlux':
-        guesser = TPSFFluxGuesser(
-            rng=rng,
-            T=0.25,
-        )
-    else:
-        raise ValueError('bad guesser')
+        runner.go(obs=obs)
 
-    fitter = LM(model=model)
+        fitter = runner.fitter
+        res = fitter.get_result()
+        assert res['flags'] == 0
 
-    runner = Runner(
-        fitter=fitter,
-        guesser=guesser,
-        ntry=2,
-    )
-    runner.go(obs=obs)
+        pixel_scale = obs.jacobian.scale
+        if noise <= 1.0e-8:
+            assert abs(res['pars'][0]-data['pars'][0]) < pixel_scale/10
+            assert abs(res['pars'][1]-data['pars'][1]) < pixel_scale/10
 
-    fitter = runner.fitter
-    res = fitter.get_result()
-    assert res['flags'] == 0
+            assert abs(res['pars'][2]-data['pars'][2]) < 0.01
+            assert abs(res['pars'][3]-data['pars'][3]) < 0.01
 
-    pixel_scale = obs.jacobian.scale
-    if noise <= 1.0e-8:
-        assert abs(res['pars'][0]-data['pars'][0]) < pixel_scale/10
-        assert abs(res['pars'][1]-data['pars'][1]) < pixel_scale/10
+            assert abs(res['pars'][4]/data['pars'][4] - 1) < FRAC_TOL
+            assert abs(res['pars'][5]/data['pars'][5] - 1) < FRAC_TOL
 
-        assert abs(res['pars'][2]-data['pars'][2]) < 0.01
-        assert abs(res['pars'][3]-data['pars'][3]) < 0.01
+        # check reconstructed image allowing for noise
+        imfit = fitter.make_image()
+        imtol = 0.001 / pixel_scale**2 + noise*5
+        assert np.all(np.abs(imfit - obs.image) < imtol)
 
-        assert abs(res['pars'][4]/data['pars'][4] - 1) < FRAC_TOL
-        assert abs(res['pars'][5]/data['pars'][5] - 1) < FRAC_TOL
-
-    # check reconstructed image allowing for noise
-    imfit = fitter.make_image()
-    imtol = 0.001 / pixel_scale**2 + noise*5
-    assert np.all(np.abs(imfit - obs.image) < imtol)
+        if i == 1:
+            assert np.all(res['pars'] == res_old['pars'])
+        else:
+            res_old = res
 
 
 def test_gaussmom_runner():
