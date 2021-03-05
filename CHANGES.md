@@ -37,6 +37,7 @@
 - introduced `NGmixBaseException` as parent class for all ngmix-specific exceptions
 - New guessers `TPSFFluxGuesser`, `TPSFFluxAndPriorGuesser`, `GmixPSFGuesser`,
   `SimplePSFGuesser`, `CoellipPSFGuesser`
+- New joint prior `PriorGalsimSimpleSep` 
 
 ### deprecated/removed
 
@@ -52,7 +53,11 @@
   of a required keyword
 - removed priors `ZDisk2DErf`, `ZAnnulus`, `UDisk2DCut`, `TruncatedStudentPolar`,
   `TruncatedGaussianPolar`, `Student`, `Student2D`, `MultivariateLogNormal`,
-  `MVNMom`, `TruncatedSimpleGauss2D`
+  `MVNMom`, `TruncatedSimpleGauss2D`, `GPriorGreat3Exp`, `GPriorGreatDES`,
+  `GPriorGreatDES2`, `GPriorGreatDESNoExp`, `GPriorM`, `GPriorMErf`, `GPriorMErf2`,
+  `FlatEtaPrior`, `BFrac`, `TFluxPriorCosmosExp`, `TFluxPriorCosmosDev`,
+  `GPriorCosmosSersicSpline
+
 - removed `GMixBDF` class.  The "bdf" is now supported by the `GMixModel` class
 - removed the `roundify` and `stats` modules
 - removed the "prepix" option for metacal
