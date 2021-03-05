@@ -2,10 +2,20 @@ import pytest
 import numpy as np
 
 from ngmix.em import fit_em
-from ngmix.priors import srandu
 from ._sims import get_ngauss_obs
 
 FRAC_TOL = 0.001
+
+
+def randomize_gmix(rng, gmix, pixel_scale):
+    gm_data = gmix.get_data()
+    for gauss in gm_data:
+        gauss["p"] *= rng.uniform(low=0.9, high=1.1)
+        gauss["row"] += rng.uniform(low=-pixel_scale, high=pixel_scale)
+        gauss["col"] += rng.uniform(low=-pixel_scale, high=pixel_scale)
+        gauss["irr"] += 0.1 * pixel_scale**2 * rng.uniform(low=-1, high=1)
+        gauss["irc"] += 0.1 * pixel_scale**2 * rng.uniform(low=-1, high=1)
+        gauss["icc"] += 0.1 * pixel_scale**2 * rng.uniform(low=-1, high=1)
 
 
 @pytest.mark.parametrize('noise', [0.0, 0.05])
@@ -28,15 +38,9 @@ def test_em_1gauss(noise):
     pixel_scale = obs.jacobian.scale
 
     pars = gm.get_full_pars()
-    counts = pars[0]
 
     gm_guess = gm.copy()
-    gm_guess._data["p"] += counts/10 * srandu(rng=rng)
-    gm_guess._data["row"] += 4 * pixel_scale * srandu(rng=rng)
-    gm_guess._data["col"] += 4 * pixel_scale * srandu(rng=rng)
-    gm_guess._data["irr"] += 0.5 * pixel_scale**2 * srandu(rng=rng)
-    gm_guess._data["irc"] += 0.5 * pixel_scale**2 * srandu(rng=rng)
-    gm_guess._data["icc"] += 0.5 * pixel_scale**2 * srandu(rng=rng)
+    randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
 
     fitter = fit_em(obs=obs, guess=gm_guess)
 
@@ -79,15 +83,9 @@ def test_em_2gauss(noise):
     pixel_scale = obs.jacobian.scale
 
     pars = gm.get_full_pars()
-    counts_1 = pars[0]
 
     gm_guess = gm.copy()
-    gm_guess._data["p"] += counts_1/10 * srandu(2, rng=rng)
-    gm_guess._data["row"] += 4 * pixel_scale * srandu(2, rng=rng)
-    gm_guess._data["col"] += 4 * pixel_scale * srandu(2, rng=rng)
-    gm_guess._data["irr"] += 0.5 * pixel_scale**2 * srandu(2, rng=rng)
-    gm_guess._data["irc"] += 0.5 * pixel_scale**2 * srandu(2, rng=rng)
-    gm_guess._data["icc"] += 0.5 * pixel_scale**2 * srandu(2, rng=rng)
+    randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
 
     fitter = fit_em(obs=obs, guess=gm_guess)
 
@@ -130,8 +128,7 @@ def test_em_2gauss(noise):
     assert np.all(np.abs(imfit - obs.image) < imtol)
 
 
-# @pytest.mark.parametrize('noise', [0.0, 0.05])
-@pytest.mark.parametrize('noise', [1.0e-6, 0.05])
+@pytest.mark.parametrize('noise', [0.0, 0.05])
 def test_em_2gauss_withpsf(noise):
     """
     see if we can recover the input with and without noise to high precision
@@ -156,15 +153,9 @@ def test_em_2gauss_withpsf(noise):
     pixel_scale = obs.jacobian.scale
 
     pars = gm.get_full_pars()
-    counts_1 = pars[0]
 
     gm_guess = gm.copy()
-    gm_guess._data["p"] += counts_1/10 * srandu(2, rng=rng)
-    gm_guess._data["row"] += pixel_scale * srandu(2, rng=rng)
-    gm_guess._data["col"] += pixel_scale * srandu(2, rng=rng)
-    gm_guess._data["irr"] += 0.1 * pixel_scale**2 * srandu(2, rng=rng)
-    gm_guess._data["irc"] += 0.1 * pixel_scale**2 * srandu(2, rng=rng)
-    gm_guess._data["icc"] += 0.1 * pixel_scale**2 * srandu(2, rng=rng)
+    randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
 
     fitter = fit_em(obs=obs, guess=gm_guess, tol=1.0e-5)
 
@@ -182,8 +173,7 @@ def test_em_2gauss_withpsf(noise):
         indices = [0, 1]
 
     # only check pars for no noise
-    # if noise == 0.0:
-    if noise < 0.001:
+    if noise == 0.0:
         for i in range(ngauss):
             start = i*6
             end = (i+1)*6
