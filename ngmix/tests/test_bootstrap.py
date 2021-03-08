@@ -67,13 +67,6 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
         T=0.25,
         flux=100.0,
     )
-    # prior = get_prior(
-    #     rng=rng,
-    #     cen=[0.0, 0.0],
-    #     cen_width=obs.jacobian.scale,
-    #     T_range=[-1.0, 1.e3],
-    #     F_range=[0.01, 1000.0],
-    # )
     prior = get_prior(
         fit_model=model,
         rng=rng,
