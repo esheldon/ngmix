@@ -9,7 +9,7 @@ from ._galsim_sims import _get_obs
 def test_metacal_smoke(psf):
     rng = np.random.RandomState(seed=100)
 
-    obs = _get_obs(rng)
+    obs = _get_obs(rng, noise=0.005)
 
     if psf == 'galsim_obj':
         psf = galsim.Gaussian(fwhm=0.9)
@@ -22,7 +22,7 @@ def test_metacal_smoke(psf):
 def test_metacal_fixnoise(fixnoise):
     rng = np.random.RandomState(seed=100)
 
-    obs = _get_obs(rng)
+    obs = _get_obs(rng, noise=0.005)
 
     mpars = {
         'psf': 'fitgauss',
@@ -44,7 +44,7 @@ def test_metacal_fixnoise(fixnoise):
 def test_metacal_fixnoise_noise_image():
     rng = np.random.RandomState(seed=100)
 
-    obs = _get_obs(rng, set_noise_image=True)
+    obs = _get_obs(rng, noise=0.005, set_noise_image=True)
     assert obs.has_noise()
 
     mpars = {
