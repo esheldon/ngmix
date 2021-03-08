@@ -95,7 +95,7 @@ class PSFRunner(RunnerBase):
 
         Side Effects
         ------------
-        .meta['result'] is set to the fit result and the .gmix attribuite is
+        obs.meta['result'] is set to the fit result and the .gmix attribuite is
         set for each successful fit, if appropriate
         """
 
@@ -160,7 +160,7 @@ def run_psf_fitter(obs, fitter, guesser=None, ntry=1):
 
     Side Effects
     ------------
-    .meta['result'] is set to the fit result and the .gmix attribuite is set
+    obs.meta['result'] is set to the fit result and the .gmix attribuite is set
     for each successful fit, if appropriate
     """
 
