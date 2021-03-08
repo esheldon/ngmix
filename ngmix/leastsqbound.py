@@ -75,7 +75,7 @@ def run_leastsq(func, guess, n_prior_pars, **keys):
 
         flags = 0
         if ier > 4:
-            flags = 2 ** (ier - 5)
+            flags |= 2 ** (ier - 5)
             pars, pcov, perr = _get_def_stuff(npars)
             LOGGER.debug(errmsg)
 
