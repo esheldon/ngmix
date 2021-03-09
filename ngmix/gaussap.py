@@ -2,7 +2,7 @@
 calculate gaussian aperture fluxes for a catalog of parameters
 """
 import numpy as np
-from .gmix import GMixModel, GMixCM, GMixBDF
+from .gmix import GMixModel, GMixCM
 from .gexceptions import GMixRangeError
 
 DEFAULT_FLUX = -9999.0
@@ -94,8 +94,6 @@ def _do_gap(weight_fwhm, fracdev, TdByTe, pars, model, i, band):
                 TdByTe[i],
                 tpars,
             )
-        elif model == 'bdf':
-            gm = GMixBDF(tpars)
         else:
             gm = GMixModel(tpars, model)
 

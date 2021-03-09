@@ -1,70 +1,64 @@
-__version__ = 'v1.3.8'
+# flake8: noqa
 
-from . import gmix  # noqa
-from .gmix import (  # noqa
+__version__ = 'v2.0.0'
+
+from . import util
+from .util import print_pars
+from . import flags
+from . import defaults
+
+from . import gmix
+from .gmix import (
     GMix,
     GMixModel,
-    GMixBDF,
     GMixCoellip,
     GMixList,
     MultiBandGMixList,
 )
 
-from . import gmix_ndim  # noqa
-from .gmix_ndim import GMixND  # noqa
+from . import gmix_ndim
+from .gmix_ndim import GMixND
 
-from . import jacobian  # noqa
-from .jacobian import (  # noqa
+from . import jacobian
+from .jacobian import (
     Jacobian,
     UnitJacobian,
     DiagonalJacobian,
 )
-from . import fastexp  # noqa
+from . import fastexp
 
-from . import priors  # noqa
-from .priors import srandu  # noqa
+from . import priors
+from .priors import srandu
 
-from . import joint_prior  # noqa
+from . import joint_prior
 
-from . import shape  # noqa
-from .shape import Shape  # noqa
-from . import moments  # noqa
+from . import shape
+from .shape import Shape
+from . import moments
 
-from . import gexceptions  # noqa
-from .gexceptions import (  # noqa
+from . import gexceptions
+from .gexceptions import (
     GMixRangeError,
     GMixFatalError,
     GMixMaxIterEM,
 )
 
-from . import fitting  # noqa
-from .fitting import print_pars, format_pars  # noqa
-from . import simplex  # noqa
+from . import fitting
+from . import simplex
 
-from . import galsimfit  # noqa
+from . import galsimfit
 
-from . import bootstrap  # noqa
-from .bootstrap import Bootstrapper, CompositeBootstrapper  # noqa
+from . import runners
+from . import bootstrap
+from . import guessers
 
-from . import em  # noqa
+from . import em
+from . import admom
+from . import gaussmom
+from . import observation
+from .observation import Observation, ObsList, MultiBandObsList
 
-from . import admom  # noqa
-
-from . import gaussmom  # noqa
-
-from . import observation  # noqa
-from .observation import Observation, ObsList, MultiBandObsList  # noqa
-
-from . import stats  # noqa
-
-from . import guessers  # noqa
-
-from . import roundify  # noqa
-
-from . import metacal  # noqa
-
-from . import simobs  # noqa
-
-from . import test  # noqa
-
-from . import gaussap  # noqa
+from . import metacal
+from . import metacal_bootstrap
+from . import simobs
+from . import gaussap

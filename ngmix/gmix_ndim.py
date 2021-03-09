@@ -110,7 +110,7 @@ class GMixND(object):
             return plt
 
     def plot(
-        self, *,
+        self,
         min=None,
         max=None,
         npts=None,

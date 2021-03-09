@@ -6,20 +6,22 @@ from ..priors import PriorBase, GPriorBase
 
 
 def test_priors_priorbase():
-    pr = PriorBase(bounds=None)
+    rng = np.random.RandomState(seed=10)
+
+    pr = PriorBase(rng=rng, bounds=None)
     assert not pr.has_bounds()
-    pr = PriorBase(bounds=(3, 4))
+    pr = PriorBase(rng=rng, bounds=(3, 4))
     assert pr.has_bounds()
-    pr = PriorBase(bounds=[3, 4])
+    pr = PriorBase(rng=rng, bounds=[3, 4])
     assert pr.has_bounds()
 
-    rng = np.random.RandomState(seed=10)
     pr = PriorBase(bounds=None, rng=rng)
     assert pr.rng is rng
 
 
 def test_priors_gpriorbase_raises():
-    pr = GPriorBase(None)
+    rng = np.random.RandomState(seed=312)
+    pr = GPriorBase(pars=None, rng=rng)
     for method, num in [
         ("fill_prob_array1d", 2),
         ("fill_lnprob_array2d", 3),

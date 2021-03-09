@@ -15,7 +15,7 @@ from ngmix.shape import e1e2_to_g1g2
 @pytest.mark.parametrize('wcs_g2', [-0.2, 0, 0.5])
 @pytest.mark.parametrize('g1_true', [-0.1, 0, 0.2])
 @pytest.mark.parametrize('g2_true', [-0.2, 0, 0.1])
-def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
+def test_gaussmom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
     rng = np.random.RandomState(seed=100)
 
     fwhm = 0.9
@@ -42,6 +42,9 @@ def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
     g1arr = []
     g2arr = []
     Tarr = []
+
+    fitter = GaussMom(fwhm=fwhm * weight_fac)
+
     for _ in range(50):
         shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
         xy = gs_wcs.toImage(galsim.PositionD(shift))
@@ -66,14 +69,16 @@ def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
             weight=wgt,
             jacobian=jac)
         # use a huge weight so that we get the raw moments back out
-        fitter = GaussMom(obs, fwhm * weight_fac, rng=rng)
         try:
-            fitter.go()
+            fitter.go(obs=obs)
             res = fitter.get_result()
             if res['flags'] == 0:
                 if weight_fac > 1:
+                    # for unweighted we need to convert e to g
                     _g1, _g2 = e1e2_to_g1g2(res['e'][0], res['e'][1])
                 else:
+                    # we are weighting by the round gaussian before shearing.
+                    # Turns out this gives e that equals the shear g
                     _g1, _g2 = res['e'][0], res['e'][1]
                 g1arr.append(_g1)
                 g2arr.append(_g2)

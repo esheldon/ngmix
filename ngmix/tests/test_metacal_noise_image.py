@@ -3,7 +3,7 @@ import numpy as np
 import ngmix
 
 
-def _get_obs():
+def _get_obs(rng):
     """
     obs with noise image included
     """
@@ -13,8 +13,6 @@ def _get_obs():
 
     psf_fwhm = 0.9
     gal_fwhm = 0.7
-
-    rng = np.random.RandomState(seed=100)
 
     psf = galsim.Gaussian(fwhm=psf_fwhm)
     obj0 = galsim.Gaussian(fwhm=gal_fwhm)
@@ -55,21 +53,22 @@ def _get_obs():
 
 def test_metacal_fixnoise_noise_image():
 
-    obs = _get_obs()
+    rng = np.random.RandomState(seed=100)
+    obs = _get_obs(rng)
+    noise_obs = _get_obs(rng)
 
-    noise_obs = _get_obs()
     with noise_obs.writeable():
         nim = obs.noise.copy()
         noise_obs.image[:, :] = np.rot90(nim, k=1)
 
     mdict = ngmix.metacal.get_all_metacal(
-        obs, psf='gauss', use_noise_image=True,
+        obs, psf='gauss', rng=rng, use_noise_image=True,
     )
     mdict_no_fixnoise = ngmix.metacal.get_all_metacal(
-        obs, psf='gauss', fixnoise=False,
+        obs, psf='gauss', rng=rng, fixnoise=False,
     )
     mdict_noise = ngmix.metacal.get_all_metacal(
-        noise_obs, psf='gauss', fixnoise=False,
+        noise_obs, psf='gauss', rng=rng, fixnoise=False,
     )
 
     for key in mdict:

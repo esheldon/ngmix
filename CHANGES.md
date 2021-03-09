@@ -1,5 +1,21 @@
 ## unreleased (v2.0.0)
 
+### breaking API changes
+
+- The fitters no longer take the observation in the constructor.
+  All fitting/measurement conform to a common interface.  The classes have a `go`
+  method that takes the observation and possibly a guess.
+- The bootstrap and runner code has been completely replaced by a new api.
+  The bootstrappers are now generic, wrapping runners that are themselves
+  generic wrappers for fitters and guessers.  Thus the bootstrap/runner
+  code is completely generic and can work with any of the fitters/guessers.
+- The guessers now optionally take the observation as argument when called; this
+  facilitates the cases where a guess can be made based on the observations.
+- The em codes take GMix objects as guesses, a simple T guess is no longer
+  supported
+- The em codes now work in image flux units rather than normalizing the
+  mixture
+
 ### bug fixes
 
 - fixed computation of Jacobian center for `ngmix.KObservation`s with mixed
@@ -16,6 +32,15 @@
 
 ### new features
 
+- All fitters and measurement classes adhere to a common interface.
+  `fitter.go(obs=obs)` or `fitter.go(obs=obs, guess=guess)`.  The obs
+  is no longer taken in the constructor so the same object can be reused
+  in the runners/bootstrappers for multiple measurements.
+- Replaced boostrapper/runner classes with generic classes/functions that
+  expect fitters/measurements and runners to provide common interfaces
+  For fitters `fitter.go(obs=obs)` or `fitter.go(obs=obs, guess=guess)`
+  For runners `runner.go(obs=obs)`.  New classes are bootstrap.Bootstrapper
+  runners.Runner, runners.PSFRunner
 - expanded test suite and improved documentation for the following modules
   * `ngmix.shape`
   * `ngmix.jacobian`
@@ -24,9 +49,20 @@
   * `ngmix.priors`
   * `ngmix.gexceptions`
 - introduced `NGmixBaseException` as parent class for all ngmix-specific exceptions
+- New guessers `TPSFFluxGuesser`, `TPSFFluxAndPriorGuesser`, `GmixPSFGuesser`,
+  `SimplePSFGuesser`, `CoellipPSFGuesser`
+- New joint prior `PriorGalsimSimpleSep`
+- Added guessers `TPSFFluxGuesser`, `TPSFFluxAndPriorGuesser`, `GMixPSFGuesser`,
+  `SimplePSFGuesser`, `CoellipPSFGuesser`,
+- New specialized EM fitting codes added:
+    - GMixEMFixedCen: fit mixtures with fixed centers for each component
+    - GMixEMFluxOnly: fit mixtures allowing only the fluxes to vary
 
 ### deprecated/removed
 
+- The `LMSimple` class now supports the "bdf" and "bd" models and has been
+  renamed to `LM`.  The `LMSimple` is now an alias for `LM` and is considered
+  deprecated.  The `LMBDF` and `LMBD` classes have been removed.
 - `ngmix.lensfit` has been removed in v2.0.0
 - all `dbyg1_*`,  `dbyg2_*`, `dlnbyg1_*`, `dlnbyg2_*`, and `get_pqr*` methods,
   along with the code used to test them, have been removed from the classes in
@@ -35,8 +71,17 @@
 - the optional `rng` keyword for `ngmix.priors.srandu` has been removed in favor
   of a required keyword
 - removed priors `ZDisk2DErf`, `ZAnnulus`, `UDisk2DCut`, `TruncatedStudentPolar`,
-  `TruncatedGaussianPolar`
-
+  `TruncatedGaussianPolar`, `Student`, `Student2D`, `MultivariateLogNormal`,
+  `MVNMom`, `TruncatedSimpleGauss2D`, `GPriorGreat3Exp`, `GPriorGreatDES`,
+  `GPriorGreatDES2`, `GPriorGreatDESNoExp`, `GPriorM`, `GPriorMErf`, `GPriorMErf2`,
+  `FlatEtaPrior`, `BFrac`, `TFluxPriorCosmosExp`, `TFluxPriorCosmosDev`,
+  `GPriorCosmosSersicSpline`
+- Removed all the old bootstrapper and runner classes; replaced with generic
+    `Bootstrapper, Runner, PSFRuner, and MetacalBootstrapper`, and associated functions
+- removed `GMixBDF` class.  The "bdf" is now supported by the `GMixModel` class
+- removed the `roundify` and `stats` modules
+- removed the "prepix" option for metacal
+- removed guessers `RoundParsGuesser`, `MomGuesser`,
 
 ## v1.3.8
 

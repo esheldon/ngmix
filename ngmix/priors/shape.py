@@ -8,9 +8,11 @@ from numpy import where, array, exp, log, sqrt, zeros, sin, cos
 from ..gexceptions import GMixRangeError
 from .random import srandu
 from .priors import PriorBase
+import logging
+from ..util import print_pars
+from ..defaults import LOWVAL
 
-LOWVAL = -numpy.inf
-BIGVAL = 9999.0e47
+LOGGER = logging.getLogger(__name__)
 
 
 class GPriorBase(PriorBase):
@@ -31,9 +33,8 @@ class GPriorBase(PriorBase):
     ----------
     pars: float or array-like
         Parameters for the prior.
-    rng: np.random.RandomState or None
-        An RNG to use. If None, a new RNG is made using the numpy global RNG
-        to generate a seed.
+    rng: np.random.RandomState
+        An random number generator (RNG) to use.
 
     attributes
     ----------
@@ -77,7 +78,7 @@ class GPriorBase(PriorBase):
     dofit(xdata, ydata, guess=None, show=False)
         Fit the prior to data.
     """
-    def __init__(self, pars, rng=None):
+    def __init__(self, pars, rng):
         PriorBase.__init__(self, rng=rng)
 
         self.pars = array(pars, dtype="f8")
@@ -351,8 +352,7 @@ class GPriorBase(PriorBase):
         show: bool, optional
             If True, show a plot of the fit and data.
         """
-        from ..fitting import run_leastsq
-        from ..fitting import print_pars
+        from ..leastsqbound import run_leastsq
 
         (w,) = where(ydata > 0)
         self.xdata = xdata[w]
@@ -369,8 +369,8 @@ class GPriorBase(PriorBase):
         self.fit_perr = res["pars_err"]
 
         print("flags:", res["flags"], "\nnfev:", res["nfev"])
-        print_pars(res["pars"], front="pars: ")
-        print_pars(res["pars_err"], front="perr: ")
+        print_pars(res["pars"], front="pars: ", logger=LOGGER)
+        print_pars(res["pars_err"], front="perr: ", logger=LOGGER)
 
         c = ["%g" % p for p in res["pars"]]
         c = "[" + ", ".join(c) + "]"
@@ -397,9 +397,8 @@ class GPriorGauss(GPriorBase):
     ----------
     pars: float
         The width of the Gaussian prior for g1, g2.
-    rng: np.random.RandomState or None
-        An RNG to use. If None, a new RNG is made using the numpy global RNG
-        to generate a seed.
+    rng: np.random.RandomState
+        An random number generator (RNG) to use.
     """
     def __init__(self, *args, **kw):
         super().__init__(*args, **kw)
@@ -477,14 +476,13 @@ class GPriorBA(GPriorBase):
     sigma: float, optional
         The overall width of the prior on |g|, matches `gsimga` from the paper.
         Default is 0.3.
+    rng: np.random.RandomState
+        An random number generator (RNG) to use.
     A: float, optional
         The overall amplitude of the prior. This is used for fitting, but not
         when evaluating lnprob. Default is 1.0.
-    rng: np.random.RandomState or None
-        An RNG to use. If None, a new RNG is made using the numpy global RNG
-        to generate a seed.
     """
-    def __init__(self, sigma=0.3, A=1.0, rng=None):
+    def __init__(self, sigma, rng, A=1.0):
         PriorBase.__init__(self, rng=rng)
 
         self.set_pars([A, sigma])
@@ -692,16 +690,15 @@ class ZDisk2D(PriorBase):
     ----------
     radius: float
         The maximum raidus of the disk.
-    rng: np.random.RandomState or None
-        An RNG to use. If None, a new RNG is made using the numpy global RNG
-        to generate a seed.
+    rng: np.random.RandomState
+        An random number generator (RNG) to use.
 
     attributes
     ----------
     radius: float
         The maximum raidus of the disk.
     """
-    def __init__(self, radius, rng=None):
+    def __init__(self, radius, rng):
         super().__init__(rng=rng)
 
         self.radius = radius

@@ -29,6 +29,15 @@ class GMixMaxIterEM(NGmixBaseException):
     pass
 
 
+class PSFFluxFailure(NGmixBaseException):
+    """
+    Failure to fit PSF fluxes.  This usually only fails for all zero weight
+    images, so this means we can't proceed with other types of fits or
+    measurements either
+    """
+    pass
+
+
 class BootPSFFailure(NGmixBaseException):
     """
     Failure to bootstrap PSF

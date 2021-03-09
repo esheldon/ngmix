@@ -5,8 +5,7 @@ Originally based off reading through Eric Huffs code; it has departed
 significantly.
 """
 import copy
-import numpy
-from numpy import zeros, sqrt, diag
+import numpy as np
 from .observation import Observation, ObsList, MultiBandObsList
 from .shape import Shape
 from . import simobs
@@ -32,14 +31,22 @@ METACAL_MINIMAL_TYPES = [
 # for backward compatibility
 METACAL_REQUIRED_TYPES = METACAL_MINIMAL_TYPES
 
+DEFAULT_STEP = 0.01
+
 logger = logging.getLogger(__name__)
 
 
-def get_all_metacal(obs,
-                    step=0.01,
-                    fixnoise=True,
-                    cheatnoise=None,
-                    **kw):
+def get_all_metacal(
+    obs,
+    step=DEFAULT_STEP,
+    fixnoise=True,
+    rng=None,
+    use_noise_image=False,
+    psf=None,
+    symmetrize_psf=False,
+    symmetrize_dilation=None,
+    types=None,
+):
     """
     Get all combinations of metacal images in a dict
 
@@ -49,7 +56,18 @@ def get_all_metacal(obs,
         The values in the dict correspond to these
     step: float, optional
         The shear step value to use for metacal.  Default 0.01
-    psf: string, optional
+    fixnoise: bool, optional
+        If set to True, add a compensating noise field to cancel the effect of
+        the sheared, correlated noise component.  Default True
+    rng: np.random.RandomState
+        A random number generator; this is required if fixnoise is True and
+        use_noise_image is False.  It is also required when psf= is sent, in
+        order to add a small amount of noise to the rendered image of the
+        psf.
+    use_noise_image: bool, optional
+        If set to True, use the .noise attribute of the observation
+        for fixing the noise when fixnoise=True.
+    psf: string or galsim object, optional
         PSF to use for metacal. Default is a dilated version
         of the original psf, but you can also set psf to
 
@@ -57,7 +75,14 @@ def get_all_metacal(obs,
                      the original and round.
             'fitgauss': fit a gaussian to the PSF and make
                         use round, dilated version for reconvolution
-
+            galsim object: any arbitrary galsim object
+    symmetrize_psf: bool, optional
+        Perform symmetrization of the image.  This only works well
+        under certain conditionns, for example perfectly centered psfs.
+        It is not a good general solution.
+    symmetrize_dilation: float, optional
+        Dilate by this amount rather than based on the ellipticity
+        of the psf
     types: list, optional
         If psf='gauss' or 'fitgauss', then the default set is the minimal
         set ['noshear','1p','1m','2p','2m']
@@ -65,12 +90,6 @@ def get_all_metacal(obs,
         Otherwise, the default is the full possible set listed in
         ['noshear','1p','1m','2p','2m',
          '1p_psf','1m_psf','2p_psf','2m_psf']
-
-    fixnoise: bool
-        If set to True, add a compensating noise field to cancel the correlated
-        noise component.  Default True
-    **kw:
-        other keywords for metacal and simobs.
 
     returns
     -------
@@ -84,25 +103,36 @@ def get_all_metacal(obs,
     """
 
     if fixnoise:
-        odict = _get_all_metacal_fixnoise(obs, step=step, **kw)
+        odict = _get_all_metacal_fixnoise(
+            obs, step=step, rng=rng,
+            use_noise_image=use_noise_image,
+            psf=psf,
+            symmetrize_psf=symmetrize_psf,
+            symmetrize_dilation=symmetrize_dilation,
+            types=types,
+        )
     else:
         logger.debug("    not doing fixnoise")
-        odict = _get_all_metacal(obs, step=step, **kw)
-
-        if cheatnoise is not None:
-            logger.debug("    cheatnoise:", cheatnoise)
-            # add the noise *after* the metacal process,
-            # cheating the correlated noise effect.  This is
-            # useful for testing the increase in noise
-            #
-            # only works if the images are all the same size, and
-            # noise is all the same
-            _add_noise_odict(odict, cheatnoise)
+        odict = _get_all_metacal(
+            obs, step=step, rng=rng,
+            psf=psf,
+            symmetrize_psf=symmetrize_psf,
+            symmetrize_dilation=symmetrize_dilation,
+            types=types,
+        )
 
     return odict
 
 
-def _get_all_metacal(obs, step=0.01, **kw):
+def _get_all_metacal(
+    obs,
+    step=DEFAULT_STEP,
+    rng=None,
+    psf=None,
+    symmetrize_psf=False,
+    symmetrize_dilation=None,
+    types=None,
+):
     """
     internal routine
 
@@ -110,28 +140,43 @@ def _get_all_metacal(obs, step=0.01, **kw):
     """
     if isinstance(obs, Observation):
 
-        psf = kw.get('psf', None)
         if psf is not None:
 
             if psf == 'gauss':
                 # we default to only shear terms, not psf shear terms
-                kw['types'] = kw.get('types', METACAL_MINIMAL_TYPES)
-                m = MetacalGaussPSF(obs, **kw)
+                types = METACAL_MINIMAL_TYPES
+                m = MetacalGaussPSF(obs=obs, rng=rng)
             elif psf == 'fitgauss':
                 # we default to only shear terms, not psf shear terms
-                kw['types'] = kw.get('types', METACAL_MINIMAL_TYPES)
-                m = MetacalFitGaussPSF(obs, **kw)
+                types = METACAL_MINIMAL_TYPES
+                m = MetacalFitGaussPSF(obs=obs, rng=rng)
             else:
-                psf = kw.pop('psf')
-                m = MetacalAnalyticPSF(obs, psf, **kw)
+                m = MetacalAnalyticPSF(obs=obs, psf=psf, rng=rng)
         else:
-            m = Metacal(obs, **kw)
+            m = Metacal(
+                obs,
+                symmetrize_psf=symmetrize_psf,
+                symmetrize_dilation=symmetrize_dilation,
+            )
 
-        odict = m.get_all(step, **kw)
+        odict = m.get_all(step=step, types=types)
+
     elif isinstance(obs, MultiBandObsList):
-        odict = _make_metacal_mb_obs_list_dict(obs, step, **kw)
+        odict = _make_metacal_mb_obs_list_dict(
+            mb_obs_list=obs, step=step, rng=rng,
+            psf=psf,
+            symmetrize_psf=symmetrize_psf,
+            symmetrize_dilation=symmetrize_dilation,
+            types=types,
+        )
     elif isinstance(obs, ObsList):
-        odict = _make_metacal_obs_list_dict(obs, step, **kw)
+        odict = _make_metacal_obs_list_dict(
+            obs, step, rng=rng,
+            psf=psf,
+            symmetrize_psf=symmetrize_psf,
+            symmetrize_dilation=symmetrize_dilation,
+            types=types,
+        )
     else:
         raise ValueError("obs must be Observation, ObsList, "
                          "or MultiBandObsList")
@@ -188,7 +233,7 @@ def _doadd_single_obs(obs, nobs):
     with obs.writeable():
         obs.image += nobs.image
 
-        wpos = numpy.where(
+        wpos = np.where(
             (obs.weight != 0.0) &
             (nobs.weight != 0.0)
         )
@@ -202,25 +247,45 @@ def _doadd_single_obs(obs, nobs):
             obs.weight[wpos] = 1.0/tvar[wpos]
 
 
-def _get_all_metacal_fixnoise(obs, step=0.01, **kw):
+def _get_all_metacal_fixnoise(
+    obs,
+    step=DEFAULT_STEP,
+    rng=None,
+    use_noise_image=False,
+    psf=None,
+    symmetrize_psf=False,
+    symmetrize_dilation=None,
+    types=None,
+):
     """
     internal routine
     Add a sheared noise field to cancel the correlated noise
     """
 
     # Using None for the model means we get just noise
-    use_noise_image = kw.get('use_noise_image', False)
     if use_noise_image:
         noise_obs = _replace_image_with_noise(obs)
         logger.debug("    Doing fixnoise with input noise image")
     else:
-        noise_obs = simobs.simulate_obs(None, obs, **kw)
+        noise_obs = simobs.simulate_obs(gmix=None, obs=obs, rng=rng)
 
     # rotate by 90
     _rotate_obs_image_square(noise_obs, k=1)
 
-    obsdict = _get_all_metacal(obs, step=step, **kw)
-    noise_obsdict = _get_all_metacal(noise_obs, step=step, **kw)
+    obsdict = _get_all_metacal(
+        obs, step=step, rng=rng,
+        psf=psf,
+        symmetrize_psf=symmetrize_psf,
+        symmetrize_dilation=symmetrize_dilation,
+        types=types,
+    )
+    noise_obsdict = _get_all_metacal(
+        noise_obs, step=step, rng=rng,
+        psf=psf,
+        symmetrize_psf=symmetrize_psf,
+        symmetrize_dilation=symmetrize_dilation,
+        types=types,
+    )
 
     for type in obsdict:
 
@@ -296,14 +361,22 @@ class Metacal(object):
     Rpsf_obs2p = mc.get_obs_psfshear(sh2p)
     """
 
-    def __init__(self, obs, **kw):
+    def __init__(self, obs, symmetrize_psf=False, symmetrize_dilation=None):
 
         self.obs = obs
 
-        self._setup(**kw)
+        if not obs.has_psf():
+            raise ValueError("observation must have a psf observation set")
+
+        # if None, we will calculate it from the PSF ellipticity
+        self.symmetrize_dilation = symmetrize_dilation
+        self.symmetrize_psf = symmetrize_psf
+
+        self._set_pixel()
+        self._set_interp()
         self._set_data()
 
-    def get_all(self, step=0.01, types=None, **kw):
+    def get_all(self, step=DEFAULT_STEP, types=None):
         """
         Get all the "usual" combinations of metacal images in a dict
 
@@ -523,19 +596,12 @@ class Metacal(object):
 
         psf_grown_nopix = self._do_dilate(self.psf_int_nopix, shear)
 
-        if doshear and not self.shear_pixelized_psf:
+        if doshear:
             psf_grown_nopix = psf_grown_nopix.shear(g1=shear.g1,
                                                     g2=shear.g2)
 
-        if self.prepix:
-            p1, p2 = psf_grown_nopix, psf_grown_nopix
-        else:
-            psf_grown = galsim.Convolve(psf_grown_nopix, self.pixel)
-            p1, p2 = psf_grown, psf_grown_nopix
-
-        if doshear and self.shear_pixelized_psf:
-            p1 = p1.shear(g1=shear.g1, g2=shear.g2)
-            p2 = p2.shear(g1=shear.g1, g2=shear.g2)
+        psf_grown = galsim.Convolve(psf_grown_nopix, self.pixel)
+        p1, p2 = psf_grown, psf_grown_nopix
 
         return p1, p2
 
@@ -569,7 +635,7 @@ class Metacal(object):
                 nx=nx,
                 ny=ny,
                 wcs=self.image.wcs,
-                dtype=numpy.float64,
+                dtype=np.float64,
             )
         except RuntimeError as err:
             # argh, galsim uses generic exceptions
@@ -604,27 +670,6 @@ class Metacal(object):
         # this is the interpolated, devonvolved image
         sheared_image = self.image_int_nopsf.shear(g1=shear.g1, g2=shear.g2)
         return sheared_image
-
-    def _setup(self, **kw):
-        """
-        set up the Galsim objects, Galsim version of Jacobian/wcs, and
-        the interpolation
-        """
-
-        # if None, we will calculate it from the PSF ellipticity
-        self.symmetrize_dilation = kw.get('symmetrize_dilation', None)
-
-        self.prepix = kw.get('prepix', False)
-        self.symmetrize_psf = kw.get('symmetrize_psf', False)
-
-        self.shear_pixelized_psf = kw.get('shear_pixelized_psf', False)
-
-        obs = self.obs
-        if not obs.has_psf():
-            raise ValueError("observation must have a psf observation set")
-
-        self._set_pixel()
-        self._set_interp()
 
     def _set_data(self):
         """
@@ -693,16 +738,16 @@ class Metacal(object):
 
         irr, irc, icc = moments.e2mom(e1, e2, T)
 
-        mat = numpy.zeros((2, 2))
+        mat = np.zeros((2, 2))
         mat[0, 0] = irr
         mat[0, 1] = irc
         mat[1, 0] = irc
         mat[1, 1] = icc
 
-        eigs = numpy.linalg.eigvals(mat)
+        eigs = np.linalg.eigvals(mat)
 
         dilation = eigs.max()/(T/2.)
-        dilation = sqrt(dilation)
+        dilation = np.sqrt(dilation)
 
         dilation = 1.0 + 2*(dilation-1.0)
         if dilation > 1.1:
@@ -816,15 +861,14 @@ class Metacal(object):
 
 
 class MetacalGaussPSF(Metacal):
-    def __init__(self, *args, **kw):
-        super(MetacalGaussPSF, self).__init__(*args, **kw)
+
+    def __init__(self, obs, rng):
+
+        super().__init__(obs=obs)
+        assert rng is not None
+        self.rng = rng
 
         self.psf_flux = self.obs.psf.image.sum()
-
-        assert self.symmetrize_psf is False,\
-            "no symmetrize for GaussPSF"
-        assert self.shear_pixelized_psf is False,\
-            "no shear pixelized psf for GaussPSF"
 
     def _do_dilate(self, psf, shear):
         newpsf = _get_gauss_target_psf(psf, flux=self.psf_flux)
@@ -884,12 +928,12 @@ class MetacalGaussPSF(Metacal):
 
     def _make_psf_obs(self, gsim):
 
-        noise = 1.0e-6
         psf_im = gsim.array.copy()
-        psf_im += numpy.random.normal(scale=noise, size=psf_im.shape)
+        noise = psf_im.max()/50000.0
+        psf_im += self.rng.normal(scale=noise, size=psf_im.shape)
         obs = self.obs
 
-        cen = (numpy.array(psf_im.shape)-1.0)/2.0
+        cen = (np.array(psf_im.shape)-1.0)/2.0
 
         j = obs.psf.jacobian.copy()
         j.set_cen(
@@ -911,24 +955,21 @@ class MetacalFitGaussPSF(Metacal):
     base the new PSF off of a simple gaussian fit
 
     this version does not support shearing the PSF
+
+    Parameters
+    ----------
+    obs: ngmix.Observation
+        Observation on which to run metacal
+    rng: numpy.random.RandomState
+        Random number generator for adding a small amount of noise to the
+        gaussian psf image
     """
-    def __init__(self, *args, **kw):
-        super(MetacalFitGaussPSF, self).__init__(*args, **kw)
+    def __init__(self, obs, rng):
+        super().__init__(obs=obs)
 
-        if 'rng' in kw:
-            self.rng = kw['rng']
-        else:
-            self.rng = numpy.random.RandomState()
-
+        assert rng is not None
+        self.rng = rng
         self._setup_psf()
-
-        assert not self.prepix, 'no prepix for fit gauss psf'
-        assert not self.shear_pixelized_psf,\
-            'no shear_pixelized_psf for fit gauss psf'
-        assert self.symmetrize_psf is False,\
-            'no symmetrize for fit gauss psf'
-        assert self.shear_pixelized_psf is False,\
-            'no shear pixelized psf for fit gauss psf'
 
     def get_target_psf(self, shear, type, get_nopix=False):
         """
@@ -952,7 +993,7 @@ class MetacalFitGaussPSF(Metacal):
         assert type == 'gal_shear',\
             'psf_shear is not supported for MetacalFitGaussPSF'
 
-        g = sqrt(shear.g1**2 + shear.g2**2)
+        g = np.sqrt(shear.g1**2 + shear.g2**2)
         if g not in self._psf_cache:
 
             psf_grown = self._get_dilated_psf(shear)
@@ -997,7 +1038,7 @@ class MetacalFitGaussPSF(Metacal):
         set the noise image to be used for all PSFs
         """
         pim = self.obs.psf.image
-        self.psf_noise = pim.max()/10000.0
+        self.psf_noise = pim.max()/50000.0
 
         self.psf_noise_image = self.rng.normal(
             size=pim.shape,
@@ -1017,22 +1058,22 @@ class MetacalFitGaussPSF(Metacal):
 
         if the above all fail, rase BootPSFFailure
         """
-        from .bootstrap import AMRunner, PSFRunner
+        from .admom import Admom
+        from .guessers import GMixPSFGuesser, SimplePSFGuesser
+        from .runners import run_psf_fitter
+        from .fitting import LM
         from .gexceptions import BootPSFFailure
-
-        ntry = 4
 
         psfobs = self.obs.psf
 
-        fwhm_guess = 0.9
-        Tguess = moments.fwhm_to_T(fwhm_guess)
+        ntry = 4
+        guesser = GMixPSFGuesser(rng=self.rng, ngauss=1)
 
         # try adaptive moments first
-        runner = AMRunner(psfobs, Tguess, rng=self.rng)
+        fitter = Admom(rng=self.rng)
 
-        runner.go(ntry=ntry)
+        run_psf_fitter(obs=psfobs, fitter=fitter, guesser=guesser, ntry=ntry)
 
-        fitter = runner.fitter
         res = fitter.get_result()
 
         if res['flags'] == 0:
@@ -1046,17 +1087,11 @@ class MetacalFitGaussPSF(Metacal):
                 'xtol': 1.0e-05,
             }
 
-            runner = PSFRunner(
-                psfobs,
-                'gauss',
-                Tguess,
-                lm_pars,
-                rng=self.rng,
-            )
+            fitter = LM(model='gauss', fit_pars=lm_pars)
+            guesser = SimplePSFGuesser(rng=self.rng)
 
-            runner.go(ntry=ntry)
+            run_psf_fitter(obs=psfobs, fitter=fitter, guesser=guesser, ntry=ntry)
 
-            fitter = runner.fitter
             res = fitter.get_result()
 
             if res['flags'] == 0:
@@ -1075,7 +1110,7 @@ class MetacalFitGaussPSF(Metacal):
 
         dilation = _get_ellip_dilation(e1, e2, T)
         T_dilated = T*dilation
-        sigma = sqrt(T_dilated/2.0)
+        sigma = np.sqrt(T_dilated/2.0)
 
         self.gauss_psf = galsim.Gaussian(
             sigma=sigma,
@@ -1099,7 +1134,7 @@ class MetacalFitGaussPSF(Metacal):
         """
         psf_im = gsim.array.copy()
 
-        cen = (numpy.array(psf_im.shape)-1.0)/2.0
+        cen = (np.array(psf_im.shape)-1.0)/2.0
 
         j = self.obs.psf.jacobian.copy()
         j.set_cen(
@@ -1121,10 +1156,13 @@ class MetacalAnalyticPSF(Metacal):
 
     this is just for the reconvolution
     """
-    def __init__(self, obs, psf_obj, **kw):
+    def __init__(self, obs, psf, rng):
+        super().__init__(obs=obs)
 
-        self._set_psf(obs, psf_obj)
-        super(MetacalAnalyticPSF, self).__init__(obs, **kw)
+        assert rng is not None
+        self.rng = rng
+
+        self._set_psf(obs, psf)
 
     def _set_psf(self, obs, psf_in):
         if isinstance(psf_in, dict):
@@ -1203,18 +1241,22 @@ class MetacalAnalyticPSF(Metacal):
                                         g2=shear.g2)
         return psf_grown
 
-    def _make_psf_obs(self, psf_im):
+    def _make_psf_obs(self, gsim):
         obs = self.obs
-        wtval = numpy.median(obs.psf.weight)
 
-        wtim = numpy.zeros(psf_im.array.shape) + wtval
+        psf_im = gsim.array.copy()
+
+        noise = psf_im.max()/50000.0
+        psf_im += self.rng.normal(scale=noise, size=psf_im.shape)
+
+        wtim = np.zeros(psf_im.shape) + 1.0/noise**2
 
         jacob = obs.psf.jacobian.copy()
-        cen = (numpy.array(wtim.shape) - 1.0)/2.0
+        cen = (np.array(wtim.shape) - 1.0)/2.0
         jacob.set_cen(row=cen[0], col=cen[1])
 
         psf_obs = Observation(
-            psf_im.array,
+            psf_im,
             weight=wtim,
             jacobian=jacob,
         )
@@ -1264,16 +1306,16 @@ def _get_ellip_dilation(e1, e2, T):
     """
     irr, irc, icc = moments.e2mom(e1, e2, T)
 
-    mat = numpy.zeros((2, 2))
+    mat = np.zeros((2, 2))
     mat[0, 0] = irr
     mat[0, 1] = irc
     mat[1, 0] = irc
     mat[1, 1] = icc
 
-    eigs = numpy.linalg.eigvals(mat)
+    eigs = np.linalg.eigvals(mat)
 
     dilation = eigs.max()/(T/2.)
-    dilation = sqrt(dilation)
+    dilation = np.sqrt(dilation)
 
     dilation = 1.0 + 2*(dilation-1.0)
 
@@ -1297,7 +1339,7 @@ def _do_dilate(obj, shear):
     shear: ngmix.Shape
         The shape to use for dilation
     """
-    g = sqrt(shear.g1**2 + shear.g2**2)
+    g = np.sqrt(shear.g1**2 + shear.g2**2)
     dilation = 1.0 + 2.0*g
     return obj.dilate(dilation)
 
@@ -1324,9 +1366,9 @@ def _make_symmetrized_image(im_input):
     add a version of itself roated by 90,180,270 degrees
     """
     im = im_input.copy()
-    im += numpy.rot90(im_input, k=1)
-    im += numpy.rot90(im_input, k=2)
-    im += numpy.rot90(im_input, k=3)
+    im += np.rot90(im_input, k=1)
+    im += np.rot90(im_input, k=2)
+    im += np.rot90(im_input, k=3)
 
     im *= (1.0/4.0)
 
@@ -1348,7 +1390,6 @@ def _get_gauss_target_psf(psf, flux):
 
     assumes the psf is centered
     """
-    from numpy import meshgrid, arange, min, sqrt, log
 
     if hasattr(psf, 'stepk'):
         dk = psf.stepk/4.0
@@ -1362,16 +1403,16 @@ def _get_gauss_target_psf(psf, flux):
     karr_r = kim.real.array
     # Find the smallest r where the kval < small_kval
     nk = karr_r.shape[0]
-    kx, ky = meshgrid(arange(-nk/2, nk/2), arange(-nk/2, nk/2))
+    kx, ky = np.meshgrid(np.arange(-nk/2, nk/2), np.arange(-nk/2, nk/2))
     ksq = (kx**2 + ky**2) * dk**2
-    ksq_max = min(ksq[karr_r < small_kval * psf.flux])
+    ksq_max = np.min(ksq[karr_r < small_kval * psf.flux])
 
     # We take our target PSF to be the (round) Gaussian that is even smaller at
     # this ksq
     # exp(-0.5 * ksq_max * sigma_sq) = smaller_kval
-    sigma_sq = -2. * log(smaller_kval) / ksq_max
+    sigma_sq = -2. * np.log(smaller_kval) / ksq_max
 
-    return galsim.Gaussian(sigma=sqrt(sigma_sq), flux=flux)
+    return galsim.Gaussian(sigma=np.sqrt(sigma_sq), flux=flux)
 
 
 def jackknife_shear(data, chunksize=1, dgamma=0.02):
@@ -1390,7 +1431,7 @@ def jackknife_shear(data, chunksize=1, dgamma=0.02):
 
     g = data['mcal_g']
 
-    R = numpy.zeros((data.size, 2))
+    R = np.zeros((data.size, 2))
 
     R[:, 0] = (data['mcal_g_1p'][:, 0] - data['mcal_g_1m'][:, 0])/dgamma
     R[:, 1] = (data['mcal_g_2p'][:, 1] - data['mcal_g_2m'][:, 1])/dgamma
@@ -1404,7 +1445,7 @@ def jackknife_shear(data, chunksize=1, dgamma=0.02):
 
     shear = g_sum/R_sum
 
-    shears = zeros((nchunks, 2))
+    shears = np.zeros((nchunks, 2))
     for i in range(nchunks):
 
         beg = i*chunksize
@@ -1418,7 +1459,7 @@ def jackknife_shear(data, chunksize=1, dgamma=0.02):
 
         shears[i, :] = j_g_sum/j_R_sum
 
-    shear_cov = zeros((2, 2))
+    shear_cov = np.zeros((2, 2))
     fac = (nchunks-1)/float(nchunks)
 
     shear_cov[0, 0] = fac*(((shear[0]-shears[:, 0])**2).sum())
@@ -1430,7 +1471,7 @@ def jackknife_shear(data, chunksize=1, dgamma=0.02):
     out = {
         'shear': shear,
         'shear_cov': shear_cov,
-        'shear_err': sqrt(diag(shear_cov)),
+        'shear_err': np.sqrt(np.diag(shear_cov)),
         'g_sum': g_sum,
         'R_sum': R_sum,
         'R': R_sum/ntot,
@@ -1454,7 +1495,7 @@ def get_shear(data, dgamma=0.02):
 
     g = data['mcal_g']
 
-    R = numpy.zeros((data.size, 2))
+    R = np.zeros((data.size, 2))
 
     R[:, 0] = (data['mcal_g_1p'][:, 0] - data['mcal_g_1m'][:, 0])/dgamma
     R[:, 1] = (data['mcal_g_2p'][:, 1] - data['mcal_g_2m'][:, 1])/dgamma
@@ -1464,11 +1505,11 @@ def get_shear(data, dgamma=0.02):
     g_mean = g.mean(axis=0)
     R_mean = R.mean(axis=0)
 
-    g_err = g.std(axis=0)/sqrt(ntot)
-    R_err = R.std(axis=0)/sqrt(ntot)
+    g_err = g.std(axis=0)/np.sqrt(ntot)
+    R_err = R.std(axis=0)/np.sqrt(ntot)
 
     shear = g_mean/R_mean
-    shear_err = numpy.abs(shear)*sqrt((g_err/g_mean)**2 + (R_err/R_mean)**2)
+    shear_err = np.abs(shear)*np.sqrt((g_err/g_mean)**2 + (R_err/R_mean)**2)
 
     out = {
         'shear': shear,
@@ -1478,11 +1519,13 @@ def get_shear(data, dgamma=0.02):
     return out
 
 
-def _make_metacal_mb_obs_list_dict(mb_obs_list, step, **kw):
+def _make_metacal_mb_obs_list_dict(mb_obs_list, step, rng=None, **kw):
 
     new_dict = None
     for obs_list in mb_obs_list:
-        odict = _make_metacal_obs_list_dict(obs_list, step, **kw)
+        odict = _make_metacal_obs_list_dict(
+            obs_list=obs_list, step=step, rng=rng, **kw,
+        )
 
         if new_dict is None:
             new_dict = _init_mb_obs_list_dict(odict.keys())
@@ -1493,11 +1536,11 @@ def _make_metacal_mb_obs_list_dict(mb_obs_list, step, **kw):
     return new_dict
 
 
-def _make_metacal_obs_list_dict(obs_list, step, **kw):
+def _make_metacal_obs_list_dict(obs_list, step, rng=None, **kw):
     odict = None
     for obs in obs_list:
 
-        todict = _get_all_metacal(obs, step=step, **kw)
+        todict = _get_all_metacal(obs, step=step, rng=rng, **kw)
 
         if odict is None:
             odict = _init_obs_list_dict(todict.keys())
@@ -1529,10 +1572,10 @@ def _rotate_obs_image_nonsquare(obs, k=1):
 
     if isinstance(obs, Observation):
 
-        image = numpy.rot90(obs.image, k=k)
-        weight = numpy.rot90(obs.weight, k=k)
+        image = np.rot90(obs.image, k=k)
+        weight = np.rot90(obs.weight, k=k)
         if obs.has_bmask():
-            bmask = numpy.rot90(obs.bmask, k=k)
+            bmask = np.rot90(obs.bmask, k=k)
         else:
             bmask = None
 
@@ -1571,7 +1614,7 @@ def _rotate_obs_image_square(obs, k=1):
     """
 
     if isinstance(obs, Observation):
-        obs.set_image(numpy.rot90(obs.image, k=k))
+        obs.set_image(np.rot90(obs.image, k=k))
     elif isinstance(obs, ObsList):
         for tobs in obs:
             _rotate_obs_image_square(tobs, k=k)
@@ -1583,32 +1626,6 @@ def _rotate_obs_image_square(obs, k=1):
                          "or MultiBandObsList")
 
 
-def _add_noise_odict(odict, noise):
-    """
-    ony
-    """
-
-    noise_image = None
-
-    for key in odict:
-        tobs = odict[key]
-
-        if noise_image is None:
-            if isinstance(tobs, Observation):
-                shape = tobs.weight.shape
-            elif isinstance(tobs, ObsList):
-                shape = tobs[0].weight.shape
-            elif isinstance(tobs, MultiBandObsList):
-                shape = tobs[0][0].weight.shape
-
-            noise_image = numpy.random.normal(
-                scale=noise,
-                size=shape,
-            )
-
-        _add_noise_obs(tobs, noise, noise_image)
-
-
 def _add_noise_obs(obs, noise, noise_image):
     """
     add extra noise and modify the weight map
@@ -1618,9 +1635,9 @@ def _add_noise_obs(obs, noise, noise_image):
 
         weight = obs.weight
 
-        err2 = numpy.zeros(weight.shape) + noise**2
+        err2 = np.zeros(weight.shape) + noise**2
 
-        w = numpy.where(weight > 0)
+        w = np.where(weight > 0)
         if w[0].size > 0:
             err2[w] += 1.0/weight[w]
 
