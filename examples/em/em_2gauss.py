@@ -1,3 +1,6 @@
+"""
+example fitting two gaussians
+"""
 import numpy as np
 import ngmix
 

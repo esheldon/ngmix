@@ -1,3 +1,6 @@
+"""
+example fitting a single gaussian
+"""
 import numpy as np
 import ngmix
 
@@ -9,6 +12,7 @@ def main():
 
     obs, gm = make_data(rng=rng, noise=args.noise)
 
+    # use a psf guesser
     guesser = ngmix.guessers.GMixPSFGuesser(rng=rng, ngauss=1)
     guess = guesser(obs=obs)
     fitter = ngmix.em.fit_em(obs=obs, guess=guess)
