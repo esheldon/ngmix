@@ -11,6 +11,10 @@
   code is completely generic and can work with any of the fitters/guessers.
 - The guessers now optionally take the observation as argument when called; this
   facilitates the cases where a guess can be made based on the observations.
+- The em codes take GMix objects as guesses, a simple T guess is no longer
+  supported
+- The em codes now work in image flux units rather than normalizing the
+  mixture
 
 ### bug fixes
 
@@ -50,6 +54,9 @@
 - New joint prior `PriorGalsimSimpleSep`
 - Added guessers `TPSFFluxGuesser`, `TPSFFluxAndPriorGuesser`, `GMixPSFGuesser`,
   `SimplePSFGuesser`, `CoellipPSFGuesser`,
+- New specialized EM fitting codes added:
+    - GMixEMFixedCen: fit mixtures with fixed centers for each component
+    - GMixEMFluxOnly: fit mixtures allowing only the fluxes to vary
 
 ### deprecated/removed
 
