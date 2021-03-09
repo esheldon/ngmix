@@ -436,7 +436,7 @@ class BDGuesser(object):
 
 class ParsGuesser(object):
     """
-    Make BD guesses from the input T, flux and prior
+    Make guess based on an input set of parameters
 
     parameters
     ----------
@@ -714,7 +714,7 @@ class R50NuFluxGuesser(R50FluxGuesser):
 
 class GMixPSFGuesser(object):
     """
-    guesser a full gaussian mixture for a psf.  Useful for EM and admom
+    Generate a full gaussian mixture for a psf fit.  Useful for EM and admom
 
     Parameters
     ----------
@@ -725,7 +725,7 @@ class GMixPSFGuesser(object):
     guess_from_moms: bool, optional
         If set to True, use weighted moments to generate the starting flux and
         T for the guess.  If set to False, the starting flux is gotten from
-        summing the image and the fwhm of the guess isset to 3.5 times the
+        summing the image and the fwhm of the guess is set to 3.5 times the
         pixel scale
     """
     def __init__(self, rng, ngauss, guess_from_moms=False):
