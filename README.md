@@ -4,7 +4,7 @@ ngmix
 [![Build Status](https://travis-ci.com/esheldon/ngmix.svg?branch=master)](https://travis-ci.com/esheldon/ngmix)
 
 Gaussian mixture models and other tools for working with 2d images, implemented
-in python.   The code is made fast using the numba package.
+in python. The code is made fast using the numba package.
 
 For some examples, please see [the wiki](https://github.com/esheldon/ngmix/wiki).
 
