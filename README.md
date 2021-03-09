@@ -3,9 +3,8 @@ ngmix
 
 [![Build Status](https://travis-ci.com/esheldon/ngmix.svg?branch=master)](https://travis-ci.com/esheldon/ngmix)
 
-Gaussian mixture models and other code for working with for 2d images,
-implemented in python.   The code is made fast using the numba package.  Note
-the old c-extension based code is still available in the tag v0.9.5
+Gaussian mixture models and other tools for working with 2d images, implemented
+in python.   The code is made fast using the numba package.
 
 For some examples, please see [the wiki](https://github.com/esheldon/ngmix/wiki).
 
@@ -31,3 +30,11 @@ conda install -c conda-forge ngmix
 python setup.py install
 conda install numba
 ```
+
+Notes on versions
+-----------------
+
+The api for fitting routines and "bootstrapping" code was rewritten for the
+ngmix version 2 release.  This is a "breaking change", so if you have existing
+code that uses the ngmix version 1 apis you most likely will need to update it.
+The wiki has been updated to reflect the new usage patterns.
