@@ -23,14 +23,16 @@ def main():
 
     # we deconvolve, shear the image, then reconvolve.  Setting psf to
     # 'fitgauss' means reconvolve by a round gaussian psf, based on fitting the
-    # original psf with a gaussian and dilating it appropriately
+    # original psf with a gaussian and dilating it appropriately.  Setting
+    # it simply to 'gauss' uses a deterministic algorithm to create a psf
+    # that is round and larger than the original.
     #
     # types is the types of images to produce.  Here we just use minimal set of
     # shears to speed this example.  If you don't set it, you will get the
-    # standard set which includes shears in g2 (2p, 2m)
+    # standard set which also includes shears in g2 (2p, 2m)
 
     mcal_kws = {
-        'psf': 'fitgauss',
+        'psf': args.psf,
         'types': ['noshear', '1p', '1m'],
     }
 
@@ -99,7 +101,12 @@ def make_data(rng, noise, shear):
     gal_hlr = 0.5
     dy, dx = rng.uniform(low=-scale/2, high=scale/2, size=2)
 
-    psf = galsim.Moffat(beta=2.5, fwhm=psf_fwhm)
+    psf = galsim.Moffat(
+        beta=2.5, fwhm=psf_fwhm,
+    ).shear(
+        g1=0.02,
+        g2=-0.01,
+    )
 
     obj0 = galsim.Exponential(
         half_light_radius=gal_hlr,
@@ -157,6 +164,8 @@ def get_args():
                         help='number of trials')
     parser.add_argument('--noise', type=float, default=1.0e-6,
                         help='noise for images')
+    parser.add_argument('--psf', default='gauss',
+                        help='psf for reconvolution')
     return parser.parse_args()
 
 

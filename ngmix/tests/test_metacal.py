@@ -5,7 +5,7 @@ import pytest
 from ._galsim_sims import _get_obs
 
 
-@pytest.mark.parametrize('psf', [None, 'gauss', 'fitgauss', 'galsim_obj'])
+@pytest.mark.parametrize('psf', ['gauss', 'fitgauss', 'galsim_obj', 'dilate'])
 def test_metacal_smoke(psf):
     rng = np.random.RandomState(seed=100)
 
@@ -14,7 +14,7 @@ def test_metacal_smoke(psf):
     if psf == 'galsim_obj':
         psf = galsim.Gaussian(fwhm=0.9)
 
-    if psf is None:
+    if psf == 'dilate':
         expected_types = ngmix.metacal.METACAL_TYPES
     else:
         expected_types = ngmix.metacal.METACAL_MINIMAL_TYPES
@@ -27,7 +27,7 @@ def test_metacal_smoke(psf):
         assert type in obs_dict
 
 
-@pytest.mark.parametrize('psf', [None, 'gauss', 'fitgauss', 'galsim_obj'])
+@pytest.mark.parametrize('psf', ['gauss', 'fitgauss', 'galsim_obj', 'dilate'])
 def test_metacal_types_smoke(psf):
     rng = np.random.RandomState(seed=100)
 
