@@ -21,17 +21,29 @@ def main():
     shear_true = [0.01, 0.00]
     rng = np.random.RandomState(args.seed)
 
-    # just use minimal set of shears to speed this example.  You should
-    # typically not set types
-    mcal_kws = {'psf': 'fitgauss', 'types': ['noshear', '1p', '1m']}
+    # we deconvolve, shear the image, then reconvolve.  Setting psf to
+    # 'fitgauss' means reconvolve by a round gaussian psf, based on fitting the
+    # original psf with a gaussian and dilating it appropriately
+    #
+    # types is the types of images to produce.  Here we just use minimal set of
+    # shears to speed this example.  If you don't set it, you will get the
+    # standard set which includes shears in g2 (2p, 2m)
 
+    mcal_kws = {
+        'psf': 'fitgauss',
+        'types': ['noshear', '1p', '1m'],
+    }
+
+    # measure moments with a fixed gaussian weight function, no psf correction
     weight_fwhm = 1.2
     fitter = ngmix.gaussmom.GaussMom(fwhm=weight_fwhm)
     psf_fitter = ngmix.gaussmom.GaussMom(fwhm=weight_fwhm)
 
+    # these run the moments
     psf_runner = ngmix.runners.PSFRunner(fitter=psf_fitter)
     runner = ngmix.runners.Runner(fitter=fitter)
 
+    # this runs metacal as well as both psf and object measurements
     boot = ngmix.metacal_bootstrap.MetacalBootstrapper(
         runner=runner, psf_runner=psf_runner,
         rng=rng,
