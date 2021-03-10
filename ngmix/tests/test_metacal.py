@@ -14,8 +14,35 @@ def test_metacal_smoke(psf):
     if psf == 'galsim_obj':
         psf = galsim.Gaussian(fwhm=0.9)
 
+    if psf is None:
+        expected_types = ngmix.metacal.METACAL_TYPES
+    else:
+        expected_types = ngmix.metacal.METACAL_MINIMAL_TYPES
+
     mpars = {'psf': psf}
-    ngmix.metacal.get_all_metacal(obs, rng=rng, **mpars)
+    obs_dict = ngmix.metacal.get_all_metacal(obs, rng=rng, **mpars)
+
+    assert len(obs_dict) == len(expected_types)
+    for type in expected_types:
+        assert type in obs_dict
+
+
+@pytest.mark.parametrize('psf', [None, 'gauss', 'fitgauss', 'galsim_obj'])
+def test_metacal_types_smoke(psf):
+    rng = np.random.RandomState(seed=100)
+
+    obs = _get_obs(rng, noise=0.005)
+
+    if psf == 'galsim_obj':
+        psf = galsim.Gaussian(fwhm=0.9)
+
+    types = ['noshear', '1p']
+    mpars = {'psf': psf, 'types': types}
+    obs_dict = ngmix.metacal.get_all_metacal(obs, rng=rng, **mpars)
+
+    assert len(obs_dict) == len(types)
+    for type in types:
+        assert type in obs_dict
 
 
 @pytest.mark.parametrize('fixnoise', [True, False])

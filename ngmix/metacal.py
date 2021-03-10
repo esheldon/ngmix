@@ -142,13 +142,13 @@ def _get_all_metacal(
 
         if psf is not None:
 
-            if psf == 'gauss':
-                # we default to only shear terms, not psf shear terms
+            # we default to only shear terms, not psf shear terms
+            if types is None:
                 types = METACAL_MINIMAL_TYPES
+
+            if psf == 'gauss':
                 m = MetacalGaussPSF(obs=obs, rng=rng)
             elif psf == 'fitgauss':
-                # we default to only shear terms, not psf shear terms
-                types = METACAL_MINIMAL_TYPES
                 m = MetacalFitGaussPSF(obs=obs, rng=rng)
             else:
                 m = MetacalAnalyticPSF(obs=obs, psf=psf, rng=rng)
