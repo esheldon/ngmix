@@ -36,15 +36,6 @@ def main():
     return gmfit
 
 
-def get_args():
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--show', action='store_true')
-    parser.add_argument('--noise', type=float, default=0.0)
-    return parser.parse_args()
-
-
 def make_data(
     rng,
     counts=100.0,
@@ -82,6 +73,18 @@ def make_data(
     obs = ngmix.Observation(image=im, jacobian=jacobian)
 
     return obs, gm
+
+
+def get_args():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--seed', type=int, default=42,
+                        help='seed for rng')
+    parser.add_argument('--show', action='store_true',
+                        help='show plot comparing model and data')
+    parser.add_argument('--noise', type=float, default=0.0,
+                        help='noise for images')
+    return parser.parse_args()
 
 
 if __name__ == '__main__':
