@@ -67,9 +67,7 @@ def main():
     s2n = np.zeros(args.ntrial)
     R11vals = np.zeros(args.ntrial)
 
-    for i in range(args.ntrial):
-        if (i == 0) or (i+1) % 100 == 0:
-            print('.', end='', flush=True)
+    for i in progress(args.ntrial, miniters=10):
 
         obs = make_data(rng=rng, noise=args.noise, shear=shear_true)
 
@@ -85,6 +83,7 @@ def main():
 
         R11vals[i] = (res1p['e'][0] - res1m['e'][0])/0.02
 
+    print()
     R11 = R11vals.mean()
 
     shear = gvals.mean(axis=0)/R11
@@ -101,6 +100,25 @@ def main():
 
 
 def make_data(rng, noise, shear):
+    """
+    simulate an exponential object with moffat psf
+
+    the hlr of the exponential is drawn from a gaussian
+    with mean 0.4 arcseconds and sigma 0.2
+
+    Parameters
+    ----------
+    rng: np.random.RandomState
+        The random number generator
+    noise: float
+        Noise for the image
+    shear: (g1, g2)
+        The shear in each component
+
+    Returns
+    -------
+    ngmix.Observation
+    """
 
     psf_noise = 1.0e-6
 
@@ -162,6 +180,27 @@ def make_data(rng, noise, shear):
     )
 
     return obs
+
+
+def progress(total, miniters=1):
+    last_print_n = 0
+    last_printed_len = 0
+    sl = str(len(str(total)))
+    mf = '%'+sl+'d/%'+sl+'d %3d%%'
+    for i in range(total):
+        yield i
+
+        num = i+1
+        if i == 0 or num == total or num - last_print_n >= miniters:
+            meter = mf % (num, total, 100*float(num) / total)
+            nspace = max(last_printed_len-len(meter), 0)
+
+            print('\r'+meter+' '*nspace, flush=True, end='')
+            last_printed_len = len(meter)
+            if i > 0:
+                last_print_n = num
+
+    print(flush=True)
 
 
 def get_args():
