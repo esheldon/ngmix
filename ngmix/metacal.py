@@ -341,6 +341,7 @@ class MetacalDilatePSF(object):
         self._set_pixel()
         self._set_interp()
         self._set_data()
+        self._psf_cache = {}
 
     def get_all(self, step=DEFAULT_STEP, types=None):
         """
@@ -494,7 +495,7 @@ class MetacalDilatePSF(object):
 
     def get_target_psf(self, shear, type):
         """
-        get galsim object for the dilated, possibly sheared, psf
+        get image and galsim object for the dilated, possibly sheared, psf
 
         parameters
         ----------
@@ -507,7 +508,7 @@ class MetacalDilatePSF(object):
 
         returns
         -------
-        galsim object
+        image, galsim object
         """
 
         _check_shape(shear)
@@ -517,21 +518,26 @@ class MetacalDilatePSF(object):
         else:
             doshear = False
 
-        psf_grown = self._get_dilated_psf(shear, doshear=doshear)
+        g = np.sqrt(shear.g1**2 + shear.g2**2)
+        if g not in self._psf_cache:
+            psf_grown = self._get_dilated_psf(shear, doshear=doshear)
 
-        # this should carry over the wcs
-        psf_grown_image = self.psf_image.copy()
+            # this should carry over the wcs
+            psf_grown_image = self.psf_image.copy()
 
-        try:
-            psf_grown.drawImage(
-                image=psf_grown_image,
-                method='no_pixel'  # pixel is in the psf
-            )
+            try:
+                psf_grown.drawImage(
+                    image=psf_grown_image,
+                    method='no_pixel',  # pixel is already in psf
+                )
+            except RuntimeError as err:
+                # argh, galsim uses generic exceptions
+                raise GMixRangeError("galsim error: '%s'" % str(err))
 
-            return psf_grown_image, psf_grown
-        except RuntimeError as err:
-            # argh, galsim uses generic exceptions
-            raise GMixRangeError("galsim error: '%s'" % str(err))
+            self._psf_cache[g] = (psf_grown_image, psf_grown)
+
+        psf_grown_image, psf_grown = self._psf_cache[g]
+        return psf_grown_image.copy(), psf_grown
 
     def _get_dilated_psf(self, shear, doshear=False):
         """
@@ -551,7 +557,11 @@ class MetacalDilatePSF(object):
         return psf_grown
 
     def _do_dilate(self, psf, shear):
-        return _do_dilate(psf, shear)
+        g = np.sqrt(shear.g1**2 + shear.g2**2)
+        if g not in self._psf_cache:
+            self._psf_cache[g] = _do_dilate(psf, shear)
+
+        return self._psf_cache[g]
 
     def get_target_image(self, psf_obj, shear=None):
         """
@@ -769,75 +779,58 @@ class MetacalGaussPSF(MetacalDilatePSF):
         super().__init__(obs=obs)
         assert rng is not None
         self.rng = rng
+        self._setup_psf_noise()
 
-        self.psf_flux = self.obs.psf.image.sum()
+    def _setup_psf_noise(self):
+        pim = self.obs.psf.image
+        self.psf_flux = pim.sum()
 
-    def _do_dilate(self, psf, shear):
-        newpsf = _get_gauss_target_psf(psf, flux=self.psf_flux)
-        return _do_dilate(newpsf, shear)
+        self.psf_noise = pim.max()/50000.0
 
-    def get_target_psf(self, shear, type):
+        self.psf_noise_image = self.rng.normal(
+            size=pim.shape,
+            scale=self.psf_noise,
+        )
+        self.psf_weight = self.psf_noise_image*0 + 1.0/self.psf_noise**2
+
+    def _get_dilated_psf(self, shear, doshear=False):
         """
-        get galsim object for the dilated, possibly sheared, psf
+        dilate the psf by the input shear and reconvolve by the pixel.  See
+        _do_dilate for the algorithm
 
-        parameters
-        ----------
-        shear: ngmix.Shape
-            The applied shear
-        type: string
-            Type of psf target.  For type='gal_shear', the psf is just dilated
-            to deal with noise amplification.  For type='psf_shear' the psf is
-            also sheared for calculating Rpsf
-
-        returns
-        -------
-        galsim object
         """
+        import galsim
 
-        _check_shape(shear)
+        assert doshear is False, 'no shearing gauss psf'
 
-        if type == 'psf_shear':
-            doshear = True
-        else:
-            doshear = False
-
-        psf_grown = self._get_dilated_psf(shear, doshear=doshear)
-
-        # this should carry over the wcs
-        psf_grown_image = self.psf_image.copy()
-
-        try:
-            psf_grown.drawImage(image=psf_grown_image)
-            return psf_grown_image, psf_grown
-        except RuntimeError as err:
-            # argh, galsim uses generic exceptions
-            raise GMixRangeError("galsim error: '%s'" % str(err))
+        gauss_psf = _get_gauss_target_psf(
+            self.psf_int_nopix, flux=self.psf_flux,
+        )
+        psf_grown_nopix = _do_dilate(gauss_psf, shear)
+        psf_grown = galsim.Convolve(psf_grown_nopix, self.pixel)
+        return psf_grown
 
     def _make_psf_obs(self, gsim):
 
         psf_im = gsim.array.copy()
-        noise = psf_im.max()/50000.0
-        psf_im += self.rng.normal(scale=noise, size=psf_im.shape)
+        psf_im += self.psf_noise_image
+
         obs = self.obs
 
-        cen = (np.array(psf_im.shape)-1.0)/2.0
+        cen = (np.array(psf_im.shape) - 1.0)/2.0
 
-        j = obs.psf.jacobian.copy()
-        j.set_cen(
-            row=cen[0],
-            col=cen[1],
-        )
+        jacobian = obs.psf.jacobian.copy()
+        jacobian.set_cen(row=cen[0], col=cen[1])
 
-        weight = psf_im*0 + 1.0/noise**2
         psf_obs = Observation(
             psf_im,
-            weight=weight,
-            jacobian=j,
+            weight=self.psf_weight,
+            jacobian=jacobian,
         )
         return psf_obs
 
 
-class MetacalFitGaussPSF(MetacalDilatePSF):
+class MetacalFitGaussPSF(MetacalGaussPSF):
     """
     Create manipulated images for use in metacalibration.  The reconvolution
     kernel is a gaussian generated based a fit to the input psf
@@ -872,83 +865,21 @@ class MetacalFitGaussPSF(MetacalDilatePSF):
     R_obs1m, R_obs1m_unsheared = mc.get_obs_galshear(sh1p, get_unsheared=True)
     """
     def __init__(self, obs, rng):
-        super().__init__(obs=obs)
-
-        assert rng is not None
-        self.rng = rng
-        self._setup_psf()
-
-    def get_target_psf(self, shear, type):
-        """
-        get galsim object for the dilated psf
-
-        parameters
-        ----------
-        shear: ngmix.Shape
-            The applied shear
-        type: string
-            Type of psf target.  Only gal_shear is supported for
-            MetacalFitGaussPSF.
-
-        returns
-        -------
-        galsim object
-        """
-
-        _check_shape(shear)
-
-        assert type == 'gal_shear',\
-            'psf_shear is not supported for MetacalFitGaussPSF'
-
-        g = np.sqrt(shear.g1**2 + shear.g2**2)
-        if g not in self._psf_cache:
-
-            psf_grown = self._get_dilated_psf(shear)
-
-            # this should carry over the wcs
-            psf_grown_image = self.psf_image.copy()
-
-            try:
-                # pixel is already in the psf
-                psf_grown.drawImage(
-                    image=psf_grown_image,
-                    method='no_pixel',
-                )
-
-            except RuntimeError as err:
-                # argh, galsim uses generic exceptions
-                raise GMixRangeError("galsim error: '%s'" % str(err))
-
-            psf_grown_image.array[:, :] += self.psf_noise_image
-            self._psf_cache[g] = (
-                psf_grown_image,
-                psf_grown,
-            )
-
-        tpsf_grown_image, psf_grown = self._psf_cache[g]
-        psf_grown_image = tpsf_grown_image.copy()
-
-        return psf_grown_image, psf_grown
-
-    def _setup_psf(self):
-        self._psf_cache = {}
-
-        self.psf_flux = self.obs.psf.image.sum()
-        self._set_psf_noise()
+        super().__init__(obs=obs, rng=rng)
         self._do_psf_fit()
 
-    def _set_psf_noise(self):
+    def _get_dilated_psf(self, shear, doshear=False):
         """
-        set the noise image to be used for all PSFs
+        dilate the psf by the input shear and reconvolve by the pixel.  See
+        _do_dilate for the algorithm
         """
-        pim = self.obs.psf.image
-        self.psf_noise = pim.max()/50000.0
 
-        self.psf_noise_image = self.rng.normal(
-            size=pim.shape,
-            scale=self.psf_noise,
-        )
-        self.psf_weight = self.psf_noise_image*0 + 1.0/self.psf_noise**2
+        assert doshear is False, 'no shearing fitgauss psf'
+
+        psf_grown = _do_dilate(self.gauss_psf, shear)
+
+        # we don't convolve by the pixel, its already in there
+        return psf_grown
 
     def _do_psf_fit(self):
         """
@@ -1023,40 +954,8 @@ class MetacalFitGaussPSF(MetacalDilatePSF):
             flux=self.psf_flux,
         )
 
-    def _get_dilated_psf(self, shear):
-        """
-        dilate the psf by the input shear and reconvolve by the pixel.  See
-        _do_dilate for the algorithm
-        """
 
-        psf_grown = _do_dilate(self.gauss_psf, shear)
-
-        # we don't convolve by the pixel, its already in there
-        return psf_grown
-
-    def _make_psf_obs(self, gsim):
-        """
-        make a new psf observation
-        """
-        psf_im = gsim.array.copy()
-
-        cen = (np.array(psf_im.shape)-1.0)/2.0
-
-        j = self.obs.psf.jacobian.copy()
-        j.set_cen(
-            row=cen[0],
-            col=cen[1],
-        )
-
-        psf_obs = Observation(
-            psf_im,
-            weight=self.psf_weight.copy(),
-            jacobian=j,
-        )
-        return psf_obs
-
-
-class MetacalAnalyticPSF(MetacalDilatePSF):
+class MetacalAnalyticPSF(MetacalGaussPSF):
     """
     Create manipulated images for use in metacalibration.  The reconvolution
     kernel is set to the input galsim object
@@ -1093,60 +992,11 @@ class MetacalAnalyticPSF(MetacalDilatePSF):
     R_obs1m, R_obs1m_unsheared = mc.get_obs_galshear(sh1p, get_unsheared=True)
     """
     def __init__(self, obs, psf, rng):
-        super().__init__(obs=obs)
-
-        assert rng is not None
-        self.rng = rng
-
-        self._set_psf(obs, psf)
-
-    def _set_psf(self, obs, psf):
         import galsim
+        super().__init__(obs=obs, rng=rng)
 
         assert isinstance(psf, galsim.GSObject)
-
         self.psf_obj = psf
-
-    def get_target_psf(self, shear, type):
-        """
-        get galsim object for the dilated, possibly sheared, psf
-
-        parameters
-        ----------
-        shear: ngmix.Shape
-            The applied shear
-        type: string
-            Type of psf target.  For type='gal_shear', the psf is just dilated
-            to deal with noise amplification.  For type='psf_shear' the psf is
-            also sheared for calculating Rpsf
-
-        returns
-        -------
-        galsim object
-        """
-
-        _check_shape(shear)
-
-        if type == 'psf_shear':
-            doshear = True
-        else:
-            doshear = False
-
-        psf_grown = self._get_dilated_psf(shear, doshear=doshear)
-
-        # this should carry over the wcs
-        psf_grown_image = self.psf_image.copy()
-
-        try:
-            psf_grown_image = psf_grown.drawImage(
-                wcs=self.psf_image.wcs,
-                method='no_pixel'  # pixel is in the psf
-            )
-        except RuntimeError as err:
-            # argh, galsim uses generic exceptions
-            raise GMixRangeError("galsim error: '%s'" % str(err))
-
-        return psf_grown_image, psf_grown
 
     def _get_dilated_psf(self, shear, doshear=False):
         """
@@ -1154,69 +1004,10 @@ class MetacalAnalyticPSF(MetacalDilatePSF):
         analytic model
         """
 
+        assert doshear is False, 'no shearing analytic psf'
+
         psf_grown = _do_dilate(self.psf_obj, shear)
-
-        if doshear:
-            psf_grown = psf_grown.shear(g1=shear.g1,
-                                        g2=shear.g2)
         return psf_grown
-
-    def _make_psf_obs(self, gsim):
-        obs = self.obs
-
-        psf_im = gsim.array.copy()
-
-        noise = psf_im.max()/50000.0
-        psf_im += self.rng.normal(scale=noise, size=psf_im.shape)
-
-        wtim = np.zeros(psf_im.shape) + 1.0/noise**2
-
-        jacob = obs.psf.jacobian.copy()
-        cen = (np.array(wtim.shape) - 1.0)/2.0
-        jacob.set_cen(row=cen[0], col=cen[1])
-
-        psf_obs = Observation(
-            psf_im,
-            weight=wtim,
-            jacobian=jacob,
-        )
-
-        return psf_obs
-
-    def _make_obs(self, im, psf_im):
-        """
-        Make new Observation objects for the image and psf.
-        Copy out the weight maps and jacobians from the original
-        Observation.
-
-        parameters
-        ----------
-        im: Galsim Image
-        psf_im: Galsim Image
-
-        returns
-        -------
-        A new Observation
-        """
-
-        obs = self.obs
-
-        psf_obs = self._make_psf_obs(psf_im)
-
-        meta = {}
-        meta.update(obs.meta)
-        newobs = Observation(
-            im.array,
-            jacobian=obs.jacobian,
-            weight=obs.weight.copy(),
-            psf=psf_obs,
-            meta=meta,
-        )
-
-        if obs.has_bmask():
-            newobs.bmask = obs.bmask
-
-        return newobs
 
 
 def _get_ellip_dilation(e1, e2, T):
