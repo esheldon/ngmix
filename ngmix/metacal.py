@@ -1,5 +1,5 @@
 """
-class to create manipulated images for use in metacalibration
+code to create sheared images for use in metacalibration
 
 Originally based off reading through Eric Huffs code; it has departed
 significantly.
@@ -14,22 +14,18 @@ from . import moments
 from .gexceptions import GMixRangeError
 import logging
 
-try:
-    import galsim
-except ImportError:
-    pass
-
+# need all these types for psf='dilate'
 METACAL_TYPES = [
     'noshear',
     '1p', '1m', '2p', '2m',
     '1p_psf', '1m_psf', '2p_psf', '2m_psf',
 ]
+
+# these are the types needed when the new psf is round
 METACAL_MINIMAL_TYPES = [
     'noshear',
     '1p', '1m', '2p', '2m',
 ]
-# for backward compatibility
-METACAL_REQUIRED_TYPES = METACAL_MINIMAL_TYPES
 
 DEFAULT_STEP = 0.01
 
@@ -38,13 +34,11 @@ logger = logging.getLogger(__name__)
 
 def get_all_metacal(
     obs,
+    psf='gauss',
     step=DEFAULT_STEP,
     fixnoise=True,
     rng=None,
     use_noise_image=False,
-    psf=None,
-    symmetrize_psf=False,
-    symmetrize_dilation=None,
     types=None,
 ):
     """
@@ -54,6 +48,21 @@ def get_all_metacal(
     ----------
     obs: Observation, ObsList, or MultiBandObsList
         The values in the dict correspond to these
+    psf: string or galsim object, optional
+        PSF to use for metacal.  Default 'gauss'.  Note 'fitgauss'
+        will usually produce a smaller psf, but it can fail.
+
+            'gauss': reconvolve gaussian that is larger than
+                the original and round.
+            'fitgauss': fit a gaussian to the PSF and make
+                use round, dilated version for reconvolution
+            galsim object: any arbitrary galsim object
+                Use the exact input object for the reconvolution kernel; this
+                psf gets convolved by thye pixel
+            'dilate': dilate the origial psf
+                just dilate the original psf; the resulting psf is not round,
+                so you need to calculate the _psf terms and make an explicit
+                correction
     step: float, optional
         The shear step value to use for metacal.  Default 0.01
     fixnoise: bool, optional
@@ -67,22 +76,6 @@ def get_all_metacal(
     use_noise_image: bool, optional
         If set to True, use the .noise attribute of the observation
         for fixing the noise when fixnoise=True.
-    psf: string or galsim object, optional
-        PSF to use for metacal. Default is a dilated version
-        of the original psf, but you can also set psf to
-
-            'gauss': reconvolve gaussian that is larger than
-                     the original and round.
-            'fitgauss': fit a gaussian to the PSF and make
-                        use round, dilated version for reconvolution
-            galsim object: any arbitrary galsim object
-    symmetrize_psf: bool, optional
-        Perform symmetrization of the image.  This only works well
-        under certain conditionns, for example perfectly centered psfs.
-        It is not a good general solution.
-    symmetrize_dilation: float, optional
-        Dilate by this amount rather than based on the ellipticity
-        of the psf
     types: list, optional
         If psf='gauss' or 'fitgauss', then the default set is the minimal
         set ['noshear','1p','1m','2p','2m']
@@ -107,8 +100,6 @@ def get_all_metacal(
             obs, step=step, rng=rng,
             use_noise_image=use_noise_image,
             psf=psf,
-            symmetrize_psf=symmetrize_psf,
-            symmetrize_dilation=symmetrize_dilation,
             types=types,
         )
     else:
@@ -116,8 +107,6 @@ def get_all_metacal(
         odict = _get_all_metacal(
             obs, step=step, rng=rng,
             psf=psf,
-            symmetrize_psf=symmetrize_psf,
-            symmetrize_dilation=symmetrize_dilation,
             types=types,
         )
 
@@ -129,8 +118,6 @@ def _get_all_metacal(
     step=DEFAULT_STEP,
     rng=None,
     psf=None,
-    symmetrize_psf=False,
-    symmetrize_dilation=None,
     types=None,
 ):
     """
@@ -140,9 +127,11 @@ def _get_all_metacal(
     """
     if isinstance(obs, Observation):
 
-        if psf is not None:
+        if psf == 'dilate':
+            m = MetacalDilatePSF(obs)
+        else:
 
-            # we default to only shear terms, not psf shear terms
+            # For these, we default to only shear terms, not psf shear terms
             if types is None:
                 types = METACAL_MINIMAL_TYPES
 
@@ -152,12 +141,6 @@ def _get_all_metacal(
                 m = MetacalFitGaussPSF(obs=obs, rng=rng)
             else:
                 m = MetacalAnalyticPSF(obs=obs, psf=psf, rng=rng)
-        else:
-            m = Metacal(
-                obs,
-                symmetrize_psf=symmetrize_psf,
-                symmetrize_dilation=symmetrize_dilation,
-            )
 
         odict = m.get_all(step=step, types=types)
 
@@ -165,16 +148,12 @@ def _get_all_metacal(
         odict = _make_metacal_mb_obs_list_dict(
             mb_obs_list=obs, step=step, rng=rng,
             psf=psf,
-            symmetrize_psf=symmetrize_psf,
-            symmetrize_dilation=symmetrize_dilation,
             types=types,
         )
     elif isinstance(obs, ObsList):
         odict = _make_metacal_obs_list_dict(
             obs, step, rng=rng,
             psf=psf,
-            symmetrize_psf=symmetrize_psf,
-            symmetrize_dilation=symmetrize_dilation,
             types=types,
         )
     else:
@@ -253,8 +232,6 @@ def _get_all_metacal_fixnoise(
     rng=None,
     use_noise_image=False,
     psf=None,
-    symmetrize_psf=False,
-    symmetrize_dilation=None,
     types=None,
 ):
     """
@@ -275,15 +252,11 @@ def _get_all_metacal_fixnoise(
     obsdict = _get_all_metacal(
         obs, step=step, rng=rng,
         psf=psf,
-        symmetrize_psf=symmetrize_psf,
-        symmetrize_dilation=symmetrize_dilation,
         types=types,
     )
     noise_obsdict = _get_all_metacal(
         noise_obs, step=step, rng=rng,
         psf=psf,
-        symmetrize_psf=symmetrize_psf,
-        symmetrize_dilation=symmetrize_dilation,
         types=types,
     )
 
@@ -321,11 +294,11 @@ def _get_all_metacal_fixnoise(
     return obsdict
 
 
-class Metacal(object):
+class MetacalDilatePSF(object):
     """
     Create manipulated images for use in metacalibration
 
-    parameters
+    Parameters
     ----------
     obs: ngmix.Observation
         The observation must have a psf observation set, holding
@@ -334,10 +307,7 @@ class Metacal(object):
     examples
     --------
 
-    psf_obs=Observation(psf_image)
-    obs=Observation(image, psf=psf_obs)
-
-    mc=Metacal(obs, prepix=True)
+    mc = MetacalDilatePSF(obs)
 
     # observations used to calculate R
 
@@ -361,16 +331,12 @@ class Metacal(object):
     Rpsf_obs2p = mc.get_obs_psfshear(sh2p)
     """
 
-    def __init__(self, obs, symmetrize_psf=False, symmetrize_dilation=None):
+    def __init__(self, obs):
 
         self.obs = obs
 
         if not obs.has_psf():
             raise ValueError("observation must have a psf observation set")
-
-        # if None, we will calculate it from the PSF ellipticity
-        self.symmetrize_dilation = symmetrize_dilation
-        self.symmetrize_psf = symmetrize_psf
 
         self._set_pixel()
         self._set_interp()
@@ -593,6 +559,7 @@ class Metacal(object):
 
         If doshear, also shear it
         """
+        import galsim
 
         psf_grown_nopix = self._do_dilate(self.psf_int_nopix, shear)
 
@@ -644,6 +611,8 @@ class Metacal(object):
         return newim
 
     def _get_target_gal_obj(self, psf_obj, shear=None):
+        import galsim
+
         if shear is not None:
             shim_nopsf = self.get_sheared_image_nopsf(shear)
         else:
@@ -675,6 +644,7 @@ class Metacal(object):
         """
         create galsim objects based on the input observation
         """
+        import galsim
 
         obs = self.obs
 
@@ -703,58 +673,7 @@ class Metacal(object):
 
         # interpolated psf deconvolved from pixel.  This is what
         # we dilate, shear, etc and reconvolve the image by
-        if self.symmetrize_psf:
-            self.psf_int_nopix = self._get_symmetrized_psf_nopix()
-        else:
-            self.psf_int_nopix = galsim.Convolve([psf_int, self.pixel_inv])
-
-    def _get_symmetrized_psf_nopix(self):
-        sym_psf_int = _make_symmetrized_gsimage_int(
-            self.obs.psf.image,
-            self.get_psf_wcs(),
-            self.interp,
-        )
-
-        psf_int_nopix = galsim.Convolve([sym_psf_int, self.pixel_inv])
-
-        dilation = self._get_symmetrize_dilation()
-
-        psf_int_nopix = psf_int_nopix.dilate(dilation)
-        return psf_int_nopix
-
-    def _get_symmetrize_dilation(self):
-
-        if self.symmetrize_dilation is not None:
-            return self.symmetrize_dilation
-
-        if not self.obs.has_psf_gmix():
-            raise RuntimeError("you need to fit the psf "
-                               "before symmetrizing")
-
-        psf_gmix = self.obs.psf.gmix
-
-        # g1,g2,T = psf_gmix.get_g1g2T()
-        e1, e2, T = psf_gmix.get_e1e2T()
-
-        irr, irc, icc = moments.e2mom(e1, e2, T)
-
-        mat = np.zeros((2, 2))
-        mat[0, 0] = irr
-        mat[0, 1] = irc
-        mat[1, 0] = irc
-        mat[1, 1] = icc
-
-        eigs = np.linalg.eigvals(mat)
-
-        dilation = eigs.max()/(T/2.)
-        dilation = np.sqrt(dilation)
-
-        dilation = 1.0 + 2*(dilation-1.0)
-        if dilation > 1.1:
-            dilation = 1.1
-        g1, g2, T = psf_gmix.get_g1g2T()
-
-        return dilation
+        self.psf_int_nopix = galsim.Convolve([psf_int, self.pixel_inv])
 
     def get_wcs(self):
         """
@@ -768,35 +687,6 @@ class Metacal(object):
         """
         return self.obs.psf.jacobian.get_galsim_wcs()
 
-    def _set_wcs_choose(self, jacobian, **kw):
-        """
-        create a galsim JacobianWCS from the input ngmix.Jacobian, as
-        well as pixel objects
-        """
-
-        self.jacobian = jacobian
-        wcs_convention = kw.get("wcs_convention", None)
-        logger.debug("        wcs convention: %s" % wcs_convention)
-
-        if wcs_convention == 1:
-            self.gs_wcs = galsim.JacobianWCS(jacobian.dudrow,
-                                             jacobian.dudcol,
-                                             jacobian.dvdrow,
-                                             jacobian.dvdcol)
-        elif wcs_convention == 2:
-            self.gs_wcs = galsim.JacobianWCS(jacobian.dudcol,
-                                             jacobian.dudrow,
-                                             jacobian.dvdcol,
-                                             jacobian.dvdrow)
-
-        elif wcs_convention == 3:
-            self.gs_wcs = galsim.JacobianWCS(jacobian.dvdcol,
-                                             jacobian.dvdrow,
-                                             jacobian.dudcol,
-                                             jacobian.dudrow)
-        else:
-            raise ValueError("bad wcs_convention: %s" % wcs_convention)
-
     def _set_pixel(self):
         """
         set the pixel based on the pixel scale, for convolutions
@@ -804,6 +694,7 @@ class Metacal(object):
         Thanks to M. Jarvis for the suggestion to use toWorld
         to get the proper pixel
         """
+        import galsim
 
         wcs = self.get_wcs()
         self.pixel = wcs.toWorld(galsim.Pixel(scale=1))
@@ -860,7 +751,40 @@ class Metacal(object):
         return newobs
 
 
-class MetacalGaussPSF(Metacal):
+class MetacalGaussPSF(MetacalDilatePSF):
+    """
+    Create manipulated images for use in metacalibration.  The reconvolution
+    kernel is a gaussian generated based on the input psf
+
+    Parameters
+    ----------
+    obs: ngmix.Observation
+        The observation must have a psf observation set, holding
+        the psf image
+    rng: numpy.random.RandomState
+        Random number generator for adding a small amount of noise to the
+        gaussian psf image
+
+    examples
+    --------
+
+    mc = MetacalGaussPFF(obs)
+
+    # observations used to calculate R
+
+    sh1m=ngmix.Shape(-0.01,  0.00 )
+    sh1p=ngmix.Shape( 0.01,  0.00 )
+    sh2m=ngmix.Shape( 0.00, -0.01 )
+    sh2p=ngmix.Shape( 0.00,  0.01 )
+
+    R_obs1m = mc.get_obs_galshear(sh1m)
+    R_obs1p = mc.get_obs_galshear(sh1p)
+    R_obs2m = mc.get_obs_galshear(sh2m)
+    R_obs2p = mc.get_obs_galshear(sh2p)
+
+    # you can also get an unsheared, just convolved obs
+    R_obs1m, R_obs1m_unsheared = mc.get_obs_galshear(sh1p, get_unsheared=True)
+    """
 
     def __init__(self, obs, rng):
 
@@ -950,11 +874,10 @@ class MetacalGaussPSF(Metacal):
         return psf_obs
 
 
-class MetacalFitGaussPSF(Metacal):
+class MetacalFitGaussPSF(MetacalDilatePSF):
     """
-    base the new PSF off of a simple gaussian fit
-
-    this version does not support shearing the PSF
+    Create manipulated images for use in metacalibration.  The reconvolution
+    kernel is a gaussian generated based a fit to the input psf
 
     Parameters
     ----------
@@ -963,6 +886,27 @@ class MetacalFitGaussPSF(Metacal):
     rng: numpy.random.RandomState
         Random number generator for adding a small amount of noise to the
         gaussian psf image
+
+    examples
+    --------
+
+    rng = np.random.RandomState(seed)
+    mc = MetacalFitGaussPSF(obs, rng)
+
+    # observations used to calculate R
+
+    sh1m=ngmix.Shape(-0.01,  0.00 )
+    sh1p=ngmix.Shape( 0.01,  0.00 )
+    sh2m=ngmix.Shape( 0.00, -0.01 )
+    sh2p=ngmix.Shape( 0.00,  0.01 )
+
+    R_obs1m = mc.get_obs_galshear(sh1m)
+    R_obs1p = mc.get_obs_galshear(sh1p)
+    R_obs2m = mc.get_obs_galshear(sh2m)
+    R_obs2p = mc.get_obs_galshear(sh2p)
+
+    # you can also get an unsheared, just convolved obs
+    R_obs1m, R_obs1m_unsheared = mc.get_obs_galshear(sh1p, get_unsheared=True)
     """
     def __init__(self, obs, rng):
         super().__init__(obs=obs)
@@ -1058,6 +1002,8 @@ class MetacalFitGaussPSF(Metacal):
 
         if the above all fail, rase BootPSFFailure
         """
+        import galsim
+
         from .admom import Admom
         from .guessers import GMixPSFGuesser, SimplePSFGuesser
         from .runners import run_psf_fitter
@@ -1150,11 +1096,41 @@ class MetacalFitGaussPSF(Metacal):
         return psf_obs
 
 
-class MetacalAnalyticPSF(Metacal):
+class MetacalAnalyticPSF(MetacalDilatePSF):
     """
-    The user inputs a galsim object (e.g. galsim.Gaussian)
+    Create manipulated images for use in metacalibration.  The reconvolution
+    kernel is set to the input galsim object
 
-    this is just for the reconvolution
+    Parameters
+    ----------
+    obs: ngmix.Observation
+        The observation must have a psf observation set, holding
+        the psf image
+    psf: galsim GSObjec
+        The psf used for reconvolution
+    rng: numpy.random.RandomState
+        Random number generator for adding a small amount of noise to the
+        gaussian psf image
+
+    examples
+    --------
+
+    mc = MetacalGaussPFF(obs)
+
+    # observations used to calculate R
+
+    sh1m=ngmix.Shape(-0.01,  0.00 )
+    sh1p=ngmix.Shape( 0.01,  0.00 )
+    sh2m=ngmix.Shape( 0.00, -0.01 )
+    sh2p=ngmix.Shape( 0.00,  0.01 )
+
+    R_obs1m = mc.get_obs_galshear(sh1m)
+    R_obs1p = mc.get_obs_galshear(sh1p)
+    R_obs2m = mc.get_obs_galshear(sh2m)
+    R_obs2p = mc.get_obs_galshear(sh2p)
+
+    # you can also get an unsheared, just convolved obs
+    R_obs1m, R_obs1m_unsheared = mc.get_obs_galshear(sh1p, get_unsheared=True)
     """
     def __init__(self, obs, psf, rng):
         super().__init__(obs=obs)
@@ -1164,23 +1140,12 @@ class MetacalAnalyticPSF(Metacal):
 
         self._set_psf(obs, psf)
 
-    def _set_psf(self, obs, psf_in):
-        if isinstance(psf_in, dict):
-            if psf_in['model'] == 'gauss':
-                psf_obj = galsim.Gaussian(
-                    fwhm=psf_in['pars']['fwhm'],
-                )
-            elif psf_in['model'] == 'moffat':
-                psf_obj = galsim.Moffat(
-                    beta=psf_in['pars']['beta'],
-                    fwhm=psf_in['pars']['fwhm'],
-                )
-            else:
-                raise ValueError("bad psf: %s" % psf_in['model'])
-        else:
-            psf_obj = psf_in
+    def _set_psf(self, obs, psf):
+        import galsim
 
-        self.psf_obj = psf_obj
+        assert isinstance(psf, galsim.GSObject)
+
+        self.psf_obj = psf
 
     def get_target_psf(self, shear, type, get_nopix=False):
         """
@@ -1301,8 +1266,8 @@ class MetacalAnalyticPSF(Metacal):
 
 def _get_ellip_dilation(e1, e2, T):
     """
-    when making a symmetric version of the PSF, we need
-    to dilate to hide modes that get exposed
+    when making a new image after shearing, we need to dilate the PSF to hide
+    modes that get exposed
     """
     irr, irc, icc = moments.e2mom(e1, e2, T)
 
@@ -1344,37 +1309,6 @@ def _do_dilate(obj, shear):
     return obj.dilate(dilation)
 
 
-def _make_symmetrized_gsimage_int(im_input, wcs, interp):
-    """
-    get the symmetrized galsim image and create an
-    interpolated image from it
-    """
-    gsim = _make_symmetrized_gsimage(im_input, wcs)
-    return galsim.InterpolatedImage(gsim, x_interpolant=interp)
-
-
-def _make_symmetrized_gsimage(im_input, wcs):
-    """
-    wrap the symmetrized image int a galsim Image
-    """
-    im = _make_symmetrized_image(im_input)
-    return galsim.Image(im, wcs=wcs)
-
-
-def _make_symmetrized_image(im_input):
-    """
-    add a version of itself roated by 90,180,270 degrees
-    """
-    im = im_input.copy()
-    im += np.rot90(im_input, k=1)
-    im += np.rot90(im_input, k=2)
-    im += np.rot90(im_input, k=3)
-
-    im *= (1.0/4.0)
-
-    return im
-
-
 def _check_shape(shape):
     """
     ensure the input is an instantiation of ngmix.Shape
@@ -1390,6 +1324,7 @@ def _get_gauss_target_psf(psf, flux):
 
     assumes the psf is centered
     """
+    import galsim
 
     if hasattr(psf, 'stepk'):
         dk = psf.stepk/4.0

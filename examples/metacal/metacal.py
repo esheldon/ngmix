@@ -1,10 +1,35 @@
 """
-Example using a bootstrapper to run metacal, using simple
-weighted moments for the shape measurement.  The simulation
-is of a Moffat psf and exponential disk galaxy.
+Use a metacal bootstrapper with gaussian moments.  Simple weighted moments are
+used for measurement.  In this example we perform no detection and make no
+selections.
 
-No detection is performed, so there is no associated shear-dependent
-detection bias.  Thus we use "normal" metacal with perfect detection.
+In this example, we set two parameters for the metacal run: the psf and the
+types of images.  These are set when constructing the MetacalBootstrapper
+
+the psf
+    We deconvolve, shear the image, then reconvolve.  Setting psf to
+    'fitgauss' means we reconvolve by a round gaussian psf, based on
+    fitting the original psf with a gaussian and dilating it appropriately.
+
+    Setting it simply to 'gauss' uses a deterministic algorithm to create a
+    psf that is round and larger than the original.  This algorithm is
+    slower and can result in a slightly noisier measurement, because it is
+    more conservative.
+
+    The default is 'gauss'
+
+the types
+    types is the types of images to produce.  Here we just use minimal set
+    of shears to speed up this example, where we only calculate the
+    response of the g1 measurement to a shear in g1
+
+        noshear: the deconvolved/reconvolved image but without shear.  This image
+          is used to measure the shear estimator and other quantities.
+        1p: sheared +g1
+        1m: sheared -g1
+            1p/1m are are used to calculate the response and selection effects.
+
+    standard default set would also includes shears in g2 (2p, 2m)
 """
 import numpy as np
 import ngmix
@@ -12,27 +37,10 @@ import galsim
 
 
 def main():
-    """
-    Use a metacal bootstrapper with gaussian moments
-    """
-
     args = get_args()
 
     shear_true = [0.01, 0.00]
     rng = np.random.RandomState(args.seed)
-
-    # we deconvolve, shear the image, then reconvolve.  Setting psf to
-    # 'fitgauss' means reconvolve by a round gaussian psf, based on fitting the
-    # original psf with a gaussian and dilating it appropriately
-    #
-    # types is the types of images to produce.  Here we just use minimal set of
-    # shears to speed this example.  If you don't set it, you will get the
-    # standard set which includes shears in g2 (2p, 2m)
-
-    mcal_kws = {
-        'psf': 'fitgauss',
-        'types': ['noshear', '1p', '1m'],
-    }
 
     # measure moments with a fixed gaussian weight function, no psf correction
     weight_fwhm = 1.2
@@ -47,11 +55,14 @@ def main():
     boot = ngmix.metacal_bootstrap.MetacalBootstrapper(
         runner=runner, psf_runner=psf_runner,
         rng=rng,
-        **mcal_kws,
+        psf=args.psf,
+        types=['noshear', '1p', '1m'],
     )
 
-    # let's just do R11 simplicity; typically the off diagonal
-    # terms are negligible, and R11 and R22 are usually consistent
+    # let's just do R11 for simplicity and to speed up this example; typically
+    # the off diagonal terms are negligible, and R11 and R22 are usually
+    # consistent
+
     gvals = np.zeros((args.ntrial, 2))
     s2n = np.zeros(args.ntrial)
     R11vals = np.zeros(args.ntrial)
@@ -99,7 +110,12 @@ def make_data(rng, noise, shear):
     gal_hlr = 0.5
     dy, dx = rng.uniform(low=-scale/2, high=scale/2, size=2)
 
-    psf = galsim.Moffat(beta=2.5, fwhm=psf_fwhm)
+    psf = galsim.Moffat(
+        beta=2.5, fwhm=psf_fwhm,
+    ).shear(
+        g1=0.02,
+        g2=-0.01,
+    )
 
     obj0 = galsim.Exponential(
         half_light_radius=gal_hlr,
@@ -157,6 +173,8 @@ def get_args():
                         help='number of trials')
     parser.add_argument('--noise', type=float, default=1.0e-6,
                         help='noise for images')
+    parser.add_argument('--psf', default='gauss',
+                        help='psf for reconvolution')
     return parser.parse_args()
 
 
