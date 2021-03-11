@@ -19,8 +19,7 @@ def test_metacal_smoke(psf):
     else:
         expected_types = ngmix.metacal.METACAL_MINIMAL_TYPES
 
-    mpars = {'psf': psf}
-    obs_dict = ngmix.metacal.get_all_metacal(obs, rng=rng, **mpars)
+    obs_dict = ngmix.metacal.get_all_metacal(obs, rng=rng, psf=psf)
 
     assert len(obs_dict) == len(expected_types)
     for type in expected_types:
@@ -37,8 +36,9 @@ def test_metacal_types_smoke(psf):
         psf = galsim.Gaussian(fwhm=0.9)
 
     types = ['noshear', '1p']
-    mpars = {'psf': psf, 'types': types}
-    obs_dict = ngmix.metacal.get_all_metacal(obs, rng=rng, **mpars)
+    obs_dict = ngmix.metacal.get_all_metacal(
+        obs, rng=rng, psf=psf, types=types,
+    )
 
     assert len(obs_dict) == len(types)
     for type in types:
@@ -51,11 +51,7 @@ def test_metacal_fixnoise(fixnoise):
 
     obs = _get_obs(rng, noise=0.005)
 
-    mpars = {
-        'psf': 'fitgauss',
-        'fixnoise': fixnoise,
-    }
-    mdict = ngmix.metacal.get_all_metacal(obs, rng=rng, **mpars)
+    mdict = ngmix.metacal.get_all_metacal(obs, rng=rng, fixnoise=fixnoise)
 
     for key, mobs in mdict.items():
         assert np.all(mobs.image != obs.image)
@@ -74,11 +70,7 @@ def test_metacal_fixnoise_noise_image():
     obs = _get_obs(rng, noise=0.005, set_noise_image=True)
     assert obs.has_noise()
 
-    mpars = {
-        'psf': 'fitgauss',
-        'use_noise_image': True,
-    }
-    mdict = ngmix.metacal.get_all_metacal(obs, rng=rng, **mpars)
+    mdict = ngmix.metacal.get_all_metacal(obs, rng=rng, use_noise_image=True)
 
     for key, mobs in mdict.items():
         assert np.all(mobs.image != obs.image)
