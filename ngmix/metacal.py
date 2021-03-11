@@ -832,9 +832,7 @@ class MetacalGaussPSF(MetacalDilatePSF):
         psf_grown_image = self.psf_image.copy()
 
         try:
-            psf_grown_image = psf_grown.drawImage(
-                wcs=self.psf_image.wcs,
-            )
+            psf_grown.drawImage(image=psf_grown_image)
 
             if get_nopix:
                 psf_grown_nopix_image = self.psf_image.copy()
@@ -947,7 +945,7 @@ class MetacalFitGaussPSF(MetacalDilatePSF):
 
             try:
                 # pixel is already in the psf
-                psf_grown_image = psf_grown.drawImage(
+                psf_grown.drawImage(
                     image=psf_grown_image,
                     method='no_pixel',
                 )

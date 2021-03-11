@@ -25,6 +25,12 @@ def test_metacal_smoke(psf):
     for type in expected_types:
         assert type in obs_dict
 
+        mobs = obs_dict[type]
+        assert mobs.image.shape == obs.image.shape
+        assert np.all(mobs.image != obs.image)
+        assert mobs.psf.image.shape == obs.psf.image.shape
+        assert np.all(mobs.psf.image != obs.psf.image)
+
 
 @pytest.mark.parametrize('psf', ['gauss', 'fitgauss', 'galsim_obj', 'dilate'])
 def test_metacal_types_smoke(psf):
@@ -44,6 +50,12 @@ def test_metacal_types_smoke(psf):
     for type in types:
         assert type in obs_dict
 
+        mobs = obs_dict[type]
+        assert mobs.image.shape == obs.image.shape
+        assert np.all(mobs.image != obs.image)
+        assert mobs.psf.image.shape == obs.psf.image.shape
+        assert np.all(mobs.psf.image != obs.psf.image)
+
 
 @pytest.mark.parametrize('fixnoise', [True, False])
 def test_metacal_fixnoise(fixnoise):
@@ -54,7 +66,9 @@ def test_metacal_fixnoise(fixnoise):
     mdict = ngmix.metacal.get_all_metacal(obs, rng=rng, fixnoise=fixnoise)
 
     for key, mobs in mdict.items():
+        assert mobs.image.shape == obs.image.shape
         assert np.all(mobs.image != obs.image)
+        assert mobs.psf.image.shape == obs.psf.image.shape
         assert np.all(mobs.psf.image != obs.psf.image)
         if fixnoise:
             assert mobs.weight[0, 0] == obs.weight[0, 0]/2
@@ -73,7 +87,10 @@ def test_metacal_fixnoise_noise_image():
     mdict = ngmix.metacal.get_all_metacal(obs, rng=rng, use_noise_image=True)
 
     for key, mobs in mdict.items():
+        assert mobs.image.shape == obs.image.shape
         assert np.all(mobs.image != obs.image)
+
+        assert mobs.psf.image.shape == obs.psf.image.shape
         assert np.all(mobs.psf.image != obs.psf.image)
 
         assert mobs.weight[0, 0] == obs.weight[0, 0]/2
