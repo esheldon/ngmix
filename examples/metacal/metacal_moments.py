@@ -1,10 +1,35 @@
 """
-Example using a bootstrapper to run metacal, using simple
-weighted moments for the shape measurement.  The simulation
-is of a Moffat psf and exponential disk galaxy.
+Use a metacal bootstrapper with gaussian moments.  Simple weighted moments are
+used for measurement.  In this example we perform no detection and make no
+selections.
 
-No detection is performed, so there is no associated shear-dependent
-detection bias.  Thus we use "normal" metacal with perfect detection.
+In this example, we set two parameters for the metacal run: the psf and the
+types of images.  These are set when constructing the MetacalBootstrapper
+
+the psf
+    We deconvolve, shear the image, then reconvolve.  Setting psf to
+    'fitgauss' means we reconvolve by a round gaussian psf, based on
+    fitting the original psf with a gaussian and dilating it appropriately.
+
+    Setting it simply to 'gauss' uses a deterministic algorithm to create a
+    psf that is round and larger than the original.  This algorithm is
+    slower and can result in a slightly noisier measurement, because it is
+    more conservative.
+
+    The default is 'gauss'
+
+the types
+    types is the types of images to produce.  Here we just use minimal set
+    of shears to speed up this example, where we only calculate the
+    response of the g1 measurement to a shear in g1
+
+        noshear: the deconvolved/reconvolved image but without shear.  This image
+          is used to measure the shear estimator and other quantities.
+        1p: sheared +g1
+        1m: sheared -g1
+            1p/1m are are used to calculate the response and selection effects.
+
+    standard default set would also includes shears in g2 (2p, 2m)
 """
 import numpy as np
 import ngmix
@@ -12,38 +37,6 @@ import galsim
 
 
 def main():
-    """
-    Use a metacal bootstrapper with gaussian moments
-
-    In this example, we set two parameters for the metacal run: the psf and the
-    types of images.  These are set when constructing the MetacalBootstrapper
-
-    the psf
-        We deconvolve, shear the image, then reconvolve.  Setting psf to
-        'fitgauss' means we reconvolve by a round gaussian psf, based on
-        fitting the original psf with a gaussian and dilating it appropriately.
-
-        Setting it simply to 'gauss' uses a deterministic algorithm to create a
-        psf that is round and larger than the original.  This algorithm is
-        slower and can result in a slightly noisier measurement, because it is
-        more conservative.
-
-        The default is 'gauss'
-
-    the types
-        types is the types of images to produce.  Here we just use minimal set of
-        shears to speed this example, where we only calculate the response
-        for the g1 measured component to a g1 shear
-
-            noshear: the deconvolved/reconvolved image but without shear.  This image
-              to get the shear estimator.
-            1p: sheared +g1
-            1m: sheared -g1
-                1p/1m are are used to calculate the response.
-
-        standard default set would also includes shears in g2 (2p, 2m)
-    """
-
     args = get_args()
 
     shear_true = [0.01, 0.00]
