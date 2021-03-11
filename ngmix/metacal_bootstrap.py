@@ -41,7 +41,7 @@ class MetacalBootstrapper(object):
         obs: ngmix Observation(s)
             Observation, ObsList, or MultiBandObsList
         """
-        self._resdict = metacal_bootstrap(
+        self._resdict, self._obsdict = metacal_bootstrap(
             obs=obs,
             runner=self.runner,
             psf_runner=self.psf_runner,
@@ -66,12 +66,28 @@ class MetacalBootstrapper(object):
 
         return self._resdict
 
+    def get_obsdict(self):
+        """
+        get the result dict for the last fit
+        """
+        if not hasattr(self, '_obsdict'):
+            raise RuntimeError('run go first')
+
+        return self._obsdict
+
     @property
     def result(self):
         """
         get the result dict for the last fit
         """
         return self.get_result()
+
+    @property
+    def obsdict(self):
+        """
+        get the metacal observation dict from the last fit
+        """
+        return self.get_obsdict()
 
 
 def metacal_bootstrap(
@@ -104,6 +120,14 @@ def metacal_bootstrap(
     **metacal_kws:  keywords
         Keywords to send to get_all_metacal
 
+    Returns
+    -------
+    resdict, obsdict
+        resdict is keyed by the metacal types (e.g. '1p') and holds results
+        for each
+
+        obsdict is keyed by the metacal types and holds the metacal observations
+
     Side effects
     ------------
     the obs.psf.meta['result'] and the obs.psf.gmix may be set if a psf runner
@@ -117,8 +141,9 @@ def metacal_bootstrap(
 
     for key, tobs in obsdict.items():
         bootstrap(
-            obs=tobs, runner=runner, ignore_failed_psf=ignore_failed_psf,
+            obs=tobs, runner=runner, psf_runner=psf_runner,
+            ignore_failed_psf=ignore_failed_psf,
         )
         resdict[key] = runner.get_result()
 
-    return resdict
+    return resdict, obsdict

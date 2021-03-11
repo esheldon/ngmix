@@ -1,4 +1,6 @@
 """
+An example of metacal with selections.
+
 Use a metacal bootstrapper with gaussian moments.  Simple weighted moments are
 used for measurement.  In this example we perform no detection and make no
 selections.
@@ -63,40 +65,110 @@ def main():
     # the off diagonal terms are negligible, and R11 and R22 are usually
     # consistent
 
-    gvals = np.zeros((args.ntrial, 2))
-    s2n = np.zeros(args.ntrial)
-    R11vals = np.zeros(args.ntrial)
+    dlist = []
 
     for i in progress(args.ntrial, miniters=10):
-
         obs = make_data(rng=rng, noise=args.noise, shear=shear_true)
 
         boot.go(obs)
-        resdict = boot.get_result()
+        res = boot.result
+        obsdict = boot.obsdict
 
-        gvals[i, :] = resdict['noshear']['e']
-
-        s2n[i] = resdict['noshear']['s2n']
-
-        res1p = resdict['1p']
-        res1m = resdict['1m']
-
-        R11vals[i] = (res1p['e'][0] - res1m['e'][0])/0.02
+        # keep any that pass the flags
+        for stype, sres in res.items():
+            if sres['flags'] == 0:
+                st = make_struct(res=sres, obs=obsdict[stype], shear_type=stype)
+                dlist.append(st)
 
     print()
-    R11 = R11vals.mean()
+    data = np.hstack(dlist)
 
-    shear = gvals.mean(axis=0)/R11
-    shear_err = gvals.std(axis=0)/np.sqrt(args.ntrial)/R11
+    w = select(data=data, shear_type='noshear')
+    w_1p = select(data=data, shear_type='1p')
+    w_1m = select(data=data, shear_type='1m')
+
+    g = data['g'][w].mean(axis=0)
+    gerr = data['g'][w].std(axis=0) / np.sqrt(w.size)
+    g1_1p = data['g'][w_1p, 0].mean()
+    g1_1m = data['g'][w_1m, 0].mean()
+    R11 = (g1_1p - g1_1m)/0.02
+
+    shear = g / R11
+    shear_err = gerr / R11
 
     m = shear[0]/shear_true[0]-1
     merr = shear_err[0]/shear_true[0]
 
-    print()
-    print('s2n: %g' % s2n.mean())
+    s2n = data['s2n'][w].mean()
+
+    print('s2n: %g' % s2n)
     print('R11: %g' % R11)
     print('m: %g +/- %g (99.7%% conf)' % (m, merr*3))
     print('c: %g +/- %g (99.7%% conf)' % (shear[1], shear_err[1]*3))
+
+
+def make_struct(res, obs, shear_type):
+    """
+    make the data structure
+
+    Parameters
+    ----------
+    res: dict
+        With keys 's2n', 'e', and 'T'
+    obs: ngmix.Observation
+        The observation for this shear type
+    shear_type: str
+        The shear type
+
+    Returns
+    -------
+    1-element array with fields
+    """
+    dt = [
+        ('shear_type', 'U7'),
+        ('s2n', 'f8'),
+        ('g', 'f8', 2),
+        ('T', 'f8'),
+        ('Tpsf', 'f8'),
+    ]
+    data = np.zeros(1, dtype=dt)
+    data['shear_type'] = shear_type
+    data['s2n'] = res['s2n']
+    # for moments we are actually measureing e, the elliptity
+    data['g'] = res['e']
+    data['T'] = res['T']
+
+    # we only have one epoch and band, so we can get the psf T from the
+    # observation rather than averaging over epochs/bands
+    data['Tpsf'] = obs.psf.meta['result']['T']
+    return data
+
+
+def select(data, shear_type):
+    """
+    select the data by shear type and size
+
+    Parameters
+    ----------
+    data: array
+        The array with fields shear_type and T
+    shear_type: str
+        e.g. 'noshear', '1p', etc.
+
+    Returns
+    -------
+    array of indices
+    """
+    # raw moments, so the T is the post-psf T.  This the
+    # selection is > 1.2 rather than something smaller like 0.5
+    # for pre-psf T from one of the maximum likelihood fitters
+
+    wtype, = np.where(data['shear_type'] == shear_type)
+    w, = np.where(data['T'][wtype]/data['Tpsf'][wtype] > 1.2)
+
+    w = wtype[w]
+    print('%s kept %d/%d' % (shear_type, w.size, wtype.size))
+    return w
 
 
 def make_data(rng, noise, shear):
@@ -119,13 +191,12 @@ def make_data(rng, noise, shear):
     -------
     ngmix.Observation
     """
-
     psf_noise = 1.0e-6
 
     scale = 0.263
 
     psf_fwhm = 0.9
-    gal_hlr = 0.5
+    gal_hlr = rng.normal(loc=0.4, scale=0.2)
     dy, dx = rng.uniform(low=-scale/2, high=scale/2, size=2)
 
     psf = galsim.Moffat(
