@@ -55,6 +55,7 @@ def test_metacal_fixnoise(fixnoise):
 
     for key, mobs in mdict.items():
         assert np.all(mobs.image != obs.image)
+        assert mobs.psf.image.shape == obs.psf.image.shape
         assert np.all(mobs.psf.image != obs.psf.image)
         if fixnoise:
             assert mobs.weight[0, 0] == obs.weight[0, 0]/2
@@ -74,6 +75,7 @@ def test_metacal_fixnoise_noise_image():
 
     for key, mobs in mdict.items():
         assert np.all(mobs.image != obs.image)
+        assert mobs.psf.image.shape == obs.psf.image.shape
         assert np.all(mobs.psf.image != obs.psf.image)
 
         assert mobs.weight[0, 0] == obs.weight[0, 0]/2
