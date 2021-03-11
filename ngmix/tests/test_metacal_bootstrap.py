@@ -3,6 +3,7 @@ just test moment errors
 """
 import pytest
 import numpy as np
+import ngmix
 from ngmix.runners import Runner, PSFRunner
 from ngmix.guessers import SimplePSFGuesser, TFluxAndPriorGuesser
 from ngmix.fitting import LM
@@ -74,16 +75,22 @@ def test_metacal_bootstrap_max_smoke(noise, use_bootstrapper, nband, nepoch):
             rng=rng,
         )
         boot.go(obs)
-        resdict = boot.get_result()
+        resdict = boot.result
+        obsdict = boot.obsdict
     else:
-        resdict = metacal_bootstrap(
+        resdict, obsdict = metacal_bootstrap(
             obs=obs, runner=runner, psf_runner=psf_runner,
             rng=rng,
         )
 
     for key in ['noshear', '1p', '1m', '2p', '2m']:
         assert key in resdict
+        assert key in obsdict
         assert resdict[key]['flags'] == 0
+
+        if isinstance(obsdict[key], ngmix.Observation):
+            assert obsdict[key].has_psf()
+            assert 'result' in obsdict[key].psf.meta
 
 
 @pytest.mark.parametrize('noise', [1.0e-8, 0.01])
@@ -115,16 +122,22 @@ def test_metacal_bootstrap_gaussmom_smoke(noise, use_bootstrapper):
             rng=rng,
         )
         boot.go(obs)
-        resdict = boot.get_result()
+        resdict = boot.result
+        obsdict = boot.obsdict
     else:
-        resdict = metacal_bootstrap(
+        resdict, obsdict = metacal_bootstrap(
             obs=obs, runner=runner, psf_runner=psf_runner,
             rng=rng,
         )
 
     for key in ['noshear', '1p', '1m', '2p', '2m']:
         assert key in resdict
+        assert key in obsdict
         assert resdict[key]['flags'] == 0
+
+        if isinstance(obsdict[key], ngmix.Observation):
+            assert obsdict[key].has_psf()
+            assert 'result' in obsdict[key].psf.meta
 
 
 def test_metacal_bootstrap_gaussmom_response():
