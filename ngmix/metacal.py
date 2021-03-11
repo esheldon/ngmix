@@ -440,11 +440,7 @@ class MetacalDilatePSF(object):
 
         type = 'gal_shear'
 
-        if get_unsheared:
-            newpsf_image, newpsf_nopix_image, newpsf_obj = \
-                self.get_target_psf(shear, type, get_nopix=True)
-        else:
-            newpsf_image, newpsf_obj = self.get_target_psf(shear, type)
+        newpsf_image, newpsf_obj = self.get_target_psf(shear, type)
 
         sheared_image = self.get_target_image(newpsf_obj, shear=shear)
 
@@ -459,9 +455,6 @@ class MetacalDilatePSF(object):
 
             uobs = self._make_obs(unsheared_image, newpsf_image)
             uobs.psf.galsim_obj = newpsf_obj
-
-            psf_nopix_obs = self._make_psf_obs(newpsf_nopix_image)
-            uobs.psf_nopix = psf_nopix_obs
 
             return newobs, uobs
         else:
@@ -499,7 +492,7 @@ class MetacalDilatePSF(object):
         newobs = self._make_obs(conv_image, newpsf_image)
         return newobs
 
-    def get_target_psf(self, shear, type, get_nopix=False):
+    def get_target_psf(self, shear, type):
         """
         get galsim object for the dilated, possibly sheared, psf
 
@@ -524,10 +517,7 @@ class MetacalDilatePSF(object):
         else:
             doshear = False
 
-        psf_grown, psf_grown_nopix = self._get_dilated_psf(
-            shear,
-            doshear=doshear,
-        )
+        psf_grown = self._get_dilated_psf(shear, doshear=doshear)
 
         # this should carry over the wcs
         psf_grown_image = self.psf_image.copy()
@@ -538,16 +528,7 @@ class MetacalDilatePSF(object):
                 method='no_pixel'  # pixel is in the psf
             )
 
-            if get_nopix:
-                psf_grown_nopix_image = self.psf_image.copy()
-                psf_grown_nopix.drawImage(
-                    image=psf_grown_nopix_image,
-                    method='no_pixel'  # pixel is in the psf
-                )
-
-                return psf_grown_image, psf_grown_nopix_image, psf_grown
-            else:
-                return psf_grown_image, psf_grown
+            return psf_grown_image, psf_grown
         except RuntimeError as err:
             # argh, galsim uses generic exceptions
             raise GMixRangeError("galsim error: '%s'" % str(err))
@@ -564,13 +545,10 @@ class MetacalDilatePSF(object):
         psf_grown_nopix = self._do_dilate(self.psf_int_nopix, shear)
 
         if doshear:
-            psf_grown_nopix = psf_grown_nopix.shear(g1=shear.g1,
-                                                    g2=shear.g2)
+            psf_grown_nopix = psf_grown_nopix.shear(g1=shear.g1, g2=shear.g2)
 
         psf_grown = galsim.Convolve(psf_grown_nopix, self.pixel)
-        p1, p2 = psf_grown, psf_grown_nopix
-
-        return p1, p2
+        return psf_grown
 
     def _do_dilate(self, psf, shear):
         return _do_dilate(psf, shear)
@@ -798,7 +776,7 @@ class MetacalGaussPSF(MetacalDilatePSF):
         newpsf = _get_gauss_target_psf(psf, flux=self.psf_flux)
         return _do_dilate(newpsf, shear)
 
-    def get_target_psf(self, shear, type, get_nopix=False):
+    def get_target_psf(self, shear, type):
         """
         get galsim object for the dilated, possibly sheared, psf
 
@@ -823,27 +801,14 @@ class MetacalGaussPSF(MetacalDilatePSF):
         else:
             doshear = False
 
-        psf_grown, psf_grown_nopix = self._get_dilated_psf(
-            shear,
-            doshear=doshear,
-        )
+        psf_grown = self._get_dilated_psf(shear, doshear=doshear)
 
         # this should carry over the wcs
         psf_grown_image = self.psf_image.copy()
 
         try:
             psf_grown.drawImage(image=psf_grown_image)
-
-            if get_nopix:
-                psf_grown_nopix_image = self.psf_image.copy()
-                psf_grown_nopix.drawImage(
-                    image=psf_grown_nopix_image,
-                    method='no_pixel'  # pixel is in the psf
-                )
-
-                return psf_grown_image, psf_grown_nopix_image, psf_grown
-            else:
-                return psf_grown_image, psf_grown
+            return psf_grown_image, psf_grown
         except RuntimeError as err:
             # argh, galsim uses generic exceptions
             raise GMixRangeError("galsim error: '%s'" % str(err))
@@ -913,7 +878,7 @@ class MetacalFitGaussPSF(MetacalDilatePSF):
         self.rng = rng
         self._setup_psf()
 
-    def get_target_psf(self, shear, type, get_nopix=False):
+    def get_target_psf(self, shear, type):
         """
         get galsim object for the dilated psf
 
@@ -963,10 +928,7 @@ class MetacalFitGaussPSF(MetacalDilatePSF):
         tpsf_grown_image, psf_grown = self._psf_cache[g]
         psf_grown_image = tpsf_grown_image.copy()
 
-        if get_nopix:
-            return psf_grown_image, psf_grown_image, psf_grown
-        else:
-            return psf_grown_image, psf_grown
+        return psf_grown_image, psf_grown
 
     def _setup_psf(self):
         self._psf_cache = {}
@@ -1145,7 +1107,7 @@ class MetacalAnalyticPSF(MetacalDilatePSF):
 
         self.psf_obj = psf
 
-    def get_target_psf(self, shear, type, get_nopix=False):
+    def get_target_psf(self, shear, type):
         """
         get galsim object for the dilated, possibly sheared, psf
 
@@ -1184,12 +1146,7 @@ class MetacalAnalyticPSF(MetacalDilatePSF):
             # argh, galsim uses generic exceptions
             raise GMixRangeError("galsim error: '%s'" % str(err))
 
-        if get_nopix:
-            # there is no pixel for analytic psf, just return
-            # a copy
-            return psf_grown_image, psf_grown_image.copy(), psf_grown
-        else:
-            return psf_grown_image, psf_grown
+        return psf_grown_image, psf_grown
 
     def _get_dilated_psf(self, shear, doshear=False):
         """
