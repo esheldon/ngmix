@@ -9,14 +9,15 @@ In this example, we set two parameters for the metacal run: the psf and the
 types of images.  These are set when constructing the MetacalBootstrapper
 
 the psf
-    We deconvolve, shear the image, then reconvolve.  Setting psf to
-    'fitgauss' means we reconvolve by a round gaussian psf, based on
+    We deconvolve, shear the image, then reconvolve.
+
+    Setting psf='fitgauss' means we reconvolve by a round gaussian psf, based on
     fitting the original psf with a gaussian and dilating it appropriately.
 
-    Setting it simply to 'gauss' uses a deterministic algorithm to create a
-    psf that is round and larger than the original.  This algorithm is
-    slower and can result in a slightly noisier measurement, because it is
-    more conservative.
+    Setting psf='gauss' uses a deterministic algorithm to create a Gaussian psf
+    that is round and larger than the original.  This algorithm is a bit slower
+    and can result in a slightly noisier measurement, because it is more
+    conservative.
 
     The default is 'gauss'
 
