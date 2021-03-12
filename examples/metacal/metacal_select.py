@@ -55,7 +55,7 @@ def main():
     runner = ngmix.runners.Runner(fitter=fitter)
 
     # this runs metacal as well as both psf and object measurements
-    boot = ngmix.metacal_bootstrap.MetacalBootstrapper(
+    boot = ngmix.metacal.MetacalBootstrapper(
         runner=runner, psf_runner=psf_runner,
         rng=rng,
         psf=args.psf,

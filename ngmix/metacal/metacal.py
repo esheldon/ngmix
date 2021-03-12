@@ -5,293 +5,20 @@ Originally based off reading through Eric Huffs code; it has departed
 significantly.
 """
 import copy
-import numpy as np
-from .observation import Observation, ObsList, MultiBandObsList
-from .shape import Shape
-from . import simobs
-from . import moments
-
-from .gexceptions import GMixRangeError
 import logging
+import numpy as np
+from ..gexceptions import GMixRangeError, BootPSFFailure
+from ..observation import Observation
+from ..shape import Shape
+from .. import moments
+from .defaults import DEFAULT_STEP, METACAL_TYPES, METACAL_MINIMAL_TYPES
 
-# need all these types for psf='dilate'
-METACAL_TYPES = [
-    'noshear',
-    '1p', '1m', '2p', '2m',
-    '1p_psf', '1m_psf', '2p_psf', '2m_psf',
+
+__all__ = [
+    'MetacalDilatePSF', 'MetacalGaussPSF', 'MetacalFitGaussPSF', 'MetacalAnalyticPSF',
 ]
-
-# these are the types needed when the new psf is round
-METACAL_MINIMAL_TYPES = [
-    'noshear',
-    '1p', '1m', '2p', '2m',
-]
-
-DEFAULT_STEP = 0.01
 
 logger = logging.getLogger(__name__)
-
-
-def get_all_metacal(
-    obs,
-    psf='gauss',
-    step=DEFAULT_STEP,
-    fixnoise=True,
-    rng=None,
-    use_noise_image=False,
-    types=None,
-):
-    """
-    Get all combinations of metacal images in a dict
-
-    parameters
-    ----------
-    obs: Observation, ObsList, or MultiBandObsList
-        The values in the dict correspond to these
-    psf: string or galsim object, optional
-        PSF to use for metacal.  Default 'gauss'.  Note 'fitgauss'
-        will usually produce a smaller psf, but it can fail.
-
-            'gauss': reconvolve gaussian that is larger than
-                the original and round.
-            'fitgauss': fit a gaussian to the PSF and make
-                use round, dilated version for reconvolution
-            galsim object: any arbitrary galsim object
-                Use the exact input object for the reconvolution kernel; this
-                psf gets convolved by thye pixel
-            'dilate': dilate the origial psf
-                just dilate the original psf; the resulting psf is not round,
-                so you need to calculate the _psf terms and make an explicit
-                correction
-    step: float, optional
-        The shear step value to use for metacal.  Default 0.01
-    fixnoise: bool, optional
-        If set to True, add a compensating noise field to cancel the effect of
-        the sheared, correlated noise component.  Default True
-    rng: np.random.RandomState
-        A random number generator; this is required if fixnoise is True and
-        use_noise_image is False.  It is also required when psf= is sent, in
-        order to add a small amount of noise to the rendered image of the
-        psf.
-    use_noise_image: bool, optional
-        If set to True, use the .noise attribute of the observation
-        for fixing the noise when fixnoise=True.
-    types: list, optional
-        If psf='gauss' or 'fitgauss', then the default set is the minimal
-        set ['noshear','1p','1m','2p','2m']
-
-        Otherwise, the default is the full possible set listed in
-        ['noshear','1p','1m','2p','2m',
-         '1p_psf','1m_psf','2p_psf','2m_psf']
-
-    returns
-    -------
-    A dictionary with all the relevant metacaled images
-        dict keys:
-            1p -> ( shear, 0)
-            1m -> (-shear, 0)
-            2p -> ( 0, shear)
-            2m -> ( 0, -shear)
-        simular for 1p_psf etc.
-    """
-
-    if fixnoise:
-        odict = _get_all_metacal_fixnoise(
-            obs, step=step, rng=rng,
-            use_noise_image=use_noise_image,
-            psf=psf,
-            types=types,
-        )
-    else:
-        logger.debug("    not doing fixnoise")
-        odict = _get_all_metacal(
-            obs, step=step, rng=rng,
-            psf=psf,
-            types=types,
-        )
-
-    return odict
-
-
-def _get_all_metacal(
-    obs,
-    step=DEFAULT_STEP,
-    rng=None,
-    psf=None,
-    types=None,
-):
-    """
-    internal routine
-
-    get all metacal
-    """
-    if isinstance(obs, Observation):
-
-        if psf == 'dilate':
-            m = MetacalDilatePSF(obs)
-        else:
-
-            # For these, we default to only shear terms, not psf shear terms
-            if types is None:
-                types = METACAL_MINIMAL_TYPES
-
-            if psf == 'gauss':
-                m = MetacalGaussPSF(obs=obs, rng=rng)
-            elif psf == 'fitgauss':
-                m = MetacalFitGaussPSF(obs=obs, rng=rng)
-            else:
-                m = MetacalAnalyticPSF(obs=obs, psf=psf, rng=rng)
-
-        odict = m.get_all(step=step, types=types)
-
-    elif isinstance(obs, MultiBandObsList):
-        odict = _make_metacal_mb_obs_list_dict(
-            mb_obs_list=obs, step=step, rng=rng,
-            psf=psf,
-            types=types,
-        )
-    elif isinstance(obs, ObsList):
-        odict = _make_metacal_obs_list_dict(
-            obs, step, rng=rng,
-            psf=psf,
-            types=types,
-        )
-    else:
-        raise ValueError("obs must be Observation, ObsList, "
-                         "or MultiBandObsList")
-
-    return odict
-
-
-def _add_obs_images(obs1, obs2):
-    """
-    add obs2 to obs1, in place in obs1
-    """
-    if isinstance(obs1, Observation):
-        obs1.image += obs2.image
-    elif isinstance(obs1, ObsList):
-        for o1, o2 in zip(obs1, obs2):
-            _add_obs_images(o1, o2)
-    elif isinstance(obs1, MultiBandObsList):
-        for olist1, olist2 in zip(obs1, obs2):
-            for o1, o2 in zip(olist1, olist2):
-                _add_obs_images(o1, o2)
-    else:
-        raise ValueError("obs must be Observation, ObsList, "
-                         "or MultiBandObsList")
-
-
-def _replace_image_with_noise(obs):
-    """
-    copy the observation and copy the .noise parameter
-    into the image position
-    """
-
-    noise_obs = copy.deepcopy(obs)
-
-    if isinstance(noise_obs, Observation):
-        noise_obs.image = noise_obs.noise
-    elif isinstance(noise_obs, ObsList):
-        for nobs in noise_obs:
-            nobs.image = nobs.noise
-    else:
-        for obslist in noise_obs:
-            for nobs in obslist:
-                nobs.image = nobs.noise
-
-    return noise_obs
-
-
-def _doadd_single_obs(obs, nobs):
-    obs.image_orig = obs.image.copy()
-    obs.weight_orig = obs.weight.copy()
-
-    # the weight and image can be modified in the context, and update_pixels is
-    # automatically called upon exit
-
-    with obs.writeable():
-        obs.image += nobs.image
-
-        wpos = np.where(
-            (obs.weight != 0.0) &
-            (nobs.weight != 0.0)
-        )
-        if wpos[0].size > 0:
-            tvar = obs.weight*0
-            # add the variances
-            tvar[wpos] = (
-                1.0/obs.weight[wpos] +
-                1.0/nobs.weight[wpos]
-            )
-            obs.weight[wpos] = 1.0/tvar[wpos]
-
-
-def _get_all_metacal_fixnoise(
-    obs,
-    step=DEFAULT_STEP,
-    rng=None,
-    use_noise_image=False,
-    psf=None,
-    types=None,
-):
-    """
-    internal routine
-    Add a sheared noise field to cancel the correlated noise
-    """
-
-    # Using None for the model means we get just noise
-    if use_noise_image:
-        noise_obs = _replace_image_with_noise(obs)
-        logger.debug("    Doing fixnoise with input noise image")
-    else:
-        noise_obs = simobs.simulate_obs(gmix=None, obs=obs, rng=rng)
-
-    # rotate by 90
-    _rotate_obs_image_square(noise_obs, k=1)
-
-    obsdict = _get_all_metacal(
-        obs, step=step, rng=rng,
-        psf=psf,
-        types=types,
-    )
-    noise_obsdict = _get_all_metacal(
-        noise_obs, step=step, rng=rng,
-        psf=psf,
-        types=types,
-    )
-
-    for type in obsdict:
-
-        imbobs = obsdict[type]
-        nmbobs = noise_obsdict[type]
-
-        # rotate back, which is 3 more rotations
-        _rotate_obs_image_square(nmbobs, k=3)
-
-        if isinstance(imbobs, Observation):
-            _doadd_single_obs(imbobs, nmbobs)
-
-        elif isinstance(imbobs, ObsList):
-            for iobs in range(len(imbobs)):
-
-                obs = imbobs[iobs]
-                nobs = nmbobs[iobs]
-
-                _doadd_single_obs(obs, nobs)
-
-        elif isinstance(imbobs, MultiBandObsList):
-            for imb in range(len(imbobs)):
-                iolist = imbobs[imb]
-                nolist = nmbobs[imb]
-
-                for iobs in range(len(iolist)):
-
-                    obs = iolist[iobs]
-                    nobs = nolist[iobs]
-
-                    _doadd_single_obs(obs, nobs)
-
-    return obsdict
 
 
 class MetacalDilatePSF(object):
@@ -345,7 +72,7 @@ class MetacalDilatePSF(object):
 
     def get_all(self, step=DEFAULT_STEP, types=None):
         """
-        Get all the "usual" combinations of metacal images in a dict
+        Get metacal images in a dict for the requested image types
 
         parameters
         ----------
@@ -373,7 +100,7 @@ class MetacalDilatePSF(object):
         """
 
         if types is None:
-            types = [t for t in METACAL_TYPES]
+            types = copy.deepcopy(METACAL_TYPES)
         else:
             for t in types:
                 assert t in METACAL_TYPES, 'bad metacal type: %s' % t
@@ -781,6 +508,37 @@ class MetacalGaussPSF(MetacalDilatePSF):
         self.rng = rng
         self._setup_psf_noise()
 
+    def get_all(self, step=DEFAULT_STEP, types=None):
+        """
+        Get metacal images in a dict for the requested image types
+
+        parameters
+        ----------
+        step: float
+            The shear step value to use for metacal. Default 0.01
+        types: list
+            Types to get.  Default is the full possible set listed in
+            METACAL_MINIMAL_TYPES = ['noshear','1p','1m','2p','2m']
+
+        returns
+        -------
+        A dictionary with all the relevant metacaled images, e.g.
+            with dict keys:
+                noshear -> (0, 0)
+                1p -> ( shear, 0)
+                1m -> (-shear, 0)
+                2p -> ( 0,  shear)
+                2m -> ( 0, -shear)
+        """
+
+        if types is None:
+            types = copy.deepcopy(METACAL_MINIMAL_TYPES)
+        else:
+            for t in types:
+                assert t in METACAL_MINIMAL_TYPES, 'bad metacal type: %s' % t
+
+        return super().get_all(step=step, types=types)
+
     def _setup_psf_noise(self):
         pim = self.obs.psf.image
         self.psf_flux = pim.sum()
@@ -895,11 +653,10 @@ class MetacalFitGaussPSF(MetacalGaussPSF):
         """
         import galsim
 
-        from .admom import Admom
-        from .guessers import GMixPSFGuesser, SimplePSFGuesser
-        from .runners import run_psf_fitter
-        from .fitting import LM
-        from .gexceptions import BootPSFFailure
+        from ..admom import Admom
+        from ..guessers import GMixPSFGuesser, SimplePSFGuesser
+        from ..runners import run_psf_fitter
+        from ..fitting import LM
 
         psfobs = self.obs.psf
 
@@ -1094,247 +851,3 @@ def _get_gauss_target_psf(psf, flux):
     sigma_sq = -2. * np.log(smaller_kval) / ksq_max
 
     return galsim.Gaussian(sigma=np.sqrt(sigma_sq), flux=flux)
-
-
-def jackknife_shear(data, chunksize=1, dgamma=0.02):
-    """
-    get the shear metacalibration style with jackknifing
-
-    parameters
-    ----------
-    data: array
-        Must have fields mcal_g, mcal_g_1p, mcal_g_1m, mcal_g_2p, mcal_g_2m
-    chunksize: int, optional
-        chunksize for jackknifing, default 1
-    dgamma: float, optional
-        dgamma for central derivative, defautl 2*0.01 = 0.02
-    """
-
-    g = data['mcal_g']
-
-    R = np.zeros((data.size, 2))
-
-    R[:, 0] = (data['mcal_g_1p'][:, 0] - data['mcal_g_1m'][:, 0])/dgamma
-    R[:, 1] = (data['mcal_g_2p'][:, 1] - data['mcal_g_2m'][:, 1])/dgamma
-
-    ntot = data.size
-
-    nchunks = ntot//chunksize
-
-    g_sum = g.sum(axis=0)
-    R_sum = R.sum(axis=0)
-
-    shear = g_sum/R_sum
-
-    shears = np.zeros((nchunks, 2))
-    for i in range(nchunks):
-
-        beg = i*chunksize
-        end = (i+1)*chunksize
-
-        tgsum = g[beg:end, :].sum(axis=0)
-        tR_sum = R[beg:end, :].sum(axis=0)
-
-        j_g_sum = g_sum - tgsum
-        j_R_sum = R_sum - tR_sum
-
-        shears[i, :] = j_g_sum/j_R_sum
-
-    shear_cov = np.zeros((2, 2))
-    fac = (nchunks-1)/float(nchunks)
-
-    shear_cov[0, 0] = fac*(((shear[0]-shears[:, 0])**2).sum())
-    shear_cov[0, 1] = \
-        fac*(((shear[0]-shears[:, 0]) * (shear[1]-shears[:, 1])).sum())
-    shear_cov[1, 0] = shear_cov[0, 1]
-    shear_cov[1, 1] = fac*(((shear[1]-shears[:, 1])**2).sum())
-
-    out = {
-        'shear': shear,
-        'shear_cov': shear_cov,
-        'shear_err': np.sqrt(np.diag(shear_cov)),
-        'g_sum': g_sum,
-        'R_sum': R_sum,
-        'R': R_sum/ntot,
-        'shears': shears,
-    }
-
-    return out
-
-
-def get_shear(data, dgamma=0.02):
-    """
-    get the shear metacalibration style
-
-    parameters
-    ----------
-    data: array
-        Must have fields mcal_g, mcal_g_1p, mcal_g_1m, mcal_g_2p, mcal_g_2m
-    dgamma: float, optional
-        dgamma for central derivative, defautl 2*0.01 = 0.02
-    """
-
-    g = data['mcal_g']
-
-    R = np.zeros((data.size, 2))
-
-    R[:, 0] = (data['mcal_g_1p'][:, 0] - data['mcal_g_1m'][:, 0])/dgamma
-    R[:, 1] = (data['mcal_g_2p'][:, 1] - data['mcal_g_2m'][:, 1])/dgamma
-
-    ntot = data.size
-
-    g_mean = g.mean(axis=0)
-    R_mean = R.mean(axis=0)
-
-    g_err = g.std(axis=0)/np.sqrt(ntot)
-    R_err = R.std(axis=0)/np.sqrt(ntot)
-
-    shear = g_mean/R_mean
-    shear_err = np.abs(shear)*np.sqrt((g_err/g_mean)**2 + (R_err/R_mean)**2)
-
-    out = {
-        'shear': shear,
-        'shear_err': shear_err,
-    }
-
-    return out
-
-
-def _make_metacal_mb_obs_list_dict(mb_obs_list, step, rng=None, **kw):
-
-    new_dict = None
-    for obs_list in mb_obs_list:
-        odict = _make_metacal_obs_list_dict(
-            obs_list=obs_list, step=step, rng=rng, **kw,
-        )
-
-        if new_dict is None:
-            new_dict = _init_mb_obs_list_dict(odict.keys())
-
-        for key in odict:
-            new_dict[key].append(odict[key])
-
-    return new_dict
-
-
-def _make_metacal_obs_list_dict(obs_list, step, rng=None, **kw):
-    odict = None
-    for obs in obs_list:
-
-        todict = _get_all_metacal(obs, step=step, rng=rng, **kw)
-
-        if odict is None:
-            odict = _init_obs_list_dict(todict.keys())
-
-        for key in odict:
-            odict[key].append(todict[key])
-
-    return odict
-
-
-def _init_obs_list_dict(keys):
-    odict = {}
-    for key in keys:
-        odict[key] = ObsList()
-    return odict
-
-
-def _init_mb_obs_list_dict(keys):
-    odict = {}
-    for key in keys:
-        odict[key] = MultiBandObsList()
-    return odict
-
-
-def _rotate_obs_image_nonsquare(obs, k=1):
-    """
-    rotate the image.  internal routine just for fixnoise with rotnoise=True
-    """
-
-    if isinstance(obs, Observation):
-
-        image = np.rot90(obs.image, k=k)
-        weight = np.rot90(obs.weight, k=k)
-        if obs.has_bmask():
-            bmask = np.rot90(obs.bmask, k=k)
-        else:
-            bmask = None
-
-        nobs = Observation(
-            image,
-            weight=weight,
-            bmask=bmask,
-            jacobian=obs.jacobian,
-            psf=obs.psf,
-            meta=obs.meta,
-        )
-        return nobs
-
-    elif isinstance(obs, ObsList):
-        nobslist = ObsList()
-        for tobs in obs:
-            nobs = _rotate_obs_image_nonsquare(tobs, k=k)
-            nobslist.append(nobs)
-        return nobslist
-
-    elif isinstance(obs, MultiBandObsList):
-        nmbobs = MultiBandObsList()
-        for obslist in obs:
-            nobslist = _rotate_obs_image_nonsquare(obslist, k=k)
-            nmbobs.append(nobslist)
-        return nmbobs
-
-    else:
-        raise ValueError("obs must be Observation, ObsList, "
-                         "or MultiBandObsList")
-
-
-def _rotate_obs_image_square(obs, k=1):
-    """
-    rotate the image.  internal routine just for fixnoise with rotnoise=True
-    """
-
-    if isinstance(obs, Observation):
-        obs.set_image(np.rot90(obs.image, k=k))
-    elif isinstance(obs, ObsList):
-        for tobs in obs:
-            _rotate_obs_image_square(tobs, k=k)
-    elif isinstance(obs, MultiBandObsList):
-        for obslist in obs:
-            _rotate_obs_image_square(obslist, k=k)
-    else:
-        raise ValueError("obs must be Observation, ObsList, "
-                         "or MultiBandObsList")
-
-
-def _add_noise_obs(obs, noise, noise_image):
-    """
-    add extra noise and modify the weight map
-    """
-
-    if isinstance(obs, Observation):
-
-        weight = obs.weight
-
-        err2 = np.zeros(weight.shape) + noise**2
-
-        w = np.where(weight > 0)
-        if w[0].size > 0:
-            err2[w] += 1.0/weight[w]
-
-            # zeros stay zero
-            obs.weight[w] = 1.0/err2[w]
-
-        obs.image += noise_image
-
-    elif isinstance(obs, ObsList):
-        for tobs in obs:
-            _add_noise_obs(tobs, noise, noise_image)
-
-    elif isinstance(obs, MultiBandObsList):
-        for tobslist in obs:
-            _add_noise_obs(tobslist, noise, noise_image)
-
-    else:
-        raise ValueError("obs must be Observation, ObsList, "
-                         "or MultiBandObsList")

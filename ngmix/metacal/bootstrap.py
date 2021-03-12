@@ -1,5 +1,7 @@
-from .metacal import get_all_metacal
-from .bootstrap import bootstrap
+from .convenience import get_all_metacal
+from ..bootstrap import bootstrap
+
+__all__ = ['MetacalBootstrapper', 'metacal_bootstrap']
 
 
 class MetacalBootstrapper(object):

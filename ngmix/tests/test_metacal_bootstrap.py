@@ -8,7 +8,7 @@ from ngmix.runners import Runner, PSFRunner
 from ngmix.guessers import SimplePSFGuesser, TFluxAndPriorGuesser
 from ngmix.fitting import LM
 from ngmix.gaussmom import GaussMom
-from ngmix.metacal_bootstrap import metacal_bootstrap, MetacalBootstrapper
+from ngmix.metacal import metacal_bootstrap, MetacalBootstrapper
 from ._sims import get_model_obs
 from ._priors import get_prior
 from ._galsim_sims import _get_obs
