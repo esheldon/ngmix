@@ -9,7 +9,6 @@ from ..observation import Observation, ObsList, MultiBandObsList
 from .metacal import (
     MetacalDilatePSF, MetacalGaussPSF, MetacalFitGaussPSF, MetacalAnalyticPSF,
 )
-from .defaults import METACAL_MINIMAL_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -112,10 +111,6 @@ def _get_all_metacal(
         if psf == 'dilate':
             m = MetacalDilatePSF(obs)
         else:
-
-            # For these, we default to only shear terms, not psf shear terms
-            if types is None:
-                types = METACAL_MINIMAL_TYPES
 
             if psf == 'gauss':
                 m = MetacalGaussPSF(obs=obs, rng=rng)
