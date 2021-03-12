@@ -5,7 +5,6 @@
 import copy
 import numpy as np
 from numpy import diag, sqrt
-from pprint import pformat
 import logging
 
 from .leastsqbound import run_leastsq
@@ -435,9 +434,10 @@ class LMFitModel(FitModelBase):
         """
         super().set_fit_result(result)
 
-        self._set_g()
-        self._set_T()
-        self._set_flux()
+        if self['flags'] == 0:
+            self._set_g()
+            self._set_T()
+            self._set_flux()
 
     def _set_g(self):
         self["g"] = self["pars"][2:2+2].copy()
@@ -560,400 +560,6 @@ class LMCoellipFitModel(LMFitModel):
         """
 
         return pars.copy()
-
-
-class FitterBaseOld(object):
-    """
-    Base for other fitters
-
-    The basic input is the Observation (or ObsList or MultiBandObsList)
-
-    Designed to fit many images at once.  For this reason, a jacobian
-    transformation is used to put all on the same system; this is part of each
-    Observation object. For the same reason, the center of the model is
-    relative to "zero", which points to the common center used by all
-    transformation objects; the row0,col0 in pixels for each should correspond
-    to that center in the common coordinates (e.g. sky coords)
-
-    Fluxes and sizes will also be in the transformed system.
-
-    """
-
-    def __init__(self, model, prior=None):
-
-        self.prior = prior
-        self.model = gmix.get_model_num(model)
-        self.model_name = gmix.get_model_name(self.model)
-
-        self._gmix_all = None
-
-    def __repr__(self):
-        rep = """
-    %(model)s
-    %(extra)s
-        """
-        if hasattr(self, "_result"):
-            extra = pformat(self._result)
-        else:
-            extra = ""
-
-        rep = rep % {
-            "model": self.model_name,
-            "extra": extra,
-        }
-        return rep
-
-    def get_result(self):
-        """
-        get the result dict
-        """
-
-        if not hasattr(self, "_result"):
-            raise ValueError(
-                "No result, you must run_mcmc " "and calc_result first"
-            )
-        return self._result
-
-    def get_gmix(self, band=0):
-        """
-        Get a gaussian mixture at the fit parameter set, which
-        definition depends on the sub-class
-
-        Parameters
-        ----------
-        band: int, optional
-            Band index, default 0
-        """
-        res = self.get_result()
-        pars = self.get_band_pars(pars=res["pars"], band=band)
-        return gmix.make_gmix_model(pars, self.model)
-
-    def get_convolved_gmix(self, band=0, obsnum=0):
-        """
-        get a gaussian mixture at the fit parameters, convolved by the psf if
-        fitting a pre-convolved model
-
-        Parameters
-        ----------
-        band: int, optional
-            Band index, default 0
-        obsnum: int, optional
-            Number of observation for the given band,
-            default 0
-        """
-
-        gm = self.get_gmix(band)
-
-        obs = self.obs[band][obsnum]
-        if obs.has_psf_gmix():
-            gm = gm.convolve(obs.psf.gmix)
-
-        return gm
-
-    def _set_obs(self, obs_in):
-        """
-        Input should be an Observation, ObsList, or MultiBandObsList
-        """
-
-        self.obs = get_mb_obs(obs_in)
-
-        self.nband = len(self.obs)
-        nimage = 0
-        for obslist in self.obs:
-            for obs in obslist:
-                nimage += 1
-        self.nimage = nimage
-
-    def _set_totpix(self):
-        """
-        Make sure the data are consistent.
-        """
-
-        totpix = 0
-        for obs_list in self.obs:
-            for obs in obs_list:
-                totpix += obs.pixels.size
-
-        self.totpix = totpix
-
-    def _set_npars(self):
-        """
-        nband should be set in set_lists, called before this
-        """
-        self.npars = gmix.get_model_npars(self.model) + self.nband - 1
-
-    def get_band_pars(self, pars, band):
-        """
-        get pars for the specified band
-        """
-        return get_band_pars(model=self.model_name, pars=pars, band=band)
-
-    def calc_lnprob(self, pars, more=False):
-        """
-        This is all we use for mcmc approaches, but also used generally for the
-        "get_fit_stats" method.  For the max likelihood fitter we also have a
-        _get_ydiff method
-        """
-
-        try:
-
-            # these are the log pars (if working in log space)
-            ln_priors = self._get_priors(pars)
-
-            lnprob = 0.0
-            s2n_numer = 0.0
-            s2n_denom = 0.0
-            npix = 0
-
-            self._fill_gmix_all(pars)
-            for band in range(self.nband):
-
-                obs_list = self.obs[band]
-                gmix_list = self._gmix_all[band]
-
-                for obs, gm in zip(obs_list, gmix_list):
-
-                    res = gm.get_loglike(obs, more=more)
-
-                    if more:
-                        lnprob += res["loglike"]
-                        s2n_numer += res["s2n_numer"]
-                        s2n_denom += res["s2n_denom"]
-                        npix += res["npix"]
-                    else:
-                        lnprob += res
-
-            # total over all bands
-            lnprob += ln_priors
-
-        except GMixRangeError:
-            lnprob = LOWVAL
-            s2n_numer = 0.0
-            s2n_denom = BIGVAL
-            npix = 0
-
-        if more:
-            return {
-                "lnprob": lnprob,
-                "s2n_numer": s2n_numer,
-                "s2n_denom": s2n_denom,
-                "npix": npix,
-            }
-        else:
-            return lnprob
-
-    def get_fit_stats(self, pars):
-        """
-        Get some fit statistics for the input pars.
-        """
-
-        res = self.calc_lnprob(pars, more=True)
-
-        if res["s2n_denom"] > 0:
-            s2n = res["s2n_numer"] / sqrt(res["s2n_denom"])
-        else:
-            s2n = 0.0
-
-        chi2 = res["lnprob"] / (-0.5)
-        dof = res["npix"] - self.npars
-        chi2per = chi2 / dof
-
-        res["chi2per"] = chi2per
-        res["dof"] = dof
-        res["s2n_w"] = s2n
-        res["s2n"] = s2n
-
-        return res
-
-    def _make_model(self, band_pars):
-        gm0 = gmix.make_gmix_model(band_pars, self.model)
-        return gm0
-
-    def _init_gmix_all(self, pars):
-        """
-        input pars are in linear space
-
-        initialize the list of lists of gaussian mixtures
-        """
-
-        if self.obs[0][0].has_psf_gmix():
-            self.dopsf = True
-        else:
-            self.dopsf = False
-
-        gmix_all0 = MultiBandGMixList()
-        gmix_all = MultiBandGMixList()
-
-        for band, obs_list in enumerate(self.obs):
-            gmix_list0 = GMixList()
-            gmix_list = GMixList()
-
-            # pars for this band, in linear space
-            band_pars = self.get_band_pars(pars=pars, band=band)
-
-            for obs in obs_list:
-                gm0 = self._make_model(band_pars)
-                if self.dopsf:
-                    psf_gmix = obs.psf.gmix
-                    gm = gm0.convolve(psf_gmix)
-                else:
-                    gm = gm0.copy()
-
-                gmix_list0.append(gm0)
-                gmix_list.append(gm)
-
-            gmix_all0.append(gmix_list0)
-            gmix_all.append(gmix_list)
-
-        self._gmix_all0 = gmix_all0
-        self._gmix_all = gmix_all
-
-    def _convolve_gmix(self, gm, gm0, psf_gmix):
-        """
-        norms get set
-        """
-        gmix_convolve_fill(gm._data, gm0._data, psf_gmix._data)
-
-    def _fill_gmix_all(self, pars):
-        """
-        input pars are in linear space
-
-        Fill the list of lists of gmix objects for the given parameters
-        """
-
-        if not self.dopsf:
-            self._fill_gmix_all_nopsf(pars)
-            return
-
-        for band, obs_list in enumerate(self.obs):
-            gmix_list0 = self._gmix_all0[band]
-            gmix_list = self._gmix_all[band]
-
-            band_pars = self.get_band_pars(pars=pars, band=band)
-
-            for i, obs in enumerate(obs_list):
-
-                psf_gmix = obs.psf.gmix
-
-                gm0 = gmix_list0[i]
-                gm = gmix_list[i]
-
-                gm0._fill(band_pars)
-                self._convolve_gmix(gm, gm0, psf_gmix)
-
-    def _fill_gmix_all_nopsf(self, pars):
-        """
-        Fill the list of lists of gmix objects for the given parameters
-        """
-
-        for band, obs_list in enumerate(self.obs):
-            gmix_list = self._gmix_all[band]
-
-            band_pars = self.get_band_pars(pars=pars, band=band)
-
-            for i, obs in enumerate(obs_list):
-
-                gm = gmix_list[i]
-
-                gm._fill(band_pars)
-
-    def _get_priors(self, pars):
-        """
-        get the sum of ln(prob) from the priors or 0.0 if
-        no priors were sent
-        """
-        if self.prior is None:
-            return 0.0
-        else:
-            return self.prior.get_lnprob_scalar(pars)
-
-    def plot_residuals(
-        self, title=None, show=False, width=1920, height=1200, **keys
-    ):
-        import images
-        import biggles
-
-        biggles.configure("screen", "width", width)
-        biggles.configure("screen", "height", height)
-
-        res = self.get_result()
-        try:
-            self._fill_gmix_all(res["pars"])
-        except GMixRangeError as gerror:
-            print(str(gerror))
-            return None
-
-        plist = []
-        for band in range(self.nband):
-
-            band_list = []
-
-            obs_list = self.obs[band]
-            gmix_list = self._gmix_all[band]
-
-            nim = len(gmix_list)
-
-            ttitle = "band: %s" % band
-            if title is not None:
-                ttitle = "%s %s" % (title, ttitle)
-
-            for i in range(nim):
-
-                this_title = "%s cutout: %d" % (ttitle, i + 1)
-
-                obs = obs_list[i]
-                gm = gmix_list[i]
-
-                im = obs.image
-                wt = obs.weight
-                j = obs.jacobian
-
-                model = gm.make_image(im.shape, jacobian=j)
-
-                showim = im * wt
-                showmod = model * wt
-
-                sub_tab = images.compare_images(
-                    showim,
-                    showmod,
-                    show=False,
-                    label1="galaxy",
-                    label2="model",
-                    **keys
-                )
-                sub_tab.title = this_title
-
-                band_list.append(sub_tab)
-
-                if show:
-                    sub_tab.show()
-
-            plist.append(band_list)
-        return plist
-
-
-class FitterBase(object):
-    """
-    Base for other fitters
-
-    The basic input is the Observation (or ObsList or MultiBandObsList)
-
-    Designed to fit many images at once.  For this reason, a jacobian
-    transformation is used to put all on the same system; this is part of each
-    Observation object. For the same reason, the center of the model is
-    relative to "zero", which points to the common center used by all
-    transformation objects; the row0,col0 in pixels for each should correspond
-    to that center in the common coordinates (e.g. sky coords)
-
-    Fluxes and sizes will also be in the transformed system.
-
-    """
-
-    def __init__(self, model, prior=None):
-
-        self.prior = prior
-        self.model = gmix.get_model_num(model)
-        self.model_name = gmix.get_model_name(self.model)
 
 
 class TemplateFluxFitModel(dict):
@@ -1198,7 +804,7 @@ class TemplateFluxFitModel(dict):
         return self._npix
 
 
-class TemplateFluxFitter(FitterBase):
+class TemplateFluxFitter(object):
     """
     Calculate the flux for the input template.  We fix the center, so this is
     linear.  This uses a simple cross-correlation between model and data.
@@ -1233,14 +839,15 @@ class TemplateFluxFitter(FitterBase):
 _default_lm_pars = {"maxfev": 4000, "ftol": 1.0e-5, "xtol": 1.0e-5}
 
 
-class LM(FitterBase):
+class LM(object):
     """
     A class for doing a fit using levenberg marquardt
-
     """
 
     def __init__(self, model, prior=None, fit_pars=None):
-        super().__init__(model=model, prior=prior)
+        self.prior = prior
+        self.model = gmix.get_model_num(model)
+        self.model_name = gmix.get_model_name(self.model)
 
         if fit_pars is not None:
             self.fit_pars = fit_pars.copy()
