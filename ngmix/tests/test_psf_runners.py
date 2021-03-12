@@ -37,8 +37,8 @@ def test_em_psf_runner_smoke(ngauss, guess_from_moms):
     )
     runner.go(obs=obs)
 
-    fitter = runner.fitter
-    res = fitter.get_result()
+    res = obs.meta['result']
+
     assert res['flags'] == 0
 
 
@@ -81,12 +81,15 @@ def test_em_psf_runner(with_psf_obs, guess_from_moms):
     )
     runner.go(obs=obs)
 
-    fitter = runner.fitter
-    res = fitter.get_result()
+    if with_psf_obs:
+        res = obs.psf.meta['result']
+    else:
+        res = obs.meta['result']
+
     assert res['flags'] == 0
 
     # check reconstructed image allowing for noise
-    imfit = fitter.make_image()
+    imfit = res.make_image()
 
     if with_psf_obs:
         comp_image = obs.psf.image
@@ -123,8 +126,8 @@ def test_simple_psf_runner_smoke(model, guess_from_moms):
     )
     runner.go(obs=data['obs'])
 
-    fitter = runner.fitter
-    res = fitter.get_result()
+    res = data['obs'].meta['result']
+
     assert res['flags'] == 0
 
 
@@ -154,12 +157,12 @@ def test_simple_psf_runner(model, guess_from_moms):
     )
     runner.go(obs=data['obs'])
 
-    fitter = runner.fitter
-    res = fitter.get_result()
+    res = data['obs'].meta['result']
+
     assert res['flags'] == 0
 
     # check reconstructed image allowing for noise
-    imfit = fitter.make_image()
+    imfit = res.make_image()
 
     obs = data['obs']
 
@@ -201,9 +204,8 @@ def test_coellip_psf_runner_smoke(ngauss, guess_from_moms):
         ntry=2,
     )
     runner.go(obs=obs)
+    res = obs.meta['result']
 
-    fitter = runner.fitter
-    res = fitter.get_result()
     assert res['flags'] == 0
 
 
@@ -244,12 +246,15 @@ def test_coellip_psf_runner(with_psf_obs, guess_from_moms):
     )
     runner.go(obs=obs)
 
-    fitter = runner.fitter
-    res = fitter.get_result()
+    if with_psf_obs:
+        res = obs.psf.meta['result']
+    else:
+        res = obs.meta['result']
+
     assert res['flags'] == 0
 
     # check reconstructed image allowing for noise
-    imfit = fitter.make_image()
+    imfit = res.make_image()
 
     if with_psf_obs:
         comp_image = obs.psf.image
@@ -287,8 +292,8 @@ def test_admom_psf_runner_smoke(ngauss, guess_from_moms):
     )
     runner.go(obs=obs)
 
-    fitter = runner.fitter
-    res = fitter.get_result()
+    res = obs.meta['result']
+
     assert res['flags'] == 0
 
 
@@ -331,12 +336,15 @@ def test_admom_psf_runner(with_psf_obs, guess_from_moms):
     )
     runner.go(obs=obs)
 
-    fitter = runner.fitter
-    res = fitter.get_result()
+    if with_psf_obs:
+        res = obs.psf.meta['result']
+    else:
+        res = obs.meta['result']
+
     assert res['flags'] == 0
 
     # check reconstructed image allowing for noise
-    imfit = fitter.make_image()
+    imfit = res.make_image()
 
     if with_psf_obs:
         comp_image = obs.psf.image

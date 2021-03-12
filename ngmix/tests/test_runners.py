@@ -158,7 +158,6 @@ def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
             res_old = res
 
 
-'''
 def test_gaussmom_runner():
     """
     Test a Runner using GaussMom
@@ -180,4 +179,3 @@ def test_gaussmom_runner():
     res = runner.go(obs=obs)
     assert res['flags'] == 0
     assert res['pars'].size == 6
-'''

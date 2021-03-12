@@ -25,14 +25,12 @@ def test_template_psf_flux(noise, nband):
     fitter = TemplateFluxFitter(do_psf=True)
 
     if nband is None:
-        fitter.go(obs=data['obs'])
-        res = fitter.get_result()
+        res = fitter.go(obs=data['obs'])
         assert res['flags'] == 0
         assert (res['flux'] - data['pars'][5]) < NSIG*res['flux_err']
     else:
         for iband, obslist in enumerate(data['obs']):
-            fitter.go(obs=obslist)
-            res = fitter.get_result()
+            res = fitter.go(obs=obslist)
             assert res['flags'] == 0
             assert (res['flux'] - data['pars'][5+iband]) < NSIG*res['flux_err']
 
@@ -54,15 +52,13 @@ def test_template_psf_flux_galsim(noise, nband):
     fitter = GalsimTemplateFluxFitter()
 
     if nband is None:
-        fitter.go(obs=data['obs'])
+        res = fitter.go(obs=data['obs'])
         scale = data['obs'][0].jacobian.scale
-        res = fitter.get_result()
         assert res['flags'] == 0
         assert (res['flux']*scale**2 - data['pars'][5]) < NSIG*res['flux_err']
     else:
         for iband, obslist in enumerate(data['obs']):
-            fitter.go(obs=obslist)
+            res = fitter.go(obs=obslist)
             scale = data['obs'][0][0].jacobian.scale
-            res = fitter.get_result()
             assert res['flags'] == 0
             assert (res['flux']**scale - data['pars'][5+iband]) < NSIG*res['flux_err']

@@ -43,7 +43,7 @@ class MetacalBootstrapper(object):
         obs: ngmix Observation(s)
             Observation, ObsList, or MultiBandObsList
         """
-        self._resdict, self._obsdict = metacal_bootstrap(
+        return metacal_bootstrap(
             obs=obs,
             runner=self.runner,
             psf_runner=self.psf_runner,
@@ -58,38 +58,6 @@ class MetacalBootstrapper(object):
         get a reference to the fitter
         """
         return self.runner.fitter
-
-    def get_result(self):
-        """
-        get the result dict for the last fit
-        """
-        if not hasattr(self, '_resdict'):
-            raise RuntimeError('run go first')
-
-        return self._resdict
-
-    def get_obsdict(self):
-        """
-        get the result dict for the last fit
-        """
-        if not hasattr(self, '_obsdict'):
-            raise RuntimeError('run go first')
-
-        return self._obsdict
-
-    @property
-    def result(self):
-        """
-        get the result dict for the last fit
-        """
-        return self.get_result()
-
-    @property
-    def obsdict(self):
-        """
-        get the metacal observation dict from the last fit
-        """
-        return self.get_obsdict()
 
 
 def metacal_bootstrap(
@@ -142,10 +110,10 @@ def metacal_bootstrap(
     resdict = {}
 
     for key, tobs in obsdict.items():
-        bootstrap(
+        resdict[key] = bootstrap(
             obs=tobs, runner=runner, psf_runner=psf_runner,
             ignore_failed_psf=ignore_failed_psf,
         )
-        resdict[key] = runner.get_result()
+        # resdict[key] = runner.get_result()
 
     return resdict, obsdict

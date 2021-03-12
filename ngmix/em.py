@@ -69,9 +69,7 @@ def fit_em(obs, guess, sky=None, fixcen=False, fluxonly=False, **kws):
     else:
         fitter = GMixEM(**kws)
 
-    fitter.go(obs=obs, guess=guess, sky=sky)
-
-    return fitter
+    return fitter.go(obs=obs, guess=guess, sky=sky)
 
 
 def prep_obs(obs):
@@ -150,8 +148,9 @@ class EMResult(dict):
     def __init__(self, obs, result, gm=None, gm_conv=None):
         self._obs = obs
         self.update(result)
-        if gm is not None:
+        if gm is not None and gm_conv is not None:
             self._gm = gm
+            self._gm_conv = gm_conv
 
     def has_gmix(self):
         """

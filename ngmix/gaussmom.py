@@ -32,17 +32,7 @@ class GaussMom(object):
         if res['flags'] != 0:
             logger.debug("        moments failed: %s" % res['flagstr'])
 
-        self._result = res
-
-    def get_result(self):
-        """
-        get the result
-        """
-
-        if not hasattr(self, '_result'):
-            raise RuntimeError("run go() first")
-
-        return self._result
+        return res
 
     def _measure_moments(self, obs):
         """

@@ -85,12 +85,10 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
 
     if use_bootstrapper:
         boot = Bootstrapper(runner=runner, psf_runner=psf_runner)
-        boot.go(obs)
+        res = boot.go(obs)
     else:
-        bootstrap(obs=obs, runner=runner, psf_runner=psf_runner)
+        res = bootstrap(obs=obs, runner=runner, psf_runner=psf_runner)
 
-    fitter = runner.fitter
-    res = fitter.get_result()
     assert res['flags'] == 0
 
     pixel_scale = obs.jacobian.scale
@@ -108,7 +106,7 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
         assert abs(res['pars'][5]/data['pars'][5] - 1) < FRAC_TOL
 
     # check reconstructed image allowing for noise
-    imfit = fitter.make_image()
+    imfit = res.make_image()
     maxdiff = np.abs(imfit - obs.image).max()
     immax = obs.image.max()
     # imtol = 0.001 / pixel_scale**2 + noise*5

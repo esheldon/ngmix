@@ -98,9 +98,7 @@ def test_ml_max_fitting_gauss_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
         guess[4] = fwhm_to_T(0.9) * rng.uniform(low=0.99, high=1.01)
         guess[5] = flux * scale**2 * rng.uniform(low=0.99, high=1.01)
 
-        # guess = guess + rng.normal(size=6) * 0.01
         res = fitter.go(obs=obs, guess=guess)
-        # res = fitter.get_result()
 
         if res['flags'] == 0:
             _g1, _g2, _T = res['g'][0], res['g'][1], res['pars'][4]

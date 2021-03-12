@@ -667,11 +667,10 @@ class MetacalFitGaussPSF(MetacalGaussPSF):
         fitter = Admom(rng=self.rng)
 
         run_psf_fitter(obs=psfobs, fitter=fitter, guesser=guesser, ntry=ntry)
-
-        res = fitter.get_result()
+        res = psfobs.meta['result']
 
         if res['flags'] == 0:
-            psf_gmix = fitter.get_gmix()
+            psf_gmix = res.get_gmix()
         else:
             # try maximum likelihood
 
@@ -687,9 +686,10 @@ class MetacalFitGaussPSF(MetacalGaussPSF):
             run_psf_fitter(obs=psfobs, fitter=fitter, guesser=guesser, ntry=ntry)
 
             res = fitter.get_result()
+            res = psfobs.meta['result']
 
             if res['flags'] == 0:
-                psf_gmix = fitter.get_gmix()
+                psf_gmix = res.get_gmix()
             else:
 
                 # see if there was already a gmix that we might use instead
