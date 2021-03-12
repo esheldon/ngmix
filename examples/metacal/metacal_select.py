@@ -71,12 +71,10 @@ def main():
     for i in progress(args.ntrial, miniters=10):
         obs = make_data(rng=rng, noise=args.noise, shear=shear_true)
 
-        boot.go(obs)
-        res = boot.result
-        obsdict = boot.obsdict
+        resdict, obsdict = boot.go(obs)
 
         # keep any that pass the flags
-        for stype, sres in res.items():
+        for stype, sres in resdict.items():
             if sres['flags'] == 0:
                 st = make_struct(res=sres, obs=obsdict[stype], shear_type=stype)
                 dlist.append(st)

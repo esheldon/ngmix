@@ -72,8 +72,7 @@ def main():
 
         obs = make_data(rng=rng, noise=args.noise, shear=shear_true)
 
-        boot.go(obs)
-        resdict = boot.get_result()
+        resdict, obsdict = boot.go(obs)
 
         gvals[i, :] = resdict['noshear']['e']
 

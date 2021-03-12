@@ -15,9 +15,10 @@ def main():
     # use a psf guesser
     guesser = ngmix.guessers.GMixPSFGuesser(rng=rng, ngauss=1)
     guess = guesser(obs=obs)
-    fitter = ngmix.em.fit_em(obs=obs, guess=guess)
+    res = ngmix.em.fit_em(obs=obs, guess=guess)
 
-    gmfit = fitter.get_gmix()
+    gmfit = res.get_gmix()
+
     print('true gm:')
     print(gm)
     print('fit gm:')
@@ -29,7 +30,7 @@ def main():
         except ImportError:
             from espy import images
 
-        imfit = fitter.make_image()
+        imfit = res.make_image()
 
         images.compare_images(obs.image, imfit)
 
