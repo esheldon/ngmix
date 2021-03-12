@@ -438,6 +438,10 @@ class GalsimLMSpergelFitModel(GalsimLMFitModel):
         For example ngmix.priors.PriorSimpleSep can
         be used as a separable prior on center, g, size, flux.
     """
+
+    def __init__(self, obs, guess, prior=None):
+        super().__init__(obs=obs, model='spergel', guess=guess, prior=prior)
+
     def _set_model_class(self):
         import galsim
 
@@ -492,17 +496,17 @@ class GalsimLMSpergel(GalsimLM):
 
     def _make_fit_model(self, obs, guess):
         return GalsimLMSpergelFitModel(
-            obs=obs, model=self.model, guess=guess, prior=self.prior,
+            obs=obs, guess=guess, prior=self.prior,
         )
 
 
-class GalsimLMMoffat(GalsimLM):
+class GalsimLMMoffatFitModel(GalsimLMFitModel):
     """
     Fit the moffat profile with free beta to the input observations
     """
 
-    def __init__(self, prior=None, fit_pars=None):
-        super().__init__(model="moffat", fit_pars=fit_pars)
+    def __init__(self, obs, guess, prior=None):
+        super().__init__(obs=obs, model='moffat', guess=guess, prior=prior)
 
     def _set_model_class(self):
         import galsim
@@ -549,6 +553,20 @@ class GalsimLMMoffat(GalsimLM):
         else:
             #                 c1  c2  e1e2  r50  beta   fluxes
             self.n_prior_pars = 1 + 1 + 1 + 1 + 1 + self.nband
+
+
+class GalsimLMMOffat(GalsimLM):
+    """
+    Fit the spergel profile to the input observations
+    """
+
+    def __init__(self, prior=None, fit_pars=None):
+        super().__init__(model="moffat", prior=prior, fit_pars=fit_pars)
+
+    def _make_fit_model(self, obs, guess):
+        return GalsimLMMoffatFitModel(
+            obs=obs, guess=guess, prior=self.prior,
+        )
 
 
 class GalsimTemplateFluxFitter(TemplateFluxFitter):
