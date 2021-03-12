@@ -44,6 +44,7 @@ from .gexceptions import (
 )
 
 from . import fitting
+from .fitting import *
 from . import simplex
 
 from . import galsimfit

@@ -20,14 +20,16 @@ from .gexceptions import GMixRangeError
 
 class GalsimLMFitModel(LMFitModel):
     """
-    Fit using galsim 6 parameter models
+    Represent a fitting model for fitting 6 parameter models with galsim
 
-    parameters
+    Parameters
     ----------
+    obs: observation(s)
+        Observation, ObsList, or MultiBandObsList
     model: string
         e.g. 'exp', 'spergel'
-    fit_pars: dict, optional
-        parameters for the lm fitter, e.g. maxfev, ftol, xtol
+    guess: array-like
+        starting parameters for the lm fitter
     prior: ngmix prior, optional
         For example ngmix.priors.PriorSimpleSep can
         be used as a separable prior on center, g, size, flux.
@@ -378,15 +380,15 @@ class GalsimLM(object):
     """
     Fit using galsim 6 parameter models
 
-    parameters
+    Parameters
     ----------
     model: string
         e.g. 'exp', 'spergel'
-    fit_pars: dict, optional
-        parameters for the lm fitter, e.g. maxfev, ftol, xtol
     prior: ngmix prior, optional
         For example ngmix.priors.PriorSimpleSep can
         be used as a separable prior on center, g, size, flux.
+    fit_pars: dict, optional
+        parameters for the lm fitter, e.g. maxfev, ftol, xtol
     """
 
     def __init__(self, model, prior=None, fit_pars=None):
@@ -426,14 +428,14 @@ class GalsimLM(object):
 
 class GalsimLMSpergelFitModel(GalsimLMFitModel):
     """
-    Fit using galsim 6 parameter models
+    Represent a fitting model for fitting the spergel model with galsim
 
     parameters
     ----------
-    model: string
-        e.g. 'exp', 'spergel'
-    fit_pars: dict, optional
-        parameters for the lm fitter, e.g. maxfev, ftol, xtol
+    obs: observation(s)
+        Observation, ObsList, or MultiBandObsList
+    guess: array-like
+        starting parameters for the lm fitter
     prior: ngmix prior, optional
         For example ngmix.priors.PriorSimpleSep can
         be used as a separable prior on center, g, size, flux.
@@ -489,6 +491,14 @@ class GalsimLMSpergelFitModel(GalsimLMFitModel):
 class GalsimLMSpergel(GalsimLM):
     """
     Fit the spergel profile to the input observations
+
+    Parameters
+    ----------
+    prior: ngmix prior, optional
+        For example ngmix.priors.PriorSimpleSep can
+        be used as a separable prior on center, g, size, flux.
+    fit_pars: dict, optional
+        parameters for the lm fitter, e.g. maxfev, ftol, xtol
     """
 
     def __init__(self, prior=None, fit_pars=None):
@@ -502,7 +512,17 @@ class GalsimLMSpergel(GalsimLM):
 
 class GalsimLMMoffatFitModel(GalsimLMFitModel):
     """
-    Fit the moffat profile with free beta to the input observations
+    Represent a fitting model for fitting the moffat profile with galsim
+
+    Parameters
+    ----------
+    obs: observation(s)
+        Observation, ObsList, or MultiBandObsList
+    guess: array-like
+        starting parameters for the lm fitter
+    prior: ngmix prior, optional
+        For example ngmix.priors.PriorSimpleSep can
+        be used as a separable prior on center, g, size, flux.
     """
 
     def __init__(self, obs, guess, prior=None):
@@ -557,7 +577,17 @@ class GalsimLMMoffatFitModel(GalsimLMFitModel):
 
 class GalsimLMMOffat(GalsimLM):
     """
-    Fit the spergel profile to the input observations
+    Fit a moffat model using galsim
+
+    Parameters
+    ----------
+    model: string
+        e.g. 'exp', 'spergel'
+    prior: ngmix prior, optional
+        For example ngmix.priors.PriorSimpleSep can
+        be used as a separable prior on center, g, size, flux.
+    fit_pars: dict, optional
+        parameters for the lm fitter, e.g. maxfev, ftol, xtol
     """
 
     def __init__(self, prior=None, fit_pars=None):
@@ -570,6 +600,22 @@ class GalsimLMMOffat(GalsimLM):
 
 
 class GalsimTemplateFitModel(TemplateFluxFitModel):
+    """
+    Represent a fitting model template flux fits
+
+    Parameters
+    ----------
+    obs: observation(s)
+        Observation, ObsList, or MultiBandObsList
+    model: galsim model, optional
+        A Galsim model, e.g. Exponential.  If not sent,
+        a psf flux is measured
+    draw_method: str
+        Galsim drawing method, default 'auto'
+    interp: string
+        type of interpolation when using the PSF image
+        rather than psf models.  Default lanzcos15
+    """
     def __init__(
         self,
         obs,
@@ -577,19 +623,6 @@ class GalsimTemplateFitModel(TemplateFluxFitModel):
         draw_method='auto',
         interp=observation.DEFAULT_XINTERP,
     ):
-        """
-        parameters
-        -----------
-        obs: Observation or ObsList
-            See ngmix.observation.Observation.
-        model: galsim model, optional
-            A Galsim model, e.g. Exponential.  If not sent,
-            a psf flux is measured
-
-        interp: string
-            type of interpolation when using the PSF image
-            rather than psf models.  Default lanzcos15
-        """
 
         self.galsim_model = model
 
@@ -720,6 +753,20 @@ class GalsimTemplateFitModel(TemplateFluxFitModel):
 
 
 class GalsimTemplateFluxFitter(object):
+    """
+    Calculate template fluxes using galsim
+
+    Parameters
+    ----------
+    model: galsim model, optional
+        A Galsim model, e.g. Exponential.  If not sent,
+        a psf flux is measured
+    draw_method: str
+        Galsim drawing method, default 'auto'
+    interp: string
+        type of interpolation when using the PSF image
+        rather than psf models.  Default lanzcos15
+    """
     def __init__(
         self,
         model=None,
@@ -742,6 +789,20 @@ class GalsimTemplateFluxFitter(object):
 
 
 def get_galsim_npars(model, nband):
+    """
+    get number of parameters for a galsim model
+
+    Parameters
+    ----------
+    model: str
+        Model string, e.g. exp, dev
+    nband: int
+        Number of bands
+
+    Returns
+    -------
+    number of parameters
+    """
     if model in ['exp', 'dev', 'gauss']:
         return 5 + nband
     elif model in ['spergel', 'moffat']:
