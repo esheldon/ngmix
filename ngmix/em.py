@@ -133,7 +133,8 @@ def prep_image(im0):
 
 class EMResult(dict):
     """
-    Class to represent an EM model fit
+    Class to represent an EM model fit and generate images and gaussian
+    mixtures for the best fit
 
     parameters
     ----------

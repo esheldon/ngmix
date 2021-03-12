@@ -54,6 +54,18 @@ def run_admom(
 
 
 class AdmomResult(dict):
+    """
+    Represent a fit using adaptive moments, and generate images and mixtures
+    for the best fit
+
+    Parameters
+    ----------
+    obs: observation(s)
+        Observation, ObsList, or MultiBandObsList
+    result: dict
+        the basic fit result, to bad added to this object's keys
+    """
+
     def __init__(self, obs, result):
         self._obs = obs
         self.update(result)

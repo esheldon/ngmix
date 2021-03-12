@@ -31,7 +31,8 @@ LOGGER = logging.getLogger(__name__)
 
 class LMFitModel(dict):
     """
-    A class to represent a fitting model, as well as the result of the fit
+    A class to represent a fitting model, the result of the fit, as well as
+    generate images and mixtures for the best fit model
 
     Parameters
     ----------
@@ -504,8 +505,9 @@ class LMFitModel(dict):
 
 class LMCoellipFitModel(LMFitModel):
     """
-    A class to represent a fitting a coelliptical gaussians model, as well as
-    the result of the fit
+    A class to represent a fitting a coelliptical gaussians model, the result
+    of the fit, as well as generate images and mixtures for the best fit model
+
 
     Parameters
     ----------
@@ -833,7 +835,7 @@ class TemplateFluxFitter(object):
         Returns
         --------
         a dict-like which contains the result as well as functions used for the
-        fitting. The class is TemplateFluxFitModel 
+        fitting. The class is TemplateFluxFitModel
         """
         fit_model = TemplateFluxFitModel(
             obs=obs, do_psf=self.do_psf, normalize_psf=self.normalize_psf,

@@ -26,6 +26,10 @@ class GaussMom(object):
         obs: Observation, ObsList or MultiBandObsList
             The observations to fit. Note that if an ObsList or a MultiBandObsList
             is passed, the observations are coadded assuming perfect registration.
+
+        Returns
+        -------
+        result dictionary
         """
         res = self._measure_moments(obs=obs)
 

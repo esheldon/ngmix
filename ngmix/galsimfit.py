@@ -20,7 +20,8 @@ from .gexceptions import GMixRangeError
 
 class GalsimLMFitModel(LMFitModel):
     """
-    Represent a fitting model for fitting 6 parameter models with galsim
+    Represent a fitting model for fitting 6 parameter models with galsim, as well
+    as generate images and mixtures for the best fit model
 
     Parameters
     ----------
@@ -428,7 +429,8 @@ class GalsimLM(object):
 
 class GalsimLMSpergelFitModel(GalsimLMFitModel):
     """
-    Represent a fitting model for fitting the spergel model with galsim
+    Represent a fitting model for fitting the spergel model with galsim, as
+    well as generate images and mixtures for the best fit model
 
     parameters
     ----------
@@ -512,7 +514,8 @@ class GalsimLMSpergel(GalsimLM):
 
 class GalsimLMMoffatFitModel(GalsimLMFitModel):
     """
-    Represent a fitting model for fitting the moffat profile with galsim
+    Represent a fitting model for fitting the moffat profile with galsim, as
+    well as generate images and mixtures for the best fit model
 
     Parameters
     ----------
