@@ -87,13 +87,19 @@ class PSFRunner(RunnerBase):
         ntry: int, optional
             Number of times to try if there is failure
 
+        Returns
+        --------
+        result if obs is an Observation
+        result list if obs is an ObsList
+        list of result lists if obs is a MultiBandObsList
+
         Side Effects
         ------------
         obs.meta['result'] is set to the fit result and the .gmix attribuite is
         set for each successful fit, if appropriate
         """
 
-        run_psf_fitter(
+        return run_psf_fitter(
             obs=obs, fitter=self.fitter, guesser=self.guesser, ntry=self.ntry,
         )
 
@@ -160,16 +166,22 @@ def run_psf_fitter(obs, fitter, guesser=None, ntry=1):
     """
 
     if isinstance(obs, MultiBandObsList):
+        reslol = []
         for tobslist in obs:
-            run_psf_fitter(
+            reslist = run_psf_fitter(
                 obs=tobslist, fitter=fitter, guesser=guesser, ntry=ntry,
             )
+            reslol.append(reslist)
+        return reslol
 
     elif isinstance(obs, ObsList):
+        reslist = []
         for tobs in obs:
-            run_psf_fitter(
+            res = run_psf_fitter(
                 obs=tobs, fitter=fitter, guesser=guesser, ntry=ntry,
             )
+            reslist.append(res)
+        return reslist
 
     elif isinstance(obs, Observation):
 
@@ -188,6 +200,7 @@ def run_psf_fitter(obs, fitter, guesser=None, ntry=1):
             gmix = res.get_gmix()
             obs_to_fit.gmix = gmix
 
+        return res
     else:
         raise ValueError(
             'obs must be an Observation, ObsList, or MultiBandObsList'

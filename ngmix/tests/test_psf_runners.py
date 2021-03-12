@@ -35,9 +35,7 @@ def test_em_psf_runner_smoke(ngauss, guess_from_moms):
         guesser=guesser,
         ntry=2,
     )
-    runner.go(obs=obs)
-
-    res = obs.meta['result']
+    res = runner.go(obs=obs)
 
     assert res['flags'] == 0
 
@@ -79,12 +77,7 @@ def test_em_psf_runner(with_psf_obs, guess_from_moms):
         guesser=guesser,
         ntry=2,
     )
-    runner.go(obs=obs)
-
-    if with_psf_obs:
-        res = obs.psf.meta['result']
-    else:
-        res = obs.meta['result']
+    res = runner.go(obs=obs)
 
     assert res['flags'] == 0
 
@@ -124,9 +117,7 @@ def test_simple_psf_runner_smoke(model, guess_from_moms):
         guesser=guesser,
         ntry=2,
     )
-    runner.go(obs=data['obs'])
-
-    res = data['obs'].meta['result']
+    res = runner.go(obs=data['obs'])
 
     assert res['flags'] == 0
 
@@ -155,9 +146,7 @@ def test_simple_psf_runner(model, guess_from_moms):
         guesser=guesser,
         ntry=2,
     )
-    runner.go(obs=data['obs'])
-
-    res = data['obs'].meta['result']
+    res = runner.go(obs=data['obs'])
 
     assert res['flags'] == 0
 
@@ -203,8 +192,7 @@ def test_coellip_psf_runner_smoke(ngauss, guess_from_moms):
         guesser=guesser,
         ntry=2,
     )
-    runner.go(obs=obs)
-    res = obs.meta['result']
+    res = runner.go(obs=obs)
 
     assert res['flags'] == 0
 
@@ -244,12 +232,7 @@ def test_coellip_psf_runner(with_psf_obs, guess_from_moms):
         guesser=guesser,
         ntry=4,
     )
-    runner.go(obs=obs)
-
-    if with_psf_obs:
-        res = obs.psf.meta['result']
-    else:
-        res = obs.meta['result']
+    res = runner.go(obs=obs)
 
     assert res['flags'] == 0
 
@@ -290,9 +273,7 @@ def test_admom_psf_runner_smoke(ngauss, guess_from_moms):
         guesser=guesser,
         ntry=2,
     )
-    runner.go(obs=obs)
-
-    res = obs.meta['result']
+    res = runner.go(obs=obs)
 
     assert res['flags'] == 0
 
@@ -334,12 +315,7 @@ def test_admom_psf_runner(with_psf_obs, guess_from_moms):
         guesser=guesser,
         ntry=2,
     )
-    runner.go(obs=obs)
-
-    if with_psf_obs:
-        res = obs.psf.meta['result']
-    else:
-        res = obs.meta['result']
+    res = runner.go(obs=obs)
 
     assert res['flags'] == 0
 
@@ -377,14 +353,19 @@ def test_gaussmom_psf_runner(nband, nepoch):
     fitter = ngmix.gaussmom.GaussMom(fwhm=1.2)
 
     runner = PSFRunner(fitter=fitter)
-    runner.go(obs=obs)
+    res = runner.go(obs=obs)
 
     if nband is not None:
+        assert isinstance(res, list)
+        assert isinstance(res[0], list)
+
         for tobslist in obs:
             for tobs in tobslist:
                 assert 'result' in tobs.psf.meta
     elif nepoch is not None:
+        assert isinstance(res, list)
         for tobs in obs:
             assert 'result' in tobs.psf.meta
     else:
+        assert hasattr(res, 'keys')
         assert 'result' in obs.psf.meta

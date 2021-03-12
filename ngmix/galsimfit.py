@@ -589,11 +589,7 @@ class GalsimTemplateFitModel(TemplateFluxFitModel):
         interp: string
             type of interpolation when using the PSF image
             rather than psf models.  Default lanzcos15
-
-        TODO:
-            - try more complex wcs
         """
-
 
         self.galsim_model = model
 
