@@ -232,8 +232,7 @@ def _get_psf_fluxes(rng, obs):
     fitter = TemplateFluxFitter(do_psf=True)
 
     for iband, obslist in enumerate(mbobs):
-        fitter.go(obs=obslist)
-        res = fitter.get_result()
+        res = fitter.go(obs=obslist)
 
         # flags are set for all zero weight pixels, so there isn't anything we
         # can do, we'll have to fix it up

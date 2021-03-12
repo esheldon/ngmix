@@ -63,14 +63,12 @@ def test_runner_lm_simple_smoke(model, psf_model_type):
         guesser=guesser,
         ntry=2,
     )
-    runner.go(obs=data['obs'])
-
-    res = runner.get_result()
+    res = runner.go(obs=data['obs'])
     assert res['flags'] == 0
 
 
 @pytest.mark.parametrize('guesser_type', ['TF', 'TPSFFlux'])
-@pytest.mark.parametrize('psf_model_type', ['em', 'coellip'])
+@pytest.mark.parametrize('psf_model_type', ['coellip', 'em'])
 @pytest.mark.parametrize('model', ['exp', 'dev'])
 @pytest.mark.parametrize('noise', [1.0e-8, 0.01])
 def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
@@ -111,6 +109,7 @@ def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
             ntry=2,
         )
         psf_runner.go(obs=obs)
+        assert obs.psf.has_gmix()
 
         if guesser_type == 'TF':
             guesser = TFluxGuesser(
@@ -133,10 +132,8 @@ def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
             guesser=guesser,
             ntry=2,
         )
-        runner.go(obs=obs)
+        res = runner.go(obs=obs)
 
-        fitter = runner.fitter
-        res = fitter.get_result()
         assert res['flags'] == 0
 
         pixel_scale = obs.jacobian.scale
@@ -151,7 +148,7 @@ def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
             assert abs(res['pars'][5]/data['pars'][5] - 1) < FRAC_TOL
 
         # check reconstructed image allowing for noise
-        imfit = fitter.make_image()
+        imfit = res.make_image()
         imtol = 0.001 / pixel_scale**2 + noise*5
         assert np.all(np.abs(imfit - obs.image) < imtol)
 
@@ -161,6 +158,7 @@ def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
             res_old = res
 
 
+'''
 def test_gaussmom_runner():
     """
     Test a Runner using GaussMom
@@ -179,8 +177,7 @@ def test_gaussmom_runner():
     fitter = ngmix.gaussmom.GaussMom(fwhm=1.2)
 
     runner = Runner(fitter=fitter)
-    runner.go(obs=obs)
-
-    res = runner.get_result()
+    res = runner.go(obs=obs)
     assert res['flags'] == 0
     assert res['pars'].size == 6
+'''

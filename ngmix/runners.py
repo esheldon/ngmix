@@ -54,15 +54,9 @@ class Runner(RunnerBase):
         result dictionary
         """
 
-        run_fitter(
+        return run_fitter(
             obs=obs, fitter=self.fitter, guesser=self.guesser, ntry=self.ntry,
         )
-
-    def get_result(self):
-        """
-        get the result dict
-        """
-        return self.fitter.get_result()
 
 
 class PSFRunner(RunnerBase):
@@ -130,13 +124,14 @@ def run_fitter(obs, fitter, guesser=None, ntry=1):
 
         if guesser is not None:
             guess = guesser(obs=obs)
-            fitter.go(obs=obs, guess=guess)
+            res = fitter.go(obs=obs, guess=guess)
         else:
-            fitter.go(obs=obs)
+            res = fitter.go(obs=obs)
 
-        res = fitter.get_result()
         if res['flags'] == 0:
             break
+
+    return res
 
 
 def run_psf_fitter(obs, fitter, guesser=None, ntry=1):
@@ -183,15 +178,14 @@ def run_psf_fitter(obs, fitter, guesser=None, ntry=1):
         else:
             obs_to_fit = obs
 
-        run_fitter(
+        res = run_fitter(
             obs=obs_to_fit, fitter=fitter, guesser=guesser, ntry=ntry,
         )
 
-        res = fitter.get_result()
         obs_to_fit.meta['result'] = res
 
-        if res['flags'] == 0 and hasattr(fitter, 'get_gmix'):
-            gmix = fitter.get_gmix()
+        if res['flags'] == 0 and hasattr(res, 'get_gmix'):
+            gmix = res.get_gmix()
             obs_to_fit.gmix = gmix
 
     else:
