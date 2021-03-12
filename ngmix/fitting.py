@@ -29,9 +29,21 @@ from .defaults import PDEF, CDEF, LOWVAL, BIGVAL
 LOGGER = logging.getLogger(__name__)
 
 
-class FitModelBase(dict):
-    def __init__(self, obs, model, prior=None):
+class LMFitModel(dict):
+    """
+    A class to represent a fitting model, as well as the result of the fit
 
+    Parameters
+    ----------
+    obs: observation(s)
+        Observation, ObsList, or MultiBandObsList
+    model: str
+        The model to fit
+    prior: ngmix prior
+        A prior for fitting
+    """
+
+    def __init__(self, obs, model, guess, prior=None):
         self.prior = prior
         self.model = gmix.get_model_num(model)
         self.model_name = gmix.get_model_name(self.model)
@@ -40,6 +52,42 @@ class FitModelBase(dict):
         self._set_obs(obs)
         self._set_totpix()
         self._set_npars()
+
+        self._set_n_prior_pars()
+        self._set_fdiff_size()
+        self._make_pixel_list()
+
+        self._set_bounds()
+        self._setup_fit(guess)
+
+    def set_fit_result(self, result):
+        """
+        Get some fit statistics for the input pars.
+        """
+
+        self.update(result)
+
+        if self["flags"] == 0:
+            cres = self.calc_lnprob(self['pars'], more=True)
+            self.update(cres)
+
+            if self["s2n_denom"] > 0:
+                s2n = self["s2n_numer"] / sqrt(self["s2n_denom"])
+            else:
+                s2n = 0.0
+
+            chi2 = self["lnprob"] / (-0.5)
+            dof = self["npix"] - self.npars
+            chi2per = chi2 / dof
+
+            self["chi2per"] = chi2per
+            self["dof"] = dof
+            self["s2n_w"] = s2n
+            self["s2n"] = s2n
+
+            self._set_g()
+            self._set_T()
+            self._set_flux()
 
     def get_gmix(self, band=0):
         """
@@ -76,41 +124,36 @@ class FitModelBase(dict):
 
         return gm
 
-    def _set_obs(self, obs_in):
+    def make_image(self, band=0, obsnum=0):
         """
-        Input should be an Observation, ObsList, or MultiBandObsList
+        Get an image of the best fit mixture
+
+        Returns
+        -------
+        image: array
+            Image of the model, including the PSF if a psf was sent
         """
-
-        self.obs = get_mb_obs(obs_in)
-
-        self.nband = len(self.obs)
-        nimage = 0
-        for obslist in self.obs:
-            for obs in obslist:
-                nimage += 1
-        self.nimage = nimage
-
-    def _set_totpix(self):
-        """
-        Make sure the data are consistent.
-        """
-
-        totpix = 0
-        for obs_list in self.obs:
-            for obs in obs_list:
-                totpix += obs.pixels.size
-
-        self.totpix = totpix
-
-    def _set_npars(self):
-        """
-        nband should be set in set_lists, called before this
-        """
-        self.npars = gmix.get_model_npars(self.model) + self.nband - 1
+        gm = self.get_convolved_gmix(band=band, obsnum=obsnum)
+        obs = self.obs[band][obsnum]
+        return gm.make_image(
+            obs.image.shape,
+            jacobian=obs.jacobian,
+        )
 
     def get_band_pars(self, pars, band):
         """
         get pars for the specified band
+
+        Parameters
+        ----------
+        pars: array-like
+            Array-like of parameters
+        band: int
+            The band as an integer
+
+        Returns
+        -------
+        parameters just associated with the requested band
         """
         return get_band_pars(model=self.model_name, pars=pars, band=band)
 
@@ -119,6 +162,22 @@ class FitModelBase(dict):
         This is all we use for mcmc approaches, but also used generally for the
         "set_fit_stats" method.  For the max likelihood fitter we also have a
         _get_ydiff method
+
+        Parameters
+        ----------
+        pars: array-like
+            Array-like of parameters
+        more: bool
+            If true, a dict with more information is returned
+
+        Returns
+        -------
+        the log(probability) unless more=True, in which case a dict
+        with keys
+            lnprob: log(probability)
+            s2n_numer: numerator for S/N
+            s2n_denom: denominator for S/N
+            npix: number of pixels used
         """
 
         try:
@@ -168,30 +227,50 @@ class FitModelBase(dict):
         else:
             return lnprob
 
-    def set_fit_result(self, result):
+    @property
+    def bounds(self):
         """
-        Get some fit statistics for the input pars.
+        get bounds used for fitting with leastsqsbound
+        """
+        return copy.deepcopy(self._bounds)
+
+    def _set_obs(self, obs_in):
+        """
+        Set the obs attribute based on the input.
+
+        Parmameters
+        -----------
+        obs: Observation, ObsList, or MultiBandObsList
+            The input observations
         """
 
-        self.update(result)
+        self.obs = get_mb_obs(obs_in)
 
-        if self["flags"] == 0:
-            cres = self.calc_lnprob(self['pars'], more=True)
-            self.update(cres)
+        self.nband = len(self.obs)
+        nimage = 0
+        for obslist in self.obs:
+            for obs in obslist:
+                nimage += 1
+        self.nimage = nimage
 
-            if self["s2n_denom"] > 0:
-                s2n = self["s2n_numer"] / sqrt(self["s2n_denom"])
-            else:
-                s2n = 0.0
+    def _set_totpix(self):
+        """
+        Set the total number of pixels
+        """
 
-            chi2 = self["lnprob"] / (-0.5)
-            dof = self["npix"] - self.npars
-            chi2per = chi2 / dof
+        totpix = 0
+        for obs_list in self.obs:
+            for obs in obs_list:
+                totpix += obs.pixels.size
 
-            self["chi2per"] = chi2per
-            self["dof"] = dof
-            self["s2n_w"] = s2n
-            self["s2n"] = s2n
+        self.totpix = totpix
+
+    def _set_npars(self):
+        """
+        Set the number of parameters.  nband should be set in set_lists, called
+        before this
+        """
+        self.npars = gmix.get_model_npars(self.model) + self.nband - 1
 
     def _make_model(self, band_pars):
         gm0 = gmix.make_gmix_model(band_pars, self.model)
@@ -295,80 +374,6 @@ class FitModelBase(dict):
         else:
             return self.prior.get_lnprob_scalar(pars)
 
-    def plot_residuals(
-        self, title=None, show=False, width=1920, height=1200, **keys
-    ):
-        import images
-        import biggles
-
-        biggles.configure("screen", "width", width)
-        biggles.configure("screen", "height", height)
-
-        try:
-            self._fill_gmix_all(self["pars"])
-        except GMixRangeError as gerror:
-            print(str(gerror))
-            return None
-
-        plist = []
-        for band in range(self.nband):
-
-            band_list = []
-
-            obs_list = self.obs[band]
-            gmix_list = self._gmix_all[band]
-
-            nim = len(gmix_list)
-
-            ttitle = "band: %s" % band
-            if title is not None:
-                ttitle = "%s %s" % (title, ttitle)
-
-            for i in range(nim):
-
-                this_title = "%s cutout: %d" % (ttitle, i + 1)
-
-                obs = obs_list[i]
-                gm = gmix_list[i]
-
-                im = obs.image
-                wt = obs.weight
-                j = obs.jacobian
-
-                model = gm.make_image(im.shape, jacobian=j)
-
-                showim = im * wt
-                showmod = model * wt
-
-                sub_tab = images.compare_images(
-                    showim,
-                    showmod,
-                    show=False,
-                    label1="galaxy",
-                    label2="model",
-                    **keys
-                )
-                sub_tab.title = this_title
-
-                band_list.append(sub_tab)
-
-                if show:
-                    sub_tab.show()
-
-            plist.append(band_list)
-        return plist
-
-
-class LMFitModel(FitModelBase):
-    def __init__(self, obs, model, guess, prior=None):
-        super().__init__(obs=obs, model=model, prior=prior)
-        self._set_n_prior_pars()
-        self._set_fdiff_size()
-        self._make_pixel_list()
-
-        self._set_bounds()
-        self._setup_fit(guess)
-
     def _setup_fit(self, guess):
         """
         setup the mixtures based on the initial guess
@@ -387,22 +392,6 @@ class LMFitModel(FitModelBase):
         except ZeroDivisionError:
             raise GMixRangeError("got zero division")
 
-    def make_image(self, band=0, obsnum=0):
-        """
-        Get an image of the best fit mixture
-
-        Returns
-        -------
-        image: array
-            Image of the model, including the PSF if a psf was sent
-        """
-        gm = self.get_convolved_gmix(band=band, obsnum=obsnum)
-        obs = self.obs[band][obsnum]
-        return gm.make_image(
-            obs.image.shape,
-            jacobian=obs.jacobian,
-        )
-
     def _set_n_prior_pars(self):
         # center1 + center2 + shape + T + fluxes
         if self.prior is None:
@@ -415,10 +404,6 @@ class LMFitModel(FitModelBase):
     def _set_fdiff_size(self):
         self.fdiff_size = self.totpix + self.n_prior_pars
 
-    @property
-    def bounds(self):
-        return copy.deepcopy(self._bounds)
-
     def _set_bounds(self):
         """
         get bounds on parameters
@@ -427,17 +412,6 @@ class LMFitModel(FitModelBase):
         if self.prior is not None:
             if hasattr(self.prior, "bounds"):
                 self._bounds = self.prior.bounds
-
-    def set_fit_result(self, result):
-        """
-        set additional statistics and derived quantities
-        """
-        super().set_fit_result(result)
-
-        if self['flags'] == 0:
-            self._set_g()
-            self._set_T()
-            self._set_flux()
 
     def _set_g(self):
         self["g"] = self["pars"][2:2+2].copy()
@@ -529,6 +503,20 @@ class LMFitModel(FitModelBase):
 
 
 class LMCoellipFitModel(LMFitModel):
+    """
+    A class to represent a fitting a coelliptical gaussians model, as well as
+    the result of the fit
+
+    Parameters
+    ----------
+    obs: observation(s)
+        Observation, ObsList, or MultiBandObsList
+    model: str
+        The model to fit
+    prior: ngmix prior
+        A prior for fitting
+    """
+
     def __init__(self, obs, ngauss, guess, prior=None):
         self._ngauss = ngauss
         super().__init__(obs=obs, model='coellip', guess=guess, prior=prior)
@@ -564,7 +552,19 @@ class LMCoellipFitModel(LMFitModel):
 
 class TemplateFluxFitModel(dict):
     """
-    This class represents a template flux fit model and result
+    A class to represent fitting a template flux, as well as the result of the
+    fit
+
+    Parameters
+    ----------
+    obs: observation(s)
+        Observation, ObsList, or MultiBandObsList
+    do_psf: bool, optional
+        If True, use the gaussian mixtures in the psf observation as templates.
+        In this mode the code calculates a "psf flux".  Default False.
+    normalize_psf: True or False
+        if True, then normalize PSF gmix to flux of unity, otherwise use input
+        normalization.  Default True
     """
 
     def __init__(self, obs, do_psf=False, normalize_psf=True):
@@ -827,7 +827,14 @@ class TemplateFluxFitter(object):
         self.normalize_psf = normalize_psf
 
     def go(self, obs):
+        """
+        perform the template flux fit and return the result
 
+        Returns
+        --------
+        a dict-like which contains the result as well as functions used for the
+        fitting. The class is TemplateFluxFitModel 
+        """
         fit_model = TemplateFluxFitModel(
             obs=obs, do_psf=self.do_psf, normalize_psf=self.normalize_psf,
         )
@@ -841,6 +848,15 @@ _default_lm_pars = {"maxfev": 4000, "ftol": 1.0e-5, "xtol": 1.0e-5}
 class LM(object):
     """
     A class for doing a fit using levenberg marquardt
+
+    Parameters
+    ----------
+    model: str
+        The model to fit
+    prior: ngmix prior
+        A prior for fitting
+    fit_pars: dict
+        Parameters to send to the LM fitting routine
     """
 
     def __init__(self, model, prior=None, fit_pars=None):
@@ -863,6 +879,12 @@ class LM(object):
             Observation(s) to fit
         guess: array
             Array of initial parameters for the fit
+
+        Returns
+        --------
+        a dict-like which contains the result as well as functions used for the
+        fitting.
+
         """
 
         fit_model = self._make_fit_model(obs=obs, guess=guess)
@@ -888,7 +910,14 @@ class LMCoellip(LM):
     """
     class to run the LM leastsq code for the coelliptical model
 
-    TODO make special set_flux and set_T methods
+    Parameters
+    ----------
+    ngauss: int
+        The number of coelliptical gaussians to fit
+    prior: ngmix prior
+        A prior for fitting
+    fit_pars: dict
+        Parameters to send to the LM fitting routine
     """
 
     def __init__(self, ngauss, prior=None, fit_pars=None):
