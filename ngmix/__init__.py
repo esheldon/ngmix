@@ -59,6 +59,5 @@ from . import observation
 from .observation import Observation, ObsList, MultiBandObsList
 
 from . import metacal
-from . import metacal_bootstrap
 from . import simobs
 from . import gaussap
