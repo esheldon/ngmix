@@ -5,7 +5,7 @@ import numpy
 
 from .fitting import (
     LMFitModel,
-    TemplateFluxFitter,
+    TemplateFluxFitModel,
     _default_lm_pars,
 )
 from .leastsqbound import run_leastsq
@@ -569,13 +569,14 @@ class GalsimLMMOffat(GalsimLM):
         )
 
 
-class GalsimTemplateFluxFitter(TemplateFluxFitter):
-    def __init__(self,
-                 model=None,
-                 draw_method='auto',
-                 interp=observation.DEFAULT_XINTERP,
-                 simulate_err=False,
-                 rng=None):
+class GalsimTemplateFitModel(TemplateFluxFitModel):
+    def __init__(
+        self,
+        obs,
+        model=None,
+        draw_method='auto',
+        interp=observation.DEFAULT_XINTERP,
+    ):
         """
         parameters
         -----------
@@ -588,33 +589,24 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
         interp: string
             type of interpolation when using the PSF image
             rather than psf models.  Default lanzcos15
-        simulate_err: bool, optional
-            If set, noise is added according to the weight
-            map. Useful when trying to calculate the noise
-            on a model rather than from real data.
-        rng: numpy random number generator, optional
-            For use when simulate_err=True
 
         TODO:
             - try more complex wcs
         """
 
-        self.model = model
 
-        if self.model is not None:
-            self.model = self.model.withFlux(1.0)
+        self.galsim_model = model
+
+        if self.galsim_model is not None:
+            self.galsim_model = self.galsim_model.withFlux(1.0)
 
         self.interp = interp
         self.draw_method = draw_method
 
-        self.simulate_err = simulate_err
-        if self.simulate_err:
-            if rng is None:
-                rng = numpy.random.RandomState()
-            self.rng = rng
-
-        self.model = "template"
+        self['model'] = 'template'
         self.npars = 1
+
+        self._set_obs(obs)
 
     def _get_model(self, iobs, flux=None):
         """
@@ -717,8 +709,8 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
 
             psf_model = self.psf_models[i]
 
-            if self.model is not None:
-                obj = galsim.Convolve(self.model, psf_model)
+            if self.galsim_model is not None:
+                obj = galsim.Convolve(self.galsim_model, psf_model)
             else:
                 obj = psf_model
 
@@ -729,6 +721,28 @@ class GalsimTemplateFluxFitter(TemplateFluxFitter):
             image_list.append(gim.array)
 
         self.template_list = image_list
+
+
+class GalsimTemplateFluxFitter(object):
+    def __init__(
+        self,
+        model=None,
+        draw_method='auto',
+        interp=observation.DEFAULT_XINTERP,
+    ):
+        self.model = model
+        self.draw_method = draw_method
+        self.interp = interp
+
+    def go(self, obs):
+
+        fit_model = GalsimTemplateFitModel(
+            obs=obs, model=self.model,
+            draw_method=self.draw_method, interp=self.interp,
+        )
+        fit_model.go()
+
+        return fit_model
 
 
 def get_galsim_npars(model, nband):

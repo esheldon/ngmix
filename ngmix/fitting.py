@@ -572,7 +572,7 @@ class TemplateFluxFitModel(dict):
 
         self.normalize_psf = normalize_psf
 
-        self.model_name = "template"
+        self['model'] = 'template'
         self.npars = 1
         self._set_obs(obs)
 
@@ -634,7 +634,6 @@ class TemplateFluxFitModel(dict):
                 flags |= BAD_VAR
 
         result = {
-            "model": self.model_name,
             "flags": flags,
             "chi2per": chi2per,
             "dof": dof,
