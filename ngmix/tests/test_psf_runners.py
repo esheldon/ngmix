@@ -333,7 +333,8 @@ def test_admom_psf_runner(with_psf_obs, guess_from_moms):
 
 @pytest.mark.parametrize('nband', [None, 3])
 @pytest.mark.parametrize('nepoch', [None, 1, 3])
-def test_gaussmom_psf_runner(nband, nepoch):
+@pytest.mark.parametrize('set_result', [True, False])
+def test_gaussmom_psf_runner(nband, nepoch, set_result):
     """
     Test a PSFRunner using GaussMom
     """
@@ -352,7 +353,7 @@ def test_gaussmom_psf_runner(nband, nepoch):
 
     fitter = ngmix.gaussmom.GaussMom(fwhm=1.2)
 
-    runner = PSFRunner(fitter=fitter)
+    runner = PSFRunner(fitter=fitter, set_result=set_result)
     res = runner.go(obs=obs)
 
     if nband is not None:
@@ -361,11 +362,20 @@ def test_gaussmom_psf_runner(nband, nepoch):
 
         for tobslist in obs:
             for tobs in tobslist:
-                assert 'result' in tobs.psf.meta
+                if set_result:
+                    assert 'result' in tobs.psf.meta
+                else:
+                    assert 'result' not in tobs.psf.meta
     elif nepoch is not None:
         assert isinstance(res, list)
         for tobs in obs:
-            assert 'result' in tobs.psf.meta
+            if set_result:
+                assert 'result' in tobs.psf.meta
+            else:
+                assert 'result' not in tobs.psf.meta
     else:
         assert hasattr(res, 'keys')
-        assert 'result' in obs.psf.meta
+        if set_result:
+            assert 'result' in obs.psf.meta
+        else:
+            assert 'result' not in obs.psf.meta
