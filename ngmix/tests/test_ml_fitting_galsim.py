@@ -2,9 +2,7 @@ import galsim
 import numpy as np
 import pytest
 
-from ngmix.galsimfit import GalsimLM
-from ngmix import Jacobian
-from ngmix import Observation
+import ngmix
 from ._priors import get_prior_galsimfit
 
 
@@ -15,7 +13,7 @@ def test_ml_fitting_galsim(wcs_g1, wcs_g2, model):
 
     rng = np.random.RandomState(seed=2312)
     scale = 0.263
-    prior = get_prior_galsimfit(rng=rng, scale=scale)
+    prior = get_prior_galsimfit(model=model, rng=rng, scale=scale)
 
     psf_fwhm = 0.9
     psf_image_size = 33
@@ -37,13 +35,13 @@ def test_ml_fitting_galsim(wcs_g1, wcs_g2, model):
     ).array
 
     psf_cen = (psf_image_size - 1.0)/2.0
-    psf_jac = Jacobian(
+    psf_jac = ngmix.Jacobian(
         y=psf_cen, x=psf_cen,
         dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
         dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy,
     )
 
-    psf_obs = Observation(
+    psf_obs = ngmix.Observation(
         image=psf_im,
         jacobian=psf_jac,
     )
@@ -55,7 +53,7 @@ def test_ml_fitting_galsim(wcs_g1, wcs_g2, model):
     xarr = []
     yarr = []
 
-    fitter = GalsimLM(model='exp', prior=prior)
+    fitter = ngmix.galsimfit.GalsimLM(model='exp', prior=prior)
 
     for _ in range(50):
         shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
@@ -83,14 +81,14 @@ def test_ml_fitting_galsim(wcs_g1, wcs_g2, model):
         wgt = np.ones_like(im) / noise**2
 
         cen = (np.array(im.shape)-1)/2
-        jac = Jacobian(
+        jac = ngmix.Jacobian(
             y=cen[0] + xy.y, x=cen[1] + xy.x,
             dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
             dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy,
         )
 
         _im = im + (rng.normal(size=im.shape) * noise)
-        obs = Observation(
+        obs = ngmix.Observation(
             image=_im,
             weight=wgt,
             jacobian=jac,
@@ -104,8 +102,7 @@ def test_ml_fitting_galsim(wcs_g1, wcs_g2, model):
         guess[4] = hlr * rng.uniform(low=0.9, high=1.1)
         guess[5] = flux * rng.uniform(low=0.9, high=1.1)
 
-        fitter.go(obs=obs, guess=guess + rng.normal(size=guess.size) * 0.01)
-        res = fitter.get_result()
+        res = fitter.go(obs=obs, guess=guess + rng.normal(size=guess.size) * 0.01)
         if res['flags'] == 0:
             _g1, _g2, _ = res['g'][0], res['g'][1], res['pars'][4]
             g1arr.append(_g1 - g1_true)
@@ -133,3 +130,145 @@ def test_ml_fitting_galsim(wcs_g1, wcs_g2, model):
     assert np.abs(np.mean(xarr)) < xerr * 5
     yerr = np.std(yarr) / np.sqrt(len(yarr))
     assert np.abs(np.mean(yarr)) < yerr * 5
+
+
+def test_ml_fitting_galsim_spergel_smoke():
+
+    rng = np.random.RandomState(seed=2312)
+    scale = 0.263
+    prior = get_prior_galsimfit(model='spergel', rng=rng, scale=scale)
+
+    psf_fwhm = 0.9
+    psf_image_size = 33
+    image_size = 51
+
+    noise = 0.001
+
+    hlr = 0.1
+    flux = 400
+
+    gs_wcs = galsim.ShearWCS(
+        scale,
+        galsim.Shear(g1=0.01, g2=-0.01),
+    ).jacobian()
+
+    psf_im = galsim.Gaussian(fwhm=psf_fwhm).drawImage(
+        nx=psf_image_size,
+        ny=psf_image_size,
+        wcs=gs_wcs,
+    ).array
+
+    psf_cen = (psf_image_size - 1.0)/2.0
+    psf_jac = ngmix.Jacobian(
+        y=psf_cen, x=psf_cen,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy,
+    )
+
+    psf_obs = ngmix.Observation(
+        image=psf_im,
+        jacobian=psf_jac,
+    )
+
+    guess = prior.sample()
+
+    fitter = ngmix.galsimfit.GalsimLMSpergel(prior=prior)
+
+    shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+    xy = gs_wcs.toImage(galsim.PositionD(shift))
+
+    g1_true, g2_true = prior.g_prior.sample2d()
+    gal = galsim.Exponential(
+        half_light_radius=hlr,
+    ).shear(
+        g1=g1_true, g2=g2_true
+    ).withFlux(
+        flux,
+    )
+
+    obj = galsim.Convolve([gal, galsim.Gaussian(fwhm=psf_fwhm)])
+
+    im = obj.shift(
+        dx=shift[0], dy=shift[1]
+    ).drawImage(
+        nx=image_size,
+        ny=image_size,
+        wcs=gs_wcs,
+        dtype=np.float64,
+    ).array
+    wgt = np.ones_like(im) / noise**2
+
+    cen = (np.array(im.shape)-1)/2
+    jac = ngmix.Jacobian(
+        y=cen[0] + xy.y, x=cen[1] + xy.x,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy,
+    )
+
+    _im = im + (rng.normal(size=im.shape) * noise)
+    obs = ngmix.Observation(
+        image=_im,
+        weight=wgt,
+        jacobian=jac,
+        psf=psf_obs,
+    )
+
+    guess[0] = rng.uniform(low=-0.1, high=0.1)
+    guess[1] = rng.uniform(low=-0.1, high=0.1)
+    guess[2] = rng.uniform(low=-0.1, high=0.1)
+    guess[3] = rng.uniform(low=-0.1, high=0.1)
+    guess[4] = hlr * rng.uniform(low=0.9, high=1.1)
+    guess[5] = rng.uniform(low=0, high=2)
+    guess[6] = flux * rng.uniform(low=0.9, high=1.1)
+
+    res = fitter.go(obs=obs, guess=guess + rng.normal(size=guess.size) * 0.01)
+    assert res['flags'] == 0
+
+
+def test_ml_fitting_galsim_moffat_smoke():
+
+    rng = np.random.RandomState(seed=2312)
+
+    scale = 0.263
+    fwhm = 0.9
+    beta = 2.5
+    image_size = 33
+    flux = 1.0
+
+    noise = 1.0e-5
+
+    moff = galsim.Moffat(fwhm=fwhm, beta=beta, flux=flux)
+    im = moff.drawImage(
+        nx=image_size,
+        ny=image_size,
+        scale=scale,
+    ).array
+    im += rng.normal(scale=noise, size=im.shape)
+    weight = im*0 + 1.0/noise**2
+
+    cen = (image_size - 1.0)/2.0
+    jac = ngmix.DiagonalJacobian(
+        y=cen, x=cen,
+        scale=scale,
+    )
+
+    obs = ngmix.Observation(
+        image=im,
+        weight=weight,
+        jacobian=jac,
+    )
+
+    fitter = ngmix.galsimfit.GalsimLMMOffat()
+
+    guess = np.zeros(7)
+
+    guess[0] = rng.uniform(low=-0.1, high=0.1)
+    guess[1] = rng.uniform(low=-0.1, high=0.1)
+    guess[2] = rng.uniform(low=-0.1, high=0.1)
+    guess[3] = rng.uniform(low=-0.1, high=0.1)
+    guess[4] = moff.half_light_radius * rng.uniform(low=0.9, high=1.1)
+    guess[5] = rng.uniform(low=1.5, high=3)
+    guess[6] = flux * rng.uniform(low=0.9, high=1.1)
+
+    res = fitter.go(obs=obs, guess=guess)
+    assert res['flags'] == 0

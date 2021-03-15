@@ -74,9 +74,7 @@ def test_metacal_bootstrap_max_smoke(noise, use_bootstrapper, nband, nepoch):
             runner=runner, psf_runner=psf_runner,
             rng=rng,
         )
-        boot.go(obs)
-        resdict = boot.result
-        obsdict = boot.obsdict
+        resdict, obsdict = boot.go(obs)
     else:
         resdict, obsdict = metacal_bootstrap(
             obs=obs, runner=runner, psf_runner=psf_runner,
@@ -121,9 +119,7 @@ def test_metacal_bootstrap_gaussmom_smoke(noise, use_bootstrapper):
             runner=runner, psf_runner=psf_runner,
             rng=rng,
         )
-        boot.go(obs)
-        resdict = boot.result
-        obsdict = boot.obsdict
+        resdict, obsdict = boot.go(obs)
     else:
         resdict, obsdict = metacal_bootstrap(
             obs=obs, runner=runner, psf_runner=psf_runner,
@@ -168,8 +164,7 @@ def test_metacal_bootstrap_gaussmom_response():
             set_noise_image=False,
         )
 
-        boot.go(obs)
-        resdict = boot.get_result()
+        resdict, obsdict = boot.go(obs)
 
         res1p = resdict['1p']
         res1m = resdict['1m']

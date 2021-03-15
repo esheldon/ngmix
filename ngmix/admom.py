@@ -50,8 +50,68 @@ def run_admom(
         Ttol=Ttol,
         rng=rng,
     )
-    am.go(obs=obs, guess=guess)
-    return am
+    return am.go(obs=obs, guess=guess)
+
+
+class AdmomResult(dict):
+    """
+    Represent a fit using adaptive moments, and generate images and mixtures
+    for the best fit
+
+    Parameters
+    ----------
+    obs: observation(s)
+        Observation, ObsList, or MultiBandObsList
+    result: dict
+        the basic fit result, to bad added to this object's keys
+    """
+
+    def __init__(self, obs, result):
+        self._obs = obs
+        self.update(result)
+
+    def get_gmix(self):
+        """
+        get a gmix representing the best fit, normalized
+        """
+        if self['flags'] != 0:
+            raise RuntimeError('cannot create gmix, fit failed')
+
+        pars = self['pars'].copy()
+        pars[5] = 1.0
+
+        e1 = pars[2]/pars[4]
+        e2 = pars[3]/pars[4]
+
+        g1, g2 = e1e2_to_g1g2(e1, e2)
+        pars[2] = g1
+        pars[3] = g2
+
+        return GMixModel(pars, "gauss")
+
+    def make_image(self):
+        """
+        Get an image of the best fit mixture
+
+        Returns
+        -------
+        image: array
+            Image of the model, including the PSF if a psf was sent
+        """
+        if self['flags'] != 0:
+            raise RuntimeError('cannot create image, fit failed')
+
+        obs = self._obs
+        jac = obs.jacobian
+
+        gm = self.get_gmix()
+        gm.set_flux(obs.image.sum() * jac.scale**2)
+
+        im = gm.make_image(
+            obs.image.shape,
+            jacobian=jac,
+        )
+        return im
 
 
 class Admom(object):
@@ -82,8 +142,7 @@ class Admom(object):
                  shiftmax=DEFAULT_SHIFTMAX,
                  etol=DEFAULT_ETOL,
                  Ttol=DEFAULT_TTOL,
-                 rng=None,
-                 **unused_keys):
+                 rng=None):
 
         self._set_conf(maxiter, shiftmax, etol, Ttol)
 
@@ -106,7 +165,6 @@ class Admom(object):
 
         if not isinstance(obs, Observation):
             raise ValueError("input obs must be an Observation")
-        self._obs = obs
 
         guess_gmix = self._get_guess(obs=obs, guess=guess)
 
@@ -120,54 +178,9 @@ class Admom(object):
             ares,
         )
 
-        self.result = get_result(ares)
+        result = get_result(ares)
 
-    def get_result(self):
-        """
-        get the result
-        """
-        if not hasattr(self, 'result'):
-            raise RuntimeError("run go() first")
-
-        return self.result
-
-    def get_gmix(self):
-        """
-        get a gmix representing the best fit, normalized
-        """
-
-        pars = self.result['pars'].copy()
-        pars[5] = 1.0
-
-        e1 = pars[2]/pars[4]
-        e2 = pars[3]/pars[4]
-
-        g1, g2 = e1e2_to_g1g2(e1, e2)
-        pars[2] = g1
-        pars[3] = g2
-
-        return GMixModel(pars, "gauss")
-
-    def make_image(self):
-        """
-        Get an image of the best fit mixture
-
-        Returns
-        -------
-        image: array
-            Image of the model, including the PSF if a psf was sent
-        """
-        obs = self._obs
-        jac = obs.jacobian
-
-        gm = self.get_gmix()
-        gm.set_flux(obs.image.sum() * jac.scale**2)
-
-        im = gm.make_image(
-            obs.image.shape,
-            jacobian=jac,
-        )
-        return im
+        return AdmomResult(obs=obs, result=result)
 
     def _get_guess(self, obs, guess):
         if isinstance(guess, GMix):

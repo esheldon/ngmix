@@ -52,7 +52,7 @@ def get_prior(*, fit_model, rng, scale, T_range=None, F_range=None, nband=None):
     return prior
 
 
-def get_prior_galsimfit(*, rng, scale, r50_range=None, F_range=None):
+def get_prior_galsimfit(*, model, rng, scale, r50_range=None, F_range=None):
 
     if r50_range is None:
         r50_range = [0.01, 10]
@@ -70,11 +70,25 @@ def get_prior_galsimfit(*, rng, scale, r50_range=None, F_range=None):
         minval=F_range[0], maxval=F_range[1], rng=rng,
     )
 
-    prior = ngmix.joint_prior.PriorGalsimSimpleSep(
-        cen_prior=cen_prior,
-        g_prior=g_prior,
-        r50_prior=r50_prior,
-        F_prior=F_prior,
-    )
+    if model == 'spergel':
+        nu_prior = ngmix.priors.FlatPrior(
+            minval=-.5, maxval=3, rng=rng,
+        )
+        prior = ngmix.joint_prior.PriorSpergelSep(
+            cen_prior=cen_prior,
+            g_prior=g_prior,
+            r50_prior=r50_prior,
+            nu_prior=nu_prior,
+            F_prior=F_prior,
+        )
+
+    else:
+
+        prior = ngmix.joint_prior.PriorGalsimSimpleSep(
+            cen_prior=cen_prior,
+            g_prior=g_prior,
+            r50_prior=r50_prior,
+            F_prior=F_prior,
+        )
 
     return prior

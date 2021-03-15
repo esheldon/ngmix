@@ -69,9 +69,7 @@ def fit_em(obs, guess, sky=None, fixcen=False, fluxonly=False, **kws):
     else:
         fitter = GMixEM(**kws)
 
-    fitter.go(obs=obs, guess=guess, sky=sky)
-
-    return fitter
+    return fitter.go(obs=obs, guess=guess, sky=sky)
 
 
 def prep_obs(obs):
@@ -133,37 +131,27 @@ def prep_image(im0):
     return im, sky
 
 
-class GMixEM(object):
+class EMResult(dict):
     """
-    Fit an image with a gaussian mixture using the EM algorithm
+    Class to represent an EM model fit and generate images and gaussian
+    mixtures for the best fit
 
-    Parameters
+    parameters
     ----------
-    miniter: number, optional
-        The minimum number of iterations, default 40
-    maxiter: number, optional
-        The maximum number of iterations, default 500
-    tol: number, optional
-        The fractional change in the log likelihood that implies convergence,
-        default 0.001
-    vary_sky: bool
-        If True, fit for the sky level
+    obs: Observation
+        An ngmix.Observation object.  This must already have been run through
+        prep_obs to make sure there are no pixels less than zero
+    guess: GMix
+        A gaussian mixture (GMix or child class) representing a starting
+        guess for the algorithm.  This should be *before* psf convolution.
     """
-    def __init__(self,
-                 miniter=40,
-                 maxiter=500,
-                 tol=DEFAULT_TOL,
-                 vary_sky=False):
 
-        self.miniter = miniter
-        self.maxiter = maxiter
-        self.tol = tol
-        self.vary_sky = vary_sky
-
-        self._sums = None
-        self._result = None
-
-        self._set_runner()
+    def __init__(self, obs, result, gm=None, gm_conv=None):
+        self._obs = obs
+        self.update(result)
+        if gm is not None and gm_conv is not None:
+            self._gm = gm
+            self._gm_conv = gm_conv
 
     def has_gmix(self):
         """
@@ -204,29 +192,6 @@ class GMixEM(object):
 
         return self._gm_conv.copy()
 
-    def get_result(self):
-        """
-        Get a dict with stats about the processing
-
-        Returns
-        ----------
-        result: dict
-            Some information about the processing, including
-            flags: int
-                Any processing flags
-            numiter: int
-                Number of iterations
-            fdiff: float
-                Fractional difference in the log likelihood between
-                the last two iterations
-            sky: float
-                Value of sky, may be different than input when the sky
-                is fit for
-            message: str
-                A string describing how the processing when, e.g. OK or maxit
-        """
-        return self._result
-
     def make_image(self):
         """
         Get an image of the best fit mixture
@@ -241,6 +206,35 @@ class GMixEM(object):
             self._obs.image.shape,
             jacobian=self._obs.jacobian,
         )
+
+
+class GMixEM(object):
+    """
+    Fit an image with a gaussian mixture using the EM algorithm
+
+    Parameters
+    ----------
+    miniter: number, optional
+        The minimum number of iterations, default 40
+    maxiter: number, optional
+        The maximum number of iterations, default 500
+    tol: number, optional
+        The fractional change in the log likelihood that implies convergence,
+        default 0.001
+    vary_sky: bool
+        If True, fit for the sky level
+    """
+    def __init__(self,
+                 miniter=40,
+                 maxiter=500,
+                 tol=DEFAULT_TOL,
+                 vary_sky=False):
+
+        self.miniter = miniter
+        self.maxiter = maxiter
+        self.tol = tol
+        self.vary_sky = vary_sky
+        self._set_runner()
 
     def go(self, obs, guess, sky=None):
         """
@@ -259,36 +253,32 @@ class GMixEM(object):
             sky such that there are no negative pixels.
         """
 
-        if hasattr(self, '_gm'):
-            del self._gm
-            del self._gm_conv
-
         assert isinstance(obs, Observation), (
             'input obs must be an instance of Observation'
         )
 
         if sky is None:
-            obs, sky = prep_obs(obs)
-
-        self._obs = obs
+            obs_sky, sky = prep_obs(obs)
+        else:
+            obs_sky = obs
 
         # makes a copy
-        if not obs.has_psf() or not obs.psf.has_gmix():
+        if not obs_sky.has_psf() or not obs_sky.psf.has_gmix():
             logger.debug('NO PSF SET')
             gmix_psf = GMixModel([0., 0., 0., 0., 0., 1.0], 'gauss')
         else:
-            gmix_psf = obs.psf.gmix
+            gmix_psf = obs_sky.psf.gmix
             gmix_psf.set_flux(1.0)
 
-        conf = self._make_conf()
+        conf = self._make_conf(obs_sky)
         conf['sky'] = sky
 
-        gm = guess.copy()
-        gm_conv = gm.convolve(gmix_psf)
+        gm_to_fit = guess.copy()
+        gm_conv_to_fit = gm_to_fit.convolve(gmix_psf)
 
-        sums = self._make_sums(len(gm))
+        sums = self._make_sums(len(gm_to_fit))
 
-        pixels = obs.pixels.copy()
+        pixels = obs_sky.pixels.copy()
 
         if np.any(pixels['ierr'] <= 0.0):
             fill_zero_weight = True
@@ -301,16 +291,16 @@ class GMixEM(object):
                 conf,
                 pixels,
                 sums,
-                gm.get_data(),
+                gm_to_fit.get_data(),
                 gmix_psf.get_data(),
-                gm_conv.get_data(),
+                gm_conv_to_fit.get_data(),
                 fill_zero_weight=fill_zero_weight,
             )
 
-            pars = gm.get_full_pars()
-            pars_conv = gm_conv.get_full_pars()
-            self._gm = GMix(pars=pars)
-            self._gm_conv = GMix(pars=pars_conv)
+            pars = gm_to_fit.get_full_pars()
+            pars_conv = gm_conv_to_fit.get_full_pars()
+            gm = GMix(pars=pars)
+            gm_conv = GMix(pars=pars_conv)
 
             if numiter >= self.maxiter:
                 flags = EM_MAXITER
@@ -327,6 +317,8 @@ class GMixEM(object):
             }
 
         except (GMixRangeError, ZeroDivisionError) as err:
+            gm = None
+            gm_conv = None
             message = str(err)
             logger.info(message)
             result = {
@@ -334,7 +326,7 @@ class GMixEM(object):
                 'message': message,
             }
 
-        self._result = result
+        return EMResult(obs=obs, result=result, gm=gm, gm_conv=gm_conv)
 
     def _make_sums(self, ngauss):
         """
@@ -342,7 +334,7 @@ class GMixEM(object):
         """
         return np.zeros(ngauss, dtype=_sums_dtype)
 
-    def _make_conf(self):
+    def _make_conf(self, obs):
         """
         make the sum structure
         """
@@ -352,7 +344,7 @@ class GMixEM(object):
         conf['tol'] = self.tol
         conf['miniter'] = self.miniter
         conf['maxiter'] = self.maxiter
-        conf['pixel_scale'] = self._obs.jacobian.scale
+        conf['pixel_scale'] = obs.jacobian.scale
         conf['vary_sky'] = self.vary_sky
 
         return conf

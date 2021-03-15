@@ -103,8 +103,9 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
             jacobian=jac,
             psf=psf_obs)
 
-        fitter.go(obs=obs, guess=guess + rng.normal(size=guess.size) * 0.01)
-        res = fitter.get_result()
+        res = fitter.go(
+            obs=obs, guess=guess + rng.normal(size=guess.size) * 0.01,
+        )
         if res['flags'] == 0:
             _g1, _g2, _ = res['g'][0], res['g'][1], res['pars'][4]
             g1arr.append(_g1)

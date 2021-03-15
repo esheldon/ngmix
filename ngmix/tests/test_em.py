@@ -42,11 +42,11 @@ def test_em_1gauss(noise):
     gm_guess = gm.copy()
     randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
 
-    fitter = fit_em(obs=obs, guess=gm_guess)
+    res = fit_em(obs=obs, guess=gm_guess)
 
-    fit_gm = fitter.get_gmix()
-    res = fitter.get_result()
     assert res['flags'] == 0
+
+    fit_gm = res.get_gmix()
 
     fitpars = fit_gm.get_full_pars()
 
@@ -59,7 +59,7 @@ def test_em_1gauss(noise):
         assert abs(fitpars[5]/pars[5]-1) < FRAC_TOL
 
     # check reconstructed image allowing for noise
-    imfit = fitter.make_image()
+    imfit = res.make_image()
     imtol = 0.001 / pixel_scale**2 + noise*5
     assert np.all(np.abs(imfit - obs.image) < imtol)
 
@@ -87,12 +87,10 @@ def test_em_2gauss(noise):
     gm_guess = gm.copy()
     randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
 
-    fitter = fit_em(obs=obs, guess=gm_guess)
-
-    fit_gm = fitter.get_gmix()
-
-    res = fitter.get_result()
+    res = fit_em(obs=obs, guess=gm_guess)
     assert res['flags'] == 0
+
+    fit_gm = res.get_gmix()
 
     fitpars = fit_gm.get_full_pars()
 
@@ -123,7 +121,7 @@ def test_em_2gauss(noise):
             assert abs(thispars[5]/truepars[5]-1) < FRAC_TOL
 
     # check reconstructed image allowing for noise
-    imfit = fitter.make_image()
+    imfit = res.make_image()
     imtol = 0.001 / pixel_scale**2 + noise*5
     assert np.all(np.abs(imfit - obs.image) < imtol)
 
@@ -157,11 +155,10 @@ def test_em_2gauss_withpsf(noise):
     gm_guess = gm.copy()
     randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
 
-    fitter = fit_em(obs=obs, guess=gm_guess, tol=1.0e-5)
-
-    fit_gm = fitter.get_gmix()
-    res = fitter.get_result()
+    res = fit_em(obs=obs, guess=gm_guess, tol=1.0e-5)
     assert res['flags'] == 0
+
+    fit_gm = res.get_gmix()
 
     fitpars = fit_gm.get_full_pars()
 
@@ -193,6 +190,6 @@ def test_em_2gauss_withpsf(noise):
             assert abs(thispars[5]/truepars[5]-1) < FRAC_TOL
 
     # check reconstructed image allowing for noise
-    imfit = fitter.make_image()
+    imfit = res.make_image()
     imtol = 0.001 / pixel_scale**2 + noise*5
     assert np.all(np.abs(imfit - obs.image) < imtol)

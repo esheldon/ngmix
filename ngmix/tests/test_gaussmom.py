@@ -70,8 +70,7 @@ def test_gaussmom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
             jacobian=jac)
         # use a huge weight so that we get the raw moments back out
         try:
-            fitter.go(obs=obs)
-            res = fitter.get_result()
+            res = fitter.go(obs=obs)
             if res['flags'] == 0:
                 if weight_fac > 1:
                     # for unweighted we need to convert e to g

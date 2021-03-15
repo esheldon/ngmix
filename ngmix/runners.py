@@ -54,15 +54,9 @@ class Runner(RunnerBase):
         result dictionary
         """
 
-        run_fitter(
+        return run_fitter(
             obs=obs, fitter=self.fitter, guesser=self.guesser, ntry=self.ntry,
         )
-
-    def get_result(self):
-        """
-        get the result dict
-        """
-        return self.fitter.get_result()
 
 
 class PSFRunner(RunnerBase):
@@ -78,7 +72,15 @@ class PSFRunner(RunnerBase):
         Must be a callable returning an array of parameters
     ntry: int, optional
         Number of times to try if there is failure
+    set_result: bool
+        If True, set the result and possibly a gmix in the observation.
+        Default True
     """
+    def __init__(self, fitter, guesser=None, ntry=1, set_result=True):
+        self.fitter = fitter
+        self.guesser = guesser
+        self.ntry = ntry
+        self.set_result = set_result
 
     def go(self, obs):
         """
@@ -93,14 +95,21 @@ class PSFRunner(RunnerBase):
         ntry: int, optional
             Number of times to try if there is failure
 
+        Returns
+        --------
+        result if obs is an Observation
+        result list if obs is an ObsList
+        list of result lists if obs is a MultiBandObsList
+
         Side Effects
         ------------
-        obs.meta['result'] is set to the fit result and the .gmix attribuite is
-        set for each successful fit, if appropriate
+        if set_result is True, then obs.meta['result'] is set to the fit result
+        and the .gmix attribuite is set for each successful fit, if appropriate
         """
 
-        run_psf_fitter(
+        return run_psf_fitter(
             obs=obs, fitter=self.fitter, guesser=self.guesser, ntry=self.ntry,
+            set_result=self.set_result,
         )
 
 
@@ -130,16 +139,17 @@ def run_fitter(obs, fitter, guesser=None, ntry=1):
 
         if guesser is not None:
             guess = guesser(obs=obs)
-            fitter.go(obs=obs, guess=guess)
+            res = fitter.go(obs=obs, guess=guess)
         else:
-            fitter.go(obs=obs)
+            res = fitter.go(obs=obs)
 
-        res = fitter.get_result()
         if res['flags'] == 0:
             break
 
+    return res
 
-def run_psf_fitter(obs, fitter, guesser=None, ntry=1):
+
+def run_psf_fitter(obs, fitter, guesser=None, ntry=1, set_result=True):
     """
     run a fitter on each observation in the input observation(s).  The fitter
     will be run multiple times if needed, with guesses generated from the input
@@ -157,24 +167,35 @@ def run_psf_fitter(obs, fitter, guesser=None, ntry=1):
         Must be a callable returning an array of parameters
     ntry: int, optional
         Number of times to try if there is failure
+    set_result: bool
+        If True, set the result and possibly a gmix in the observation.
+        Default True
 
     Side Effects
     ------------
-    obs.meta['result'] is set to the fit result and the .gmix attribuite is set
-    for each successful fit, if appropriate
+    if set_result is True, then obs.meta['result'] is set to the fit result
+    and the .gmix attribuite is set for each successful fit, if appropriate
     """
 
     if isinstance(obs, MultiBandObsList):
+        reslol = []
         for tobslist in obs:
-            run_psf_fitter(
+            reslist = run_psf_fitter(
                 obs=tobslist, fitter=fitter, guesser=guesser, ntry=ntry,
+                set_result=set_result,
             )
+            reslol.append(reslist)
+        return reslol
 
     elif isinstance(obs, ObsList):
+        reslist = []
         for tobs in obs:
-            run_psf_fitter(
+            res = run_psf_fitter(
                 obs=tobs, fitter=fitter, guesser=guesser, ntry=ntry,
+                set_result=set_result,
             )
+            reslist.append(res)
+        return reslist
 
     elif isinstance(obs, Observation):
 
@@ -183,16 +204,18 @@ def run_psf_fitter(obs, fitter, guesser=None, ntry=1):
         else:
             obs_to_fit = obs
 
-        run_fitter(
+        res = run_fitter(
             obs=obs_to_fit, fitter=fitter, guesser=guesser, ntry=ntry,
         )
 
-        res = fitter.get_result()
-        obs_to_fit.meta['result'] = res
+        if set_result:
+            obs_to_fit.meta['result'] = res
 
-        if res['flags'] == 0 and hasattr(fitter, 'get_gmix'):
-            gmix = fitter.get_gmix()
-            obs_to_fit.gmix = gmix
+            if res['flags'] == 0 and hasattr(res, 'get_gmix'):
+                gmix = res.get_gmix()
+                obs_to_fit.gmix = gmix
+
+        return res
 
     else:
         raise ValueError(

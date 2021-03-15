@@ -48,7 +48,7 @@ class Bootstrapper(object):
         obs: ngmix Observation(s)
             Observation, ObsList, or MultiBandObsList
         """
-        bootstrap(
+        return bootstrap(
             obs=obs,
             runner=self.runner,
             psf_runner=self.psf_runner,
@@ -61,19 +61,6 @@ class Bootstrapper(object):
         get a reference to the fitter
         """
         return self.runner.fitter
-
-    def get_result(self):
-        """
-        get the result dict for the last fit
-        """
-        return self.fitter.get_result()
-
-    @property
-    def result(self):
-        """
-        get the result dict for the last fit
-        """
-        return self.get_result()
 
 
 def bootstrap(
@@ -111,7 +98,7 @@ def bootstrap(
         if ignore_failed_psf:
             obs = remove_failed_psf_obs(obs=obs)
 
-    runner.go(obs=obs)
+    return runner.go(obs=obs)
 
 
 def remove_failed_psf_obs(obs):

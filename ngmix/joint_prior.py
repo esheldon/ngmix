@@ -725,6 +725,32 @@ class PriorSpergelSep(PriorSimpleSep):
 
         self.set_bounds()
 
+    def set_bounds(self):
+        """
+        set possibe bounds
+        """
+        bounds = [
+            (None, None),  # c1
+            (None, None),  # c2
+            (None, None),  # g1
+            (None, None),  # g2
+        ]
+
+        allp = [self.r50_prior, self.nu_prior] + self.F_priors
+
+        some_have_bounds = False
+        for i, p in enumerate(allp):
+            if p.has_bounds():
+                some_have_bounds = True
+                bounds.append((p.bounds[0], p.bounds[1]))
+            else:
+                bounds.append((None, None))
+
+        if not some_have_bounds:
+            bounds = None
+
+        self.bounds = bounds
+
     def get_lnprob_scalar(self, pars):
         """
         log probability for scalar input (meaning one point)
