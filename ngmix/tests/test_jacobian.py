@@ -53,8 +53,6 @@ def test_jacobian_smoke(kind):
 
     assert np.allclose(jac.det, dudcol * dvdrow - dudrow * dvdcol)
     assert np.allclose(
-        jac.sdet, np.sqrt(np.abs(dudcol * dvdrow - dudrow * dvdcol)))
-    assert np.allclose(
         jac.scale, np.sqrt(np.abs(dudcol * dvdrow - dudrow * dvdcol)))
 
     r, c = 20.0, -44.5
@@ -143,8 +141,6 @@ def test_diagonal_jacobian_smoke(kind):
 
     assert np.allclose(jac.det, dudcol * dvdrow - dudrow * dvdcol)
     assert np.allclose(
-        jac.sdet, np.sqrt(np.abs(dudcol * dvdrow - dudrow * dvdcol)))
-    assert np.allclose(
         jac.scale, np.sqrt(np.abs(dudcol * dvdrow - dudrow * dvdcol)))
 
     r, c = 20.0, -44.5
@@ -206,8 +202,6 @@ def test_unit_jacobian_smoke(kind):
     assert np.allclose(jac.dvdrow, dvdrow)
 
     assert np.allclose(jac.det, dudcol * dvdrow - dudrow * dvdcol)
-    assert np.allclose(
-        jac.sdet, np.sqrt(np.abs(dudcol * dvdrow - dudrow * dvdcol)))
     assert np.allclose(
         jac.scale, np.sqrt(np.abs(dudcol * dvdrow - dudrow * dvdcol)))
 
