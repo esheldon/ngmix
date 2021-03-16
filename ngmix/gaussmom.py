@@ -48,6 +48,14 @@ class GaussMom(object):
         if res['flags'] != 0:
             return res
 
+        # need to take out the pixel area factor since new ngmix is in flux
+        # units
+        area = obs.jacobian.area
+        fac = 1/area
+        res['flux'] *= fac
+        res['flux_err'] *= fac
+        res['pars'][5] *= fac
+
         res['numiter'] = 1
         return res
 
