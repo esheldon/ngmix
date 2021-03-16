@@ -18,7 +18,7 @@ FRAC_TOL = 5.0e-4
 
 @pytest.mark.parametrize('psf_model_type', ['em', 'coellip'])
 @pytest.mark.parametrize('model', ['gauss', 'exp', 'dev'])
-@pytest.mark.parametrize('noise', [1.0e-8, 0.01])
+@pytest.mark.parametrize('noise', [1.0e-7, 0.01])
 @pytest.mark.parametrize('guess_from_moms', [True, False])
 @pytest.mark.parametrize('use_prior', [False, True])
 @pytest.mark.parametrize('use_bootstrapper', [False, True])
@@ -109,7 +109,6 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
     imfit = res.make_image()
     maxdiff = np.abs(imfit - obs.image).max()
     immax = obs.image.max()
-    # imtol = 0.001 / pixel_scale**2 + noise*5
     max_reldiff = maxdiff/immax - 1
     reltol = 0.001 + noise * 5 / immax
     if max_reldiff > reltol:

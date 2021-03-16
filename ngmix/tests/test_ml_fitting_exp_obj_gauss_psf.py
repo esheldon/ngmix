@@ -64,6 +64,8 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
     guess[4] = fwhm_to_T(0.5)
 
     if fit_model == 'bd':
+        guess[5] = 1.0
+        guess[6] = 0.5
         guess[7] = 400
     elif fit_model == 'bdf':
         guess[6] = 400

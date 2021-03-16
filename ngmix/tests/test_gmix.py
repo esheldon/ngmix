@@ -314,12 +314,16 @@ def test_gmix_loglike_fdiff(start):
     pars = np.array([row, col, g1, g2, T, flux])
     gm = make_gmix_model(pars, 'gauss')
 
+    jacob = DiagonalJacobian(row=6.5, col=7.1, scale=0.25)
+    area = jacob.area
+
     rng = np.random.RandomState(seed=10)
     dims = (13, 15)
     obs = Observation(
         image=rng.normal(size=dims),
         weight=np.exp(rng.normal(size=dims)),
-        jacobian=DiagonalJacobian(row=6.5, col=7.1, scale=0.25))
+        jacobian=jacob,
+    )
     fdiff = np.zeros(dims[0] * dims[1] + start, dtype=np.float64)
     gm.fill_fdiff(obs, fdiff, start=start)
 
@@ -330,14 +334,14 @@ def test_gmix_loglike_fdiff(start):
 
     loc = start
 
+    pnorm = 5 / 2.0 / np.pi / sigma**2
     for r in range(row_range[0], row_range[1]):
         for c in range(col_range[0], col_range[1]):
             loc = start + r*dims[1] + c
 
             v, u = obs.jacobian(r, c)
             chi2 = ((u - col)**2 + (v - row)**2)/sigma**2
-            model = (
-                5 * np.exp(-0.5 * chi2) / 2.0 / np.pi / sigma**2)
+            model =  pnorm * np.exp(-0.5 * chi2) * area
             _fdiff = (model - obs.image[r, c]) * np.sqrt(obs.weight[r, c])
             print(_fdiff, fdiff[loc])
             assert np.allclose(_fdiff, fdiff[loc], rtol=rtol)

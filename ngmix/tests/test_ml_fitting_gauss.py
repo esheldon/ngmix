@@ -96,7 +96,7 @@ def test_ml_max_fitting_gauss_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
         guess[2] = g1_true + rng.uniform(low=-0.01, high=0.01)
         guess[3] = g2_true + rng.uniform(low=-0.01, high=0.01)
         guess[4] = fwhm_to_T(0.9) * rng.uniform(low=0.99, high=1.01)
-        guess[5] = flux * scale**2 * rng.uniform(low=0.99, high=1.01)
+        guess[5] = flux * rng.uniform(low=0.99, high=1.01)
 
         res = fitter.go(obs=obs, guess=guess)
 
@@ -120,7 +120,7 @@ def test_ml_max_fitting_gauss_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
         Ttrue = fwhm_to_T(0.9)
         assert T/Ttrue-1 < tol
 
-    fmn = np.mean(farr)/scale/scale
+    fmn = np.mean(farr)
 
     assert np.abs(fmn/flux-1) < tol
 
