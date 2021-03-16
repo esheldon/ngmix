@@ -18,7 +18,7 @@ from .gmix_nb import (
     GMIX_LOW_DETVAL,
 )
 
-from .fastexp import exp5
+from .fastexp import fexp
 
 logger = logging.getLogger(__name__)
 
@@ -344,7 +344,6 @@ class GMixEM(object):
         conf['tol'] = self.tol
         conf['miniter'] = self.miniter
         conf['maxiter'] = self.maxiter
-        conf['pixel_scale'] = obs.jacobian.scale
         conf['vary_sky'] = self.vary_sky
 
         return conf
@@ -454,7 +453,6 @@ def em_run(conf,
                 convergence
             miniter: minimum number of iterations
             maxiter: maximum number of iterations
-            pixel_scale: pixel scale
             sky: the sky, or guess for sky if fitting for it
             vary_sky: True if fitting for the sky
 
@@ -486,7 +484,6 @@ def em_run(conf,
 
     tol = conf['tol']
 
-    pix_area = conf['pixel_scale']*conf['pixel_scale']
     npix = pixels.size
 
     sky = conf['sky']
@@ -526,7 +523,6 @@ def em_run(conf,
             gmix_psf,
             gmix_conv,
             sums,
-            pix_area,
         )
 
         if conf['vary_sky']:
@@ -648,7 +644,7 @@ def do_scratch_sums(pixel, gmix_conv, sums, ngauss_psf, taudata):
             chi2 = gauss['dcc']*v2 + gauss['drr']*u2 - 2.0*gauss['drc']*uv
 
             if chi2 < 25.0 and chi2 >= 0.0:
-                val = gauss['pnorm']*exp5(-0.5*chi2)
+                val = gauss['pnorm']*fexp(-0.5*chi2) * pixel['area']
             else:
                 val = 0.0
 
@@ -711,8 +707,7 @@ def do_sums(sums, pixel, gtot):
 def gmix_set_from_sums(gmix,
                        gmix_psf,
                        gmix_conv,
-                       sums,
-                       pix_area):
+                       sums):
     """
     fill the gaussian mixture from the em sums
 
@@ -726,8 +721,6 @@ def gmix_set_from_sums(gmix,
         The final convolved mixture
     sums: sums structure
         With dtype _sums_dtype
-    pix_area: float
-        Area of pixel
     """
 
     minval = 1.0e-4
@@ -769,12 +762,9 @@ def gmix_set_from_sums(gmix,
             irr = icc = T/2
             irc = 0.0
 
-        # ngmix works in surface brightness, so multiply p by area since it
-        # has the actual image value in there
-
         gauss2d_set(
             gauss,
-            p*pix_area,
+            p,
             v,
             u,
             irr,
@@ -806,7 +796,6 @@ def em_run_fixcen(conf,
                 convergence
             miniter: minimum number of iterations
             maxiter: maximum number of iterations
-            pixel_scale: pixel scale
             sky: the sky, or guess for sky if fitting for it
             vary_sky: True if fitting for the sky
 
@@ -838,7 +827,6 @@ def em_run_fixcen(conf,
 
     tol = conf['tol']
 
-    pix_area = conf['pixel_scale']*conf['pixel_scale']
     npix = pixels.size
 
     sky = conf['sky']
@@ -878,7 +866,6 @@ def em_run_fixcen(conf,
             gmix_psf,
             gmix_conv,
             sums,
-            pix_area,
         )
 
         if conf['vary_sky']:
@@ -968,7 +955,7 @@ def do_scratch_sums_fixcen(pixel, gmix_conv, sums, ngauss_psf, taudata):
             chi2 = gauss['dcc']*v2 + gauss['drr']*u2 - 2.0*gauss['drc']*uv
 
             if chi2 < 25.0 and chi2 >= 0.0:
-                val = gauss['pnorm']*exp5(-0.5*chi2)
+                val = gauss['pnorm']*fexp(-0.5*chi2) * pixel['area']
             else:
                 val = 0.0
 
@@ -1024,8 +1011,7 @@ def do_sums_fixcen(sums, pixel, gtot):
 def gmix_set_from_sums_fixcen(gmix,
                               gmix_psf,
                               gmix_conv,
-                              sums,
-                              pix_area):
+                              sums):
     """
     fill the gaussian mixture from the em sums
 
@@ -1039,8 +1025,6 @@ def gmix_set_from_sums_fixcen(gmix,
         The final convolved mixture
     sums: sums structure
         With dtype _sums_dtype_fixcen
-    pix_area: float
-        Area of pixel
     """
 
     minval = 1.0e-4
@@ -1080,12 +1064,9 @@ def gmix_set_from_sums_fixcen(gmix,
             irr = icc = T/2
             irc = 0.0
 
-        # ngmix works in surface brightness, so multiply p by area since it
-        # has the actual image value in there
-
         gauss2d_set(
             gauss,
-            p*pix_area,
+            p,
             gauss['row'],
             gauss['col'],
             irr,
@@ -1161,7 +1142,6 @@ def em_run_fluxonly(
                 convergence
             miniter: minimum number of iterations
             maxiter: maximum number of iterations
-            pixel_scale: pixel scale
             sky: the sky, or guess for sky if fitting for it
             vary_sky: True if fitting for the sky
 
@@ -1191,7 +1171,6 @@ def em_run_fluxonly(
 
     tol = conf['tol']
 
-    pix_area = conf['pixel_scale']*conf['pixel_scale']
     npix = pixels.size
 
     sky = conf['sky']
@@ -1223,7 +1202,6 @@ def em_run_fluxonly(
             gmix_psf,
             gmix_conv,
             sums,
-            pix_area,
         )
 
         if conf['vary_sky']:
@@ -1302,7 +1280,7 @@ def do_scratch_sums_fluxonly(pixel, gmix_conv, sums, ngauss_psf):
             chi2 = gauss['dcc']*v2 + gauss['drr']*u2 - 2.0*gauss['drc']*uv
 
             if chi2 < 25.0 and chi2 >= 0.0:
-                val = gauss['pnorm']*exp5(-0.5*chi2)
+                val = gauss['pnorm']*fexp(-0.5*chi2) * pixel['area']
             else:
                 val = 0.0
 
@@ -1345,7 +1323,6 @@ def gmix_set_from_sums_fluxonly(
     gmix_psf,
     gmix_conv,
     sums,
-    pix_area,
 ):
     """
     fill the gaussian mixture from the em sums
@@ -1360,8 +1337,6 @@ def gmix_set_from_sums_fluxonly(
         The final convolved mixture
     sums: sums structure
         With dtype _sums_dtype_fluxonly
-    pix_area: float
-        Area of pixel
     """
 
     n_gauss = gmix.size
@@ -1370,8 +1345,7 @@ def gmix_set_from_sums_fluxonly(
         tsums = sums[i]
         gauss = gmix[i]
 
-        # ngmix works in surface brightness
-        p = tsums['pnew']*pix_area
+        p = tsums['pnew']
 
         gauss2d_set(
             gauss,
@@ -1467,7 +1441,6 @@ _em_conf_dtype = [
     ('miniter', 'i4'),
     ('sky', 'f8'),
     ('vary_sky', 'bool'),
-    ('pixel_scale', 'f8'),
 ]
 _em_conf_dtype = np.dtype(_em_conf_dtype, align=True)
 
