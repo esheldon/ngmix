@@ -147,6 +147,12 @@ class Jacobian(object):
         """
         return self._data['scale'][0]
 
+    def get_area(self):
+        """
+        Get the area of a pixel
+        """
+        return self.scale**2
+
     def get_vu(self, row, col):
         """
         get v,u given row,col
@@ -197,6 +203,7 @@ class Jacobian(object):
 
     det = property(fget=get_det)
     scale = property(fget=get_scale)
+    area = property(fget=get_area)
 
     def set_cen(self, **kw):
         """

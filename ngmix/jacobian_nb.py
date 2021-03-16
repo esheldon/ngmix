@@ -29,3 +29,12 @@ def jacobian_get_rowcol(jacob, v, u):
     col = jacob['col0'][0] + coldiff/jacob['det'][0]
 
     return row, col
+
+
+@njit
+def jacobian_get_area(jacob):
+    """
+    get the pixel area
+    """
+
+    return jacob['scale'][0]**2
