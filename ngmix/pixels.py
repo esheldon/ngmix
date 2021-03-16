@@ -71,6 +71,7 @@ def make_coords(dims, jacob):
 _pixels_dtype = [
     ("u", "f8"),
     ("v", "f8"),
+    ("area", "f8"),
     ("val", "f8"),
     ("ierr", "f8"),
     ("fdiff", "f8"),
@@ -80,4 +81,5 @@ _pixels_dtype = [
 _coords_dtype = [
     ("u", "f8"),
     ("v", "f8"),
+    ("area", "f8"),
 ]
