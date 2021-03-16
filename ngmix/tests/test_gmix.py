@@ -341,7 +341,7 @@ def test_gmix_loglike_fdiff(start):
 
             v, u = obs.jacobian(r, c)
             chi2 = ((u - col)**2 + (v - row)**2)/sigma**2
-            model =  pnorm * np.exp(-0.5 * chi2) * area
+            model = pnorm * np.exp(-0.5 * chi2) * area
             _fdiff = (model - obs.image[r, c]) * np.sqrt(obs.weight[r, c])
             print(_fdiff, fdiff[loc])
             assert np.allclose(_fdiff, fdiff[loc], rtol=rtol)
