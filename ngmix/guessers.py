@@ -803,7 +803,8 @@ class GMixPSFGuesser(object):
         wt = GMixModel([0.0, 0.0, 0.0, 0.0, Tweight, 1.0], "gauss")
 
         res = wt.get_weighted_moments(obs=obs, maxrad=1.0e9)
-        assert res['flags'] == 0, 'weighted moments failed'
+        if res['flags'] != 0:
+            return self._get_T_flux_default(obs=obs)
 
         # ngmix is in flux units, need to divide by area
         area = scale**2
