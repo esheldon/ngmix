@@ -238,8 +238,16 @@ def test_mdet_regression(fname, write=False):
                 atol = 2e-6
 
             if np.issubdtype(old_data[col].dtype, np.number):
+
+                if col == 'wmom_pars' and '1.3.8' in fname:
+                    adata = all_res[col][:, :5]
+                    odata = old_data[col][:, :5]
+                else:
+                    adata = all_res[col]
+                    odata = old_data[col]
+
                 assert np.allclose(
-                    all_res[col], old_data[col],
+                    adata, odata,
                     atol=atol, rtol=rtol,
                 ), {
                     col+' '+os.path.basename(fname): np.max(
