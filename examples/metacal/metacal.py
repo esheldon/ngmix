@@ -1,10 +1,20 @@
 """
-Use a metacal bootstrapper with gaussian moments.  Simple weighted moments are
-used for measurement.  In this example we perform no detection and make no
+Metacalibration (https://arxiv.org/abs/1702.02600, https://arxiv.org/abs/1702.02601)
+
+Metacalibration is a method to calibrate weak lensing shear measurements.  It
+involves creating artifically sheared images. This means deconvolving,
+shearing, and reconvolving by a new function (a new PSF). The shear estimator
+is then measured on all of these images in order to form an estimate of a
+linear response (the calibration).
+
+In this example, we use a bootstrapper, which is a wraper class to run
+measurements on the object and psf.  We use simple gaussian weighted moments
+for measurement.  In this example we perform no detection and make no
 selections.
 
-In this example, we set two parameters for the metacal run: the psf and the
-types of images.  These are set when constructing the MetacalBootstrapper
+In this example, we set two parameters for the metacal run: the psf type for
+the final PSF in the image, and the types of images to generate.  These are set
+when constructing the MetacalBootstrapper
 
 the psf
     We deconvolve, shear the image, then reconvolve.
@@ -31,6 +41,16 @@ the types
             1p/1m are are used to calculate the response and selection effects.
 
     standard default set would also includes shears in g2 (2p, 2m)
+
+This example is low noise without any blending.  It should take about a minute
+to run and get a precise final shear estimate.  You should see that the
+recovered shear is unbiased.  The printout should look something like this
+
+    > python metacal.py
+    S/N: 79381.3
+    R11: 0.343469
+    m: 4.60743e-06 +/- 0.000419315 (99.7% conf)
+    c: -8.87648e-07 +/- 4.01498e-06 (99.7% conf)
 """
 import numpy as np
 import ngmix
@@ -43,16 +63,16 @@ def main():
     shear_true = [0.01, 0.00]
     rng = np.random.RandomState(args.seed)
 
-    # measure moments with a fixed gaussian weight function, no psf correction
+    # We will measure moments with a fixed gaussian weight function
     weight_fwhm = 1.2
     fitter = ngmix.gaussmom.GaussMom(fwhm=weight_fwhm)
     psf_fitter = ngmix.gaussmom.GaussMom(fwhm=weight_fwhm)
 
-    # these run the moments
+    # these "runners" run the moments code on observations
     psf_runner = ngmix.runners.PSFRunner(fitter=psf_fitter)
     runner = ngmix.runners.Runner(fitter=fitter)
 
-    # this runs metacal as well as both psf and object measurements
+    # this "bootstrapper" runs metacal as well as both psf and object measurements
     boot = ngmix.metacal.MetacalBootstrapper(
         runner=runner, psf_runner=psf_runner,
         rng=rng,
@@ -60,9 +80,9 @@ def main():
         types=['noshear', '1p', '1m'],
     )
 
-    # let's just do R11 for simplicity and to speed up this example; typically
-    # the off diagonal terms are negligible, and R11 and R22 are usually
-    # consistent
+    # We will just do R11 for simplicity and to speed up this example;
+    # typically the off diagonal terms are negligible, and R11 and R22 are
+    # usually consistent
 
     gvals = np.zeros((args.ntrial, 2))
     s2n = np.zeros(args.ntrial)
@@ -93,7 +113,7 @@ def main():
     merr = shear_err[0]/shear_true[0]
 
     print()
-    print('s2n: %g' % s2n.mean())
+    print('S/N: %g' % s2n.mean())
     print('R11: %g' % R11)
     print('m: %g +/- %g (99.7%% conf)' % (m, merr*3))
     print('c: %g +/- %g (99.7%% conf)' % (shear[1], shear_err[1]*3))
