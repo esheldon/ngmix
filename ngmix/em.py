@@ -527,7 +527,6 @@ def em_run(conf,
 
         if conf['vary_sky']:
             sky = skysum/npix
-            # print('sky_orig:', conf['sky'], 'sky:', sky)
 
         numiter = i+1
         if numiter >= conf['miniter']:
@@ -870,7 +869,6 @@ def em_run_fixcen(conf,
 
         if conf['vary_sky']:
             sky = skysum/npix
-            # print('sky_orig:', conf['sky'], 'sky:', sky)
 
         numiter = i+1
         if numiter >= conf['miniter']:
@@ -1206,7 +1204,6 @@ def em_run_fluxonly(
 
         if conf['vary_sky']:
             sky = skysum/npix
-            # print('sky_orig:', conf['sky'], 'sky:', sky)
 
         psum = gmix['p'].sum()
 

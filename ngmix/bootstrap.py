@@ -6,6 +6,7 @@ TODO
     - make it possible to specify the guess type (not just psf)
 
 """
+import logging
 import numpy as np
 
 from .observation import Observation, ObsList, MultiBandObsList
@@ -18,6 +19,8 @@ BOOT_R4_LOW = 2 ** 2
 BOOT_TS2N_ROUND_FAIL = 2 ** 3
 BOOT_ROUND_CONVOLVE_FAIL = 2 ** 4
 BOOT_WEIGHTS_LOW = 2 ** 5
+
+logger = logging.getLogger(__name__)
 
 
 class Bootstrapper(object):
@@ -201,7 +204,6 @@ def replace_masked_pixels(
                 bmask = None
 
             if hasattr(obs, "weight_raw"):
-                # print("    using raw weight for replace")
                 weight = obs.weight_raw
             else:
                 weight = obs.weight
@@ -212,7 +214,7 @@ def replace_masked_pixels(
                 w = np.where(weight == 0.0)
 
             if w[0].size > 0:
-                print(
+                logger.debug(
                     "        replacing %d/%d masked or zero weight "
                     "pixels" % (w[0].size, im.size)
                 )

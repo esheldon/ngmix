@@ -19,8 +19,6 @@ class PriorSimpleSep(object):
 
     def __init__(self, cen_prior, g_prior, T_prior, F_prior):
 
-        # print("JointPriorSimpleSep")
-
         self.cen_prior = cen_prior
         self.g_prior = g_prior
         self.T_prior = T_prior
@@ -44,8 +42,6 @@ class PriorSimpleSep(object):
             (None, None),  # c2
             (None, None),  # g1
             (None, None),  # g2
-            # (-1.0,1.0),  # g1
-            # (-1.0,1.0),  # g2
         ]
 
         allp = [self.T_prior] + self.F_priors
@@ -131,8 +127,6 @@ class PriorSimpleSep(object):
             the fdiff array to fill
         """
         index = 0
-
-        # fdiff[index] = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
 
         lnp1, lnp2 = self.cen_prior.get_lnprob_scalar_sep(pars[0], pars[1])
 
@@ -299,8 +293,6 @@ class PriorBDSep(PriorSimpleSep):
         F_prior,
     ):
 
-        # print("JointPriorSimpleSep")
-
         self.cen_prior = cen_prior
         self.g_prior = g_prior
         self.T_prior = T_prior
@@ -381,8 +373,6 @@ class PriorBDSep(PriorSimpleSep):
             the fdiff array to fill
         """
         index = 0
-
-        # fdiff[index] = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
 
         fdiff1, fdiff2 = self.cen_prior.get_fdiff(pars[0], pars[1])
 
@@ -510,8 +500,6 @@ class PriorBDFSep(PriorSimpleSep):
 
     def __init__(self, cen_prior, g_prior, T_prior, fracdev_prior, F_prior):
 
-        # print("JointPriorSimpleSep")
-
         self.cen_prior = cen_prior
         self.g_prior = g_prior
         self.T_prior = T_prior
@@ -536,8 +524,6 @@ class PriorBDFSep(PriorSimpleSep):
             (None, None),  # c2
             (None, None),  # g1
             (None, None),  # g2
-            # (-1.0,1.0),  # g1
-            # (-1.0,1.0),  # g2
         ]
 
         allp = [self.T_prior, self.fracdev_prior] + self.F_priors
@@ -545,7 +531,6 @@ class PriorBDFSep(PriorSimpleSep):
         some_have_bounds = False
         for i, p in enumerate(allp):
             if p.has_bounds():
-                # print('bounds for:',i,p)
                 some_have_bounds = True
                 bounds.append((p.bounds[0], p.bounds[1]))
             else:
@@ -589,8 +574,6 @@ class PriorBDFSep(PriorSimpleSep):
             the fdiff array to fill
         """
         index = 0
-
-        # fdiff[index] = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
 
         fdiff1, fdiff2 = self.cen_prior.get_fdiff(pars[0], pars[1])
 
@@ -784,8 +767,6 @@ class PriorSpergelSep(PriorSimpleSep):
         """
         index = 0
 
-        # fdiff[index] = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
-
         lnp1, lnp2 = self.cen_prior.get_lnprob_scalar_sep(pars[0], pars[1])
 
         fdiff[index] = lnp1
@@ -969,8 +950,6 @@ class PriorCoellipSame(PriorSimpleSep):
         ngauss = self.ngauss
 
         index = 0
-
-        # fdiff[index] = self.cen_prior.get_lnprob_scalar(pars[0],pars[1])
 
         lnp1, lnp2 = self.cen_prior.get_lnprob_scalar_sep(pars[0], pars[1])
 
