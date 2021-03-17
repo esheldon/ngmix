@@ -86,6 +86,7 @@
 - removed the `roundify` and `stats` modules
 - removed the "prepix" option for metacal
 - removed guessers `RoundParsGuesser`, `MomGuesser`,
+- switched from print to logging in many modules
 
 ## v1.3.8
 
