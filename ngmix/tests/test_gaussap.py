@@ -5,10 +5,10 @@ import ngmix
 
 
 @pytest.mark.parametrize('model', ['gauss', 'exp', 'dev'])
-def test_gaussap_simple_smoke(model):
+@pytest.mark.parametrize('weight_fwhm', [2.5, 1000.0])
+def test_gaussap_simple_smoke(model, weight_fwhm):
     rng = np.random.RandomState(seed=31415)
 
-    weight_fwhm = 2.5
     nobj = 10
     nband = 5
 
@@ -37,6 +37,16 @@ def test_gaussap_simple_smoke(model):
     )
 
     assert np.all(flags == 0)
+
+    bstart = 5
+    assert gap_fluxes.shape == pars[:, bstart:bstart+nband].shape
+
+    if weight_fwhm > 100:
+        # for large weight functions we should recover the original flux
+        assert np.all(np.abs(pars[:, bstart:bstart+nband] - gap_fluxes) < 0.01)
+    else:
+        # for smaller weight functions we just verify the flux is smaller
+        assert np.all(gap_fluxes < pars[:, bstart:bstart+nband])
 
 
 def test_gaussap_cm_smoke():
@@ -76,6 +86,16 @@ def test_gaussap_cm_smoke():
 
     assert np.all(flags == 0)
 
+    bstart = 5
+    assert gap_fluxes.shape == pars[:, bstart:bstart+nband].shape
+
+    if weight_fwhm > 100:
+        # for large weight functions we should recover the original flux
+        assert np.all(np.abs(pars[:, bstart:bstart+nband] - gap_fluxes) < 0.01)
+    else:
+        # for smaller weight functions we just verify the flux is smaller
+        assert np.all(gap_fluxes < pars[:, bstart:bstart+nband])
+
 
 def test_gaussap_bdf_smoke():
     rng = np.random.RandomState(seed=314)
@@ -110,3 +130,13 @@ def test_gaussap_bdf_smoke():
     )
 
     assert np.all(flags == 0)
+
+    bstart = 6
+    assert gap_fluxes.shape == pars[:, bstart:bstart+nband].shape
+
+    if weight_fwhm > 100:
+        # for large weight functions we should recover the original flux
+        assert np.all(np.abs(pars[:, bstart:bstart+nband] - gap_fluxes) < 0.01)
+    else:
+        # for smaller weight functions we just verify the flux is smaller
+        assert np.all(gap_fluxes < pars[:, bstart:bstart+nband])
