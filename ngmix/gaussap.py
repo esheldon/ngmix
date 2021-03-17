@@ -1,6 +1,7 @@
 """
 calculate gaussian aperture fluxes for a catalog of parameters
 """
+import logging
 import numpy as np
 from .gmix import GMixModel, GMixCM
 from .gexceptions import GMixRangeError
@@ -8,6 +9,8 @@ from .gexceptions import GMixRangeError
 DEFAULT_FLUX = -9999.0
 NO_ATTEMPT = 2**0
 RANGE_ERROR = 2**1
+
+logger = logging.getLogger(__name__)
 
 
 def get_gaussap_flux(pars,
@@ -57,7 +60,9 @@ def get_gaussap_flux(pars,
     for i in range(nobj):
 
         if verbose and ((i+1) % 1000) == 0:
-            print("%d/%d" % (i+1, nobj))
+            logger.info("%d/%d" % (i+1, nobj))
+        else:
+            logger.debug("%d/%d" % (i+1, nobj))
 
         if not mask[i]:
             flags[i] = NO_ATTEMPT
@@ -101,7 +106,7 @@ def _do_gap(weight_fwhm, fracdev, TdByTe, pars, model, i, band):
         flags = 0
 
     except GMixRangeError as err:
-        print(str(err))
+        logger.debug(str(err))
 
     return flux, flags
 
