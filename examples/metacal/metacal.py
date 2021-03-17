@@ -200,9 +200,6 @@ def make_data(rng, noise, shear):
     """
     simulate an exponential object with moffat psf
 
-    the hlr of the exponential is drawn from a gaussian
-    with mean 0.4 arcseconds and sigma 0.2
-
     Parameters
     ----------
     rng: np.random.RandomState
