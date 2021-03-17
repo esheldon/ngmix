@@ -326,10 +326,6 @@ class GPriorBase(PriorBase):
         self.maxval1d = -res["fun"]
         self.maxval1d_loc = res["x"]
 
-        # print("maxguess:",maxguess)
-        # print("maxloc:",self.maxval1d_loc)
-        # print(res)
-
     def get_prob_scalar1d_neg(self, g, *args):
         """
         Helper function so we can use the minimizer
