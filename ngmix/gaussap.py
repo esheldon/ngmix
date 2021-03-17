@@ -38,7 +38,7 @@ def get_gaussap_flux(pars,
     TdByTe: array
         Send for model 'cm'
     verbose: bool
-        If True, print otu progress
+        If True, print out progress
     """
 
     fracdev, TdByTe, pars, mask = _prepare(
