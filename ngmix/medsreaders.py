@@ -1,10 +1,13 @@
 import os
+import logging
 import numpy as np
 from meds import MEDS as _MEDS
 
 from .observation import MultiBandObsList, Observation, ObsList
 from .jacobian import Jacobian
 from .gexceptions import GMixFatalError
+
+logger = logging.getLogger(__name__)
 
 
 class MultiBandNGMixMEDS(object):
@@ -140,7 +143,7 @@ class NGMixMEDS(_MEDS):
                 obs = self.get_obs(iobj, icut, weight_type=weight_type)
                 obslist.append(obs)
             except GMixFatalError:
-                print('zero weight observation found, skipping')
+                logger.debug('zero weight observation found, skipping')
 
         if len(obslist) > 0:
             obs = obslist[0]
