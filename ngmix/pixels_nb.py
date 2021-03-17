@@ -1,6 +1,6 @@
 import numpy
 from numba import njit
-from .jacobian_nb import jacobian_get_vu
+from .jacobian_nb import jacobian_get_vu, jacobian_get_area
 
 
 @njit
@@ -27,6 +27,7 @@ def fill_pixels(pixels, image, weight, jacob, ignore_zero_weight=True):
         pixels in the weight image.  Default True.
     """
     nrow, ncol = image.shape
+    pixel_area = jacobian_get_area(jacob)
 
     ipixel = 0
     for row in range(nrow):
@@ -42,6 +43,7 @@ def fill_pixels(pixels, image, weight, jacob, ignore_zero_weight=True):
 
             pixel['v'] = v
             pixel['u'] = u
+            pixel['area'] = pixel_area
 
             pixel['val'] = image[row, col]
 
@@ -75,6 +77,8 @@ def fill_coords(coords, nrow, ncol, jacob):
         row0,col0,dvdrow,dvdcol,dudrow,dudcol,...
     """
 
+    pixel_area = jacobian_get_area(jacob)
+
     icoord = 0
     for row in range(nrow):
         for col in range(ncol):
@@ -85,5 +89,6 @@ def fill_coords(coords, nrow, ncol, jacob):
 
             coord['v'] = v
             coord['u'] = u
+            coord['area'] = pixel_area
 
             icoord += 1

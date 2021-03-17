@@ -49,7 +49,7 @@ def gauss2d_eval_pixel_fast(gauss, pixel):
     )
 
     if chi2 < FASTEXP_MAX_CHI2 and chi2 >= 0.0:
-        model_val = gauss["pnorm"] * fexp(-0.5 * chi2)
+        model_val = gauss["pnorm"] * fexp(-0.5 * chi2) * pixel["area"]
 
     return model_val
 
@@ -78,7 +78,7 @@ def gauss2d_eval_pixel(gauss, pixel):
         - 2.0 * gauss["drc"] * vdiff * udiff
     )
 
-    model_val = gauss["pnorm"] * numpy.exp(-0.5 * chi2)
+    model_val = gauss["pnorm"] * numpy.exp(-0.5 * chi2) * pixel["area"]
 
     return model_val
 

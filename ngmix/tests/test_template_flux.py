@@ -53,12 +53,10 @@ def test_template_psf_flux_galsim(noise, nband):
 
     if nband is None:
         res = fitter.go(obs=data['obs'])
-        scale = data['obs'][0].jacobian.scale
         assert res['flags'] == 0
-        assert (res['flux']*scale**2 - data['pars'][5]) < NSIG*res['flux_err']
+        assert (res['flux'] - data['pars'][5]) < NSIG*res['flux_err']
     else:
         for iband, obslist in enumerate(data['obs']):
             res = fitter.go(obs=obslist)
-            scale = data['obs'][0][0].jacobian.scale
             assert res['flags'] == 0
-            assert (res['flux']**scale - data['pars'][5+iband]) < NSIG*res['flux_err']
+            assert (res['flux'] - data['pars'][5+iband]) < NSIG*res['flux_err']

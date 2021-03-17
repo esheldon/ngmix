@@ -53,6 +53,8 @@ def test_pixels_smoke(x, y, wcs_g1, wcs_g2, ignore_zero_weight):
     pixels = make_pixels(
         image, weight, jac, ignore_zero_weight=ignore_zero_weight)
 
+    assert np.allclose(pixels['area'], jac.area)
+
     found_zero = 0
     for i in range(len(pixels)):
         y, x = jac.get_rowcol(pixels['v'][i], pixels['u'][i])

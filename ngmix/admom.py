@@ -105,7 +105,7 @@ class AdmomResult(dict):
         jac = obs.jacobian
 
         gm = self.get_gmix()
-        gm.set_flux(obs.image.sum() * jac.scale**2)
+        gm.set_flux(obs.image.sum())
 
         im = gm.make_image(
             obs.image.shape,

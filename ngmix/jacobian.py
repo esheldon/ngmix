@@ -8,7 +8,7 @@ _jacobian_dtype = [
     ('dudrow', 'f8'),
     ('dudcol', 'f8'),
     ('det', 'f8'),
-    ('sdet', 'f8')]
+    ('scale', 'f8')]
 
 _ROWCOL_REQ = [
     'row', 'col',
@@ -141,17 +141,17 @@ class Jacobian(object):
         """
         return self._data['det'][0]
 
-    def get_sdet(self):
-        """
-        Get the sqrt(determinant) of the jacobian matrix
-        """
-        return self._data['sdet'][0]
-
     def get_scale(self):
         """
         Get the scale, defined as sqrt(det)
         """
-        return self._data['sdet'][0]
+        return self._data['scale'][0]
+
+    def get_area(self):
+        """
+        Get the area of a pixel
+        """
+        return self.scale**2
 
     def get_vu(self, row, col):
         """
@@ -202,8 +202,8 @@ class Jacobian(object):
     dudcol = property(fget=get_dudcol)
 
     det = property(fget=get_det)
-    sdet = property(fget=get_sdet)
     scale = property(fget=get_scale)
+    area = property(fget=get_area)
 
     def set_cen(self, **kw):
         """
@@ -308,7 +308,7 @@ class Jacobian(object):
         self._data['dudcol'] = dudcol
 
         self._data['det'] = dvdrow*dudcol - dvdcol*dudrow
-        self._data['sdet'] = sqrt(abs(self._data['det']))
+        self._data['scale'] = sqrt(abs(self._data['det']))
 
     def __repr__(self):
         fmt = (
