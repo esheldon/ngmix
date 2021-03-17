@@ -1,12 +1,25 @@
 """
-An example of metacal with selections.
+Metacalibration (https://arxiv.org/abs/1702.02600, https://arxiv.org/abs/1702.02601)
 
-Use a metacal bootstrapper with gaussian moments.  Simple weighted moments are
-used for measurement.  In this example we perform no detection and make no
-selections.
+In this example we perform basic metacalibration with selections but no no
+object detection (to include detection see the example metadetect.py)
 
-In this example, we set two parameters for the metacal run: the psf and the
-types of images.  These are set when constructing the MetacalBootstrapper
+Metacalibration is a method to calibrate weak lensing shear measurements.  It
+involves creating artifically sheared images. This means deconvolving,
+shearing, and reconvolving by a new function (a new PSF). The shear estimator
+is then measured on all of these images in order to form an estimate of a
+linear response (the calibration).
+
+We can include shear-dependent selection effects in the calibration by
+performing selections on measurements from the sheared versions.
+
+In this example, we use a bootstrapper, which is a wraper class to run
+measurements on the object and psf.  We use simple gaussian weighted moments
+for measurement.
+
+In this example, we set two parameters for the metacal run: the psf type for
+the final PSF in the image, and the types of images to generate.  These are set
+when constructing the MetacalBootstrapper
 
 the psf
     We deconvolve, shear the image, then reconvolve.
@@ -33,6 +46,25 @@ the types
             1p/1m are are used to calculate the response and selection effects.
 
     standard default set would also includes shears in g2 (2p, 2m)
+
+This example is low noise without any blending.  It should take about a minute
+to run and get a precise final shear estimate.  You should see that the
+recovered shear is unbiased.  Note that the uncertainty is greatly
+overestimated for this low-noise example, because the variations in g are due
+to variations in the response, and this variation goes away after calibratioin.
+A jackknife would be better.
+
+The printout should look something like this
+
+    > python metacal_select.py
+
+    noshear kept: 708/1000
+    1p kept: 708/1000
+    1m kept: 708/1000
+    S/N: 80882.1
+    R11: 0.325406
+    m: -0.000163905 +/- 0.0101938 (99.7% conf)
+    c: 2.47504e-06 +/- 5.17806e-06 (99.7% conf)
 """
 import numpy as np
 import ngmix
@@ -45,16 +77,17 @@ def main():
     shear_true = [0.01, 0.00]
     rng = np.random.RandomState(args.seed)
 
-    # measure moments with a fixed gaussian weight function, no psf correction
+    # We will measure moments with a fixed gaussian weight function
     weight_fwhm = 1.2
     fitter = ngmix.gaussmom.GaussMom(fwhm=weight_fwhm)
     psf_fitter = ngmix.gaussmom.GaussMom(fwhm=weight_fwhm)
 
-    # these run the moments
+    # these "runners" run the measurement code on observations
     psf_runner = ngmix.runners.PSFRunner(fitter=psf_fitter)
     runner = ngmix.runners.Runner(fitter=fitter)
 
-    # this runs metacal as well as both psf and object measurements
+    # this "bootstrapper" runs the metacal image shearing as well as both psf
+    # and object measurements
     boot = ngmix.metacal.MetacalBootstrapper(
         runner=runner, psf_runner=psf_runner,
         rng=rng,
@@ -62,9 +95,13 @@ def main():
         types=['noshear', '1p', '1m'],
     )
 
-    # let's just do R11 for simplicity and to speed up this example; typically
-    # the off diagonal terms are negligible, and R11 and R22 are usually
-    # consistent
+    # We will just do R11 for simplicity and to speed up this example;
+    # typically the off diagonal terms are negligible, and R11 and R22 are
+    # usually consistent
+    #
+    # We will just do R11 for simplicity and to speed up this example;
+    # typically the off diagonal terms are negligible, and R11 and R22 are
+    # usually consistent
 
     dlist = []
 
@@ -73,15 +110,14 @@ def main():
 
         resdict, obsdict = boot.go(obs)
 
-        # keep any that pass the flags
         for stype, sres in resdict.items():
-            if sres['flags'] == 0:
-                st = make_struct(res=sres, obs=obsdict[stype], shear_type=stype)
-                dlist.append(st)
+            st = make_struct(res=sres, obs=obsdict[stype], shear_type=stype)
+            dlist.append(st)
 
     print()
     data = np.hstack(dlist)
 
+    # selections performed separately on each shear type
     w = select(data=data, shear_type='noshear')
     w_1p = select(data=data, shear_type='1p')
     w_1m = select(data=data, shear_type='1m')
@@ -100,7 +136,13 @@ def main():
 
     s2n = data['s2n'][w].mean()
 
-    print('s2n: %g' % s2n)
+    # note for this example, with the default noise, the error is hugely
+    # overestimated using std/sqrt(n).  This is because the variation in g is
+    # dominated by variations in the response. But those variations are
+    # removed when the response is included.  A jackknife would capture the
+    # correct noise
+
+    print('S/N: %g' % s2n)
     print('R11: %g' % R11)
     print('m: %g +/- %g (99.7%% conf)' % (m, merr*3))
     print('c: %g +/- %g (99.7%% conf)' % (shear[1], shear_err[1]*3))
@@ -124,6 +166,7 @@ def make_struct(res, obs, shear_type):
     1-element array with fields
     """
     dt = [
+        ('flags', 'i4'),
         ('shear_type', 'U7'),
         ('s2n', 'f8'),
         ('g', 'f8', 2),
@@ -132,14 +175,23 @@ def make_struct(res, obs, shear_type):
     ]
     data = np.zeros(1, dtype=dt)
     data['shear_type'] = shear_type
-    data['s2n'] = res['s2n']
-    # for moments we are actually measureing e, the elliptity
-    data['g'] = res['e']
-    data['T'] = res['T']
+    data['flags'] = res['flags']
+
+    if res['flags'] == 0:
+        data['s2n'] = res['s2n']
+        # for moments we are actually measureing e, the elliptity
+        data['g'] = res['e']
+        data['T'] = res['T']
+    else:
+        data['s2n'] = np.nan
+        data['g'] = np.nan
+        data['T'] = np.nan
+        data['Tpsf'] = np.nan
 
     # we only have one epoch and band, so we can get the psf T from the
     # observation rather than averaging over epochs/bands
     data['Tpsf'] = obs.psf.meta['result']['T']
+
     return data
 
 
@@ -162,11 +214,16 @@ def select(data, shear_type):
     # selection is > 1.2 rather than something smaller like 0.5
     # for pre-psf T from one of the maximum likelihood fitters
 
-    wtype, = np.where(data['shear_type'] == shear_type)
+    wtype, = np.where(
+        (data['shear_type'] == shear_type) &
+        (data['flags'] == 0)
+    )
+
     w, = np.where(data['T'][wtype]/data['Tpsf'][wtype] > 1.2)
 
+    print('%s kept: %d/%d' % (shear_type, w.size, wtype.size))
+
     w = wtype[w]
-    print('%s kept %d/%d' % (shear_type, w.size, wtype.size))
     return w
 
 
@@ -276,7 +333,7 @@ def progress(total, miniters=1):
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--seed', type=int, default=31415,
+    parser.add_argument('--seed', type=int, default=8312,
                         help='seed for rng')
     parser.add_argument('--ntrial', type=int, default=1000,
                         help='number of trials')

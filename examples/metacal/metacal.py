@@ -1,10 +1,22 @@
 """
-Use a metacal bootstrapper with gaussian moments.  Simple weighted moments are
-used for measurement.  In this example we perform no detection and make no
-selections.
+Metacalibration (https://arxiv.org/abs/1702.02600, https://arxiv.org/abs/1702.02601)
 
-In this example, we set two parameters for the metacal run: the psf and the
-types of images.  These are set when constructing the MetacalBootstrapper
+In this example we perform basic metacalibration with no object detection or
+object selections
+
+Metacalibration is a method to calibrate weak lensing shear measurements.  It
+involves creating artifically sheared images. This means deconvolving,
+shearing, and reconvolving by a new function (a new PSF). The shear estimator
+is then measured on all of these images in order to form an estimate of a
+linear response (the calibration).
+
+In this example, we use a bootstrapper, which is a wraper class to run
+measurements on the object and psf.  We use simple gaussian weighted moments
+for measurement.
+
+In this example, we set two parameters for the metacal run: the psf type for
+the final PSF in the image, and the types of images to generate.  These are set
+when constructing the MetacalBootstrapper
 
 the psf
     We deconvolve, shear the image, then reconvolve.
@@ -31,6 +43,16 @@ the types
             1p/1m are are used to calculate the response and selection effects.
 
     standard default set would also includes shears in g2 (2p, 2m)
+
+This example is low noise without any blending.  It should take about a minute
+to run and get a precise final shear estimate.  You should see that the
+recovered shear is unbiased.  The printout should look something like this
+
+    > python metacal.py
+    S/N: 79381.3
+    R11: 0.343469
+    m: 4.60743e-06 +/- 0.000419315 (99.7% conf)
+    c: -8.87648e-07 +/- 4.01498e-06 (99.7% conf)
 """
 import numpy as np
 import ngmix
@@ -43,16 +65,22 @@ def main():
     shear_true = [0.01, 0.00]
     rng = np.random.RandomState(args.seed)
 
-    # measure moments with a fixed gaussian weight function, no psf correction
+    # We will measure moments with a fixed gaussian weight function
     weight_fwhm = 1.2
     fitter = ngmix.gaussmom.GaussMom(fwhm=weight_fwhm)
     psf_fitter = ngmix.gaussmom.GaussMom(fwhm=weight_fwhm)
 
-    # these run the moments
+    # these "runners" run the measurement code on observations
     psf_runner = ngmix.runners.PSFRunner(fitter=psf_fitter)
     runner = ngmix.runners.Runner(fitter=fitter)
 
-    # this runs metacal as well as both psf and object measurements
+    # this "bootstrapper" runs the metacal image shearing as well as both psf
+    # and object measurements
+    #
+    # We will just do R11 for simplicity and to speed up this example;
+    # typically the off diagonal terms are negligible, and R11 and R22 are
+    # usually consistent
+
     boot = ngmix.metacal.MetacalBootstrapper(
         runner=runner, psf_runner=psf_runner,
         rng=rng,
@@ -60,13 +88,7 @@ def main():
         types=['noshear', '1p', '1m'],
     )
 
-    # let's just do R11 for simplicity and to speed up this example; typically
-    # the off diagonal terms are negligible, and R11 and R22 are usually
-    # consistent
-
-    gvals = np.zeros((args.ntrial, 2))
-    s2n = np.zeros(args.ntrial)
-    R11vals = np.zeros(args.ntrial)
+    dlist = []
 
     for i in progress(args.ntrial, miniters=10):
 
@@ -74,37 +96,109 @@ def main():
 
         resdict, obsdict = boot.go(obs)
 
-        gvals[i, :] = resdict['noshear']['e']
-
-        s2n[i] = resdict['noshear']['s2n']
-
-        res1p = resdict['1p']
-        res1m = resdict['1m']
-
-        R11vals[i] = (res1p['e'][0] - res1m['e'][0])/0.02
+        for stype, sres in resdict.items():
+            st = make_struct(res=sres, obs=obsdict[stype], shear_type=stype)
+            dlist.append(st)
 
     print()
-    R11 = R11vals.mean()
 
-    shear = gvals.mean(axis=0)/R11
-    shear_err = gvals.std(axis=0)/np.sqrt(args.ntrial)/R11
+    data = np.hstack(dlist)
+
+    w = select(data=data, shear_type='noshear')
+    w_1p = select(data=data, shear_type='1p')
+    w_1m = select(data=data, shear_type='1m')
+
+    g = data['g'][w].mean(axis=0)
+    gerr = data['g'][w].std(axis=0) / np.sqrt(w.size)
+    g1_1p = data['g'][w_1p, 0].mean()
+    g1_1m = data['g'][w_1m, 0].mean()
+    R11 = (g1_1p - g1_1m)/0.02
+
+    shear = g / R11
+    shear_err = gerr / R11
 
     m = shear[0]/shear_true[0]-1
     merr = shear_err[0]/shear_true[0]
 
-    print()
-    print('s2n: %g' % s2n.mean())
+    s2n = data['s2n'][w].mean()
+
+    print('S/N: %g' % s2n)
     print('R11: %g' % R11)
     print('m: %g +/- %g (99.7%% conf)' % (m, merr*3))
     print('c: %g +/- %g (99.7%% conf)' % (shear[1], shear_err[1]*3))
 
 
+def select(data, shear_type):
+    """
+    select the data by shear type and size
+
+    Parameters
+    ----------
+    data: array
+        The array with fields shear_type and T
+    shear_type: str
+        e.g. 'noshear', '1p', etc.
+
+    Returns
+    -------
+    array of indices
+    """
+
+    w, = np.where(
+        (data['flags'] == 0) & (data['shear_type'] == shear_type)
+    )
+    return w
+
+
+def make_struct(res, obs, shear_type):
+    """
+    make the data structure
+
+    Parameters
+    ----------
+    res: dict
+        With keys 's2n', 'e', and 'T'
+    obs: ngmix.Observation
+        The observation for this shear type
+    shear_type: str
+        The shear type
+
+    Returns
+    -------
+    1-element array with fields
+    """
+    dt = [
+        ('flags', 'i4'),
+        ('shear_type', 'U7'),
+        ('s2n', 'f8'),
+        ('g', 'f8', 2),
+        ('T', 'f8'),
+        ('Tpsf', 'f8'),
+    ]
+    data = np.zeros(1, dtype=dt)
+    data['shear_type'] = shear_type
+    data['flags'] = res['flags']
+    if res['flags'] == 0:
+        data['s2n'] = res['s2n']
+        # for moments we are actually measureing e, the elliptity
+        data['g'] = res['e']
+        data['T'] = res['T']
+    else:
+        data['s2n'] = np.nan
+        data['g'] = np.nan
+        data['T'] = np.nan
+        data['Tpsf'] = np.nan
+
+        # we only have one epoch and band, so we can get the psf T from the
+        # observation rather than averaging over epochs/bands
+        data['Tpsf'] = obs.psf.meta['result']['T']
+
+    return data
+
+
 def make_data(rng, noise, shear):
     """
     simulate an exponential object with moffat psf
-
-    the hlr of the exponential is drawn from a gaussian
-    with mean 0.4 arcseconds and sigma 0.2
 
     Parameters
     ----------

@@ -417,6 +417,7 @@ class LMFitModel(dict):
     def _set_g(self):
         self["g"] = self["pars"][2:2+2].copy()
         self["g_cov"] = self["pars_cov"][2:2+2, 2:2+2].copy()
+        self["g_err"] = self["pars_err"][2:2+2].copy()
 
     def _set_T(self):
         self["T"] = self["pars"][4]
