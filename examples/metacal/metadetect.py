@@ -1,13 +1,32 @@
 """
-Run metadetection example (metacalibration + detection)
+Metacalibration (https://arxiv.org/abs/1702.02600, https://arxiv.org/abs/1702.02601)
+including the detection phase, a.k.a. metadetection (https://arxiv.org/abs/1911.02505)
 
-For detection we use sep, with DES settings as implemented in the
+In this example we create large blended images and run detection and object
+selection.  For detection we use sep, with DES settings as implemented in the
 sxdes package.  To install use
 
     conda install -c conda-forge des-sxdes
 
+Metadetection (metacalibration + detection) is a method to calibrate weak
+lensing shear measurements.  It involves creating artifically sheared images.
+This means deconvolving, shearing, and reconvolving by a new function (a new
+PSF). Detection and the shear estimator are then measured on all of these
+images in order to form an estimate of a linear response (the calibration).
 
-For this example we just measure simple weighted moments.
+This example has blending so it has large shear noise.  The printout should
+look something like this
+
+    > python metadetect.py
+
+    noshear kept 21427/30025
+    1p kept 21465/30032
+    1m kept 21438/30044
+
+    s2n: 86.1238
+    R11: 0.294313 +/- 0.000329995
+    m: -0.0351589 +/- 0.168414 (99.7% conf)
+    c: -0.000301514 +/- 0.00344292 (99.7% conf)
 """
 import numpy as np
 import ngmix
@@ -64,6 +83,8 @@ def print_shear(data, shear_true):
     shear_true: (g1, g2)
         The true shear
     """
+
+    print()
     w = select(data=data, shear_type='noshear')
     w_1p = select(data=data, shear_type='1p')
     w_1m = select(data=data, shear_type='1m')
@@ -87,6 +108,7 @@ def print_shear(data, shear_true):
 
     s2n = data['s2n'][w].mean()
 
+    print()
     print('s2n: %g' % s2n)
     print('R11: %g +/- %g' % (R11, R11_err))
     print('m: %g +/- %g (99.7%% conf)' % (m, merr*3))
@@ -112,10 +134,12 @@ def select(data, shear_type):
     # selection is > 1.2 rather than something smaller like 0.5
     # for pre-psf T from one of the maximum likelihood fitters
 
-    wtype, = np.where(data['shear_type'] == shear_type)
+    wtype, = np.where(
+        (data['shear_type'] == shear_type) &
+        (data['flags'] == 0)
+    )
 
     w, = np.where(
-        (data['flags'][wtype] == 0) &
         (data['T'][wtype]/data['Tpsf'][wtype] > 1.2) &
         (data['s2n'][wtype] > 10) &
         (data['s2n'][wtype] < 300) &
@@ -123,9 +147,9 @@ def select(data, shear_type):
         (np.abs(data['g'][wtype, 1]) < 0.99)
     )
 
-    w = wtype[w]
     print('%s kept %d/%d' % (shear_type, w.size, wtype.size))
 
+    w = wtype[w]
     return w
 
 
@@ -171,7 +195,7 @@ def get_moments(obs):
     array of struct
     """
 
-    # measure moments with a fixed gaussian weight function, no psf correction
+    # We will measure moments with a fixed gaussian weight function
     weight_fwhm = 1.2
     fitter = ngmix.gaussmom.GaussMom(fwhm=weight_fwhm)
     stamp_dim = 32
@@ -185,6 +209,7 @@ def get_moments(obs):
         sflag, tobs = make_stamp_obs(cat[iobj], obs, stamp_dim)
         if sflag != 0:
             continue
+
         res = fitter.go(obs=tobs)
         st = make_struct(res)
         st['Tpsf'] = psf_res['T']
@@ -427,7 +452,7 @@ def progress(total, miniters=1):
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--seed', type=int, default=31415,
+    parser.add_argument('--seed', type=int, default=5,
                         help='seed for rng')
     parser.add_argument('--ntrial', type=int, default=1000,
                         help='number of trials')
