@@ -2,6 +2,10 @@
 
 ### breaking API changes
 
+- ngmix now evaluates models in flux units rather than surface brightness.
+  Users whose images are in flux units previously had to include extra
+  factors of pixel scale squared to get the right units, this is no longer
+  the case.
 - The fitters no longer take the observation in the constructor.
   All fitting/measurement conform to a common interface.  The classes have a `go`
   method that takes the observation and possibly a guess.
