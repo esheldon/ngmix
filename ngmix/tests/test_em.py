@@ -193,3 +193,47 @@ def test_em_2gauss_withpsf(noise):
     imfit = res.make_image()
     imtol = 0.001 / pixel_scale**2 + noise*5
     assert np.all(np.abs(imfit - obs.image) < imtol)
+
+
+@pytest.mark.parametrize('noise', [0.0, 0.05])
+@pytest.mark.parametrize('em_type', ['fixcen', 'fluxonly'])
+def test_em_types(em_type, noise):
+    """
+    test fixcen and fluxonly fitters
+    """
+
+    rng = np.random.RandomState(42587)
+    ngauss = 1
+    data = get_ngauss_obs(rng=rng, ngauss=ngauss, noise=noise)
+
+    obs = data['obs']
+    gm = data['gmix']
+
+    pixel_scale = obs.jacobian.scale
+
+    pars = gm.get_full_pars()
+
+    gm_guess = gm.copy()
+
+    fixcen = False
+    fluxonly = False
+    if em_type == 'fixcen':
+        fixcen = True
+    if em_type == 'fluxonly':
+        fluxonly = True
+
+    res = fit_em(obs=obs, guess=gm_guess, fixcen=fixcen, fluxonly=fluxonly)
+
+    assert res['flags'] == 0
+
+    fit_gm = res.get_gmix()
+
+    fitpars = fit_gm.get_full_pars()
+
+    if noise == 0.0:
+        assert abs(fitpars[0]/pars[0]-1) < FRAC_TOL
+        assert abs(fitpars[1]-pars[1]) < pixel_scale/10
+        assert abs(fitpars[2]-pars[2]) < pixel_scale/10
+        assert abs(fitpars[3]/pars[3]-1) < FRAC_TOL
+        assert abs(fitpars[4]/pars[4]-1) < FRAC_TOL
+        assert abs(fitpars[5]/pars[5]-1) < FRAC_TOL
