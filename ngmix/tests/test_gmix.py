@@ -3,6 +3,7 @@ import galsim
 
 import pytest
 
+import ngmix
 from ngmix.gmix import make_gmix_model
 from ngmix.shape import g1g2_to_e1e2
 from ngmix.shape import Shape
@@ -74,6 +75,19 @@ def test_gmix_get_pars(model, row, col, flux, g1, g2, T):
         np.sum(data['p'] * data['row']) / np.sum(data['p']), row)
     assert np.allclose(
         np.sum(data['p'] * data['col']) / np.sum(data['p']), col)
+
+    gmfull = make_gmix_model(full_pars, 'full')
+    assert np.all(gmfull.get_full_pars() == full_pars)
+
+
+def test_gmix_s2n_smoke():
+    pars = [0, 0, 0, 0, 5, 1]
+    gm = ngmix.GMixModel(pars, "gauss")
+    im = gm.make_image([10, 10])
+
+    obs = ngmix.Observation(im)
+
+    gm.get_model_s2n(obs)
 
 
 @pytest.mark.parametrize('model', ['gauss', 'exp', 'dev', 'turb'])
@@ -345,3 +359,94 @@ def test_gmix_loglike_fdiff(start):
             _fdiff = (model - obs.image[r, c]) * np.sqrt(obs.weight[r, c])
             print(_fdiff, fdiff[loc])
             assert np.allclose(_fdiff, fdiff[loc], rtol=rtol)
+
+
+def test_gmix_errors():
+    with pytest.raises(ValueError):
+        ngmix.GMix()
+
+    with pytest.raises(ValueError):
+        ngmix.GMixModel([1]*6, "blah")
+
+    with pytest.raises(ValueError):
+        ngmix.GMix(pars=[1]*10)
+
+    with pytest.raises(ValueError):
+        ngmix.GMix(ngauss=-1)
+
+    with pytest.raises(ValueError):
+        ngmix.GMixModel([1]*10, "gauss")
+
+    pars = [0, 0, 0, 0, 10, 1]
+    gm = ngmix.GMixModel(pars, "gauss")
+    with pytest.raises(ValueError):
+        gm.get_sheared(0.1)
+
+    with pytest.raises(TypeError):
+        gm.convolve(3)
+
+    with pytest.raises(ValueError):
+        gm.make_image([1])
+
+    obs = ngmix.Observation(np.zeros((10, 10)))
+    with pytest.raises(ValueError):
+        gm.fill_fdiff(obs, np.zeros((10, 10)), start=100000)
+
+    with pytest.raises(TypeError):
+        gm.make_galsim_object(gsparams=3)
+
+    with pytest.raises(ValueError):
+        gm = ngmix.GMixCoellip([1]*3)
+
+    with pytest.raises(ValueError):
+        ngmix.gmix.get_model_name(-1)
+
+    with pytest.raises(ValueError):
+        ngmix.gmix.get_model_num('asdfsa')
+
+    with pytest.raises(ValueError):
+        ngmix.gmix.get_model_ngauss('asdfsa')
+
+    with pytest.raises(ValueError):
+        ngmix.gmix.get_model_npars('asdfsa')
+
+    with pytest.raises(ValueError):
+        tgm = gm.copy()
+        tgm._model_name = 'sdfasd'
+        tgm._set_fill_func()
+
+
+def test_extra():
+    """
+    some extra stuff to get coverage
+    """
+    pars = [0, 0, 0, 0, 10, 1]
+    gm = ngmix.GMixModel(pars, "gauss")
+
+    fwhm = 0.9
+    T = ngmix.moments.fwhm_to_T(fwhm)
+    sigma = ngmix.moments.fwhm_to_sigma(fwhm)
+
+    apflux = gm.get_gaussap_flux(fwhm=fwhm)
+    np.allclose(apflux, gm.get_gaussap_flux(T=T))
+    np.allclose(apflux, gm.get_gaussap_flux(sigma=sigma))
+
+    g = ngmix.gmix.GMixCM(0.5, 1.0, pars)
+    g.copy()
+
+    npars = ngmix.gmix.get_coellip_npars(5)
+    assert npars == 4 + 2*5
+    assert ngmix.gmix.get_coellip_ngauss(npars) == (npars - 4) // 2
+
+
+def test_gmix_lists():
+    gml = ngmix.gmix.GMixList()
+    gml.append(ngmix.GMix(ngauss=3))
+    gml.append(ngmix.GMix(ngauss=3))
+    gml[1] = ngmix.GMix(ngauss=3)
+
+    mgml = ngmix.gmix.MultiBandGMixList()
+    mgml.append(gml)
+    mgml.append(gml)
+
+    mgml[1] = gml
