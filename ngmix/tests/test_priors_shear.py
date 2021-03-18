@@ -45,11 +45,15 @@ def test_priors_gpriorgauss():
         assert "no 1d for gauss" in e.value
 
 
-def test_priors_gpriorba():
-    pr = GPriorBA(A=1.0, sigma=0.5, rng=np.random.RandomState(seed=4535))
+@pytest.mark.parametrize('sigma', [0.05, 0.1, 0.2, 0.3, 0.6])
+def test_priors_gpriorba(sigma):
+    """
+    try a few to make sure the peak finder works
+    """
+    pr = GPriorBA(sigma=0.5, rng=np.random.RandomState(seed=4535))
     _g1, _g2 = pr.sample2d()
 
-    pr = GPriorBA(A=1.0, sigma=0.5, rng=np.random.RandomState(seed=4535))
+    pr = GPriorBA(sigma=0.5, rng=np.random.RandomState(seed=4535))
     assert pr.sigma == 0.5
     assert pr.A == 1.0
 
@@ -138,7 +142,7 @@ def test_priors_gpriorba():
 
     # make sure recomputing the max value kind of works
     mvloc, mv = pr.maxval1d_loc, pr.maxval1d
-    pr.set_maxval1d_scipy()
+    pr.set_maxval1d()
     assert np.allclose(mvloc, pr.maxval1d_loc, atol=1e-2, rtol=0)
     assert np.allclose(mv, pr.maxval1d, atol=1e-2, rtol=0)
 

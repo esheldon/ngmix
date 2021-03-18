@@ -291,20 +291,6 @@ class GPriorBase(PriorBase):
 
         return g1, g2
 
-    def set_maxval1d_scipy(self):
-        """
-        Use a simple minimizer to find the max value of the 1d distribution
-        """
-        import scipy.optimize
-
-        (minvalx, fval, iterations, fcalls, warnflag) = scipy.optimize.fmin(
-            self.get_prob_scalar1d_neg, 0.1, full_output=True, disp=False
-        )
-        if warnflag != 0:
-            raise RuntimeError("failed to find min: warnflag %d" % warnflag)
-        self.maxval1d = -fval
-        self.maxval1d_loc = minvalx
-
     def set_maxval1d(self, maxguess=0.1):
         """
         Use a simple minimizer to find the max value of the 1d distribution
@@ -314,11 +300,9 @@ class GPriorBase(PriorBase):
         maxguess: float
             The guess for finding the maximum g value if it is needed.
         """
-        from ..simplex import minimize_neldermead
+        import scipy.optimize
 
-        res = minimize_neldermead(
-            self.get_prob_scalar1d_neg, maxguess, maxiter=4000, maxfev=4000
-        )
+        res = scipy.optimize.minimize(self.get_prob_scalar1d_neg, maxguess)
 
         if res["status"] != 0:
             raise RuntimeError("failed to find min, flags: %d" % res["status"])
