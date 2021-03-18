@@ -196,14 +196,6 @@ class GalsimLMFitModel(LMFitModel):
         pars[5] = pars_in[5 + band]
         return pars
 
-    def _set_fitting_pars(self, fit_pars=None):
-        """
-        set the fit pars, in this case for the LM algorithm
-        """
-        if fit_pars is None:
-            fit_pars = _default_lm_pars
-        self.fit_pars = fit_pars
-
     def _set_totpix(self):
         """
         Make sure the data are consistent.
@@ -578,7 +570,7 @@ class GalsimLMMoffatFitModel(GalsimLMFitModel):
             self.n_prior_pars = 1 + 1 + 1 + 1 + 1 + self.nband
 
 
-class GalsimLMMOffat(GalsimLM):
+class GalsimLMMoffat(GalsimLM):
     """
     Fit a moffat model using galsim
 
@@ -682,10 +674,6 @@ class GalsimTemplateFitModel(TemplateFluxFitModel):
         if isinstance(obs_in, Observation):
             obs_list = ObsList()
             obs_list.append(obs_in)
-
-            if self.psf_models is not None:
-                if not isinstance(self.psf_models, (list, tuple)):
-                    self.psf_models = [self.psf_models]
 
         elif isinstance(obs_in, ObsList):
             obs_list = obs_in
