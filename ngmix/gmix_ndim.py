@@ -121,7 +121,7 @@ class GMixND(object):
         dpi=100,
         show=False,
         **plot_kws
-    ):
+    ):  # pragma: no cover
         """
         plot the model and each component.  Optionally plot a set of
         data as well.  Currently only works for 1d
