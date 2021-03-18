@@ -62,16 +62,19 @@ class GMixND(object):
 
         self.ngauss = self.weights.size
 
-        sh = means.shape
-        if len(sh) == 1:
-            raise ValueError("means must be 2-d even for ndim=1")
-
-        self.ndim = sh[1]
+        self.ndim = means.shape[1]
 
         self._calc_icovars_and_norms()
 
         self.tmp_lnprob = numpy.zeros(self.ngauss)
         self.xdiff = numpy.zeros(self.ndim)
+
+    @property
+    def converged(self):
+        """
+        returns True if converged
+        """
+        return self._gmm.converged_
 
     def fit(
         self, data, ngauss, n_iter=5000, min_covar=1.0e-6, doplot=False, **keys
