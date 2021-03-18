@@ -43,9 +43,11 @@ def _get_obs(rng, set_noise_image=False, noise=1.0e-6):
     else:
         nim = None
 
+    bmask = np.zeros(im.shape, dtype='i2')
     obs = ngmix.Observation(
         im,
         weight=wt,
+        bmask=bmask,
         noise=nim,
         jacobian=j,
         psf=psf_obs,
