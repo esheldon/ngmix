@@ -188,23 +188,6 @@ class MetacalDilatePSF(object):
         else:
             return newobs
 
-    def get_obs_dilated_only(self, shear):
-        """
-        Unsheared image, just with psf dilated
-
-        parameters
-        ----------
-        shear: ngmix.Shape
-            The shear to apply
-        """
-
-        newpsf_image, newpsf_obj = self.get_target_psf(shear, 'gal_shear')
-        unsheared_image = self.get_target_image(newpsf_obj, shear=None)
-
-        uobs = self._make_obs(unsheared_image, newpsf_image)
-
-        return uobs
-
     def get_obs_psfshear(self, shear):
         """
         This is the case where we shear the psf image, for calculating Rpsf
@@ -245,8 +228,8 @@ class MetacalDilatePSF(object):
         else:
             doshear = False
 
-        g = np.sqrt(shear.g1**2 + shear.g2**2)
-        if g not in self._psf_cache:
+        key = self._get_psf_key(shear, doshear)
+        if key not in self._psf_cache:
             psf_grown = self._get_dilated_psf(shear, doshear=doshear)
 
             # this should carry over the wcs
@@ -261,9 +244,9 @@ class MetacalDilatePSF(object):
                 # argh, galsim uses generic exceptions
                 raise GMixRangeError("galsim error: '%s'" % str(err))
 
-            self._psf_cache[g] = (psf_grown_image, psf_grown)
+            self._psf_cache[key] = (psf_grown_image, psf_grown)
 
-        psf_grown_image, psf_grown = self._psf_cache[g]
+        psf_grown_image, psf_grown = self._psf_cache[key]
         return psf_grown_image.copy(), psf_grown
 
     def _get_dilated_psf(self, shear, doshear=False):
@@ -275,7 +258,7 @@ class MetacalDilatePSF(object):
         """
         import galsim
 
-        psf_grown_nopix = self._do_dilate(self.psf_int_nopix, shear)
+        psf_grown_nopix = self._do_dilate(self.psf_int_nopix, shear, doshear=doshear)
 
         if doshear:
             psf_grown_nopix = psf_grown_nopix.shear(g1=shear.g1, g2=shear.g2)
@@ -283,12 +266,16 @@ class MetacalDilatePSF(object):
         psf_grown = galsim.Convolve(psf_grown_nopix, self.pixel)
         return psf_grown
 
-    def _do_dilate(self, psf, shear):
-        g = np.sqrt(shear.g1**2 + shear.g2**2)
-        if g not in self._psf_cache:
-            self._psf_cache[g] = _do_dilate(psf, shear)
+    def _do_dilate(self, psf, shear, doshear=False):
+        key = self._get_psf_key(shear, doshear)
+        if key not in self._psf_cache:
+            self._psf_cache[key] = _do_dilate(psf, shear)
 
-        return self._psf_cache[g]
+        return self._psf_cache[key]
+
+    def _get_psf_key(self, shear, doshear):
+        g = np.sqrt(shear.g1**2 + shear.g2**2)
+        return '%s-%s' % (doshear, g)
 
     def get_target_image(self, psf_obj, shear=None):
         """
@@ -504,7 +491,9 @@ class MetacalGaussPSF(MetacalDilatePSF):
     def __init__(self, obs, rng):
 
         super().__init__(obs=obs)
-        assert rng is not None
+        if rng is None:
+            raise ValueError('send an rng to MetacalGaussPSF')
+
         self.rng = rng
         self._setup_psf_noise()
 
@@ -666,8 +655,7 @@ class MetacalFitGaussPSF(MetacalGaussPSF):
         # try adaptive moments first
         fitter = Admom(rng=self.rng)
 
-        run_psf_fitter(obs=psfobs, fitter=fitter, guesser=guesser, ntry=ntry)
-        res = psfobs.meta['result']
+        res = run_psf_fitter(obs=psfobs, fitter=fitter, guesser=guesser, ntry=ntry)
 
         if res['flags'] == 0:
             psf_gmix = res.get_gmix()
@@ -683,10 +671,10 @@ class MetacalFitGaussPSF(MetacalGaussPSF):
             fitter = LM(model='gauss', fit_pars=lm_pars)
             guesser = SimplePSFGuesser(rng=self.rng)
 
-            run_psf_fitter(obs=psfobs, fitter=fitter, guesser=guesser, ntry=ntry)
-
-            res = fitter.get_result()
-            res = psfobs.meta['result']
+            res = run_psf_fitter(
+                obs=psfobs, fitter=fitter, guesser=guesser, ntry=ntry,
+                set_result=False,
+            )
 
             if res['flags'] == 0:
                 psf_gmix = res.get_gmix()
@@ -829,10 +817,7 @@ def _get_gauss_target_psf(psf, flux):
     """
     import galsim
 
-    if hasattr(psf, 'stepk'):
-        dk = psf.stepk/4.0
-    else:
-        dk = psf.stepK()/4.0
+    dk = psf.stepk/4.0
 
     small_kval = 1.e-2    # Find the k where the given psf hits this kvalue
     smaller_kval = 3.e-3  # Target PSF will have this kvalue at the same k
