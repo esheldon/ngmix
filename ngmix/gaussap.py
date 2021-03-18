@@ -65,7 +65,7 @@ def get_gaussap_flux(pars,
             logger.debug("%d/%d" % (i+1, nobj))
 
         if not mask[i]:
-            flags[i] = NO_ATTEMPT
+            flags[i, :] = NO_ATTEMPT
             continue
 
         for band in range(nband):
@@ -121,16 +121,11 @@ def _prepare(pars,
     pars = np.array(pars, dtype='f8', ndmin=2, copy=False)
 
     if mask is not None:
-        mask = np.array(mask, dtype=np.bool_, ndmin=1, copy=False)
+        mask = np.array(mask, dtype=bool, ndmin=1, copy=False)
         assert mask.shape[0] == pars.shape[0], \
             'mask and pars must be same length'
     else:
-        mask = np.ones(pars.shape[0], dtype=np.bool_)
-
-    if len(pars.shape) == 1:
-        oldpars = pars
-        pars = np.zeros((1, pars.shape[0]), dtype='f8')
-        pars[0, :] = oldpars
+        mask = np.ones(pars.shape[0], dtype=bool)
 
     if model == 'cm':
 
