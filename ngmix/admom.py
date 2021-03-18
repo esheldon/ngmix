@@ -254,20 +254,6 @@ def get_ratio_var(a, b, var_a, var_b, cov_ab):
     return var
 
 
-def get_sum_err(var_a, var_b, cov_ab):
-    from math import sqrt
-    var = get_sum_var(var_a, var_b, cov_ab)
-    if var < 0:
-        var = 0
-
-    error = sqrt(var)
-    return error
-
-
-def get_sum_var(var_a, var_b, cov_ab):
-    return var_a + var_b - 2*cov_ab
-
-
 def get_result(ares):
     """
     copy the result structure to a dict, and
