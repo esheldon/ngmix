@@ -179,7 +179,7 @@ class Admom(object):
                 obs.pixels,
                 ares,
             )
-        except GMixRangeError as err:
+        except GMixRangeError:
             ares['flags'] = 0x8
 
         result = get_result(ares)
