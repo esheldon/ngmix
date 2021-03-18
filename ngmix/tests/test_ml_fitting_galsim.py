@@ -3,13 +3,15 @@ import numpy as np
 import pytest
 
 import ngmix
+from ._galsim_sims import _get_obs
 from ._priors import get_prior_galsimfit
 
 
 @pytest.mark.parametrize('wcs_g1', [-0.03, 0.0, 0.03])
 @pytest.mark.parametrize('wcs_g2', [-0.03, 0.0, 0.03])
-@pytest.mark.parametrize('model', ['exp'])
-def test_ml_fitting_galsim(wcs_g1, wcs_g2, model):
+@pytest.mark.parametrize('model', ['exp', 'dev', 'gauss'])
+@pytest.mark.parametrize('use_prior', [True, False])
+def test_ml_fitting_galsim(wcs_g1, wcs_g2, model, use_prior):
 
     rng = np.random.RandomState(seed=2312)
     scale = 0.263
@@ -53,9 +55,19 @@ def test_ml_fitting_galsim(wcs_g1, wcs_g2, model):
     xarr = []
     yarr = []
 
-    fitter = ngmix.galsimfit.GalsimLM(model='exp', prior=prior)
+    if use_prior:
+        send_prior = prior
+    else:
+        send_prior = None
 
-    for _ in range(50):
+    fitter = ngmix.galsimfit.GalsimLM(model=model, prior=send_prior)
+
+    if model == 'exp' and use_prior:
+        ntrial = 50
+    else:
+        ntrial = 1
+
+    for _ in range(ntrial):
         shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
         xy = gs_wcs.toImage(galsim.PositionD(shift))
 
@@ -111,25 +123,26 @@ def test_ml_fitting_galsim(wcs_g1, wcs_g2, model):
             xarr.append(res['pars'][1])
             yarr.append(res['pars'][0])
 
-    g1diff = np.mean(g1arr)
-    g2diff = np.mean(g2arr)
+    if model == 'exp' and use_prior:
+        g1diff = np.mean(g1arr)
+        g2diff = np.mean(g2arr)
 
-    print('g1vals')
-    print(g1arr)
-    print(g1diff)
-    print('g2vals')
-    print(g2arr)
-    print(g2diff)
+        print('g1vals')
+        print(g1arr)
+        print(g1diff)
+        print('g2vals')
+        print(g2arr)
+        print(g2diff)
 
-    gtol = 1.0e-5
+        gtol = 1.0e-5
 
-    assert np.abs(g1diff) < gtol
-    assert np.abs(g2diff) < gtol
+        assert np.abs(g1diff) < gtol
+        assert np.abs(g2diff) < gtol
 
-    xerr = np.std(xarr) / np.sqrt(len(xarr))
-    assert np.abs(np.mean(xarr)) < xerr * 5
-    yerr = np.std(yarr) / np.sqrt(len(yarr))
-    assert np.abs(np.mean(yarr)) < yerr * 5
+        xerr = np.std(xarr) / np.sqrt(len(xarr))
+        assert np.abs(np.mean(xarr)) < xerr * 5
+        yerr = np.std(yarr) / np.sqrt(len(yarr))
+        assert np.abs(np.mean(yarr)) < yerr * 5
 
 
 def test_ml_fitting_galsim_spergel_smoke():
@@ -258,7 +271,7 @@ def test_ml_fitting_galsim_moffat_smoke():
         jacobian=jac,
     )
 
-    fitter = ngmix.galsimfit.GalsimLMMOffat()
+    fitter = ngmix.galsimfit.GalsimLMMoffat()
 
     guess = np.zeros(7)
 
@@ -272,3 +285,29 @@ def test_ml_fitting_galsim_moffat_smoke():
 
     res = fitter.go(obs=obs, guess=guess)
     assert res['flags'] == 0
+
+
+def test_ml_fitting_galsim_errors():
+    rng = np.random.RandomState(seed=8)
+
+    fitter = ngmix.galsimfit.GalsimLM(model='exp')
+    with pytest.raises(ValueError):
+        fitter.go(obs=None, guess=None)
+
+    obs = _get_obs(rng)
+    with pytest.raises(ngmix.GMixRangeError):
+        fitter.go(obs=obs, guess=[0, 0, 0, 0, 0, 0])
+
+    guess = [0, 0, 0, 0, 1, 1]
+    gmod = ngmix.galsimfit.GalsimLMFitModel(obs=obs, model='exp', guess=guess)
+    with pytest.raises(ngmix.GMixRangeError):
+        gmod.make_model([0, 0, 1.e9, 0, 1, 1])
+
+    with pytest.raises(ngmix.GMixRangeError):
+        gmod.make_round_model([0, 0, 0, 0, -1, 1])
+
+    with pytest.raises(NotImplementedError):
+        ngmix.galsimfit.GalsimLMFitModel(obs=obs, model='blah', guess=guess)
+
+    with pytest.raises(ValueError):
+        fitter.go(obs=obs, guess=np.zeros(1000))

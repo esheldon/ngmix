@@ -75,7 +75,8 @@ def test_template_psf_flux(noise, nband):
 
 @pytest.mark.parametrize('noise', [1.0, 5.0, 100.0])
 @pytest.mark.parametrize('nband', [None, 1, 2])
-def test_template_psf_flux_galsim(noise, nband):
+@pytest.mark.parametrize('nepoch', [None, 10])
+def test_template_psf_flux_galsim(noise, nband, nepoch):
     """
     see if we can recover the psf flux within errors
     """
@@ -84,7 +85,7 @@ def test_template_psf_flux_galsim(noise, nband):
     data = get_model_obs(
         model='gauss',  # it has T=0 for a star
         rng=rng, noise=noise, star=True,
-        set_psf_gmix=True, nepoch=10, nband=nband,
+        set_psf_gmix=True, nepoch=nepoch, nband=nband,
     )
 
     fitter = GalsimTemplateFluxFitter()
