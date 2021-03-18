@@ -9,13 +9,14 @@ FRAC_TOL = 0.001
 
 def _exercise_gd(gd, data):
     gd.get_prob_scalar(data[0])
+    gd.get_prob_scalar(data[0], component=0)
     gd.get_lnprob_scalar(data[0])
 
     gd.get_prob_array(data)
     gd.get_lnprob_array(data)
 
-    _ = gd.sample()
-    _ = gd.sample(n=10)
+    gd.sample()
+    gd.sample(n=10)
 
 
 @pytest.mark.parametrize('ndim', [1, 2, 3])
@@ -34,6 +35,7 @@ def test_gmix_ndim_smoke(ndim):
 
     gd = ngmix.gmix_ndim.GMixND(rng=rng)
     gd.fit(data, ngauss=1, min_covar=0.1)
+    assert gd.converged
 
     _exercise_gd(gd, data)
 
@@ -51,6 +53,29 @@ def test_gmix_ndim_smoke(ndim):
         gd.load_mixture(fname)
 
         _exercise_gd(gd, data)
+
+        newgd = ngmix.gmix_ndim.GMixND(file=fname, rng=rng)
+        _exercise_gd(newgd, data)
+
+    with pytest.raises(RuntimeError):
+        ngmix.gmix_ndim.GMixND(weights=[3, 4])
+    with pytest.raises(RuntimeError):
+        ngmix.gmix_ndim.GMixND(means=[3, 4])
+    with pytest.raises(RuntimeError):
+        ngmix.gmix_ndim.GMixND(covars=[3, 4])
+
+    # make sure the code reshapes the data
+    if ndim == 1:
+        gd = ngmix.gmix_ndim.GMixND(
+            rng=rng,
+            weights=gd.weights,
+            means=gd.means.ravel(),
+            covars=gd.covars.ravel(),
+        )
+        _exercise_gd(gd, data)
+
+    gd.fit(data, ngauss=1, min_covar=0.1, n_iter=1)
+    assert not gd.converged
 
 
 @pytest.mark.parametrize('seed', [5, 10, 100])
@@ -70,8 +95,6 @@ def test_gmix_ndim(seed):
     data2 = rng.normal(scale=sigma2, loc=cen2, size=num2)
 
     data = np.hstack((data1, data2))
-    # import hickory
-    # hickory.plot_hist(data, bins=100)
 
     gd = ngmix.gmix_ndim.GMixND(rng=rng)
     gd.fit(data, ngauss=2, min_covar=0.1)
