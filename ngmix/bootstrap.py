@@ -7,11 +7,9 @@ TODO
 
 """
 import logging
-import numpy as np
 
 from .observation import Observation, ObsList, MultiBandObsList
 from .gexceptions import BootPSFFailure
-from copy import deepcopy
 
 BOOT_S2N_LOW = 2 ** 0
 BOOT_R2_LOW = 2 ** 1
@@ -154,90 +152,3 @@ def remove_failed_psf_obs(obs):
             'Observation, ObsList, or MulitiBandObsList' % type(obs)
         )
         raise ValueError(mess)
-
-
-def replace_masked_pixels(
-    mb_obs_list, inplace=False, method="best-fit", fitter=None, add_noise=False
-):
-    """
-    replaced masked pixels
-
-    The original image is stored for each Observation as .image_orig
-
-    parameters
-    ----------
-    mb_obs_list: MultiBandObsList
-        The original observations
-    inplace: bool
-        If True, modify the data in place.  Default False; a full
-        copy is made.
-    method: string, optional
-        Method for replacement.  Supported methods are 'best-fit'.
-        Default is 'best-fit'
-    fitter:
-        when method=='best-fit', a fitter from fitting.py
-
-    add_noise: bool
-        If True, add noise to the replaced pixels based on the median
-        noise in the image, derived from the weight map
-    """
-
-    assert method == "best-fit", "only best-fit replacement is supported"
-    assert fitter is not None, "fitter required"
-
-    if inplace:
-        mbo = mb_obs_list
-    else:
-        mbo = deepcopy(mb_obs_list)
-
-    nband = len(mbo)
-
-    for band in range(nband):
-        olist = mbo[band]
-        for iobs, obs in enumerate(olist):
-
-            im = obs.image
-
-            if obs.has_bmask():
-                bmask = obs.bmask
-            else:
-                bmask = None
-
-            if hasattr(obs, "weight_raw"):
-                weight = obs.weight_raw
-            else:
-                weight = obs.weight
-
-            if bmask is not None:
-                w = np.where((bmask != 0) | (weight == 0.0))
-            else:
-                w = np.where(weight == 0.0)
-
-            if w[0].size > 0:
-                logger.debug(
-                    "        replacing %d/%d masked or zero weight "
-                    "pixels" % (w[0].size, im.size)
-                )
-                obs.image_orig = obs.image.copy()
-                gm = fitter.get_convolved_gmix(band=band, obsnum=iobs)
-
-                im = obs.image
-                model_image = gm.make_image(im.shape, jacobian=obs.jacobian)
-
-                im[w] = model_image[w]
-
-                if add_noise:
-                    wgood = np.where(weight > 0.0)
-                    if wgood[0].size > 0:
-                        median_err = np.median(1.0 / weight[wgood])
-
-                        noise_image = np.random.normal(
-                            loc=0.0, scale=median_err, size=im.shape
-                        )
-
-                        im[w] += noise_image[w]
-
-            else:
-                obs.image_orig = None
-
-    return mbo
