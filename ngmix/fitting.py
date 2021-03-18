@@ -792,19 +792,6 @@ class TemplateFluxFitModel(dict):
 
         return self.eff_npix
 
-    def get_npix(self):
-        """
-        just get the total number of pixels in all images
-        """
-        if not hasattr(self, "_npix"):
-            npix = 0
-            for obs in self.obs:
-                npix += obs.image.size
-
-            self._npix = npix
-
-        return self._npix
-
 
 class TemplateFluxFitter(object):
     """
