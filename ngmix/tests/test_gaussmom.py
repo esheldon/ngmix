@@ -2,6 +2,7 @@ import galsim
 import numpy as np
 import pytest
 
+import ngmix
 from ngmix import Jacobian
 from ngmix.gaussmom import GaussMom
 from ngmix import Observation
@@ -97,3 +98,37 @@ def test_gaussmom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
     if g1_true == 0 and g2_true == 0 and weight_fac > 1:
         T = np.mean(Tarr)
         assert np.abs(T - fwhm_to_T(fwhm)) < 1e-6
+
+
+def test_gaussmom_flags():
+    """
+    test we get flags for very noisy data
+    """
+    rng = np.random.RandomState(seed=100)
+
+    ntrial = 10
+    noise = 100000
+    scale = 0.263
+    dims = [32]*2
+    weight = np.zeros(dims) + 1.0/noise**2
+
+    cen = (np.array(dims)-1)/2
+    jacobian = ngmix.DiagonalJacobian(row=cen[0], col=cen[1], scale=scale)
+
+    flags = np.zeros(ntrial)
+    for i in range(ntrial):
+
+        im = rng.normal(scale=noise, size=dims)
+
+        obs = Observation(
+            image=im,
+            weight=weight,
+            jacobian=jacobian,
+        )
+
+        fitter = GaussMom(fwhm=1.2)
+
+        res = fitter.go(obs)
+        flags[i] = res['flags']
+
+    assert np.any(flags != 0)
