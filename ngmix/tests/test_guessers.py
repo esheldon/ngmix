@@ -234,4 +234,3 @@ def test_guessers_errors():
 
     with pytest.raises(ValueError):
         ngmix.guessers.CoellipPSFGuesser(rng=rng, ngauss=1000)
-
