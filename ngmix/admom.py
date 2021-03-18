@@ -4,6 +4,7 @@ from numpy import diag
 from .gmix import GMix, GMixModel
 from .shape import e1e2_to_g1g2
 from .observation import Observation
+from .gexceptions import GMixRangeError
 
 DEFAULT_MAXITER = 200
 DEFAULT_SHIFTMAX = 5.0  # pixels
@@ -171,12 +172,15 @@ class Admom(object):
         ares = self._get_am_result()
 
         wt_gmix = guess_gmix._data
-        admom(
-            self.conf,
-            wt_gmix,
-            obs.pixels,
-            ares,
-        )
+        try:
+            admom(
+                self.conf,
+                wt_gmix,
+                obs.pixels,
+                ares,
+            )
+        except GMixRangeError as err:
+            ares['flags'] = 0x8
 
         result = get_result(ares)
 
