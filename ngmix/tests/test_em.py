@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from ngmix.em import fit_em
+import ngmix
 from ._sims import get_ngauss_obs
 
 FRAC_TOL = 0.001
@@ -42,7 +42,55 @@ def test_em_1gauss(noise):
     gm_guess = gm.copy()
     randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
 
-    res = fit_em(obs=obs, guess=gm_guess)
+    res = ngmix.em.fit_em(obs=obs, guess=gm_guess)
+
+    assert res['flags'] == 0
+
+    fit_gm = res.get_gmix()
+
+    fitpars = fit_gm.get_full_pars()
+
+    if noise == 0.0:
+        assert abs(fitpars[0]/pars[0]-1) < FRAC_TOL
+        assert abs(fitpars[1]-pars[1]) < pixel_scale/10
+        assert abs(fitpars[2]-pars[2]) < pixel_scale/10
+        assert abs(fitpars[3]/pars[3]-1) < FRAC_TOL
+        assert abs(fitpars[4]/pars[4]-1) < FRAC_TOL
+        assert abs(fitpars[5]/pars[5]-1) < FRAC_TOL
+
+    # check reconstructed image allowing for noise
+    imfit = res.make_image()
+    imtol = 0.001 / pixel_scale**2 + noise*5
+    assert np.all(np.abs(imfit - obs.image) < imtol)
+
+
+def test_em_1gauss_prep():
+    """
+    see if we can recover the input with and without noise to high precision
+    even with a bad guess
+
+    Use ngmix to make the image to make sure there are
+    no pixelization effects
+    """
+
+    rng = np.random.RandomState(42587)
+    noise = 0.0
+    ngauss = 1
+    data = get_ngauss_obs(rng=rng, ngauss=ngauss, noise=noise)
+
+    obs = data['obs']
+    gm = data['gmix']
+
+    pixel_scale = obs.jacobian.scale
+
+    pars = gm.get_full_pars()
+
+    gm_guess = gm.copy()
+    randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
+
+    fitter = ngmix.em.GMixEM()
+    obs_sky, sky = ngmix.em.prep_obs(obs)
+    res = fitter.go(obs=obs_sky, guess=gm_guess, sky=sky)
 
     assert res['flags'] == 0
 
@@ -87,7 +135,7 @@ def test_em_2gauss(noise):
     gm_guess = gm.copy()
     randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
 
-    res = fit_em(obs=obs, guess=gm_guess)
+    res = ngmix.em.fit_em(obs=obs, guess=gm_guess)
     assert res['flags'] == 0
 
     fit_gm = res.get_gmix()
@@ -155,7 +203,7 @@ def test_em_2gauss_withpsf(noise):
     gm_guess = gm.copy()
     randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
 
-    res = fit_em(obs=obs, guess=gm_guess, tol=1.0e-5)
+    res = ngmix.em.fit_em(obs=obs, guess=gm_guess, tol=1.0e-5)
     assert res['flags'] == 0
 
     fit_gm = res.get_gmix()
@@ -222,7 +270,9 @@ def test_em_types(em_type, noise):
     if em_type == 'fluxonly':
         fluxonly = True
 
-    res = fit_em(obs=obs, guess=gm_guess, fixcen=fixcen, fluxonly=fluxonly)
+    res = ngmix.em.fit_em(
+        obs=obs, guess=gm_guess, fixcen=fixcen, fluxonly=fluxonly,
+    )
 
     assert res['flags'] == 0
 
@@ -237,3 +287,44 @@ def test_em_types(em_type, noise):
         assert abs(fitpars[3]/pars[3]-1) < FRAC_TOL
         assert abs(fitpars[4]/pars[4]-1) < FRAC_TOL
         assert abs(fitpars[5]/pars[5]-1) < FRAC_TOL
+
+
+def test_em_errors():
+    """
+    see if we can recover the input with and without noise to high precision
+    even with a bad guess
+
+    Use ngmix to make the image to make sure there are
+    no pixelization effects
+    """
+
+    with pytest.raises(ValueError):
+        ngmix.em.fit_em(None, None)
+
+    rng = np.random.RandomState(42587)
+    noise = 0.0
+    ngauss = 1
+    data = get_ngauss_obs(rng=rng, ngauss=ngauss, noise=noise)
+
+    obs = data['obs']
+    gm = data['gmix']
+
+    gm_guess = gm.copy()
+    data = gm_guess.get_data()
+    for col in ['p', 'row', 'col', 'irr', 'irc', 'icc']:
+        data[col] = np.nan
+
+    res = ngmix.em.fit_em(obs=obs, guess=gm_guess)
+
+    assert res['flags'] == ngmix.em.EM_RANGE_ERROR
+
+    gm_guess = gm.copy()
+    res = ngmix.em.fit_em(obs=obs, guess=gm_guess, maxiter=0)
+    assert res['flags'] == ngmix.em.EM_MAXITER
+
+    emresult = ngmix.em.EMResult(obs=obs, result={})
+    with pytest.raises(RuntimeError):
+        emresult.get_gmix()
+
+    with pytest.raises(RuntimeError):
+        emresult.get_convolved_gmix()
