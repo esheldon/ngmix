@@ -733,6 +733,19 @@ class GMixPSFGuesser(object):
         self.ngauss = ngauss
         self.guess_from_moms = guess_from_moms
 
+        if self.ngauss == 1:
+            self._guess_func = self._get_guess_1gauss
+        elif self.ngauss == 2:
+            self._guess_func = self._get_guess_2gauss
+        elif self.ngauss == 3:
+            self._guess_func = self._get_guess_3gauss
+        elif self.ngauss == 4:
+            self._guess_func = self._get_guess_4gauss
+        elif self.ngauss == 5:
+            self._guess_func = self._get_guess_5gauss
+        else:
+            raise ValueError("bad ngauss: %d" % self.ngauss)
+
     def __call__(self, obs):
         """
         Get a guess for the EM algorithm
@@ -754,19 +767,7 @@ class GMixPSFGuesser(object):
 
     def _get_guess(self, obs):
         T, flux = self._get_T_flux(obs=obs)
-
-        if self.ngauss == 1:
-            return self._get_guess_1gauss(flux=flux, T=T)
-        elif self.ngauss == 2:
-            return self._get_guess_2gauss(flux=flux, T=T)
-        elif self.ngauss == 3:
-            return self._get_guess_3gauss(flux=flux, T=T)
-        elif self.ngauss == 4:
-            return self._get_guess_4gauss(flux=flux, T=T)
-        elif self.ngauss == 5:
-            return self._get_guess_5gauss(flux=flux, T=T)
-        else:
-            raise ValueError("bad ngauss: %d" % self.ngauss)
+        return self._guess_func(flux=flux, T=T)
 
     def _get_T_flux(self, obs):
         if self.guess_from_moms:
@@ -1063,10 +1064,11 @@ class CoellipPSFGuesser(GMixPSFGuesser):
         pixel scale
     """
     def __init__(self, rng, ngauss, guess_from_moms=False):
-
-        self.rng = rng
-        self.ngauss = ngauss
-        self.guess_from_moms = guess_from_moms
+        super().__init__(
+            rng=rng,
+            ngauss=ngauss,
+            guess_from_moms=guess_from_moms,
+        )
         self.npars = get_coellip_npars(ngauss)
 
     def __call__(self, obs):
