@@ -75,6 +75,8 @@ def test_metacal_bootstrap_max_smoke(noise, use_bootstrapper, nband, nepoch):
             rng=rng,
         )
         resdict, obsdict = boot.go(obs)
+
+        _ = boot.fitter  # for coverage
     else:
         resdict, obsdict = metacal_bootstrap(
             obs=obs, runner=runner, psf_runner=psf_runner,
