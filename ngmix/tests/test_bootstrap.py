@@ -86,6 +86,7 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
     if use_bootstrapper:
         boot = Bootstrapper(runner=runner, psf_runner=psf_runner)
         res = boot.go(obs)
+        _ = boot.fitter  # for coverage
     else:
         res = bootstrap(obs=obs, runner=runner, psf_runner=psf_runner)
 
@@ -119,14 +120,14 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
 
 
 @pytest.mark.parametrize('nband', [None, 2])
-def test_remove_failed_psf(nband):
+@pytest.mark.parametrize('nepoch', [None, 1, 10])
+def test_remove_failed_psf(nepoch, nband):
     """
     test removing obs with bad fits
     """
 
     rng = np.random.RandomState(2830)
 
-    nepoch = 10
     data = get_model_obs(
         rng=rng,
         model='gauss',
@@ -135,10 +136,15 @@ def test_remove_failed_psf(nband):
         nband=nband,
     )
 
+    if nepoch is None:
+        test_nepoch = 1
+    else:
+        test_nepoch = nepoch
+
     if isinstance(data['obs'], ngmix.MultiBandObsList):
         mbobs = data['obs']
         for obslist in mbobs:
-            assert len(obslist) == nepoch
+            assert len(obslist) == test_nepoch
 
             index = rng.randint(len(obslist))
             for i, obs in enumerate(obslist):
@@ -148,12 +154,16 @@ def test_remove_failed_psf(nband):
                     flags = 0
                 obs.psf.meta['result'] = {'flags': flags}
 
-        new_mbobs = ngmix.bootstrap.remove_failed_psf_obs(mbobs)
-        for obslist in new_mbobs:
-            assert len(obslist) == nepoch-1
+        if nepoch is None:
+            with pytest.raises(ngmix.gexceptions.BootPSFFailure):
+                _ = ngmix.bootstrap.remove_failed_psf_obs(mbobs)
+        else:
+            new_mbobs = ngmix.bootstrap.remove_failed_psf_obs(mbobs)
+            for obslist in new_mbobs:
+                assert len(obslist) == test_nepoch-1
     elif isinstance(data['obs'], ngmix.ObsList):
         obslist = data['obs']
-        assert len(obslist) == nepoch
+        assert len(obslist) == test_nepoch
 
         index = rng.randint(len(obslist))
         for i, obs in enumerate(obslist):
@@ -163,12 +173,19 @@ def test_remove_failed_psf(nband):
                 flags = 0
             obs.psf.meta['result'] = {'flags': flags}
 
-        new_obslist = ngmix.bootstrap.remove_failed_psf_obs(obslist)
-        assert len(new_obslist) == nepoch-1
+        if test_nepoch == 1:
+            with pytest.raises(ngmix.gexceptions.BootPSFFailure):
+                _ = ngmix.bootstrap.remove_failed_psf_obs(obslist)
+        else:
+            new_obslist = ngmix.bootstrap.remove_failed_psf_obs(obslist)
+            assert len(new_obslist) == test_nepoch-1
     else:
         obs = data['obs']
 
-        obs.psf.meta['result'] = {'flags': flags}
+        obs.psf.meta['result'] = {'flags': 1}
 
         with pytest.raises(ngmix.gexceptions.BootPSFFailure):
-            _ = ngmix.bootstrap.remove_failed_psf_obs(obslist)
+            _ = ngmix.bootstrap.remove_failed_psf_obs(obs)
+
+    with pytest.raises(ValueError):
+        _ = ngmix.bootstrap.remove_failed_psf_obs(None)
