@@ -253,9 +253,8 @@ class GMixEM(object):
             sky such that there are no negative pixels.
         """
 
-        assert isinstance(obs, Observation), (
-            'input obs must be an instance of Observation'
-        )
+        if not isinstance(obs, Observation):
+            raise ValueError('input obs must be an instance of Observation')
 
         if sky is None:
             obs_sky, sky = prep_obs(obs)
