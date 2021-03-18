@@ -154,7 +154,7 @@ def test_remove_failed_psf(nepoch, nband):
                     flags = 0
                 obs.psf.meta['result'] = {'flags': flags}
 
-        if nepoch is None:
+        if nepoch is None or nepoch == 1:
             with pytest.raises(ngmix.gexceptions.BootPSFFailure):
                 _ = ngmix.bootstrap.remove_failed_psf_obs(mbobs)
         else:
