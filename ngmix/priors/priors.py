@@ -2,8 +2,7 @@
 Convention is that all priors should have peak ln(prob)==0. This
 helps use in priors for LM fitting.
 """
-import numpy
-from numpy import where, array, log, sqrt, zeros
+import numpy as np
 
 from ..gexceptions import GMixRangeError
 from .random import make_rng
@@ -98,6 +97,46 @@ class FlatPrior(PriorBase):
                 "value %s out of range: "
                 "[%s,%s]" % (val, self.minval, self.maxval)
             )
+        return retval
+
+    def get_prob_array(self, vals):
+        """
+        Returns 1 if the value is in [minval, maxval] or raises a GMixRangeError
+
+        Parameters
+        ----------
+        vals: array
+            The locations at which to evaluate
+        """
+        retval = 1.0
+
+        w, = np.where((vals < self.minval) | (vals > self.maxval))
+        if w.size > 0:
+            raise GMixRangeError(
+                "values were out of range: "
+                "[%s,%s]" % (self.minval, self.maxval)
+            )
+
+        return vals*0 + retval
+
+    def get_lnprob_array(self, vals):
+        """
+        Returns 0.0 if the value is in [minval, maxval] or raises a GMixRangeError
+
+        Parameters
+        ----------
+        vals: array
+            The location at which to evaluate
+        """
+        retval = 0.0
+
+        w, = np.where((vals < self.minval) | (vals > self.maxval))
+        if w.size > 0:
+            raise GMixRangeError(
+                "values were out of range: "
+                "[%s,%s]" % (self.minval, self.maxval)
+            )
+
         return retval
 
     def get_fdiff(self, val):
@@ -213,7 +252,7 @@ class TwoSidedErf(PriorBase):
         if p <= 0.0:
             lnp = LOWVAL
         else:
-            lnp = log(p)
+            lnp = np.log(p)
         return lnp
 
     def get_prob_array(self, vals):
@@ -226,8 +265,8 @@ class TwoSidedErf(PriorBase):
             The locations at which to evaluate
         """
 
-        vals = array(vals, ndmin=1, dtype="f8", copy=False)
-        pvals = zeros(vals.size)
+        vals = np.array(vals, ndmin=1, dtype="f8", copy=False)
+        pvals = np.zeros(vals.size)
 
         for i in range(vals.size):
             pvals[i] = self.get_prob_scalar(vals[i])
@@ -246,10 +285,10 @@ class TwoSidedErf(PriorBase):
 
         p = self.get_prob_array(vals)
 
-        lnp = numpy.zeros(p.size) + LOWVAL
-        (w,) = numpy.where(p > 0.0)
+        lnp = np.zeros(p.size) + LOWVAL
+        (w,) = np.where(p > 0.0)
         if w.size > 0:
-            lnp[w] = numpy.log(p[w])
+            lnp[w] = np.log(p[w])
         return lnp
 
     def get_fdiff(self, val):
@@ -261,7 +300,7 @@ class TwoSidedErf(PriorBase):
         val: number
             The location at which to evaluate
         """
-        if isinstance(val, numpy.ndarray):
+        if isinstance(val, np.ndarray):
             return self._get_fdiff_array(val)
         else:
             return self._get_fdiff_scalar(val)
@@ -275,8 +314,8 @@ class TwoSidedErf(PriorBase):
         vals: number
             The locations at which to evaluate
         """
-        vals = array(vals, ndmin=1, dtype="f8", copy=False)
-        fdiff = zeros(vals.size)
+        vals = np.array(vals, ndmin=1, dtype="f8", copy=False)
+        fdiff = np.zeros(vals.size)
 
         for i in range(vals.size):
             fdiff[i] = self._get_fdiff_scalar(vals[i])
@@ -300,7 +339,7 @@ class TwoSidedErf(PriorBase):
         p = -2 * p
         if p < 0.0:
             p = 0.0
-        return sqrt(p)
+        return np.sqrt(p)
 
     def sample(self, nrand=None):
         """
@@ -332,7 +371,7 @@ class TwoSidedErf(PriorBase):
         xmin = self.minval - 5.0 * self.width_at_min
         xmax = self.maxval + 5.0 * self.width_at_max
 
-        rvals = zeros(nrand)
+        rvals = np.zeros(nrand)
 
         ngood = 0
         nleft = nrand
@@ -342,7 +381,7 @@ class TwoSidedErf(PriorBase):
             pvals = self.get_prob_array(randx)
             randy = rng.uniform(size=nleft)
 
-            (w,) = where(randy < pvals)
+            (w,) = np.where(randy < pvals)
             if w.size > 0:
                 rvals[ngood:ngood + w.size] = randx[w]
                 ngood += w.size
@@ -415,7 +454,7 @@ class Normal(PriorBase):
         """
         diff = self.mean - val
         lnp = -0.5 * diff * diff * self.s2inv
-        return numpy.exp(lnp)
+        return np.exp(lnp)
 
     get_prob_array = get_prob
 
@@ -618,14 +657,14 @@ class Bounded1D(PriorBase):
         else:
             nval = size
 
-        values = numpy.zeros(nval)
+        values = np.zeros(nval)
         ngood = 0
         nleft = nval
 
         while nleft > 0:
             tmp = self.pdf.sample(nleft)
 
-            (w,) = numpy.where((tmp > bounds[0]) & (tmp < bounds[1]))
+            (w,) = np.where((tmp > bounds[0]) & (tmp < bounds[1]))
 
             if w.size > 0:
                 values[ngood:ngood + w.size] = tmp[w]
@@ -698,11 +737,11 @@ class LogNormal(PriorBase):
         self.mean = mean
         self.sigma = sigma
 
-        logmean = numpy.log(self.mean) - 0.5 * numpy.log(
+        logmean = np.log(self.mean) - 0.5 * np.log(
             1 + self.sigma ** 2 / self.mean ** 2
         )
-        logvar = numpy.log(1 + self.sigma ** 2 / self.mean ** 2)
-        logsigma = numpy.sqrt(logvar)
+        logvar = np.log(1 + self.sigma ** 2 / self.mean ** 2)
+        logsigma = np.sqrt(logvar)
         logivar = 1.0 / logvar
 
         self.logmean = logmean
@@ -711,7 +750,7 @@ class LogNormal(PriorBase):
         self.logivar = logivar
 
         log_mode = self.logmean - self.logvar
-        self.mode = numpy.exp(log_mode)
+        self.mode = np.exp(log_mode)
         chi2 = self.logivar * (log_mode - self.logmean) ** 2
 
         # subtract mode to make max 0.0
@@ -734,7 +773,7 @@ class LogNormal(PriorBase):
         if val <= 0:
             raise GMixRangeError("values of val must be > 0")
 
-        logval = numpy.log(val)
+        logval = np.log(val)
         chi2 = self.logivar * (logval - self.logmean) ** 2
 
         # subtract mode to make max 0.0
@@ -751,15 +790,15 @@ class LogNormal(PriorBase):
         vals: array
             The locations at which to evaluate
         """
-        vals = numpy.array(vals, dtype="f8", copy=False)
+        vals = np.array(vals, dtype="f8", copy=False)
         if self.shift is not None:
             vals = vals - self.shift
 
-        (w,) = where(vals <= 0)
+        (w,) = np.where(vals <= 0)
         if w.size > 0:
             raise GMixRangeError("values must be > 0")
 
-        logvals = numpy.log(vals)
+        logvals = np.log(vals)
         chi2 = self.logivar * (logvals - self.logmean) ** 2
 
         # subtract mode to make max 0.0
@@ -778,7 +817,7 @@ class LogNormal(PriorBase):
         """
 
         lnprob = self.get_lnprob_scalar(val)
-        return numpy.exp(lnprob)
+        return np.exp(lnprob)
 
     def get_prob_array(self, vals):
         """
@@ -791,7 +830,7 @@ class LogNormal(PriorBase):
         """
 
         lnp = self.get_lnprob_array(vals)
-        return numpy.exp(lnp)
+        return np.exp(lnp)
 
     def get_fdiff(self, val):
         """
@@ -806,7 +845,7 @@ class LogNormal(PriorBase):
         chi2 = -2 * lnp
         if chi2 < 0.0:
             chi2 = 0.0
-        fdiff = sqrt(chi2)
+        fdiff = np.sqrt(chi2)
         return fdiff
 
     def sample(self, nrand=None):
@@ -826,7 +865,7 @@ class LogNormal(PriorBase):
             scalar is returned.
         """
         z = self.rng.normal(size=nrand)
-        r = numpy.exp(self.logmean + self.logsigma * z)
+        r = np.exp(self.logmean + self.logsigma * z)
 
         if self.shift is not None:
             r += self.shift
@@ -864,7 +903,7 @@ class LogNormal(PriorBase):
         else:
             is_scalar = False
 
-        samples = numpy.zeros(nrand)
+        samples = np.zeros(nrand)
 
         ngood = 0
         nleft = nrand
@@ -879,7 +918,7 @@ class LogNormal(PriorBase):
 
             pvals = self.get_prob_array(rvals)
 
-            (w,) = numpy.where(h < pvals)
+            (w,) = np.where(h < pvals)
             if w.size > 0:
                 samples[ngood:ngood + w.size] = rvals[w]
                 ngood += w.size
@@ -903,7 +942,7 @@ class LogNormal(PriorBase):
             ln = LogNormal(pars[0], pars[1], rng=self.rng)
             model = ln.get_prob_array(self._fitx) * pars[2]
         except (GMixRangeError, ValueError):
-            return self._fity * 0 - numpy.inf
+            return self._fity * 0 - np.inf
 
         fdiff = model - self._fity
         return fdiff
@@ -934,7 +973,7 @@ class LogNormal(PriorBase):
 
         for i in range(4):
             f1, f2, f3 = 1.0 + rng.uniform(low=0.1, high=0.1, size=3)
-            guess = numpy.array([x.mean() * f1, x.std() * f2, y.mean() * f3])
+            guess = np.array([x.mean() * f1, x.std() * f2, y.mean() * f3])
 
             res = run_leastsq(self._calc_fdiff, guess, 0,)
             if res["flags"] == 0:
@@ -980,7 +1019,7 @@ class Sinh(PriorBase):
         val: number
             The location at which to evaluate
         """
-        return numpy.sinh((val - self.mean) / self.scale)
+        return np.sinh((val - self.mean) / self.scale)
 
     def sample(self, nrand=None):
         """
@@ -1074,9 +1113,9 @@ class TruncatedGaussian(PriorBase):
         val: array
             The locations at which to evaluate
         """
-        lnp = zeros(val.size)
-        lnp -= numpy.inf
-        (w,) = where((val > self.minval) & (val < self.maxval))
+        lnp = np.zeros(val.size)
+        lnp -= np.inf
+        (w,) = np.where((val > self.minval) & (val < self.maxval))
         if w.size > 0:
             diff = val[w] - self.mean
             lnp[w] = -0.5 * diff * diff * self.ivar
@@ -1120,7 +1159,7 @@ class TruncatedGaussian(PriorBase):
         else:
             is_scalar = False
 
-        vals = numpy.zeros(nrand)
+        vals = np.zeros(nrand)
 
         ngood = 0
         nleft = nrand
@@ -1128,7 +1167,7 @@ class TruncatedGaussian(PriorBase):
 
             tvals = rng.normal(loc=self.mean, scale=self.sigma, size=nleft)
 
-            (w,) = numpy.where((tvals > self.minval) & (tvals < self.maxval))
+            (w,) = np.where((tvals > self.minval) & (tvals < self.maxval))
             if w.size > 0:
                 vals[ngood:ngood + w.size] = tvals[w]
                 ngood += w.size
