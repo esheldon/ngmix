@@ -3,6 +3,7 @@ just test moment errors
 """
 import pytest
 import numpy as np
+import ngmix
 from ngmix.simobs import simulate_obs
 from ._sims import get_model_obs
 
@@ -50,6 +51,11 @@ def test_simobs_smoke(
     else:
         gmix = None
 
+    if nband is None and nepoch is None and use_raw_weight:
+        obs.weight_raw = obs.weight.copy()
+        if not convolve_psf:
+            obs.set_psf(None)
+
     _ = simulate_obs(
         gmix=gmix,
         obs=obs,
@@ -60,3 +66,45 @@ def test_simobs_smoke(
         use_raw_weight=use_raw_weight,
         convolve_psf=convolve_psf,
     )
+
+
+def test_simobs_errors():
+    rng = np.random.RandomState(0)
+
+    with pytest.raises(ValueError):
+        ngmix.simobs.simulate_obs(obs=None, gmix=None)
+
+    with pytest.raises(ValueError):
+        ngmix.simobs.simulate_obs(obs=None, gmix=3)
+
+    nband = 3
+    data = get_model_obs(
+        rng=rng,
+        model='gauss',
+        noise=0.1,
+        nepoch=2,
+        nband=nband,
+        set_psf_gmix=True,
+    )
+    obs = data['obs']
+
+    with pytest.raises(ValueError):
+        ngmix.simobs.simulate_obs(obs=obs, gmix=None)
+
+    with pytest.raises(ValueError):
+        ngmix.simobs.simulate_obs(obs=obs, gmix=3)
+
+    with pytest.raises(ValueError):
+        ngmix.simobs.simulate_obs(obs=obs, gmix=[None])
+
+    gm = ngmix.GMixModel([0, 0, 0, 0, 4, 1], "gauss")
+    with pytest.raises(ValueError):
+        ngmix.simobs.simulate_obs(obs=obs, gmix=[gm]*(nband+1))
+
+    obs[0][0].psf.set_gmix(None)
+    with pytest.raises(RuntimeError):
+        ngmix.simobs.simulate_obs(obs=obs, gmix=[gm]*nband)
+
+    obs[0][0].set_psf(None)
+    with pytest.raises(RuntimeError):
+        ngmix.simobs.simulate_obs(obs=obs, gmix=[gm]*nband)
