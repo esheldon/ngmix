@@ -6,7 +6,6 @@ import ngmix
 from ngmix import Jacobian
 from ngmix.gaussmom import GaussMom
 from ngmix import Observation
-from ngmix.gexceptions import GMixRangeError
 from ngmix.moments import fwhm_to_T
 from ngmix.shape import e1e2_to_g1g2
 

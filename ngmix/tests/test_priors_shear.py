@@ -40,7 +40,7 @@ def test_priors_gpriorgauss():
     assert np.all(np.abs(g1) <= 1.0)
     assert np.all(np.abs(g2) <= 1.0)
 
-    with pytest.raises(NotImplementedError) as e:
+    with pytest.raises(NotImplementedError):
         pr.sample1d()
 
 

@@ -8,7 +8,6 @@ from ngmix import Jacobian
 from ngmix.admom import run_admom
 from ngmix import Observation
 from ngmix.moments import fwhm_to_T
-from ngmix.gexceptions import GMixRangeError
 
 
 @pytest.mark.parametrize('wcs_g1', [-0.5, 0, 0.2])
