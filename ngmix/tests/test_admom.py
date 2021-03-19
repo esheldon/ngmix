@@ -88,7 +88,7 @@ def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
 
     g1 = np.mean(g1arr)
     g2 = np.mean(g2arr)
-    gtol = 1e-6
+    gtol = 1.5e-6
     assert np.abs(g1 - g1_true) < gtol, (g1, np.std(g1arr)/np.sqrt(len(g1arr)))
     assert np.abs(g2 - g2_true) < gtol, (g2, np.std(g2arr)/np.sqrt(len(g2arr)))
 
