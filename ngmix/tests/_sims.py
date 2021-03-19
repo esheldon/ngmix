@@ -106,7 +106,9 @@ def get_ngauss_obs(*, rng, ngauss, noise=0.0, with_psf=False, psf_model='turb'):
 
 def get_model_obs(
     *, rng, model,
-    noise=0.0, psf_model='turb',
+    noise=0.0,
+    psf_model='turb',
+    psf_noise=1.0e-6,
     set_psf_gmix=False,
     set_templates=False,
     set_psf_templates=False,
@@ -156,7 +158,7 @@ def get_model_obs(
                 col=jcen[1] + off2_pix,
             )
 
-            psf_ret = get_psf_obs(rng=rng, model=psf_model)
+            psf_ret = get_psf_obs(rng=rng, model=psf_model, noise=psf_noise)
             if set_psf_gmix:
                 psf_ret['obs'].set_gmix(psf_ret['gmix'])
 
