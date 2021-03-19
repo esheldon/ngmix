@@ -71,9 +71,7 @@ def get_prior_galsimfit(*, model, rng, scale, r50_range=None, F_range=None):
     )
 
     if model == 'spergel':
-        nu_prior = ngmix.priors.FlatPrior(
-            minval=-.5, maxval=3, rng=rng,
-        )
+        nu_prior = ngmix.priors.Normal(mean=2, sigma=2, bounds=[-0.5, 3], rng=rng)
         prior = ngmix.joint_prior.PriorSpergelSep(
             cen_prior=cen_prior,
             g_prior=g_prior,
