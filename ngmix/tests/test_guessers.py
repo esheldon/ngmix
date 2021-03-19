@@ -75,7 +75,7 @@ def test_noprior_guessers_smoke(guesser_type, nband, with_prior):
             )
             npars = 6 + nband_use
         else:
-            raise ValueError('bad guesser %s' % guesser_type)
+            raise ValueError('bad guesser %s' % guesser_type)  # pragma: no cover
 
         guess = guesser(obs=data['obs'])
         assert guess.size == npars
@@ -156,7 +156,7 @@ def test_prior_guessers_smoke(guesser_type, nband):
             )
             npars = 6 + nband_use
         else:
-            raise ValueError('bad guesser %s' % guesser_type)
+            raise ValueError('bad guesser %s' % guesser_type)  # pragma: no cover
 
         guess = guesser(obs=data['obs'])
         assert guess.size == npars
@@ -202,7 +202,7 @@ def test_psf_guessers_smoke(guesser_type, ngauss, guess_from_moms):
             )
             npars = get_coellip_npars(ngauss)
         else:
-            raise ValueError('bad guesser %s' % guesser_type)
+            raise ValueError('bad guesser %s' % guesser_type)  # pragma: no cover
 
         guess = guesser(obs=data['obs'])
         assert len(guess) == npars

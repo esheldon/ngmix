@@ -55,10 +55,10 @@ def test_gaussap_simple_smoke(model, weight_fwhm):
         assert np.all(gap_fluxes[w] < pars[w, bstart:bstart+nband])
 
 
-def test_gaussap_cm_smoke():
+@pytest.mark.parametrize('weight_fwhm', [2.5, 1000.0])
+def test_gaussap_cm_smoke(weight_fwhm):
     rng = np.random.RandomState(seed=314)
 
-    weight_fwhm = 2.5
     nobj = 10
     nband = 5
 
@@ -103,10 +103,10 @@ def test_gaussap_cm_smoke():
         assert np.all(gap_fluxes < pars[:, bstart:bstart+nband])
 
 
-def test_gaussap_bdf_smoke():
+@pytest.mark.parametrize('weight_fwhm', [2.5, 1000.0])
+def test_gaussap_bdf_smoke(weight_fwhm):
     rng = np.random.RandomState(seed=314)
 
-    weight_fwhm = 2.5
     nobj = 10
     nband = 5
 

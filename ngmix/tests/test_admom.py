@@ -80,7 +80,7 @@ def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
                 fim = res.make_image()
                 assert fim.shape == im.shape
 
-        except GMixRangeError:
+        except GMixRangeError:  # pragma: no cover
             pass
 
         res['flags'] = 5

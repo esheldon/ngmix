@@ -42,7 +42,8 @@ def test_priors_gpriorgauss():
 
     with pytest.raises(NotImplementedError) as e:
         pr.sample1d()
-        assert "no 1d for gauss" in e.value
+        # unreachable
+        assert "no 1d for gauss" in e.value  # pragma: no cover
 
 
 @pytest.mark.parametrize('sigma', [0.05, 0.1, 0.2, 0.3, 0.6])

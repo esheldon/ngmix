@@ -83,7 +83,7 @@ def test_gaussmom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
                 g1arr.append(_g1)
                 g2arr.append(_g2)
                 Tarr.append(res['pars'][4])
-        except GMixRangeError:
+        except GMixRangeError:  # pragma: no cover
             pass
 
     g1 = np.mean(g1arr)

@@ -123,7 +123,7 @@ def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
                 T=0.25,
             )
         else:
-            raise ValueError('bad guesser')
+            raise ValueError('bad guesser')  # pragma: no cover
 
         fitter = LM(model=model)
 

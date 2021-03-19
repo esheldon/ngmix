@@ -10,3 +10,4 @@ def test_print_pars():
     print_pars(pars)
     print_pars(pars, front='pars: ')
     print_pars(pars, logger=logger)
+    print_pars(None)
