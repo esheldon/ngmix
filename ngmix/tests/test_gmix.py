@@ -24,6 +24,9 @@ def test_gmix_get_pars(model, row, col, flux, g1, g2, T):
     pars = np.array([row, col, g1, g2, T, flux])
     gm = make_gmix_model(pars, model)
 
+    # this will always get coverage
+    assert model in ['gauss', 'exp', 'dev', 'turb']
+
     if model == 'gauss':
         assert len(gm) == 1
     elif model == 'exp':
@@ -32,8 +35,6 @@ def test_gmix_get_pars(model, row, col, flux, g1, g2, T):
         assert len(gm) == 10
     elif model == 'turb':
         assert len(gm) == 3
-    else:
-        raise AssertionError("len(gm) was not checked!")  # pragma: no cover
 
     assert np.allclose(gm.get_cen(), np.array([row, col]))
     assert np.allclose(gm.get_flux(), flux)
@@ -60,8 +61,6 @@ def test_gmix_get_pars(model, row, col, flux, g1, g2, T):
     elif model == 'turb':
         assert len(data) == 3
         assert len(full_pars) == 3*6
-    else:
-        raise AssertionError("len(gm) was not checked!")  # pragma: no cover
 
     assert np.allclose(np.sum(full_pars[::6]), flux)
     assert np.allclose(

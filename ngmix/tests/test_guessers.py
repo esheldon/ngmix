@@ -34,6 +34,10 @@ def test_noprior_guessers_smoke(guesser_type, nband, with_prior):
 
         nband_use = nband if nband is not None else 1
 
+        # this always gets coverage
+        assert guesser_type in [
+            'TFlux', 'TPSFFlux', 'Pars', 'Pars+Width', 'R50Flux', 'R50NuFlux'
+        ]
         if guesser_type == 'TFlux':
             T_center = 0.001
             flux_center = [1.0]*nband_use
@@ -74,8 +78,6 @@ def test_noprior_guessers_smoke(guesser_type, nband, with_prior):
                 prior=prior,
             )
             npars = 6 + nband_use
-        else:
-            raise ValueError('bad guesser %s' % guesser_type)  # pragma: no cover
 
         guess = guesser(obs=data['obs'])
         assert guess.size == npars
@@ -108,6 +110,11 @@ def test_prior_guessers_smoke(guesser_type, nband):
             set_psf_gmix=True, nepoch=10,
             nband=nband,
         )
+
+        # this always gets coverage
+        assert guesser_type in [
+            'TFluxAndPrior', 'TPSFFluxAndPrior', 'BD', 'BDF', 'Prior',
+        ]
 
         T_center = 0.001
         flux_center = [1.0]*nband_use
@@ -155,8 +162,6 @@ def test_prior_guessers_smoke(guesser_type, nband):
                 T=T_center, flux=flux_center, prior=prior,
             )
             npars = 6 + nband_use
-        else:
-            raise ValueError('bad guesser %s' % guesser_type)  # pragma: no cover
 
         guess = guesser(obs=data['obs'])
         assert guess.size == npars
@@ -184,6 +189,9 @@ def test_psf_guessers_smoke(guesser_type, ngauss, guess_from_moms):
         rng = np.random.RandomState(19487)
         data = get_psf_obs(rng=rng)
 
+        # this always gets coverage
+        assert guesser_type in ['GMix', 'Simple', 'Coellip']
+
         if guesser_type == 'GMix':
             guesser = guessers.GMixPSFGuesser(
                 rng=rng, ngauss=ngauss, guess_from_moms=guess_from_moms,
@@ -201,8 +209,6 @@ def test_psf_guessers_smoke(guesser_type, ngauss, guess_from_moms):
                 rng=rng, ngauss=ngauss, guess_from_moms=guess_from_moms,
             )
             npars = get_coellip_npars(ngauss)
-        else:
-            raise ValueError('bad guesser %s' % guesser_type)  # pragma: no cover
 
         guess = guesser(obs=data['obs'])
         assert len(guess) == npars

@@ -111,6 +111,8 @@ def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
         psf_runner.go(obs=obs)
         assert obs.psf.has_gmix()
 
+        # always gets coverage
+        assert guesser_type in ['TF', 'TPSFFlux']
         if guesser_type == 'TF':
             guesser = TFluxGuesser(
                 rng=rng,
@@ -122,8 +124,6 @@ def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
                 rng=rng,
                 T=0.25,
             )
-        else:
-            raise ValueError('bad guesser')  # pragma: no cover
 
         fitter = LM(model=model)
 
