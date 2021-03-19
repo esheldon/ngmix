@@ -14,8 +14,11 @@ class KDE(object):
         The input data to fit.
     kde_factor : str, scalar, or callable
         Any valid input to the keyword `bw_method` for the gaussian KDE.
+    rng: np.random.RandomState or seed
+        rng for sampling
     """
-    def __init__(self, data, kde_factor):
+    def __init__(self, data, kde_factor, rng):
+        self.rng = rng
         if len(data.shape) == 1:
             self.is_1d = True
         else:
@@ -56,7 +59,9 @@ class KDE(object):
         else:
             is_scalar = False
 
-        r = self.kde.resample(size=n).transpose()
+        r = self.kde.resample(
+            size=n, seed=self.rng,
+        ).transpose()
 
         if self.is_1d:
             r = r[:, 0]
