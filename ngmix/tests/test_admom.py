@@ -66,22 +66,20 @@ def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
             image=_im,
             weight=wgt,
             jacobian=jac)
-        try:
-            Tguess = fwhm_to_T(fwhm) + rng.normal()*0.01
-            res = run_admom(obs=obs, guess=Tguess)
-            if res['flags'] == 0:
-                gm = res.get_gmix()
-                _g1, _g2, _T = gm.get_g1g2T()
 
-                g1arr.append(_g1)
-                g2arr.append(_g2)
-                Tarr.append(_T)
+        Tguess = fwhm_to_T(fwhm) + rng.normal()*0.01
+        res = run_admom(obs=obs, guess=Tguess)
 
-                fim = res.make_image()
-                assert fim.shape == im.shape
+        if res['flags'] == 0:
+            gm = res.get_gmix()
+            _g1, _g2, _T = gm.get_g1g2T()
 
-        except GMixRangeError:  # pragma: no cover
-            pass
+            g1arr.append(_g1)
+            g2arr.append(_g2)
+            Tarr.append(_T)
+
+            fim = res.make_image()
+            assert fim.shape == im.shape
 
         res['flags'] = 5
         with pytest.raises(RuntimeError):
