@@ -42,7 +42,7 @@ class TFluxGuesser(object):
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples to draw.  Default 1
         obs: ignored
             This keyword is here to conform to the interface
@@ -112,7 +112,7 @@ class TPSFFluxGuesser(object):
         ----------
         obs: Observation
             The observation(s) used for psf fluxes
-        n: int, optional
+        nrand: int, optional
             Number of samples to draw.  Default 1
         """
 
@@ -173,7 +173,7 @@ class TPSFFluxAndPriorGuesser(TPSFFluxGuesser):
         ----------
         obs: Observation
             The observation(s) used for psf fluxes
-        n: int, optional
+        nrand: int, optional
             Number of samples to draw.  Default 1
         """
 
@@ -294,7 +294,7 @@ class TFluxAndPriorGuesser(object):
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples to draw.  Default 1
         obs: ignored
             This keyword is here to conform to the interface
@@ -345,7 +345,7 @@ class BDFGuesser(object):
         """
         center, shape are just distributed around zero
 
-        n: int, optional
+        nrand: int, optional
             Number of samples to draw.  Default 1
         obs: ignored
             This keyword is here to conform to the interface
@@ -401,7 +401,7 @@ class BDGuesser(object):
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples to draw.  Default 1
         obs: ignored
             This keyword is here to conform to the interface
@@ -469,7 +469,7 @@ class ParsGuesser(object):
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples to draw.  Default 1
         obs: ignored
             This keyword is here to conform to the interface
@@ -577,7 +577,7 @@ class R50FluxGuesser(object):
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples to draw.  Default 1
         obs: ignored
             This keyword is here to conform to the interface
@@ -625,7 +625,7 @@ class PriorGuesser(object):
 
     def __call__(self, obs=None, nrand=None):
         """
-        n: int, optional
+        nrand: int, optional
             Number of samples to draw.  Default 1
         obs: ignored
             This keyword is here to conform to the interface
@@ -670,7 +670,7 @@ class R50NuFluxGuesser(R50FluxGuesser):
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples to draw.  Default 1
         obs: ignored
             This keyword is here to conform to the interface
