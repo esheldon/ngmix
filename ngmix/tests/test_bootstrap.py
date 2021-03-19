@@ -93,10 +93,12 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
     assert res['flags'] == 0
 
     pixel_scale = obs.jacobian.scale
-    if noise <= 1.0e-8:
+    if noise <= 1.0e-7:
         assert abs(res['pars'][0]-data['pars'][0]) < pixel_scale/10
         assert abs(res['pars'][1]-data['pars'][1]) < pixel_scale/10
 
+        print('true:', data['pars'][2:2+2])
+        print('fit: ', res['pars'][2:2+2])
         assert abs(res['pars'][2]-data['pars'][2]) < 0.01
         assert abs(res['pars'][3]-data['pars'][3]) < 0.01
 
@@ -112,9 +114,6 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
     immax = obs.image.max()
     max_reldiff = maxdiff/immax - 1
     reltol = 0.001 + noise * 5 / immax
-    if max_reldiff > reltol:
-        from espy import images
-        images.compare_images(obs.image, imfit)
 
     assert max_reldiff < reltol
 
