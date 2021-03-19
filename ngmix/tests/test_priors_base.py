@@ -34,5 +34,3 @@ def test_priors_gpriorbase_raises():
         with pytest.raises(RuntimeError) as e:
             args = tuple([None] * num)
             mth(*args)
-            # unreachable
-            assert "over-ride me" in e.value  # pragma: no cover
