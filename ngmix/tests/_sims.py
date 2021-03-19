@@ -171,7 +171,17 @@ def get_model_obs(
             im0 = gmconv.make_image(dims, jacobian=jacob)
 
             im = im0 + rng.normal(size=im0.shape, scale=noise)
-            obs = Observation(im, jacobian=jacob, psf=psf_ret['obs'])
+            if noise == 0.0:
+                weight = im*0 + 1.0/1.0e-12
+            else:
+                weight = im*0 + 1.0/noise**2
+
+            obs = Observation(
+                im,
+                weight=weight,
+                jacobian=jacob,
+                psf=psf_ret['obs'],
+            )
 
             if set_templates:
                 obs.template = im0
