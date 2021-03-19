@@ -191,10 +191,12 @@ def test_leastsqbound_errors():
         fitter.go(obs=obs, guess=guess)
 
     fitter = LMValueErrorNaN(model=fit_model)
-    fitter.go(obs=obs, guess=guess)
+    res = fitter.go(obs=obs, guess=guess)
+    assert res['flags'] == ngmix.flags.LM_FUNC_NOTFINITE
 
     fitter = LMZeroDivision(model=fit_model)
-    fitter.go(obs=obs, guess=guess)
+    res = fitter.go(obs=obs, guess=guess)
+    assert res['flags'] == ngmix.flags.DIV_ZERO
 
 
 @pytest.mark.parametrize('psf_noise', [1.0e-6, 1.0e9])
