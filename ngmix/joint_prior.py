@@ -66,7 +66,7 @@ class PriorSimpleSep(object):
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples to draw
         """
         if not hasattr(self, "_sigma_estimates"):
@@ -193,7 +193,7 @@ class PriorSimpleSep(object):
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples, default to a single set with size [npars].  If n
             is sent the result will have shape [n, npars]
         """
@@ -428,7 +428,7 @@ class PriorBDSep(PriorSimpleSep):
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples, default to a single set with size [npars].  If n
             is sent the result will have shape [n, npars]
         """
@@ -625,7 +625,7 @@ class PriorBDFSep(PriorSimpleSep):
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples, default to a single set with size [npars].  If n
             is sent the result will have shape [n, npars]
         """
@@ -821,7 +821,7 @@ class PriorSpergelSep(PriorSimpleSep):
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples, default to a single set with size [npars].  If n
             is sent the result will have shape [n, npars]
         """
@@ -995,7 +995,7 @@ class PriorCoellipSame(PriorSimpleSep):
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples, default to a single set with size [npars].  If n
             is sent the result will have shape [n, npars]
         """
