@@ -1,4 +1,3 @@
-import numpy as np
 from ..util import print_pars
 import logging
 
