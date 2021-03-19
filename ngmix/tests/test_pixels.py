@@ -2,8 +2,10 @@ import numpy as np
 import galsim
 import pytest
 
+import ngmix
 from ngmix.pixels import make_coords, make_pixels
 from ngmix.jacobian import Jacobian
+from ._galsim_sims import _get_obs
 
 
 @pytest.mark.parametrize('x', [-31, 0.0, 45.1])
@@ -75,3 +77,12 @@ def test_pixels_smoke(x, y, wcs_g1, wcs_g2, ignore_zero_weight):
         assert found_zero == 0
     else:
         assert found_zero == 2
+
+
+def test_pixels_errors():
+    rng = np.random.RandomState(seed=11)
+    obs = _get_obs(rng=rng)
+
+    with pytest.raises(ngmix.GMixFatalError):
+        with obs.writeable():
+            obs.weight[:, :] = 0
