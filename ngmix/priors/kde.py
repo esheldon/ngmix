@@ -28,7 +28,7 @@ class KDE(object):
             data.transpose(), bw_method=kde_factor,
         )
 
-    def sample(self, nrand=None, n=None):
+    def sample(self, nrand=None):
         """
         draw random samples from the kde.
 
@@ -48,19 +48,14 @@ class KDE(object):
             (`ndims`, `nrand`) or (`ndims`,) depending on whether or not `nrand` is
             non-None or None.
         """
-        if n is None and nrand is not None:
-            # if they have given nrand and not n, use that
-            # this keeps the API the same but allows ppl to use the new API of nrand
-            n = nrand
-
-        if n is None:
-            n = 1
+        if nrand is None:
+            nrand = 1
             is_scalar = True
         else:
             is_scalar = False
 
         r = self.kde.resample(
-            size=n, seed=self.rng,
+            size=nrand, seed=self.rng,
         ).transpose()
 
         if self.is_1d:

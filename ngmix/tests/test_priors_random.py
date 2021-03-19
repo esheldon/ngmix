@@ -20,16 +20,16 @@ def test_srandu():
     assert isinstance(srandu(1, rng=rng), np.ndarray)
 
     assert np.all(
-        (srandu(num=10000, rng=rng) > -1.0)
-        & (srandu(num=10000, rng=rng) < 1.0)
+        (srandu(nrand=10000, rng=rng) > -1.0)
+        & (srandu(nrand=10000, rng=rng) < 1.0)
     )
     rng = np.random.RandomState(seed=10)
-    nums = srandu(num=10000, rng=rng)
+    nums = srandu(nrand=10000, rng=rng)
     rng = np.random.RandomState(seed=10)
-    nums_again = srandu(num=10000, rng=rng)
+    nums_again = srandu(nrand=10000, rng=rng)
     assert np.array_equal(nums, nums_again)
     rng = np.random.RandomState(seed=10)
-    assert np.allclose(np.mean(srandu(num=1000000, rng=rng)), 0.0, atol=1e-1, rtol=0)
+    assert np.allclose(np.mean(srandu(nrand=1000000, rng=rng)), 0.0, atol=1e-1, rtol=0)
     assert np.allclose(
-        np.std(srandu(num=1000000, rng=rng)), np.sqrt(4/12), atol=1e-1, rtol=0
+        np.std(srandu(nrand=1000000, rng=rng)), np.sqrt(4/12), atol=1e-1, rtol=0
     )

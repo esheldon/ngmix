@@ -156,7 +156,7 @@ class FlatPrior(PriorBase):
             )
         return retval
 
-    def sample(self, nrand=None, n=None):
+    def sample(self, nrand=None):
         """
         Returns samples uniformly on the interval.
 
@@ -172,18 +172,13 @@ class FlatPrior(PriorBase):
             The samples with shape (`nrand`,). If `nrand` is None, then a
             scalar is returned.
         """
-        if n is None and nrand is not None:
-            # if they have given nrand and not n, use that
-            # this keeps the API the same but allows ppl to use the new API of nrand
-            n = nrand
-
-        if n is None:
+        if nrand is None:
             is_scalar = True
-            n = 1
+            nrand = 1
         else:
             is_scalar = False
 
-        rvals = self.rng.uniform(size=n)
+        rvals = self.rng.uniform(size=nrand)
         rvals = self.minval + (self.maxval - self.minval) * rvals
 
         if is_scalar:
@@ -553,7 +548,7 @@ class LMBounds(PriorBase):
         """
         return 0.0 * val
 
-    def sample(self, nrand=None, n=None):
+    def sample(self, nrand=None):
         """
         Returns samples uniformly on the interval.
 
@@ -569,13 +564,8 @@ class LMBounds(PriorBase):
             The samples with shape (`nrand`,). If `nrand` is None, then a
             scalar is returned.
         """
-        if n is None and nrand is not None:
-            # if they have given nrand and not n, use that
-            # this keeps the API the same but allows ppl to use the new API of nrand
-            n = nrand
-
         return self.rng.uniform(
-            low=self.bounds[0], high=self.bounds[1], size=n,
+            low=self.bounds[0], high=self.bounds[1], size=nrand,
         )
 
 

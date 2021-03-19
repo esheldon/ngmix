@@ -80,7 +80,7 @@ def test_noprior_guessers_smoke(guesser_type, nband, with_prior):
         guess = guesser(obs=data['obs'])
         assert guess.size == npars
 
-        guess = guesser(obs=data['obs'], n=3)
+        guess = guesser(obs=data['obs'], nrand=3)
         assert guess.shape[0] == 3
         assert guess.shape[1] == npars
 
@@ -219,7 +219,7 @@ def test_psf_guessers_smoke(guesser_type, ngauss, guess_from_moms):
 def test_guessers_shape_guess():
     rng = np.random.RandomState(88)
     g = ngmix.guessers.get_shape_guess(
-        rng=rng, g1=1.5, g2=0.1, n=10, width=[0.1]*2,
+        rng=rng, g1=1.5, g2=0.1, nrand=10, width=[0.1]*2,
     )
     assert np.all(np.sqrt(g[:, 0]**2 + g[:, 1]**2) < 1)
 
