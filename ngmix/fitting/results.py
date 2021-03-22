@@ -5,7 +5,7 @@ from .. import gmix
 from ..gexceptions import GMixRangeError
 from ..defaults import PDEF, CDEF, LOWVAL, BIGVAL
 from ..observation import Observation, ObsList, get_mb_obs
-from ..gmix_nb import gmix_convolve_fill, fill_fdiff
+from ..gmix.gmix_nb import gmix_convolve_fill, fill_fdiff
 from ..gmix import GMixList, MultiBandGMixList
 from ..flags import ZERO_DOF, DIV_ZERO, BAD_VAR
 
