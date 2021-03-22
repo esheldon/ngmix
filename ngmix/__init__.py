@@ -23,7 +23,7 @@ from .jacobian import (
     UnitJacobian,
     DiagonalJacobian,
 )
-from . import fastexp
+from . import fastexp_nb
 
 from . import priors
 from .priors import srandu

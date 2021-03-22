@@ -22,7 +22,7 @@ from .gmix.gmix_nb import (
     GMIX_LOW_DETVAL,
 )
 
-from .fastexp import fexp
+from .fastexp_nb import fexp
 
 logger = logging.getLogger(__name__)
 

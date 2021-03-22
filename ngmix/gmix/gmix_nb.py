@@ -1,7 +1,7 @@
 import numpy
 from numpy import array, nan
 from numba import njit
-from ..fastexp import fexp, FASTEXP_MAX_CHI2
+from ..fastexp_nb import fexp, FASTEXP_MAX_CHI2
 
 # need to make this a pure python exception
 from ..gexceptions import GMixRangeError
