@@ -8,36 +8,36 @@ from ._priors import get_prior
 FRAC_TOL = 5.0e-4
 
 
-class FitModelValueErrorNaN(ngmix.fitting.LMFitModel):
+class FitModelValueErrorNaN(ngmix.fitting.FitModel):
     def calc_fdiff(self, pars):
         raise ValueError('NaNs')
 
 
-class LMValueErrorNaN(ngmix.fitting.LM):
+class FitterValueErrorNaN(ngmix.fitting.Fitter):
     def _make_fit_model(self, obs, guess):
         return FitModelValueErrorNaN(
             obs=obs, model=self.model, guess=guess, prior=self.prior,
         )
 
 
-class FitModelValueError(ngmix.fitting.LMFitModel):
+class FitModelValueError(ngmix.fitting.FitModel):
     def calc_fdiff(self, pars):
         raise ValueError('blah')
 
 
-class LMValueError(ngmix.fitting.LM):
+class FitterValueError(ngmix.fitting.Fitter):
     def _make_fit_model(self, obs, guess):
         return FitModelValueError(
             obs=obs, model=self.model, guess=guess, prior=self.prior,
         )
 
 
-class FitModelZeroDivision(ngmix.fitting.LMFitModel):
+class FitModelZeroDivision(ngmix.fitting.FitModel):
     def calc_fdiff(self, pars):
         raise ZeroDivisionError('blah')
 
 
-class LMZeroDivision(ngmix.fitting.LM):
+class FitterZeroDivision(ngmix.fitting.Fitter):
     def _make_fit_model(self, obs, guess):
         return FitModelZeroDivision(
             obs=obs, model=self.model, guess=guess, prior=self.prior,
@@ -60,7 +60,7 @@ def test_leastsqbound_smoke(use_prior):
         ngauss=psf_ngauss,
     )
 
-    psf_fitter = ngmix.fitting.LMCoellip(ngauss=psf_ngauss)
+    psf_fitter = ngmix.fitting.CoellipFitter(ngauss=psf_ngauss)
 
     psf_runner = ngmix.runners.PSFRunner(
         fitter=psf_fitter,
@@ -79,7 +79,7 @@ def test_leastsqbound_smoke(use_prior):
     else:
         prior = None
 
-    fitter = ngmix.fitting.LM(model=fit_model, prior=prior)
+    fitter = ngmix.fitting.Fitter(model=fit_model, prior=prior)
     guesser = ngmix.guessers.TFluxGuesser(
         rng=rng,
         T=0.25,
@@ -127,7 +127,7 @@ def test_leastsqbound_bounds(fracdev_bounds):
         ngauss=psf_ngauss,
     )
 
-    psf_fitter = ngmix.fitting.LMCoellip(ngauss=psf_ngauss)
+    psf_fitter = ngmix.fitting.CoellipFitter(ngauss=psf_ngauss)
 
     psf_runner = ngmix.runners.PSFRunner(
         fitter=psf_fitter,
@@ -150,7 +150,7 @@ def test_leastsqbound_bounds(fracdev_bounds):
         prior=prior,
     )
 
-    fitter = ngmix.fitting.LM(model=fit_model, prior=prior)
+    fitter = ngmix.fitting.Fitter(model=fit_model, prior=prior)
     runner = ngmix.runners.Runner(
         fitter=fitter,
         guesser=guesser,
@@ -187,14 +187,14 @@ def test_leastsqbound_errors():
 
     # only certain ValueError are caught
     with pytest.raises(ValueError):
-        fitter = LMValueError(model=fit_model)
+        fitter = FitterValueError(model=fit_model)
         fitter.go(obs=obs, guess=guess)
 
-    fitter = LMValueErrorNaN(model=fit_model)
+    fitter = FitterValueErrorNaN(model=fit_model)
     res = fitter.go(obs=obs, guess=guess)
     assert res['flags'] == ngmix.flags.LM_FUNC_NOTFINITE
 
-    fitter = LMZeroDivision(model=fit_model)
+    fitter = FitterZeroDivision(model=fit_model)
     res = fitter.go(obs=obs, guess=guess)
     assert res['flags'] == ngmix.flags.DIV_ZERO
 
@@ -215,7 +215,7 @@ def test_leastsqbound_bad_data(fit_model, psf_noise):
 
     psf_guesser = ngmix.guessers.SimplePSFGuesser(rng=rng)
 
-    psf_fitter = ngmix.fitting.LM(model=psf_model)
+    psf_fitter = ngmix.fitting.Fitter(model=psf_model)
 
     psf_runner = ngmix.runners.PSFRunner(
         fitter=psf_fitter,
@@ -248,7 +248,7 @@ def test_leastsqbound_bad_data(fit_model, psf_noise):
             prior=prior,
         )
 
-    fitter = ngmix.fitting.LM(model=fit_model, prior=prior)
+    fitter = ngmix.fitting.Fitter(model=fit_model, prior=prior)
     runner = ngmix.runners.Runner(
         fitter=fitter,
         guesser=guesser,
