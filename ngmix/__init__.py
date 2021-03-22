@@ -42,8 +42,6 @@ from .gexceptions import *
 from . import fitting
 from .fitting import *
 
-from . import galsimfit
-
 from . import runners
 from . import bootstrap
 from . import guessers

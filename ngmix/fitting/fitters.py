@@ -5,7 +5,7 @@
 __all__ = ['Fitter', 'CoellipFitter', 'PSFFluxFitter']
 import logging
 
-from ..leastsqbound import run_leastsq
+from .leastsqbound import run_leastsq
 from .. import gmix
 from ..defaults import DEFAULT_LM_PARS
 from .results import FitModel, CoellipFitModel, PSFFluxFitModel
