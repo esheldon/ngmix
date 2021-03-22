@@ -12,8 +12,6 @@ from .gmix import (
     GMix,
     GMixModel,
     GMixCoellip,
-    GMixList,
-    MultiBandGMixList,
 )
 
 from . import gmix_ndim

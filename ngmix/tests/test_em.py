@@ -42,7 +42,7 @@ def test_em_1gauss(noise):
     gm_guess = gm.copy()
     randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
 
-    res = ngmix.em.fit_em(obs=obs, guess=gm_guess)
+    res = ngmix.em.run_em(obs=obs, guess=gm_guess)
 
     assert res['flags'] == 0
 
@@ -88,7 +88,7 @@ def test_em_1gauss_prep():
     gm_guess = gm.copy()
     randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
 
-    fitter = ngmix.em.EMfitter()
+    fitter = ngmix.em.EMFitter()
     obs_sky, sky = ngmix.em.prep_obs(obs)
     res = fitter.go(obs=obs_sky, guess=gm_guess, sky=sky)
 
@@ -135,7 +135,7 @@ def test_em_2gauss(noise):
     gm_guess = gm.copy()
     randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
 
-    res = ngmix.em.fit_em(obs=obs, guess=gm_guess)
+    res = ngmix.em.run_em(obs=obs, guess=gm_guess)
     assert res['flags'] == 0
 
     fit_gm = res.get_gmix()
@@ -203,7 +203,7 @@ def test_em_2gauss_withpsf(noise):
     gm_guess = gm.copy()
     randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
 
-    res = ngmix.em.fit_em(obs=obs, guess=gm_guess, tol=1.0e-5)
+    res = ngmix.em.run_em(obs=obs, guess=gm_guess, tol=1.0e-5)
     assert res['flags'] == 0
 
     fit_gm = res.get_gmix()
@@ -270,7 +270,7 @@ def test_em_types(em_type, noise):
     if em_type == 'fluxonly':
         fluxonly = True
 
-    res = ngmix.em.fit_em(
+    res = ngmix.em.run_em(
         obs=obs, guess=gm_guess, fixcen=fixcen, fluxonly=fluxonly,
     )
 
@@ -299,7 +299,7 @@ def test_em_errors():
     """
 
     with pytest.raises(ValueError):
-        ngmix.em.fit_em(None, None)
+        ngmix.em.run_em(None, None)
 
     rng = np.random.RandomState(42587)
     noise = 0.0
@@ -314,12 +314,12 @@ def test_em_errors():
     for col in ['p', 'row', 'col', 'irr', 'irc', 'icc']:
         data[col] = np.nan
 
-    res = ngmix.em.fit_em(obs=obs, guess=gm_guess)
+    res = ngmix.em.run_em(obs=obs, guess=gm_guess)
 
     assert res['flags'] == ngmix.em.EM_RANGE_ERROR
 
     gm_guess = gm.copy()
-    res = ngmix.em.fit_em(obs=obs, guess=gm_guess, maxiter=0)
+    res = ngmix.em.run_em(obs=obs, guess=gm_guess, maxiter=0)
     assert res['flags'] == ngmix.em.EM_MAXITER
 
     emresult = ngmix.em.EMResult(obs=obs, result={})

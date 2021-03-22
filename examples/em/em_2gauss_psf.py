@@ -17,7 +17,7 @@ def main():
     guess = gm.copy()
     randomize_gmix(rng=rng, gmix=guess, pixel_scale=obs.jacobian.scale)
 
-    res = ngmix.em.fit_em(obs=obs, guess=guess)
+    res = ngmix.em.run_em(obs=obs, guess=guess)
 
     gmfit = res.get_gmix()
     print('true gm:')

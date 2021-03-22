@@ -104,11 +104,11 @@ def test_admom_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
 
     tres['flags'] = 0
     tres['sums_cov'][:, :] = np.nan
-    tres = ngmix.admom.get_result(tres)
+    tres = ngmix.admom.admom.get_result(tres)
     assert tres['e1err'] == 9999.0
 
     tres = copy.deepcopy(res)
     tres['flags'] = 0
     tres['pars'][4] = -1
-    tres = ngmix.admom.get_result(tres)
+    tres = ngmix.admom.admom.get_result(tres)
     assert tres['flags'] == 0x8

@@ -1,6 +1,6 @@
 from numba import njit
 
-from .gmix_nb import (
+from ..gmix.gmix_nb import (
     gmix_set_norms,
     gmix_eval_pixel_fast,
     GMIX_LOW_DETVAL,

@@ -2,7 +2,7 @@
 Fit an image with a gaussian mixture using the EM algorithm
 """
 __all__ = [
-    'fit_em', 'prep_image', 'prep_obs', 'EMResult', 'EMFitter',
+    'run_em', 'prep_image', 'prep_obs', 'EMResult', 'EMFitter',
     'EMFitterFixCen', 'EMFitterFluxOnly',
 ]
 import logging
@@ -13,7 +13,7 @@ from .gexceptions import GMixRangeError
 from .observation import Observation
 
 from .gmix import GMix, GMixModel
-from .gmix_nb import (
+from .gmix.gmix_nb import (
     gauss2d_set,
     gmix_set_norms,
     gmix_get_cen,
@@ -33,7 +33,7 @@ EM_MAXITER = 2 ** 1
 DEFAULT_TOL = 1.0e-5
 
 
-def fit_em(obs, guess, sky=None, fixcen=False, fluxonly=False, **kws):
+def run_em(obs, guess, sky=None, fixcen=False, fluxonly=False, **kws):
     """
     fit the observation with EM
 
@@ -74,6 +74,10 @@ def fit_em(obs, guess, sky=None, fixcen=False, fluxonly=False, **kws):
         fitter = EMFitter(**kws)
 
     return fitter.go(obs=obs, guess=guess, sky=sky)
+
+
+# for backwards compatibility
+fit_em = run_em
 
 
 def prep_obs(obs):
