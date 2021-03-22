@@ -1,10 +1,13 @@
+__all__ = ['run_admom', 'AdmomFitter']
+
 import numpy
 from numpy import diag
 
-from .gmix import GMix, GMixModel
-from .shape import e1e2_to_g1g2
-from .observation import Observation
-from .gexceptions import GMixRangeError
+from ..gmix import GMix, GMixModel
+from ..shape import e1e2_to_g1g2
+from ..observation import Observation
+from ..gexceptions import GMixRangeError
+from ..util import get_ratio_error
 
 DEFAULT_MAXITER = 200
 DEFAULT_SHIFTMAX = 5.0  # pixels
@@ -44,7 +47,7 @@ def run_admom(
         on a T guess
     """
 
-    am = Admom(
+    am = AdmomFitter(
         maxiter=maxiter,
         shiftmax=shiftmax,
         etol=etol,
@@ -115,7 +118,7 @@ class AdmomResult(dict):
         return im
 
 
-class Admom(object):
+class AdmomFitter(object):
     """
     Measure adaptive moments for the input observation
 
@@ -216,7 +219,6 @@ class Admom(object):
         return self.rng
 
     def _generate_guess(self, obs, Tguess):  # noqa
-        from .gmix import GMixModel
 
         rng = self._get_rng()
 
@@ -228,34 +230,6 @@ class Admom(object):
         pars[5] = 1.0
 
         return GMixModel(pars, "gauss")
-
-
-def get_ratio_error(a, b, var_a, var_b, cov_ab):
-    """
-    get a/b and error on a/b
-    """
-    from math import sqrt
-
-    var = get_ratio_var(a, b, var_a, var_b, cov_ab)
-
-    if var < 0:
-        var = 0
-    error = sqrt(var)
-    return error
-
-
-def get_ratio_var(a, b, var_a, var_b, cov_ab):
-    """
-    get (a/b)**2 and variance in mean of (a/b)
-    """
-
-    if b == 0:
-        raise ValueError("zero in denominator")
-
-    rsq = (a/b)**2
-
-    var = rsq * (var_a/a**2 + var_b/b**2 - 2*cov_ab/(a*b))
-    return var
 
 
 def get_result(ares):
@@ -356,13 +330,6 @@ def get_result(ares):
     return res
 
 
-_admom_conf_dtype = [
-    ('maxit', 'i4'),
-    ('shiftmax', 'f8'),
-    ('etol', 'f8'),
-    ('Ttol', 'f8'),
-]
-
 _admom_result_dtype = [
     ('flags', 'i4'),
     ('numiter', 'i4'),
@@ -371,11 +338,17 @@ _admom_result_dtype = [
     ('wsum', 'f8'),
 
     ('sums', 'f8', 6),
-    # ('sums_cov','f8', 36),
     ('sums_cov', 'f8', (6, 6)),
     ('pars', 'f8', 6),
     # temporary
     ('F', 'f8', 6),
+]
+
+_admom_conf_dtype = [
+    ('maxit', 'i4'),
+    ('shiftmax', 'f8'),
+    ('etol', 'f8'),
+    ('Ttol', 'f8'),
 ]
 
 _admom_flagmap = {

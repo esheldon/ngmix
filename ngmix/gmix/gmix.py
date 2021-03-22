@@ -1,31 +1,37 @@
-import numpy
-from numpy import (
-    array,
-    zeros,
-    sqrt,
-    diag,
-    isfinite,
-)
-from .jacobian import Jacobian, UnitJacobian
-from .shape import Shape, e1e2_to_g1g2
+__all__ = [
+    'GMix',
+    'GMixModel',
+    'GMixCM',
+    'GMixCoellip',
+    'make_gmix_model',
+    'get_coellip_npars',
+    'get_coellip_ngauss',
+    'get_model_num',
+    'get_model_name',
+    'get_model_ngauss',
+    'get_model_npars',
+    'get_weighted_moments_stats',
+]
+import numpy as np
+from ..jacobian import Jacobian, UnitJacobian
+from ..shape import Shape, e1e2_to_g1g2
+from ..util import get_ratio_error
+from .. import shape
+from .. import moments
 
-from . import moments
-
-from . import gmix_nb
-from .gmix_nb import (
+from ..gmix import gmix_nb
+from ..gmix.gmix_nb import (
     _gmix_fill_functions,
     gmix_set_norms,
     gmix_convolve_fill,
     get_cm_Tfactor,
-)
-from .fitting_nb import (
     get_loglike,
     fill_fdiff,
     get_model_s2n_sum,
 )
 
 from .render_nb import render
-from .pixels import make_coords
+from ..pixels import make_coords
 
 
 def make_gmix_model(pars, model, **kw):
@@ -118,7 +124,7 @@ class GMix(object):
         gm = self.get_data()
 
         n = self._ngauss
-        pars = numpy.zeros(n * 6)
+        pars = np.zeros(n * 6)
         beg = 0
         for i in range(n):
             pars[beg + 0] = gm["p"][i]
@@ -187,7 +193,7 @@ class GMix(object):
         get sigma=sqrt(T/2)
         """
         T = self.get_T()
-        return sqrt(T / 2.0)
+        return np.sqrt(T / 2.0)
 
     def get_e1e2T(self):
         """
@@ -230,7 +236,7 @@ class GMix(object):
         """
 
         e1, e2, T = self.get_e1e2T()
-        sigma = sqrt(T / 2)
+        sigma = np.sqrt(T / 2)
         return e1, e2, sigma
 
     def get_g1g2sigma(self):
@@ -242,7 +248,7 @@ class GMix(object):
         e1, e2, T = self.get_e1e2T()
         g1, g2 = e1e2_to_g1g2(e1, e2)
 
-        sigma = sqrt(T / 2)
+        sigma = np.sqrt(T / 2)
         return g1, g2, sigma
 
     def get_flux(self):
@@ -289,7 +295,7 @@ class GMix(object):
         if fwhm is not None:
             sigma = moments.fwhm_to_sigma(fwhm)
         elif T is not None:
-            sigma = sqrt(T / 2.0)
+            sigma = np.sqrt(T / 2.0)
         elif sigma is not None:
             sigma = float(sigma)
         else:
@@ -297,7 +303,7 @@ class GMix(object):
 
         sigma2 = sigma ** 2
 
-        wt_mat = array([[sigma2, 0.0], [0.0, sigma2]],)
+        wt_mat = np.array([[sigma2, 0.0], [0.0, sigma2]],)
         wt_mat_inv = linalg.inv(wt_mat)
 
         gm = self.get_data()
@@ -312,7 +318,7 @@ class GMix(object):
             fac = 1.0
             if det > gmix_nb.GMIX_LOW_DETVAL:
 
-                mat = array(
+                mat = np.array(
                     [
                         [gauss["irr"], gauss["irc"]],
                         [gauss["irc"], gauss["icc"]],
@@ -328,7 +334,7 @@ class GMix(object):
                     newmat = linalg.inv(invsum)
                     newdet = linalg.det(newmat)
 
-                    fac = sqrt(newdet / det)
+                    fac = np.sqrt(newdet / det)
                     if fac > 1:
                         fac = 1
 
@@ -478,13 +484,13 @@ class GMix(object):
             use fast, approximate exp function
         """
 
-        dims = numpy.array(dims, ndmin=1, dtype="i8")
+        dims = np.array(dims, ndmin=1, dtype="i8")
         if dims.size != 2:
             raise ValueError(
                 "images must have two dimensions, " "got %s" % str(dims)
             )
 
-        image = numpy.zeros(dims, dtype="f8")
+        image = np.zeros(dims, dtype="f8")
         self._fill_image(image, jacobian=jacobian, fast_exp=fast_exp)
         return image
 
@@ -503,7 +509,6 @@ class GMix(object):
         -------
         New round gmix
         """
-        from . import shape
 
         gm = self.copy()
 
@@ -515,13 +520,13 @@ class GMix(object):
 
             irr, irc, icc = moments.e2mom(e1, e2, T)
 
-            mat = numpy.zeros((2, 2))
+            mat = np.zeros((2, 2))
             mat[0, 0] = irr
             mat[0, 1] = irc
             mat[1, 0] = irc
             mat[1, 1] = icc
 
-            eigs = numpy.linalg.eigvals(mat)
+            eigs = np.linalg.eigvals(mat)
 
             factor = eigs.max() / (T / 2.0)
 
@@ -557,7 +562,7 @@ class GMix(object):
         """
 
         if jacobian is None:
-            cen = (numpy.array(image.shape) - 1.0) / 2.0
+            cen = (np.array(image.shape) - 1.0) / 2.0
             jacobian = UnitJacobian(row=cen[0], col=cen[1])
         else:
             assert isinstance(jacobian, Jacobian)
@@ -636,14 +641,13 @@ class GMix(object):
             If sent, sums will be added to the array rather than making
             a new one
         """
-        from . import admom
         from . import gmix_nb
 
         self.set_norms_if_needed()
 
         if res is None:
-            dt = numpy.dtype(admom._admom_result_dtype, align=True)
-            resarray = numpy.zeros(1, dtype=dt)
+            dt = np.dtype(_moments_result_dtype, align=True)
+            resarray = np.zeros(1, dtype=dt)
             res = resarray[0]
 
         wt_gm = self.get_data()
@@ -692,7 +696,7 @@ class GMix(object):
         """
 
         s2n_sum = self.get_model_s2n_sum(obs)
-        s2n = sqrt(s2n_sum)
+        s2n = np.sqrt(s2n_sum)
         return s2n
 
     def get_loglike(self, obs, more=False):
@@ -720,8 +724,8 @@ class GMix(object):
         """
         Replace the data array with a zeroed one.
         """
-        self._pars = zeros(self._npars)
-        self._data = zeros(self._ngauss, dtype=_gauss2d_dtype)
+        self._pars = np.zeros(self._npars)
+        self._data = np.zeros(self._ngauss, dtype=_gauss2d_dtype)
 
     def make_galsim_object(self, Tmin=1e-6, gsparams=None):
         """
@@ -784,7 +788,7 @@ class GMix(object):
             if Tround < Tmin:
                 Tround = Tmin
 
-            sigma_round = sqrt(Tround / 2.0)
+            sigma_round = np.sqrt(Tround / 2.0)
 
             gsobj = galsim.Gaussian(
                 flux=flux, sigma=sigma_round, gsparams=gsparams
@@ -831,59 +835,6 @@ class GMix(object):
 
         rep = "\n".join(rep)
         return rep
-
-
-class GMixList(list):
-    """
-    Hold a list of GMix objects
-
-    This class provides a bit of type safety and ease of type checking
-    """
-
-    def append(self, gmix):
-        """
-        Add a new mixture
-
-        over-riding this for type safety
-        """
-        assert isinstance(gmix, GMix), "gmix should be of type GMix"
-        super(GMixList, self).append(gmix)
-
-    def __setitem__(self, index, gmix):
-        """
-        over-riding this for type safety
-        """
-        assert isinstance(gmix, GMix), "gmix should be of type GMix"
-        super(GMixList, self).__setitem__(index, gmix)
-
-
-class MultiBandGMixList(list):
-    """
-    Hold a list of lists of GMixList objects, each representing a filter
-    band
-
-    This class provides a bit of type safety and ease of type checking
-    """
-
-    def append(self, gmix_list):
-        """
-        add a new GMixList
-
-        over-riding this for type safety
-        """
-        assert isinstance(
-            gmix_list, GMixList
-        ), "gmix_list should be of type GMixList"
-        super(MultiBandGMixList, self).append(gmix_list)
-
-    def __setitem__(self, index, gmix_list):
-        """
-        over-riding this for type safety
-        """
-        assert isinstance(
-            gmix_list, GMixList
-        ), "gmix_list should be of type GMixList"
-        super(MultiBandGMixList, self).__setitem__(index, gmix_list)
 
 
 class GMixModel(GMix):
@@ -1218,7 +1169,6 @@ def get_weighted_moments_stats(ares):
     """
     do some additional calculations based on the sums
     """
-    from .admom import get_ratio_error
 
     res = {}
     for n in ares.dtype.names:
@@ -1245,14 +1195,14 @@ def get_weighted_moments_stats(ares):
     # or if the flux variance is zero somehow
     res["T"] = -9999.0
     res["s2n"] = -9999.0
-    res["e"] = array([-9999.0, -9999.0])
+    res["e"] = np.array([-9999.0, -9999.0])
     res["e_err"] = 9999.0
 
     fvar_sum = sums_cov[5, 5]
 
     if fvar_sum > 0.0:
 
-        res["flux_err"] = sqrt(fvar_sum)
+        res["flux_err"] = np.sqrt(fvar_sum)
         res["s2n"] = flux_sum / res["flux_err"]
 
     else:
@@ -1305,10 +1255,10 @@ def get_weighted_moments_stats(ares):
                     sums_cov[3, 4],
                 )
 
-                if not isfinite(e1_err) or not isfinite(e2_err):
-                    res["e_cov"] = diag([9999.0, 9999.0])
+                if not np.isfinite(e1_err) or not np.isfinite(e2_err):
+                    res["e_cov"] = np.diag([9999.0, 9999.0])
                 else:
-                    res["e_cov"] = diag([e1_err ** 2, e2_err ** 2])
+                    res["e_cov"] = np.diag([e1_err ** 2, e2_err ** 2])
 
             else:
                 # T <= 0.0
@@ -1321,3 +1271,16 @@ def get_weighted_moments_stats(ares):
             res["flagstr"] = "flux <= 0.0"
 
     return res
+
+
+_moments_result_dtype = [
+    ('flags', 'i4'),
+    ('npix', 'i4'),
+    ('wsum', 'f8'),
+
+    ('sums', 'f8', 6),
+    ('sums_cov', 'f8', (6, 6)),
+    ('pars', 'f8', 6),
+    # temporary
+    ('F', 'f8', 6),
+]

@@ -60,7 +60,7 @@ def test_ml_fitting_galsim(wcs_g1, wcs_g2, model, use_prior):
     else:
         send_prior = None
 
-    fitter = ngmix.galsimfit.GalsimLM(model=model, prior=send_prior)
+    fitter = ngmix.fitting.GalsimFitter(model=model, prior=send_prior)
 
     if model == 'exp' and use_prior:
         ntrial = 50
@@ -185,7 +185,7 @@ def test_ml_fitting_galsim_spergel_smoke():
 
     guess = prior.sample()
 
-    fitter = ngmix.galsimfit.GalsimLMSpergel(prior=prior)
+    fitter = ngmix.fitting.GalsimSpergelFitter(prior=prior)
 
     shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
     xy = gs_wcs.toImage(galsim.PositionD(shift))
@@ -271,7 +271,7 @@ def test_ml_fitting_galsim_moffat_smoke():
         jacobian=jac,
     )
 
-    fitter = ngmix.galsimfit.GalsimLMMoffat()
+    fitter = ngmix.fitting.GalsimMoffatFitter()
 
     guess = np.zeros(7)
 
@@ -290,7 +290,7 @@ def test_ml_fitting_galsim_moffat_smoke():
 def test_ml_fitting_galsim_errors():
     rng = np.random.RandomState(seed=8)
 
-    fitter = ngmix.galsimfit.GalsimLM(model='exp')
+    fitter = ngmix.fitting.GalsimFitter(model='exp')
     with pytest.raises(ValueError):
         fitter.go(obs=None, guess=None)
 
@@ -299,7 +299,7 @@ def test_ml_fitting_galsim_errors():
         fitter.go(obs=obs, guess=[0, 0, 0, 0, 0, 0])
 
     guess = [0, 0, 0, 0, 1, 1]
-    gmod = ngmix.galsimfit.GalsimLMFitModel(obs=obs, model='exp', guess=guess)
+    gmod = ngmix.fitting.GalsimFitModel(obs=obs, model='exp', guess=guess)
     with pytest.raises(ngmix.GMixRangeError):
         gmod.make_model([0, 0, 1.e9, 0, 1, 1])
 
@@ -307,7 +307,7 @@ def test_ml_fitting_galsim_errors():
         gmod.make_round_model([0, 0, 0, 0, -1, 1])
 
     with pytest.raises(NotImplementedError):
-        ngmix.galsimfit.GalsimLMFitModel(obs=obs, model='blah', guess=guess)
+        ngmix.fitting.GalsimFitModel(obs=obs, model='blah', guess=guess)
 
     with pytest.raises(ValueError):
         fitter.go(obs=obs, guess=np.zeros(1000))

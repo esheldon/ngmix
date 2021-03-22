@@ -12,8 +12,6 @@ from .gmix import (
     GMix,
     GMixModel,
     GMixCoellip,
-    GMixList,
-    MultiBandGMixList,
 )
 
 from . import gmix_ndim
@@ -25,7 +23,7 @@ from .jacobian import (
     UnitJacobian,
     DiagonalJacobian,
 )
-from . import fastexp
+from . import fastexp_nb
 
 from . import priors
 from .priors import srandu
@@ -40,9 +38,6 @@ from . import gexceptions
 from .gexceptions import *
 
 from . import fitting
-from .fitting import *
-
-from . import galsimfit
 
 from . import runners
 from . import bootstrap

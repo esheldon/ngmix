@@ -954,7 +954,7 @@ class LogNormal(PriorBase):
             A dictionary with the best-fit parameters and other information
             from the fit.
         """
-        from ..leastsqbound import run_leastsq
+        from ..fitting.leastsqbound import run_leastsq
 
         rng = self.rng
 

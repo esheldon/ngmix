@@ -14,3 +14,7 @@ ZERO_DOF = 2 ** 10  # dof zero so can't do chi^2/dof
 # case where the flux_err cannot be calculated
 
 BAD_VAR = 2 ** 0  # variance not positive definite
+
+# flags for EM processing
+EM_RANGE_ERROR = 2 ** 0
+EM_MAXITER = 2 ** 1

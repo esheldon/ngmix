@@ -1,35 +1,16 @@
-"""
-- todo
-    - remove old unused fitters
-"""
+__all__ = ['FitModel', 'CoellipFitModel', 'PSFFluxFitModel']
 import copy
 import numpy as np
-from numpy import diag, sqrt
-import logging
-
-from .leastsqbound import run_leastsq
-from . import gmix
-from .gmix import GMixList, MultiBandGMixList
-
-
-from .gexceptions import GMixRangeError
-
-from .observation import Observation, ObsList, get_mb_obs
-
-from .gmix_nb import gmix_convolve_fill
-from .fitting_nb import fill_fdiff
-
-from .flags import (
-    ZERO_DOF,
-    DIV_ZERO,
-    BAD_VAR,
-)
-from .defaults import PDEF, CDEF, LOWVAL, BIGVAL
-
-LOGGER = logging.getLogger(__name__)
+from .. import gmix
+from ..gexceptions import GMixRangeError
+from ..defaults import PDEF, CDEF, LOWVAL, BIGVAL
+from ..observation import Observation, ObsList, get_mb_obs
+from ..gmix.gmix_nb import gmix_convolve_fill, fill_fdiff
+from ..gmix import GMixList, MultiBandGMixList
+from ..flags import ZERO_DOF, DIV_ZERO, BAD_VAR
 
 
-class LMFitModel(dict):
+class FitModel(dict):
     """
     A class to represent a fitting model, the result of the fit, as well as
     generate images and mixtures for the best fit model
@@ -73,7 +54,7 @@ class LMFitModel(dict):
             self.update(cres)
 
             if self["s2n_denom"] > 0:
-                s2n = self["s2n_numer"] / sqrt(self["s2n_denom"])
+                s2n = self["s2n_numer"] / np.sqrt(self["s2n_denom"])
             else:
                 s2n = 0.0
 
@@ -421,7 +402,7 @@ class LMFitModel(dict):
 
     def _set_T(self):
         self["T"] = self["pars"][4]
-        self["T_err"] = sqrt(self["pars_cov"][4, 4])
+        self["T_err"] = np.sqrt(self["pars_cov"][4, 4])
 
     def _set_flux(self):
         _set_flux(res=self, nband=self.nband)
@@ -504,7 +485,7 @@ class LMFitModel(dict):
         return nprior
 
 
-class LMCoellipFitModel(LMFitModel):
+class CoellipFitModel(FitModel):
     """
     A class to represent a fitting a coelliptical gaussians model, the result
     of the fit, as well as generate images and mixtures for the best fit model
@@ -553,10 +534,10 @@ class LMCoellipFitModel(LMFitModel):
         return pars.copy()
 
 
-class TemplateFluxFitModel(dict):
+class PSFFluxFitModel(dict):
     """
-    A class to represent fitting a template flux, as well as the result of the
-    fit
+    A class to represent fitting a psf flux fitter.  The class can be
+    used as a generic template flux fitter as well
 
     Parameters
     ----------
@@ -564,13 +545,13 @@ class TemplateFluxFitModel(dict):
         Observation, ObsList, or MultiBandObsList
     do_psf: bool, optional
         If True, use the gaussian mixtures in the psf observation as templates.
-        In this mode the code calculates a "psf flux".  Default False.
+        In this mode the code calculates a "psf flux".  Default True.
     normalize_psf: True or False
         if True, then normalize PSF gmix to flux of unity, otherwise use input
         normalization.  Default True
     """
 
-    def __init__(self, obs, do_psf=False, normalize_psf=True):
+    def __init__(self, obs, do_psf=True, normalize_psf=True):
         self.do_psf = do_psf
 
         self.normalize_psf = normalize_psf
@@ -632,7 +613,7 @@ class TemplateFluxFitModel(dict):
 
             arg = chi2 / msq_sum / (self.totpix - 1)
             if arg >= 0.0:
-                flux_err = sqrt(arg)
+                flux_err = np.sqrt(arg)
             else:
                 flags |= BAD_VAR
 
@@ -793,133 +774,6 @@ class TemplateFluxFitModel(dict):
         return self.eff_npix
 
 
-class TemplateFluxFitter(object):
-    """
-    Calculate the flux for the input template.  We fix the center, so this is
-    linear.  This uses a simple cross-correlation between model and data.
-
-    The center of the jacobian(s) must point to a common place on the sky, and
-    if the center is input (to reset the gmix centers),) it is relative to that
-    position
-
-    Parameters
-    -----------
-    do_psf: bool, optional
-        If True, use the gaussian mixtures in the psf observation as templates.
-        In this mode the code calculates a "psf flux".  Default False.
-    normalize_psf: True or False
-        if True, then normalize PSF gmix to flux of unity, otherwise use input
-        normalization.  Default True
-    """
-
-    def __init__(self, do_psf=False, normalize_psf=True):
-        self.do_psf = do_psf
-        self.normalize_psf = normalize_psf
-
-    def go(self, obs):
-        """
-        perform the template flux fit and return the result
-
-        Returns
-        --------
-        a dict-like which contains the result as well as functions used for the
-        fitting. The class is TemplateFluxFitModel
-        """
-        fit_model = TemplateFluxFitModel(
-            obs=obs, do_psf=self.do_psf, normalize_psf=self.normalize_psf,
-        )
-        fit_model.go()
-        return fit_model
-
-
-_default_lm_pars = {"maxfev": 4000, "ftol": 1.0e-5, "xtol": 1.0e-5}
-
-
-class LM(object):
-    """
-    A class for doing a fit using levenberg marquardt
-
-    Parameters
-    ----------
-    model: str
-        The model to fit
-    prior: ngmix prior
-        A prior for fitting
-    fit_pars: dict
-        Parameters to send to the LM fitting routine
-    """
-
-    def __init__(self, model, prior=None, fit_pars=None):
-        self.prior = prior
-        self.model = gmix.get_model_num(model)
-        self.model_name = gmix.get_model_name(self.model)
-
-        if fit_pars is not None:
-            self.fit_pars = fit_pars.copy()
-        else:
-            self.fit_pars = _default_lm_pars.copy()
-
-    def go(self, obs, guess):
-        """
-        Run leastsq and set the result
-
-        Parameters
-        ----------
-        obs: Observation, ObsList, or MultiBandObsList
-            Observation(s) to fit
-        guess: array
-            Array of initial parameters for the fit
-
-        Returns
-        --------
-        a dict-like which contains the result as well as functions used for the
-        fitting.
-
-        """
-
-        fit_model = self._make_fit_model(obs=obs, guess=guess)
-
-        result = run_leastsq(
-            fit_model.calc_fdiff,
-            guess=guess,
-            n_prior_pars=fit_model.n_prior_pars,
-            bounds=fit_model.bounds,
-            **self.fit_pars
-        )
-
-        fit_model.set_fit_result(result)
-        return fit_model
-
-    def _make_fit_model(self, obs, guess):
-        return LMFitModel(
-            obs=obs, model=self.model, guess=guess, prior=self.prior,
-        )
-
-
-class LMCoellip(LM):
-    """
-    class to run the LM leastsq code for the coelliptical model
-
-    Parameters
-    ----------
-    ngauss: int
-        The number of coelliptical gaussians to fit
-    prior: ngmix prior
-        A prior for fitting
-    fit_pars: dict
-        Parameters to send to the LM fitting routine
-    """
-
-    def __init__(self, ngauss, prior=None, fit_pars=None):
-        self._ngauss = ngauss
-        super().__init__(model="coellip", prior=prior, fit_pars=fit_pars)
-
-    def _make_fit_model(self, obs, guess):
-        return LMCoellipFitModel(
-            obs=obs, ngauss=self._ngauss, guess=guess, prior=self.prior,
-        )
-
-
 def get_band_pars(model, pars, band):
     """
     extract parameters for given band
@@ -998,6 +852,8 @@ def _set_flux(res, nband):
     nband: int
         Number of bands
     """
+    from numpy import sqrt, diag
+
     model = res['model']
     assert model != 'coellip'
 
@@ -1010,7 +866,7 @@ def _set_flux(res, nband):
 
     if nband == 1:
         res["flux"] = res["pars"][start]
-        res["flux_err"] = sqrt(res["pars_cov"][start, start])
+        res["flux_err"] = np.sqrt(res["pars_cov"][start, start])
     else:
         res["flux"] = res["pars"][start:]
         res["flux_cov"] = res["pars_cov"][start:, start:]

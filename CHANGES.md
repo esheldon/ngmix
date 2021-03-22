@@ -21,6 +21,16 @@
   mixture
 - all PDFs/priors sample methods take the option nrand=.  Some had previously
   taken n=
+- fitters renamed:
+    - LMSimple -> Fitter
+    - LMCoellip -> CoellipFitter
+    - TemplateFluxFitter -> PSFFluxFitter
+    - GalsimSimple -> GalsimFitter
+    - SpergelFitter -> GalsimSpergelFitter
+    - MoffatFitter -> GalsimMoffatFitter
+    - GalsimTemplateFluxFitter -> GalsimPSFFluxFitter
+    - GMixEM -> EMFitter
+    - Admom -> AdmomFitter
 
 ### bug fixes
 
@@ -63,6 +73,7 @@
 - New specialized EM fitting codes added:
     - GMixEMFixedCen: fit mixtures with fixed centers for each component
     - GMixEMFluxOnly: fit mixtures allowing only the fluxes to vary
+- some refactoring of like modules into sub-packages.
 
 ### deprecated/removed
 

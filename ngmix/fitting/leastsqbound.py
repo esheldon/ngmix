@@ -15,8 +15,8 @@ from numpy import take, eye, triu, transpose, dot, finfo
 from numpy import empty_like, sqrt, cos, sin, arcsin, asarray
 from numpy import atleast_1d, shape, issubdtype, dtype, inexact
 from scipy.optimize import _minpack, leastsq
-from .util import print_pars
-from .flags import (
+from ..util import print_pars
+from ..flags import (
     ZERO_DOF,
     DIV_ZERO,
     LM_SINGULAR_MATRIX,
@@ -25,7 +25,7 @@ from .flags import (
     EIG_NOTFINITE,
     LM_FUNC_NOTFINITE,
 )
-from .defaults import PDEF, CDEF
+from ..defaults import PDEF, CDEF
 
 LOGGER = logging.getLogger(__name__)
 

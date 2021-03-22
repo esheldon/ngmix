@@ -55,8 +55,6 @@ class GaussMom(object):
         res['flux'] *= fac
         res['flux_err'] *= fac
         res['pars'][5] *= fac
-
-        res['numiter'] = 1
         return res
 
     def _set_mompars(self):

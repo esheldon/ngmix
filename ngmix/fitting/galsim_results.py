@@ -1,24 +1,16 @@
-"""
-fitting using galsim to create the models
-"""
-import numpy
-
-from .fitting import (
-    LMFitModel,
-    TemplateFluxFitModel,
-    _default_lm_pars,
-)
-from .leastsqbound import run_leastsq
-
-from . import observation
-from .observation import Observation, ObsList, MultiBandObsList
-
-from .defaults import LOWVAL
-
-from .gexceptions import GMixRangeError
+__all__ = [
+    'GalsimFitModel', 'GalsimSpergelFitModel',
+    'GalsimMoffatFitModel', 'GalsimPSFFitModel',
+]
+import numpy as np
+from .results import FitModel, PSFFluxFitModel
+from ..gexceptions import GMixRangeError
+from ..defaults import LOWVAL
+from .. import observation
+from ..observation import Observation, ObsList, MultiBandObsList
 
 
-class GalsimLMFitModel(LMFitModel):
+class GalsimFitModel(FitModel):
     """
     Represent a fitting model for fitting 6 parameter models with galsim, as well
     as generate images and mixtures for the best fit model
@@ -61,7 +53,7 @@ class GalsimLMFitModel(LMFitModel):
         """
 
         # we cannot keep sending existing array into leastsq, don't know why
-        fdiff = numpy.zeros(self.fdiff_size)
+        fdiff = np.zeros(self.fdiff_size)
 
         try:
 
@@ -264,9 +256,9 @@ class GalsimLMFitModel(LMFitModel):
                 ierr = weight.copy()
                 ierr.setZero()
 
-                w = numpy.where(weight.array > 0)
+                w = np.where(weight.array > 0)
                 if w[0].size > 0:
-                    ierr.array[w] = numpy.sqrt(weight.array[w])
+                    ierr.array[w] = np.sqrt(weight.array[w])
 
                 meta["ierr"] = ierr
                 self._create_models_in_kobs(kobs)
@@ -277,7 +269,7 @@ class GalsimLMFitModel(LMFitModel):
         exception
         """
 
-        guess = numpy.array(guess, dtype="f8", copy=False)
+        guess = np.array(guess, dtype="f8", copy=False)
         if guess.size != self.npars:
             raise ValueError(
                 "expected %d entries in the "
@@ -314,7 +306,7 @@ class GalsimLMFitModel(LMFitModel):
         self._set_npars()
 
         npars_band = self.npars - self.nband + 1
-        self._band_pars = numpy.zeros(npars_band)
+        self._band_pars = np.zeros(npars_band)
 
     def set_fit_result(self, result):
         """
@@ -362,64 +354,14 @@ class GalsimLMFitModel(LMFitModel):
                 s2n_sum += kmodel.imag.array.sum()
 
         if s2n_sum > 0.0:
-            s2n = numpy.sqrt(s2n_sum)
+            s2n = np.sqrt(s2n_sum)
         else:
             s2n = 0.0
 
         return s2n
 
 
-class GalsimLM(object):
-    """
-    Fit using galsim 6 parameter models
-
-    Parameters
-    ----------
-    model: string
-        e.g. 'exp', 'spergel'
-    prior: ngmix prior, optional
-        For example ngmix.priors.PriorSimpleSep can
-        be used as a separable prior on center, g, size, flux.
-    fit_pars: dict, optional
-        parameters for the lm fitter, e.g. maxfev, ftol, xtol
-    """
-
-    def __init__(self, model, prior=None, fit_pars=None):
-        self.prior = prior
-        self.model = model
-
-        if fit_pars is not None:
-            self.fit_pars = fit_pars.copy()
-        else:
-            self.fit_pars = _default_lm_pars.copy()
-
-    def go(self, obs, guess):
-        """
-        Run leastsq and get the result
-        """
-
-        fit_model = self._make_fit_model(obs=obs, guess=guess)
-
-        result = run_leastsq(
-            fit_model.calc_fdiff,
-            guess=guess,
-            n_prior_pars=fit_model.n_prior_pars,
-            bounds=fit_model.bounds,
-            k_space=True,
-            **self.fit_pars
-        )
-
-        fit_model.set_fit_result(result)
-
-        return fit_model
-
-    def _make_fit_model(self, obs, guess):
-        return GalsimLMFitModel(
-            obs=obs, model=self.model, guess=guess, prior=self.prior,
-        )
-
-
-class GalsimLMSpergelFitModel(GalsimLMFitModel):
+class GalsimSpergelFitModel(GalsimFitModel):
     """
     Represent a fitting model for fitting the spergel model with galsim, as
     well as generate images and mixtures for the best fit model
@@ -482,29 +424,7 @@ class GalsimLMSpergelFitModel(GalsimLMFitModel):
             self.n_prior_pars = 1 + 1 + 1 + 1 + 1 + self.nband
 
 
-class GalsimLMSpergel(GalsimLM):
-    """
-    Fit the spergel profile to the input observations
-
-    Parameters
-    ----------
-    prior: ngmix prior, optional
-        For example ngmix.priors.PriorSimpleSep can
-        be used as a separable prior on center, g, size, flux.
-    fit_pars: dict, optional
-        parameters for the lm fitter, e.g. maxfev, ftol, xtol
-    """
-
-    def __init__(self, prior=None, fit_pars=None):
-        super().__init__(model="spergel", prior=prior, fit_pars=fit_pars)
-
-    def _make_fit_model(self, obs, guess):
-        return GalsimLMSpergelFitModel(
-            obs=obs, guess=guess, prior=self.prior,
-        )
-
-
-class GalsimLMMoffatFitModel(GalsimLMFitModel):
+class GalsimMoffatFitModel(GalsimFitModel):
     """
     Represent a fitting model for fitting the moffat profile with galsim, as
     well as generate images and mixtures for the best fit model
@@ -570,31 +490,7 @@ class GalsimLMMoffatFitModel(GalsimLMFitModel):
             self.n_prior_pars = 1 + 1 + 1 + 1 + 1 + self.nband
 
 
-class GalsimLMMoffat(GalsimLM):
-    """
-    Fit a moffat model using galsim
-
-    Parameters
-    ----------
-    model: string
-        e.g. 'exp', 'spergel'
-    prior: ngmix prior, optional
-        For example ngmix.priors.PriorSimpleSep can
-        be used as a separable prior on center, g, size, flux.
-    fit_pars: dict, optional
-        parameters for the lm fitter, e.g. maxfev, ftol, xtol
-    """
-
-    def __init__(self, prior=None, fit_pars=None):
-        super().__init__(model="moffat", prior=prior, fit_pars=fit_pars)
-
-    def _make_fit_model(self, obs, guess):
-        return GalsimLMMoffatFitModel(
-            obs=obs, guess=guess, prior=self.prior,
-        )
-
-
-class GalsimTemplateFitModel(TemplateFluxFitModel):
+class GalsimPSFFitModel(PSFFluxFitModel):
     """
     Represent a fitting model template flux fits
 
@@ -649,7 +545,7 @@ class GalsimTemplateFitModel(TemplateFluxFitModel):
         wcs = jac.get_galsim_wcs()
 
         # note reverse for galsim
-        canonical_center = (numpy.array((ncol, nrow)) - 1.0) / 2.0
+        canonical_center = (np.array((ncol, nrow)) - 1.0) / 2.0
         jrow, jcol = jac.get_cen()
         offset = (jcol, jrow) - canonical_center
         try:
@@ -702,7 +598,7 @@ class GalsimTemplateFitModel(TemplateFluxFitModel):
             psf_im *= 1.0 / psf_im.sum()
 
             nrow, ncol = psf_im.shape
-            canonical_center = (numpy.array((ncol, nrow)) - 1.0) / 2.0
+            canonical_center = (np.array((ncol, nrow)) - 1.0) / 2.0
             jrow, jcol = psf_jac.get_cen()
             offset = (jcol, jrow) - canonical_center
 
@@ -741,42 +637,6 @@ class GalsimTemplateFitModel(TemplateFluxFitModel):
             image_list.append(gim.array)
 
         self.template_list = image_list
-
-
-class GalsimTemplateFluxFitter(object):
-    """
-    Calculate template fluxes using galsim
-
-    Parameters
-    ----------
-    model: galsim model, optional
-        A Galsim model, e.g. Exponential.  If not sent,
-        a psf flux is measured
-    draw_method: str
-        Galsim drawing method, default 'auto'
-    interp: string
-        type of interpolation when using the PSF image
-        rather than psf models.  Default lanzcos15
-    """
-    def __init__(
-        self,
-        model=None,
-        draw_method='auto',
-        interp=observation.DEFAULT_XINTERP,
-    ):
-        self.model = model
-        self.draw_method = draw_method
-        self.interp = interp
-
-    def go(self, obs):
-
-        fit_model = GalsimTemplateFitModel(
-            obs=obs, model=self.model,
-            draw_method=self.draw_method, interp=self.interp,
-        )
-        fit_model.go()
-
-        return fit_model
 
 
 def get_galsim_npars(model, nband):

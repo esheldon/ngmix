@@ -1,5 +1,6 @@
+__all__ = ['make_pixels', 'make_coords']
 import numpy
-from .gexceptions import GMixFatalError
+from ..gexceptions import GMixFatalError
 
 
 def make_pixels(image, weight, jacob, ignore_zero_weight=True):

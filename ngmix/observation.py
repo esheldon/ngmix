@@ -1,7 +1,12 @@
-import numpy
+__all__ = [
+    'Observation', 'ObsList', 'MultiBandObsList', 'get_mb_obs',
+    'KObservation', 'KObsList', 'KMultiBandObsList',
+    'make_kobs', 'get_kmb_obs',
+]
+import copy
+import numpy as np
 from .jacobian import Jacobian, UnitJacobian, DiagonalJacobian
 from .gmix import GMix
-import copy
 
 from .pixels import make_pixels
 
@@ -306,7 +311,7 @@ class Observation(MetadataMixin):
             image_old = None
 
         # force f8 with native byte ordering, contiguous C layout
-        image = numpy.ascontiguousarray(image, dtype='f8')
+        image = np.ascontiguousarray(image, dtype='f8')
 
         assert len(image.shape) == 2, "image must be 2d"
 
@@ -337,14 +342,14 @@ class Observation(MetadataMixin):
         image = self.image
         if weight is not None:
             # force f8 with native byte ordering, contiguous C layout
-            weight = numpy.ascontiguousarray(weight, dtype='f8')
+            weight = np.ascontiguousarray(weight, dtype='f8')
             assert len(weight.shape) == 2, "weight must be 2d"
 
             mess = "image and weight must be same shape"
             assert (weight.shape == image.shape), mess
 
         else:
-            weight = numpy.zeros(image.shape) + 1.0
+            weight = np.zeros(image.shape) + 1.0
 
         self._weight = weight
         if update_pixels:
@@ -367,7 +372,7 @@ class Observation(MetadataMixin):
             image = self.image
 
             # force contiguous C, but we don't know what dtype to expect
-            bmask = numpy.ascontiguousarray(bmask)
+            bmask = np.ascontiguousarray(bmask)
             assert len(bmask.shape) == 2, "bmask must be 2d"
 
             assert (bmask.shape == image.shape), \
@@ -401,7 +406,7 @@ class Observation(MetadataMixin):
             image = self.image
 
             # force contiguous C, but we don't know what dtype to expect
-            ormask = numpy.ascontiguousarray(ormask)
+            ormask = np.ascontiguousarray(ormask)
             assert len(ormask.shape) == 2, "ormask must be 2d"
 
             assert (ormask.shape == image.shape),\
@@ -435,7 +440,7 @@ class Observation(MetadataMixin):
             image = self.image
 
             # force contiguous C, but we don't know what dtype to expect
-            noise = numpy.ascontiguousarray(noise)
+            noise = np.ascontiguousarray(noise)
             assert len(noise.shape) == 2, "noise must be 2d"
 
             assert (noise.shape == image.shape), \
@@ -466,7 +471,7 @@ class Observation(MetadataMixin):
             do this update. Default is True.
         """
         if jacobian is None:
-            cen = (numpy.array(self.image.shape)-1.0)/2.0
+            cen = (np.array(self.image.shape)-1.0)/2.0
             jac = UnitJacobian(row=cen[0], col=cen[1])
         else:
             mess = ("jacobian must be of "
@@ -578,7 +583,7 @@ class Observation(MetadataMixin):
 
         Isum, Vsum, Npix = self.get_s2n_sums()
         if Vsum > 0.0:
-            s2n = Isum/numpy.sqrt(Vsum)
+            s2n = Isum/np.sqrt(Vsum)
         else:
             s2n = -9999.0
         return s2n
@@ -602,7 +607,7 @@ class Observation(MetadataMixin):
         image = self.image
         weight = self.weight
 
-        w = numpy.where(weight > 0)
+        w = np.where(weight > 0)
 
         if w[0].size > 0:
             Isum = image[w].sum()
@@ -755,7 +760,7 @@ class ObsList(list, MetadataMixin):
 
         Isum, Vsum, Npix = self.get_s2n_sums()
         if Vsum > 0.0:
-            s2n = Isum/numpy.sqrt(Vsum)
+            s2n = Isum/np.sqrt(Vsum)
         else:
             s2n = -9999.0
         return s2n
@@ -846,7 +851,7 @@ class MultiBandObsList(list, MetadataMixin):
 
         Isum, Vsum, Npix = self.get_s2n_sums()
         if Vsum > 0.0:
-            s2n = Isum/numpy.sqrt(Vsum)
+            s2n = Isum/np.sqrt(Vsum)
         else:
             s2n = -9999.0
         return s2n
@@ -968,7 +973,7 @@ class KObservation(MetadataMixin):
 
         if not isinstance(kimage, galsim.Image):
             raise ValueError("kimage must be a galsim.Image")
-        if kimage.array.dtype != numpy.complex128:
+        if kimage.array.dtype != np.complex128:
             raise ValueError("kimage must be complex")
 
         self.kimage = kimage
@@ -1032,7 +1037,7 @@ class KObservation(MetadataMixin):
         if psf.kimage.array.shape != self.kimage.array.shape:
             raise ValueError("psf kimage must have "
                              "same shape as kimage")
-        assert numpy.allclose(psf.kimage.scale, self.kimage.scale)
+        assert np.allclose(psf.kimage.scale, self.kimage.scale)
 
     def _set_jacobian(self):
         """
@@ -1044,7 +1049,7 @@ class KObservation(MetadataMixin):
         scale = self.kimage.scale
 
         dims = self.kimage.array.shape
-        cen = numpy.zeros(2)
+        cen = np.zeros(2)
         for i in range(2):
             if (dims[i] % 2) == 0:
                 cen[i] = (dims[i]-1.0)/2.0 + 0.5
@@ -1264,8 +1269,8 @@ def make_iilist(obs, interp=DEFAULT_XINTERP):
 
         mb_iilist.append(iilist)
 
-    dimarr = numpy.array(dimlist)
-    dkarr = numpy.array(dklist)
+    dimarr = np.array(dimlist)
+    dkarr = np.array(dklist)
 
     imax = dimarr.argmax()
 

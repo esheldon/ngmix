@@ -6,7 +6,7 @@ import numpy as np
 import ngmix
 from ngmix.runners import Runner, PSFRunner
 from ngmix.guessers import SimplePSFGuesser, TFluxAndPriorGuesser
-from ngmix.fitting import LM
+from ngmix.fitting import Fitter
 from ngmix.gaussmom import GaussMom
 from ngmix.metacal import metacal_bootstrap, MetacalBootstrapper
 from ._sims import get_model_obs
@@ -55,8 +55,8 @@ def test_metacal_bootstrap_max_smoke(noise, use_bootstrapper, nband, nepoch):
     )
     psf_guesser = SimplePSFGuesser(rng=rng)
 
-    fitter = LM(model=fit_model, prior=prior)
-    psf_fitter = LM(model='gauss')
+    fitter = Fitter(model=fit_model, prior=prior)
+    psf_fitter = Fitter(model='gauss')
 
     psf_runner = PSFRunner(
         fitter=psf_fitter,

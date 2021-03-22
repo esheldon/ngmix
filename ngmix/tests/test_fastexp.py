@@ -2,7 +2,7 @@ import time
 import numpy as np
 import pytest
 
-from ngmix.fastexp import fexp
+from ngmix.fastexp_nb import fexp
 
 # test values between -15 and 0
 vals = [-7.8864744, -4.2333561, -11.02660361, -9.07802778,

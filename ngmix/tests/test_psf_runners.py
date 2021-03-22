@@ -3,9 +3,9 @@ import numpy as np
 import ngmix
 from ngmix.runners import PSFRunner
 from ngmix.guessers import GMixPSFGuesser, SimplePSFGuesser, CoellipPSFGuesser
-from ngmix.em import GMixEM
-from ngmix.admom import Admom
-from ngmix.fitting import LMCoellip, LM
+from ngmix.em import EMFitter
+from ngmix.admom import AdmomFitter
+from ngmix.fitting import CoellipFitter, Fitter
 from ._sims import get_ngauss_obs, get_psf_obs, get_model_obs
 
 
@@ -28,7 +28,7 @@ def test_em_psf_runner_smoke(ngauss, guess_from_moms):
         guess_from_moms=guess_from_moms,
     )
     # better tolerance needed for this psf fit
-    fitter = GMixEM(tol=1.0e-5)
+    fitter = EMFitter(tol=1.0e-5)
 
     runner = PSFRunner(
         fitter=fitter,
@@ -70,7 +70,7 @@ def test_em_psf_runner(with_psf_obs, guess_from_moms):
         guess_from_moms=guess_from_moms,
     )
     # better tolerance needed for this psf fit
-    fitter = GMixEM(tol=1.0e-5)
+    fitter = EMFitter(tol=1.0e-5)
 
     runner = PSFRunner(
         fitter=fitter,
@@ -110,7 +110,7 @@ def test_simple_psf_runner_smoke(model, guess_from_moms):
         rng=rng,
         guess_from_moms=guess_from_moms,
     )
-    fitter = LM(model=model)
+    fitter = Fitter(model=model)
 
     runner = PSFRunner(
         fitter=fitter,
@@ -139,7 +139,7 @@ def test_simple_psf_runner(model, guess_from_moms):
         rng=rng,
         guess_from_moms=guess_from_moms,
     )
-    fitter = LM(model=model)
+    fitter = Fitter(model=model)
 
     runner = PSFRunner(
         fitter=fitter,
@@ -185,7 +185,7 @@ def test_coellip_psf_runner_smoke(ngauss, guess_from_moms):
         ngauss=ngauss,
         guess_from_moms=guess_from_moms,
     )
-    fitter = LMCoellip(ngauss=ngauss)
+    fitter = CoellipFitter(ngauss=ngauss)
 
     runner = PSFRunner(
         fitter=fitter,
@@ -225,7 +225,7 @@ def test_coellip_psf_runner(with_psf_obs, guess_from_moms):
         guess_from_moms=guess_from_moms,
     )
     # better tolerance needed for this psf fit
-    fitter = LMCoellip(ngauss=ngauss)
+    fitter = CoellipFitter(ngauss=ngauss)
 
     runner = PSFRunner(
         fitter=fitter,
@@ -266,7 +266,7 @@ def test_admom_psf_runner_smoke(ngauss, guess_from_moms):
         ngauss=1,
         guess_from_moms=guess_from_moms,
     )
-    fitter = Admom()
+    fitter = AdmomFitter()
 
     runner = PSFRunner(
         fitter=fitter,
@@ -308,7 +308,7 @@ def test_admom_psf_runner(with_psf_obs, guess_from_moms):
         ngauss=1,
         guess_from_moms=guess_from_moms,
     )
-    fitter = Admom()
+    fitter = AdmomFitter()
 
     runner = PSFRunner(
         fitter=fitter,

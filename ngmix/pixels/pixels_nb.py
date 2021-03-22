@@ -1,6 +1,6 @@
 import numpy
 from numba import njit
-from .jacobian_nb import jacobian_get_vu, jacobian_get_area
+from ..jacobian.jacobian_nb import jacobian_get_vu, jacobian_get_area
 
 
 @njit
