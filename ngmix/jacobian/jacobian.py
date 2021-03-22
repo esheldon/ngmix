@@ -1,5 +1,7 @@
 from numpy import zeros, sqrt, abs
 
+__all__ = ['Jacobian', 'DiagonalJacobian', 'UnitJacobian']
+
 _jacobian_dtype = [
     ('row0', 'f8'),
     ('col0', 'f8'),

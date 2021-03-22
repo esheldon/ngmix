@@ -8,6 +8,8 @@ loading, as well as very fast likelihood evaluation
 import numpy
 from .gmix_ndim_nb import gmixnd_get_prob, gmixnd_get_prob_component
 
+__all__ = ['GMixND']
+
 
 class GMixND(object):
     """
