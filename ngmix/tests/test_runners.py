@@ -6,7 +6,7 @@ from ngmix.guessers import (
     GMixPSFGuesser, TFluxGuesser, TPSFFluxGuesser, CoellipPSFGuesser,
 )
 from ngmix.fitting import CoellipFitter
-from ngmix.em import GMixEM
+from ngmix.em import EMFitter
 from ngmix.fitting import Fitter
 from ._sims import get_model_obs
 
@@ -35,7 +35,7 @@ def test_runner_lm_simple_smoke(model, psf_model_type):
             ngauss=psf_ngauss,
         )
 
-        psf_fitter = GMixEM(tol=1.0e-5)
+        psf_fitter = EMFitter(tol=1.0e-5)
     else:
         psf_guesser = CoellipPSFGuesser(
             rng=rng,
@@ -94,7 +94,7 @@ def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
                 ngauss=psf_ngauss,
             )
 
-            psf_fitter = GMixEM(tol=1.0e-5)
+            psf_fitter = EMFitter(tol=1.0e-5)
         else:
             psf_guesser = CoellipPSFGuesser(
                 rng=rng,

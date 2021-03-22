@@ -1,6 +1,10 @@
 """
 Fit an image with a gaussian mixture using the EM algorithm
 """
+__all__ = [
+    'fit_em', 'prep_image', 'prep_obs', 'EMResult', 'EMFitter',
+    'EMFitterFixCen', 'EMFitterFluxOnly',
+]
 import logging
 import numpy as np
 from numba import njit
@@ -63,11 +67,11 @@ def fit_em(obs, guess, sky=None, fixcen=False, fluxonly=False, **kws):
     """
 
     if fixcen:
-        fitter = GMixEMFixCen(**kws)
+        fitter = EMFitterFixCen(**kws)
     elif fluxonly:
-        fitter = GMixEMFluxOnly(**kws)
+        fitter = EMFitterFluxOnly(**kws)
     else:
-        fitter = GMixEM(**kws)
+        fitter = EMFitter(**kws)
 
     return fitter.go(obs=obs, guess=guess, sky=sky)
 
@@ -208,7 +212,7 @@ class EMResult(dict):
         )
 
 
-class GMixEM(object):
+class EMFitter(object):
     """
     Fit an image with a gaussian mixture using the EM algorithm
 
@@ -351,7 +355,7 @@ class GMixEM(object):
         self._runner = em_run
 
 
-class GMixEMFixCen(GMixEM):
+class EMFitterFixCen(EMFitter):
     """
     Fit an image with a gaussian mixture using the EM algorithm
 
@@ -378,7 +382,7 @@ class GMixEMFixCen(GMixEM):
         self._runner = em_run_fixcen
 
 
-class GMixEMFluxOnly(GMixEMFixCen):
+class EMFitterFluxOnly(EMFitterFixCen):
     """
     Fit an image with a gaussian mixture using the EM algorithm,
     allowing only the fluxes to vary

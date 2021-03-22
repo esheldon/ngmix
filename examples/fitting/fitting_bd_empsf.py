@@ -38,7 +38,7 @@ def main():
     prior = get_prior(rng=rng, scale=obs.jacobian.scale)
     # fit bulge+disk with fixed size ratio, using the levenberg marquards
     # algorithm
-    fitter = ngmix.fitting.LM(model='bdf', prior=prior)
+    fitter = ngmix.fitting.Fitter(model='bdf', prior=prior)
     # make parameter guesses based on a psf flux and a rough T
     guesser = ngmix.guessers.TPSFFluxAndPriorGuesser(
         rng=rng,
@@ -48,7 +48,7 @@ def main():
 
     # psf fitting with coelliptical gaussians
     psf_ngauss = 5
-    psf_fitter = ngmix.em.GMixEM()
+    psf_fitter = ngmix.em.EMFitter()
     # guesses full gmix objects
     psf_guesser = ngmix.guessers.GMixPSFGuesser(rng=rng, ngauss=psf_ngauss)
 

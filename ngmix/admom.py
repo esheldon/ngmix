@@ -44,7 +44,7 @@ def run_admom(
         on a T guess
     """
 
-    am = Admom(
+    am = AdmomFitter(
         maxiter=maxiter,
         shiftmax=shiftmax,
         etol=etol,
@@ -115,7 +115,7 @@ class AdmomResult(dict):
         return im
 
 
-class Admom(object):
+class AdmomFitter(object):
     """
     Measure adaptive moments for the input observation
 

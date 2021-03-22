@@ -88,7 +88,7 @@ def test_em_1gauss_prep():
     gm_guess = gm.copy()
     randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
 
-    fitter = ngmix.em.GMixEM()
+    fitter = ngmix.em.EMfitter()
     obs_sky, sky = ngmix.em.prep_obs(obs)
     res = fitter.go(obs=obs_sky, guess=gm_guess, sky=sky)
 

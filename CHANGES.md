@@ -21,6 +21,16 @@
   mixture
 - all PDFs/priors sample methods take the option nrand=.  Some had previously
   taken n=
+- fitters renamed:
+    - LMSimple -> Fitter
+    - LMCoellip -> CoellipFitter
+    - TemplateFluxFitter -> PSFFluxFitter
+    - GalsimSimple -> GalsimFitter
+    - SpergelFitter -> GalsimSpergelFitter
+    - MoffatFitter -> GalsimMoffatFitter
+    - GalsimTemplateFluxFitter -> GalsimPSFFluxFitter
+    - GMixEM -> EMFitter
+    - Admom -> AdmomFitter
 
 ### bug fixes
 

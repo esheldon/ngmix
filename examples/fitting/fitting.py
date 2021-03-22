@@ -39,7 +39,7 @@ def main():
     # fit the object to an exponential disk
     prior = get_prior(rng=rng, scale=obs.jacobian.scale)
     # fit using the levenberg marquards algorithm
-    fitter = ngmix.fitting.LM(model='exp', prior=prior)
+    fitter = ngmix.fitting.Fitter(model='exp', prior=prior)
     # make parameter guesses based on a psf flux and a rough T
     guesser = ngmix.guessers.TPSFFluxAndPriorGuesser(
         rng=rng,
@@ -49,7 +49,7 @@ def main():
 
     # psf fitting with coelliptical gaussians
     psf_ngauss = 5
-    psf_fitter = ngmix.fitting.LMCoellip(ngauss=psf_ngauss)
+    psf_fitter = ngmix.fitting.CoellipFitter(ngauss=psf_ngauss)
     # special guesser for coelliptical gaussians
     psf_guesser = ngmix.guessers.CoellipPSFGuesser(rng=rng, ngauss=psf_ngauss)
 

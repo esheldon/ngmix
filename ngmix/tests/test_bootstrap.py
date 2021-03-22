@@ -7,7 +7,7 @@ import ngmix
 from ngmix.runners import Runner, PSFRunner
 from ngmix.guessers import GMixPSFGuesser, TFluxGuesser, CoellipPSFGuesser
 from ngmix.fitting import CoellipFitter
-from ngmix.em import GMixEM
+from ngmix.em import EMFitter
 from ngmix.fitting import Fitter
 from ngmix.bootstrap import bootstrap, Bootstrapper
 from ._sims import get_model_obs
@@ -46,7 +46,7 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
             guess_from_moms=guess_from_moms,
         )
 
-        psf_fitter = GMixEM(tol=1.0e-5)
+        psf_fitter = EMFitter(tol=1.0e-5)
     else:
         psf_guesser = CoellipPSFGuesser(
             rng=rng,
