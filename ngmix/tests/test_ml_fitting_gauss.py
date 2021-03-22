@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 import ngmix
-from ngmix.fitting import LM
+from ngmix.fitting import Fitter
 from ngmix import Jacobian
 from ngmix import Observation
 from ngmix.moments import fwhm_to_T
@@ -89,7 +89,7 @@ def test_ml_max_fitting_gauss_smoke(g1_true, g2_true, wcs_g1, wcs_g2):
         )
 
         prior = None
-        fitter = LM(model='gauss', prior=prior)
+        fitter = Fitter(model='gauss', prior=prior)
 
         guess = np.zeros(6)
         guess[0:2] = rng.uniform(low=-0.1*scale, high=0.1*scale, size=2)

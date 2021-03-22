@@ -17,8 +17,6 @@ from .gmix_nb import (
     gmix_set_norms,
     gmix_convolve_fill,
     get_cm_Tfactor,
-)
-from .fitting_nb import (
     get_loglike,
     fill_fdiff,
     get_model_s2n_sum,

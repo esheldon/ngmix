@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 import ngmix
-from ngmix.fitting import LM
+from ngmix.fitting import Fitter
 from ngmix import Jacobian
 from ngmix import Observation
 from ngmix.moments import fwhm_to_T
@@ -78,7 +78,7 @@ def test_ml_fitting_exp_obj_gauss_psf_smoke(
     xarr = []
     yarr = []
 
-    fitter = LM(model=fit_model, prior=prior)
+    fitter = Fitter(model=fit_model, prior=prior)
 
     for _ in range(50):
         shift = rng.uniform(low=-scale/2, high=scale/2, size=2)

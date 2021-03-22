@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 
-from ngmix.fitting import TemplateFluxFitter
+from ngmix import PSFFluxFitter
 from ngmix.galsimfit import GalsimTemplateFluxFitter
 from ._sims import get_model_obs
 
@@ -33,7 +33,7 @@ def test_template_flux(noise, nband, do_psf):
         nband=nband,
     )
 
-    fitter = TemplateFluxFitter(do_psf=do_psf)
+    fitter = PSFFluxFitter(do_psf=do_psf)
 
     if nband is None:
         res = fitter.go(obs=data['obs'])
@@ -60,7 +60,7 @@ def test_template_psf_flux(noise, nband):
         set_psf_gmix=True, nepoch=10, nband=nband,
     )
 
-    fitter = TemplateFluxFitter(do_psf=True)
+    fitter = PSFFluxFitter()
 
     if nband is None:
         res = fitter.go(obs=data['obs'])
@@ -106,7 +106,7 @@ def test_template_flux_errors():
     see if we can recover the psf flux within errors
     """
 
-    fitter = TemplateFluxFitter()
+    fitter = PSFFluxFitter()
 
     with pytest.raises(ValueError):
         fitter.go(obs=None)

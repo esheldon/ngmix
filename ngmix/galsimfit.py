@@ -4,10 +4,10 @@ fitting using galsim to create the models
 import numpy
 
 from .fitting import (
-    LMFitModel,
-    TemplateFluxFitModel,
-    _default_lm_pars,
+    FitModel,
+    PSFFluxFitModel,
 )
+from .defaults import DEFAULT_LM_PARS
 from .leastsqbound import run_leastsq
 
 from . import observation
@@ -18,7 +18,7 @@ from .defaults import LOWVAL
 from .gexceptions import GMixRangeError
 
 
-class GalsimLMFitModel(LMFitModel):
+class GalsimFitModel(FitModel):
     """
     Represent a fitting model for fitting 6 parameter models with galsim, as well
     as generate images and mixtures for the best fit model
@@ -369,7 +369,7 @@ class GalsimLMFitModel(LMFitModel):
         return s2n
 
 
-class GalsimLM(object):
+class GalsimFitter(object):
     """
     Fit using galsim 6 parameter models
 
@@ -391,7 +391,7 @@ class GalsimLM(object):
         if fit_pars is not None:
             self.fit_pars = fit_pars.copy()
         else:
-            self.fit_pars = _default_lm_pars.copy()
+            self.fit_pars = DEFAULT_LM_PARS.copy()
 
     def go(self, obs, guess):
         """
@@ -414,12 +414,12 @@ class GalsimLM(object):
         return fit_model
 
     def _make_fit_model(self, obs, guess):
-        return GalsimLMFitModel(
+        return GalsimFitModel(
             obs=obs, model=self.model, guess=guess, prior=self.prior,
         )
 
 
-class GalsimLMSpergelFitModel(GalsimLMFitModel):
+class GalsimSpergelFitModel(GalsimFitModel):
     """
     Represent a fitting model for fitting the spergel model with galsim, as
     well as generate images and mixtures for the best fit model
@@ -482,7 +482,7 @@ class GalsimLMSpergelFitModel(GalsimLMFitModel):
             self.n_prior_pars = 1 + 1 + 1 + 1 + 1 + self.nband
 
 
-class GalsimLMSpergel(GalsimLM):
+class GalsimSpergelFitter(GalsimFitter):
     """
     Fit the spergel profile to the input observations
 
@@ -499,12 +499,12 @@ class GalsimLMSpergel(GalsimLM):
         super().__init__(model="spergel", prior=prior, fit_pars=fit_pars)
 
     def _make_fit_model(self, obs, guess):
-        return GalsimLMSpergelFitModel(
+        return GalsimSpergelFitModel(
             obs=obs, guess=guess, prior=self.prior,
         )
 
 
-class GalsimLMMoffatFitModel(GalsimLMFitModel):
+class GalsimMoffatFitModel(GalsimFitModel):
     """
     Represent a fitting model for fitting the moffat profile with galsim, as
     well as generate images and mixtures for the best fit model
@@ -570,7 +570,7 @@ class GalsimLMMoffatFitModel(GalsimLMFitModel):
             self.n_prior_pars = 1 + 1 + 1 + 1 + 1 + self.nband
 
 
-class GalsimLMMoffat(GalsimLM):
+class GalsimMoffatFitter(GalsimFitter):
     """
     Fit a moffat model using galsim
 
@@ -589,12 +589,12 @@ class GalsimLMMoffat(GalsimLM):
         super().__init__(model="moffat", prior=prior, fit_pars=fit_pars)
 
     def _make_fit_model(self, obs, guess):
-        return GalsimLMMoffatFitModel(
+        return GalsimMoffatFitModel(
             obs=obs, guess=guess, prior=self.prior,
         )
 
 
-class GalsimTemplateFitModel(TemplateFluxFitModel):
+class GalsimPSFFitModel(PSFFluxFitModel):
     """
     Represent a fitting model template flux fits
 
@@ -770,7 +770,7 @@ class GalsimTemplateFluxFitter(object):
 
     def go(self, obs):
 
-        fit_model = GalsimTemplateFitModel(
+        fit_model = GalsimPSFFitModel(
             obs=obs, model=self.model,
             draw_method=self.draw_method, interp=self.interp,
         )
