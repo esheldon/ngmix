@@ -2,9 +2,9 @@ import numpy as np
 import pytest
 
 from ngmix.observation import Observation
+from ngmix.observation.pixels import make_pixels
 from ngmix.jacobian import DiagonalJacobian
 from ngmix.gmix import GMix
-from ngmix.pixels import make_pixels
 
 
 @pytest.fixture()

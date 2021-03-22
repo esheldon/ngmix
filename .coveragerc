@@ -2,6 +2,9 @@
 omit =
     # we omit numba code since we cannot measure it
     ngmix/*_nb.py
+    ngmix/em/*_nb.py
+    ngmix/admom/*_nb.py
+    ngmix/gmix/*_nb.py
 
 [report]
 exclude_lines = 
