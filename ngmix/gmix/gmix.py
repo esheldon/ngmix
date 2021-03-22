@@ -642,12 +642,11 @@ class GMix(object):
             a new one
         """
         from . import gmix_nb
-        from ..defaults import ADMOM_RESULT_DTYPE
 
         self.set_norms_if_needed()
 
         if res is None:
-            dt = np.dtype(ADMOM_RESULT_DTYPE, align=True)
+            dt = np.dtype(_moments_result_dtype, align=True)
             resarray = np.zeros(1, dtype=dt)
             res = resarray[0]
 
@@ -1272,3 +1271,16 @@ def get_weighted_moments_stats(ares):
             res["flagstr"] = "flux <= 0.0"
 
     return res
+
+
+_moments_result_dtype = [
+    ('flags', 'i4'),
+    ('npix', 'i4'),
+    ('wsum', 'f8'),
+
+    ('sums', 'f8', 6),
+    ('sums_cov', 'f8', (6, 6)),
+    ('pars', 'f8', 6),
+    # temporary
+    ('F', 'f8', 6),
+]

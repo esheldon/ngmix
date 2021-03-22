@@ -6,7 +6,6 @@ from numpy import diag
 from ..gmix import GMix, GMixModel
 from ..shape import e1e2_to_g1g2
 from ..observation import Observation
-from ..defaults import ADMOM_RESULT_DTYPE
 from ..gexceptions import GMixRangeError
 from ..util import get_ratio_error
 
@@ -210,7 +209,7 @@ class AdmomFitter(object):
         self.conf = conf
 
     def _get_am_result(self):
-        dt = numpy.dtype(ADMOM_RESULT_DTYPE, align=True)
+        dt = numpy.dtype(_admom_result_dtype, align=True)
         return numpy.zeros(1, dtype=dt)
 
     def _get_rng(self):
@@ -330,6 +329,20 @@ def get_result(ares):
 
     return res
 
+
+_admom_result_dtype = [
+    ('flags', 'i4'),
+    ('numiter', 'i4'),
+    ('nimage', 'i4'),
+    ('npix', 'i4'),
+    ('wsum', 'f8'),
+
+    ('sums', 'f8', 6),
+    ('sums_cov', 'f8', (6, 6)),
+    ('pars', 'f8', 6),
+    # temporary
+    ('F', 'f8', 6),
+]
 
 _admom_conf_dtype = [
     ('maxit', 'i4'),
