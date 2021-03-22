@@ -40,7 +40,6 @@ from . import gexceptions
 from .gexceptions import *
 
 from . import fitting
-from .fitting import *
 
 from . import runners
 from . import bootstrap

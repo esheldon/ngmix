@@ -5,9 +5,9 @@ from ngmix.runners import Runner, PSFRunner
 from ngmix.guessers import (
     GMixPSFGuesser, TFluxGuesser, TPSFFluxGuesser, CoellipPSFGuesser,
 )
-from ngmix.fitting import LMCoellip
+from ngmix.fitting import CoellipFitter
 from ngmix.em import GMixEM
-from ngmix.fitting import LM
+from ngmix.fitting import Fitter
 from ._sims import get_model_obs
 
 FRAC_TOL = 5.0e-4
@@ -42,7 +42,7 @@ def test_runner_lm_simple_smoke(model, psf_model_type):
             ngauss=psf_ngauss,
         )
 
-        psf_fitter = LMCoellip(ngauss=psf_ngauss)
+        psf_fitter = CoellipFitter(ngauss=psf_ngauss)
 
     psf_runner = PSFRunner(
         fitter=psf_fitter,
@@ -56,7 +56,7 @@ def test_runner_lm_simple_smoke(model, psf_model_type):
         T=0.25,
         flux=100.0,
     )
-    fitter = LM(model=model)
+    fitter = Fitter(model=model)
 
     runner = Runner(
         fitter=fitter,
@@ -101,7 +101,7 @@ def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
                 ngauss=psf_ngauss,
             )
 
-            psf_fitter = LMCoellip(ngauss=psf_ngauss)
+            psf_fitter = CoellipFitter(ngauss=psf_ngauss)
 
         psf_runner = PSFRunner(
             fitter=psf_fitter,
@@ -125,7 +125,7 @@ def test_runner_lm_simple(model, psf_model_type, noise, guesser_type):
                 T=0.25,
             )
 
-        fitter = LM(model=model)
+        fitter = Fitter(model=model)
 
         runner = Runner(
             fitter=fitter,

@@ -6,9 +6,9 @@ import numpy as np
 import ngmix
 from ngmix.runners import Runner, PSFRunner
 from ngmix.guessers import GMixPSFGuesser, TFluxGuesser, CoellipPSFGuesser
-from ngmix.fitting import LMCoellip
+from ngmix.fitting import CoellipFitter
 from ngmix.em import GMixEM
-from ngmix.fitting import LM
+from ngmix.fitting import Fitter
 from ngmix.bootstrap import bootstrap, Bootstrapper
 from ._sims import get_model_obs
 from ._priors import get_prior
@@ -54,7 +54,7 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
             guess_from_moms=guess_from_moms,
         )
 
-        psf_fitter = LMCoellip(ngauss=psf_ngauss)
+        psf_fitter = CoellipFitter(ngauss=psf_ngauss)
 
     psf_runner = PSFRunner(
         fitter=psf_fitter,
@@ -75,7 +75,7 @@ def test_bootstrap(model, psf_model_type, guess_from_moms, noise,
         F_range=[0.01, 1000.0],
     )
 
-    fitter = LM(model=model, prior=prior)
+    fitter = Fitter(model=model, prior=prior)
 
     runner = Runner(
         fitter=fitter,

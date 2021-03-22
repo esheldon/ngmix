@@ -1,8 +1,7 @@
 import pytest
 import numpy as np
 
-from ngmix import PSFFluxFitter
-from ngmix.fitting import GalsimPSFFluxFitter
+from ngmix.fitting import PSFFluxFitter, GalsimPSFFluxFitter
 from ._sims import get_model_obs
 
 NSIG = 4

@@ -332,7 +332,7 @@ class GPriorBase(PriorBase):
         show: bool, optional
             If True, show a plot of the fit and data.
         """
-        from ..leastsqbound import run_leastsq
+        from ..fitting.leastsqbound import run_leastsq
 
         (w,) = where(ydata > 0)
         self.xdata = xdata[w]

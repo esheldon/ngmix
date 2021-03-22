@@ -219,7 +219,7 @@ def _get_psf_fluxes(rng, obs):
     -------
     a dict with 'flags' 'flux' 'flux_err' for each band
     """
-    from .fitting import TemplateFluxFitter
+    from .fitting import PSFFluxFitter
     from .observation import get_mb_obs
 
     mbobs = get_mb_obs(obs)
@@ -229,7 +229,7 @@ def _get_psf_fluxes(rng, obs):
     flux_err = np.zeros(nband)
     flags = np.zeros(nband, dtype='i4')
 
-    fitter = TemplateFluxFitter(do_psf=True)
+    fitter = PSFFluxFitter()
 
     for iband, obslist in enumerate(mbobs):
         res = fitter.go(obs=obslist)

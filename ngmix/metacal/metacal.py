@@ -645,7 +645,7 @@ class MetacalFitGaussPSF(MetacalGaussPSF):
         from ..admom import Admom
         from ..guessers import GMixPSFGuesser, SimplePSFGuesser
         from ..runners import run_psf_fitter
-        from ..fitting import LM
+        from ..fitting import Fitter
 
         psfobs = self.obs.psf
 
@@ -668,7 +668,7 @@ class MetacalFitGaussPSF(MetacalGaussPSF):
                 'xtol': 1.0e-05,
             }
 
-            fitter = LM(model='gauss', fit_pars=lm_pars)
+            fitter = Fitter(model='gauss', fit_pars=lm_pars)
             guesser = SimplePSFGuesser(rng=self.rng)
 
             res = run_psf_fitter(
