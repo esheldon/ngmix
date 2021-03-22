@@ -1,12 +1,12 @@
 __all__ = [
     'Observation', 'ObsList', 'MultiBandObsList', 'get_mb_obs',
     'KObservation', 'KObsList', 'KMultiBandObsList',
-    'make_kobs', 'make_kmb_obs',
+    'make_kobs', 'get_kmb_obs',
 ]
 import copy
 import numpy as np
-from ..jacobian import Jacobian, UnitJacobian, DiagonalJacobian
-from ..gmix import GMix
+from .jacobian import Jacobian, UnitJacobian, DiagonalJacobian
+from .gmix import GMix
 
 from .pixels import make_pixels
 

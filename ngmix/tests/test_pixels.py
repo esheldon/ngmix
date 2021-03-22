@@ -3,7 +3,7 @@ import galsim
 import pytest
 
 import ngmix
-from ngmix.observation.pixels import make_coords, make_pixels
+from ngmix.pixels import make_coords, make_pixels
 from ngmix.jacobian import Jacobian
 from ._galsim_sims import _get_obs
 

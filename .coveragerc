@@ -5,6 +5,7 @@ omit =
     ngmix/em/*_nb.py
     ngmix/admom/*_nb.py
     ngmix/gmix/*_nb.py
+    ngmix/pixels/*_nb.py
 
 [report]
 exclude_lines = 

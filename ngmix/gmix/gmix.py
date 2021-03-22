@@ -31,7 +31,7 @@ from ..gmix.gmix_nb import (
 )
 
 from .render_nb import render
-from ..observation.pixels import make_coords
+from ..pixels import make_coords
 
 
 def make_gmix_model(pars, model, **kw):
