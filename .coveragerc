@@ -2,7 +2,6 @@
 omit =
     # we omit numba code since we cannot measure it
     ngmix/*_nb.py
-    ngmix/fastexp.py
 
 [report]
 exclude_lines = 

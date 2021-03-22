@@ -316,11 +316,11 @@ def test_em_errors():
 
     res = ngmix.em.run_em(obs=obs, guess=gm_guess)
 
-    assert res['flags'] == ngmix.em.EM_RANGE_ERROR
+    assert res['flags'] == ngmix.flags.EM_RANGE_ERROR
 
     gm_guess = gm.copy()
     res = ngmix.em.run_em(obs=obs, guess=gm_guess, maxiter=0)
-    assert res['flags'] == ngmix.em.EM_MAXITER
+    assert res['flags'] == ngmix.flags.EM_MAXITER
 
     emresult = ngmix.em.EMResult(obs=obs, result={})
     with pytest.raises(RuntimeError):

@@ -1,3 +1,5 @@
+# flake8: noqa
+
 from . import admom
 from .admom import *
 

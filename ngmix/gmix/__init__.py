@@ -1,3 +1,5 @@
+# flake8: noqa
+
 from . import gmix
 from .gmix import *
 
