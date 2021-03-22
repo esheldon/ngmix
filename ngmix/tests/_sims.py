@@ -106,7 +106,13 @@ def get_ngauss_obs(*, rng, ngauss, noise=0.0, with_psf=False, psf_model='turb'):
 
 def get_model_obs(
     *, rng, model,
-    noise=0.0, psf_model='turb', set_psf_gmix=False, nepoch=None, nband=None,
+    noise=0.0,
+    psf_model='turb',
+    psf_noise=1.0e-6,
+    set_psf_gmix=False,
+    set_templates=False,
+    set_psf_templates=False,
+    nepoch=None, nband=None,
     star=False,
 ):
 
@@ -152,18 +158,38 @@ def get_model_obs(
                 col=jcen[1] + off2_pix,
             )
 
-            psf_ret = get_psf_obs(rng=rng, model=psf_model)
+            psf_ret = get_psf_obs(rng=rng, model=psf_model, noise=psf_noise)
             if set_psf_gmix:
                 psf_ret['obs'].set_gmix(psf_ret['gmix'])
+
+            if set_psf_templates:
+                psf_ret['obs'].template = psf_ret['gmix'].make_image(
+                    dims,
+                    jacobian=jacob,
+                )
 
             gmconv = gm.convolve(psf_ret['gmix'])
 
             im0 = gmconv.make_image(dims, jacobian=jacob)
 
             im = im0 + rng.normal(size=im0.shape, scale=noise)
-            obs = Observation(im, jacobian=jacob, psf=psf_ret['obs'])
+            if noise == 0.0:
+                weight = im*0 + 1.0/1.0e-12
+            else:
+                weight = im*0 + 1.0/noise**2
+
+            obs = Observation(
+                im,
+                weight=weight,
+                jacobian=jacob,
+                psf=psf_ret['obs'],
+            )
+
+            if set_templates:
+                obs.template = im0
 
             obslist.append(obs)
+
         mbobs.append(obslist)
 
     ret = {

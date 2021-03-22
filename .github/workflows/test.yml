@@ -41,6 +41,7 @@ jobs:
             galsim \
             scikit-learn \
             emcee \
+            fitsio \
             pytest-cov
 
           python -m pip install -e .

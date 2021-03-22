@@ -31,7 +31,6 @@ def test_priors_gpriorbase_raises():
         ("get_prob_scalar1d", 1),
     ]:
         mth = getattr(pr, method)
-        with pytest.raises(RuntimeError) as e:
+        with pytest.raises(RuntimeError):
             args = tuple([None] * num)
             mth(*args)
-            assert "over-ride me" in e.value

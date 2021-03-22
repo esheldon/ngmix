@@ -14,8 +14,11 @@ class KDE(object):
         The input data to fit.
     kde_factor : str, scalar, or callable
         Any valid input to the keyword `bw_method` for the gaussian KDE.
+    rng: np.random.RandomState or seed
+        rng for sampling
     """
-    def __init__(self, data, kde_factor):
+    def __init__(self, data, kde_factor, rng):
+        self.rng = rng
         if len(data.shape) == 1:
             self.is_1d = True
         else:
@@ -25,7 +28,7 @@ class KDE(object):
             data.transpose(), bw_method=kde_factor,
         )
 
-    def sample(self, nrand=None, n=None):
+    def sample(self, nrand=None):
         """
         draw random samples from the kde.
 
@@ -45,18 +48,15 @@ class KDE(object):
             (`ndims`, `nrand`) or (`ndims`,) depending on whether or not `nrand` is
             non-None or None.
         """
-        if n is None and nrand is not None:
-            # if they have given nrand and not n, use that
-            # this keeps the API the same but allows ppl to use the new API of nrand
-            n = nrand
-
-        if n is None:
-            n = 1
+        if nrand is None:
+            nrand = 1
             is_scalar = True
         else:
             is_scalar = False
 
-        r = self.kde.resample(size=n).transpose()
+        r = self.kde.resample(
+            size=nrand, seed=self.rng,
+        ).transpose()
 
         if self.is_1d:
             r = r[:, 0]

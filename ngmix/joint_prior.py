@@ -1,4 +1,5 @@
 from numpy import zeros, exp, sqrt
+from . import gmix
 
 
 class PriorSimpleSep(object):
@@ -59,17 +60,17 @@ class PriorSimpleSep(object):
 
         self.bounds = bounds
 
-    def get_widths(self, n=10000):
+    def get_widths(self, nrand=10000):
         """
         estimate the width in each dimension
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples to draw
         """
         if not hasattr(self, "_sigma_estimates"):
-            samples = self.sample(n)
+            samples = self.sample(nrand)
             sigmas = samples.std(axis=0)
 
             # for e1,e2 we want to allow this a bit bigger
@@ -81,39 +82,6 @@ class PriorSimpleSep(object):
             self._sigma_estimates = sigmas
 
         return self._sigma_estimates
-
-    def get_prob_scalar(self, pars):
-        """
-        probability for scalar input (meaning one point)
-
-        Parameters
-        ----------
-        pars: array
-            Array of parameters values
-        """
-
-        lnp = self.get_lnprob_scalar(pars)
-        p = exp(lnp)
-        return p
-
-    def get_lnprob_scalar(self, pars):
-        """
-        log probability for scalar input (meaning one point)
-
-        Parameters
-        ----------
-        pars: array
-            Array of parameters values
-        """
-
-        lnp = self.cen_prior.get_lnprob_scalar(pars[0], pars[1])
-        lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
-        lnp += self.T_prior.get_lnprob_scalar(pars[4])
-
-        for i, F_prior in enumerate(self.F_priors):
-            lnp += F_prior.get_lnprob_scalar(pars[5 + i])
-
-        return lnp
 
     def fill_fdiff(self, pars, fdiff):
         """
@@ -151,6 +119,39 @@ class PriorSimpleSep(object):
 
         return index
 
+    def get_prob_scalar(self, pars):
+        """
+        probability for scalar input (meaning one point)
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
+        """
+
+        lnp = self.get_lnprob_scalar(pars)
+        p = exp(lnp)
+        return p
+
+    def get_lnprob_scalar(self, pars):
+        """
+        log probability for scalar input (meaning one point)
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters values
+        """
+
+        lnp = self.cen_prior.get_lnprob_scalar(pars[0], pars[1])
+        lnp += self.g_prior.get_lnprob_scalar2d(pars[2], pars[3])
+        lnp += self.T_prior.get_lnprob_scalar(pars[4])
+
+        for i, F_prior in enumerate(self.F_priors):
+            lnp += F_prior.get_lnprob_scalar(pars[5 + i])
+
+        return lnp
+
     def get_prob_array(self, pars):
         """
         probability for array input [N,ndims]
@@ -186,28 +187,28 @@ class PriorSimpleSep(object):
 
         return lnp
 
-    def sample(self, n=None):
+    def sample(self, nrand=None):
         """
         Get random samples
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples, default to a single set with size [npars].  If n
             is sent the result will have shape [n, npars]
         """
 
-        if n is None:
+        if nrand is None:
             is_scalar = True
-            n = 1
+            nrand = 1
         else:
             is_scalar = False
 
-        samples = zeros((n, 5 + self.nband))
+        samples = zeros((nrand, 5 + self.nband))
 
-        cen1, cen2 = self.cen_prior.sample(n)
-        g1, g2 = self.g_prior.sample2d(n)
-        T = self.T_prior.sample(n)
+        cen1, cen2 = self.cen_prior.sample(nrand)
+        g1, g2 = self.g_prior.sample2d(nrand)
+        T = self.T_prior.sample(nrand)
 
         samples[:, 0] = cen1
         samples[:, 1] = cen2
@@ -217,7 +218,7 @@ class PriorSimpleSep(object):
 
         for i in range(self.nband):
             F_prior = self.F_priors[i]
-            F = F_prior.sample(n)
+            F = F_prior.sample(nrand)
             samples[:, 5 + i] = F
 
         if is_scalar:
@@ -421,30 +422,30 @@ class PriorBDSep(PriorSimpleSep):
 
         return lnp
 
-    def sample(self, n=None):
+    def sample(self, nrand=None):
         """
         Get random samples
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples, default to a single set with size [npars].  If n
             is sent the result will have shape [n, npars]
         """
 
-        if n is None:
+        if nrand is None:
             is_scalar = True
-            n = 1
+            nrand = 1
         else:
             is_scalar = False
 
-        samples = zeros((n, 7 + self.nband))
+        samples = zeros((nrand, 7 + self.nband))
 
-        cen1, cen2 = self.cen_prior.sample(n)
-        g1, g2 = self.g_prior.sample2d(n)
-        T = self.T_prior.sample(n)
-        logTratio = self.logTratio_prior.sample(n)
-        fracdev = self.fracdev_prior.sample(n)
+        cen1, cen2 = self.cen_prior.sample(nrand)
+        g1, g2 = self.g_prior.sample2d(nrand)
+        T = self.T_prior.sample(nrand)
+        logTratio = self.logTratio_prior.sample(nrand)
+        fracdev = self.fracdev_prior.sample(nrand)
 
         samples[:, 0] = cen1
         samples[:, 1] = cen2
@@ -456,7 +457,7 @@ class PriorBDSep(PriorSimpleSep):
 
         for i in range(self.nband):
             F_prior = self.F_priors[i]
-            F = F_prior.sample(n)
+            F = F_prior.sample(nrand)
             samples[:, 7 + i] = F
 
         if is_scalar:
@@ -618,28 +619,28 @@ class PriorBDFSep(PriorSimpleSep):
 
         return lnp
 
-    def sample(self, n=None):
+    def sample(self, nrand=None):
         """
         Get random samples
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples, default to a single set with size [npars].  If n
             is sent the result will have shape [n, npars]
         """
-        if n is None:
+        if nrand is None:
             is_scalar = True
-            n = 1
+            nrand = 1
         else:
             is_scalar = False
 
-        samples = zeros((n, 6 + self.nband))
+        samples = zeros((nrand, 6 + self.nband))
 
-        cen1, cen2 = self.cen_prior.sample(n)
-        g1, g2 = self.g_prior.sample2d(n)
-        T = self.T_prior.sample(n)
-        fracdev = self.fracdev_prior.sample(n)
+        cen1, cen2 = self.cen_prior.sample(nrand)
+        g1, g2 = self.g_prior.sample2d(nrand)
+        T = self.T_prior.sample(nrand)
+        fracdev = self.fracdev_prior.sample(nrand)
 
         samples[:, 0] = cen1
         samples[:, 1] = cen2
@@ -650,7 +651,7 @@ class PriorBDFSep(PriorSimpleSep):
 
         for i in range(self.nband):
             F_prior = self.F_priors[i]
-            F = F_prior.sample(n)
+            F = F_prior.sample(nrand)
             samples[:, 6 + i] = F
 
         if is_scalar:
@@ -814,29 +815,29 @@ class PriorSpergelSep(PriorSimpleSep):
 
         return lnp
 
-    def sample(self, n=None):
+    def sample(self, nrand=None):
         """
         Get random samples
 
         Parameters
         ----------
-        n: int, optional
+        nrand: int, optional
             Number of samples, default to a single set with size [npars].  If n
             is sent the result will have shape [n, npars]
         """
 
-        if n is None:
+        if nrand is None:
             is_scalar = True
-            n = 1
+            nrand = 1
         else:
             is_scalar = False
 
-        samples = zeros((n, 6 + self.nband))
+        samples = zeros((nrand, 6 + self.nband))
 
-        cen1, cen2 = self.cen_prior.sample(n)
-        g1, g2 = self.g_prior.sample2d(n)
-        r50 = self.r50_prior.sample(n)
-        nu = self.nu_prior.sample(n)
+        cen1, cen2 = self.cen_prior.sample(nrand)
+        g1, g2 = self.g_prior.sample2d(nrand)
+        r50 = self.r50_prior.sample(nrand)
+        nu = self.nu_prior.sample(nrand)
 
         samples[:, 0] = cen1
         samples[:, 1] = cen2
@@ -847,7 +848,7 @@ class PriorSpergelSep(PriorSimpleSep):
 
         for i in range(self.nband):
             F_prior = self.F_priors[i]
-            F = F_prior.sample(n)
+            F = F_prior.sample(nrand)
             samples[:, 6 + i] = F
 
         if is_scalar:
@@ -873,20 +874,22 @@ class PriorSpergelSep(PriorSimpleSep):
 class PriorCoellipSame(PriorSimpleSep):
     def __init__(self, ngauss, cen_prior, g_prior, T_prior, F_prior):
 
+        self.ngauss = ngauss
+        self.npars = gmix.get_coellip_npars(ngauss)
+
         super(PriorCoellipSame, self).__init__(
             cen_prior, g_prior, T_prior, F_prior
         )
 
-        self.ngauss = ngauss
+        if self.nband != 1:
+            raise ValueError("coellip only supports one band")
 
     def set_bounds(self):
         """
         set possibe bounds
         """
 
-        self.bounds = None
-
-        return
+        ngauss = self.ngauss
 
         bounds = [
             (None, None),  # c1
@@ -897,7 +900,9 @@ class PriorCoellipSame(PriorSimpleSep):
 
         some_have_bounds = False
 
-        for p in [self.T_prior, self.F_prior]:
+        allp = [self.T_prior]*ngauss + self.F_priors
+
+        for i, p in enumerate(allp):
             if p.has_bounds():
                 some_have_bounds = True
                 pbounds = [(p.bounds[0], p.bounds[1])]
@@ -920,6 +925,9 @@ class PriorCoellipSame(PriorSimpleSep):
         pars: array
             Array of parameters values
         """
+
+        if len(pars) != self.npars:
+            raise ValueError('pars size %d expected %d' % (len(pars), self.npars))
 
         ngauss = self.ngauss
 
@@ -946,6 +954,9 @@ class PriorCoellipSame(PriorSimpleSep):
         fdiff: array
             the fdiff array to fill
         """
+
+        if len(pars) != self.npars:
+            raise ValueError('pars size %d expected %d' % (len(pars), self.npars))
 
         ngauss = self.ngauss
 
@@ -977,3 +988,44 @@ class PriorCoellipSame(PriorSimpleSep):
         fdiff[0:index] = sqrt(chi2)
 
         return index
+
+    def sample(self, nrand=None):
+        """
+        Get random samples
+
+        Parameters
+        ----------
+        nrand: int, optional
+            Number of samples, default to a single set with size [npars].  If n
+            is sent the result will have shape [n, npars]
+        """
+
+        if nrand is None:
+            is_scalar = True
+            nrand = 1
+        else:
+            is_scalar = False
+
+        ngauss = self.ngauss
+        samples = zeros((nrand, self.npars))
+
+        cen1, cen2 = self.cen_prior.sample(nrand)
+        g1, g2 = self.g_prior.sample2d(nrand)
+        T = self.T_prior.sample(nrand)
+
+        samples[:, 0] = cen1
+        samples[:, 1] = cen2
+        samples[:, 2] = g1
+        samples[:, 3] = g2
+        samples[:, 4] = T
+
+        for i in range(ngauss):
+            samples[:, 4+i] += self.T_prior.sample(nrand)
+
+        F_prior = self.F_priors[0]
+        for i in range(ngauss):
+            samples[:, 4 + ngauss + i] = F_prior.sample(nrand)
+
+        if is_scalar:
+            samples = samples[0, :]
+        return samples

@@ -254,7 +254,8 @@ def get_noise_image(weight, rng, add_all=True, noise_factor=None):
     be a problem for algorithms that use the weight map
     """
 
-    assert rng is not None
+    if rng is None:
+        raise ValueError('you must send an rng to get_noise_image')
 
     noise_image = rng.normal(loc=0.0, scale=1.0, size=weight.shape,)
 

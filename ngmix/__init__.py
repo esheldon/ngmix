@@ -37,15 +37,10 @@ from .shape import Shape
 from . import moments
 
 from . import gexceptions
-from .gexceptions import (
-    GMixRangeError,
-    GMixFatalError,
-    GMixMaxIterEM,
-)
+from .gexceptions import *
 
 from . import fitting
 from .fitting import *
-from . import simplex
 
 from . import galsimfit
 

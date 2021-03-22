@@ -13,9 +13,20 @@ def make_rng(rng=None):
     return rng
 
 
-def srandu(num=None, *, rng):
+def srandu(nrand=None, *, rng):
     """
     Generate random numbers in the symmetric distribution [-1,1]
+
+    Parameters
+    ----------
+    nrand: int or None, optional
+        Number of samples. If None a scalar is returned, else an array
+    rng: np.random.RandomState
+        The random number generator
+
+    Returns
+    -------
+    samples between
     """
     randu = rng.uniform
-    return randu(low=-1.0, high=1.0, size=num)
+    return randu(low=-1.0, high=1.0, size=nrand)

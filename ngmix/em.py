@@ -253,9 +253,8 @@ class GMixEM(object):
             sky such that there are no negative pixels.
         """
 
-        assert isinstance(obs, Observation), (
-            'input obs must be an instance of Observation'
-        )
+        if not isinstance(obs, Observation):
+            raise ValueError('input obs must be an instance of Observation')
 
         if sky is None:
             obs_sky, sky = prep_obs(obs)
@@ -358,11 +357,6 @@ class GMixEMFixCen(GMixEM):
 
     Parameters
     ----------
-    obs: Observation
-        An ngmix.Observation object
-
-        The image should not have zero or negative pixels. You can
-        use the ngmix.em.prep_image() function to ensure this.
     miniter: number, optional
         The minimum number of iterations, default 40
     maxiter: number, optional
@@ -391,12 +385,6 @@ class GMixEMFluxOnly(GMixEMFixCen):
 
     Parameters
     ----------
-    obs: Observation
-        An Observation object, containing the image and possibly
-        non-trivial jacobian.  see ngmix.observation.Observation
-
-        The image should not have zero or negative pixels. You can
-        use the prep_image() function to ensure this.
     miniter: number, optional
         The minimum number of iterations, default 20
     maxiter: number, optional
@@ -404,10 +392,11 @@ class GMixEMFluxOnly(GMixEMFixCen):
     tol: number, optional
         The fractional change in the log likelihood that implies convergence,
         default 0.001
+    vary_sky: bool
+        If True, fit for the sky level
     """
 
     def __init__(self,
-                 obs,
                  miniter=20,
                  maxiter=500,
                  tol=DEFAULT_TOL,
@@ -416,7 +405,6 @@ class GMixEMFluxOnly(GMixEMFixCen):
         over-riding because we want a different default miniter
         """
         super().__init__(
-            obs,
             miniter=miniter,
             maxiter=maxiter,
             tol=tol,

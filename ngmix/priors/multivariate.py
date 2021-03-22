@@ -81,6 +81,9 @@ class CenPrior(PriorBase):
         lnp = -0.5 * d1 * d1 * self.s2inv1 - 0.5 * d2 * d2 * self.s2inv2
         return exp(lnp)
 
+    get_prob_array = get_prob_scalar
+    get_lnprob_array = get_lnprob_scalar
+
     def sample(self, nrand=None):
         """
         Get a single sample or arrays.

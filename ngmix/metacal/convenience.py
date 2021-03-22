@@ -267,9 +267,6 @@ def _rotate_obs_image_square(obs, k=1):
     elif isinstance(obs, MultiBandObsList):
         for obslist in obs:
             _rotate_obs_image_square(obslist, k=k)
-    else:
-        raise ValueError("obs must be Observation, ObsList, "
-                         "or MultiBandObsList")
 
 
 def _doadd_single_obs(obs, nobs):

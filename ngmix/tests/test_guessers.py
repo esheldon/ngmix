@@ -5,18 +5,26 @@ import ngmix
 from ngmix import guessers
 from ngmix.gmix import get_coellip_npars
 from ._sims import get_model_obs, get_psf_obs
+from ._priors import get_prior
 
 
 @pytest.mark.parametrize(
     'guesser_type',
-    ['TFlux', 'TPSFFlux', 'Pars', 'R50Flux', 'R50NuFlux'],
+    ['TFlux', 'TPSFFlux', 'Pars', 'Pars+Width', 'R50Flux', 'R50NuFlux'],
 )
 @pytest.mark.parametrize('nband', [None, 1, 2])
-def test_noprior_guessers_smoke(guesser_type, nband):
+@pytest.mark.parametrize('with_prior', [False, True])
+def test_noprior_guessers_smoke(guesser_type, nband, with_prior):
 
     guess_old = None
     for i in range(2):
         rng = np.random.RandomState(587)
+
+        if with_prior:
+            prior = get_prior(fit_model='exp', rng=rng, scale=0.263)
+        else:
+            prior = None
+
         data = get_model_obs(
             model='gauss',  # it has T=0 for a star
             rng=rng, star=True,
@@ -26,23 +34,40 @@ def test_noprior_guessers_smoke(guesser_type, nband):
 
         nband_use = nband if nband is not None else 1
 
+        # this always gets coverage
+        assert guesser_type in [
+            'TFlux', 'TPSFFlux', 'Pars', 'Pars+Width', 'R50Flux', 'R50NuFlux'
+        ]
         if guesser_type == 'TFlux':
             T_center = 0.001
             flux_center = [1.0]*nband_use
-            guesser = guessers.TFluxGuesser(rng=rng, T=T_center, flux=flux_center)
+            guesser = guessers.TFluxGuesser(
+                rng=rng, T=T_center, flux=flux_center, prior=prior,
+            )
             npars = 5 + nband_use
         elif guesser_type == 'TPSFFlux':
             T_center = 0.001
-            guesser = guessers.TPSFFluxGuesser(rng=rng, T=T_center)
+            guesser = guessers.TPSFFluxGuesser(rng=rng, T=T_center, prior=prior)
             npars = 5 + nband_use
         elif guesser_type == 'Pars':
             pars = [0.0, 0.0, 0.0, 0.0, 0.1] + [1.0]*nband_use
-            guesser = guessers.ParsGuesser(rng=rng, pars=pars)
+            guesser = guessers.ParsGuesser(rng=rng, pars=pars, prior=prior)
             npars = 5 + nband_use
+
+        elif guesser_type == 'Pars+Width':
+            pars = [0.0, 0.0, 0.0, 0.0, 0.1] + [1.0]*nband_use
+            widths = [0.1]*len(pars)
+            guesser = guessers.ParsGuesser(
+                rng=rng, pars=pars, prior=prior, widths=widths,
+            )
+            npars = 5 + nband_use
+
         elif guesser_type == 'R50Flux':
             r50_center = 0.2
             flux_center = [1.0]*nband_use
-            guesser = guessers.R50FluxGuesser(rng=rng, r50=r50_center, flux=flux_center)
+            guesser = guessers.R50FluxGuesser(
+                rng=rng, r50=r50_center, flux=flux_center, prior=prior,
+            )
             npars = 5 + nband_use
         elif guesser_type == 'R50NuFlux':
             r50_center = 0.2
@@ -50,13 +75,16 @@ def test_noprior_guessers_smoke(guesser_type, nband):
             nu_center = 1
             guesser = guessers.R50NuFluxGuesser(
                 rng=rng, r50=r50_center, nu=nu_center, flux=flux_center,
+                prior=prior,
             )
             npars = 6 + nband_use
-        else:
-            raise ValueError('bad guesser %s' % guesser_type)
 
         guess = guesser(obs=data['obs'])
         assert guess.size == npars
+
+        guess = guesser(obs=data['obs'], nrand=3)
+        assert guess.shape[0] == 3
+        assert guess.shape[1] == npars
 
         if i == 1:
             assert np.all(guess == guess_old)
@@ -82,6 +110,11 @@ def test_prior_guessers_smoke(guesser_type, nband):
             set_psf_gmix=True, nepoch=10,
             nband=nband,
         )
+
+        # this always gets coverage
+        assert guesser_type in [
+            'TFluxAndPrior', 'TPSFFluxAndPrior', 'BD', 'BDF', 'Prior',
+        ]
 
         T_center = 0.001
         flux_center = [1.0]*nband_use
@@ -129,8 +162,6 @@ def test_prior_guessers_smoke(guesser_type, nband):
                 T=T_center, flux=flux_center, prior=prior,
             )
             npars = 6 + nband_use
-        else:
-            raise ValueError('bad guesser %s' % guesser_type)
 
         guess = guesser(obs=data['obs'])
         assert guess.size == npars
@@ -158,6 +189,9 @@ def test_psf_guessers_smoke(guesser_type, ngauss, guess_from_moms):
         rng = np.random.RandomState(19487)
         data = get_psf_obs(rng=rng)
 
+        # this always gets coverage
+        assert guesser_type in ['GMix', 'Simple', 'Coellip']
+
         if guesser_type == 'GMix':
             guesser = guessers.GMixPSFGuesser(
                 rng=rng, ngauss=ngauss, guess_from_moms=guess_from_moms,
@@ -175,8 +209,6 @@ def test_psf_guessers_smoke(guesser_type, ngauss, guess_from_moms):
                 rng=rng, ngauss=ngauss, guess_from_moms=guess_from_moms,
             )
             npars = get_coellip_npars(ngauss)
-        else:
-            raise ValueError('bad guesser %s' % guesser_type)
 
         guess = guesser(obs=data['obs'])
         assert len(guess) == npars
@@ -188,3 +220,23 @@ def test_psf_guessers_smoke(guesser_type, ngauss, guess_from_moms):
             assert np.all(guess == guess_old)
         else:
             guess_old = guess
+
+
+def test_guessers_shape_guess():
+    rng = np.random.RandomState(88)
+    g = ngmix.guessers.get_shape_guess(
+        rng=rng, g1=1.5, g2=0.1, nrand=10, width=[0.1]*2,
+    )
+    assert np.all(np.sqrt(g[:, 0]**2 + g[:, 1]**2) < 1)
+
+
+def test_guessers_errors():
+    rng = np.random.RandomState(8)
+    with pytest.raises(ngmix.GMixRangeError):
+        ngmix.guessers.R50FluxGuesser(rng=rng, r50=-1, flux=100)
+
+    with pytest.raises(ValueError):
+        ngmix.guessers.GMixPSFGuesser(rng=rng, ngauss=1000)
+
+    with pytest.raises(ValueError):
+        ngmix.guessers.CoellipPSFGuesser(rng=rng, ngauss=1000)

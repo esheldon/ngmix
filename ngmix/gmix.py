@@ -11,8 +11,6 @@ from .shape import Shape, e1e2_to_g1g2
 
 from . import moments
 
-from .gexceptions import GMixFatalError
-
 from . import gmix_nb
 from .gmix_nb import (
     _gmix_fill_functions,
@@ -84,12 +82,12 @@ class GMix(object):
         self._set_fill_func()
 
         if ngauss is None and pars is None:
-            raise GMixFatalError("send ngauss= or pars=")
+            raise ValueError("send ngauss= or pars=")
 
         if pars is not None:
             npars = len(pars)
             if (npars % 6) != 0:
-                raise GMixFatalError(
+                raise ValueError(
                     "len(pars) must be mutiple of 6 " "got %s" % npars
                 )
             self._ngauss = npars // 6
@@ -373,7 +371,7 @@ class GMix(object):
         if npars != self._npars:
             err = "model '%s' requires %s pars, got %s"
             err = err % (self._model_name, self._npars, npars)
-            raise GMixFatalError(err)
+            raise ValueError(err)
 
         self._fill(pars)
 
@@ -419,7 +417,7 @@ class GMix(object):
             shear1 = s1
             shear2 = s2
         else:
-            raise RuntimeError("send a Shape or s1,s2")
+            raise ValueError("send a Shape or s1,s2")
 
         new_gmix = self.copy()
 
@@ -505,7 +503,6 @@ class GMix(object):
         -------
         New round gmix
         """
-        # raise RuntimeError("fix round")
         from . import shape
 
         gm = self.copy()
@@ -908,11 +905,11 @@ class GMixModel(GMix):
         self._do_init(pars, model)
 
     def _do_init(self, pars, model):
-        self._model = _gmix_model_dict[model]
-        self._model_name = _gmix_string_dict[self._model]
+        self._model = get_model_num(model)
+        self._model_name = get_model_name(self._model)
 
-        self._ngauss = _gmix_ngauss_dict[self._model]
-        self._npars = _gmix_npars_dict[self._model]
+        self._ngauss = get_model_ngauss(self._model)
+        self._npars = get_model_npars(self._model)
 
         self.reset()
 

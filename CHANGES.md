@@ -19,6 +19,8 @@
   supported
 - The em codes now work in image flux units rather than normalizing the
   mixture
+- all PDFs/priors sample methods take the option nrand=.  Some had previously
+  taken n=
 
 ### bug fixes
 
@@ -87,6 +89,7 @@
 - removed the "prepix" option for metacal
 - removed guessers `RoundParsGuesser`, `MomGuesser`,
 - switched from print to logging in many modules
+- removed simplex.py no longer needed, we just use the scipy simplex fitter
 
 ## v1.3.8
 

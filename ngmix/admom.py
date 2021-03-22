@@ -4,6 +4,7 @@ from numpy import diag
 from .gmix import GMix, GMixModel
 from .shape import e1e2_to_g1g2
 from .observation import Observation
+from .gexceptions import GMixRangeError
 
 DEFAULT_MAXITER = 200
 DEFAULT_SHIFTMAX = 5.0  # pixels
@@ -171,12 +172,15 @@ class Admom(object):
         ares = self._get_am_result()
 
         wt_gmix = guess_gmix._data
-        admom(
-            self.conf,
-            wt_gmix,
-            obs.pixels,
-            ares,
-        )
+        try:
+            admom(
+                self.conf,
+                wt_gmix,
+                obs.pixels,
+                ares,
+            )
+        except GMixRangeError:
+            ares['flags'] = 0x8
 
         result = get_result(ares)
 
@@ -252,20 +256,6 @@ def get_ratio_var(a, b, var_a, var_b, cov_ab):
 
     var = rsq * (var_a/a**2 + var_b/b**2 - 2*cov_ab/(a*b))
     return var
-
-
-def get_sum_err(var_a, var_b, cov_ab):
-    from math import sqrt
-    var = get_sum_var(var_a, var_b, cov_ab)
-    if var < 0:
-        var = 0
-
-    error = sqrt(var)
-    return error
-
-
-def get_sum_var(var_a, var_b, cov_ab):
-    return var_a + var_b - 2*cov_ab
 
 
 def get_result(ares):
