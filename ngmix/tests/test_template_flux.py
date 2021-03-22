@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 
 from ngmix import PSFFluxFitter
-from ngmix.galsimfit import GalsimTemplateFluxFitter
+from ngmix.fitting import GalsimPSFFluxFitter
 from ._sims import get_model_obs
 
 NSIG = 4
@@ -88,7 +88,7 @@ def test_template_psf_flux_galsim(noise, nband, nepoch):
         set_psf_gmix=True, nepoch=nepoch, nband=nband,
     )
 
-    fitter = GalsimTemplateFluxFitter()
+    fitter = GalsimPSFFluxFitter()
 
     if nband is None:
         res = fitter.go(obs=data['obs'])
