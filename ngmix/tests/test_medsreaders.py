@@ -47,9 +47,15 @@ def test_medsreaders_smoke(
             if weight_type == 'weight':
                 assert len(obslist) == m['ncutout'][iobj], ('iobj: %s' % iobj)
 
-            if with_psf:
-                for obs in obslist:
+            for obs in obslist:
+                if with_psf:
                     assert obs.has_psf()
+                if with_bmask:
+                    assert obs.has_bmask()
+                if with_ormask:
+                    assert obs.has_ormask()
+                if with_noise:
+                    assert obs.has_noise()
 
         # test an error that can occur
         with pytest.raises(ValueError):
