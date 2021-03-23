@@ -42,6 +42,7 @@ jobs:
             scikit-learn \
             emcee \
             fitsio \
+            meds \
             pytest-cov
 
           python -m pip install -e .
