@@ -214,19 +214,19 @@ def make_object_data(
     data['number'] = 1 + np.arange(nobj)
     data['box_size'] = box_size
 
-    data['ra'] = rng.uniform(low=0, high=3)
-    data['dec'] = rng.uniform(low=0, high=3)
-    data['ncutout'] = rng.randint(low=1, high=ncutout_max)
+    data['ra'] = rng.uniform(low=0, high=3, size=nobj)
+    data['dec'] = rng.uniform(low=0, high=3, size=nobj)
+    data['ncutout'] = rng.randint(low=1, high=ncutout_max+1, size=nobj)
 
     # doesn't matter
-    data['orig_row'] = rng.uniform(0, 500)
-    data['orig_col'] = rng.uniform(0, 500)
+    data['orig_row'] = rng.uniform(0, 500, size=(nobj, ncutout_max))
+    data['orig_col'] = rng.uniform(0, 500, size=(nobj, ncutout_max))
     data['orig_start_row'] = data['orig_row'] - box_size/2
     data['orig_start_col'] = data['orig_col'] - box_size/2
 
     cen = (box_size - 1)/2
-    data['cutout_row'] = cen + rng.uniform(low=-0.5, high=0.5)
-    data['cutout_col'] = cen + rng.uniform(low=-0.5, high=0.5)
+    data['cutout_row'] = cen + rng.uniform(low=-0.5, high=0.5, size=(nobj, ncutout_max))
+    data['cutout_col'] = cen + rng.uniform(low=-0.5, high=0.5, size=(nobj, ncutout_max))
     data['dudrow'] = DUDROW
     data['dudcol'] = DUDCOL
     data['dvdrow'] = DVDROW
@@ -242,7 +242,8 @@ def make_object_data(
     current_row = 0
     npixels_per = box_size * box_size
     for iobj in range(nobj):
-        data['file_id'][iobj] = ids[0:data['ncutout'][iobj]]
+        ncutout = data['ncutout'][iobj]
+        data['file_id'][iobj, :ncutout] = ids[:ncutout]
 
         for icut in range(data['ncutout'][iobj]):
             data['start_row'][iobj, icut] = current_row
