@@ -31,7 +31,7 @@ def print_pars(pars, fmt="%8.3g", front=None, stream=stdout, logger=None):
     if logger is not None:
         logger.debug(txt)
     else:
-        stream.write(txt)
+        stream.write(txt + '\n')
 
 
 def format_pars(pars, fmt="%8.3g"):
