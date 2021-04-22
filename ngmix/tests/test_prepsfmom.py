@@ -114,12 +114,12 @@ def test_prepsfmom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
     assert np.abs(mean_flux - flux_true) < 5e-4, (np.mean(farr), np.std(farr))
 
 
-@pytest.mark.parametrize('pad_factor', [1.3234, 1])
-def test_prepsfmom_error(pad_factor):
+@pytest.mark.parametrize('image_size', [107, 112])
+@pytest.mark.parametrize('pad_factor', [3.1, 1.3234, 1])
+def test_prepsfmom_error(pad_factor, image_size):
     rng = np.random.RandomState(seed=100)
 
     fwhm = 0.9
-    image_size = 107
     cen = (image_size - 1)/2
     gs_wcs = galsim.ShearWCS(
         0.125, galsim.Shear(g1=-0.1, g2=0.23)).jacobian()
@@ -199,9 +199,9 @@ def test_prepsfmom_error(pad_factor):
 
     etol = 0.1
     assert np.allclose(np.std(farr), res["flux_err"], atol=0, rtol=etol)
-    assert np.allclose(np.std(Tarr), res["T_err"], atol=0, rtol=etol*2)
-    assert np.allclose(np.std(g1arr), res["e_err"][0], atol=0, rtol=etol*2)
-    assert np.allclose(np.std(g2arr), res["e_err"][1], atol=0, rtol=etol*2)
+    assert np.allclose(np.std(Tarr), res["T_err"], atol=0, rtol=etol*3)
+    assert np.allclose(np.std(g1arr), res["e_err"][0], atol=0, rtol=etol*3)
+    assert np.allclose(np.std(g2arr), res["e_err"][1], atol=0, rtol=etol*3)
 
     assert np.allclose(np.mean(farr), flux_true, atol=0, rtol=1e-3)
     assert np.allclose(np.mean(Tarr), T_true, atol=0, rtol=1e-3)
@@ -209,8 +209,8 @@ def test_prepsfmom_error(pad_factor):
     assert np.allclose(np.mean(g2arr), g2_true, atol=0, rtol=1e-2)
 
 
-@pytest.mark.parametrize('image_size', [107, 110])
-@pytest.mark.parametrize('pad_factor', [1.3234, 1])
+@pytest.mark.parametrize('image_size', [107, 112])
+@pytest.mark.parametrize('pad_factor', [3.34123, 1.3234, 1])
 def test_prepsfmom_psf(pad_factor, image_size):
     rng = np.random.RandomState(seed=100)
 
@@ -322,6 +322,6 @@ def test_prepsfmom_psf(pad_factor, image_size):
     # deconvolving the PSF correlates the noise which makes the errors wrong
     etol = 0.1
     assert np.allclose(np.std(farr), res["flux_err"], atol=0, rtol=etol)
-    assert np.allclose(np.std(Tarr), res["T_err"], atol=0, rtol=etol*2)
+    assert np.allclose(np.std(Tarr), res["T_err"], atol=0, rtol=etol*3)
     assert np.allclose(np.std(g1arr), res["e_err"][0], atol=0, rtol=etol*3)
     assert np.allclose(np.std(g2arr), res["e_err"][1], atol=0, rtol=etol*3)

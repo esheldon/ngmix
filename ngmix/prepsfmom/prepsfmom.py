@@ -28,9 +28,9 @@ class PrePSFMom(object):
     psf_trunc_fac : float, optional
         In Fourier-space if a PSF is given with the observation, any modes
         where the amplitude of the PSF profile is less than `psf_trunc_fac`
-        times the max will be given zero weight. Default is 1e-4.
+        times the max will be given zero weight. Default is 1e-5.
     """
-    def __init__(self, fwhm, kernel='gauss', pad_factor=4, psf_trunc_fac=1e-4):
+    def __init__(self, fwhm, kernel='gauss', pad_factor=4, psf_trunc_fac=1e-5):
         self.kernel = kernel
         self.fwhm = fwhm
         self.pad_factor = pad_factor
