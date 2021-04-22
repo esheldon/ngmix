@@ -6,6 +6,7 @@ from ngmix import GMixModel
 from ngmix.jacobian import Jacobian
 from ngmix.observation import Observation
 from ngmix.moments import fwhm_to_T
+from ngmix.util import get_ratio_error
 
 
 logger = logging.getLogger(__name__)
@@ -105,11 +106,14 @@ class PrePSFMom(object):
             raise RuntimeError(
                 "Kernel '%s' is not allowed for pre-PSF moments!" % self.kernel
             )
+
+        inv_wgt = np.zeros_like(wgt)
         msk = wgt > 0
+        inv_wgt[msk] = 1.0 / wgt[msk]
         res = _measure_moments_fft(
-            im, np.sum(1.0/wgt[msk]),
+            im, inv_wgt,
             im_row0, im_col0,
-            *kres,
+            kres,
             psf_im=psf_im,
             psf_row_offset=psf_row_offset,
             psf_col_offset=psf_col_offset,
@@ -120,6 +124,8 @@ class PrePSFMom(object):
         if return_kernels:
             res["kernels"] = kres
             res["im"] = im
+            res['wgt'] = wgt
+            res["inv_wgt"] = inv_wgt
 
         return res
 
@@ -202,13 +208,36 @@ def _gauss_kernels(
     fkxx = np.fft.fftn(rkxx)
     fkxy = np.fft.fftn(rkxy)
     fkyy = np.fft.fftn(rkyy)
+    fkff = np.fft.fftn(rkf**2)
+    fkrr = np.fft.fftn((rkxx + rkyy)**2)
+    fkrf = np.fft.fftn((rkxx + rkyy)*rkf)
+    fkpp = np.fft.fftn((rkxx - rkyy)**2)
+    fkrp = np.fft.fftn((rkxx + rkyy)*(rkxx - rkyy))
+    fkcc = np.fft.fftn((2*rkxy)**2)
+    fkrc = np.fft.fftn((rkxx + rkyy)*(2*rkxy))
 
-    return rkf, rkxx, rkxy, rkyy, fkf, fkxx, fkxy, fkyy
+    return dict(
+        rkf=rkf,
+        rkxx=rkxx,
+        rkxy=rkxy,
+        rkyy=rkyy,
+        fkf=fkf,
+        fkxx=fkxx,
+        fkxy=fkxy,
+        fkyy=fkyy,
+        fkff=fkff,
+        fkrr=fkrr,
+        fkrf=fkrf,
+        fkrp=fkrp,
+        fkpp=fkpp,
+        fkcc=fkcc,
+        fkrc=fkrc,
+    )
 
 
 def _measure_moments_fft(
-    im, tot_var, cen_row, cen_col,
-    rkf, rkxx, rkxy, rkyy, fkf, fkxx, fkxy, fkyy,
+    im, inv_wgt, cen_row, cen_col,
+    kernels,
     psf_im=None,
     psf_row_offset=None,
     psf_col_offset=None,
@@ -217,6 +246,7 @@ def _measure_moments_fft(
     flagstr = ''
 
     imfft = np.fft.fftn(im)
+    inv_wgtfft = np.fft.fftn(inv_wgt)
 
     # we need to shift the FFT so that x = 0 is the center of the profile
     # this is a phase shift in fourier space
@@ -230,6 +260,9 @@ def _measure_moments_fft(
     # do it once profile and once for the kernel
     imfft *= cen_phase
     imfft *= cen_phase
+
+    inv_wgtfft *= cen_phase
+    inv_wgtfft *= cen_phase
 
     if psf_im is not None:
         # we also have to shift the center for the PSF (which could have a
@@ -245,54 +278,66 @@ def _measure_moments_fft(
         psf_zero_msk = np.abs(psf_imfft) == 0
         if np.any(psf_zero_msk):
             psf_imfft[psf_zero_msk] = 1.0
-            fkf[psf_zero_msk] = 0.0
-            fkxx[psf_zero_msk] = 0.0
-            fkxy[psf_zero_msk] = 0.0
-            fkyy[psf_zero_msk] = 0.0
+            for k in kernels:
+                if k.startswith("f"):
+                    kernels[k][psf_zero_msk] = 0.0
 
         # deconvolve!
         imfft /= psf_imfft
 
+        inv_wgtfft /= psf_imfft
+        inv_wgtfft /= psf_imfft
+    else:
+        psf_imfft = 1.0
+
     df = f[1] - f[0]
-    fnrm = np.sum(imfft * fkf)
-    fxx = np.sum(imfft * fkxx) / fnrm
-    fyy = np.sum(imfft * fkyy) / fnrm
-    fxy = np.sum(imfft * fkxy) / fnrm
+    fkf = kernels["fkf"]
+    fkr = kernels["fkxx"] + kernels["fkyy"]
+    fkp = kernels["fkxx"] - kernels["fkyy"]
+    fkc = 2 * kernels["fkxy"]
+    mf = np.sum(imfft * fkf).real * df**2
+    mr = np.sum(imfft * fkr).real * df**2
+    mp = np.sum(imfft * fkp).real * df**2
+    mc = np.sum(imfft * fkc).real * df**2
 
-    flux = fnrm.real * df**2
-    T = (fxx + fyy).real
-    e1 = ((fxx - fyy) / (fxx + fyy)).real
-    e2 = (2 * fxy / (fxx + fyy)).real
+    m_cov = np.zeros((4, 4)) + -9999.0
 
-    flux_err = (
-        np.sqrt(np.sum(tot_var * fkf * fkf)).real
-        * df**2
-    )
-    # these are wrong
-    # xx_err = (
-    #     np.sqrt(np.sum(tot_var * fkxx * fkxx)).real
-    #     * df**2
-    # )
-    # xy_err = (
-    #     np.sqrt(np.sum(tot_var * fkxy * fkxy)).real
-    #     * df**2
-    # )
-    # yy_err = (
-    #     np.sqrt(np.sum(tot_var * fkyy * fkyy)).real
-    #     * df**2
-    # )
+    m_cov[0, 0] = np.sum(inv_wgtfft * kernels["fkff"]).real * df**2
+    m_cov[1, 1] = np.sum(inv_wgtfft * kernels["fkrr"]).real * df**2
+    m_cov[2, 2] = np.sum(inv_wgtfft * kernels["fkpp"]).real * df**2
+    m_cov[3, 3] = np.sum(inv_wgtfft * kernels["fkcc"]).real * df**2
+
+    m_cov[0, 1] = np.sum(inv_wgtfft * kernels["fkrf"]).real * df**2
+    m_cov[1, 0] = m_cov[0, 1]
+
+    m_cov[1, 2] = np.sum(inv_wgtfft * kernels["fkrp"]).real * df**2
+    m_cov[2, 1] = m_cov[1, 2]
+
+    m_cov[1, 3] = np.sum(inv_wgtfft * kernels["fkrc"]).real * df**2
+    m_cov[3, 1] = m_cov[1, 2]
+
+    flux = mf
+    T = mr / mf
+    e1 = mp / mr
+    e2 = mc / mr
+
+    T_err = get_ratio_error(mr, mf, m_cov[1, 1], m_cov[0, 0], m_cov[0, 1])
+    e_err = np.zeros(2)
+    e_err[0] = get_ratio_error(mp, mr, m_cov[2, 2], m_cov[1, 1], m_cov[1, 2])
+    e_err[1] = get_ratio_error(mp, mr, m_cov[3, 3], m_cov[1, 1], m_cov[1, 3])
 
     return {
         "flags": flags,
         "flagstr": flagstr,
         "flux": flux,
-        "flux_err": flux_err,
-        "uu": fxx.real,
-        "uv": fxy.real,
-        "vv": fyy.real,
+        "flux_err": np.sqrt(m_cov[0, 0]),
+        "mom": np.array([mf, mr, mp, mc]),
+        "mom_err": np.sqrt(np.diagonal(m_cov)),
         "e1": e1,
         "e2": e2,
         "e": [e1, e2],
+        "e_err": e_err,
         "T": T,
-        "pars": [0, 0, (fxx - fyy).real, (2 * fxy).real, T, flux],
+        "T_err": T_err,
+        "pars": [0, 0, mp/mf, mc/mf, T, flux],
     }
