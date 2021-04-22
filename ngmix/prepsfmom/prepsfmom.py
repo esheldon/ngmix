@@ -208,13 +208,14 @@ def _gauss_kernels(
     fkxx = np.fft.fftn(rkxx)
     fkxy = np.fft.fftn(rkxy)
     fkyy = np.fft.fftn(rkyy)
-    fkff = np.fft.fftn(rkf**2)
-    fkrr = np.fft.fftn((rkxx + rkyy)**2)
-    fkrf = np.fft.fftn((rkxx + rkyy)*rkf)
-    fkpp = np.fft.fftn((rkxx - rkyy)**2)
-    fkrp = np.fft.fftn((rkxx + rkyy)*(rkxx - rkyy))
-    fkcc = np.fft.fftn((2*rkxy)**2)
-    fkrc = np.fft.fftn((rkxx + rkyy)*(2*rkxy))
+    # not using these - here for posterity
+    # fkff = np.fft.fftn(rkf**2)
+    # fkrr = np.fft.fftn((rkxx + rkyy)**2)
+    # fkrf = np.fft.fftn((rkxx + rkyy)*rkf)
+    # fkpp = np.fft.fftn((rkxx - rkyy)**2)
+    # fkrp = np.fft.fftn((rkxx + rkyy)*(rkxx - rkyy))
+    # fkcc = np.fft.fftn((2*rkxy)**2)
+    # fkrc = np.fft.fftn((rkxx + rkyy)*(2*rkxy))
 
     return dict(
         rkf=rkf,
@@ -225,13 +226,14 @@ def _gauss_kernels(
         fkxx=fkxx,
         fkxy=fkxy,
         fkyy=fkyy,
-        fkff=fkff,
-        fkrr=fkrr,
-        fkrf=fkrf,
-        fkrp=fkrp,
-        fkpp=fkpp,
-        fkcc=fkcc,
-        fkrc=fkrc,
+        # not using these - here for posterity
+        # fkff=fkff,
+        # fkrr=fkrr,
+        # fkrf=fkrf,
+        # fkrp=fkrp,
+        # fkpp=fkpp,
+        # fkcc=fkcc,
+        # fkrc=fkrc,
     )
 
 
@@ -247,7 +249,8 @@ def _measure_moments_fft(
     flagstr = ''
 
     imfft = np.fft.fftn(im)
-    inv_wgtfft = np.fft.fftn(inv_wgt)
+    # not using this - here for posterity
+    # inv_wgtfft = np.fft.fftn(inv_wgt)
 
     # we need to shift the FFT so that x = 0 is the center of the profile
     # this is a phase shift in fourier space
@@ -262,8 +265,9 @@ def _measure_moments_fft(
     imfft *= cen_phase
     imfft *= cen_phase
 
-    inv_wgtfft *= cen_phase
-    inv_wgtfft *= cen_phase
+    # not using this - here for posterity
+    # inv_wgtfft *= cen_phase
+    # inv_wgtfft *= cen_phase
 
     if psf_im is not None:
         # we also have to shift the center for the PSF (which could have a
@@ -304,35 +308,36 @@ def _measure_moments_fft(
 
     m_cov = np.zeros((4, 4)) + -9999.0
 
-    if True:
-        tot_var = np.prod(inv_wgt.shape) * np.max(inv_wgt)
-        m_cov[0, 0] = np.sum(tot_var * (kernels["fkf"]/psf_imfft)**2) * df**4
-        m_cov[1, 1] = np.sum(tot_var * (fkr/psf_imfft)**2) * df**4
-        m_cov[2, 2] = np.sum(tot_var * (fkp/psf_imfft)**2) * df**4
-        m_cov[3, 3] = np.sum(tot_var * (fkc/psf_imfft)**2) * df**4
+    tot_var = np.prod(inv_wgt.shape) * np.max(inv_wgt)
+    m_cov[0, 0] = np.sum(tot_var * (fkf/psf_imfft)**2) * df**4
+    m_cov[1, 1] = np.sum(tot_var * (fkr/psf_imfft)**2) * df**4
+    m_cov[2, 2] = np.sum(tot_var * (fkp/psf_imfft)**2) * df**4
+    m_cov[3, 3] = np.sum(tot_var * (fkc/psf_imfft)**2) * df**4
 
-        m_cov[0, 1] = np.sum(tot_var * kernels["fkf"] * fkr / psf_imfft**2).real * df**4
-        m_cov[1, 0] = m_cov[0, 1]
+    m_cov[0, 1] = np.sum(tot_var * fkf * fkr / psf_imfft**2).real * df**4
+    m_cov[1, 0] = m_cov[0, 1]
 
-        m_cov[1, 2] = np.sum(tot_var * fkr * fkp / psf_imfft**2).real * df**4
-        m_cov[2, 1] = m_cov[1, 2]
+    m_cov[1, 2] = np.sum(tot_var * fkr * fkp / psf_imfft**2).real * df**4
+    m_cov[2, 1] = m_cov[1, 2]
 
-        m_cov[1, 3] = np.sum(tot_var * fkr * fkc / psf_imfft**2).real * df**4
-        m_cov[3, 1] = m_cov[1, 2]
-    else:
-        m_cov[0, 0] = np.sum(inv_wgtfft * kernels["fkff"]/psf_imfft**2).real * df**2
-        m_cov[1, 1] = np.sum(inv_wgtfft * kernels["fkrr"]/psf_imfft**2).real * df**2
-        m_cov[2, 2] = np.sum(inv_wgtfft * kernels["fkpp"]/psf_imfft**2).real * df**2
-        m_cov[3, 3] = np.sum(inv_wgtfft * kernels["fkcc"]/psf_imfft**2).real * df**2
+    m_cov[1, 3] = np.sum(tot_var * fkr * fkc / psf_imfft**2).real * df**4
+    m_cov[3, 1] = m_cov[1, 2]
 
-        m_cov[0, 1] = np.sum(inv_wgtfft * kernels["fkrf"]/psf_imfft**2).real * df**2
-        m_cov[1, 0] = m_cov[0, 1]
-
-        m_cov[1, 2] = np.sum(inv_wgtfft * kernels["fkrp"]/psf_imfft**2).real * df**2
-        m_cov[2, 1] = m_cov[1, 2]
-
-        m_cov[1, 3] = np.sum(inv_wgtfft * kernels["fkrc"]/psf_imfft**2).real * df**2
-        m_cov[3, 1] = m_cov[1, 2]
+    # this version uses FFTs of the kernel producs with an FFT of the weight map
+    # doesn't work with PSFs in testing, so I am not using it
+    # m_cov[0, 0] = np.sum(inv_wgtfft * kernels["fkff"]/psf_imfft**2).real * df**2
+    # m_cov[1, 1] = np.sum(inv_wgtfft * kernels["fkrr"]/psf_imfft**2).real * df**2
+    # m_cov[2, 2] = np.sum(inv_wgtfft * kernels["fkpp"]/psf_imfft**2).real * df**2
+    # m_cov[3, 3] = np.sum(inv_wgtfft * kernels["fkcc"]/psf_imfft**2).real * df**2
+    #
+    # m_cov[0, 1] = np.sum(inv_wgtfft * kernels["fkrf"]/psf_imfft**2).real * df**2
+    # m_cov[1, 0] = m_cov[0, 1]
+    #
+    # m_cov[1, 2] = np.sum(inv_wgtfft * kernels["fkrp"]/psf_imfft**2).real * df**2
+    # m_cov[2, 1] = m_cov[1, 2]
+    #
+    # m_cov[1, 3] = np.sum(inv_wgtfft * kernels["fkrc"]/psf_imfft**2).real * df**2
+    # m_cov[3, 1] = m_cov[1, 2]
 
     flux = mf
     T = mr / mf
