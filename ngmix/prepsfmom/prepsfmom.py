@@ -324,7 +324,7 @@ def _measure_moments_fft(
     T_err = get_ratio_error(mr, mf, m_cov[1, 1], m_cov[0, 0], m_cov[0, 1])
     e_err = np.zeros(2)
     e_err[0] = get_ratio_error(mp, mr, m_cov[2, 2], m_cov[1, 1], m_cov[1, 2])
-    e_err[1] = get_ratio_error(mp, mr, m_cov[3, 3], m_cov[1, 1], m_cov[1, 3])
+    e_err[1] = get_ratio_error(mc, mr, m_cov[3, 3], m_cov[1, 1], m_cov[1, 3])
 
     return {
         "flags": flags,
