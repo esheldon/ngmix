@@ -253,6 +253,11 @@ def test_prepsfmom_psf(pad_factor):
     fitter = PrePSFMom(fwhm=fwhm, pad_factor=pad_factor)
 
     # get true flux
+    im = gal.drawImage(
+        nx=image_size,
+        ny=image_size,
+        wcs=gs_wcs,
+        method='no_pixel').array
     jac = Jacobian(
         y=cen, x=cen,
         dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
@@ -260,7 +265,6 @@ def test_prepsfmom_psf(pad_factor):
     obs = Observation(
         image=im,
         jacobian=jac,
-        psf=Observation(image=psf_im, jacobian=jac),
     )
     res = fitter.go(obs=obs)
     flux_true = res["flux"]
