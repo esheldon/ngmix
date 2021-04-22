@@ -241,6 +241,7 @@ def _measure_moments_fft(
     psf_im=None,
     psf_row_offset=None,
     psf_col_offset=None,
+    max_psf_frac=1e-5,
 ):
     flags = 0
     flagstr = ''
@@ -271,11 +272,15 @@ def _measure_moments_fft(
         fx = f.reshape(1, -1)
         fy = f.reshape(-1, 1)
         kcen = 2.0 * np.pi * (fy*psf_row_offset + fx*psf_col_offset)
-        cen_phase = np.cos(kcen) + 1j*np.sin(kcen)
+        psf_cen_phase = np.cos(kcen) + 1j*np.sin(kcen)
+        psf_imfft *= psf_cen_phase
+
+        # shift due to fourier transform definition
         psf_imfft *= cen_phase
 
         # make sure to zero out modes where we divide by zero
-        psf_zero_msk = np.abs(psf_imfft) == 0
+        abs_psfimfft = np.abs(psf_imfft)
+        psf_zero_msk = abs_psfimfft <= max_psf_frac * np.max(abs_psfimfft)
         if np.any(psf_zero_msk):
             psf_imfft[psf_zero_msk] = 1.0
             for k in kernels:
@@ -284,9 +289,6 @@ def _measure_moments_fft(
 
         # deconvolve!
         imfft /= psf_imfft
-
-        inv_wgtfft /= psf_imfft
-        inv_wgtfft /= psf_imfft
     else:
         psf_imfft = 1.0
 
@@ -302,19 +304,35 @@ def _measure_moments_fft(
 
     m_cov = np.zeros((4, 4)) + -9999.0
 
-    m_cov[0, 0] = np.sum(inv_wgtfft * kernels["fkff"]).real * df**2
-    m_cov[1, 1] = np.sum(inv_wgtfft * kernels["fkrr"]).real * df**2
-    m_cov[2, 2] = np.sum(inv_wgtfft * kernels["fkpp"]).real * df**2
-    m_cov[3, 3] = np.sum(inv_wgtfft * kernels["fkcc"]).real * df**2
+    if True:
+        tot_var = np.prod(inv_wgt.shape) * np.max(inv_wgt)
+        m_cov[0, 0] = np.sum(tot_var * (kernels["fkf"]/psf_imfft)**2) * df**4
+        m_cov[1, 1] = np.sum(tot_var * (fkr/psf_imfft)**2) * df**4
+        m_cov[2, 2] = np.sum(tot_var * (fkp/psf_imfft)**2) * df**4
+        m_cov[3, 3] = np.sum(tot_var * (fkc/psf_imfft)**2) * df**4
 
-    m_cov[0, 1] = np.sum(inv_wgtfft * kernels["fkrf"]).real * df**2
-    m_cov[1, 0] = m_cov[0, 1]
+        m_cov[0, 1] = np.sum(tot_var * kernels["fkf"] * fkr / psf_imfft**2).real * df**4
+        m_cov[1, 0] = m_cov[0, 1]
 
-    m_cov[1, 2] = np.sum(inv_wgtfft * kernels["fkrp"]).real * df**2
-    m_cov[2, 1] = m_cov[1, 2]
+        m_cov[1, 2] = np.sum(tot_var * fkr * fkp / psf_imfft**2).real * df**4
+        m_cov[2, 1] = m_cov[1, 2]
 
-    m_cov[1, 3] = np.sum(inv_wgtfft * kernels["fkrc"]).real * df**2
-    m_cov[3, 1] = m_cov[1, 2]
+        m_cov[1, 3] = np.sum(tot_var * fkr * fkc / psf_imfft**2).real * df**4
+        m_cov[3, 1] = m_cov[1, 2]
+    else:
+        m_cov[0, 0] = np.sum(inv_wgtfft * kernels["fkff"]/psf_imfft**2).real * df**2
+        m_cov[1, 1] = np.sum(inv_wgtfft * kernels["fkrr"]/psf_imfft**2).real * df**2
+        m_cov[2, 2] = np.sum(inv_wgtfft * kernels["fkpp"]/psf_imfft**2).real * df**2
+        m_cov[3, 3] = np.sum(inv_wgtfft * kernels["fkcc"]/psf_imfft**2).real * df**2
+
+        m_cov[0, 1] = np.sum(inv_wgtfft * kernels["fkrf"]/psf_imfft**2).real * df**2
+        m_cov[1, 0] = m_cov[0, 1]
+
+        m_cov[1, 2] = np.sum(inv_wgtfft * kernels["fkrp"]/psf_imfft**2).real * df**2
+        m_cov[2, 1] = m_cov[1, 2]
+
+        m_cov[1, 3] = np.sum(inv_wgtfft * kernels["fkrc"]/psf_imfft**2).real * df**2
+        m_cov[3, 1] = m_cov[1, 2]
 
     flux = mf
     T = mr / mf
