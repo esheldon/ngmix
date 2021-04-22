@@ -25,14 +25,19 @@ class PrePSFMom(object):
         The kernel. Only supports 'gauss' currently. Default is 'gauss'.
     pad_factor : int, optional
         The factor by which to pad the FFTs used for the image. Default is 4.
+    psf_trunc_fac : float, optional
+        In Fourier-space if a PSF is given with the observation, any modes
+        where the amplitude of the PSF profile is less than `psf_trunc_fac`
+        times the max will be given zero weight. Default is 1e-4.
     """
-    def __init__(self, fwhm, kernel='gauss', pad_factor=4):
+    def __init__(self, fwhm, kernel='gauss', pad_factor=4, psf_trunc_fac=1e-4):
         self.kernel = kernel
         self.fwhm = fwhm
         self.pad_factor = pad_factor
+        self.psf_trunc_fac = psf_trunc_fac
 
     def go(self, obs, return_kernels=False):
-        """Measure the pre-PSF moments
+        """Measure the pre-PSF moments.
 
         Parameters
         ----------
@@ -114,6 +119,7 @@ class PrePSFMom(object):
             im, inv_wgt,
             im_row0, im_col0,
             kres,
+            self.psf_trunc_fac,
             psf_im=psf_im,
             psf_row_offset=psf_row_offset,
             psf_col_offset=psf_col_offset,
@@ -240,10 +246,10 @@ def _gauss_kernels(
 def _measure_moments_fft(
     im, inv_wgt, cen_row, cen_col,
     kernels,
+    max_psf_frac,
     psf_im=None,
     psf_row_offset=None,
     psf_col_offset=None,
-    max_psf_frac=1e-5,
 ):
     flags = 0
     flagstr = ''

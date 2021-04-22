@@ -209,13 +209,13 @@ def test_prepsfmom_error(pad_factor):
     assert np.allclose(np.mean(g2arr), g2_true, atol=0, rtol=1e-2)
 
 
+@pytest.mark.parametrize('image_size', [107, 110])
 @pytest.mark.parametrize('pad_factor', [1.3234, 1])
-def test_prepsfmom_psf(pad_factor):
+def test_prepsfmom_psf(pad_factor, image_size):
     rng = np.random.RandomState(seed=100)
 
     fwhm = 0.9
     psf_fwhm = 0.6
-    image_size = 107
     cen = (image_size - 1)/2
     gs_wcs = galsim.ShearWCS(
         0.125, galsim.Shear(g1=-0, g2=0)).jacobian()
