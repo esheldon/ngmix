@@ -216,7 +216,7 @@ def _report_info(s, arr, mn, err):
 
 
 @pytest.mark.parametrize('direct_deconv', [False, True])
-@pytest.mark.parametrize('fwhm,psf_fwhm', [(0.6, 0.9), (0.5, 0.5)])
+@pytest.mark.parametrize('fwhm,psf_fwhm', [(0.6, 0.9), (1.5, 0.9)])
 @pytest.mark.parametrize('image_size', [107, 110])
 @pytest.mark.parametrize('pad_factor', [4, 2.5, 1, 1.2])
 def test_prepsfmom_psf(pad_factor, image_size, fwhm, psf_fwhm, direct_deconv):
@@ -254,6 +254,7 @@ def test_prepsfmom_psf(pad_factor, image_size, fwhm, psf_fwhm, direct_deconv):
     g2arr = []
     Tarr = []
     farr = []
+    momarr = []
 
     fitter = PrePSFMom(
         fwhm=1.2,
@@ -321,12 +322,18 @@ def test_prepsfmom_psf(pad_factor, image_size, fwhm, psf_fwhm, direct_deconv):
             g2arr.append(_g2)
             Tarr.append(res['T'])
             farr.append(res['flux'])
+            if not direct_deconv:
+                momarr.append(res["mom"])
 
     print("\n")
     _report_info("flux", farr, flux_true, res["flux_err"])
     _report_info("T", Tarr, T_true, res["T_err"])
     _report_info("g1", g1arr, g1_true, res["e_err"][0])
     _report_info("g2", g2arr, g2_true, res["e_err"][1])
+
+    if not direct_deconv:
+        mom_cov = np.cov(np.array(momarr).T)
+        print("mom cov:\n", res["mom_cov"]/mom_cov)
 
     if direct_deconv:
         etol = 2e-1
