@@ -14,8 +14,11 @@ from ngmix.gaussmom import GaussMom
 logger = logging.getLogger(__name__)
 
 
-class PrePSFMom(object):
-    """Measure a set of pre-PSF Gaussian weighted moments of an obs.
+class PrePSFGaussMom(object):
+    """Measure pre-PSF Gaussian weighted moments.
+
+    If the fwhm of the weight function is of similar size to the PSF or smaller,
+    then the object properties returned by this fitter will be very noisy.
 
     Parameters
     ----------
@@ -48,7 +51,7 @@ class PrePSFMom(object):
             The observation to measure.
         return_kernels : bool, optional
             If True, return the kernels used for the flux and moments.
-            Defaults to False.
+            Only valid when `direct_deconv` is False. Defaults to False.
 
         Returns
         -------

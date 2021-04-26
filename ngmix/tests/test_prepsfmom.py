@@ -2,7 +2,7 @@ import galsim
 import numpy as np
 import pytest
 
-from ngmix.prepsfmom import PrePSFMom
+from ngmix.prepsfmom import PrePSFGaussMom
 from ngmix import Jacobian
 from ngmix import Observation
 from ngmix.moments import fwhm_to_T
@@ -43,7 +43,7 @@ def test_prepsfmom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
     Tarr = []
     farr = []
 
-    fitter = PrePSFMom(fwhm=fwhm * weight_fac, pad_factor=1.2)
+    fitter = PrePSFGaussMom(fwhm=fwhm * weight_fac, pad_factor=1.2)
 
     # get true flux
     jac = Jacobian(
@@ -157,7 +157,7 @@ def test_prepsfmom_error(pad_factor, image_size, pixel_scale):
     Tarr = []
     farr = []
 
-    fitter = PrePSFMom(fwhm=1.2, pad_factor=pad_factor)
+    fitter = PrePSFGaussMom(fwhm=1.2, pad_factor=pad_factor)
 
     # get true flux
     jac = Jacobian(
@@ -257,7 +257,7 @@ def test_prepsfmom_psf(pad_factor, image_size, fwhm, psf_fwhm, direct_deconv):
     farr = []
     momarr = []
 
-    fitter = PrePSFMom(
+    fitter = PrePSFGaussMom(
         fwhm=1.2,
         pad_factor=pad_factor,
         direct_deconv=direct_deconv,

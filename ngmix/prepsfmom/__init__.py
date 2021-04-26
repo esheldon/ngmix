@@ -1,1 +1,1 @@
-from .prepsfmom import PrePSFMom  # noqa
+from .gaussmom import PrePSFGaussMom  # noqa
