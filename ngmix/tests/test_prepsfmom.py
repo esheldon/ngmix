@@ -209,16 +209,19 @@ def test_prepsfmom_error(pad_factor, image_size, pixel_scale):
     assert np.allclose(np.std(g2arr), res["e_err"][1], atol=0, rtol=etol*3)
 
 
+@pytest.mark.parametrize('pixel_scale', [0.125, 0.25])
 @pytest.mark.parametrize('direct_deconv', [False, True])
 @pytest.mark.parametrize('fwhm,psf_fwhm', [(0.6, 0.9), (1.5, 0.9)])
-@pytest.mark.parametrize('image_size', [107, 110])
+@pytest.mark.parametrize('image_size', [57, 58])
 @pytest.mark.parametrize('pad_factor', [2, 1, 1.5])
-def test_prepsfmom_psf(pad_factor, image_size, fwhm, psf_fwhm, direct_deconv):
+def test_prepsfmom_psf(
+    pad_factor, image_size, fwhm, psf_fwhm, direct_deconv, pixel_scale
+):
     rng = np.random.RandomState(seed=100)
 
     cen = (image_size - 1)/2
     gs_wcs = galsim.ShearWCS(
-        0.125, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
+        0.25, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
     scale = np.sqrt(gs_wcs.pixelArea())
     shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
     xy = gs_wcs.toImage(galsim.PositionD(shift))
@@ -315,7 +318,7 @@ def test_prepsfmom_psf(pad_factor, image_size, fwhm, psf_fwhm, direct_deconv):
 
     if direct_deconv:
         etol = 2e-1
-        gfac = 1
+        gfac = 1.25
     else:
         etol = 2e-2
         gfac = 10
