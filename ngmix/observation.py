@@ -88,6 +88,8 @@ class Observation(MetadataMixin):
         Optional psf Observation
     meta: dict
         Optional dictionary
+    mfrac: ndarray, optional
+        A masked fraction image for this observation.
     ignore_zero_weight: bool
         If True, do not store zero weight pixels in the pixels
         array.  Default is True.
@@ -119,6 +121,7 @@ class Observation(MetadataMixin):
                  gmix=None,
                  psf=None,
                  meta=None,
+                 mfrac=None,
                  store_pixels=True,
                  ignore_zero_weight=True):
 
@@ -196,6 +199,22 @@ class Observation(MetadataMixin):
         read only.  To reset the pixels you must reset the image/weight/jacobian
         """
         return self._pixels
+
+    @property
+    def mfrac(self):
+        """
+        getter for mfrac
+
+        returns a read-only reference
+        """
+        return self._get_view(self._mfrac)
+
+    @mfrac.setter
+    def mfrac(self, mfrac):
+        """
+        set the mfrac, with consistency checks
+        """
+        self.set_mfrac(mfrac)
 
     @property
     def bmask(self):
@@ -354,6 +373,40 @@ class Observation(MetadataMixin):
         self._weight = weight
         if update_pixels:
             self.update_pixels()
+
+    def set_mfrac(self, mfrac):
+        """
+        Set the masked fraction entry.
+
+        parameters
+        ----------
+        mfrac: ndarray (or None)
+            The new masked fraction image.
+        """
+        if mfrac is None:
+            if self.has_mfrac():
+                del self._mfrac
+        else:
+
+            image = self.image
+
+            # force contiguous C, but we don't know what dtype to expect
+            mfrac = np.ascontiguousarray(mfrac)
+            assert len(mfrac.shape) == 2, "mfrac must be 2d"
+
+            assert (mfrac.shape == image.shape), \
+                "image and mfrac must be same shape"
+
+            self._mfrac = mfrac
+
+    def has_mfrac(self):
+        """
+        returns True if a masked fraction image is set
+        """
+        if hasattr(self, '_mfrac'):
+            return True
+        else:
+            return False
 
     def set_bmask(self, bmask):
         """
@@ -650,6 +703,11 @@ class Observation(MetadataMixin):
         else:
             psf = None
 
+        if self.has_mfrac():
+            mfrac = self.mfrac.copy()
+        else:
+            mfrac = None
+
         meta = copy.deepcopy(self.meta)
 
         return Observation(
@@ -662,6 +720,7 @@ class Observation(MetadataMixin):
             jacobian=self.jacobian,  # makes a copy internally
             meta=meta,
             psf=psf,
+            mfrac=mfrac,
         )
 
     def update_pixels(self):

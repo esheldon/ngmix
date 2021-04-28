@@ -13,7 +13,7 @@ def image_data():
     rng = np.random.RandomState(seed=10)
 
     data = {}
-    for key in ['image', 'weight', 'bmask', 'ormask', 'noise']:
+    for key in ['image', 'weight', 'bmask', 'ormask', 'noise', 'mfrac']:
         data[key] = rng.normal(size=dims)
 
         if key == 'weight':
@@ -40,6 +40,7 @@ def test_observation_get_has(image_data):
     assert not obs.has_psf()
     assert not obs.has_psf_gmix()
     assert not obs.has_gmix()
+    assert not obs.has_mfrac()
 
     obs = Observation(
         image=image_data['image'],
@@ -63,6 +64,12 @@ def test_observation_get_has(image_data):
         noise=image_data['noise'])
     assert np.all(obs.noise == image_data['noise'])
     assert obs.has_noise()
+
+    obs = Observation(
+        image=image_data['image'],
+        noise=image_data['mfrac'])
+    assert np.all(obs.mfrac == image_data['mfrac'])
+    assert obs.has_mfrac()
 
     obs = Observation(
         image=image_data['image'],
@@ -110,7 +117,9 @@ def test_observation_set(image_data):
         jacobian=image_data['jacobian'],
         gmix=image_data['gmix'],
         psf=image_data['psf'],
-        meta=image_data['meta'])
+        meta=image_data['meta'],
+        mfrac=image_data['mfrac'],
+    )
 
     rng = np.random.RandomState(seed=11)
 
@@ -131,6 +140,11 @@ def test_observation_set(image_data):
     assert np.all(obs.bmask == new_arr)
     obs.bmask = None
     assert not obs.has_bmask()
+
+    new_arr = rng.normal(size=image_data['image'].shape)
+    assert np.all(obs.mfrac != new_arr)
+    obs.mfrac = new_arr
+    assert np.all(obs.mfrac == new_arr)
 
     new_arr = (np.exp(rng.normal(size=image_data['image'].shape)) *
                100).astype(np.int32)
@@ -326,7 +340,9 @@ def test_observation_copy(image_data):
         jacobian=image_data['jacobian'],
         gmix=image_data['gmix'],
         psf=image_data['psf'],
-        meta=image_data['meta'])
+        meta=image_data['meta'],
+        mfrac=image_data['mfrac'],
+    )
 
     new_obs = obs.copy()
 
@@ -336,6 +352,11 @@ def test_observation_copy(image_data):
     assert np.all(obs.image == new_obs.image)
     new_obs.image = new_arr
     assert np.all(obs.image != new_obs.image)
+
+    new_arr = rng.normal(size=image_data['image'].shape)
+    assert np.all(obs.mfrac == new_obs.mfrac)
+    new_obs.mfrac = new_arr
+    assert np.all(obs.mfrac != new_obs.mfrac)
 
     new_arr = np.exp(rng.normal(size=image_data['image'].shape))
     assert np.all(obs.weight == new_obs.weight)
@@ -387,7 +408,7 @@ def test_observation_copy(image_data):
 
 
 def _dotest_readonly_attrs(obs):
-    attrs = ['image', 'weight', 'bmask', 'ormask', 'noise']
+    attrs = ['image', 'weight', 'bmask', 'ormask', 'noise', 'mfrac']
     val = 9999
 
     for attr in attrs:
@@ -404,7 +425,7 @@ def _dotest_readonly_attrs(obs):
 
 def _dotest_writeable_attrs(obs):
 
-    attrs = ['image', 'weight', 'bmask', 'ormask', 'noise']
+    attrs = ['image', 'weight', 'bmask', 'ormask', 'noise', 'mfrac']
     val = 9999
 
     with obs.writeable():
@@ -434,6 +455,7 @@ def test_observation_context(image_data):
         ormask=image_data['ormask'].copy(),
         noise=image_data['noise'].copy(),
         jacobian=image_data['jacobian'],
+        mfeac=image_data['mfrac'].copy(),
     )
 
     _dotest_readonly_attrs(obs)
