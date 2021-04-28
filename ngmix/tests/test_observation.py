@@ -67,7 +67,7 @@ def test_observation_get_has(image_data):
 
     obs = Observation(
         image=image_data['image'],
-        noise=image_data['mfrac'])
+        mfrac=image_data['mfrac'])
     assert np.all(obs.mfrac == image_data['mfrac'])
     assert obs.has_mfrac()
 
