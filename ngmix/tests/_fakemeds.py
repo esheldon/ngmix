@@ -104,7 +104,7 @@ def write_cutouts(
                 elif cutout_type == 'noise':
                     imdata = rng.normal(scale=noise, size=imdata.shape)
                 elif cutout_type == 'mfrac':
-                    imdata = rng.uniform(scale=noise, size=imdata.shape)
+                    imdata = rng.uniform(size=imdata.shape)
                 elif cutout_type == 'psf':
                     row, col = [(box_size - 1)/2]*2
                     imdata = make_model_image(
