@@ -151,6 +151,7 @@ class Observation(MetadataMixin):
         self.set_noise(noise)
         self.set_gmix(gmix)
         self.set_psf(psf)
+        self.set_mfrac(mfrac)
 
     @property
     def image(self):
