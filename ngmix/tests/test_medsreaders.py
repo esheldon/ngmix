@@ -12,8 +12,9 @@ import numpy as np
 @pytest.mark.parametrize('with_bmask', [False, True])
 @pytest.mark.parametrize('with_ormask', [False, True])
 @pytest.mark.parametrize('with_noise', [False, True])
+@pytest.mark.parametrize('with_mfrac', [False, True])
 def test_medsreaders_smoke(
-    weight_type, with_psf, with_bmask, with_ormask, with_noise,
+    weight_type, with_psf, with_bmask, with_ormask, with_noise, with_mfrac,
 ):
     import ngmix.medsreaders
     from ._fakemeds import make_fake_meds
@@ -27,6 +28,8 @@ def test_medsreaders_smoke(
         cutout_types += ['ormask']
     if with_noise:
         cutout_types += ['noise']
+    if with_mfrac:
+        cutout_types += ['mfrac']
     if with_psf:
         cutout_types += ['psf']
 
@@ -54,6 +57,8 @@ def test_medsreaders_smoke(
                     assert obs.has_bmask()
                 if with_ormask:
                     assert obs.has_ormask()
+                if with_mfrac:
+                    assert obs.has_mfrac()
                 if with_noise:
                     assert obs.has_noise()
 

@@ -74,6 +74,7 @@
     - GMixEMFixedCen: fit mixtures with fixed centers for each component
     - GMixEMFluxOnly: fit mixtures allowing only the fluxes to vary
 - some refactoring of like modules into sub-packages.
+- Added `mfrac` attribute to observations to hold masked fraction images.
 
 ### deprecated/removed
 
