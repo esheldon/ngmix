@@ -455,7 +455,7 @@ def test_observation_context(image_data):
         ormask=image_data['ormask'].copy(),
         noise=image_data['noise'].copy(),
         jacobian=image_data['jacobian'],
-        mfeac=image_data['mfrac'].copy(),
+        mfrac=image_data['mfrac'].copy(),
     )
 
     _dotest_readonly_attrs(obs)
