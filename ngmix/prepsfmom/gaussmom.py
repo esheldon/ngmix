@@ -7,7 +7,6 @@ from ngmix.jacobian import Jacobian
 from ngmix.observation import Observation
 from ngmix.moments import fwhm_to_T
 from ngmix.util import get_ratio_error
-from ngmix.gaussmom import GaussMom
 
 
 logger = logging.getLogger(__name__)
