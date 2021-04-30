@@ -221,11 +221,13 @@ def test_prepsfmom_error(pad_factor, image_size, pixel_scale):
 @pytest.mark.parametrize('snr', [1e1, 1e3])
 @pytest.mark.parametrize('pixel_scale', [0.125, 0.25])
 @pytest.mark.parametrize('fwhm,psf_fwhm', [(0.6, 0.9), (1.5, 0.9)])
+@pytest.mark.parametrize('mom_fwhm', [1.2, 1.5, 2.0])
 @pytest.mark.parametrize('image_size', [57, 58])
 @pytest.mark.parametrize('pad_factor', [2, 1, 1.5])
-@pytest.mark.parametrize('psf_trunc_fac', [1e-5])
+@pytest.mark.parametrize('psf_trunc_fac', [1e-3, 1e-5])
 def test_prepsfmom_psf(
     pad_factor, image_size, fwhm, psf_fwhm, pixel_scale, snr, psf_trunc_fac,
+    mom_fwhm,
 ):
     rng = np.random.RandomState(seed=100)
 
@@ -285,7 +287,7 @@ def test_prepsfmom_psf(
     momarr = []
     snrarr = []
     fitter = PrePSFGaussMom(
-        fwhm=1.2,
+        fwhm=mom_fwhm,
         pad_factor=pad_factor,
         psf_trunc_fac=psf_trunc_fac,
     )
@@ -331,11 +333,10 @@ def test_prepsfmom_psf(
     _report_info("T", Tarr, T_true, res["T_err"])
     _report_info("g1", g1arr, g1_true, res["e_err"][0])
     _report_info("g2", g2arr, g2_true, res["e_err"][1])
-
     mom_cov = np.cov(np.array(momarr).T)
     print("mom cov ratio:\n", res["mom_cov"]/mom_cov, flush=True)
-    assert np.allclose(res["mom_cov"], mom_cov, atol=0, rtol=0.5)
     assert np.allclose(np.mean(farr), flux_true, atol=0, rtol=0.1)
+    assert np.allclose(np.std(farr), res["flux_err"], atol=0, rtol=0.2)
 
     # at low SNR we get a lot of problems with division by noisy things
     if snr > 100:

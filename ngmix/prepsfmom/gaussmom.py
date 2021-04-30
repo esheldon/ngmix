@@ -290,8 +290,10 @@ def _measure_moments_fft(
             if k.startswith("f"):
                 kernels[k][psf_zero_msk] = 0.0
 
+    g = 1.0 / psf_imfft
+
     # deconvolve!
-    imfft /= psf_imfft
+    imfft *= g
 
     # finally we build the kernels, moments and their errors
     df = f[1] - f[0]  # this is the area factor for the integral we are
@@ -313,7 +315,7 @@ def _measure_moments_fft(
     # we need a factor of the padding to correct for something...
     m_cov = np.zeros((4, 4))
     tot_var = np.sum(inv_wgt) * eff_pad_factor**2
-    kerns = [fkf / psf_imfft, fkr / psf_imfft, fkp / psf_imfft, fkc / psf_imfft]
+    kerns = [fkf * g, fkr * g, fkp * g, fkc * g]
     for i in range(4):
         for j in range(i, 4):
             m_cov[i, j] = np.sum(
