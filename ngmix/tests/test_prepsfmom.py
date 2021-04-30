@@ -151,7 +151,7 @@ def test_prepsfmom_gauss(
     g2_true = res["e"][1]
 
     for _ in range(100):
-        _im = im + (rng.normal(size=im.shape) * noise)
+        _im = im + rng.normal(size=im.shape, scale=noise)
         obs = Observation(
             image=_im,
             weight=wgt,
