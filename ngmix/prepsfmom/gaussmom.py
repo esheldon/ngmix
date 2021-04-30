@@ -21,9 +21,7 @@ class PrePSFGaussMom(object):
     Parameters
     ----------
     fwhm : float
-        The size of the kernel. This parameter has a slightly different meaning
-        for each kernel. Roughly each parameter corresponds to the FWHM of the
-        kernel.
+        The FWHM of the Gaussian kernel.
     pad_factor : int, optional
         The factor by which to pad the FFTs used for the image. Default is 4.
     psf_trunc_fac : float, optional
