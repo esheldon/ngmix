@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 
 from ngmix.prepsfmom import PrePSFGaussMom
+from ngmix.gaussmom import GaussMom
 from ngmix import Jacobian
 from ngmix import Observation
 
@@ -144,7 +145,7 @@ def test_prepsfmom_gauss(
         image=im_true,
         jacobian=jac,
     )
-    res = fitter.go(obs=obs)
+    res = GaussMom(fwhm=mom_fwhm).go(obs=obs)
     flux_true = res["flux"]
     T_true = res["T"]
     g1_true = res["e"][0]
