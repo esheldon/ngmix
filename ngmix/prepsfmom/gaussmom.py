@@ -1,7 +1,6 @@
 import logging
 
 import numpy as np
-import galsim
 
 from ngmix import GMixModel
 from ngmix.jacobian import Jacobian
@@ -32,15 +31,11 @@ class PrePSFGaussMom(object):
         In Fourier-space if a PSF is given with the observation, any modes
         where the amplitude of the PSF profile is less than `psf_trunc_fac`
         times the max will be given zero weight. Default is 1e-5.
-    direct_deconv : bool, optional
-        If True, remove the PSf via direct deconvolution. This procedure is faster,
-        but produces noisier measurements with inaccurate errors. Default is False.
     """
-    def __init__(self, fwhm, pad_factor=4, psf_trunc_fac=1e-5, direct_deconv=False):
+    def __init__(self, fwhm, pad_factor=4, psf_trunc_fac=1e-5):
         self.fwhm = fwhm
         self.pad_factor = pad_factor
         self.psf_trunc_fac = psf_trunc_fac
-        self.direct_deconv = direct_deconv
 
     def go(self, obs, return_kernels=False):
         """Measure the pre-PSF moments.
@@ -77,11 +72,7 @@ class PrePSFGaussMom(object):
         if psf_obs is None:
             return GaussMom(fwhm=self.fwhm).go(obs=obs)
         else:
-            if self.direct_deconv:
-                deconv_obs = _deconv_galsim(obs, psf_obs)
-                return GaussMom(fwhm=self.fwhm).go(obs=deconv_obs)
-            else:
-                return self._meas_fourier_only(obs, psf_obs, return_kernels)
+            return self._meas_fourier_only(obs, psf_obs, return_kernels)
 
     def _meas_fourier_only(self, obs, psf_obs, return_kernels):
         # pick the larger size
@@ -89,11 +80,12 @@ class PrePSFGaussMom(object):
             target_dim = int(obs.image.shape[0] * self.pad_factor)
         else:
             target_dim = int(psf_obs.image.shape[0] * self.pad_factor)
+        eff_pad_factor = target_dim / obs.image.shape[0]
 
         # pad the image and weight
         # compute new profile center
-        im, im_pad_offset = _zero_pad_image(obs.image.copy(), target_dim)
-        wgt, _ = _zero_pad_image(obs.weight.copy(), target_dim)
+        im, im_pad_offset, _ = _zero_pad_image(obs.image.copy(), target_dim)
+        wgt, _, _ = _zero_pad_image(obs.weight.copy(), target_dim)
         jac = obs.jacobian
         im_row0 = jac.row0 + im_pad_offset
         im_col0 = jac.col0 + im_pad_offset
@@ -102,7 +94,7 @@ class PrePSFGaussMom(object):
         # the object center. this offset gets removed in the FFT so that objects
         # stay in the same spot.
         # We assume the Jacobian is centered at the object/PSF center.
-        psf_im, psf_pad_offset = _zero_pad_image(
+        psf_im, psf_pad_offset, _ = _zero_pad_image(
             psf_obs.image.copy(), target_dim
         )
         psf_row0 = psf_obs.jacobian.row0 + psf_pad_offset
@@ -125,15 +117,14 @@ class PrePSFGaussMom(object):
         inv_wgt[msk] = 1.0 / wgt[msk]
 
         # run the actual measurements and return
-        im_area_fac = np.prod(im.shape) / np.prod(obs.image.shape)
         res = _measure_moments_fft(
-            im, inv_wgt, im_area_fac,
+            im, inv_wgt, eff_pad_factor,
             im_row0, im_col0,
             kres,
             self.psf_trunc_fac,
-            psf_im=psf_im,
-            psf_row_offset=psf_row_offset,
-            psf_col_offset=psf_col_offset,
+            psf_im,
+            psf_row_offset,
+            psf_col_offset,
         )
         if res['flags'] != 0:
             logger.debug("        pre-psf moments failed: %s" % res['flagstr'])
@@ -145,57 +136,6 @@ class PrePSFGaussMom(object):
             res["inv_wgt"] = inv_wgt
 
         return res
-
-
-def _deconv_galsim(obs, psf_obs):
-    im_cen = (psf_obs.image.shape[0] - 1)/2
-    im_cen_off = (
-        psf_obs.jacobian.col0 - im_cen,
-        psf_obs.jacobian.row0 - im_cen,
-    )
-    gspsf = galsim.InterpolatedImage(
-        galsim.ImageD(psf_obs.image),
-        wcs=psf_obs.jacobian.get_galsim_wcs(),
-        offset=im_cen_off,
-    )
-
-    im_cen = (obs.image.shape[0] - 1)/2
-    im_cen_off = (
-        obs.jacobian.col0 - im_cen,
-        obs.jacobian.row0 - im_cen,
-    )
-    gsim = galsim.InterpolatedImage(
-        galsim.ImageD(obs.image),
-        wcs=obs.jacobian.get_galsim_wcs(),
-        offset=im_cen_off,
-    )
-
-    deconv_im = galsim.Convolve([
-        gsim,
-        galsim.Deconvolve(gspsf),
-    ]).drawImage(
-        nx=obs.image.shape[0],
-        ny=obs.image.shape[0],
-        wcs=obs.jacobian.get_galsim_wcs(),
-        offset=im_cen_off,
-        method='no_pixel',
-    ).array
-
-    deconv_obs = Observation(
-        image=deconv_im,
-        weight=obs.weight.copy(),
-        jacobian=obs.jacobian,
-    )
-
-    if False:
-        cut = 87
-        import matplotlib.pyplot as plt
-        plt.figure()
-        plt.imshow(deconv_obs.image[cut:-cut, cut:-cut])
-        import pdb
-        pdb.set_trace()
-
-    return deconv_obs
 
 
 def _zero_pad_image(im, target_dim):
@@ -226,7 +166,7 @@ def _zero_pad_image(im, target_dim):
         ]
     )
 
-    return im_padded, pad_width_before
+    return im_padded, pad_width_before, pad_width_after
 
 
 def _gauss_kernels(
@@ -301,13 +241,13 @@ def _gauss_kernels(
 
 
 def _measure_moments_fft(
-    im, inv_wgt, im_area_fac,
+    im, inv_wgt, eff_pad_factor,
     cen_row, cen_col,
     kernels,
     max_psf_frac,
-    psf_im=None,
-    psf_row_offset=None,
-    psf_col_offset=None,
+    psf_im,
+    psf_row_offset,
+    psf_col_offset,
 ):
     flags = 0
     flagstr = ''
@@ -323,39 +263,35 @@ def _measure_moments_fft(
     fy = f.reshape(-1, 1)
     kcen = 2.0 * np.pi * (fy*cen_row + fx*cen_col)
     cen_phase = np.cos(kcen) + 1j*np.sin(kcen)
-    # instead of adjusting the kernels, we will sapply the shift twice to the
-    # image
+    # instead of adjusting the kernels, we will apply the shift twice to the image
     imfft *= cen_phase
     imfft *= cen_phase
 
-    if psf_im is not None:
-        # first we shift the PSF to the object center
-        psf_imfft = np.fft.fftn(psf_im)
-        fx = f.reshape(1, -1)
-        fy = f.reshape(-1, 1)
-        kcen = 2.0 * np.pi * (fy*psf_row_offset + fx*psf_col_offset)
-        psf_cen_phase = np.cos(kcen) + 1j*np.sin(kcen)
-        psf_imfft *= psf_cen_phase
+    # first we shift the PSF to the object center
+    psf_imfft = np.fft.fftn(psf_im)
+    fx = f.reshape(1, -1)
+    fy = f.reshape(-1, 1)
+    kcen = 2.0 * np.pi * (fy*psf_row_offset + fx*psf_col_offset)
+    psf_cen_phase = np.cos(kcen) + 1j*np.sin(kcen)
+    psf_imfft *= psf_cen_phase
 
-        # now we apply the shift as above
-        psf_imfft *= cen_phase
+    # now we apply the shift as above
+    psf_imfft *= cen_phase
 
-        # now we remove the PSF
-        # we truncate models below max_psf_frac of the maximum of the PSF profile
-        # set the PSF to 1 there to make sure we don't divide by zero
-        # set the kernels to zero there to ensure we do not use those modes
-        abs_psfimfft = np.abs(psf_imfft)
-        psf_zero_msk = abs_psfimfft <= max_psf_frac * np.max(abs_psfimfft)
-        if np.any(psf_zero_msk):
-            psf_imfft[psf_zero_msk] = 1.0
-            for k in kernels:
-                if k.startswith("f"):
-                    kernels[k][psf_zero_msk] = 0.0
+    # now we remove the PSF
+    # we truncate models below max_psf_frac of the maximum of the PSF profile
+    # set the PSF to 1 there to make sure we don't divide by zero
+    # set the kernels to zero there to ensure we do not use those modes
+    abs_psfimfft = np.abs(psf_imfft)
+    psf_zero_msk = abs_psfimfft <= max_psf_frac * np.max(abs_psfimfft)
+    if np.any(psf_zero_msk):
+        psf_imfft[psf_zero_msk] = 1.0
+        for k in kernels:
+            if k.startswith("f"):
+                kernels[k][psf_zero_msk] = 0.0
 
-        # deconvolve!
-        imfft /= psf_imfft
-    else:
-        psf_imfft = 1.0
+    # deconvolve!
+    imfft /= psf_imfft
 
     # finally we build the kernels, moments and their errors
     df = f[1] - f[0]  # this is the area factor for the integral we are
@@ -374,10 +310,9 @@ def _measure_moments_fft(
     # build a covariance matrix of the moments
     # here we assume each Fourier mode is independent and sum the variances
     # the variance in each mode is simply the total variance over the input image
-    # for a reason I do not follow, we have to treat the zero-padded pixels
-    # as if they have variance too
+    # we need a factor of the padding to correct for something...
     m_cov = np.zeros((4, 4))
-    tot_var = im_area_fac * np.sum(inv_wgt)
+    tot_var = np.sum(inv_wgt) * eff_pad_factor**2
     kerns = [fkf / psf_imfft, fkr / psf_imfft, fkp / psf_imfft, fkc / psf_imfft]
     for i in range(4):
         for j in range(i, 4):
