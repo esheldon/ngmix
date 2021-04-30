@@ -24,6 +24,42 @@ def _report_info(s, arr, mn, err):
         )
 
 
+def test_prepsfmom_gauss_raises_nopsf():
+    fitter = PrePSFGaussMom(1.2)
+    obs = Observation(image=np.zeros((10, 10)))
+    with pytest.raises(RuntimeError) as e:
+        fitter.go(obs)
+
+    assert "PSF must be set" in str(e.value)
+
+
+def test_prepsfmom_gauss_raises_badjacob():
+    fitter = PrePSFGaussMom(1.2)
+
+    gs_wcs = galsim.ShearWCS(
+        0.2, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
+    jac = Jacobian(
+        y=0, x=0,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
+    psf_jac = Jacobian(
+        y=0, x=0,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy*2)
+
+    obs = Observation(
+        image=np.zeros((10, 10)),
+        jacobian=jac,
+        psf=Observation(image=np.zeros((10, 10)), jacobian=psf_jac),
+    )
+
+    with pytest.raises(RuntimeError) as e:
+        fitter.go(obs)
+
+    assert "Jacobian" in str(e.value)
+
+
 @pytest.mark.parametrize('snr', [1e1, 1e3])
 @pytest.mark.parametrize('pixel_scale', [0.125, 0.25])
 @pytest.mark.parametrize('fwhm,psf_fwhm', [(0.6, 0.9), (1.5, 0.9)])
