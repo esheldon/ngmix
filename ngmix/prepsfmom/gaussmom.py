@@ -56,23 +56,17 @@ class PrePSFGaussMom(object):
             raise ValueError("input obs must be an Observation")
 
         if not obs.has_psf():
-            psf_obs = None
-        else:
-            psf_obs = obs.get_psf()
+            raise RuntimeError("The PSF must be set to measure a pre-PSF moment!")
 
-        if (
-            obs.has_psf()
-            and psf_obs.jacobian.get_galsim_wcs() != obs.jacobian.get_galsim_wcs()
-        ):
+        psf_obs = obs.get_psf()
+
+        if psf_obs.jacobian.get_galsim_wcs() != obs.jacobian.get_galsim_wcs():
             raise RuntimeError(
                 "The PSF and observation must have the same WCS "
                 "Jacobian for measuring pre-PSF moments."
             )
 
-        if psf_obs is None:
-            return GaussMom(fwhm=self.fwhm).go(obs=obs)
-        else:
-            return self._meas_fourier_only(obs, psf_obs, return_kernels)
+        return self._meas_fourier_only(obs, psf_obs, return_kernels)
 
     def _meas_fourier_only(self, obs, psf_obs, return_kernels):
         # pick the larger size
