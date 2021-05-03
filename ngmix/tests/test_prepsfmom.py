@@ -67,10 +67,8 @@ def test_prepsfmom_gauss_raises_badjacob():
 @pytest.mark.parametrize('mom_fwhm', [1.2, 1.5, 2.0])
 @pytest.mark.parametrize('image_size', [57, 58])
 @pytest.mark.parametrize('pad_factor', [2, 1, 1.5])
-@pytest.mark.parametrize('psf_trunc_fac', [1e-3, 1e-5])
 def test_prepsfmom_gauss(
-    pad_factor, image_size, fwhm, psf_fwhm, pixel_scale, snr, psf_trunc_fac,
-    mom_fwhm,
+    pad_factor, image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm,
 ):
     rng = np.random.RandomState(seed=100)
 
@@ -132,7 +130,6 @@ def test_prepsfmom_gauss(
     fitter = PrePSFGaussMom(
         fwhm=mom_fwhm,
         pad_factor=pad_factor,
-        psf_trunc_fac=psf_trunc_fac,
     )
 
     # get true flux
@@ -180,9 +177,3 @@ def test_prepsfmom_gauss(
     print("mom cov ratio:\n", res["mom_cov"]/mom_cov, flush=True)
     assert np.allclose(np.mean(farr), flux_true, atol=0, rtol=0.1)
     assert np.allclose(np.std(farr), res["flux_err"], atol=0, rtol=0.2)
-
-    # at low SNR we get a lot of problems with division by noisy things
-    if snr > 100:
-        assert np.allclose(np.mean(Tarr), T_true, atol=0, rtol=0.1)
-        assert np.allclose(np.mean(g1arr), g1_true, atol=0, rtol=0.2)
-        assert np.allclose(np.mean(g2arr), g2_true, atol=0, rtol=0.2)

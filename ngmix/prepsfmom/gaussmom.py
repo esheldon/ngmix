@@ -24,15 +24,14 @@ class PrePSFGaussMom(object):
         The FWHM of the Gaussian kernel.
     pad_factor : int, optional
         The factor by which to pad the FFTs used for the image. Default is 4.
-    psf_trunc_fac : float, optional
-        In Fourier-space if a PSF is given with the observation, any modes
-        where the amplitude of the PSF profile is less than `psf_trunc_fac`
-        times the max will be given zero weight. Default is 1e-5.
+    kernel_trunc_fac : float, optional
+        The kernel is truncated in Fourier-space at this factor times the kernel
+        FWHM. Default is 1.
     """
-    def __init__(self, fwhm, pad_factor=4, psf_trunc_fac=1e-5):
+    def __init__(self, fwhm, pad_factor=4, kernel_trunc_fac=1):
         self.fwhm = fwhm
         self.pad_factor = pad_factor
-        self.psf_trunc_fac = psf_trunc_fac
+        self.kernel_trunc_fac = kernel_trunc_fac
 
     def go(self, obs, return_kernels=False):
         """Measure the pre-PSF moments.
@@ -99,6 +98,7 @@ class PrePSFGaussMom(object):
             self.fwhm,
             im_row0, im_col0,
             jac.dvdrow, jac.dvdcol, jac.dudrow, jac.dudcol,
+            self.kernel_trunc_fac,
         )
 
         # compute the inverse of the weight map, not dividing by zero
@@ -111,7 +111,6 @@ class PrePSFGaussMom(object):
             im, inv_wgt, eff_pad_factor,
             im_row0, im_col0,
             kres,
-            self.psf_trunc_fac,
             psf_im,
             psf_row_offset,
             psf_col_offset,
@@ -164,6 +163,7 @@ def _gauss_kernels(
     kernel_size,
     row0, col0,
     dvdrow, dvdcol, dudrow, dudcol,
+    kernel_trunc_fac,
 ):
     """
     This function renders the kernel in real-space and then computes the right
@@ -181,6 +181,8 @@ def _gauss_kernels(
         dudrow=dudrow,
         dudcol=dudcol,
     )
+
+    fft_fwhm = 1.0 / kernel_size
 
     T = fwhm_to_T(kernel_size)
 
@@ -214,6 +216,19 @@ def _gauss_kernels(
     fkxy = np.fft.fftn(rkxy)
     fkyy = np.fft.fftn(rkyy)
 
+    # we truncate the kernels in fourier space
+    f = np.fft.fftfreq(dim)
+    fx = f.reshape(1, -1)
+    fy = f.reshape(-1, 1)
+    Atinv = np.linalg.inv([[dvdrow, dvdcol], [dudrow, dudcol]]).T
+    fv = Atinv[0, 0] * fy + Atinv[0, 1] * fx
+    fu = Atinv[1, 0] * fy + Atinv[1, 1] * fx
+    msk = (fu**2 + fv**2) >= (fft_fwhm * kernel_trunc_fac)**2
+    fkf[msk] = 0
+    fkxx[msk] = 0
+    fkxy[msk] = 0
+    fkyy[msk] = 0
+
     # the linear combinations here measure the moments proportional to the size
     # and shears
     return dict(
@@ -232,10 +247,10 @@ def _measure_moments_fft(
     im, inv_wgt, eff_pad_factor,
     cen_row, cen_col,
     kernels,
-    max_psf_frac,
     psf_im,
     psf_row_offset,
     psf_col_offset,
+    max_psf_frac=1e-12,
 ):
     flags = 0
     flagstr = ''
