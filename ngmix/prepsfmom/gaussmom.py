@@ -101,7 +101,6 @@ class PrePSFGaussMom(object):
             self.fwhm,
             im_row0, im_col0,
             jac.dvdrow, jac.dvdcol, jac.dudrow, jac.dudcol,
-            wgt,
         )
 
         # compute the inverse of the weight map, not dividing by zero
@@ -167,7 +166,6 @@ def _gauss_kernels(
     kernel_size,
     row0, col0,
     dvdrow, dvdcol, dudrow, dudcol,
-    wgt,
 ):
     # first we get the kernel from ngmix
     jac = Jacobian(
@@ -192,10 +190,6 @@ def _gauss_kernels(
     weight.set_flux(1.0/norm/jac.area)
     rkf = weight.make_image((dim, dim), jacobian=jac, fast_exp=True)
 
-    # record the maximum value for when we scale by the weight map below
-    mval = np.max(rkf)
-    mind = np.unravel_index(np.argmax(rkf, axis=None), rkf.shape)
-
     # build u,v for each pixel to compute the moment kernels
     x, y = np.meshgrid(np.arange(dim), np.arange(dim), indexing='xy')
     x = x.astype(np.float64)
@@ -204,10 +198,6 @@ def _gauss_kernels(
     x -= col0
     v = dvdrow*y + dvdcol*x
     u = dudrow*y + dudcol*x
-
-    # now rescale by weight map, keeping the maximum value the same
-    rkf *= wgt
-    rkf *= (mval/rkf[mind])
 
     # now build the moment kernels and their FFTs
     rkxx = rkf * u**2
