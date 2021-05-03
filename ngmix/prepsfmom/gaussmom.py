@@ -165,6 +165,13 @@ def _gauss_kernels(
     row0, col0,
     dvdrow, dvdcol, dudrow, dudcol,
 ):
+    """
+    This function renders the kernel in real-space and then computes the right
+    set of FFTs.
+
+    It is possible to directly render the kernel in Fourier-space which may yield
+    faster code. However this has not been done here.
+    """
     # first we get the kernel from ngmix
     jac = Jacobian(
         row=row0,
