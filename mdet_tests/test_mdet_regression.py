@@ -245,7 +245,11 @@ def test_mdet_regression(fname, write=False):
                     adata = all_res[col]
                     odata = old_data[col].copy()
                     odata[5] = odata[5] * SCALE**2
-                elif col.startswith('wmom_band_flux') and '1.3.8' in fname:
+                elif (
+                    col.startswith('wmom_band_flux')
+                    and not col.endswith('flags')
+                    and '1.3.8' in fname
+                ):
                     odata = old_data[col].copy() * SCALE**2
                 else:
                     adata = all_res[col]
