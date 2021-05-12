@@ -502,6 +502,24 @@ def test_observation_set_store_pixels(image_data):
     obs.store_pixels = True
     assert obs.pixels is not None
 
+    obs = Observation(
+        image=image_data['image'],
+        store_pixels=False,
+    )
+    with obs.writeable():
+        assert obs.pixels is None
+        obs.store_pixels = True
+        # we force an update here since this change should be expected
+        assert obs.pixels is not None
+
+        obs.store_pixels = False
+        assert obs.pixels is None
+
+        obs.store_pixels = True
+
+    # final state should be this
+    assert obs.pixels is not None
+
 
 def test_observation_set_ignore_zero_weight(image_data):
     wgt = image_data["weight"].copy()
@@ -531,4 +549,26 @@ def test_observation_set_ignore_zero_weight(image_data):
     obs.ignore_zero_weight = True
     assert len(obs.pixels) == wgt.size-4
     obs.ignore_zero_weight = False
+    assert len(obs.pixels) == wgt.size
+
+    obs = Observation(
+        image=image_data['image'],
+        weight=wgt,
+        store_pixels=True,
+        ignore_zero_weight=True,
+    )
+    with obs.writeable():
+        assert obs.pixels is not None
+        assert len(obs.pixels) == wgt.size-4
+
+        # we force a change here since this is expected
+        obs.ignore_zero_weight = False
+        assert len(obs.pixels) == wgt.size
+
+        obs.ignore_zero_weight = True
+        assert len(obs.pixels) == wgt.size-4
+
+        obs.ignore_zero_weight = False
+
+    # final state should be this
     assert len(obs.pixels) == wgt.size
