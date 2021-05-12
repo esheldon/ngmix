@@ -46,6 +46,7 @@
 - fixed a bug in `ngmix.priors.TwoSidedErf.get_fdiff` in handling array inputs
 - fixed bug in `TruncatedSimpleGauss2D` where the truncation radius was applied about
   zero in some methods and not about the center
+- fixed flux unit scaling in metadetect regression tests
 
 ### new features
 
