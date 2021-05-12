@@ -466,3 +466,69 @@ def test_observation_context(image_data):
 
     with obs.writeable():
         _dotest_writeable_attrs(obs)
+
+
+@pytest.mark.parametrize('ignore_zero_weight', [False, True])
+@pytest.mark.parametrize('store_pixels', [False, True])
+def test_observation_copy_propagate(image_data, store_pixels, ignore_zero_weight):
+    obs = Observation(
+        image=image_data['image'],
+        store_pixels=store_pixels,
+        ignore_zero_weight=ignore_zero_weight,
+    )
+    obs1 = obs.copy()
+    assert obs.store_pixels == obs1.store_pixels
+    assert obs.ignore_zero_weight == obs1.ignore_zero_weight
+
+
+def test_observation_set_store_pixels(image_data):
+    obs = Observation(
+        image=image_data['image'],
+        store_pixels=False,
+    )
+    assert obs.pixels is None
+    obs.store_pixels = True
+    assert obs.pixels is not None
+    obs.store_pixels = False
+    assert obs.pixels is None
+
+    obs = Observation(
+        image=image_data['image'],
+        store_pixels=True,
+    )
+    assert obs.pixels is not None
+    obs.store_pixels = False
+    assert obs.pixels is None
+    obs.store_pixels = True
+    assert obs.pixels is not None
+
+
+def test_observation_set_ignore_zero_weight(image_data):
+    wgt = image_data["weight"].copy()
+    wgt[0:2, 0:2] = 0
+
+    obs = Observation(
+        image=image_data['image'],
+        weight=wgt,
+        store_pixels=True,
+        ignore_zero_weight=True,
+    )
+    assert obs.pixels is not None
+    assert len(obs.pixels) == wgt.size-4
+    obs.ignore_zero_weight = False
+    assert len(obs.pixels) == wgt.size
+    obs.ignore_zero_weight = True
+    assert len(obs.pixels) == wgt.size-4
+
+    obs = Observation(
+        image=image_data['image'],
+        weight=wgt,
+        store_pixels=True,
+        ignore_zero_weight=False,
+    )
+    assert obs.pixels is not None
+    assert len(obs.pixels) == wgt.size
+    obs.ignore_zero_weight = True
+    assert len(obs.pixels) == wgt.size-4
+    obs.ignore_zero_weight = False
+    assert len(obs.pixels) == wgt.size
