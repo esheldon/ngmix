@@ -242,8 +242,9 @@ def test_mdet_regression(fname, write=False):
             if np.issubdtype(old_data[col].dtype, np.number):
 
                 if col == 'wmom_pars' and '1.3.8' in fname:
-                    adata = all_res[col][:, :5]
-                    odata = old_data[col][:, :5]
+                    adata = all_res[col]
+                    odata = old_data[col].copy()
+                    odata[5] = odata[5] * SCALE**2
                 elif col.startswith('wmom_band_flux') and '1.3.8' in fname:
                     odata = old_data[col].copy() * SCALE**2
                 else:
