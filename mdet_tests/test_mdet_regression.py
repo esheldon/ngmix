@@ -106,9 +106,11 @@ TEST_METADETECT_CONFIG = {
     'imperfect_flags': 0,
 }
 
+SCALE = 0.25
+
 
 def make_sim(seed=42):
-    scale = 0.25
+    scale = SCALE
     flux = 10.0**(0.4 * (30 - 18))
     noise = 10
     ngals = 120
@@ -242,6 +244,8 @@ def test_mdet_regression(fname, write=False):
                 if col == 'wmom_pars' and '1.3.8' in fname:
                     adata = all_res[col][:, :5]
                     odata = old_data[col][:, :5]
+                elif col.startswith('wmom_band_flux') and '1.3.8' in fname:
+                    odata = old_data[col].copy() * SCALE**2
                 else:
                     adata = all_res[col]
                     odata = old_data[col]
