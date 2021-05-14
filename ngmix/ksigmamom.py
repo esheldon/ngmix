@@ -145,7 +145,7 @@ def _measure_moments_fft(kim, kpsf_im, inv_wgt, eff_pad_factor, kernels, drow, d
     dim = kim.shape[0]
 
     # deconvolve PSF
-    kim, kpsf_im, _ = _deconvolve_im_psf(
+    kim, kpsf_im, _ = _deconvolve_im_psf_inplace(
         kim[msk],
         kpsf_im[msk],
         # max amplitude is flux which is 0,0 in the standard FFT convention
@@ -236,7 +236,7 @@ def _zero_pad_image(im, target_dim):
         pad_width_before = twice_pad_width // 2
         pad_width_after = pad_width_before + 1
 
-    assert pad_width_before + pad_width_after == twice_pad_width
+    # assert pad_width_before + pad_width_after == twice_pad_width
 
     im_padded = np.pad(
         im,
@@ -244,13 +244,13 @@ def _zero_pad_image(im, target_dim):
         mode='constant',
         constant_values=0,
     )
-    assert np.array_equal(
-        im,
-        im_padded[
-            pad_width_before:im_padded.shape[0] - pad_width_after,
-            pad_width_before:im_padded.shape[0] - pad_width_after
-        ]
-    )
+    # assert np.array_equal(
+    #     im,
+    #     im_padded[
+    #         pad_width_before:im_padded.shape[0] - pad_width_after,
+    #         pad_width_before:im_padded.shape[0] - pad_width_after
+    #     ]
+    # )
 
     return im_padded, pad_width_before, pad_width_after
 
@@ -318,7 +318,7 @@ def _zero_pad_and_compute_centroided_fft_and_cen_phase(
     )
 
 
-def _deconvolve_im_psf(kim, kpsf_im, max_amp, min_psf_frac=1e-5):
+def _deconvolve_im_psf_inplace(kim, kpsf_im, max_amp, min_psf_frac=1e-5):
     """deconvolve the PSF from an image in place.
 
     Returns the deconvolved image, the kpsf_im used,
@@ -327,12 +327,11 @@ def _deconvolve_im_psf(kim, kpsf_im, max_amp, min_psf_frac=1e-5):
     min_amp = min_psf_frac * max_amp
     abs_kpsf_im = np.abs(kpsf_im)
     msk = abs_kpsf_im <= min_amp
-    kpsf_im_deconv = kpsf_im.copy()
     if np.any(msk):
-        kpsf_im_deconv[msk] = kpsf_im_deconv[msk] / abs_kpsf_im[msk] * min_amp
+        kpsf_im[msk] = kpsf_im[msk] / abs_kpsf_im[msk] * min_amp
 
-    kim_deconv = kim/kpsf_im
-    return kim_deconv, kpsf_im_deconv, msk
+    kim /= kpsf_im
+    return kim, kpsf_im, msk
 
 
 def _ksigma_kernels(
