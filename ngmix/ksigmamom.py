@@ -195,10 +195,7 @@ def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, d
     conj_kerns = [np.conj(k) for k in kerns]
     for i in range(4):
         for j in range(i, 4):
-            m_cov[i, j] = np.sum(
-                (tot_var * kerns[i] * conj_kerns[j]).real
-                * df4
-            )
+            m_cov[i, j] = np.sum((tot_var * kerns[i] * conj_kerns[j]).real) * df4
             m_cov[j, i] = m_cov[i, j]
 
     # now finally build the outputs and their errors
