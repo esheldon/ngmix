@@ -70,13 +70,13 @@ class KSigmaMom(object):
 
         # pad image, psf and weight map, get FFTs, apply cen_phases
         kim, im_row, im_col = _zero_pad_and_compute_fft(
-            obs.image.copy(), obs.jacobian.row0, obs.jacobian.col0, target_dim,
+            obs.image, obs.jacobian.row0, obs.jacobian.col0, target_dim,
         )
         fft_dim = kim.shape[0]
 
         psf_obs = obs.psf
         kpsf_im, psf_im_row, psf_im_col = _zero_pad_and_compute_fft(
-            psf_obs.image.copy(),
+            psf_obs.image,
             psf_obs.jacobian.row0, psf_obs.jacobian.col0,
             target_dim,
         )
