@@ -1,6 +1,7 @@
 import logging
 
 import numpy as np
+import scipy.fft as fft
 
 from ngmix.observation import Observation
 from ngmix.moments import fwhm_to_sigma
@@ -74,7 +75,7 @@ class KSigmaMom(object):
             obs.image.copy(), obs.jacobian.row0, obs.jacobian.col0, target_dim,
             apply_phase=False,
         )
-        wgt = _zero_pad_image(obs.weight.copy(), target_dim)[0]
+        fft_dim = kim.shape[0]
 
         psf_obs = obs.psf
         (
@@ -116,32 +117,38 @@ class KSigmaMom(object):
             obs.jacobian.dudrow, obs.jacobian.dudcol,
         )
 
-        # compute the inverse of the weight map, not dividing by zero
-        inv_wgt = np.zeros_like(wgt)
-        msk = wgt > 0
-        inv_wgt[msk] = 1.0 / wgt[msk]
+        # compute the total variance from weight map
+        msk = obs.weight > 0
+        tot_var = np.sum(1.0 / obs.weight[msk])
 
         # run the actual measurements and return
         res = _measure_moments_fft(
-            kim, kpsf_im, inv_wgt, eff_pad_factor, kres,
+            kim, kpsf_im, tot_var, eff_pad_factor, kres,
             im_row - psf_im_row, im_col - psf_im_col,
         )
         if res['flags'] != 0:
             logger.debug("ksigma pre-psf moments failed: %s" % res['flagstr'])
 
         if return_kernels:
-            res["kernels"] = kres
+            # put the kernels back into their unpacked state
+            new_kres = {}
+            for k in kres:
+                if k == "msk":
+                    continue
+                new_kres[k] = np.zeros((fft_dim, fft_dim), dtype=np.complex128)
+                new_kres[k][kres["msk"]] = kres[k]
+            res["kernels"] = new_kres
 
         return res
 
 
-def _measure_moments_fft(kim, kpsf_im, inv_wgt, eff_pad_factor, kernels, drow, dcol):
+def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, dcol):
     flags = 0
     flagstr = ''
 
     # we only need to do things where the ksigma kernel is non-zero
     # this saves a bunch of CPU cycles
-    msk = kernels["fkf"] != 0
+    msk = kernels["msk"]
     dim = kim.shape[0]
 
     # deconvolve PSF
@@ -164,24 +171,26 @@ def _measure_moments_fft(kim, kpsf_im, inv_wgt, eff_pad_factor, kernels, drow, d
     # real-space center of the object (0 in our coordinate system).
     # thus we code the factor of 1/n by hand
     df = 1/dim
+    df2 = df * df
+    df4 = df2 * df2
 
     # we only sum where the kernel is nonzero
-    fkf = kernels["fkf"][msk]
-    fkr = kernels["fkr"][msk]
-    fkp = kernels["fkp"][msk]
-    fkc = kernels["fkc"][msk]
+    fkf = kernels["fkf"]
+    fkr = kernels["fkr"]
+    fkp = kernels["fkp"]
+    fkc = kernels["fkc"]
 
-    mf = np.sum(kim * fkf).real * df**2
-    mr = np.sum(kim * fkr).real * df**2
-    mp = np.sum(kim * fkp).real * df**2
-    mc = np.sum(kim * fkc).real * df**2
+    mf = np.sum(kim * fkf).real * df2
+    mr = np.sum(kim * fkr).real * df2
+    mp = np.sum(kim * fkp).real * df2
+    mc = np.sum(kim * fkc).real * df2
 
     # build a covariance matrix of the moments
     # here we assume each Fourier mode is independent and sum the variances
     # the variance in each mode is simply the total variance over the input image
     # we need a factor of the padding to correct for something...
     m_cov = np.zeros((4, 4))
-    tot_var = np.sum(inv_wgt) * eff_pad_factor**2
+    tot_var *= eff_pad_factor**2
     kerns = [fkf / kpsf_im, fkr / kpsf_im, fkp / kpsf_im, fkc / kpsf_im]
     conj_kerns = [np.conj(k) for k in kerns]
     for i in range(4):
@@ -190,7 +199,7 @@ def _measure_moments_fft(kim, kpsf_im, inv_wgt, eff_pad_factor, kernels, drow, d
                 tot_var
                 * kerns[i]
                 * conj_kerns[j]
-            ).real * df**4
+            ).real * df4
             m_cov[j, i] = m_cov[i, j]
 
     # now finally build the outputs and their errors
@@ -236,21 +245,12 @@ def _zero_pad_image(im, target_dim):
         pad_width_before = twice_pad_width // 2
         pad_width_after = pad_width_before + 1
 
-    # assert pad_width_before + pad_width_after == twice_pad_width
-
     im_padded = np.pad(
         im,
         (pad_width_before, pad_width_after),
         mode='constant',
         constant_values=0,
     )
-    # assert np.array_equal(
-    #     im,
-    #     im_padded[
-    #         pad_width_before:im_padded.shape[0] - pad_width_after,
-    #         pad_width_before:im_padded.shape[0] - pad_width_after
-    #     ]
-    # )
 
     return im_padded, pad_width_before, pad_width_after
 
@@ -261,7 +261,7 @@ def _compute_cen_phase_shift(cen_row, cen_col, dim, msk=None):
     If you feed the centroid of a profile, then this factor times the raw FFT
     of that profile will result in an FFT centered at the profile.
     """
-    f = np.fft.fftfreq(dim) * (2.0 * np.pi)
+    f = fft.fftfreq(dim) * (2.0 * np.pi)
     # this reshaping makes sure the arrays broadcast nicely into a grid
     fx = f.reshape(1, -1)
     fy = f.reshape(-1, 1)
@@ -279,7 +279,7 @@ def _compute_centroided_fft_and_cen_phase(im, cen_row, cen_col, apply_phase=True
     Returns the fft **with the phase shift already applied** and the phase shift
     that was applied.
     """
-    kim = np.fft.fftn(im)
+    kim = fft.fftn(im)
     if apply_phase:
         cen_phase = _compute_cen_phase_shift(cen_row, cen_col, im.shape[0])
         kim *= cen_phase
@@ -345,7 +345,7 @@ def _ksigma_kernels(
     real-space by summing the kernel against the FFT of an image.
     """
     # we first get the Fourier modes in the u,v plane
-    f = np.fft.fftfreq(dim) * (2.0 * np.pi)
+    f = fft.fftfreq(dim) * (2.0 * np.pi)
     fx = f.reshape(1, -1)
     fy = f.reshape(-1, 1)
     Atinv = np.linalg.inv([[dvdrow, dvdcol], [dudrow, dudcol]]).T
@@ -353,12 +353,6 @@ def _ksigma_kernels(
     fu = Atinv[1, 0] * fy + Atinv[1, 1] * fx
 
     # now draw the kernels
-    fft_dim = f.shape[0]
-    fkf = np.zeros((fft_dim, fft_dim), dtype=np.complex128)
-    fkr = np.zeros((fft_dim, fft_dim), dtype=np.complex128)
-    fkp = np.zeros((fft_dim, fft_dim), dtype=np.complex128)
-    fkc = np.zeros((fft_dim, fft_dim), dtype=np.complex128)
-
     # we are computing the Bernstein et al., arXiv:1508.05655. ksigma kernel which is
     # W(k) = (1 - (k*sigma/sqrt(2n))^2)^n for k < sqrt(2*n)/sigma
     # and zero otherwise. we follow them and set n = 4.
@@ -367,14 +361,16 @@ def _ksigma_kernels(
     kmax2 = 2*n/sigma**2
     fmag2 = fu**2 + fv**2
     msk = fmag2 < kmax2
-    karg = np.zeros_like(fmag2)
-    karg2 = np.zeros_like(fmag2)
-    karg3 = np.zeros_like(fmag2)
-    karg4 = np.zeros_like(fmag2)
-    karg[msk] = 1.0 - fmag2[msk]/kmax2
-    karg2[msk] = karg[msk]*karg[msk]
-    karg3[msk] = karg2[msk]*karg[msk]
-    karg4[msk] = karg3[msk]*karg[msk]
+
+    # from here we work with non-zero portion only
+    fmag2 = fmag2[msk]
+    fu = fu[msk]
+    fv = fv[msk]
+
+    karg = 1.0 - fmag2/kmax2
+    karg2 = karg*karg
+    karg3 = karg2*karg
+    karg4 = karg3*karg
 
     # we need to normalize the kernel to unity in real space at the object center
     # in our fourier conventions (angular frequency, non-unitary), the real-space
@@ -398,7 +394,7 @@ def _ksigma_kernels(
 
     # now build the kernels
     # the flux kernel is easy since it is the kernel itself
-    fkf[msk] = karg4[msk] * knrm
+    fkf = karg4 * knrm
 
     # the moment kernels take a bit more work
     # product by u^2 in real space is -dk^2/dku^2 in Fourier space
@@ -411,21 +407,22 @@ def _ksigma_kernels(
     # The other derivs are similar.
     # The math below has combined soem terms for efficiency, not that this
     # code is all that efficient anyways.
-    two_knrm_dWdk2 = -knrm * 8.0 * karg3[msk] / kmax2
-    four_knrm_dW2dk22 = knrm * 48 * karg2[msk] / kmax2**2
+    two_knrm_dWdk2 = -knrm * 8.0 * karg3 / kmax2
+    four_knrm_dW2dk22 = knrm * 48 * karg2 / kmax2**2
 
     # the linear combinations here measure the moments proportional to the size
     # and shears - see the Mf, Mr, M+, Mx moments in Bernstein et al., arXiv:1508.05655
     # fkr = fkxx + fkyy
     # fkp = fkxx - fkyy
     # fkc = 2 * fklxy
-    fkr[msk] = -2 * two_knrm_dWdk2 - fmag2[msk] * four_knrm_dW2dk22
-    fkp[msk] = -(fu[msk]**2 - fv[msk]**2) * four_knrm_dW2dk22
-    fkc[msk] = -2 * fu[msk] * fv[msk] * four_knrm_dW2dk22
+    fkr = -2 * two_knrm_dWdk2 - fmag2 * four_knrm_dW2dk22
+    fkp = -(fu**2 - fv**2) * four_knrm_dW2dk22
+    fkc = -2 * fu * fv * four_knrm_dW2dk22
 
     return dict(
         fkf=fkf,
         fkr=fkr,
         fkp=fkp,
         fkc=fkc,
+        msk=msk,
     )
