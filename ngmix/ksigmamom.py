@@ -180,10 +180,10 @@ def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, d
     fkp = kernels["fkp"]
     fkc = kernels["fkc"]
 
-    mf = np.sum(kim * fkf).real * df2
-    mr = np.sum(kim * fkr).real * df2
-    mp = np.sum(kim * fkp).real * df2
-    mc = np.sum(kim * fkc).real * df2
+    mf = np.sum((kim * fkf).real) * df2
+    mr = np.sum((kim * fkr).real) * df2
+    mp = np.sum((kim * fkp).real) * df2
+    mc = np.sum((kim * fkc).real) * df2
 
     # build a covariance matrix of the moments
     # here we assume each Fourier mode is independent and sum the variances
@@ -196,10 +196,9 @@ def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, d
     for i in range(4):
         for j in range(i, 4):
             m_cov[i, j] = np.sum(
-                tot_var
-                * kerns[i]
-                * conj_kerns[j]
-            ).real * df4
+                (tot_var * kerns[i] * conj_kerns[j]).real
+                * df4
+            )
             m_cov[j, i] = m_cov[i, j]
 
     # now finally build the outputs and their errors
