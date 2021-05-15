@@ -355,13 +355,17 @@ def _ksigma_kernels(
     n = 4
     sigma = fwhm_to_sigma(kernel_size)
     kmax2 = 2*n/sigma**2
-    fmag2 = fu**2 + fv**2
+    fu2 = fu**2
+    fv2 = fv**2
+    fmag2 = fu2 + fv2
     msk = fmag2 < kmax2
 
     # from here we work with non-zero portion only
     fmag2 = fmag2[msk]
     fu = fu[msk]
+    fu2 = fu2[msk]
     fv = fv[msk]
+    fv2 = fv2[msk]
 
     karg = 1.0 - fmag2/kmax2
     karg2 = karg*karg
@@ -403,8 +407,8 @@ def _ksigma_kernels(
     # The other derivs are similar.
     # The math below has combined soem terms for efficiency, not that this
     # code is all that efficient anyways.
-    two_knrm_dWdk2 = -knrm * 8.0 * karg3 / kmax2
-    four_knrm_dW2dk22 = knrm * 48 * karg2 / kmax2**2
+    two_knrm_dWdk2 = (-knrm * 8.0 / kmax2) * karg3
+    four_knrm_dW2dk22 = (knrm * 48 / kmax2**2) * karg2
 
     # the linear combinations here measure the moments proportional to the size
     # and shears - see the Mf, Mr, M+, Mx moments in Bernstein et al., arXiv:1508.05655
@@ -412,7 +416,7 @@ def _ksigma_kernels(
     # fkp = fkxx - fkyy
     # fkc = 2 * fklxy
     fkr = -2 * two_knrm_dWdk2 - fmag2 * four_knrm_dW2dk22
-    fkp = -(fu**2 - fv**2) * four_knrm_dW2dk22
+    fkp = -(fu2 - fv2) * four_knrm_dW2dk22
     fkc = -2 * fu * fv * four_knrm_dW2dk22
 
     return dict(
