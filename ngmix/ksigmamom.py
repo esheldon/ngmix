@@ -69,22 +69,16 @@ class KSigmaMom(object):
         eff_pad_factor = target_dim / obs.image.shape[0]
 
         # pad image, psf and weight map, get FFTs, apply cen_phases
-        (
-            kim, _, im_row, im_col, _, _
-        ) = _zero_pad_and_compute_centroided_fft_and_cen_phase(
+        kim, im_row, im_col = _zero_pad_and_compute_fft(
             obs.image.copy(), obs.jacobian.row0, obs.jacobian.col0, target_dim,
-            apply_phase=False,
         )
         fft_dim = kim.shape[0]
 
         psf_obs = obs.psf
-        (
-            kpsf_im, _, psf_im_row, psf_im_col, _, _
-        ) = _zero_pad_and_compute_centroided_fft_and_cen_phase(
+        kpsf_im, psf_im_row, psf_im_col = _zero_pad_and_compute_fft(
             psf_obs.image.copy(),
             psf_obs.jacobian.row0, psf_obs.jacobian.col0,
             target_dim,
-            apply_phase=False,
         )
 
         # the final, deconvolved image we want is
@@ -268,50 +262,16 @@ def _compute_cen_phase_shift(cen_row, cen_col, dim, msk=None):
         return np.cos(kcen) + 1j*np.sin(kcen)
 
 
-def _compute_centroided_fft_and_cen_phase(im, cen_row, cen_col, apply_phase=True):
-    """compute the FFT of an image, applying a phase shift to center things
-    at the image center.
+def _zero_pad_and_compute_fft(im, cen_row, cen_col, target_dim):
+    """zero pad and compute the FFT
 
-    Returns the fft **with the phase shift already applied** and the phase shift
-    that was applied.
+    Returns the fft, cen_row in the padded image, and cen_col in the padded image.
     """
-    kim = fft.fftn(im)
-    if apply_phase:
-        cen_phase = _compute_cen_phase_shift(cen_row, cen_col, im.shape[0])
-        kim *= cen_phase
-        return kim, cen_phase
-    else:
-        return kim
-
-
-def _zero_pad_and_compute_centroided_fft_and_cen_phase(
-    im, cen_row, cen_col, target_dim, apply_phase=True,
-):
-    """zero pad, compute the FFT, and finally apply the phase shift to center
-    the FFT at the object center.
-
-    Returns the fft **with the phase shift already applied**, the phase shift
-    that was applied, cen_row in the padded image, cen_col in the padded image,
-    the padding before, and the padding after.
-    """
-    pim, pad_width_before, pad_width_after = _zero_pad_image(im, target_dim)
+    pim, pad_width_before, _ = _zero_pad_image(im, target_dim)
     pad_cen_row = cen_row + pad_width_before
     pad_cen_col = cen_col + pad_width_before
-    if apply_phase:
-        kpim, pad_cen_phase = _compute_centroided_fft_and_cen_phase(
-            pim, pad_cen_row, pad_cen_col, apply_phase=apply_phase
-        )
-    else:
-        kpim = _compute_centroided_fft_and_cen_phase(
-            pim, pad_cen_row, pad_cen_col, apply_phase=apply_phase
-        )
-        pad_cen_phase = None
-
-    return (
-        kpim, pad_cen_phase,
-        pad_cen_row, pad_cen_col,
-        pad_width_before, pad_width_after,
-    )
+    kpim = fft.fftn(pim)
+    return kpim, pad_cen_row, pad_cen_col
 
 
 def _deconvolve_im_psf_inplace(kim, kpsf_im, max_amp, min_psf_frac=1e-5):
