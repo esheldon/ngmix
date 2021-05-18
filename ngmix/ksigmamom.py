@@ -29,7 +29,7 @@ class KSigmaMom(object):
         self.fwhm = fwhm
         self.pad_factor = pad_factor
 
-    def go(self, obs, return_kernels=False):
+    def go(self, obs, return_kernels=False, no_psf=False):
         """Measure the pre-PSF ksigma moments.
 
         Parameters
@@ -39,6 +39,9 @@ class KSigmaMom(object):
         return_kernels : bool, optional
             If True, return the kernels used for the flux and moments.
             Defaults to False.
+        no_psf : bool, optional
+            If True, allow inputs without a PSF observation. Defaults to False
+            so that any input observation without a PSF will raise an error.
 
         Returns
         -------
@@ -47,25 +50,31 @@ class KSigmaMom(object):
         if not isinstance(obs, Observation):
             raise ValueError("input obs must be an Observation")
 
-        if not obs.has_psf():
+        if not obs.has_psf() and not no_psf:
             raise RuntimeError("The PSF must be set to measure a pre-PSF moment!")
 
-        psf_obs = obs.get_psf()
+        if not no_psf:
+            psf_obs = obs.get_psf()
 
-        if psf_obs.jacobian.get_galsim_wcs() != obs.jacobian.get_galsim_wcs():
-            raise RuntimeError(
-                "The PSF and observation must have the same WCS "
-                "Jacobian for measuring pre-PSF moments."
-            )
+            if psf_obs.jacobian.get_galsim_wcs() != obs.jacobian.get_galsim_wcs():
+                raise RuntimeError(
+                    "The PSF and observation must have the same WCS "
+                    "Jacobian for measuring pre-PSF moments."
+                )
+        else:
+            psf_obs = None
 
         return self._meas_fourier_only(obs, psf_obs, return_kernels)
 
     def _meas_fourier_only(self, obs, psf_obs, return_kernels):
         # pick the larger size
-        if obs.image.shape[0] > psf_obs.image.shape[0]:
-            target_dim = int(obs.image.shape[0] * self.pad_factor)
+        if psf_obs is not None:
+            if obs.image.shape[0] > psf_obs.image.shape[0]:
+                target_dim = int(obs.image.shape[0] * self.pad_factor)
+            else:
+                target_dim = int(psf_obs.image.shape[0] * self.pad_factor)
         else:
-            target_dim = int(psf_obs.image.shape[0] * self.pad_factor)
+            target_dim = int(obs.image.shape[0] * self.pad_factor)
         eff_pad_factor = target_dim / obs.image.shape[0]
 
         # pad image, psf and weight map, get FFTs, apply cen_phases
@@ -74,12 +83,17 @@ class KSigmaMom(object):
         )
         fft_dim = kim.shape[0]
 
-        psf_obs = obs.psf
-        kpsf_im, psf_im_row, psf_im_col = _zero_pad_and_compute_fft(
-            psf_obs.image,
-            psf_obs.jacobian.row0, psf_obs.jacobian.col0,
-            target_dim,
-        )
+        if psf_obs is not None:
+            kpsf_im, psf_im_row, psf_im_col = _zero_pad_and_compute_fft(
+                psf_obs.image,
+                psf_obs.jacobian.row0, psf_obs.jacobian.col0,
+                target_dim,
+            )
+        else:
+            # delta function in k-space
+            kpsf_im = np.ones_like(kim, dtype=np.complex128)
+            psf_im_row = 0.0
+            psf_im_col = 0.0
 
         # the final, deconvolved image we want is
         #
@@ -137,9 +151,6 @@ class KSigmaMom(object):
 
 
 def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, dcol):
-    flags = 0
-    flagstr = ''
-
     # we only need to do things where the ksigma kernel is non-zero
     # this saves a bunch of CPU cycles
     msk = kernels["msk"]
@@ -193,33 +204,78 @@ def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, d
             m_cov[j, i] = m_cov[i, j]
 
     # now finally build the outputs and their errors
-    flux = mf
-    T = mr / mf
-    e1 = mp / mr
-    e2 = mc / mr
+    res = {}
+    res["flags"] = 0
+    res["flagstr"] = ""
+    res["flux"] = mf
+    res["mom"] = np.array([mf, mr, mp, mc])
+    res["mom_cov"] = m_cov
 
-    T_err = get_ratio_error(mr, mf, m_cov[1, 1], m_cov[0, 0], m_cov[0, 1])
-    e_err = np.zeros(2)
-    e_err[0] = get_ratio_error(mp, mr, m_cov[2, 2], m_cov[1, 1], m_cov[1, 2])
-    e_err[1] = get_ratio_error(mc, mr, m_cov[3, 3], m_cov[1, 1], m_cov[1, 3])
+    # we fill these in later if T > 0 and flux cov is positive
+    res["flux_err"] = 9999.0
+    res["T"] = -9999.0
+    res["T_err"] = 9999.0
+    res["s2n"] = -9999.0
+    res["e1"] = 9999.0
+    res["e2"] = 9999.0
+    res["e"] = np.array([-9999.0, -9999.0])
+    res["e_err"] = np.array([9999.0, 9999.0])
+    res["e_cov"] = np.diag([9999.0, 9999.0])
+    res["mom_err"] = np.ones(4) * 9999.0
 
-    return {
-        "flags": flags,
-        "flagstr": flagstr,
-        "flux": flux,
-        "flux_err": np.sqrt(m_cov[0, 0]),
-        "mom": np.array([mf, mr, mp, mc]),
-        "mom_err": np.sqrt(np.diagonal(m_cov)),
-        "mom_cov": m_cov,
-        "e1": e1,
-        "e2": e2,
-        "e": [e1, e2],
-        "e_err": e_err,
-        "e_cov": np.diag(e_err**2),
-        "T": T,
-        "T_err": T_err,
-        "pars": [0, 0, mp/mf, mc/mf, T, flux],
-    }
+    if m_cov[0, 0] > 0:
+        res["flux_err"] = np.sqrt(m_cov[0, 0])
+        res["s2n"] = res["flux"] / res["flux_err"]
+    else:
+        # zero var flag
+        res["flags"] |= 0x40
+        res["flagstr"] = "zero or negative flux var"
+
+    if np.all(np.diagonal(m_cov) > 0):
+        res["mom_err"] = np.sqrt(np.diagonal(m_cov))
+    else:
+        res["flags"] |= 0x80
+        res["flagstr"] = 'zero or neg moment var'
+
+    if res["flags"] == 0:
+        if mf > 0:
+            res["T"] = mr / mf
+            res["T_err"] = get_ratio_error(
+                mr, mf,
+                m_cov[1, 1], m_cov[0, 0], m_cov[0, 1]
+            )
+
+            if res["T"] > 0:
+                res["pars"] = np.array([0, 0, mp/mf, mc/mf, mr/mf, mf])
+                res["e1"] = mp / mr
+                res["e2"] = mc / mr
+                res["e"] = np.array([res["e1"], res["e2"]])
+                e_err = np.zeros(2)
+                e_err[0] = get_ratio_error(
+                    mp, mr,
+                    m_cov[2, 2], m_cov[1, 1], m_cov[1, 2]
+                )
+                e_err[1] = get_ratio_error(
+                    mc, mr,
+                    m_cov[3, 3], m_cov[1, 1], m_cov[1, 3]
+                )
+                if np.all(np.isfinite(e_err)):
+                    res["e_err"] = e_err
+                    res["e_cov"] = np.diag(e_err**2)
+                else:
+                    # T <= 0.0
+                    res["flags"] |= 0x100
+                    res["flagstr"] = "non-finite shape errors"
+            else:
+                # T <= 0.0
+                res["flags"] |= 0x8
+                res["flagstr"] = "T <= 0.0"
+        else:
+            # mf <= 0.0
+            res["flags"] |= 0x4
+            res["flagstr"] = "flux <= 0.0"
+
+    return res
 
 
 def _zero_pad_image(im, target_dim):
