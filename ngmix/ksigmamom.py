@@ -430,7 +430,7 @@ def _ksigma_kernels(
     # and shears - see the Mf, Mr, M+, Mx moments in Bernstein et al., arXiv:1508.05655
     # fkr = fkxx + fkyy
     # fkp = fkxx - fkyy
-    # fkc = 2 * fklxy
+    # fkc = 2 * fkxy
     fkr = -2 * two_knrm_dWdk2 - fmag2 * four_knrm_dW2dk22
     fkp = -(fu2 - fv2) * four_knrm_dW2dk22
     fkc = -2 * fu * fv * four_knrm_dW2dk22
