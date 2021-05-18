@@ -167,8 +167,9 @@ def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, d
     # put in phase shift as described above
     # the sin and cos are expensive so we only compute them where we will
     # use the image which is in the msk
-    cen_phase = _compute_cen_phase_shift(drow, dcol, dim, msk=msk)
-    kim *= cen_phase
+    if drow != 0 or dcol != 0:
+        cen_phase = _compute_cen_phase_shift(drow, dcol, dim, msk=msk)
+        kim *= cen_phase
 
     # build the flux, radial, plus and cross kernels / moments
     # the inverse FFT in our convention has a factor of 1/n per dimension
