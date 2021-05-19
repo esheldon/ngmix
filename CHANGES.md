@@ -31,6 +31,7 @@
     - GalsimTemplateFluxFitter -> GalsimPSFFluxFitter
     - GMixEM -> EMFitter
     - Admom -> AdmomFitter
+- Copies of observations now propagate the values of `store_pixels` and `ignore_zero_weight`.
 
 ### bug fixes
 
@@ -45,6 +46,7 @@
 - fixed a bug in `ngmix.priors.TwoSidedErf.get_fdiff` in handling array inputs
 - fixed bug in `TruncatedSimpleGauss2D` where the truncation radius was applied about
   zero in some methods and not about the center
+- fixed flux unit scaling in metadetect regression tests
 
 ### new features
 
@@ -75,6 +77,9 @@
     - GMixEMFluxOnly: fit mixtures allowing only the fluxes to vary
 - some refactoring of like modules into sub-packages.
 - Added `mfrac` attribute to observations to hold masked fraction images.
+- Added Python `@property` functions for `store_pixels` and `ignore_zero_weight`
+  for `ngmix.Observation`.
+- `setup.py` now gets the version from the package.
 
 ### deprecated/removed
 
