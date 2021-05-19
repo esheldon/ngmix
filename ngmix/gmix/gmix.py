@@ -1196,7 +1196,8 @@ def get_weighted_moments_stats(ares):
     res["T"] = -9999.0
     res["s2n"] = -9999.0
     res["e"] = np.array([-9999.0, -9999.0])
-    res["e_err"] = 9999.0
+    res["e_err"] = np.array([9999.0, 9999.0])
+    res["e_cov"] = np.diag([9999.0, 9999.0])
 
     fvar_sum = sums_cov[5, 5]
 
@@ -1255,10 +1256,9 @@ def get_weighted_moments_stats(ares):
                     sums_cov[3, 4],
                 )
 
-                if not np.isfinite(e1_err) or not np.isfinite(e2_err):
-                    res["e_cov"] = np.diag([9999.0, 9999.0])
-                else:
+                if np.isfinite(e1_err) and np.isfinite(e2_err):
                     res["e_cov"] = np.diag([e1_err ** 2, e2_err ** 2])
+                    res["e_err"] = np.array([e1_err, e2_err])
 
             else:
                 # T <= 0.0

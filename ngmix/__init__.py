@@ -46,6 +46,7 @@ from . import guessers
 from . import em
 from . import admom
 from . import gaussmom
+from . import ksigmamom
 from . import observation
 from .observation import Observation, ObsList, MultiBandObsList
 

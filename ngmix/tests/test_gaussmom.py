@@ -42,8 +42,20 @@ def test_gaussmom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
     g1arr = []
     g2arr = []
     Tarr = []
+    farr = []
 
     fitter = GaussMom(fwhm=fwhm * weight_fac)
+
+    # get true flux
+    jac = Jacobian(
+        y=cen, x=cen,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+    obs = Observation(
+        image=im,
+        jacobian=jac,
+    )
+    flux_true = fitter.go(obs=obs)["flux"]
 
     for _ in range(50):
         shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
@@ -82,6 +94,7 @@ def test_gaussmom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
             g1arr.append(_g1)
             g2arr.append(_g2)
             Tarr.append(res['pars'][4])
+            farr.append(res['pars'][5])
 
     g1 = np.mean(g1arr)
     g2 = np.mean(g2arr)
@@ -95,6 +108,10 @@ def test_gaussmom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
     if g1_true == 0 and g2_true == 0 and weight_fac > 1:
         T = np.mean(Tarr)
         assert np.abs(T - fwhm_to_T(fwhm)) < 1e-6
+
+    if weight_fac > 1:
+        assert np.allclose(flux_true, np.sum(im))
+    assert np.abs(np.mean(farr) - flux_true) < 1e-4, (np.mean(farr), np.std(farr))
 
 
 def test_gaussmom_flags():

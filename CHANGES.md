@@ -80,6 +80,8 @@
 - Added Python `@property` functions for `store_pixels` and `ignore_zero_weight`
   for `ngmix.Observation`.
 - `setup.py` now gets the version from the package.
+- Added new `KSigmaMom` fitter to measure pre-PSF weighted moments using the
+  `ksigma` kernel from Bernstein et al.
 
 ### deprecated/removed
 
