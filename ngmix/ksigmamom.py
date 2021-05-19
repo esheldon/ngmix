@@ -64,9 +64,9 @@ class KSigmaMom(object):
         else:
             psf_obs = None
 
-        return self._meas_fourier_only(obs, psf_obs, return_kernels)
+        return self._meas(obs, psf_obs, return_kernels)
 
-    def _meas_fourier_only(self, obs, psf_obs, return_kernels):
+    def _meas(self, obs, psf_obs, return_kernels):
         # pick the larger size
         if psf_obs is not None:
             if obs.image.shape[0] > psf_obs.image.shape[0]:
@@ -118,7 +118,7 @@ class KSigmaMom(object):
         # later in _measure_moments_fft
 
         # now build the kernels
-        kres = _ksigma_kernels(
+        kernels = _ksigma_kernels(
             target_dim,
             self.fwhm,
             obs.jacobian.dvdrow, obs.jacobian.dvdcol,
@@ -131,7 +131,7 @@ class KSigmaMom(object):
 
         # run the actual measurements and return
         res = _measure_moments_fft(
-            kim, kpsf_im, tot_var, eff_pad_factor, kres,
+            kim, kpsf_im, tot_var, eff_pad_factor, kernels,
             im_row - psf_im_row, im_col - psf_im_col,
         )
         if res['flags'] != 0:
@@ -139,13 +139,13 @@ class KSigmaMom(object):
 
         if return_kernels:
             # put the kernels back into their unpacked state
-            new_kres = {}
-            for k in kres:
+            full_kernels = {}
+            for k in kernels:
                 if k == "msk":
                     continue
-                new_kres[k] = np.zeros((fft_dim, fft_dim), dtype=np.complex128)
-                new_kres[k][kres["msk"]] = kres[k]
-            res["kernels"] = new_kres
+                full_kernels[k] = np.zeros((fft_dim, fft_dim), dtype=np.complex128)
+                full_kernels[k][kernels["msk"]] = kernels[k]
+            res["kernels"] = full_kernels
 
         return res
 

@@ -195,7 +195,9 @@ def test_ksigmamom_gauss(
 def test_ksigmamom_mn_cov(
     pad_factor, image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm,
 ):
-    """Slower test to make sure means and errors are right in a well-sampled case."""
+    """Slower test to make sure means and errors are right
+    w/ tons of monte carlo samples.
+    """
     rng = np.random.RandomState(seed=100)
 
     cen = (image_size - 1)/2
