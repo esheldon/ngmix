@@ -68,14 +68,16 @@ def test_ksigmamom_gauss_raises_badjacob():
 @pytest.mark.parametrize('fwhm,psf_fwhm', [(0.6, 0.9), (1.5, 0.9)])
 @pytest.mark.parametrize('mom_fwhm', [1.2, 1.5, 2.0])
 @pytest.mark.parametrize('image_size', [57, 58])
+@pytest.mark.parametrize('psf_image_size', [33, 34])
 @pytest.mark.parametrize('pad_factor', [2, 1, 1.5])
 def test_ksigmamom_gauss(
-    pad_factor, image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm,
+    pad_factor, image_size, psf_image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm,
 ):
     """fast test at a range of parameters to check that things come out ok"""
     rng = np.random.RandomState(seed=100)
 
     cen = (image_size - 1)/2
+    psf_cen = (psf_image_size - 1)/2
     gs_wcs = galsim.ShearWCS(
         pixel_scale, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
     scale = np.sqrt(gs_wcs.pixelArea())
@@ -90,7 +92,7 @@ def test_ksigmamom_gauss(
         dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
 
     psf_jac = Jacobian(
-        y=cen + psf_xy.y, x=cen + psf_xy.x,
+        y=psf_cen + psf_xy.y, x=psf_cen + psf_xy.x,
         dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
         dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
 
@@ -119,8 +121,8 @@ def test_ksigmamom_gauss(
     psf_im = psf.shift(
         dx=psf_shift[0], dy=psf_shift[1]
     ).drawImage(
-        nx=image_size,
-        ny=image_size,
+        nx=psf_image_size,
+        ny=psf_image_size,
         wcs=gs_wcs
     ).array
 
@@ -151,11 +153,7 @@ def test_ksigmamom_gauss(
     g1_true = res["e"][0]
     g2_true = res["e"][1]
 
-    if snr > 1e4:
-        nitr = 10000
-    else:
-        nitr = 100
-    for _ in range(nitr):
+    for _ in range(100):
         _im = im + rng.normal(size=im.shape, scale=noise)
         obs = Observation(
             image=_im,
@@ -215,7 +213,7 @@ def test_ksigmamom_mn_cov(
         dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
 
     psf_jac = Jacobian(
-        y=cen + psf_xy.y, x=cen + psf_xy.x,
+        y=26 + psf_xy.y, x=26 + psf_xy.x,
         dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
         dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
 
@@ -244,8 +242,8 @@ def test_ksigmamom_mn_cov(
     psf_im = psf.shift(
         dx=psf_shift[0], dy=psf_shift[1]
     ).drawImage(
-        nx=image_size,
-        ny=image_size,
+        nx=53,
+        ny=53,
         wcs=gs_wcs
     ).array
 
