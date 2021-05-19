@@ -2,7 +2,7 @@ import galsim
 import numpy as np
 import pytest
 
-from ngmix.ksigmamom import KSigmaMom
+from ngmix.ksigmamom import KSigmaMom, _make_mom_res
 from ngmix import Jacobian
 from ngmix import Observation
 
@@ -317,3 +317,39 @@ def test_ksigmamom_mn_cov(
     print("mom cov meas:\n", mom_cov, flush=True)
     print("mom cov pred:\n", res["mom_cov"], flush=True)
     assert np.allclose(res["mom_cov"], mom_cov, atol=0, rtol=4e-1)
+
+
+def test_make_mom_res_flags():
+    mom = np.ones(4)
+    mom_cov = np.diag(np.ones(4))
+
+    # weird cov
+    for i in range(4):
+        _mom_cov = mom_cov.copy()
+        _mom_cov[i, i] = -1
+        res = _make_mom_res(mom, _mom_cov)
+        assert (res["flags"] & 0x40) != 0
+        assert "zero or neg moment var" in res["flagstr"]
+
+    # neg flux
+    _mom = mom.copy()
+    _mom[0] = -1
+    res = _make_mom_res(_mom, mom_cov)
+    assert (res["flags"] & 0x4) != 0
+    assert "flux <= 0" in res["flagstr"]
+
+    # neg T
+    _mom = mom.copy()
+    _mom[1] = -1
+    res = _make_mom_res(_mom, mom_cov)
+    assert (res["flags"] & 0x8) != 0
+    assert "T <= 0" in res["flagstr"]
+
+    # bad shape errs
+    for i in [2, 3]:
+        _mom_cov = mom_cov.copy()
+        _mom_cov[1, i] = np.nan
+        _mom_cov[i, 1] = np.nan
+        res = _make_mom_res(mom, _mom_cov)
+        assert (res["flags"] & 0x100) != 0
+        assert "non-finite shape errors" in res["flagstr"]

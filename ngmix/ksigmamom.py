@@ -130,10 +130,11 @@ class KSigmaMom(object):
         tot_var = np.sum(1.0 / obs.weight[msk])
 
         # run the actual measurements and return
-        res = _measure_moments_fft(
+        mom, mom_cov = _measure_moments_fft(
             kim, kpsf_im, tot_var, eff_pad_factor, kernels,
             im_row - psf_im_row, im_col - psf_im_col,
         )
+        res = _make_mom_res(mom, mom_cov)
         if res['flags'] != 0:
             logger.debug("ksigma pre-psf moments failed: %s" % res['flagstr'])
 
@@ -197,20 +198,27 @@ def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, d
     # we need a factor of the padding to correct for something...
     m_cov = np.zeros((4, 4))
     tot_var *= eff_pad_factor**2
+    tot_var_df4 = tot_var * df4
     kerns = [fkf / kpsf_im, fkr / kpsf_im, fkp / kpsf_im, fkc / kpsf_im]
     conj_kerns = [np.conj(k) for k in kerns]
     for i in range(4):
         for j in range(i, 4):
-            m_cov[i, j] = np.sum((tot_var * kerns[i] * conj_kerns[j]).real) * df4
+            m_cov[i, j] = np.sum((kerns[i] * conj_kerns[j]).real) * tot_var_df4
             m_cov[j, i] = m_cov[i, j]
 
+    mom = np.array([mf, mr, mp, mc])
+
+    return mom, m_cov
+
+
+def _make_mom_res(mom, mom_cov):
     # now finally build the outputs and their errors
     res = {}
     res["flags"] = 0
     res["flagstr"] = ""
-    res["flux"] = mf
-    res["mom"] = np.array([mf, mr, mp, mc])
-    res["mom_cov"] = m_cov
+    res["flux"] = mom[0]
+    res["mom"] = mom
+    res["mom_cov"] = mom_cov
 
     # we fill these in later if T > 0 and flux cov is positive
     res["flux_err"] = 9999.0
@@ -224,47 +232,47 @@ def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, d
     res["e_cov"] = np.diag([9999.0, 9999.0])
     res["mom_err"] = np.ones(4) * 9999.0
 
-    if m_cov[0, 0] > 0:
-        res["flux_err"] = np.sqrt(m_cov[0, 0])
+    if np.all(np.diagonal(mom_cov) > 0):
+        res["flux_err"] = np.sqrt(mom_cov[0, 0])
         res["s2n"] = res["flux"] / res["flux_err"]
+        res["mom_err"] = np.sqrt(np.diagonal(mom_cov))
     else:
-        # zero var flag
         res["flags"] |= 0x40
-        res["flagstr"] = "zero or negative flux var"
-
-    if np.all(np.diagonal(m_cov) > 0):
-        res["mom_err"] = np.sqrt(np.diagonal(m_cov))
-    else:
-        res["flags"] |= 0x80
         res["flagstr"] = 'zero or neg moment var'
 
     if res["flags"] == 0:
-        if mf > 0:
-            res["T"] = mr / mf
+        if mom[0] > 0:
+            res["T"] = mom[1] / mom[0]
             res["T_err"] = get_ratio_error(
-                mr, mf,
-                m_cov[1, 1], m_cov[0, 0], m_cov[0, 1]
+                mom[1], mom[0],
+                mom_cov[1, 1], mom_cov[0, 0], mom_cov[0, 1]
             )
 
             if res["T"] > 0:
-                res["pars"] = np.array([0, 0, mp/mf, mc/mf, mr/mf, mf])
-                res["e1"] = mp / mr
-                res["e2"] = mc / mr
+                res["pars"] = np.array([
+                    0, 0,
+                    mom[2]/mom[0],
+                    mom[3]/mom[0],
+                    mom[1]/mom[0],
+                    mom[0],
+                ])
+                res["e1"] = mom[2] / mom[1]
+                res["e2"] = mom[3] / mom[1]
                 res["e"] = np.array([res["e1"], res["e2"]])
                 e_err = np.zeros(2)
                 e_err[0] = get_ratio_error(
-                    mp, mr,
-                    m_cov[2, 2], m_cov[1, 1], m_cov[1, 2]
+                    mom[2], mom[1],
+                    mom_cov[2, 2], mom_cov[1, 1], mom_cov[1, 2]
                 )
                 e_err[1] = get_ratio_error(
-                    mc, mr,
-                    m_cov[3, 3], m_cov[1, 1], m_cov[1, 3]
+                    mom[3], mom[1],
+                    mom_cov[3, 3], mom_cov[1, 1], mom_cov[1, 3]
                 )
                 if np.all(np.isfinite(e_err)):
                     res["e_err"] = e_err
                     res["e_cov"] = np.diag(e_err**2)
                 else:
-                    # T <= 0.0
+                    # bad e_err
                     res["flags"] |= 0x100
                     res["flagstr"] = "non-finite shape errors"
             else:
@@ -272,7 +280,7 @@ def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, d
                 res["flags"] |= 0x8
                 res["flagstr"] = "T <= 0.0"
         else:
-            # mf <= 0.0
+            # flux <= 0.0
             res["flags"] |= 0x4
             res["flagstr"] = "flux <= 0.0"
 
