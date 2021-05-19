@@ -1,6 +1,6 @@
 # flake8: noqa
 
-__version__ = '2.0.0rc1'
+from ._version import __version__
 
 from . import util
 from .util import print_pars

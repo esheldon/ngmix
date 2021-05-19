@@ -722,7 +722,42 @@ class Observation(MetadataMixin):
             meta=meta,
             psf=psf,
             mfrac=mfrac,
+            store_pixels=self._store_pixels,
+            ignore_zero_weight=self._ignore_zero_weight,
         )
+
+    @property
+    def store_pixels(self):
+        """getter for store_pixels attribute"""
+        return self._store_pixels
+
+    @store_pixels.setter
+    def store_pixels(self, store_pixels):
+        """setter for store pixels
+
+        calls update_pixels after store_pixels is set if needed
+        """
+        # only update if value is changed
+        do_update = False if store_pixels == self._store_pixels else True
+        self._store_pixels = store_pixels
+        if do_update:
+            self.update_pixels()
+
+    @property
+    def ignore_zero_weight(self):
+        """getter for ignore_zero_weight attribute"""
+        return self._ignore_zero_weight
+
+    @ignore_zero_weight.setter
+    def ignore_zero_weight(self, ignore_zero_weight):
+        """setter for ignore_zero_weight
+
+        calls update_pixels after ignore_zero_weight is set if needed
+        """
+        do_update = False if ignore_zero_weight == self._ignore_zero_weight else True
+        self._ignore_zero_weight = ignore_zero_weight
+        if do_update:
+            self.update_pixels()
 
     def update_pixels(self):
         """
