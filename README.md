@@ -37,4 +37,6 @@ Notes on versions
 The api for fitting routines and "bootstrapping" code was rewritten for the
 ngmix version 2 release.  This is a "breaking change", so if you have existing
 code that uses the ngmix version 1 apis you most likely will need to update it.
+You can also install version 1.3.8 to get the old api.
+
 The wiki has been updated to reflect the new usage patterns.
