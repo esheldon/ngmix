@@ -1,4 +1,4 @@
-## unreleased (v2.0.0)
+## v2.0.0
 
 ### breaking API changes
 
@@ -59,13 +59,7 @@
   For fitters `fitter.go(obs=obs)` or `fitter.go(obs=obs, guess=guess)`
   For runners `runner.go(obs=obs)`.  New classes are bootstrap.Bootstrapper
   runners.Runner, runners.PSFRunner
-- expanded test suite and improved documentation for the following modules
-  * `ngmix.shape`
-  * `ngmix.jacobian`
-  * `ngmix.moments`
-  * `ngmix.observation`
-  * `ngmix.priors`
-  * `ngmix.gexceptions`
+- Expanded test suite and improved documentation for all modules
 - introduced `NGmixBaseException` as parent class for all ngmix-specific exceptions
 - New guessers `TPSFFluxGuesser`, `TPSFFluxAndPriorGuesser`, `GmixPSFGuesser`,
   `SimplePSFGuesser`, `CoellipPSFGuesser`
