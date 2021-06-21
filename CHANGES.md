@@ -35,6 +35,9 @@
 
 ### bug fixes
 
+- metacal was reconvolving by the pixel *twice*, which resulted in larger
+  reconvolved PSFs and thus somewhat lower response.  This did not cause
+  any bias.
 - fixed computation of Jacobian center for `ngmix.KObservation`s with mixed
   even-odd dimensions
 - the total shape amplitude `g` is now reset properly when using the
