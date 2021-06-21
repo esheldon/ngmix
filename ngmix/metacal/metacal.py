@@ -305,6 +305,7 @@ class MetacalDilatePSF(object):
                 ny=ny,
                 wcs=self.image.wcs,
                 dtype=np.float64,
+                method='no_pixel',
             )
         except RuntimeError as err:
             # argh, galsim uses generic exceptions
