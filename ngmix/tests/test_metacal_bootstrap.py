@@ -16,7 +16,6 @@ from ._galsim_sims import _get_obs
 FRAC_TOL = 5.0e-4
 
 
-'''
 @pytest.mark.parametrize('noise', [1.0e-8, 0.01])
 @pytest.mark.parametrize('use_bootstrapper', [False, True])
 @pytest.mark.parametrize('nband', [None, 2])
@@ -137,7 +136,6 @@ def test_metacal_bootstrap_gaussmom_smoke(noise, use_bootstrapper):
         if isinstance(obsdict[key], ngmix.Observation):
             assert obsdict[key].has_psf()
             assert 'result' in obsdict[key].psf.meta
-'''
 
 
 def test_metacal_bootstrap_gaussmom_response():
@@ -176,7 +174,6 @@ def test_metacal_bootstrap_gaussmom_response():
         Rvals[i] = (res1p['e'][0] - res1m['e'][0])/0.02
 
     Rmean = Rvals.mean()
-    Rerr = Rvals.std()/np.sqrt(Rvals.size)
     # this response value comes from 2.0.0, and had an error less than of
     # 1.0e-5 on it.  Allow for differences in rng/arch etc. by taking 1.0e-4
     assert abs(Rmean - 0.28535) < 1.0e-4
