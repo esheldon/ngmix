@@ -577,6 +577,7 @@ class Metacal(object):
                 ny=ny,
                 wcs=self.image.wcs,
                 dtype=numpy.float64,
+                method='no_pixel',
             )
         except RuntimeError as err:
             # argh, galsim uses generic exceptions
