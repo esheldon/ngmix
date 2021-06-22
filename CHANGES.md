@@ -1,3 +1,11 @@
+## v1.3.9
+
+### bug fixes
+
+- metacal was reconvolving by the pixel *twice*, which resulted in larger
+  reconvolved PSFs and thus somewhat lower, but still accurate, response than
+  the pixel was included once. This did not cause any bias. 
+
 ## v1.3.8
 
 ### bug fixes
