@@ -174,7 +174,6 @@ def test_metacal_bootstrap_gaussmom_response():
         Rvals[i] = (res1p['e'][0] - res1m['e'][0])/0.02
 
     Rmean = Rvals.mean()
-    # this response value comes from ngmix 1.3.8, and had an error
-    # of 2.7e-5 on it.  Allow for differences in rng/arch etc. by
-    # taking 3*2.7e-5 = 1.3e-4
-    assert abs(Rmean - 0.276829) < 1.3e-4
+    # this response value comes from 2.0.0, and had an error less than of
+    # 1.0e-5 on it.  Allow for differences in rng/arch etc. by taking 1.0e-4
+    assert abs(Rmean - 0.28535) < 1.0e-4
