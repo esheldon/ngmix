@@ -237,7 +237,7 @@ def test_mdet_regression(fname, write=False):
                 atol = 1.0e-4
             else:
                 rtol = 1.0e-5
-                atol = 2e-6
+                atol = 8e-6
 
             if np.issubdtype(old_data[col].dtype, np.number):
 
