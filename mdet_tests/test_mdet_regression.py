@@ -232,7 +232,7 @@ def test_mdet_regression(fname, write=False):
     else:
         old_data = fitsio.read(fname)
         for col in old_data.dtype.names:
-            if ('psf_' in col or 'ratio' in col) and '1.3.8' in fname:
+            if ('psf_' in col or 'ratio' in col) and '1.3.9' in fname:
                 rtol = 1.0e-4
                 atol = 1.0e-4
             else:
@@ -241,14 +241,14 @@ def test_mdet_regression(fname, write=False):
 
             if np.issubdtype(old_data[col].dtype, np.number):
 
-                if col == 'wmom_pars' and '1.3.8' in fname:
+                if col == 'wmom_pars' and '1.3.9' in fname:
                     adata = all_res[col]
                     odata = old_data[col].copy()
                     odata[5] = odata[5] * SCALE**2
                 elif (
                     col.startswith('wmom_band_flux')
                     and not col.endswith('flags')
-                    and '1.3.8' in fname
+                    and '1.3.9' in fname
                 ):
                     adata = all_res[col]
                     odata = old_data[col].copy() * SCALE**2
