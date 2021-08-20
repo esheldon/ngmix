@@ -244,7 +244,7 @@ def test_em_2gauss_withpsf(noise):
 
 
 @pytest.mark.parametrize('noise', [0.0, 0.05])
-@pytest.mark.parametrize('em_type', ['fixcen', 'fluxonly'])
+@pytest.mark.parametrize('em_type', ['fixcen', 'fixcov', 'fluxonly'])
 def test_em_types(em_type, noise):
     """
     test fixcen and fluxonly fitters
@@ -263,15 +263,17 @@ def test_em_types(em_type, noise):
 
     gm_guess = gm.copy()
 
-    fixcen = False
-    fluxonly = False
+    fixcen, fluxonly, fixcov = [False]*3
+
     if em_type == 'fixcen':
         fixcen = True
     if em_type == 'fluxonly':
         fluxonly = True
+    if em_type == 'fixcov':
+        fixcov = True
 
     res = ngmix.em.run_em(
-        obs=obs, guess=gm_guess, fixcen=fixcen, fluxonly=fluxonly,
+        obs=obs, guess=gm_guess, fixcen=fixcen, fixcov=fixcov, fluxonly=fluxonly,
     )
 
     assert res['flags'] == 0

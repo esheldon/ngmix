@@ -38,7 +38,7 @@ def em_run(conf,
     pixels: pixel array
         for the image/jacobian
     sums: array with fields
-        The sums array, a type _sums_dtype_fixcen
+        The sums array, a type _sums_dtype
     gmix: gauss2d array
         The initial mixture.  The final result is also stored in this array.
     gmix_psf: gauss2d array
@@ -254,7 +254,7 @@ def do_sums(sums, pixel, gtot):
     Parameters
     ----------
     sums: sums structure
-        With dtype _sums_dtype_fixcen
+        With dtype _sums_dtype
     pixel: pixel structure
         Dtype should be ngmix.pixels._pixels_dtype
     gtot: float
@@ -696,6 +696,310 @@ def clear_sums_fixcen(sums):
     sums['u2sum'][:] = 0.0
     sums['uvsum'][:] = 0.0
     sums['v2sum'][:] = 0.0
+
+
+# start fixcov
+@njit
+def em_run_fixcov(
+    conf,
+    pixels,
+    sums,
+    gmix,
+    gmix_psf,
+    gmix_conv,
+    fill_zero_weight=False,
+):
+    """
+    run the EM algorithm
+
+    Parameters
+    ----------
+    conf: array
+        Should have fields
+
+            tol: The fractional change in the log likelihood that implies
+                convergence
+            miniter: minimum number of iterations
+            maxiter: maximum number of iterations
+            sky: the sky, or guess for sky if fitting for it
+            vary_sky: True if fitting for the sky
+
+    pixels: pixel array
+        for the image/jacobian
+    sums: array with fields
+        The sums array, a type _sums_dtype_fixcov
+    gmix: gauss2d array
+        The initial mixture.  The final result is also stored in this array.
+    gmix_psf: gauss2d array
+        Single gaussian psf
+    gmix_conv: gauss2d array
+        Convolved gmix
+    fill_zero_weight: bool
+        If True, fill the zero weight pixels with the model on
+        each iteration
+
+    Returns
+    -------
+    numiter, frac_diff, sky
+        number of iterations, fractional difference in log likelihood between
+        last two steps, and sky.  The sky may have been fit for.
+    """
+
+    gmix_set_norms(gmix_conv)
+    ngauss_psf = gmix_psf.size
+
+    taudata = np.zeros(gmix_conv.size, dtype=_tau_dtype)
+
+    tol = conf['tol']
+
+    npix = pixels.size
+
+    sky = conf['sky']
+
+    elogL_last = -9999.9e9
+
+    for i in range(conf['maxiter']):
+
+        elogL = 0.0
+        skysum = 0.0
+
+        clear_sums_fixcov(sums)
+        set_logtau_logdet(gmix_conv, taudata)
+
+        if fill_zero_weight:
+            fill_zero_weight_pixels(gmix_conv, pixels, sky)
+
+        for pixel in pixels:
+
+            gsum, tlogL = do_scratch_sums_fixcov(
+                pixel, gmix_conv, sums, ngauss_psf,
+                taudata,
+            )
+
+            gtot = gsum + sky
+            if gtot == 0.0:
+                raise GMixRangeError('gtot == 0')
+
+            elogL += tlogL
+
+            skysum += sky*pixel['val']/gtot
+
+            do_sums_fixcov(sums, pixel, gtot)
+
+        gmix_set_from_sums_fixcov(
+            gmix,
+            gmix_psf,
+            gmix_conv,
+            sums,
+        )
+
+        if conf['vary_sky']:
+            sky = skysum/npix
+
+        numiter = i+1
+        if numiter >= conf['miniter']:
+
+            if elogL == 0.0:
+                raise GMixRangeError('elogL == 0')
+
+            frac_diff = abs((elogL - elogL_last)/elogL)
+            if frac_diff < tol:
+                break
+
+        elogL_last = elogL
+
+    # we have modified the mixture and not set the norms, and we don't want to
+    # set them for the pre-psf mixture
+
+    gmix['norm_set'][:] = 0
+
+    return numiter, frac_diff, sky
+
+
+@njit
+def clear_sums_fixcov(sums):
+    """
+    set all sums to zero
+
+    Parameters
+    ----------
+    sums: array
+        Array with dtype _sums_dtype
+    """
+    sums['gi'][:] = 0.0
+
+    sums['tusum'][:] = 0.0
+    sums['tvsum'][:] = 0.0
+
+    # sums over all pixels
+    sums['pnew'][:] = 0.0
+
+    sums['usum'][:] = 0.0
+    sums['vsum'][:] = 0.0
+
+
+@njit
+def do_scratch_sums_fixcov(pixel, gmix_conv, sums, ngauss_psf, taudata):
+    """
+    do the basic sums for this pixel, using scratch space in the sums struct
+
+    we may have multiple components per "object" so we update the
+    sums accordingly
+
+    Parameters
+    ----------
+    pixel: pixel structure
+        Dtype should be ngmix.pixels._pixels_dtype
+    gmix_conv: ngmix.GMix
+        The current mixture, convolved by the PSF
+    sums: sums structure
+        With dtype _sums_dtype
+    ngauss_psf: int
+        Number of gaussians in psf
+    taudata: tau data struct
+        With dtype _tau_dtype
+
+    Returns
+    -------
+    gsum, logL:
+        The total of the gaussians evaluated in the pixel and the
+        log likelihood
+    """
+
+    v = pixel['v']
+    u = pixel['u']
+
+    gsum = 0.0
+    logL = 0.0
+
+    ngauss = gmix_conv.size//ngauss_psf
+
+    for ii in range(ngauss):
+        tsums = sums[ii]
+        tsums['gi'] = 0.0
+        tsums['tvsum'] = 0.0
+        tsums['tusum'] = 0.0
+
+        start = ii*ngauss_psf
+        end = (ii+1)*ngauss_psf
+
+        for i in range(start, end):
+            gauss = gmix_conv[i]
+            ttau = taudata[i]
+
+            # in practice we have co-centric gaussians even after psf
+            # convolution, so we could move these to the outer loop
+
+            vdiff = v - gauss['row']
+            udiff = u - gauss['col']
+
+            u2 = udiff*udiff
+            v2 = vdiff*vdiff
+            uv = udiff*vdiff
+
+            chi2 = gauss['dcc']*v2 + gauss['drr']*u2 - 2.0*gauss['drc']*uv
+
+            if chi2 < 25.0 and chi2 >= 0.0:
+                val = gauss['pnorm']*fexp(-0.5*chi2) * pixel['area']
+            else:
+                val = 0.0
+
+            tsums['gi'] += val
+            gsum += val
+
+            tsums['tvsum'] += v*val
+            tsums['tusum'] += u*val
+
+            logL += val*(ttau['logtau'] - 0.5*ttau['logdet'] - 0.5*chi2)
+
+    if gsum == 0.0:
+        logL = 0.0
+    else:
+        logL *= 1.0/gsum
+
+    return gsum, logL
+
+
+@njit
+def do_sums_fixcov(sums, pixel, gtot):
+    """
+    do the sums based on the scratch values
+
+    Parameters
+    ----------
+    sums: sums structure
+        With dtype _sums_dtype
+    pixel: pixel structure
+        Dtype should be ngmix.pixels._pixels_dtype
+    gtot: float
+        The sum over gaussian values
+    """
+
+    factor = pixel['val']/gtot
+
+    n_gauss = sums.size
+    for i in range(n_gauss):
+        tsums = sums[i]
+
+        wtau = tsums['gi']*factor
+
+        tsums['pnew'] += wtau
+
+        # row*gi/gtot*imnorm
+
+        tsums['usum'] += tsums['tusum']*factor
+        tsums['vsum'] += tsums['tvsum']*factor
+
+
+@njit
+def gmix_set_from_sums_fixcov(
+    gmix,
+    gmix_psf,
+    gmix_conv,
+    sums,
+):
+    """
+    fill the gaussian mixture from the em sums
+
+    Parameters
+    ----------
+    gmix: ngmix.GMix
+        The gaussian mixture before psf convolution
+    gmix_psf: ngmix.GMix
+        The gaussian mixture of the PSF (can be zero size for no psf)
+    gmix_conv: ngmix.GMix
+        The final convolved mixture
+    sums: sums structure
+        With dtype _sums_dtype
+    """
+
+    n_gauss = gmix.size
+    for i in range(n_gauss):
+
+        tsums = sums[i]
+        gauss = gmix[i]
+
+        p = tsums['pnew']
+        pinv = 1.0/p
+
+        # update for convolved gaussian
+        v = tsums['vsum']*pinv
+        u = tsums['usum']*pinv
+
+        gauss2d_set(
+            gauss,
+            p,
+            v,
+            u,
+            gauss['irr'],
+            gauss['irc'],
+            gauss['icc'],
+        )
+
+    gmix_convolve_fill(gmix_conv, gmix, gmix_psf)
+    gmix_set_norms(gmix_conv)
+
+# end fixcov
 
 
 @njit
