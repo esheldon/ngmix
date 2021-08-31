@@ -33,7 +33,7 @@ jobs:
             pip \
             setuptools \
             numpy \
-            numba \
+            "numba<0.54.0" \
             flake8 \
             pyyaml \
             scipy \
