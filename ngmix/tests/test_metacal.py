@@ -32,6 +32,15 @@ def test_metacal_smoke(psf):
         assert mobs.psf.image.shape == obs.psf.image.shape
         assert np.all(mobs.psf.image != obs.psf.image)
 
+    assert np.all(obs_dict['1p'].image != obs_dict['1m'].image)
+    assert np.all(obs_dict['2p'].image != obs_dict['2m'].image)
+    assert np.all(obs_dict['noshear'].image != obs_dict['1p'].image)
+
+    if psf == 'dilate':
+        assert np.all(obs_dict['1p_psf'].image != obs_dict['1m_psf'].image)
+        assert np.all(obs_dict['2p_psf'].image != obs_dict['2m_psf'].image)
+        assert np.all(obs_dict['noshear'].image != obs_dict['2m_psf'].image)
+
 
 @pytest.mark.parametrize('psf', ['gauss', 'fitgauss', 'galsim_obj', 'dilate'])
 def test_metacal_types_smoke(psf):
