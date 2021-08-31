@@ -274,8 +274,10 @@ class MetacalDilatePSF(object):
         return self._psf_cache[key]
 
     def _get_psf_key(self, shear, doshear):
-        g = np.sqrt(shear.g1**2 + shear.g2**2)
-        return '%s-%s' % (doshear, g)
+        """
+        need full g1 and g2 in key to support psf shearing
+        """
+        return '%s-%s-%s' % (doshear, shear.g1, shear.g2)
 
     def get_target_image(self, psf_obj, shear=None):
         """
