@@ -1,3 +1,11 @@
+## v2.0.1  (not yet released)
+
+### new features
+
+- em fitting now supports fixed covariance matrices using the
+  EMFitterFixCov, or equivalently the fixcov=True keyword to the run_em
+  convenience function
+
 ## v2.0.0
 
 ### breaking API changes

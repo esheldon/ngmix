@@ -12,7 +12,7 @@ from ..gexceptions import GMixRangeError
 from ..observation import Observation
 from ..gmix import GMix, GMixModel
 from ..flags import EM_RANGE_ERROR, EM_MAXITER
-from .em_nb import em_run, em_run_fixcen, em_run_fluxonly
+from .em_nb import em_run, em_run_fixcen, em_run_fixcov, em_run_fluxonly
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_TOL = 1.0e-5
 
 
-def run_em(obs, guess, sky=None, fixcen=False, fluxonly=False, **kws):
+def run_em(obs, guess, sky=None, fixcen=False, fixcov=False, fluxonly=False, **kws):
     """
     fit the observation with EM
 
@@ -36,6 +36,8 @@ def run_em(obs, guess, sky=None, fixcen=False, fluxonly=False, **kws):
         sky such that there are no negative pixels.
     fixcen: bool, optional
         if True, use the fixed center fitter
+    fixcov: bool, optional
+        if True, use the fixed covariance fitter
     fluxonly: bool, optional
         if True, use the flxu only fitter
     minimum: number, optional
@@ -55,6 +57,8 @@ def run_em(obs, guess, sky=None, fixcen=False, fluxonly=False, **kws):
 
     if fixcen:
         fitter = EMFitterFixCen(**kws)
+    elif fixcov:
+        fitter = EMFitterFixCov(**kws)
     elif fluxonly:
         fitter = EMFitterFluxOnly(**kws)
     else:
@@ -373,6 +377,33 @@ class EMFitterFixCen(EMFitter):
         self._runner = em_run_fixcen
 
 
+class EMFitterFixCov(EMFitter):
+    """
+    Fit an image with a gaussian mixture using the EM algorithm
+
+    Parameters
+    ----------
+    miniter: number, optional
+        The minimum number of iterations, default 40
+    maxiter: number, optional
+        The maximum number of iterations, default 500
+    tol: number, optional
+        The fractional change in the log likelihood that implies convergence,
+        default 0.001
+    vary_sky: bool
+        If True, fit for the sky level
+    """
+
+    def _make_sums(self, ngauss):
+        """
+        make the sum structure
+        """
+        return np.zeros(ngauss, dtype=_sums_dtype_fixcov)
+
+    def _set_runner(self):
+        self._runner = em_run_fixcov
+
+
 class EMFitterFluxOnly(EMFitterFixCen):
     """
     Fit an image with a gaussian mixture using the EM algorithm,
@@ -470,6 +501,26 @@ _sums_dtype_fixcen = [
     ('v2sum', 'f8'),
 ]
 _sums_dtype_fixcen = np.dtype(_sums_dtype_fixcen, align=True)
+
+
+_sums_dtype_fixcov = [
+    ('gi', 'f8'),
+
+    # used for convergence tests only
+    ('logtau', 'f8'),
+    ('logdet', 'f8'),
+
+    # scratch on a given pixel
+    ('tvsum', 'f8'),
+    ('tusum', 'f8'),
+
+    # sums over all pixels
+    ('pnew', 'f8'),
+    ('vsum', 'f8'),
+    ('usum', 'f8'),
+]
+_sums_dtype_fixcov = np.dtype(_sums_dtype_fixcov, align=True)
+
 
 _sums_dtype_fluxonly = [
     ('gi', 'f8'),
