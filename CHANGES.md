@@ -6,6 +6,11 @@
   EMFitterFixCov, or equivalently the fixcov=True keyword to the run_em
   convenience function
 
+### bug fixes
+
+- fixed bug with sheared psfs in metacal, negative sheared psfs
+  were not being cached.
+
 ## v2.0.0
 
 ### breaking API changes
