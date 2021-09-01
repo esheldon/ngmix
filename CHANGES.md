@@ -1,4 +1,4 @@
-## v2.0.1  (not yet released)
+## v2.0.1
 
 ### new features
 
