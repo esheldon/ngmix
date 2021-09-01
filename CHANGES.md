@@ -10,6 +10,8 @@
 
 - fixed bug with sheared psfs in metacal, negative sheared psfs
   were not being cached.
+- bug in psf guesser when using guess_from_moms that caused
+  infinite recursion
 
 ## v2.0.0
 

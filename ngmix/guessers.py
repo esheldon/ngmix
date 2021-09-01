@@ -815,7 +815,7 @@ class GMixPSFGuesser(object):
         fwhm_meas = moments.T_to_fwhm(Tmeas)
         if fwhm_meas < scale:
             # something probably went wrong
-            T, flux = self._get_T_flux(obs=obs)
+            T, flux = self._get_T_flux_default(obs=obs)
         else:
             # deweight assuming true profile is a gaussian
             T = 1.0/(1/Tmeas - 1/Tweight)
