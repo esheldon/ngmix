@@ -6,6 +6,7 @@ import scipy.fft as fft
 from ngmix.observation import Observation
 from ngmix.moments import fwhm_to_sigma
 from ngmix.util import get_ratio_error
+from ngmix.fastexp_nb import fexp, FASTEXP_MAX_CHI2
 
 
 logger = logging.getLogger(__name__)
@@ -478,6 +479,87 @@ def _ksigma_kernels(
     fkr = -2 * two_knrm_dWdk2 - fmag2 * four_knrm_dW2dk22
     fkp = -(fu2 - fv2) * four_knrm_dW2dk22
     fkc = -2 * fu * fv * four_knrm_dW2dk22
+
+    return dict(
+        fkf=fkf,
+        fkr=fkr,
+        fkp=fkp,
+        fkc=fkc,
+        msk=msk,
+    )
+
+
+def _gauss_kernels(
+    dim,
+    kernel_size,
+    dvdrow, dvdcol, dudrow, dudcol,
+):
+    """This function builds a Gaussian kernel in Fourier-space.
+
+    It returns a dict of all of the kernels needed to measure moments in
+    real-space by summing the kernel against the FFT of an image.
+    """
+    # we first get the Fourier modes in the u,v plane
+    f = fft.fftfreq(dim) * (2.0 * np.pi)
+    fx = f.reshape(1, -1)
+    fy = f.reshape(-1, 1)
+    Atinv = np.linalg.inv([[dvdrow, dvdcol], [dudrow, dudcol]]).T
+    fv = Atinv[0, 0] * fy + Atinv[0, 1] * fx
+    fu = Atinv[1, 0] * fy + Atinv[1, 1] * fx
+
+    # now draw the kernels
+    sigma = fwhm_to_sigma(kernel_size)
+    sigma2 = sigma * sigma
+    fu2 = fu**2
+    fv2 = fv**2
+    fmag2 = fu2 + fv2
+    exp_fac = 2 * np.pi**2 * sigma2
+    chi2 = exp_fac * fmag2
+    msk = chi2 < FASTEXP_MAX_CHI2
+
+    # from here we work with non-zero portion only
+    fmag2 = fmag2[msk]
+    fu = fu[msk]
+    fu2 = fu2[msk]
+    fv = fv[msk]
+    fv2 = fv2[msk]
+    chi2 = chi2[msk]
+    exp_val = fexp(chi2)
+
+    # we need to normalize the kernel to unity in real space at the object center
+    # we also need a factor of the k-space area element so that when we
+    # sum an image against this kernel, we get an integral
+    detAtinv = np.abs(np.linalg.det(Atinv))
+
+    # the total factor is the k-space element times the right normalization in
+    # fourier space for a unit peak kernel in real space
+    # we multiply by this value
+    knrm = detAtinv * np.pi * 2 * sigma2
+
+    # now build the kernels
+    # the flux kernel is easy since it is the kernel itself
+    fkf = exp_val * knrm
+
+    # the moment kernels take a bit more work
+    # product by u^2 in real space is -dk^2/dku^2 in Fourier space
+    # same holds for v and cross deriv is -dk^2/dkudkv
+    # in general
+    #
+    #   dWdkx = dWdk2 * dk2dx = 2kx * dWdk2
+    #   dW^2dkx^2 = 2 dWdk2 + 4 kx^2 * dW^2dk2^2
+    #
+    # The other derivs are similar.
+
+    # the linear combinations here measure the moments proportional to the size
+    # and shears - see the Mf, Mr, M+, Mx moments in Bernstein et al., arXiv:1508.05655
+    # fkr = fkxx + fkyy
+    # fkp = fkxx - fkyy
+    # fkc = 2 * fkxy
+    fkxx = 2*exp_fac * (2 * exp_fac * fu2 - 1) * fkf
+    fkyy = 2*exp_fac * (2 * exp_fac * fv2 - 1) * fkf
+    fkr = fkxx + fkyy
+    fkp = fkxx - fkyy
+    fkc = 8 * exp_fac**2 * fu * fv * fkf
 
     return dict(
         fkf=fkf,
