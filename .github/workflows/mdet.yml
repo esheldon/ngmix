@@ -60,9 +60,9 @@ jobs:
           popd
 
           pip uninstall ngmix -y
-          mamba install ngmix==1.3.9 -y
+          mamba install ngmix==2.0.1 -y
           pushd mdet_tests
-          python test_mdet_regression.py v1.3.9
+          python test_mdet_regression.py v2.0.1
           popd
           mamba uninstall ngmix -y
 
