@@ -45,7 +45,8 @@ jobs:
             emcee \
             fitsio \
             meds \
-            pytest-cov
+            pytest-cov \
+            pytest-xdist
 
           python -m pip install -e .
 
@@ -57,4 +58,4 @@ jobs:
       - name: test
         shell: bash -l {0}
         run: |
-          pytest -v --cov=ngmix --cov-report term-missing ngmix
+          pytest -n 4 -v --cov=ngmix --cov-report term-missing ngmix

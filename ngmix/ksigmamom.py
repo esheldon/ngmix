@@ -11,9 +11,11 @@ from ngmix.util import get_ratio_error
 logger = logging.getLogger(__name__)
 
 
-class KSigmaMom(object):
-    """Measure pre-PSF weighted real-sapce moments w/ the 'ksigma'
-    Fourier-space kernels from Bernstein et al., arXiv:1508.05655.
+class _PrePSFMom(object):
+    """Measure pre-PSF weighted real-space moments.
+
+    This class is not meant to be used directly. Instead use either `KSigmaMom`
+    or `PrePSFGaussMom`.
 
     If the fwhm of the weight/kernel function is of similar size to the PSF or
     smaller, then the object properties returned by this fitter will be very noisy.
@@ -22,12 +24,15 @@ class KSigmaMom(object):
     ----------
     fwhm : float
         This parameter is the approximate real-space FWHM of the kernel.
+    kernel : str
+        The kernel to use. Either `ksigma` or `gauss`.
     pad_factor : int, optional
         The factor by which to pad the FFTs used for the image. Default is 4.
     """
-    def __init__(self, fwhm, pad_factor=4):
+    def __init__(self, fwhm, *, kernel, pad_factor=4):
         self.fwhm = fwhm
         self.pad_factor = pad_factor
+        self.kernel = kernel
 
     def go(self, obs, return_kernels=False, no_psf=False):
         """Measure the pre-PSF ksigma moments.
@@ -118,12 +123,24 @@ class KSigmaMom(object):
         # later in _measure_moments_fft
 
         # now build the kernels
-        kernels = _ksigma_kernels(
-            target_dim,
-            self.fwhm,
-            obs.jacobian.dvdrow, obs.jacobian.dvdcol,
-            obs.jacobian.dudrow, obs.jacobian.dudcol,
-        )
+        if self.kernel == "ksigma":
+            kernels = _ksigma_kernels(
+                target_dim,
+                self.fwhm,
+                obs.jacobian.dvdrow, obs.jacobian.dvdcol,
+                obs.jacobian.dudrow, obs.jacobian.dudcol,
+            )
+        elif self.kernel == "gauss":
+            kernels = _gauss_kernels(
+                target_dim,
+                self.fwhm,
+                obs.jacobian.dvdrow, obs.jacobian.dvdcol,
+                obs.jacobian.dudrow, obs.jacobian.dudcol,
+            )
+        else:
+            raise ValueError(
+                "The kernel '%s' _PrePSFMom is not recognized!" % self.kernel
+            )
 
         # compute the total variance from weight map
         msk = obs.weight > 0
@@ -149,6 +166,24 @@ class KSigmaMom(object):
             res["kernels"] = full_kernels
 
         return res
+
+
+class KSigmaMom(_PrePSFMom):
+    """Measure pre-PSF weighted real-space moments w/ the 'ksigma'
+    Fourier-space kernels from Bernstein et al., arXiv:1508.05655.
+
+    If the fwhm of the weight/kernel function is of similar size to the PSF or
+    smaller, then the object properties returned by this fitter will be very noisy.
+
+    Parameters
+    ----------
+    fwhm : float
+        This parameter is the approximate real-space FWHM of the kernel.
+    pad_factor : int, optional
+        The factor by which to pad the FFTs used for the image. Default is 4.
+    """
+    def __init__(self, fwhm, pad_factor=4):
+        super().__init__(fwhm, kernel='ksigma', pad_factor=pad_factor)
 
 
 def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, dcol):

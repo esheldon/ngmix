@@ -63,6 +63,38 @@ def test_ksigmamom_gauss_raises_badjacob():
     assert "same WCS Jacobia" in str(e.value)
 
 
+def _stack_list_of_dicts(res):
+    def _get_dtype(v):
+        if isinstance(v, float):
+            return ('f8',)
+        elif isinstance(v, int):
+            return ('i4',)
+        elif isinstance(v, str):
+            return ('U256',)
+        elif hasattr(v, "dtype") and hasattr(v, "shape"):
+            if "float" in str(v.dtype):
+                dstr = "f8"
+            else:
+                dstr = "i8"
+
+            if len(v.shape) == 1:
+                return (dstr, v.shape[0])
+            else:
+                return (dstr, v.shape)
+        else:
+            raise RuntimeError("cannot interpret dtype of '%s'" % v)
+
+    dtype = []
+    for k, v in res[0].items():
+        dtype.append((k,) + _get_dtype(v))
+    d = np.zeros(len(res), dtype=dtype)
+    for i in range(len(res)):
+        for k, v in res[i].items():
+            d[k][i] = v
+
+    return d
+
+
 @pytest.mark.parametrize('snr', [1e1, 1e3])
 @pytest.mark.parametrize('pixel_scale', [0.125, 0.25])
 @pytest.mark.parametrize('fwhm,psf_fwhm', [(0.6, 0.9), (1.5, 0.9)])
@@ -126,12 +158,6 @@ def test_ksigmamom_gauss(
         wcs=gs_wcs
     ).array
 
-    g1arr = []
-    g2arr = []
-    Tarr = []
-    farr = []
-    momarr = []
-    snrarr = []
     fitter = KSigmaMom(
         fwhm=mom_fwhm,
         pad_factor=pad_factor,
@@ -153,7 +179,8 @@ def test_ksigmamom_gauss(
     g1_true = res["e"][0]
     g2_true = res["e"][1]
 
-    for _ in range(100):
+    res = []
+    for _ in range(500):
         _im = im + rng.normal(size=im.shape, scale=noise)
         obs = Observation(
             image=_im,
@@ -162,26 +189,28 @@ def test_ksigmamom_gauss(
             psf=Observation(image=psf_im, jacobian=psf_jac),
         )
 
-        res = fitter.go(obs=obs)
-        if res['flags'] == 0:
-            _g1, _g2 = res['e'][0], res['e'][1]
-            g1arr.append(_g1)
-            g2arr.append(_g2)
-            Tarr.append(res['T'])
-            farr.append(res['flux'])
-            snrarr.append(res["flux"] / res["flux_err"])
-            momarr.append(res["mom"])
+        _res = fitter.go(obs=obs)
+        if _res['flags'] == 0:
+            res.append(_res)
+
+    res = _stack_list_of_dicts(res)
 
     print("\n")
-    _report_info("snr", snrarr, None, None)
-    _report_info("flux", farr, flux_true, res["flux_err"])
-    _report_info("T", Tarr, T_true, res["T_err"])
-    _report_info("g1", g1arr, g1_true, res["e_err"][0])
-    _report_info("g2", g2arr, g2_true, res["e_err"][1])
-    mom_cov = np.cov(np.array(momarr).T)
-    print("mom cov ratio:\n", res["mom_cov"]/mom_cov, flush=True)
-    assert np.allclose(np.mean(farr), flux_true, atol=0, rtol=0.1)
-    assert np.allclose(np.std(farr), res["flux_err"], atol=0, rtol=0.2)
+    _report_info("snr", np.mean(res["flux"]/res["flux_err"]), None, None)
+    _report_info("flux", res["flux"], flux_true, np.mean(res["flux_err"]))
+    _report_info("T", res["T"], T_true, np.mean(res["T_err"]))
+    _report_info("g1", res["e"][:, 0], g1_true, np.mean(res["e_err"][0]))
+    _report_info("g2", res["e"][:, 1], g2_true, np.mean(res["e_err"][1]))
+    mom_cov = np.cov(res["mom"].T)
+    print("mom cov ratio:\n", np.mean(res["mom_cov"], axis=0)/mom_cov, flush=True)
+    assert np.allclose(np.mean(res["flux"]), flux_true, atol=0, rtol=0.1)
+    assert np.allclose(np.std(res["flux"]), np.mean(res["flux_err"]), atol=0, rtol=0.1)
+    assert np.allclose(
+        np.abs(np.mean(res["flux"]) - flux_true)/np.mean(res["flux_err"]),
+        0,
+        atol=4,
+        rtol=0,
+    )
 
 
 @pytest.mark.parametrize('snr', [1e2])
@@ -247,12 +276,6 @@ def test_ksigmamom_mn_cov(
         wcs=gs_wcs
     ).array
 
-    g1arr = []
-    g2arr = []
-    Tarr = []
-    farr = []
-    momarr = []
-    snrarr = []
     fitter = KSigmaMom(
         fwhm=mom_fwhm,
         pad_factor=pad_factor,
@@ -274,6 +297,7 @@ def test_ksigmamom_mn_cov(
     g1_true = res["e"][0]
     g2_true = res["e"][1]
 
+    res = []
     for _ in range(10_000):
         _im = im + rng.normal(size=im.shape, scale=noise)
         obs = Observation(
@@ -283,38 +307,37 @@ def test_ksigmamom_mn_cov(
             psf=Observation(image=psf_im, jacobian=psf_jac),
         )
 
-        res = fitter.go(obs=obs)
-        if res['flags'] == 0:
-            _g1, _g2 = res['e'][0], res['e'][1]
-            g1arr.append(_g1)
-            g2arr.append(_g2)
-            Tarr.append(res['T'])
-            farr.append(res['flux'])
-            snrarr.append(res["flux"] / res["flux_err"])
-            momarr.append(res["mom"])
+        _res = fitter.go(obs=obs)
+        if _res['flags'] == 0:
+            res.append(_res)
+
+    res = _stack_list_of_dicts(res)
 
     print("\n")
-    _report_info("snr", snrarr, None, None)
-    _report_info("flux", farr, flux_true, res["flux_err"])
-    _report_info("T", Tarr, T_true, res["T_err"])
-    _report_info("g1", g1arr, g1_true, res["e_err"][0])
-    _report_info("g2", g2arr, g2_true, res["e_err"][1])
+    _report_info("snr", np.mean(res["flux"]/res["flux_err"]), None, None)
+    _report_info("flux", res["flux"], flux_true, np.mean(res["flux_err"]))
+    _report_info("T", res["T"], T_true, np.mean(res["T_err"]))
+    _report_info("g1", res["e"][:, 0], g1_true, np.mean(res["e_err"][0]))
+    _report_info("g2", res["e"][:, 1], g2_true, np.mean(res["e_err"][1]))
 
-    assert np.allclose(np.mean(farr), flux_true, atol=0, rtol=1e-2)
-    assert np.allclose(np.mean(Tarr), T_true, atol=0, rtol=1e-2)
-    assert np.allclose(np.mean(g1arr), g1_true, atol=0, rtol=1e-2)
-    assert np.allclose(np.mean(g2arr), g2_true, atol=0, rtol=1e-2)
+    assert np.allclose(np.mean(res["flux"]), flux_true, atol=0, rtol=1e-2)
+    assert np.allclose(np.mean(res["T"]), T_true, atol=0, rtol=1e-2)
+    assert np.allclose(np.mean(res["e"][:, 0]), g1_true, atol=0, rtol=1e-2)
+    assert np.allclose(np.mean(res["e"][:, 1]), g2_true, atol=0, rtol=1e-2)
 
-    assert np.allclose(np.std(farr), res["flux_err"], atol=0, rtol=2e-2)
-    assert np.allclose(np.std(Tarr), res["T_err"], atol=0, rtol=2e-2)
-    assert np.allclose(np.std(g1arr), res["e_err"][0], atol=0, rtol=2e-2)
-    assert np.allclose(np.std(g2arr), res["e_err"][1], atol=0, rtol=2e-2)
+    assert np.allclose(np.std(res["flux"]), np.mean(res["flux_err"]), atol=0, rtol=2e-2)
+    assert np.allclose(np.std(res["T"]), np.mean(res["T_err"]), atol=0, rtol=2e-2)
+    assert np.allclose(
+        np.std(res["e"][:, 0]), np.mean(res["e_err"][:, 0]), atol=0, rtol=2e-2)
+    assert np.allclose(
+        np.std(res["e"][:, 1]), np.mean(res["e_err"][:, 1]), atol=0, rtol=2e-2)
 
-    mom_cov = np.cov(np.array(momarr).T)
-    print("mom cov ratio:\n", res["mom_cov"]/mom_cov, flush=True)
+    mom_cov = np.cov(res["mom"].T)
+    print("mom cov ratio:\n", np.mean(res["mom_cov"], axis=0)/mom_cov, flush=True)
     print("mom cov meas:\n", mom_cov, flush=True)
-    print("mom cov pred:\n", res["mom_cov"], flush=True)
-    assert np.allclose(res["mom_cov"], mom_cov, atol=0, rtol=4e-1)
+    print("mom cov pred:\n", np.mean(res["mom_cov"], axis=0), flush=True)
+    assert np.allclose(
+        res["mom_cov"], np.mean(res["mom_cov"], axis=0), atol=0, rtol=4e-1)
 
 
 def test_make_mom_res_flags():
