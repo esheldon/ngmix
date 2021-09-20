@@ -24,7 +24,9 @@ class _PrePSFMom(object):
     Parameters
     ----------
     fwhm : float
-        This parameter is the approximate real-space FWHM of the kernel.
+        This parameter is the approximate real-space FWHM of the kernel. The units are
+        whatever the Jacobian on the obs converts pixels units to. This is typically
+        arcseconds.
     kernel : str
         The kernel to use. Either `ksigma` or `gauss`.
     pad_factor : int, optional
@@ -179,7 +181,9 @@ class KSigmaMom(_PrePSFMom):
     Parameters
     ----------
     fwhm : float
-        This parameter is the approximate real-space FWHM of the kernel.
+        This parameter is the approximate real-space FWHM of the kernel. The units are
+        whatever the Jacobian on the obs converts pixels units to. This is typically
+        arcseconds.
     pad_factor : int, optional
         The factor by which to pad the FFTs used for the image. Default is 4.
     """
@@ -549,17 +553,18 @@ def _gauss_kernels(
     #   dW^2dkx^2 = 2 dWdk2 + 4 kx^2 * dW^2dk2^2
     #
     # The other derivs are similar.
+    # I've combined a lot of the math below.
 
     # the linear combinations here measure the moments proportional to the size
     # and shears - see the Mf, Mr, M+, Mx moments in Bernstein et al., arXiv:1508.05655
     # fkr = fkxx + fkyy
     # fkp = fkxx - fkyy
     # fkc = 2 * fkxy
-    fkxx = 2*exp_fac * (2 * exp_fac * fu2 - 1) * fkf
-    fkyy = 2*exp_fac * (2 * exp_fac * fv2 - 1) * fkf
-    fkr = fkxx + fkyy
-    fkp = fkxx - fkyy
-    fkc = 8 * exp_fac**2 * fu * fv * fkf
+    fkfac = 2 * exp_fac
+    fkfac2 = 4 * exp_fac**2
+    fkr = (fkfac2 * fmag2 - 2 * fkfac) * fkf
+    fkp = fkfac2 * (fu2 - fv2) * fkf
+    fkc = 2 * fkfac2 * fu * fv * fkf
 
     return dict(
         fkf=fkf,

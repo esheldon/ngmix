@@ -1,4 +1,4 @@
-from .ksigmamom import _PrePSFMom
+from ngmix.ksigmamom import _PrePSFMom
 
 
 class PrePSFGaussMom(_PrePSFMom):
@@ -12,7 +12,9 @@ class PrePSFGaussMom(_PrePSFMom):
     Parameters
     ----------
     fwhm : float
-        This parameter is the real-space FWHM of the kernel.
+        This parameter is the real-space FWHM of the kernel. The units are
+        whatever the Jacobian on the obs converts pixels units to. This is typically
+        arcseconds.
     pad_factor : int, optional
         The factor by which to pad the FFTs used for the image. Default is 4.
     """
