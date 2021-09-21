@@ -1,3 +1,18 @@
+## unreleased
+
+### new features
+
+- Added `PrePSFGaussMom` fitter for computing pre-PSF moments in Gaussian
+  apertures
+- Test suite now runs in parallel using `pytest-xdist`
+- Added `flux_flags` and `T_flags` fields to `KSigmaMom` and `PrePSFGaussMom`
+  fitters for using just those quantities.
+
+### bug fixes
+
+- Fixed bug in `KSigmaMom` where the moment was not properly normalized if
+  the stamp size is much smaller than the moment aperture.
+
 ## v2.0.1
 
 ### new features
