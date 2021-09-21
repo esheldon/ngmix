@@ -282,6 +282,8 @@ def _make_mom_res(mom, mom_cov):
     res["mom_cov"] = mom_cov
     res["flux_flags"] = 0
     res["flux_flagstr"] = ""
+    res["T_flags"] = 0
+    res["T_flagstr"] = ""
 
     # we fill these in later if T > 0 and flux cov is positive
     res["flux_err"] = 9999.0
@@ -295,25 +297,32 @@ def _make_mom_res(mom, mom_cov):
     res["e_cov"] = np.diag([9999.0, 9999.0])
     res["mom_err"] = np.ones(4) * 9999.0
 
-    # handle flux-only and fill in T/T_err if we can
+    # handle flux-only
     if np.diagonal(mom_cov)[0] > 0:
         res["flux_err"] = np.sqrt(mom_cov[0, 0])
         res["s2n"] = res["flux"] / res["flux_err"]
-        if mom[0] > 0:
-            res["T"] = mom[1] / mom[0]
-            if mom_cov[0, 0] > 0 and mom_cov[1, 1]:
-                res["T_err"] = get_ratio_error(
-                    mom[1], mom[0],
-                    mom_cov[1, 1], mom_cov[0, 0], mom_cov[0, 1]
-                )
     else:
         res["flux_flags"] |= 0x40
         res["flux_flagstr"] += 'zero or neg flux var;'
 
+    # handle flux+T only
+    if np.all(np.diagonal(mom_cov)[0:2] > 0):
+        if mom[0] > 0:
+            res["T"] = mom[1] / mom[0]
+            res["T_err"] = get_ratio_error(
+                mom[1], mom[0],
+                mom_cov[1, 1], mom_cov[0, 0], mom_cov[0, 1]
+            )
+        else:
+            # flux <= 0.0
+            res["T_flags"] |= 0x4
+            res["T_flagstr"] += "flux <= 0.0;"
+    else:
+        res["T_flags"] |= 0x40
+        res["T_flagstr"] += 'zero or neg flux/T var;'
+
     # now handle full flags
     if np.all(np.diagonal(mom_cov) > 0):
-        res["flux_err"] = np.sqrt(mom_cov[0, 0])
-        res["s2n"] = res["flux"] / res["flux_err"]
         res["mom_err"] = np.sqrt(np.diagonal(mom_cov))
     else:
         res["flags"] |= 0x40
@@ -321,12 +330,6 @@ def _make_mom_res(mom, mom_cov):
 
     if res["flags"] == 0:
         if mom[0] > 0:
-            res["T"] = mom[1] / mom[0]
-            res["T_err"] = get_ratio_error(
-                mom[1], mom[0],
-                mom_cov[1, 1], mom_cov[0, 0], mom_cov[0, 1]
-            )
-
             if res["T"] > 0:
                 res["pars"] = np.array([
                     0, 0,

@@ -358,6 +358,13 @@ def test_make_mom_res_flags():
             assert res["flux_flags"] == 0
             assert res["flux_flagstr"] == ""
 
+        if i < 2:
+            assert (res["T_flags"] & 0x40) != 0
+            assert "zero or neg flux/T var" in res["T_flagstr"]
+        else:
+            assert res["T_flags"] == 0
+            assert res["T_flagstr"] == ""
+
     # neg flux
     _mom = mom.copy()
     _mom[0] = -1
@@ -366,6 +373,8 @@ def test_make_mom_res_flags():
     assert "flux <= 0" in res["flagstr"]
     assert res["flux_flags"] == 0
     assert res["flux_flagstr"] == ""
+    assert (res["T_flags"] & 0x4) != 0
+    assert "flux <= 0" in res["T_flagstr"]
 
     # neg T
     _mom = mom.copy()
@@ -375,6 +384,8 @@ def test_make_mom_res_flags():
     assert "T <= 0" in res["flagstr"]
     assert res["flux_flags"] == 0
     assert res["flux_flagstr"] == ""
+    assert res["T_flags"] == 0
+    assert res["T_flagstr"] == ""
 
     # bad shape errs
     for i in [2, 3]:
@@ -386,3 +397,5 @@ def test_make_mom_res_flags():
         assert "non-finite shape errors" in res["flagstr"]
         assert res["flux_flags"] == 0
         assert res["flux_flagstr"] == ""
+        assert res["T_flags"] == 0
+        assert res["T_flagstr"] == ""
