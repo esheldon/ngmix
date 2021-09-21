@@ -1,5 +1,5 @@
 import numpy as np
-from numba import njit
+from numba import njit, vectorize
 
 
 def _make_exp_lookup(minval=-15, maxval=0):
@@ -102,3 +102,8 @@ def exp5(x):
 
 
 fexp = exp5
+
+
+@vectorize
+def fexp_arr(x):
+    return fexp(x)

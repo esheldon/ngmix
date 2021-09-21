@@ -6,7 +6,7 @@ import scipy.fft as fft
 from ngmix.observation import Observation
 from ngmix.moments import fwhm_to_sigma
 from ngmix.util import get_ratio_error
-from ngmix.fastexp_nb import fexp, FASTEXP_MAX_CHI2
+from ngmix.fastexp_nb import fexp_arr, FASTEXP_MAX_CHI2
 
 
 logger = logging.getLogger(__name__)
@@ -503,6 +503,15 @@ def _ksigma_kernels(
     # the flux kernel is easy since it is the kernel itself
     fkf = karg4 * knrm
 
+    # when the kernel support extends beyong the FFt region, we have to do more
+    # thus we have to normalize the discrete FFT to unit peak in real-space
+    # for kernels much smaller than the image size, this comes out fine
+    # for kernels much bigger than the image size, you need an extra factor to
+    # correct for the truncated aperture
+    nrm = np.sum(fkf)/dim/dim
+    fkf /= nrm
+    knrm /= nrm
+
     # the moment kernels take a bit more work
     # product by u^2 in real space is -dk^2/dku^2 in Fourier space
     # same holds for v and cross deriv is -dk^2/dkudkv
@@ -559,7 +568,7 @@ def _gauss_kernels(
     fu2 = fu**2
     fv2 = fv**2
     fmag2 = fu2 + fv2
-    exp_fac = 2 * np.pi**2 * sigma2
+    exp_fac = sigma2 / 2
     chi2 = exp_fac * fmag2
     msk = chi2 < FASTEXP_MAX_CHI2
 
@@ -570,7 +579,7 @@ def _gauss_kernels(
     fv = fv[msk]
     fv2 = fv2[msk]
     chi2 = chi2[msk]
-    exp_val = fexp(chi2)
+    exp_val = fexp_arr(-chi2)
 
     # we need to normalize the kernel to unity in real space at the object center
     # we also need a factor of the k-space area element so that when we
@@ -585,6 +594,15 @@ def _gauss_kernels(
     # now build the kernels
     # the flux kernel is easy since it is the kernel itself
     fkf = exp_val * knrm
+
+    # when the kernel support extends beyong the FFt region, we have to do more
+    # thus we have to normalize the discrete FFT to unit peak in real-space
+    # for kernels much smaller than the image size, this comes out fine
+    # for kernels much bigger than the image size, you need an extra factor to
+    # correct for the truncated aperture
+    nrm = np.sum(fkf)/dim/dim
+    fkf /= nrm
+    knrm /= nrm
 
     # the moment kernels take a bit more work
     # product by u^2 in real space is -dk^2/dku^2 in Fourier space
