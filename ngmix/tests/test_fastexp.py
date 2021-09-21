@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import pytest
+from flaky import flaky
 
 from ngmix.fastexp_nb import fexp
 
@@ -15,6 +16,7 @@ def test_fastexp_smoke(x):
 
 
 @pytest.mark.parametrize('x', vals)
+@flaky
 def test_fastexp_timing(x):
     # call a few tims for numba overhead
     for _ in range(2):
