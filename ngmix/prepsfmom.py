@@ -503,8 +503,8 @@ def _ksigma_kernels(
     # the flux kernel is easy since it is the kernel itself
     fkf = karg4 * knrm
 
-    # when the kernel support extends beyong the FFt region, we have to do more
-    # thus we have to normalize the discrete FFT to unit peak in real-space
+    # when the kernel support extends beyong the FFT region, we have to do more work
+    # we have to normalize the discrete FFT to unit peak in real-space
     # for kernels much smaller than the image size, this comes out fine
     # for kernels much bigger than the image size, you need an extra factor to
     # correct for the truncated aperture
@@ -595,8 +595,8 @@ def _gauss_kernels(
     # the flux kernel is easy since it is the kernel itself
     fkf = exp_val * knrm
 
-    # when the kernel support extends beyong the FFt region, we have to do more
-    # thus we have to normalize the discrete FFT to unit peak in real-space
+    # when the kernel support extends beyong the FFT region, we have to do more work
+    # we have to normalize the discrete FFT to unit peak in real-space
     # for kernels much smaller than the image size, this comes out fine
     # for kernels much bigger than the image size, you need an extra factor to
     # correct for the truncated aperture
