@@ -2,7 +2,7 @@ import galsim
 import numpy as np
 import pytest
 
-from ngmix.ksigmamom import KSigmaMom, _make_mom_res
+from ngmix.prepsfmom import KSigmaMom, _make_mom_res
 from ngmix import Jacobian
 from ngmix import Observation
 
@@ -180,7 +180,7 @@ def test_ksigmamom_gauss(
     g2_true = res["e"][1]
 
     res = []
-    for _ in range(500):
+    for _ in range(100):
         _im = im + rng.normal(size=im.shape, scale=noise)
         obs = Observation(
             image=_im,
@@ -204,7 +204,7 @@ def test_ksigmamom_gauss(
     mom_cov = np.cov(res["mom"].T)
     print("mom cov ratio:\n", np.mean(res["mom_cov"], axis=0)/mom_cov, flush=True)
     assert np.allclose(np.mean(res["flux"]), flux_true, atol=0, rtol=0.1)
-    assert np.allclose(np.std(res["flux"]), np.mean(res["flux_err"]), atol=0, rtol=0.1)
+    assert np.allclose(np.std(res["flux"]), np.mean(res["flux_err"]), atol=0, rtol=0.2)
     assert np.allclose(
         np.abs(np.mean(res["flux"]) - flux_true)/np.mean(res["flux_err"]),
         0,
