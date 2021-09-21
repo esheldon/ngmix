@@ -46,7 +46,8 @@ jobs:
             fitsio \
             meds \
             pytest-cov \
-            pytest-xdist
+            pytest-xdist \
+            flaky
 
           python -m pip install -e .
 
