@@ -156,7 +156,7 @@ class _PrePSFMom(object):
         )
         res = _make_mom_res(mom, mom_cov)
         if res['flags'] != 0:
-            logger.debug("ksigma pre-psf moments failed: %s" % res['flagstr'])
+            logger.debug("pre-psf moments failed: %s" % res['flagstr'])
 
         if return_kernels:
             # put the kernels back into their unpacked state
@@ -541,6 +541,7 @@ def _ksigma_kernels(
         fkp=fkp,
         fkc=fkc,
         msk=msk,
+        nrm=nrm,
     )
 
 
@@ -632,4 +633,5 @@ def _gauss_kernels(
         fkp=fkp,
         fkc=fkc,
         msk=msk,
+        nrm=nrm,
     )
