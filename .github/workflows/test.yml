@@ -11,7 +11,7 @@ jobs:
     name: tests
     strategy:
       matrix:
-        pyver: [3.6, 3.7, 3.8]
+        pyver: [3.7, 3.8, 3.9]
 
     runs-on: "ubuntu-latest"
 
@@ -45,7 +45,9 @@ jobs:
             emcee \
             fitsio \
             meds \
-            pytest-cov
+            pytest-cov \
+            pytest-xdist \
+            flaky
 
           python -m pip install -e .
 
@@ -57,4 +59,4 @@ jobs:
       - name: test
         shell: bash -l {0}
         run: |
-          pytest -v --cov=ngmix --cov-report term-missing ngmix
+          pytest -n 4 -v --cov=ngmix --cov-report term-missing ngmix

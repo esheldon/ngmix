@@ -1,3 +1,15 @@
+## unreleased
+
+### new features
+
+- Added `PrePSFGaussMom` fitter for computing pre-PSF moments in Gaussian
+  apertures
+- Test suite now runs in parallel using `pytest-xdist`
+- Added `flux_flags` and `T_flags` fields to `KSigmaMom` and `PrePSFGaussMom`
+  fitters for using just those quantities.
+- Added `FFTRangeError` which is now raised if `KSigmaMom` or `PrePSFGaussMom`
+  are using inconsistent FFT sizes given the kernel size.
+
 ## v2.0.1
 
 ### new features
