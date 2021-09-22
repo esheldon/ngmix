@@ -7,11 +7,8 @@
 - Test suite now runs in parallel using `pytest-xdist`
 - Added `flux_flags` and `T_flags` fields to `KSigmaMom` and `PrePSFGaussMom`
   fitters for using just those quantities.
-
-### bug fixes
-
-- Fixed bug in `KSigmaMom` where the moment was not properly normalized if
-  the stamp size is much smaller than the moment aperture.
+- Added `FFTRangeError` which is now raised if `KSigmaMom` or `PrePSFGaussMom`
+  are using inconsistent FFT sizes given the kernel size.
 
 ## v2.0.1
 
