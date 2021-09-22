@@ -12,7 +12,7 @@ from ngmix.fastexp_nb import fexp_arr, FASTEXP_MAX_CHI2
 logger = logging.getLogger(__name__)
 
 
-class _PrePSFMom(object):
+class PrePSFMom(object):
     """Measure pre-PSF weighted real-space moments.
 
     This class is not meant to be used directly. Instead use either `KSigmaMom`
@@ -32,7 +32,7 @@ class _PrePSFMom(object):
     pad_factor : int, optional
         The factor by which to pad the FFTs used for the image. Default is 4.
     """
-    def __init__(self, fwhm, *, kernel, pad_factor=4):
+    def __init__(self, fwhm, kernel, pad_factor=4):
         self.fwhm = fwhm
         self.pad_factor = pad_factor
         self.kernel = kernel
@@ -142,7 +142,7 @@ class _PrePSFMom(object):
             )
         else:
             raise ValueError(
-                "The kernel '%s' _PrePSFMom is not recognized!" % self.kernel
+                "The kernel '%s' for PrePSFMom is not recognized!" % self.kernel
             )
 
         # compute the total variance from weight map
@@ -171,7 +171,7 @@ class _PrePSFMom(object):
         return res
 
 
-class KSigmaMom(_PrePSFMom):
+class KSigmaMom(PrePSFMom):
     """Measure pre-PSF weighted real-space moments w/ the 'ksigma'
     Fourier-space kernels from Bernstein et al., arXiv:1508.05655.
 
@@ -188,10 +188,10 @@ class KSigmaMom(_PrePSFMom):
         The factor by which to pad the FFTs used for the image. Default is 4.
     """
     def __init__(self, fwhm, pad_factor=4):
-        super().__init__(fwhm, kernel='ksigma', pad_factor=pad_factor)
+        super().__init__(fwhm, 'ksigma', pad_factor=pad_factor)
 
 
-class PrePSFGaussMom(_PrePSFMom):
+class PrePSFGaussMom(PrePSFMom):
     """Measure pre-PSF weighted real-space moments w/ a Gaussian kernel.
 
     This fitter differs from `GaussMom` in that it deconvolves the PSF first.
@@ -209,11 +209,11 @@ class PrePSFGaussMom(_PrePSFMom):
         The factor by which to pad the FFTs used for the image. Default is 4.
     """
     def __init__(self, fwhm, pad_factor=4):
-        super().__init__(fwhm, kernel='gauss', pad_factor=pad_factor)
+        super().__init__(fwhm, 'gauss', pad_factor=pad_factor)
 
 
 def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, dcol):
-    # we only need to do things where the ksigma kernel is non-zero
+    # we only need to do things where the kernel is non-zero
     # this saves a bunch of CPU cycles
     msk = kernels["msk"]
     dim = kim.shape[0]
