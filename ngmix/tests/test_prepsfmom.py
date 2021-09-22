@@ -26,15 +26,15 @@ def _report_info(s, arr, mn, err):
 
 @pytest.mark.parametrize("cls", [KSigmaMom, PrePSFGaussMom])
 def test_prepsfmom_raises_nopsf(cls):
-    fitter = cls(1.2)
-    obs = Observation(image=np.zeros((10, 10)))
+    fitter = cls(20)
+    obs = Observation(image=np.zeros((1000, 1000)))
     with pytest.raises(RuntimeError) as e:
         fitter.go(obs)
 
     assert "PSF must be set" in str(e.value)
 
-    fitter = cls(1.2)
-    obs = Observation(image=np.zeros((10, 10)))
+    fitter = cls(20)
+    obs = Observation(image=np.zeros((1000, 1000)))
     fitter.go(obs, no_psf=True)
 
 
@@ -104,7 +104,7 @@ def _stack_list_of_dicts(res):
 @pytest.mark.parametrize('mom_fwhm', [2.0, 1.5, 1.2])
 @pytest.mark.parametrize('image_size', [57, 58])
 @pytest.mark.parametrize('psf_image_size', [33, 34])
-@pytest.mark.parametrize('pad_factor', [2, 1, 1.5])
+@pytest.mark.parametrize('pad_factor', [3.5, 2])
 def test_prepsfmom_gauss(
     pad_factor, image_size, psf_image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm,
     cls,
@@ -222,18 +222,14 @@ def test_prepsfmom_gauss(
 
 @pytest.mark.parametrize("cls,mom_fwhm,snr", [
     (KSigmaMom, 2.0, 1e2),
-    pytest.param(
-        PrePSFGaussMom, 8, 5e2,
-        marks=pytest.mark.xfail(
-            reason="Gaussian pre-PSF moment errors do not yet work!")
-    ),
+    (PrePSFGaussMom, 2.0, 1e2),
 ])
 @pytest.mark.parametrize('pixel_scale', [0.25])
 @pytest.mark.parametrize('fwhm,psf_fwhm', [
     (2.0, 1.0),
 ])
 @pytest.mark.parametrize('image_size', [
-    101,
+    53,
 ])
 @pytest.mark.parametrize('pad_factor', [
     1.5,
@@ -361,18 +357,14 @@ def test_prepsfmom_mn_cov(
 
 @pytest.mark.parametrize("cls,mom_fwhm,snr", [
     (KSigmaMom, 2.0, 1e2),
-    pytest.param(
-        PrePSFGaussMom, 8, 5e2,
-        marks=pytest.mark.xfail(
-            reason="Gaussian pre-PSF moment errors do not yet work!")
-    ),
+    (PrePSFGaussMom, 2.0, 1e2),
 ])
 @pytest.mark.parametrize('pixel_scale', [0.25])
 @pytest.mark.parametrize('fwhm', [
     2,
 ])
 @pytest.mark.parametrize('image_size', [
-    101,
+    53,
 ])
 @pytest.mark.parametrize('pad_factor', [
     1.5,
@@ -538,19 +530,19 @@ def test_prepsfmom_make_mom_res_flags():
         assert res["T_flagstr"] == ""
 
 
-@pytest.mark.parametrize("cls", [KSigmaMom, PrePSFGaussMom])
+@pytest.mark.parametrize("cls", [PrePSFGaussMom, KSigmaMom])
 @pytest.mark.parametrize('pixel_scale', [0.125, 0.25])
-@pytest.mark.parametrize('fwhm,psf_fwhm', [(0.6, 0.9), (1.5, 0.9)])
-@pytest.mark.parametrize('image_size', [57, 58])
+@pytest.mark.parametrize('fwhm,psf_fwhm', [(0.6, 0.9)])
+@pytest.mark.parametrize('image_size', [250])
 @pytest.mark.parametrize('psf_image_size', [33, 34])
-@pytest.mark.parametrize('pad_factor', [2, 1, 1.5, 4])
+@pytest.mark.parametrize('pad_factor', [4, 3.5])
 def test_prepsfmom_gauss_true_flux(
     pad_factor, psf_image_size, image_size, fwhm, psf_fwhm, pixel_scale, cls
 ):
     rng = np.random.RandomState(seed=100)
 
     snr = 1e8
-    mom_fwhm = 1000.0
+    mom_fwhm = 15.0
 
     cen = (image_size - 1)/2
     psf_cen = (psf_image_size - 1)/2
@@ -619,7 +611,7 @@ def test_prepsfmom_gauss_true_flux(
     )
     res = fitter.go(obs=obs, no_psf=True)
     flux_true = res["flux"]
-    assert np.allclose(flux_true, 400, atol=0, rtol=1e-4)
+    assert np.allclose(flux_true, 400, atol=0, rtol=5e-3)
 
     obs = Observation(
         image=im,
@@ -627,6 +619,71 @@ def test_prepsfmom_gauss_true_flux(
         jacobian=jac,
         psf=Observation(image=psf_im, jacobian=psf_jac),
     )
-    res = fitter.go(obs=obs, no_psf=True)
+    res = fitter.go(obs=obs)
     flux_true = res["flux"]
-    assert np.allclose(flux_true, 400, atol=0, rtol=1e-4)
+    assert np.allclose(flux_true, 400, atol=0, rtol=5e-3)
+
+
+@pytest.mark.parametrize('pixel_scale', [0.25, 0.125])
+@pytest.mark.parametrize('fwhm', [
+    2, 0.5,
+])
+@pytest.mark.parametrize('image_size', [
+    53,
+])
+@pytest.mark.parametrize('pad_factor', [
+    3.5, 4,
+])
+@pytest.mark.parametrize('mom_fwhm', [
+    2, 2.5,
+])
+def test_prepsfmom_comp_to_gaussmom(
+    pad_factor, image_size, fwhm, pixel_scale, mom_fwhm,
+):
+    rng = np.random.RandomState(seed=100)
+
+    cen = (image_size - 1)/2
+    gs_wcs = galsim.ShearWCS(
+        pixel_scale, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
+    scale = np.sqrt(gs_wcs.pixelArea())
+    shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+    xy = gs_wcs.toImage(galsim.PositionD(shift))
+
+    jac = Jacobian(
+        y=cen + xy.y, x=cen + xy.x,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
+    gal = galsim.Gaussian(
+        fwhm=fwhm
+    ).shear(
+        g1=-0.1, g2=0.2
+    ).withFlux(
+        400
+    ).shift(
+        dx=shift[0], dy=shift[1]
+    )
+
+    # get true flux
+    im_true = gal.drawImage(
+        nx=image_size,
+        ny=image_size,
+        wcs=gs_wcs,
+    ).array
+    obs = Observation(
+        image=im_true,
+        jacobian=jac,
+    )
+    res = PrePSFGaussMom(fwhm=mom_fwhm, pad_factor=pad_factor).go(
+        obs=obs, no_psf=True, return_kernels=True,
+    )
+
+    from ngmix.gaussmom import GaussMom
+    res_gmom = GaussMom(fwhm=mom_fwhm).go(obs=obs)
+
+    for k in sorted(res):
+        if k in res_gmom:
+            print("%s:" % k, res[k], res_gmom[k])
+
+    for k in ["flux", "flux_err", "T", "T_err", "e", "e_cov"]:
+        assert np.allclose(res[k], res_gmom[k], atol=0, rtol=1e-2)
