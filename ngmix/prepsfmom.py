@@ -6,7 +6,8 @@ import scipy.fft as fft
 from ngmix.observation import Observation
 from ngmix.moments import fwhm_to_sigma
 from ngmix.util import get_ratio_error
-from ngmix.fastexp_nb import fexp_arr, FASTEXP_MAX_CHI2
+from ngmix.gexceptions import FFTRangeError
+from ngmix.fastexp_nb import FASTEXP_MAX_CHI2, fexp_arr
 
 
 logger = logging.getLogger(__name__)
@@ -164,8 +165,11 @@ class PrePSFMom(object):
             for k in kernels:
                 if k == "msk":
                     continue
-                full_kernels[k] = np.zeros((fft_dim, fft_dim), dtype=np.complex128)
-                full_kernels[k][kernels["msk"]] = kernels[k]
+                if k == "nrm":
+                    full_kernels[k] = kernels[k]
+                else:
+                    full_kernels[k] = np.zeros((fft_dim, fft_dim), dtype=np.complex128)
+                    full_kernels[k][kernels["msk"]] = kernels[k]
             res["kernels"] = full_kernels
 
         return res
@@ -503,14 +507,13 @@ def _ksigma_kernels(
     # the flux kernel is easy since it is the kernel itself
     fkf = karg4 * knrm
 
-    # when the kernel support extends beyong the FFT region, we have to do more work
-    # we have to normalize the discrete FFT to unit peak in real-space
-    # for kernels much smaller than the image size, this comes out fine
-    # for kernels much bigger than the image size, you need an extra factor to
-    # correct for the truncated aperture
+    # when the kernel support extends beyong the FFT region, we raise an error
     nrm = np.sum(fkf)/dim/dim
-    fkf /= nrm
-    knrm /= nrm
+    if not np.allclose(nrm, 1.0, atol=1e-5, rtol=0):
+        raise FFTRangeError(
+            "FFT size appears to be too small for ksigma kernel size %f: "
+            "norm = %f (should be 1)!" % (kernel_size, nrm)
+        )
 
     # the moment kernels take a bit more work
     # product by u^2 in real space is -dk^2/dku^2 in Fourier space
@@ -570,8 +573,8 @@ def _gauss_kernels(
     fv2 = fv**2
     fmag2 = fu2 + fv2
     exp_fac = sigma2 / 2
-    chi2 = exp_fac * fmag2
-    msk = chi2 < FASTEXP_MAX_CHI2
+    chi2_2 = exp_fac * fmag2
+    msk = (chi2_2 < FASTEXP_MAX_CHI2/2) & (chi2_2 >= 0)
 
     # from here we work with non-zero portion only
     fmag2 = fmag2[msk]
@@ -579,8 +582,8 @@ def _gauss_kernels(
     fu2 = fu2[msk]
     fv = fv[msk]
     fv2 = fv2[msk]
-    chi2 = chi2[msk]
-    exp_val = fexp_arr(-chi2)
+    chi2_2 = chi2_2[msk]
+    exp_val = fexp_arr(-chi2_2)
 
     # we need to normalize the kernel to unity in real space at the object center
     # we also need a factor of the k-space area element so that when we
@@ -596,14 +599,13 @@ def _gauss_kernels(
     # the flux kernel is easy since it is the kernel itself
     fkf = exp_val * knrm
 
-    # when the kernel support extends beyong the FFT region, we have to do more work
-    # we have to normalize the discrete FFT to unit peak in real-space
-    # for kernels much smaller than the image size, this comes out fine
-    # for kernels much bigger than the image size, you need an extra factor to
-    # correct for the truncated aperture
+    # when the kernel support extends beyong the FFT region, we raise an error
     nrm = np.sum(fkf)/dim/dim
-    fkf /= nrm
-    knrm /= nrm
+    if not np.allclose(nrm, 1.0, atol=1e-5, rtol=0):
+        raise FFTRangeError(
+            "FFT size appears to be too small for gauss kernel size %f: "
+            "norm = %f (should be 1)!" % (kernel_size, nrm)
+        )
 
     # the moment kernels take a bit more work
     # product by u^2 in real space is -dk^2/dku^2 in Fourier space
@@ -623,9 +625,9 @@ def _gauss_kernels(
     # fkc = 2 * fkxy
     fkfac = 2 * exp_fac
     fkfac2 = 4 * exp_fac**2
-    fkr = (fkfac2 * fmag2 - 2 * fkfac) * fkf
-    fkp = fkfac2 * (fu2 - fv2) * fkf
-    fkc = 2 * fkfac2 * fu * fv * fkf
+    fkr = (2 * fkfac - fkfac2 * fmag2) * fkf
+    fkp = fkfac2 * (fv2 - fu2) * fkf
+    fkc = -2 * fkfac2 * fu * fv * fkf
 
     return dict(
         fkf=fkf,

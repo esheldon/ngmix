@@ -50,3 +50,10 @@ class BootGalFailure(NGmixBaseException):
     Failure to bootstrap galaxy
     """
     pass
+
+
+class FFTRangeError(NGmixBaseException):
+    """
+    FFT size is not correct/consistent.
+    """
+    pass
