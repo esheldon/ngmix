@@ -88,14 +88,17 @@ def find_cen_admom(
     ----------
     obs: Observation
         ngmix.Observation
-    gmix: ngmix.GMix*
-        A weight function.  On the first iteration the center of this
-        gmix is used for the guess, on subsequent tries a guess is
-        generated as a uniform deviate within a pixel scale.
-    fwhm: ngmix.GMix*
+    gmix: ngmix.GMix*, optional
+        A gaussian weight function.  Can be created with ngmix.GMixModel with
+        model 'gauss' or with ngmix.GMix with parameters for a single gaussian.
+        On the first iteration the center of this gmix is used for the guess,
+        on subsequent tries a guess is generated as a uniform deviate within a
+        pixel scale.  Send either gmix= or fwhm=
+    fwhm: float, optional
         The fwhm for a gaussian weight function.  On the first iteration the
         center of the jacobian is used for the guess, on subsequent tries a
         guess is generated as a uniform deviate within a pixel scale.
+        Send either gmix= or fwhm=
     maxiter: integer, optional
         Maximum number of iterations, default 200
     etol: float, optional
