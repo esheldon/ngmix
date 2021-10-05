@@ -96,15 +96,16 @@ def admom(confarray, wt, pixels, resarray):
         else:
             # deweight moments and go to the next iteration
 
-            deweight_moments(wt, Irr, Irc, Icc, res)
-            if res['flags'] != 0:
-                break
+            if not conf['cenonly']:
+                deweight_moments(wt, Irr, Irc, Icc, res)
+                if res['flags'] != 0:
+                    break
 
             e1old = e1
             e2old = e2
             Told = T
 
-    res['numiter'] = i
+    res['numiter'] = i+1
 
     if res['numiter'] == conf['maxit']:
         res['flags'] = ADMOM_MAXIT

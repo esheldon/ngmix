@@ -1,4 +1,4 @@
-## unreleased
+## v2.0.2 (unreleased)
 
 ### new features
 
@@ -9,6 +9,14 @@
   fitters for using just those quantities.
 - Added `FFTRangeError` which is now raised if `KSigmaMom` or `PrePSFGaussMom`
   are using inconsistent FFT sizes given the kernel size.
+- add `cenonly` option to adaptive moments, using a fixed gaussian covariance
+  with only the center varying.  Added ngmix.admom.find_cen_admom function
+  for finding the center.
+
+### bug fixes
+
+- Fixed bug identifying that adaptive moments had reached maximum
+  number of iterations
 
 ## v2.0.1
 

@@ -1,9 +1,10 @@
-__all__ = ['run_admom', 'AdmomFitter']
+__all__ = ['run_admom', 'find_cen_admom', 'AdmomFitter']
 
-import numpy
+import numpy as np
 from numpy import diag
 
 from ..gmix import GMix, GMixModel
+from ..moments import fwhm_to_T
 from ..shape import e1e2_to_g1g2
 from ..observation import Observation
 from ..gexceptions import GMixRangeError
@@ -21,9 +22,14 @@ def run_admom(
     shiftmax=DEFAULT_SHIFTMAX,
     etol=DEFAULT_ETOL,
     Ttol=DEFAULT_TTOL,
+    cenonly=False,
     rng=None,
 ):
     """
+    Run adaptive moments on the observation
+
+    Parameters
+    ----------
     obs: Observation
         ngmix.Observation
     guess: ngmix.GMix or a float
@@ -42,9 +48,15 @@ def run_admom(
         Largest allowed shift in the centroid, relative to
         the initial guess.  Default 5.0 (5 pixels if the jacobian
         scale is 1)
-    rng: numpy.random.RandomState
+    cenonly: bool, optional
+        If set to True, only fit for the center
+    rng: np.random.RandomState
         Random state for creating full gaussian guesses based
         on a T guess
+
+    Returns
+    -------
+    AdmomResult
     """
 
     am = AdmomFitter(
@@ -52,9 +64,103 @@ def run_admom(
         shiftmax=shiftmax,
         etol=etol,
         Ttol=Ttol,
+        cenonly=cenonly,
         rng=rng,
     )
     return am.go(obs=obs, guess=guess)
+
+
+def find_cen_admom(
+    obs,
+    fwhm=None,
+    gmix=None,
+    maxiter=DEFAULT_MAXITER,
+    shiftmax=DEFAULT_SHIFTMAX,
+    etol=DEFAULT_ETOL,
+    Ttol=DEFAULT_TTOL,
+    ntry=1,
+    rng=None,
+):
+    """
+    Use adaptive moments with fixed weight function to find the center
+
+    Parameters
+    ----------
+    obs: Observation
+        ngmix.Observation
+    gmix: ngmix.GMix*, optional
+        A gaussian weight function.  Can be created with ngmix.GMixModel with
+        model 'gauss' or with ngmix.GMix with parameters for a single gaussian.
+        On the first iteration the center of this gmix is used for the guess,
+        on subsequent tries a guess is generated as a uniform deviate within a
+        pixel scale.  Send either gmix= or fwhm=
+    fwhm: float, optional
+        The fwhm for a gaussian weight function.  On the first iteration the
+        center of the jacobian is used for the guess, on subsequent tries a
+        guess is generated as a uniform deviate within a pixel scale.
+        Send either gmix= or fwhm=
+    maxiter: integer, optional
+        Maximum number of iterations, default 200
+    etol: float, optional
+        absolute tolerance in e1 or e2 to determine convergence,
+        default 1.0e-5
+    Ttol: float, optional
+        relative tolerance in T <x^2> + <y^2> to determine
+        convergence, default 1.0e-3
+    shiftmax: float, optional
+        Largest allowed shift in the centroid, relative to the initial guess.
+        Default 5.0 (5 pixels if the jacobian scale is 1)
+    rng: np.random.RandomState
+        Random state, required if more than one try is requested in order
+        to generate guesses.
+
+    Returns
+    -------
+    AdmomResult with entry "cen" set.  This cen is the offset relative to
+    the jacobian center
+    """
+
+    if ntry > 1 and rng is None:
+        raise ValueError(
+            'send a random number generator rng= when trying more than once '
+            'this facilitates generating a new guess for the center'
+        )
+
+    if gmix is not None:
+        wt = gmix.copy()
+    elif fwhm is not None:
+        T = fwhm_to_T(fwhm)
+        pars = [0.0, 0.0, 0.0, 0.0, T, 1.0]
+        wt = GMixModel(pars, 'gauss')
+    else:
+        raise ValueError('send gmix= or fwhm=')
+
+    scale = obs.jacobian.scale
+
+    am = AdmomFitter(
+        maxiter=maxiter,
+        shiftmax=shiftmax,
+        etol=etol,
+        Ttol=Ttol,
+        cenonly=True,
+    )
+
+    for itry in range(ntry):
+        res = am.go(obs=obs, guess=wt)
+        if res['flags'] == 0:
+            break
+
+        if ntry > 1:
+            # offset from jacobian center
+            drow, dcol = rng.uniform(low=-scale/2, high=scale/2, size=2)
+            wt.set_cen(row=drow, col=dcol)
+
+    if res['flags'] == 0:
+        res['cen'] = res.get_gmix().get_cen()
+    else:
+        res['cen'] = np.zeros(2) + np.nan
+
+    return res
 
 
 class AdmomResult(dict):
@@ -136,7 +242,9 @@ class AdmomFitter(object):
         Largest allowed shift in the centroid, relative to
         the initial guess.  Default 5.0 (5 pixels if the jacobian
         scale is 1)
-    rng: numpy.random.RandomState
+    cenonly: bool, optional
+        If set to True, only vary the center
+    rng: np.random.RandomState
         Random state for creating full gaussian guesses based
         on a T guess
     """
@@ -146,9 +254,16 @@ class AdmomFitter(object):
                  shiftmax=DEFAULT_SHIFTMAX,
                  etol=DEFAULT_ETOL,
                  Ttol=DEFAULT_TTOL,
+                 cenonly=False,
                  rng=None):
 
-        self._set_conf(maxiter, shiftmax, etol, Ttol)
+        self._set_conf(
+            maxiter=maxiter,
+            shiftmax=shiftmax,
+            etol=etol,
+            Ttol=Ttol,
+            cenonly=cenonly,
+        )
 
         self.rng = rng
 
@@ -197,24 +312,25 @@ class AdmomFitter(object):
             guess_gmix = self._generate_guess(obs=obs, Tguess=Tguess)
         return guess_gmix
 
-    def _set_conf(self, maxiter, shiftmax, etol, Ttol):  # noqa
-        dt = numpy.dtype(_admom_conf_dtype, align=True)
-        conf = numpy.zeros(1, dtype=dt)
+    def _set_conf(self, maxiter, shiftmax, etol, Ttol, cenonly):  # noqa
+        dt = np.dtype(_admom_conf_dtype, align=True)
+        conf = np.zeros(1, dtype=dt)
 
         conf['maxit'] = maxiter
         conf['shiftmax'] = shiftmax
         conf['etol'] = etol
         conf['Ttol'] = Ttol
+        conf['cenonly'] = cenonly
 
         self.conf = conf
 
     def _get_am_result(self):
-        dt = numpy.dtype(_admom_result_dtype, align=True)
-        return numpy.zeros(1, dtype=dt)
+        dt = np.dtype(_admom_result_dtype, align=True)
+        return np.zeros(1, dtype=dt)
 
     def _get_rng(self):
         if self.rng is None:
-            self.rng = numpy.random.RandomState()
+            self.rng = np.random.RandomState()
 
         return self.rng
 
@@ -223,7 +339,7 @@ class AdmomFitter(object):
         rng = self._get_rng()
 
         scale = obs.jacobian.get_scale()
-        pars = numpy.zeros(6)
+        pars = np.zeros(6)
         pars[0:0+2] = rng.uniform(low=-0.5*scale, high=0.5*scale, size=2)
         pars[2:2+2] = rng.uniform(low=-0.3, high=0.3, size=2)
         pars[4] = Tguess*(1.0 + rng.uniform(low=-0.1, high=0.1))
@@ -238,7 +354,7 @@ def get_result(ares):
     calculate a few more things
     """
 
-    if isinstance(ares, numpy.ndarray):
+    if isinstance(ares, np.ndarray):
         ares = ares[0]
         names = ares.dtype.names
     else:
@@ -255,7 +371,7 @@ def get_result(ares):
 
     res['flux_mean'] = -9999.0
     res['s2n'] = -9999.0
-    res['e'] = numpy.array([-9999.0, -9999.0])
+    res['e'] = np.array([-9999.0, -9999.0])
     res['e_err'] = 9999.0
 
     if res['flags'] == 0:
@@ -300,8 +416,8 @@ def get_result(ares):
                 sums_cov[3, 4],
             )
 
-            if (not numpy.isfinite(res['e1err']) or
-                    not numpy.isfinite(res['e2err'])):
+            if (not np.isfinite(res['e1err']) or
+                    not np.isfinite(res['e2err'])):
                 res['e1err'] = 9999.0
                 res['e2err'] = 9999.0
                 res['e_cov'] = diag([9999.0, 9999.0])
@@ -315,7 +431,7 @@ def get_result(ares):
 
         if fvar_sum > 0.0:
 
-            flux_err = numpy.sqrt(fvar_sum)
+            flux_err = np.sqrt(fvar_sum)
             res['s2n'] = flux_sum/flux_err
 
             # error on each shape component from BJ02 for gaussians
@@ -349,6 +465,7 @@ _admom_conf_dtype = [
     ('shiftmax', 'f8'),
     ('etol', 'f8'),
     ('Ttol', 'f8'),
+    ('cenonly', bool),
 ]
 
 _admom_flagmap = {
