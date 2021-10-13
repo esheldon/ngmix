@@ -39,6 +39,16 @@ def test_prepsfmom_raises_nopsf(cls):
 
 
 @pytest.mark.parametrize("cls", [KSigmaMom, PrePSFGaussMom])
+def test_prepsfmom_raises_nonsquare(cls):
+    fitter = cls(20)
+    obs = Observation(image=np.zeros((100, 90)))
+    with pytest.raises(ValueError) as e:
+        fitter.go(obs)
+
+    assert "square" in str(e.value)
+
+
+@pytest.mark.parametrize("cls", [KSigmaMom, PrePSFGaussMom])
 def test_prepsfmom_raises_badjacob(cls):
     fitter = cls(1.2)
 
