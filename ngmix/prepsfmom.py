@@ -43,8 +43,8 @@ class PrePSFMom(object):
 
         Parameters
         ----------
-        obs : Observation
-            The observation to measure.
+        obs : ngmix.Observation
+            The observation to measure.  The image data must be square.
         return_kernels : bool, optional
             If True, return the kernels used for the flux and moments.
             Defaults to False.
@@ -56,23 +56,7 @@ class PrePSFMom(object):
         -------
         result dictionary
         """
-        if not isinstance(obs, Observation):
-            raise ValueError("input obs must be an Observation")
-
-        if not obs.has_psf() and not no_psf:
-            raise RuntimeError("The PSF must be set to measure a pre-PSF moment!")
-
-        if not no_psf:
-            psf_obs = obs.get_psf()
-
-            if psf_obs.jacobian.get_galsim_wcs() != obs.jacobian.get_galsim_wcs():
-                raise RuntimeError(
-                    "The PSF and observation must have the same WCS "
-                    "Jacobian for measuring pre-PSF moments."
-                )
-        else:
-            psf_obs = None
-
+        psf_obs = _check_obs_and_get_psf_obs(obs, no_psf)
         return self._meas(obs, psf_obs, return_kernels)
 
     def _meas(self, obs, psf_obs, return_kernels):
@@ -637,3 +621,28 @@ def _gauss_kernels(
         msk=msk,
         nrm=nrm,
     )
+
+
+def _check_obs_and_get_psf_obs(obs, no_psf):
+    if not isinstance(obs, Observation):
+        raise ValueError("input obs must be an Observation")
+
+    shape = obs.image.shape
+    if shape[0] != shape[1]:
+        raise ValueError(f'pre-psf moments require a square image, got {shape}')
+
+    if not obs.has_psf() and not no_psf:
+        raise RuntimeError("The PSF must be set to measure a pre-PSF moment!")
+
+    if not no_psf:
+        psf_obs = obs.get_psf()
+
+        if psf_obs.jacobian.get_galsim_wcs() != obs.jacobian.get_galsim_wcs():
+            raise RuntimeError(
+                "The PSF and observation must have the same WCS "
+                "Jacobian for measuring pre-PSF moments."
+            )
+    else:
+        psf_obs = None
+
+    return psf_obs

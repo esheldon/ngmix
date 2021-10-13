@@ -1,3 +1,10 @@
+## v2.0.3 (unreleased)
+
+### bug fixes
+
+    - Ensure only square images are accepted for pre psf moments codes
+      KSigmaMom and PrePSFGaussMom
+
 ## v2.0.2
 
 ### new features
