@@ -1179,96 +1179,20 @@ def get_weighted_moments_stats(ares):
         else:
             res[n] = ares[n]
 
-    # we always have a measure of the flux
-    sums = res["sums"]
-    sums_cov = res["sums_cov"]
-    pars = res["pars"]
+    mom = np.array([
+        res['sums'][5],
+        res['sums'][4],
+        res['sums'][2],
+        res['sums'][3],
+    ])
+    mom_cov = np.zeros((4, 4))
+    for inew, iold in enumerate([5, 4, 2, 3]):
+        for jnew, jold in enumerate([5, 4, 2, 3]):
+            mom_cov[inew, jnew] += res['sums_cov'][iold, jold]
 
-    flux_sum = sums[5]
-
-    res["flux"] = flux_sum
-    res["flux_err"] = 9999.0
-
-    pars[5] = res["flux"]
-
-    # these might not get filled in if T is too small
-    # or if the flux variance is zero somehow
-    res["T"] = -9999.0
-    res["s2n"] = -9999.0
-    res["e"] = np.array([-9999.0, -9999.0])
-    res["e_err"] = np.array([9999.0, 9999.0])
-    res["e_cov"] = np.diag([9999.0, 9999.0])
-
-    fvar_sum = sums_cov[5, 5]
-
-    if fvar_sum > 0.0:
-
-        res["flux_err"] = np.sqrt(fvar_sum)
-        res["s2n"] = flux_sum / res["flux_err"]
-
-    else:
-        # zero var flag
-        res["flags"] |= 0x40
-        res["flagstr"] = "zero var"
-
-    if res["flags"] == 0:
-
-        if flux_sum > 0.0:
-            finv = 1.0 / flux_sum
-
-            row = sums[0] * finv
-            col = sums[1] * finv
-            M1 = sums[2] * finv
-            M2 = sums[3] * finv
-            T = sums[4] * finv
-
-            pars[0] = row
-            pars[1] = col
-            pars[2] = M1
-            pars[3] = M2
-            pars[4] = T
-
-            res["T"] = pars[4]
-
-            res["T_err"] = get_ratio_error(
-                sums[4],
-                sums[5],
-                sums_cov[4, 4],
-                sums_cov[5, 5],
-                sums_cov[4, 5],
-            )
-
-            if res["T"] > 0.0:
-                res["e"][:] = res["pars"][2:2 + 2] / res["T"]
-
-                e1_err = get_ratio_error(
-                    sums[2],
-                    sums[4],
-                    sums_cov[2, 2],
-                    sums_cov[4, 4],
-                    sums_cov[2, 4],
-                )
-                e2_err = get_ratio_error(
-                    sums[3],
-                    sums[4],
-                    sums_cov[3, 3],
-                    sums_cov[4, 4],
-                    sums_cov[3, 4],
-                )
-
-                if np.isfinite(e1_err) and np.isfinite(e2_err):
-                    res["e_cov"] = np.diag([e1_err ** 2, e2_err ** 2])
-                    res["e_err"] = np.array([e1_err, e2_err])
-
-            else:
-                # T <= 0.0
-                res["flags"] |= 0x8
-                res["flagstr"] = "T <= 0.0"
-
-        else:
-            # flux <= 0.0
-            res["flags"] |= 0x4
-            res["flagstr"] = "flux <= 0.0"
+    res.update(
+        moments.make_mom_result(mom, mom_cov)
+    )
 
     return res
 

@@ -13,6 +13,9 @@ class GaussMom(object):
     fwhm: float
         The FWHM of the Gaussian weight function.
     """
+
+    kind = "wmom"
+
     def __init__(self, fwhm):
         self.fwhm = fwhm
         self._set_mompars()

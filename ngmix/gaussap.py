@@ -5,10 +5,9 @@ import logging
 import numpy as np
 from .gmix import GMixModel, GMixCM
 from .gexceptions import GMixRangeError
+from .procflags import NO_ATTEMPT, GMIX_RANGE_ERROR
 
 DEFAULT_FLUX = -9999.0
-NO_ATTEMPT = 2**0
-RANGE_ERROR = 2**1
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +86,7 @@ def get_gaussap_flux(pars,
 def _do_gap(weight_fwhm, fracdev, TdByTe, pars, model, i, band):
 
     flux = DEFAULT_FLUX
-    flags = RANGE_ERROR
+    flags = GMIX_RANGE_ERROR
 
     try:
 

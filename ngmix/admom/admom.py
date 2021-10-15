@@ -9,6 +9,7 @@ from ..shape import e1e2_to_g1g2
 from ..observation import Observation
 from ..gexceptions import GMixRangeError
 from ..util import get_ratio_error
+from .. import procflags
 
 DEFAULT_MAXITER = 200
 DEFAULT_SHIFTMAX = 5.0  # pixels
@@ -249,6 +250,8 @@ class AdmomFitter(object):
         on a T guess
     """
 
+    kind = "admom"
+
     def __init__(self,
                  maxiter=DEFAULT_MAXITER,
                  shiftmax=DEFAULT_SHIFTMAX,
@@ -298,7 +301,7 @@ class AdmomFitter(object):
                 ares,
             )
         except GMixRangeError:
-            ares['flags'] = 0x8
+            ares['flags'] = procflags.GMIX_RANGE_ERROR
 
         result = get_result(ares)
 
@@ -425,7 +428,7 @@ def get_result(ares):
                 res['e_cov'] = diag([res['e1err']**2, res['e2err']**2])
 
         else:
-            res['flags'] = 0x8
+            res['flags'] |= procflags.NONPOS_SIZE
 
         fvar_sum = sums_cov[5, 5]
 
@@ -439,9 +442,9 @@ def get_result(ares):
 
             res['e_err_r'] = 2.0/res['s2n']
         else:
-            res['flags'] = 0x40
+            res['flags'] |= procflags.NONPOS_VAR
 
-    res['flagstr'] = _admom_flagmap[res['flags']]
+    res['flagstr'] = procflags.get_procflags_str(res['flags'])
 
     return res
 
@@ -467,14 +470,3 @@ _admom_conf_dtype = [
     ('Ttol', 'f8'),
     ('cenonly', bool),
 ]
-
-_admom_flagmap = {
-    0: 'ok',
-    0x1: 'edge hit',  # not currently used
-    0x2: 'center shifted too far',
-    0x4: 'flux < 0',
-    0x8: 'T < 0',
-    0x10: 'determinant near zero',
-    0x20: 'maxit reached',
-    0x40: 'zero var',
-}
