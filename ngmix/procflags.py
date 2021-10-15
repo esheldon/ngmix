@@ -56,8 +56,9 @@ def get_procflags_str(val, name_map=None):
     nstrs = []
     for pow in range(32):
         fval = 2**pow
-        if fval in inv_name_map and ((val & fval) != 0):
-            nstrs.append(inv_name_map[fval])
-        else:
-            nstrs.append("bit 2**%d" % pow)
+        if ((val & fval) != 0):
+            if fval in inv_name_map:
+                nstrs.append(inv_name_map[fval])
+            else:
+                nstrs.append("bit 2**%d" % pow)
     return "|".join(nstrs)

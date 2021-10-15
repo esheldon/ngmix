@@ -2,9 +2,11 @@ import galsim
 import numpy as np
 import pytest
 
-from ngmix.prepsfmom import KSigmaMom, PrePSFGaussMom, _make_mom_res
+from ngmix.prepsfmom import KSigmaMom, PrePSFGaussMom
 from ngmix import Jacobian
 from ngmix import Observation
+from ngmix.moments import make_mom_result
+from ngmix import procflags
 
 
 def _report_info(s, arr, mn, err):
@@ -479,7 +481,7 @@ def test_prepsfmom_mn_cov_nopsf(
         res["mom_cov"], np.mean(res["mom_cov"], axis=0), atol=0, rtol=4e-1)
 
 
-def test_prepsfmom_make_mom_res_flags():
+def test_moments_make_mom_result_flags():
     mom = np.ones(4)
     mom_cov = np.diag(np.ones(4))
 
@@ -487,19 +489,19 @@ def test_prepsfmom_make_mom_res_flags():
     for i in range(4):
         _mom_cov = mom_cov.copy()
         _mom_cov[i, i] = -1
-        res = _make_mom_res(mom, _mom_cov)
-        assert (res["flags"] & 0x40) != 0
-        assert "zero or neg moment var" in res["flagstr"]
+        res = make_mom_result(mom, _mom_cov)
+        assert (res["flags"] & procflags.NONPOS_VAR) != 0
+        assert procflags.NAME_MAP[procflags.NONPOS_VAR] in res["flagstr"]
         if i == 0:
-            assert (res["flux_flags"] & 0x40) != 0
-            assert "zero or neg flux var" in res["flux_flagstr"]
+            assert (res["flux_flags"] & procflags.NONPOS_VAR) != 0
+            assert procflags.NAME_MAP[procflags.NONPOS_VAR] in res["flux_flagstr"]
         else:
             assert res["flux_flags"] == 0
             assert res["flux_flagstr"] == ""
 
         if i < 2:
-            assert (res["T_flags"] & 0x40) != 0
-            assert "zero or neg flux/T var" in res["T_flagstr"]
+            assert (res["T_flags"] & procflags.NONPOS_VAR) != 0
+            assert procflags.NAME_MAP[procflags.NONPOS_VAR] in res["T_flagstr"]
         else:
             assert res["T_flags"] == 0
             assert res["T_flagstr"] == ""
@@ -507,20 +509,20 @@ def test_prepsfmom_make_mom_res_flags():
     # neg flux
     _mom = mom.copy()
     _mom[0] = -1
-    res = _make_mom_res(_mom, mom_cov)
-    assert (res["flags"] & 0x4) != 0
-    assert "flux <= 0" in res["flagstr"]
+    res = make_mom_result(_mom, mom_cov)
+    assert (res["flags"] & procflags.NONPOS_FLUX) != 0
+    assert procflags.NAME_MAP[procflags.NONPOS_FLUX] in res["flagstr"]
     assert res["flux_flags"] == 0
     assert res["flux_flagstr"] == ""
-    assert (res["T_flags"] & 0x4) != 0
-    assert "flux <= 0" in res["T_flagstr"]
+    assert (res["T_flags"] & procflags.NONPOS_FLUX) != 0
+    assert procflags.NAME_MAP[procflags.NONPOS_FLUX] in res["T_flagstr"]
 
     # neg T
     _mom = mom.copy()
     _mom[1] = -1
-    res = _make_mom_res(_mom, mom_cov)
-    assert (res["flags"] & 0x8) != 0
-    assert "T <= 0" in res["flagstr"]
+    res = make_mom_result(_mom, mom_cov)
+    assert (res["flags"] & procflags.NONPOS_SIZE) != 0
+    assert procflags.NAME_MAP[procflags.NONPOS_SIZE] in res["flagstr"]
     assert res["flux_flags"] == 0
     assert res["flux_flagstr"] == ""
     assert res["T_flags"] == 0
@@ -531,9 +533,9 @@ def test_prepsfmom_make_mom_res_flags():
         _mom_cov = mom_cov.copy()
         _mom_cov[1, i] = np.nan
         _mom_cov[i, 1] = np.nan
-        res = _make_mom_res(mom, _mom_cov)
-        assert (res["flags"] & 0x100) != 0
-        assert "non-finite shape errors" in res["flagstr"]
+        res = make_mom_result(mom, _mom_cov)
+        assert (res["flags"] & procflags.NONPOS_SHAPE_VAR) != 0
+        assert procflags.NAME_MAP[procflags.NONPOS_SHAPE_VAR] in res["flagstr"]
         assert res["flux_flags"] == 0
         assert res["flux_flagstr"] == ""
         assert res["T_flags"] == 0
