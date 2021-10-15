@@ -15,7 +15,6 @@ __all__ = [
 import numpy as np
 from ..jacobian import Jacobian, UnitJacobian
 from ..shape import Shape, e1e2_to_g1g2
-from ..util import get_ratio_error
 from .. import shape
 from .. import moments
 
