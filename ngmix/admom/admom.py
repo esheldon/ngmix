@@ -372,10 +372,10 @@ def get_result(ares):
         else:
             res[n] = ares[n]
 
-    res['flux_mean'] = -9999.0
-    res['s2n'] = -9999.0
-    res['e'] = np.array([-9999.0, -9999.0])
-    res['e_err'] = 9999.0
+    res['flux_mean'] = np.nan
+    res['s2n'] = np.nan
+    res['e'] = np.array([np.nan, np.nan])
+    res['e_err'] = np.nan
 
     if res['flags'] == 0:
         flux_sum = res['sums'][5]
@@ -421,9 +421,9 @@ def get_result(ares):
 
             if (not np.isfinite(res['e1err']) or
                     not np.isfinite(res['e2err'])):
-                res['e1err'] = 9999.0
-                res['e2err'] = 9999.0
-                res['e_cov'] = diag([9999.0, 9999.0])
+                res['e1err'] = np.nan
+                res['e2err'] = np.nan
+                res['e_cov'] = diag([np.nan, np.nan])
             else:
                 res['e_cov'] = diag([res['e1err']**2, res['e2err']**2])
 
