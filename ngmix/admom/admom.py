@@ -372,79 +372,104 @@ def get_result(ares):
         else:
             res[n] = ares[n]
 
-    res['flux_mean'] = np.nan
-    res['s2n'] = np.nan
-    res['e'] = np.array([np.nan, np.nan])
-    res['e_err'] = np.nan
+    res["flags"] = 0
+    res["flagstr"] = ""
+    res["flux_flags"] = 0
+    res["flux_flagstr"] = ""
+    res["T_flags"] = 0
+    res["T_flagstr"] = ""
 
+    res['flux'] = np.nan
+    res['flux_mean'] = np.nan
+    res["flux_err"] = np.nan
+    res["T"] = np.nan
+    res["T_err"] = np.nan
+    res["s2n"] = np.nan
+    res["e1"] = np.nan
+    res["e2"] = np.nan
+    res["e1err"] = np.nan
+    res["e2err"] = np.nan
+    res["e"] = np.array([np.nan, np.nan])
+    res["e_err"] = np.array([np.nan, np.nan])
+    res["e_cov"] = np.diag([np.nan, np.nan])
+
+    # handle flux-only
     if res['flags'] == 0:
+        res['flux'] = res['sums'][5]
         flux_sum = res['sums'][5]
         res['flux_mean'] = flux_sum/res['wsum']
         res['pars'][5] = res['flux_mean']
 
-        # now want pars and cov for [cen1,cen2,e1,e2,T,flux]
-        sums = res['sums']
+        if res['sums_cov'][5, 5] > 0:
+            res["flux_err"] = np.sqrt(res['sums_cov'][5, 5])
+            res["s2n"] = res["flux"] / res["flux_err"]
+        else:
+            res["flux_flags"] |= ngmix.flags.NONPOS_VAR
+    else:
+        res["flux_flags"] |= ngmix.flags.NONPOS_VAR
 
-        pars = res['pars']
-        sums_cov = res['sums_cov']
+    # handle flux+T only
+    if res['flags'] == 0 and res['sums_cov'][4, 4] > 0 and res['sums_cov'][5, 5] > 0:
+        if res['sums'][5] > 0:
+            res['T'] = res['pars'][4]
 
-        res['T'] = pars[4]
-
-        if sums[5] > 0.0:
             # the sums include the weight, so need factor of two to correct
             res['T_err'] = 4*get_ratio_error(
-                sums[4],
-                sums[5],
-                sums_cov[4, 4],
-                sums_cov[5, 5],
-                sums_cov[4, 5],
+                res['sums'][4],
+                res['sums'][5],
+                res['sums_cov'][4, 4],
+                res['sums_cov'][5, 5],
+                res['sums_cov'][4, 5],
             )
+        else:
+            # flux <= 0.0
+            res["T_flags"] |= ngmix.flags.NONPOS_FLUX
+    else:
+        res["T_flags"] |= ngmix.flags.NONPOS_VAR
 
+    if res['flags'] == 0:
+        res['T'] = res['pars'][4]
+
+        # now want pars and cov for [cen1,cen2,e1,e2,T,flux]
         if res['T'] > 0.0:
             res['e'][:] = res['pars'][2:2+2]/res['T']
+            res['e1'] = res['e'][0]
+            res['e2'] = res['e'][1]
 
-            sums = res['sums']
             res['e1err'] = 2*get_ratio_error(
-                sums[2],
-                sums[4],
-                sums_cov[2, 2],
-                sums_cov[4, 4],
-                sums_cov[2, 4],
+                res['sums'][2],
+                res['sums'][4],
+                res['sums_cov'][2, 2],
+                res['sums_cov'][4, 4],
+                res['sums_cov'][2, 4],
             )
             res['e2err'] = 2*get_ratio_error(
-                sums[3],
-                sums[4],
-                sums_cov[3, 3],
-                sums_cov[4, 4],
-                sums_cov[3, 4],
+                res['sums'][3],
+                res['sums'][4],
+                res['sums_cov'][3, 3],
+                res['sums_cov'][4, 4],
+                res['sums_cov'][3, 4],
             )
 
             if (not np.isfinite(res['e1err']) or
                     not np.isfinite(res['e2err'])):
                 res['e1err'] = np.nan
                 res['e2err'] = np.nan
+                res['e_err'] = np.array([np.nan, np.nan])
                 res['e_cov'] = diag([np.nan, np.nan])
             else:
                 res['e_cov'] = diag([res['e1err']**2, res['e2err']**2])
+                res['e_err'] = np.array([res['e1err'], res['e2err']])
+                res["flags"] |= ngmix.flags.NONPOS_SHAPE_VAR
 
+            if res['sums'][5] <= 0:
+                res['flags'] |= ngmix.flags.NONPOS_VAR
         else:
             res['flags'] |= ngmix.flags.NONPOS_SIZE
 
-        fvar_sum = sums_cov[5, 5]
-
-        if fvar_sum > 0.0:
-
-            flux_err = np.sqrt(fvar_sum)
-            res['s2n'] = flux_sum/flux_err
-
-            # error on each shape component from BJ02 for gaussians
-            # assumes round
-
-            res['e_err_r'] = 2.0/res['s2n']
-        else:
-            res['flags'] |= ngmix.flags.NONPOS_VAR
-
     res['flagstr'] = ngmix.flags.get_flags_str(res['flags'])
+    res['flux_flagstr'] = ngmix.flags.get_flags_str(res['flux_flags'])
+    res['T_flagstr'] = ngmix.flags.get_flags_str(res['T_flags'])
 
     return res
 
