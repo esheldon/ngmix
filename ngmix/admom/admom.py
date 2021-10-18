@@ -430,14 +430,14 @@ def get_result(ares):
     else:
         res['T_flags'] |= res['flags']
 
-    if not np.all(np.diagonal(res['sums_cov']) > 0):
+    # now handle full flags
+    if not np.all(np.diagonal(res['sums_cov'][2:, 2:]) > 0):
         res["flags"] |= ngmix.flags.NONPOS_VAR
 
     if res['flags'] == 0:
         res['T'] = res['pars'][4]
 
         if res['flux'] > 0:
-            # now want pars and cov for [cen1,cen2,e1,e2,T,flux]
             if res['T'] > 0.0:
                 res['e'][:] = res['pars'][2:2+2]/res['T']
                 res['e1'] = res['e'][0]
