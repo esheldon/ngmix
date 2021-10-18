@@ -405,8 +405,6 @@ def get_result(ares):
             res["s2n"] = res["flux"] / res["flux_err"]
         else:
             res["flux_flags"] |= ngmix.flags.NONPOS_VAR
-    else:
-        res["flux_flags"] |= ngmix.flags.NONPOS_VAR
 
     # handle flux+T only
     if res['flags'] == 0 and res['sums_cov'][4, 4] > 0 and res['sums_cov'][5, 5] > 0:
@@ -457,10 +455,10 @@ def get_result(ares):
                 res['e2err'] = np.nan
                 res['e_err'] = np.array([np.nan, np.nan])
                 res['e_cov'] = diag([np.nan, np.nan])
+                res["flags"] |= ngmix.flags.NONPOS_SHAPE_VAR
             else:
                 res['e_cov'] = diag([res['e1err']**2, res['e2err']**2])
                 res['e_err'] = np.array([res['e1err'], res['e2err']])
-                res["flags"] |= ngmix.flags.NONPOS_SHAPE_VAR
 
             if res['sums'][5] <= 0:
                 res['flags'] |= ngmix.flags.NONPOS_VAR
