@@ -49,7 +49,7 @@ def admom(confarray, wt, pixels, resarray):
 
         if (abs(wt['row'][0]-roworig) > conf['shiftmax']
                 or abs(wt['col'][0]-colorig) > conf['shiftmax']):
-            res['flags'] = ngmix.flags.BIG_CEN_SHIFT
+            res['flags'] = ngmix.flags.CEN_SHIFT
             break
 
         clear_result(res)
