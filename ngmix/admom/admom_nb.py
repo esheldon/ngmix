@@ -7,7 +7,7 @@ from ..gmix.gmix_nb import (
     GMIX_LOW_DETVAL,
 )
 
-from .. import procflags
+import ngmix.flags
 
 
 @njit
@@ -28,10 +28,10 @@ def admom(confarray, wt, pixels, resarray):
     colorig = wt['col'][0]
 
     e1old = e2old = Told = np.nan
-    for i in range(conf['maxit']):
+    for i in range(conf['maxiter']):
 
         if wt['det'][0] < GMIX_LOW_DETVAL:
-            res['flags'] = procflags.LOW_DET
+            res['flags'] = ngmix.flags.LOW_DET
             break
 
         # due to check above, this should not raise an exception
@@ -41,7 +41,7 @@ def admom(confarray, wt, pixels, resarray):
         admom_censums(wt, pixels, res)
 
         if res['sums'][5] <= 0.0:
-            res['flags'] = procflags.NONPOS_FLUX
+            res['flags'] = ngmix.flags.NONPOS_FLUX
             break
 
         wt['row'][0] = res['sums'][0]/res['sums'][5]
@@ -49,14 +49,14 @@ def admom(confarray, wt, pixels, resarray):
 
         if (abs(wt['row'][0]-roworig) > conf['shiftmax']
                 or abs(wt['col'][0]-colorig) > conf['shiftmax']):
-            res['flags'] = procflags.BIG_CEN_SHIFT
+            res['flags'] = ngmix.flags.BIG_CEN_SHIFT
             break
 
         clear_result(res)
         admom_momsums(wt, pixels, res)
 
         if res['sums'][5] <= 0.0:
-            res['flags'] = procflags.NONPOS_FLUX
+            res['flags'] = ngmix.flags.NONPOS_FLUX
             break
 
         # look for convergence
@@ -70,7 +70,7 @@ def admom(confarray, wt, pixels, resarray):
         Irc = 0.5*M2
 
         if T <= 0.0:
-            res['flags'] = procflags.NONPOS_SIZE
+            res['flags'] = ngmix.flags.NONPOS_SIZE
             break
 
         e1 = (Icc - Irr)/T
@@ -103,8 +103,8 @@ def admom(confarray, wt, pixels, resarray):
 
     res['numiter'] = i+1
 
-    if res['numiter'] == conf['maxit']:
-        res['flags'] = procflags.MAXIT
+    if res['numiter'] == conf['maxiter']:
+        res['flags'] = ngmix.flags.MAXITER
 
 
 @njit
@@ -184,7 +184,7 @@ def deweight_moments(wt, Irr, Irc, Icc, res):
     # measured moments
     detm = Irr*Icc - Irc*Irc
     if detm <= GMIX_LOW_DETVAL:
-        res['flags'] = procflags.LOW_DET
+        res['flags'] = ngmix.flags.LOW_DET
         return
 
     Wrr = wt['irr'][0]
@@ -192,7 +192,7 @@ def deweight_moments(wt, Irr, Irc, Icc, res):
     Wcc = wt['icc'][0]
     detw = Wrr*Wcc - Wrc*Wrc
     if detw <= GMIX_LOW_DETVAL:
-        res['flags'] = procflags.LOW_DET
+        res['flags'] = ngmix.flags.LOW_DET
         return
 
     idetw = 1.0/detw
@@ -205,7 +205,7 @@ def deweight_moments(wt, Irr, Irc, Icc, res):
     detn = Nrr*Ncc - Nrc*Nrc
 
     if detn <= GMIX_LOW_DETVAL:
-        res['flags'] = procflags.LOW_DET
+        res['flags'] = ngmix.flags.LOW_DET
         return
 
     # now set from the inverted matrix

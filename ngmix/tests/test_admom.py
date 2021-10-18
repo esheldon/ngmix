@@ -5,7 +5,7 @@ import pytest
 
 import ngmix
 from ngmix.moments import fwhm_to_T
-from ngmix import procflags
+import ngmix.flags
 
 
 @pytest.mark.parametrize('wcs_g1', [-0.5, 0, 0.2])
@@ -109,7 +109,7 @@ def test_admom(g1_true, g2_true, wcs_g1, wcs_g2):
     tres['flags'] = 0
     tres['pars'][4] = -1
     tres = ngmix.admom.admom.get_result(tres)
-    assert tres['flags'] == procflags.NONPOS_SIZE
+    assert tres['flags'] == ngmix.flags.NONPOS_SIZE
 
 
 @pytest.mark.parametrize('snr', [20, 10, 5])

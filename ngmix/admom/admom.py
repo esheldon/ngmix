@@ -9,7 +9,7 @@ from ..shape import e1e2_to_g1g2
 from ..observation import Observation
 from ..gexceptions import GMixRangeError
 from ..util import get_ratio_error
-from .. import procflags
+import ngmix.flags
 
 DEFAULT_MAXITER = 200
 DEFAULT_SHIFTMAX = 5.0  # pixels
@@ -301,7 +301,7 @@ class AdmomFitter(object):
                 ares,
             )
         except GMixRangeError:
-            ares['flags'] = procflags.GMIX_RANGE_ERROR
+            ares['flags'] = ngmix.flags.GMIX_RANGE_ERROR
 
         result = get_result(ares)
 
@@ -319,7 +319,7 @@ class AdmomFitter(object):
         dt = np.dtype(_admom_conf_dtype, align=True)
         conf = np.zeros(1, dtype=dt)
 
-        conf['maxit'] = maxiter
+        conf['maxiter'] = maxiter
         conf['shiftmax'] = shiftmax
         conf['etol'] = etol
         conf['Ttol'] = Ttol
@@ -428,7 +428,7 @@ def get_result(ares):
                 res['e_cov'] = diag([res['e1err']**2, res['e2err']**2])
 
         else:
-            res['flags'] |= procflags.NONPOS_SIZE
+            res['flags'] |= ngmix.flags.NONPOS_SIZE
 
         fvar_sum = sums_cov[5, 5]
 
@@ -442,9 +442,9 @@ def get_result(ares):
 
             res['e_err_r'] = 2.0/res['s2n']
         else:
-            res['flags'] |= procflags.NONPOS_VAR
+            res['flags'] |= ngmix.flags.NONPOS_VAR
 
-    res['flagstr'] = procflags.get_procflags_str(res['flags'])
+    res['flagstr'] = ngmix.flags.get_flags_str(res['flags'])
 
     return res
 
@@ -464,7 +464,7 @@ _admom_result_dtype = [
 ]
 
 _admom_conf_dtype = [
-    ('maxit', 'i4'),
+    ('maxiter', 'i4'),
     ('shiftmax', 'f8'),
     ('etol', 'f8'),
     ('Ttol', 'f8'),

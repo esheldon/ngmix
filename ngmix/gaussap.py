@@ -5,9 +5,9 @@ import logging
 import numpy as np
 from .gmix import GMixModel, GMixCM
 from .gexceptions import GMixRangeError
-from .procflags import NO_ATTEMPT, GMIX_RANGE_ERROR
+from ngmix.flags import NO_ATTEMPT, GMIX_RANGE_ERROR
 
-DEFAULT_FLUX = -9999.0
+DEFAULT_FLUX = np.nan
 
 logger = logging.getLogger(__name__)
 

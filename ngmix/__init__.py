@@ -54,5 +54,3 @@ from .observation import Observation, ObsList, MultiBandObsList
 from . import metacal
 from . import simobs
 from . import gaussap
-
-from . import procflags

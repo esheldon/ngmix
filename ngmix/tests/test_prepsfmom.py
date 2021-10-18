@@ -6,7 +6,7 @@ from ngmix.prepsfmom import KSigmaMom, PrePSFGaussMom
 from ngmix import Jacobian
 from ngmix import Observation
 from ngmix.moments import make_mom_result
-from ngmix import procflags
+import ngmix.flags
 
 
 def _report_info(s, arr, mn, err):
@@ -490,18 +490,18 @@ def test_moments_make_mom_result_flags():
         _mom_cov = mom_cov.copy()
         _mom_cov[i, i] = -1
         res = make_mom_result(mom, _mom_cov)
-        assert (res["flags"] & procflags.NONPOS_VAR) != 0
-        assert procflags.NAME_MAP[procflags.NONPOS_VAR] in res["flagstr"]
+        assert (res["flags"] & ngmix.flags.NONPOS_VAR) != 0
+        assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_VAR] in res["flagstr"]
         if i == 0:
-            assert (res["flux_flags"] & procflags.NONPOS_VAR) != 0
-            assert procflags.NAME_MAP[procflags.NONPOS_VAR] in res["flux_flagstr"]
+            assert (res["flux_flags"] & ngmix.flags.NONPOS_VAR) != 0
+            assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_VAR] in res["flux_flagstr"]
         else:
             assert res["flux_flags"] == 0
             assert res["flux_flagstr"] == ""
 
         if i < 2:
-            assert (res["T_flags"] & procflags.NONPOS_VAR) != 0
-            assert procflags.NAME_MAP[procflags.NONPOS_VAR] in res["T_flagstr"]
+            assert (res["T_flags"] & ngmix.flags.NONPOS_VAR) != 0
+            assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_VAR] in res["T_flagstr"]
         else:
             assert res["T_flags"] == 0
             assert res["T_flagstr"] == ""
@@ -510,19 +510,19 @@ def test_moments_make_mom_result_flags():
     _mom = mom.copy()
     _mom[0] = -1
     res = make_mom_result(_mom, mom_cov)
-    assert (res["flags"] & procflags.NONPOS_FLUX) != 0
-    assert procflags.NAME_MAP[procflags.NONPOS_FLUX] in res["flagstr"]
+    assert (res["flags"] & ngmix.flags.NONPOS_FLUX) != 0
+    assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_FLUX] in res["flagstr"]
     assert res["flux_flags"] == 0
     assert res["flux_flagstr"] == ""
-    assert (res["T_flags"] & procflags.NONPOS_FLUX) != 0
-    assert procflags.NAME_MAP[procflags.NONPOS_FLUX] in res["T_flagstr"]
+    assert (res["T_flags"] & ngmix.flags.NONPOS_FLUX) != 0
+    assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_FLUX] in res["T_flagstr"]
 
     # neg T
     _mom = mom.copy()
     _mom[1] = -1
     res = make_mom_result(_mom, mom_cov)
-    assert (res["flags"] & procflags.NONPOS_SIZE) != 0
-    assert procflags.NAME_MAP[procflags.NONPOS_SIZE] in res["flagstr"]
+    assert (res["flags"] & ngmix.flags.NONPOS_SIZE) != 0
+    assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_SIZE] in res["flagstr"]
     assert res["flux_flags"] == 0
     assert res["flux_flagstr"] == ""
     assert res["T_flags"] == 0
@@ -534,8 +534,8 @@ def test_moments_make_mom_result_flags():
         _mom_cov[1, i] = np.nan
         _mom_cov[i, 1] = np.nan
         res = make_mom_result(mom, _mom_cov)
-        assert (res["flags"] & procflags.NONPOS_SHAPE_VAR) != 0
-        assert procflags.NAME_MAP[procflags.NONPOS_SHAPE_VAR] in res["flagstr"]
+        assert (res["flags"] & ngmix.flags.NONPOS_SHAPE_VAR) != 0
+        assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_SHAPE_VAR] in res["flagstr"]
         assert res["flux_flags"] == 0
         assert res["flux_flagstr"] == ""
         assert res["T_flags"] == 0

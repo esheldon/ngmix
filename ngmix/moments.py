@@ -2,7 +2,7 @@ import numpy as np
 
 from .gexceptions import GMixRangeError
 from . import shape
-from . import procflags
+import ngmix.flags
 from .util import get_ratio_error
 
 
@@ -384,7 +384,7 @@ def make_mom_result(mom, mom_cov):
         res["flux_err"] = np.sqrt(mom_cov[0, 0])
         res["s2n"] = res["flux"] / res["flux_err"]
     else:
-        res["flux_flags"] |= procflags.NONPOS_VAR
+        res["flux_flags"] |= ngmix.flags.NONPOS_VAR
 
     # handle flux+T only
     if np.all(np.diagonal(mom_cov)[0:2] > 0):
@@ -396,15 +396,15 @@ def make_mom_result(mom, mom_cov):
             )
         else:
             # flux <= 0.0
-            res["T_flags"] |= procflags.NONPOS_FLUX
+            res["T_flags"] |= ngmix.flags.NONPOS_FLUX
     else:
-        res["T_flags"] |= procflags.NONPOS_VAR
+        res["T_flags"] |= ngmix.flags.NONPOS_VAR
 
     # now handle full flags
     if np.all(np.diagonal(mom_cov) > 0):
         res["mom_err"] = np.sqrt(np.diagonal(mom_cov))
     else:
-        res["flags"] |= procflags.NONPOS_VAR
+        res["flags"] |= ngmix.flags.NONPOS_VAR
 
     if res["flags"] == 0:
         if mom[0] > 0:
@@ -433,16 +433,16 @@ def make_mom_result(mom, mom_cov):
                     res["e_cov"] = np.diag(e_err**2)
                 else:
                     # bad e_err
-                    res["flags"] |= procflags.NONPOS_SHAPE_VAR
+                    res["flags"] |= ngmix.flags.NONPOS_SHAPE_VAR
             else:
                 # T <= 0.0
-                res["flags"] |= procflags.NONPOS_SIZE
+                res["flags"] |= ngmix.flags.NONPOS_SIZE
         else:
             # flux <= 0.0
-            res["flags"] |= procflags.NONPOS_FLUX
+            res["flags"] |= ngmix.flags.NONPOS_FLUX
 
-    res["flagstr"] = procflags.get_procflags_str(res["flags"])
-    res["flux_flagstr"] = procflags.get_procflags_str(res["flux_flags"])
-    res["T_flagstr"] = procflags.get_procflags_str(res["T_flags"])
+    res["flagstr"] = ngmix.flags.get_flags_str(res["flags"])
+    res["flux_flagstr"] = ngmix.flags.get_flags_str(res["flux_flags"])
+    res["T_flagstr"] = ngmix.flags.get_flags_str(res["T_flags"])
 
     return res
