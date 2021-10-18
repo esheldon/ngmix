@@ -205,6 +205,10 @@ class PGaussMom(PrePSFMom):
         super().__init__(fwhm, 'gauss', pad_factor=pad_factor)
 
 
+# keep this here for API consistency
+PrePSFGaussMom = PGaussMom
+
+
 def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, dcol):
     # we only need to do things where the kernel is non-zero
     # this saves a bunch of CPU cycles
