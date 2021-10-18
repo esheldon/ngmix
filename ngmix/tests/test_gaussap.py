@@ -43,6 +43,9 @@ def test_gaussap_simple_smoke(model, weight_fwhm):
     w, = np.where(flags[:, 0] == 0)
     assert flags[ibad, 0] != 0
     assert w.size == nobj-1
+    assert np.all(np.isfinite(gap_fluxes[:ibad]))
+    assert np.all(np.isfinite(gap_fluxes[ibad+1:]))
+    assert np.all(np.isnan(gap_fluxes[ibad]))
 
     bstart = 5
     assert gap_fluxes.shape == pars[:, bstart:bstart+nband].shape
@@ -91,6 +94,7 @@ def test_gaussap_cm_smoke(weight_fwhm):
     )
 
     assert np.all(flags == 0)
+    assert np.all(np.isfinite(gap_fluxes))
 
     bstart = 5
     assert gap_fluxes.shape == pars[:, bstart:bstart+nband].shape
@@ -136,6 +140,7 @@ def test_gaussap_bdf_smoke(weight_fwhm):
     )
 
     assert np.all(flags == 0)
+    assert np.all(np.isfinite(gap_fluxes))
 
     bstart = 6
     assert gap_fluxes.shape == pars[:, bstart:bstart+nband].shape
@@ -172,3 +177,4 @@ def test_gaussap_corner_cases(nobj):
 
     gap_fluxes, flags = ngmix.gaussap.get_gaussap_flux(pars, model, weight_fwhm)
     assert flags[ibad] != 0
+    assert np.any(np.isnan(gap_fluxes))
