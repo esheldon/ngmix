@@ -2,7 +2,7 @@ import galsim
 import numpy as np
 import pytest
 
-from ngmix.prepsfmom import KSigmaMom, PrePSFGaussMom
+from ngmix.prepsfmom import KSigmaMom, PGaussMom
 from ngmix import Jacobian
 from ngmix import Observation
 from ngmix.moments import make_mom_result
@@ -26,7 +26,7 @@ def _report_info(s, arr, mn, err):
         )
 
 
-@pytest.mark.parametrize("cls", [KSigmaMom, PrePSFGaussMom])
+@pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
 def test_prepsfmom_raises_nopsf(cls):
     fitter = cls(20)
     obs = Observation(image=np.zeros((1000, 1000)))
@@ -40,7 +40,7 @@ def test_prepsfmom_raises_nopsf(cls):
     fitter.go(obs, no_psf=True)
 
 
-@pytest.mark.parametrize("cls", [KSigmaMom, PrePSFGaussMom])
+@pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
 def test_prepsfmom_raises_nonsquare(cls):
     fitter = cls(20)
     obs = Observation(image=np.zeros((100, 90)))
@@ -50,7 +50,7 @@ def test_prepsfmom_raises_nonsquare(cls):
     assert "square" in str(e.value)
 
 
-@pytest.mark.parametrize("cls", [KSigmaMom, PrePSFGaussMom])
+@pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
 def test_prepsfmom_raises_badjacob(cls):
     fitter = cls(1.2)
 
@@ -109,7 +109,7 @@ def _stack_list_of_dicts(res):
     return d
 
 
-@pytest.mark.parametrize("cls", [KSigmaMom, PrePSFGaussMom])
+@pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
 @pytest.mark.parametrize('snr', [1e1, 1e3])
 @pytest.mark.parametrize('pixel_scale', [0.125, 0.25])
 @pytest.mark.parametrize('fwhm,psf_fwhm', [(0.6, 0.9), (1.5, 0.9)])
@@ -234,7 +234,7 @@ def test_prepsfmom_gauss(
 
 @pytest.mark.parametrize("cls,mom_fwhm,snr", [
     (KSigmaMom, 2.0, 1e2),
-    (PrePSFGaussMom, 2.0, 1e2),
+    (PGaussMom, 2.0, 1e2),
 ])
 @pytest.mark.parametrize('pixel_scale', [0.25])
 @pytest.mark.parametrize('fwhm,psf_fwhm', [
@@ -369,7 +369,7 @@ def test_prepsfmom_mn_cov(
 
 @pytest.mark.parametrize("cls,mom_fwhm,snr", [
     (KSigmaMom, 2.0, 1e2),
-    (PrePSFGaussMom, 2.0, 1e2),
+    (PGaussMom, 2.0, 1e2),
 ])
 @pytest.mark.parametrize('pixel_scale', [0.25])
 @pytest.mark.parametrize('fwhm', [
@@ -542,7 +542,7 @@ def test_moments_make_mom_result_flags():
         assert res["T_flagstr"] == ""
 
 
-@pytest.mark.parametrize("cls", [PrePSFGaussMom, KSigmaMom])
+@pytest.mark.parametrize("cls", [PGaussMom, KSigmaMom])
 @pytest.mark.parametrize('pixel_scale', [0.125, 0.25])
 @pytest.mark.parametrize('fwhm,psf_fwhm', [(0.6, 0.9)])
 @pytest.mark.parametrize('image_size', [250])
@@ -686,7 +686,7 @@ def test_prepsfmom_comp_to_gaussmom(
         image=im_true,
         jacobian=jac,
     )
-    res = PrePSFGaussMom(fwhm=mom_fwhm, pad_factor=pad_factor).go(
+    res = PGaussMom(fwhm=mom_fwhm, pad_factor=pad_factor).go(
         obs=obs, no_psf=True, return_kernels=True,
     )
 

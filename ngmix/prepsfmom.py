@@ -16,7 +16,7 @@ class PrePSFMom(object):
     """Measure pre-PSF weighted real-space moments.
 
     This class is not meant to be used directly. Instead use either `KSigmaMom`
-    or `PrePSFGaussMom`.
+    or `PGaussMom`.
 
     If the fwhm of the weight/kernel function is of similar size to the PSF or
     smaller, then the object properties returned by this fitter will be very noisy.
@@ -181,7 +181,7 @@ class KSigmaMom(PrePSFMom):
         super().__init__(fwhm, 'ksigma', pad_factor=pad_factor)
 
 
-class PrePSFGaussMom(PrePSFMom):
+class PGaussMom(PrePSFMom):
     """Measure pre-PSF weighted real-space moments w/ a Gaussian kernel.
 
     This fitter differs from `GaussMom` in that it deconvolves the PSF first.
@@ -199,7 +199,7 @@ class PrePSFGaussMom(PrePSFMom):
         The factor by which to pad the FFTs used for the image. Default is 4.
     """
 
-    kind = "gap"
+    kind = "pgauss"
 
     def __init__(self, fwhm, pad_factor=4):
         super().__init__(fwhm, 'gauss', pad_factor=pad_factor)
