@@ -54,8 +54,9 @@ NAME_MAP = {
     ZERO_DOF: 'degrees of freedom for it is zero (no chi^2/dof possible)',
 }
 
+INV_NAME_MAP = {}
 for k, v in list(NAME_MAP.items()):
-    NAME_MAP[v] = k
+    INV_NAME_MAP[v] = k
 
 
 def get_flags_str(val, name_map=None):
@@ -75,11 +76,11 @@ def get_flags_str(val, name_map=None):
         A string of descriptions for each bit separated by `|`.
     """
     if name_map is None:
-        name_map = NAME_MAP
-
-    inv_name_map = {}
-    for k, v in name_map.items():
-        inv_name_map[v] = k
+        inv_name_map = INV_NAME_MAP
+    else:
+        inv_name_map = {}
+        for k, v in name_map.items():
+            inv_name_map[v] = k
 
     nstrs = []
     for pow in range(32):

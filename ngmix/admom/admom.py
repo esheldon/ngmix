@@ -393,13 +393,16 @@ def get_result(ares):
     res["e_err"] = np.array([np.nan, np.nan])
     res["e_cov"] = np.diag([np.nan, np.nan])
 
-    # handle flux-only
+    # set things we always set if flags are ok
     if res['flags'] == 0:
+        res['T'] = res['pars'][4]
         res['flux'] = res['sums'][5]
         flux_sum = res['sums'][5]
         res['flux_mean'] = flux_sum/res['wsum']
         res['pars'][5] = res['flux_mean']
 
+    # handle flux-only flags
+    if res['flags'] == 0:
         if res['sums_cov'][5, 5] > 0:
             res["flux_err"] = np.sqrt(res['sums_cov'][5, 5])
             res["s2n"] = res["flux"] / res["flux_err"]
@@ -412,8 +415,6 @@ def get_result(ares):
     if res['flags'] == 0:
         if res['sums_cov'][4, 4] > 0 and res['sums_cov'][5, 5] > 0:
             if res['sums'][5] > 0:
-                res['T'] = res['pars'][4]
-
                 # the sums include the weight, so need factor of two to correct
                 res['T_err'] = 4*get_ratio_error(
                     res['sums'][4],
@@ -435,8 +436,6 @@ def get_result(ares):
         res["flags"] |= ngmix.flags.NONPOS_VAR
 
     if res['flags'] == 0:
-        res['T'] = res['pars'][4]
-
         if res['flux'] > 0:
             if res['T'] > 0.0:
                 res['e'][:] = res['pars'][2:2+2]/res['T']
