@@ -1,4 +1,19 @@
-## v2.0.3 (unreleased)
+## v2.0.3
+
+### new features
+
+    - All moments codes now produce similar output dictionaries and flags.
+    - The `PrePSFGaussMom` class has been renamed to `PGaussMom`. The old name still
+      exists for backwards compatibility but will be deprecated and removed at
+      some future date.
+    - The moments codes and `gaussap.py` codes now use np.nan for missing values.
+    - The flag bits have been normalized across the code base to now all reside in
+      `ngmix.flags`. A new function to convert the flags to a descriptive string is
+      located there as well.
+    - A new function exists to convert raw moments to shape results:
+      `ngmix.moments.make_mom_result`
+    - The moments fitters now have a `kind` attribute to help downstream code
+      process them uniformly.
 
 ### bug fixes
 

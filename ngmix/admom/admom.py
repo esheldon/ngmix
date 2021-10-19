@@ -250,7 +250,7 @@ class AdmomFitter(object):
         on a T guess
     """
 
-    kind = "admom"
+    kind = "am"
 
     def __init__(self,
                  maxiter=DEFAULT_MAXITER,
