@@ -263,7 +263,7 @@ def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, d
     m_cov[1, 1] = 1
     tot_var *= eff_pad_factor**2
     tot_var_df4 = tot_var * df4
-    kerns = [fkr / kpsf_im, fkp / kpsf_im, fkc / kpsf_im, fkf / kpsf_im]
+    kerns = [fkp / kpsf_im, fkc / kpsf_im, fkr / kpsf_im, fkf / kpsf_im]
     conj_kerns = [np.conj(k) for k in kerns]
     for i in range(2, 6):
         for j in range(i, 6):
