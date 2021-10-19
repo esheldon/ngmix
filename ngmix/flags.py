@@ -54,10 +54,6 @@ NAME_MAP = {
     ZERO_DOF: 'degrees of freedom for it is zero (no chi^2/dof possible)',
 }
 
-INV_NAME_MAP = {}
-for k, v in list(NAME_MAP.items()):
-    INV_NAME_MAP[v] = k
-
 
 def get_flags_str(val, name_map=None):
     """Get a descriptive string given a flag value.
@@ -67,7 +63,7 @@ def get_flags_str(val, name_map=None):
     val : int
         The flag value.
     name_map : dict, optional
-        A dictionary mapping names to values. Default is global at
+        A dictionary mapping values to names. Default is global at
         ngmix.flags.NAME_MAP.
 
     Returns
@@ -76,18 +72,14 @@ def get_flags_str(val, name_map=None):
         A string of descriptions for each bit separated by `|`.
     """
     if name_map is None:
-        inv_name_map = INV_NAME_MAP
-    else:
-        inv_name_map = {}
-        for k, v in name_map.items():
-            inv_name_map[v] = k
+        name_map = NAME_MAP
 
     nstrs = []
     for pow in range(32):
         fval = 2**pow
         if ((val & fval) != 0):
-            if fval in inv_name_map:
-                nstrs.append(inv_name_map[fval])
+            if fval in name_map:
+                nstrs.append(name_map[fval])
             else:
                 nstrs.append("bit 2**%d" % pow)
     return "|".join(nstrs)
