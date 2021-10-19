@@ -482,7 +482,7 @@ def test_prepsfmom_mn_cov_nopsf(
         np.std(res["e"][:, 1]), np.mean(res["e_err"][:, 1]), atol=0, rtol=2e-2)
 
     assert np.allclose(
-        mom_cov,
+        mom_cov[2:, 2:],
         np.mean(res["mom_cov"][:, 2:, 2:], axis=0),
         atol=0,
         rtol=4e-1,
