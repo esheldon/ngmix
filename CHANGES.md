@@ -14,6 +14,7 @@
       `ngmix.moments.make_mom_result`
     - The moments fitters now have a `kind` attribute to help downstream code
       process them uniformly.
+    - Added slots for position moments in moments output for moments fitters. 
 
 ### bug fixes
 
