@@ -4,8 +4,7 @@ import numpy as np
 import scipy.fft as fft
 
 from ngmix.observation import Observation
-from ngmix.moments import fwhm_to_sigma
-from ngmix.util import get_ratio_error
+from ngmix.moments import fwhm_to_sigma, make_mom_result
 from ngmix.gexceptions import FFTRangeError
 from ngmix.fastexp_nb import FASTEXP_MAX_CHI2, fexp_arr
 
@@ -17,7 +16,7 @@ class PrePSFMom(object):
     """Measure pre-PSF weighted real-space moments.
 
     This class is not meant to be used directly. Instead use either `KSigmaMom`
-    or `PrePSFGaussMom`.
+    or `PGaussMom`.
 
     If the fwhm of the weight/kernel function is of similar size to the PSF or
     smaller, then the object properties returned by this fitter will be very noisy.
@@ -139,7 +138,7 @@ class PrePSFMom(object):
             kim, kpsf_im, tot_var, eff_pad_factor, kernels,
             im_row - psf_im_row, im_col - psf_im_col,
         )
-        res = _make_mom_res(mom, mom_cov)
+        res = make_mom_result(mom, mom_cov)
         if res['flags'] != 0:
             logger.debug("pre-psf moments failed: %s" % res['flagstr'])
 
@@ -175,11 +174,14 @@ class KSigmaMom(PrePSFMom):
     pad_factor : int, optional
         The factor by which to pad the FFTs used for the image. Default is 4.
     """
+
+    kind = "ksigma"
+
     def __init__(self, fwhm, pad_factor=4):
         super().__init__(fwhm, 'ksigma', pad_factor=pad_factor)
 
 
-class PrePSFGaussMom(PrePSFMom):
+class PGaussMom(PrePSFMom):
     """Measure pre-PSF weighted real-space moments w/ a Gaussian kernel.
 
     This fitter differs from `GaussMom` in that it deconvolves the PSF first.
@@ -196,8 +198,15 @@ class PrePSFGaussMom(PrePSFMom):
     pad_factor : int, optional
         The factor by which to pad the FFTs used for the image. Default is 4.
     """
+
+    kind = "pgauss"
+
     def __init__(self, fwhm, pad_factor=4):
         super().__init__(fwhm, 'gauss', pad_factor=pad_factor)
+
+
+# keep this here for API consistency
+PrePSFGaussMom = PGaussMom
 
 
 def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, dcol):
@@ -258,103 +267,6 @@ def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, d
     mom = np.array([mf, mr, mp, mc])
 
     return mom, m_cov
-
-
-def _make_mom_res(mom, mom_cov):
-    # now finally build the outputs and their errors
-    res = {}
-    res["flags"] = 0
-    res["flagstr"] = ""
-    res["flux"] = mom[0]
-    res["mom"] = mom
-    res["mom_cov"] = mom_cov
-    res["flux_flags"] = 0
-    res["flux_flagstr"] = ""
-    res["T_flags"] = 0
-    res["T_flagstr"] = ""
-
-    # we fill these in later if T > 0 and flux cov is positive
-    res["flux_err"] = 9999.0
-    res["T"] = -9999.0
-    res["T_err"] = 9999.0
-    res["s2n"] = -9999.0
-    res["e1"] = 9999.0
-    res["e2"] = 9999.0
-    res["e"] = np.array([-9999.0, -9999.0])
-    res["e_err"] = np.array([9999.0, 9999.0])
-    res["e_cov"] = np.diag([9999.0, 9999.0])
-    res["mom_err"] = np.ones(4) * 9999.0
-
-    # handle flux-only
-    if np.diagonal(mom_cov)[0] > 0:
-        res["flux_err"] = np.sqrt(mom_cov[0, 0])
-        res["s2n"] = res["flux"] / res["flux_err"]
-    else:
-        res["flux_flags"] |= 0x40
-        res["flux_flagstr"] += 'zero or neg flux var;'
-
-    # handle flux+T only
-    if np.all(np.diagonal(mom_cov)[0:2] > 0):
-        if mom[0] > 0:
-            res["T"] = mom[1] / mom[0]
-            res["T_err"] = get_ratio_error(
-                mom[1], mom[0],
-                mom_cov[1, 1], mom_cov[0, 0], mom_cov[0, 1]
-            )
-        else:
-            # flux <= 0.0
-            res["T_flags"] |= 0x4
-            res["T_flagstr"] += "flux <= 0.0;"
-    else:
-        res["T_flags"] |= 0x40
-        res["T_flagstr"] += 'zero or neg flux/T var;'
-
-    # now handle full flags
-    if np.all(np.diagonal(mom_cov) > 0):
-        res["mom_err"] = np.sqrt(np.diagonal(mom_cov))
-    else:
-        res["flags"] |= 0x40
-        res["flagstr"] += 'zero or neg moment var;'
-
-    if res["flags"] == 0:
-        if mom[0] > 0:
-            if res["T"] > 0:
-                res["pars"] = np.array([
-                    0, 0,
-                    mom[2]/mom[0],
-                    mom[3]/mom[0],
-                    mom[1]/mom[0],
-                    mom[0],
-                ])
-                res["e1"] = mom[2] / mom[1]
-                res["e2"] = mom[3] / mom[1]
-                res["e"] = np.array([res["e1"], res["e2"]])
-                e_err = np.zeros(2)
-                e_err[0] = get_ratio_error(
-                    mom[2], mom[1],
-                    mom_cov[2, 2], mom_cov[1, 1], mom_cov[1, 2]
-                )
-                e_err[1] = get_ratio_error(
-                    mom[3], mom[1],
-                    mom_cov[3, 3], mom_cov[1, 1], mom_cov[1, 3]
-                )
-                if np.all(np.isfinite(e_err)):
-                    res["e_err"] = e_err
-                    res["e_cov"] = np.diag(e_err**2)
-                else:
-                    # bad e_err
-                    res["flags"] |= 0x100
-                    res["flagstr"] += "non-finite shape errors;"
-            else:
-                # T <= 0.0
-                res["flags"] |= 0x8
-                res["flagstr"] += "T <= 0.0;"
-        else:
-            # flux <= 0.0
-            res["flags"] |= 0x4
-            res["flagstr"] += "flux <= 0.0;"
-
-    return res
 
 
 def _zero_pad_image(im, target_dim):

@@ -1,3 +1,4 @@
+import numpy as np
 from numba import njit
 
 from ..gmix.gmix_nb import (
@@ -6,12 +7,7 @@ from ..gmix.gmix_nb import (
     GMIX_LOW_DETVAL,
 )
 
-ADMOM_EDGE = 0x1
-ADMOM_SHIFT = 0x2
-ADMOM_FAINT = 0x4
-ADMOM_SMALL = 0x8
-ADMOM_DET = 0x10
-ADMOM_MAXIT = 0x20
+import ngmix.flags
 
 
 @njit
@@ -31,11 +27,11 @@ def admom(confarray, wt, pixels, resarray):
     roworig = wt['row'][0]
     colorig = wt['col'][0]
 
-    e1old = e2old = Told = -9999.0
-    for i in range(conf['maxit']):
+    e1old = e2old = Told = np.nan
+    for i in range(conf['maxiter']):
 
         if wt['det'][0] < GMIX_LOW_DETVAL:
-            res['flags'] = ADMOM_DET
+            res['flags'] = ngmix.flags.LOW_DET
             break
 
         # due to check above, this should not raise an exception
@@ -45,7 +41,7 @@ def admom(confarray, wt, pixels, resarray):
         admom_censums(wt, pixels, res)
 
         if res['sums'][5] <= 0.0:
-            res['flags'] = ADMOM_FAINT
+            res['flags'] = ngmix.flags.NONPOS_FLUX
             break
 
         wt['row'][0] = res['sums'][0]/res['sums'][5]
@@ -53,14 +49,14 @@ def admom(confarray, wt, pixels, resarray):
 
         if (abs(wt['row'][0]-roworig) > conf['shiftmax']
                 or abs(wt['col'][0]-colorig) > conf['shiftmax']):
-            res['flags'] = ADMOM_SHIFT
+            res['flags'] = ngmix.flags.CEN_SHIFT
             break
 
         clear_result(res)
         admom_momsums(wt, pixels, res)
 
         if res['sums'][5] <= 0.0:
-            res['flags'] = ADMOM_FAINT
+            res['flags'] = ngmix.flags.NONPOS_FLUX
             break
 
         # look for convergence
@@ -74,7 +70,7 @@ def admom(confarray, wt, pixels, resarray):
         Irc = 0.5*M2
 
         if T <= 0.0:
-            res['flags'] = ADMOM_SMALL
+            res['flags'] = ngmix.flags.NONPOS_SIZE
             break
 
         e1 = (Icc - Irr)/T
@@ -107,8 +103,8 @@ def admom(confarray, wt, pixels, resarray):
 
     res['numiter'] = i+1
 
-    if res['numiter'] == conf['maxit']:
-        res['flags'] = ADMOM_MAXIT
+    if res['numiter'] == conf['maxiter']:
+        res['flags'] = ngmix.flags.MAXITER
 
 
 @njit
@@ -188,7 +184,7 @@ def deweight_moments(wt, Irr, Irc, Icc, res):
     # measured moments
     detm = Irr*Icc - Irc*Irc
     if detm <= GMIX_LOW_DETVAL:
-        res['flags'] = ADMOM_DET
+        res['flags'] = ngmix.flags.LOW_DET
         return
 
     Wrr = wt['irr'][0]
@@ -196,7 +192,7 @@ def deweight_moments(wt, Irr, Irc, Icc, res):
     Wcc = wt['icc'][0]
     detw = Wrr*Wcc - Wrc*Wrc
     if detw <= GMIX_LOW_DETVAL:
-        res['flags'] = ADMOM_DET
+        res['flags'] = ngmix.flags.LOW_DET
         return
 
     idetw = 1.0/detw
@@ -209,7 +205,7 @@ def deweight_moments(wt, Irr, Irc, Icc, res):
     detn = Nrr*Ncc - Nrc*Nrc
 
     if detn <= GMIX_LOW_DETVAL:
-        res['flags'] = ADMOM_DET
+        res['flags'] = ngmix.flags.LOW_DET
         return
 
     # now set from the inverted matrix
@@ -231,7 +227,7 @@ def clear_result(res):
     res['wsum'] = 0.0
     res['sums'][:] = 0.0
     res['sums_cov'][:, :] = 0.0
-    res['pars'][:] = -9999.0
+    res['pars'][:] = np.nan
 
     # res['flags']=0
     # res['numiter']=0

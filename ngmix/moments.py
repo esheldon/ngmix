@@ -1,6 +1,9 @@
-import numpy
+import numpy as np
+
 from .gexceptions import GMixRangeError
 from . import shape
+import ngmix.flags
+from .util import get_ratio_error
 
 
 def sigma_to_fwhm(sigma):
@@ -14,7 +17,7 @@ def T_to_fwhm(T):
     """
     convert T to fwhm for a gaussian
     """
-    sigma = numpy.sqrt(T / 2.0)
+    sigma = np.sqrt(T / 2.0)
     return sigma_to_fwhm(sigma)
 
 
@@ -70,7 +73,7 @@ def T_to_r50(T):
     """
     convert T=2*sigma**2 to r50 for a gaussian
     """
-    sigma = numpy.sqrt(T / 2.0)
+    sigma = np.sqrt(T / 2.0)
     return sigma_to_r50(sigma)
 
 
@@ -90,8 +93,8 @@ def moms_to_e1e2(M1, M2, T):
     e1,e2:
         M1/T M2/T also know as the standard ellipticity parameters
     """
-    if isinstance(T, numpy.ndarray):
-        (w,) = numpy.where(T <= 0.0)
+    if isinstance(T, np.ndarray):
+        (w,) = np.where(T <= 0.0)
         if w.size > 0:
             raise GMixRangeError("%d T were <= 0.0" % w.size)
     else:
@@ -335,3 +338,111 @@ def g2mom(g1, g2, T):
     Irr = (1 - e1) * T / 2.0
 
     return Irr, Irc, Icc
+
+
+def make_mom_result(mom, mom_cov):
+    """Make a fitting results dict from a set of moments.
+
+    Parameters
+    ----------
+    mom : np.ndarray
+        The array of moments in the order [flux, <x**2 + y**2>, <x**2 - y**2>, 2*<xy>].
+    mom_cov : np.ndarray
+        The array of moment covariances.
+
+    Returns
+    -------
+    res : dict
+        A dictionary of results.
+    """
+    # now finally build the outputs and their errors
+    res = {}
+    res["flags"] = 0
+    res["flagstr"] = ""
+    res["flux"] = mom[0]
+    res["mom"] = mom
+    res["mom_cov"] = mom_cov
+    res["flux_flags"] = 0
+    res["flux_flagstr"] = ""
+    res["T_flags"] = 0
+    res["T_flagstr"] = ""
+
+    # we fill these in later if T > 0 and flux cov is positive
+    res["flux_err"] = np.nan
+    res["T"] = np.nan
+    res["T_err"] = np.nan
+    res["s2n"] = np.nan
+    res["e1"] = np.nan
+    res["e2"] = np.nan
+    res["e"] = np.array([np.nan, np.nan])
+    res["e_err"] = np.array([np.nan, np.nan])
+    res["e_cov"] = np.diag([np.nan, np.nan])
+    res["mom_err"] = np.array([np.nan, np.nan, np.nan, np.nan])
+
+    # handle flux-only
+    if np.diagonal(mom_cov)[0] > 0:
+        res["flux_err"] = np.sqrt(mom_cov[0, 0])
+        res["s2n"] = res["flux"] / res["flux_err"]
+    else:
+        res["flux_flags"] |= ngmix.flags.NONPOS_VAR
+
+    # handle flux+T only
+    if np.all(np.diagonal(mom_cov)[0:2] > 0):
+        if mom[0] > 0:
+            res["T"] = mom[1] / mom[0]
+            res["T_err"] = get_ratio_error(
+                mom[1], mom[0],
+                mom_cov[1, 1], mom_cov[0, 0], mom_cov[0, 1]
+            )
+        else:
+            # flux <= 0.0
+            res["T_flags"] |= ngmix.flags.NONPOS_FLUX
+    else:
+        res["T_flags"] |= ngmix.flags.NONPOS_VAR
+
+    # now handle full flags
+    if np.all(np.diagonal(mom_cov) > 0):
+        res["mom_err"] = np.sqrt(np.diagonal(mom_cov))
+    else:
+        res["flags"] |= ngmix.flags.NONPOS_VAR
+
+    if res["flags"] == 0:
+        if mom[0] > 0:
+            if res["T"] > 0:
+                res["pars"] = np.array([
+                    0, 0,
+                    mom[2]/mom[0],
+                    mom[3]/mom[0],
+                    mom[1]/mom[0],
+                    mom[0],
+                ])
+                res["e1"] = mom[2] / mom[1]
+                res["e2"] = mom[3] / mom[1]
+                res["e"] = np.array([res["e1"], res["e2"]])
+                e_err = np.zeros(2)
+                e_err[0] = get_ratio_error(
+                    mom[2], mom[1],
+                    mom_cov[2, 2], mom_cov[1, 1], mom_cov[1, 2]
+                )
+                e_err[1] = get_ratio_error(
+                    mom[3], mom[1],
+                    mom_cov[3, 3], mom_cov[1, 1], mom_cov[1, 3]
+                )
+                if np.all(np.isfinite(e_err)):
+                    res["e_err"] = e_err
+                    res["e_cov"] = np.diag(e_err**2)
+                else:
+                    # bad e_err
+                    res["flags"] |= ngmix.flags.NONPOS_SHAPE_VAR
+            else:
+                # T <= 0.0
+                res["flags"] |= ngmix.flags.NONPOS_SIZE
+        else:
+            # flux <= 0.0
+            res["flags"] |= ngmix.flags.NONPOS_FLUX
+
+    res["flagstr"] = ngmix.flags.get_flags_str(res["flags"])
+    res["flux_flagstr"] = ngmix.flags.get_flags_str(res["flux_flags"])
+    res["T_flagstr"] = ngmix.flags.get_flags_str(res["T_flags"])
+
+    return res
