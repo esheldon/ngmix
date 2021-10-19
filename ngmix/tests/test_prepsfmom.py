@@ -366,8 +366,15 @@ def test_prepsfmom_mn_cov(
     assert np.allclose(
         mom_cov[2:, 2:],
         np.mean(res["mom_cov"][:, 2:, 2:], axis=0),
+        atol=2.5e-1,
+        rtol=0,
+    )
+
+    assert np.allclose(
+        np.diagonal(mom_cov[2:, 2:]),
+        np.diagonal(np.mean(res["mom_cov"][:, 2:, 2:], axis=0)),
         atol=0,
-        rtol=4e-1,
+        rtol=2e-2,
     )
 
 
@@ -484,8 +491,15 @@ def test_prepsfmom_mn_cov_nopsf(
     assert np.allclose(
         mom_cov[2:, 2:],
         np.mean(res["mom_cov"][:, 2:, 2:], axis=0),
+        atol=2.5e-1,
+        rtol=0,
+    )
+
+    assert np.allclose(
+        np.diagonal(mom_cov[2:, 2:]),
+        np.diagonal(np.mean(res["mom_cov"][:, 2:, 2:], axis=0)),
         atol=0,
-        rtol=4e-1,
+        rtol=2e-2,
     )
 
 
