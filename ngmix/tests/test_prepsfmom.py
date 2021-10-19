@@ -539,8 +539,8 @@ def test_moments_make_mom_result_flags():
     # bad shape errs
     for i in [2, 3]:
         _mom_cov = mom_cov.copy()
-        _mom_cov[1, i] = np.nan
-        _mom_cov[i, 1] = np.nan
+        _mom_cov[4, i] = np.nan
+        _mom_cov[i, 4] = np.nan
         res = make_mom_result(mom, _mom_cov)
         assert (res["flags"] & ngmix.flags.NONPOS_SHAPE_VAR) != 0
         assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_SHAPE_VAR] in res["flagstr"]

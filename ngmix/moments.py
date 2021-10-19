@@ -407,7 +407,7 @@ def make_mom_result(mom, mom_cov):
         res["flux_flags"] |= ngmix.flags.NONPOS_VAR
 
     # handle flux+T only
-    if np.all(np.diagonal(mom_cov)[4:5] > 0):
+    if np.all(np.diagonal(mom_cov)[4:6] > 0):
         if mom[5] > 0:
             res["T"] = mom[4] / mom[5]
             res["T_err"] = get_ratio_error(
