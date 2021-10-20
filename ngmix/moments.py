@@ -367,7 +367,7 @@ def make_mom_result(mom, mom_cov):
     # for safety...
     if len(mom) != 6:
         raise ValueError(
-            "You must pass exactly 6 moments in the order [Mu, Mv, M1, M2, MT, MF] "
+            "You must pass exactly 6 moments in the order [Mv, Mu, M1, M2, MT, MF] "
             "for ngmix.moments.make_mom_result."
         )
     if mom_cov.shape != (6, 6):
