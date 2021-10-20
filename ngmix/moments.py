@@ -355,7 +355,7 @@ def make_mom_result(mom, mom_cov):
     Parameters
     ----------
     mom : np.ndarray
-        The array of moments in the order [Mu, Mv, M1, M2, MT, MF].
+        The array of moments in the order [Mv, Mu, M1, M2, MT, MF].
     mom_cov : np.ndarray
         The array of moment covariances.
 
