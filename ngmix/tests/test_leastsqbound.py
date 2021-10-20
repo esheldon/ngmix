@@ -93,7 +93,7 @@ def test_leastsqbound_smoke(use_prior):
         ntry=2,
     )
 
-    allflags = np.zeros(ntrial)
+    allflags = np.zeros(ntrial, dtype=int)
     for i in range(ntrial):
         data = get_model_obs(
             rng=rng,
@@ -132,7 +132,7 @@ def test_leastsqbound_bounds(fracdev_bounds):
     psf_runner = ngmix.runners.PSFRunner(
         fitter=psf_fitter,
         guesser=psf_guesser,
-        ntry=2,
+        ntry=1,
     )
 
     prior = get_prior(
@@ -154,10 +154,10 @@ def test_leastsqbound_bounds(fracdev_bounds):
     runner = ngmix.runners.Runner(
         fitter=fitter,
         guesser=guesser,
-        ntry=2,
+        ntry=1,
     )
 
-    allflags = np.zeros(ntrial)
+    allflags = np.zeros(ntrial, dtype=int)
     for i in range(ntrial):
         data = get_model_obs(
             rng=rng,
@@ -254,7 +254,7 @@ def test_leastsqbound_bad_data(fit_model, psf_noise):
         guesser=guesser,
     )
 
-    allflags = np.zeros(ntrial)
+    allflags = np.zeros(ntrial, dtype=int)
     for i in range(ntrial):
         data = get_model_obs(
             rng=rng,
@@ -265,7 +265,8 @@ def test_leastsqbound_bad_data(fit_model, psf_noise):
         obs = data['obs']
 
         if psf_noise > 0.0:
-            obs.image = rng.normal(scale=1.e9, size=obs.image.shape)
+            with obs.writeable():
+                obs.image = rng.normal(scale=1.e9, size=obs.image.shape)
 
         try:
             res = bootstrap(obs=obs, runner=runner, psf_runner=psf_runner)

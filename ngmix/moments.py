@@ -5,6 +5,15 @@ from . import shape
 import ngmix.flags
 from .util import get_ratio_error
 
+MOMENTS_NAME_MAP = {
+    "Mv": 0,
+    "Mu": 1,
+    "M1": 2,
+    "M2": 3,
+    "MT": 4,
+    "MF": 5,
+}
+
 
 def sigma_to_fwhm(sigma):
     """
@@ -346,7 +355,7 @@ def make_mom_result(mom, mom_cov):
     Parameters
     ----------
     mom : np.ndarray
-        The array of moments in the order [flux, <x**2 + y**2>, <x**2 - y**2>, 2*<xy>].
+        The array of moments in the order [Mv, Mu, M1, M2, MT, MF].
     mom_cov : np.ndarray
         The array of moment covariances.
 
@@ -355,11 +364,29 @@ def make_mom_result(mom, mom_cov):
     res : dict
         A dictionary of results.
     """
+    # for safety...
+    if len(mom) != 6:
+        raise ValueError(
+            "You must pass exactly 6 moments in the order [Mv, Mu, M1, M2, MT, MF] "
+            "for ngmix.moments.make_mom_result."
+        )
+    if mom_cov.shape != (6, 6):
+        raise ValueError(
+            "You must pass a 6x6 matrix for ngmix.moments.make_mom_result."
+        )
+
+    mv_ind = MOMENTS_NAME_MAP["Mv"]
+    mu_ind = MOMENTS_NAME_MAP["Mu"]
+    mf_ind = MOMENTS_NAME_MAP["MF"]
+    mt_ind = MOMENTS_NAME_MAP["MT"]
+    m1_ind = MOMENTS_NAME_MAP["M1"]
+    m2_ind = MOMENTS_NAME_MAP["M2"]
+
     # now finally build the outputs and their errors
     res = {}
     res["flags"] = 0
     res["flagstr"] = ""
-    res["flux"] = mom[0]
+    res["flux"] = mom[mf_ind]
     res["mom"] = mom
     res["mom_cov"] = mom_cov
     res["flux_flags"] = 0
@@ -377,22 +404,25 @@ def make_mom_result(mom, mom_cov):
     res["e"] = np.array([np.nan, np.nan])
     res["e_err"] = np.array([np.nan, np.nan])
     res["e_cov"] = np.diag([np.nan, np.nan])
-    res["mom_err"] = np.array([np.nan, np.nan, np.nan, np.nan])
+    res["mom_err"] = np.array([np.nan, np.nan, np.nan, np.nan, np.nan, np.nan])
 
     # handle flux-only
-    if np.diagonal(mom_cov)[0] > 0:
-        res["flux_err"] = np.sqrt(mom_cov[0, 0])
+    if mom_cov[mf_ind, mf_ind] > 0:
+        res["flux_err"] = np.sqrt(mom_cov[mf_ind, mf_ind])
         res["s2n"] = res["flux"] / res["flux_err"]
     else:
         res["flux_flags"] |= ngmix.flags.NONPOS_VAR
 
     # handle flux+T only
-    if np.all(np.diagonal(mom_cov)[0:2] > 0):
-        if mom[0] > 0:
-            res["T"] = mom[1] / mom[0]
+    if mom_cov[mf_ind, mf_ind] > 0 and mom_cov[mt_ind, mt_ind] > 0:
+        if mom[mf_ind] > 0:
+            res["T"] = mom[mt_ind] / mom[mf_ind]
             res["T_err"] = get_ratio_error(
-                mom[1], mom[0],
-                mom_cov[1, 1], mom_cov[0, 0], mom_cov[0, 1]
+                mom[mt_ind],
+                mom[mf_ind],
+                mom_cov[mt_ind, mt_ind],
+                mom_cov[mf_ind, mf_ind],
+                mom_cov[mt_ind, mf_ind],
             )
         else:
             # flux <= 0.0
@@ -407,26 +437,35 @@ def make_mom_result(mom, mom_cov):
         res["flags"] |= ngmix.flags.NONPOS_VAR
 
     if res["flags"] == 0:
-        if mom[0] > 0:
+        if res["flux"] > 0:
             if res["T"] > 0:
-                res["pars"] = np.array([
-                    0, 0,
-                    mom[2]/mom[0],
-                    mom[3]/mom[0],
-                    mom[1]/mom[0],
-                    mom[0],
-                ])
-                res["e1"] = mom[2] / mom[1]
-                res["e2"] = mom[3] / mom[1]
+                res["e1"] = mom[m1_ind] / mom[mt_ind]
+                res["e2"] = mom[m2_ind] / mom[mt_ind]
                 res["e"] = np.array([res["e1"], res["e2"]])
+
+                res["pars"] = np.array([
+                    mom[mv_ind],
+                    mom[mu_ind],
+                    res["e1"],
+                    res["e2"],
+                    res["T"],
+                    res["flux"],
+                ])
+
                 e_err = np.zeros(2)
                 e_err[0] = get_ratio_error(
-                    mom[2], mom[1],
-                    mom_cov[2, 2], mom_cov[1, 1], mom_cov[1, 2]
+                    mom[m1_ind],
+                    mom[mt_ind],
+                    mom_cov[m1_ind, m1_ind],
+                    mom_cov[mt_ind, mt_ind],
+                    mom_cov[m1_ind, mt_ind],
                 )
                 e_err[1] = get_ratio_error(
-                    mom[3], mom[1],
-                    mom_cov[3, 3], mom_cov[1, 1], mom_cov[1, 3]
+                    mom[m2_ind],
+                    mom[mt_ind],
+                    mom_cov[m2_ind, m2_ind],
+                    mom_cov[mt_ind, mt_ind],
+                    mom_cov[m2_ind, mt_ind]
                 )
                 if np.all(np.isfinite(e_err)):
                     res["e_err"] = e_err

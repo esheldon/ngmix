@@ -1178,19 +1178,8 @@ def get_weighted_moments_stats(ares):
         else:
             res[n] = ares[n]
 
-    mom = np.array([
-        res['sums'][5],
-        res['sums'][4],
-        res['sums'][2],
-        res['sums'][3],
-    ])
-    mom_cov = np.zeros((4, 4))
-    for inew, iold in enumerate([5, 4, 2, 3]):
-        for jnew, jold in enumerate([5, 4, 2, 3]):
-            mom_cov[inew, jnew] += res['sums_cov'][iold, jold]
-
     res.update(
-        moments.make_mom_result(mom, mom_cov)
+        moments.make_mom_result(res["sums"], res["sums_cov"])
     )
 
     return res

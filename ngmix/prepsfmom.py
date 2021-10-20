@@ -28,7 +28,8 @@ class PrePSFMom(object):
         whatever the Jacobian on the obs converts pixels units to. This is typically
         arcseconds.
     kernel : str
-        The kernel to use. Either `ksigma` or `gauss`.
+        The kernel to use. Either `ksigma` or `pgauss` or `gauss`. `gauss` and `pgauss`
+        are aliases for the same thing.
     pad_factor : int, optional
         The factor by which to pad the FFTs used for the image. Default is 4.
     """
@@ -117,7 +118,7 @@ class PrePSFMom(object):
                 obs.jacobian.dvdrow, obs.jacobian.dvdcol,
                 obs.jacobian.dudrow, obs.jacobian.dudcol,
             )
-        elif self.kernel == "gauss":
+        elif self.kernel in ["gauss", "pgauss"]:
             kernels = _gauss_kernels(
                 target_dim,
                 self.fwhm,
@@ -202,7 +203,7 @@ class PGaussMom(PrePSFMom):
     kind = "pgauss"
 
     def __init__(self, fwhm, pad_factor=4):
-        super().__init__(fwhm, 'gauss', pad_factor=pad_factor)
+        super().__init__(fwhm, 'pgauss', pad_factor=pad_factor)
 
 
 # keep this here for API consistency
@@ -254,17 +255,22 @@ def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, d
     # here we assume each Fourier mode is independent and sum the variances
     # the variance in each mode is simply the total variance over the input image
     # we need a factor of the padding to correct for something...
-    m_cov = np.zeros((4, 4))
+    m_cov = np.zeros((6, 6))
+    # TODO
+    # FIXME
+    # set these for real
+    m_cov[0, 0] = 1
+    m_cov[1, 1] = 1
     tot_var *= eff_pad_factor**2
     tot_var_df4 = tot_var * df4
-    kerns = [fkf / kpsf_im, fkr / kpsf_im, fkp / kpsf_im, fkc / kpsf_im]
+    kerns = [fkp / kpsf_im, fkc / kpsf_im, fkr / kpsf_im, fkf / kpsf_im]
     conj_kerns = [np.conj(k) for k in kerns]
-    for i in range(4):
-        for j in range(i, 4):
-            m_cov[i, j] = np.sum((kerns[i] * conj_kerns[j]).real) * tot_var_df4
+    for i in range(2, 6):
+        for j in range(i, 6):
+            m_cov[i, j] = np.sum((kerns[i-2] * conj_kerns[j-2]).real) * tot_var_df4
             m_cov[j, i] = m_cov[i, j]
 
-    mom = np.array([mf, mr, mp, mc])
+    mom = np.array([np.nan, np.nan, mp, mc, mr, mf])
 
     return mom, m_cov
 
