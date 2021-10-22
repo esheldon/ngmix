@@ -209,18 +209,10 @@ def test_admom_find_cen(g1_true, g2_true, snr):
 
 
 @pytest.mark.parametrize('pixel_scale', [0.25, 0.125])
-@pytest.mark.parametrize('fwhm', [
-    2, 0.5,
-])
-@pytest.mark.parametrize('image_size', [
-    53,
-])
-@pytest.mark.parametrize('mom_fwhm', [
-    2, 2.5,
-])
-def test_admom_comp_to_gaussmom_flux(
-    image_size, fwhm, pixel_scale, mom_fwhm,
-):
+@pytest.mark.parametrize('fwhm', [2, 0.5])
+@pytest.mark.parametrize('image_size', [53])
+@pytest.mark.parametrize('mom_fwhm', [2, 2.5])
+def test_admom_comp_to_gaussmom_flux(image_size, fwhm, pixel_scale, mom_fwhm):
     cen = (image_size - 1)/2
     gs_wcs = galsim.PixelScale(pixel_scale).jacobian()
 
