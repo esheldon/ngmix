@@ -96,20 +96,20 @@ def test_admom(g1_true, g2_true, wcs_g1, wcs_g2):
         assert np.abs(T - fwhm_to_T(fwhm)) < 1e-6
 
     with pytest.raises(ValueError):
-        _ = ngmix.admom.run_admom(None, None)
+        ngmix.admom.run_admom(None, None)
 
     # cover some branches
     tres = copy.deepcopy(res)
 
     tres['flags'] = 0
     tres['sums_cov'][:, :] = np.nan
-    tres = ngmix.admom.admom.get_result(tres)
+    tres = ngmix.admom.admom.get_result(tres, 1.0)
     assert np.isnan(tres['e1err'])
 
     tres = copy.deepcopy(res)
     tres['flags'] = 0
     tres['pars'][4] = -1
-    tres = ngmix.admom.admom.get_result(tres)
+    tres = ngmix.admom.admom.get_result(tres, 1.0)
     assert tres['flags'] == ngmix.flags.NONPOS_SIZE
 
 
