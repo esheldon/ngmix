@@ -408,7 +408,7 @@ def get_result(ares, jac_area):
                 'gauss',
             )
             wgt.set_norms()
-            norm = wgt.get_data()['norm'][0]
+            norm = wgt.get_data()['norm'][0] * res['wsum']
             res['flux'] = res['sums'][5] / jac_area / norm
 
             if res['sums_cov'][5, 5] > 0:
