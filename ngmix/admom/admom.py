@@ -303,7 +303,7 @@ class AdmomFitter(object):
         except GMixRangeError:
             ares['flags'] = ngmix.flags.GMIX_RANGE_ERROR
 
-        result = get_result(ares)
+        result = get_result(ares, obs.jacobian.area)
 
         return AdmomResult(obs=obs, result=result)
 
@@ -351,7 +351,7 @@ class AdmomFitter(object):
         return GMixModel(pars, "gauss")
 
 
-def get_result(ares):
+def get_result(ares, jac_area):
     """
     copy the result structure to a dict, and
     calculate a few more things
@@ -371,6 +371,13 @@ def get_result(ares):
             res[n] = ares[n].reshape((6, 6)).copy()
         else:
             res[n] = ares[n]
+
+    wgt = ngmix.GMixModel(
+        res["pars"],
+        'gauss',
+    )
+    wgt.set_norms()
+    norm = wgt.get_data()['norm'][0]
 
     res["flags"] = 0
     res["flagstr"] = ""
@@ -396,7 +403,7 @@ def get_result(ares):
     # set things we always set if flags are ok
     if res['flags'] == 0:
         res['T'] = res['pars'][4]
-        res['flux'] = res['sums'][5]
+        res['flux'] = res['sums'][5] / jac_area / norm
         flux_sum = res['sums'][5]
         res['flux_mean'] = flux_sum/res['wsum']
         res['pars'][5] = res['flux_mean']
@@ -404,7 +411,7 @@ def get_result(ares):
     # handle flux-only flags
     if res['flags'] == 0:
         if res['sums_cov'][5, 5] > 0:
-            res["flux_err"] = np.sqrt(res['sums_cov'][5, 5])
+            res["flux_err"] = np.sqrt(res['sums_cov'][5, 5]) / jac_area / norm
             res["s2n"] = res["flux"] / res["flux_err"]
         else:
             res["flux_flags"] |= ngmix.flags.NONPOS_VAR

@@ -1,3 +1,10 @@
+## v2.0.4 (unreleased)
+
+### bug fixes
+
+    - Changes to ensure the "flux" result from the `AdmomFitter` is normalized
+      the same as those from the other moments fitters.
+
 ## v2.0.3
 
 ### new features
@@ -14,7 +21,7 @@
       `ngmix.moments.make_mom_result`
     - The moments fitters now have a `kind` attribute to help downstream code
       process them uniformly.
-    - Added slots for position moments in moments output for moments fitters. 
+    - Added slots for position moments in moments output for moments fitters.
 
 ### bug fixes
 
