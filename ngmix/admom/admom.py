@@ -3,7 +3,7 @@ __all__ = ['run_admom', 'find_cen_admom', 'AdmomFitter']
 import numpy as np
 from numpy import diag
 
-from ..gmix import GMix, GMixModel
+from ..gmix import GMix, GMixModel, gmix_nb
 from ..moments import fwhm_to_T
 from ..shape import e1e2_to_g1g2
 from ..observation import Observation
@@ -303,7 +303,7 @@ class AdmomFitter(object):
         except GMixRangeError:
             ares['flags'] = ngmix.flags.GMIX_RANGE_ERROR
 
-        result = get_result(ares)
+        result = get_result(ares, obs.jacobian.area)
 
         return AdmomResult(obs=obs, result=result)
 
@@ -351,7 +351,7 @@ class AdmomFitter(object):
         return GMixModel(pars, "gauss")
 
 
-def get_result(ares):
+def get_result(ares, jac_area):
     """
     copy the result structure to a dict, and
     calculate a few more things
@@ -396,18 +396,28 @@ def get_result(ares):
     # set things we always set if flags are ok
     if res['flags'] == 0:
         res['T'] = res['pars'][4]
-        res['flux'] = res['sums'][5]
         flux_sum = res['sums'][5]
         res['flux_mean'] = flux_sum/res['wsum']
         res['pars'][5] = res['flux_mean']
 
     # handle flux-only flags
     if res['flags'] == 0:
-        if res['sums_cov'][5, 5] > 0:
-            res["flux_err"] = np.sqrt(res['sums_cov'][5, 5])
-            res["s2n"] = res["flux"] / res["flux_err"]
+        if res["T"] > gmix_nb.GMIX_LOW_DETVAL:
+            wgt = ngmix.GMixModel(
+                res["pars"],
+                'gauss',
+            )
+            wgt.set_norms()
+            norm = wgt.get_data()['norm'][0] * res['wsum']
+            res['flux'] = res['sums'][5] / jac_area / norm
+
+            if res['sums_cov'][5, 5] > 0:
+                res["flux_err"] = np.sqrt(res['sums_cov'][5, 5]) / jac_area / norm
+                res["s2n"] = res["flux"] / res["flux_err"]
+            else:
+                res["flux_flags"] |= ngmix.flags.NONPOS_VAR
         else:
-            res["flux_flags"] |= ngmix.flags.NONPOS_VAR
+            res["flux_flags"] |= ngmix.flags.NONPOS_SIZE
     else:
         res['flux_flags'] |= res['flags']
 
@@ -436,7 +446,7 @@ def get_result(ares):
         res["flags"] |= ngmix.flags.NONPOS_VAR
 
     if res['flags'] == 0:
-        if res['flux'] > 0:
+        if res['sums'][5] > 0:
             if res['T'] > 0.0:
                 res['e'][:] = res['pars'][2:2+2]/res['T']
                 res['e1'] = res['e'][0]
