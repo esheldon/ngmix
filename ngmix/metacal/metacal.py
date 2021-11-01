@@ -691,8 +691,13 @@ class MetacalFitGaussPSF(MetacalGaussPSF):
                     # ok, just raise and exception
                     raise BootPSFFailure('failed to fit psf '
                                          'for MetacalFitGaussPSF')
-
-            e1, e2, T = psf_gmix.get_e1e2T()
+            try:
+                e1, e2, T = psf_gmix.get_e1e2T()
+            except GMixRangeError as err:
+                logger.info('%s', err)
+                raise BootPSFFailure(
+                    'could not get e1,e2 from psf fit for MetacalFitGaussPSF'
+                )
 
         dilation = _get_ellip_dilation(e1, e2, T)
         T_dilated = T*dilation
