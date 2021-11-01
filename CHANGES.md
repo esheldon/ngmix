@@ -3,6 +3,8 @@
 ### new features
 
     - util.get_ratio_error and get_ratio_var support array arguments
+    - added new function ngmix.gmix.gmix_concat to concatenate
+      GMix objects into a combined GMix
 
 ### bug fixes
 

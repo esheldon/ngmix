@@ -449,3 +449,24 @@ def test_gmix_lists():
     mgml.append(gml)
 
     mgml[1] = gml
+
+
+def test_gmix_concat():
+    gm1 = ngmix.GMixModel([0, 0, 0.1, -0.2, 4.0, 1.0], 'dev')
+    gm2 = ngmix.GMixModel([-1, 3, 0.2, 0.1, 8.0, 2.0], 'exp')
+
+    gmc = ngmix.gmix.gmix_concat([gm1, gm2])
+    assert len(gmc) == len(gm1) + len(gm2)
+
+    gm1data = gm1.get_data()
+    gm2data = gm2.get_data()
+    gmcdata = gmc.get_data()
+
+    for i in range(gm1data.size):
+        for name in ('p', 'row', 'col', 'irr', 'irc', 'icc'):
+            assert gm1data[name][i] == gmcdata[name][i]
+
+    for i in range(gm2data.size):
+        ic = len(gm1) + i
+        for name in ('p', 'row', 'col', 'irr', 'irc', 'icc'):
+            assert gm2data[name][i] == gmcdata[name][ic]

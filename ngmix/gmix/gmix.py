@@ -3,6 +3,7 @@ __all__ = [
     'GMixModel',
     'GMixCM',
     'GMixCoellip',
+    'gmix_concat',
     'make_gmix_model',
     'get_coellip_npars',
     'get_coellip_ngauss',
@@ -33,9 +34,21 @@ from .render_nb import render
 from ..pixels import make_coords
 
 
-def make_gmix_model(pars, model, **kw):
+def make_gmix_model(pars, model):
     """
     get a gaussian mixture model for the given model
+
+    Parameters
+    ----------
+    pars: sequence
+        The parameters for the GMix or GMixModel
+    model: str
+        One of 'full', 'gauss', 'turb', 'exp', 'dev', 'bd', 'bdf', 'cm',
+        'coellip'
+
+    Returns
+    -------
+    A GMix or subclass
     """
 
     model = get_model_num(model)
@@ -1112,6 +1125,38 @@ _gauss2d_dtype = [
     ("norm", "f8"),
     ("pnorm", "f8"),
 ]
+
+
+def gmix_concat(gmixes):
+    """
+    Concatenate one or more GMix objects
+
+    Parameters
+    ----------
+    gmixes: sequence of ngmix.GMix objects
+        The GMix to concatenate, in some kind of sequence.
+        Can be tuple, list or GMixList
+
+    Returns
+    -------
+    gmix: ngmix.GMix
+        The concatenated GMix
+
+    Examples
+    --------
+    gm1 = ngmix.GMixModel(...)
+    gm2 = ngmix.GMixModel(...)
+    gmc = gmix_concat([gm1, gm2])
+    """
+
+    if len(gmixes) == 0:
+        raise ValueError('send at least one gmix')
+
+    pars = []
+    for igmix, this_gmix in enumerate(gmixes):
+        pars += list(this_gmix.get_full_pars())
+
+    return GMix(pars=pars)
 
 
 def get_model_num(model):
