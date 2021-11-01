@@ -3,6 +3,10 @@
 ### new features
 
     - util.get_ratio_error and get_ratio_var support array arguments
+    - It is no longer required to send a random number generator
+      to the constructors for MetacalGaussPSF and MetacalAnalyticPSF.  If one
+      is sent it is still used to add a small amount of noise.
+
 
 ### bug fixes
 

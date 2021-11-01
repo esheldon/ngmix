@@ -51,9 +51,9 @@ def get_all_metacal(
         the sheared, correlated noise component.  Default True
     rng: np.random.RandomState
         A random number generator; this is required if fixnoise is True and
-        use_noise_image is False.  It is also required when psf= is sent, in
-        order to add a small amount of noise to the rendered image of the
-        psf.
+        use_noise_image is False.  If the keyword psf= is sent, it will be used
+        to to add a small amount of noise to the rendered image of the psf,
+        but is not required.
     use_noise_image: bool, optional
         If set to True, use the .noise attribute of the observation
         for fixing the noise when fixnoise=True.

@@ -42,6 +42,40 @@ def test_metacal_smoke(psf):
         assert np.all(obs_dict['noshear'].image != obs_dict['2m_psf'].image)
 
 
+@pytest.mark.parametrize('psf', ['gauss', 'fitgauss', 'galsim_obj'])
+@pytest.mark.parametrize('send_rng', [True, False])
+def test_metacal_send_rng(psf, send_rng):
+
+    rng = np.random.RandomState(seed=100)
+    obs = _get_obs(rng, noise=0.005)
+
+    if psf == 'galsim_obj':
+        psf = galsim.Gaussian(fwhm=0.9)
+
+    kw = {
+        'psf': psf, 'fixnoise': False, 'types': ['noshear', '1p', '1m'],
+    }
+    if send_rng:
+        kw['rng'] = rng
+
+    if psf == 'fitgauss' and not send_rng:
+        with pytest.raises(ValueError):
+            obs_dict1 = ngmix.metacal.get_all_metacal(obs, **kw)
+        return
+    else:
+        obs_dict1 = ngmix.metacal.get_all_metacal(obs, **kw)
+        obs_dict2 = ngmix.metacal.get_all_metacal(obs, **kw)
+
+    for mtype in kw['types']:
+        psf_image1 = obs_dict1[mtype].psf.image
+        psf_image2 = obs_dict2[mtype].psf.image
+
+        if send_rng:
+            assert not np.allclose(psf_image1, psf_image2)
+        else:
+            assert np.allclose(psf_image1, psf_image2)
+
+
 @pytest.mark.parametrize('psf', ['gauss', 'fitgauss', 'galsim_obj', 'dilate'])
 def test_metacal_types_smoke(psf):
     rng = np.random.RandomState(seed=100)
@@ -148,7 +182,7 @@ def test_metacal_errors():
         ngmix.metacal.get_all_metacal(obs=obs, rng=None)
 
     with pytest.raises(ValueError):
-        ngmix.metacal.MetacalGaussPSF(obs=obs, rng=None)
+        ngmix.metacal.MetacalFitGaussPSF(obs=obs, rng=None)
 
     with pytest.raises(TypeError):
         ngmix.metacal.metacal._check_shape(None)
