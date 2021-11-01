@@ -1,4 +1,5 @@
 from sys import stdout
+import numpy as np
 
 
 def print_pars(pars, fmt="%8.3g", front=None, stream=stdout, logger=None):
@@ -58,7 +59,7 @@ def get_ratio_var(a, b, var_a, var_b, cov_ab):
     get (a/b)**2 and variance in mean of (a/b)
     """
 
-    if b == 0:
+    if np.any(b == 0):
         raise ValueError("zero in denominator")
 
     rsq = (a/b)**2
@@ -71,11 +72,9 @@ def get_ratio_error(a, b, var_a, var_b, cov_ab):
     """
     get a/b and error on a/b
     """
-    from math import sqrt
 
     var = get_ratio_var(a, b, var_a, var_b, cov_ab)
 
-    if var < 0:
-        var = 0
-    error = sqrt(var)
+    var = np.clip(var, 0.0, np.inf)
+    error = np.sqrt(var)
     return error
