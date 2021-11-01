@@ -4,6 +4,10 @@
 
     - Changes to ensure the "flux" result from the `AdmomFitter` is normalized
       the same as those from the other moments fitters.
+    - In MetacalFitGaussPSF when using adaptive moments to get the psf
+      model, be careful to use the fitted parameters rather than going through
+      an intermediate gmix, which converts e1, e2 to g1, g2 and can fail in
+      rare cases.
 
 ## v2.0.3
 

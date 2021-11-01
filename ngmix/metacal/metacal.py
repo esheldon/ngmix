@@ -661,7 +661,8 @@ class MetacalFitGaussPSF(MetacalGaussPSF):
         res = run_psf_fitter(obs=psfobs, fitter=fitter, guesser=guesser, ntry=ntry)
 
         if res['flags'] == 0:
-            psf_gmix = res.get_gmix()
+            e1, e2 = res['e']
+            T = res['T']
         else:
             # try maximum likelihood
 
@@ -690,8 +691,13 @@ class MetacalFitGaussPSF(MetacalGaussPSF):
                     # ok, just raise and exception
                     raise BootPSFFailure('failed to fit psf '
                                          'for MetacalFitGaussPSF')
-
-        e1, e2, T = psf_gmix.get_e1e2T()
+            try:
+                e1, e2, T = psf_gmix.get_e1e2T()
+            except GMixRangeError as err:
+                logger.info('%s', err)
+                raise BootPSFFailure(
+                    'could not get e1,e2 from psf fit for MetacalFitGaussPSF'
+                )
 
         dilation = _get_ellip_dilation(e1, e2, T)
         T_dilated = T*dilation
