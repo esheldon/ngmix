@@ -1,5 +1,9 @@
 ## v2.0.4 (unreleased)
 
+### new features
+
+    - util.get_ratio_error and get_ratio_var support array arguments
+
 ### bug fixes
 
     - Changes to ensure the "flux" result from the `AdmomFitter` is normalized
