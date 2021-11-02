@@ -466,9 +466,9 @@ class MetacalGaussPSF(MetacalDilatePSF):
     obs: ngmix.Observation
         The observation must have a psf observation set, holding
         the psf image
-    rng: numpy.random.RandomState
-        Random number generator for adding a small amount of noise to the
-        gaussian psf image
+    rng: numpy.random.RandomState, optional
+        Optional random number generator for adding a small amount of noise to
+        the gaussian psf image
 
     examples
     --------
@@ -491,12 +491,9 @@ class MetacalGaussPSF(MetacalDilatePSF):
     R_obs1m, R_obs1m_unsheared = mc.get_obs_galshear(sh1p, get_unsheared=True)
     """
 
-    def __init__(self, obs, rng):
+    def __init__(self, obs, rng=None):
 
         super().__init__(obs=obs)
-        if rng is None:
-            raise ValueError('send an rng to MetacalGaussPSF')
-
         self.rng = rng
         self._setup_psf_noise()
 
@@ -537,11 +534,15 @@ class MetacalGaussPSF(MetacalDilatePSF):
 
         self.psf_noise = pim.max()/50000.0
 
-        self.psf_noise_image = self.rng.normal(
-            size=pim.shape,
-            scale=self.psf_noise,
-        )
-        self.psf_weight = self.psf_noise_image*0 + 1.0/self.psf_noise**2
+        if self.rng is not None:
+            self.psf_noise_image = self.rng.normal(
+                size=pim.shape,
+                scale=self.psf_noise,
+            )
+        else:
+            self.psf_noise_image = None
+
+        self.psf_weight = pim * 0 + 1.0/self.psf_noise**2
 
     def _get_dilated_psf(self, shear, doshear=False):
         """
@@ -563,7 +564,9 @@ class MetacalGaussPSF(MetacalDilatePSF):
     def _make_psf_obs(self, gsim):
 
         psf_im = gsim.array.copy()
-        psf_im += self.psf_noise_image
+
+        if self.psf_noise_image is not None:
+            psf_im += self.psf_noise_image
 
         obs = self.obs
 
@@ -590,8 +593,8 @@ class MetacalFitGaussPSF(MetacalGaussPSF):
     obs: ngmix.Observation
         Observation on which to run metacal
     rng: numpy.random.RandomState
-        Random number generator for adding a small amount of noise to the
-        gaussian psf image
+        Random number generator.  Used to generate guesses for the fit, and for
+        adding a small amount of noise to the psf image.
 
     examples
     --------
@@ -614,8 +617,10 @@ class MetacalFitGaussPSF(MetacalGaussPSF):
     # you can also get an unsheared, just convolved obs
     R_obs1m, R_obs1m_unsheared = mc.get_obs_galshear(sh1p, get_unsheared=True)
     """
-    def __init__(self, obs, rng):
+    def __init__(self, obs, rng=None):
         super().__init__(obs=obs, rng=rng)
+        if rng is None:
+            raise ValueError('send an rng to MetacalFitGaussPSF')
         self._do_psf_fit()
 
     def _get_dilated_psf(self, shear, doshear=False):
@@ -722,8 +727,8 @@ class MetacalAnalyticPSF(MetacalGaussPSF):
     psf: galsim GSObjec
         The psf used for reconvolution
     rng: numpy.random.RandomState
-        Random number generator for adding a small amount of noise to the
-        gaussian psf image
+        Optional random number generator for adding a small amount of noise to
+        the gaussian psf image
 
     examples
     --------
@@ -745,7 +750,7 @@ class MetacalAnalyticPSF(MetacalGaussPSF):
     # you can also get an unsheared, just convolved obs
     R_obs1m, R_obs1m_unsheared = mc.get_obs_galshear(sh1p, get_unsheared=True)
     """
-    def __init__(self, obs, psf, rng):
+    def __init__(self, obs, psf, rng=None):
         import galsim
         super().__init__(obs=obs, rng=rng)
 
