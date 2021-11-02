@@ -593,8 +593,8 @@ class MetacalFitGaussPSF(MetacalGaussPSF):
     obs: ngmix.Observation
         Observation on which to run metacal
     rng: numpy.random.RandomState
-        Optional random number generator for adding a small amount of noise to
-        the gaussian psf image
+        Random number generator.  Used to generate guesses for the fit, and for
+        adding a small amount of noise to the psf image.
 
     examples
     --------

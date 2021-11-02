@@ -53,7 +53,7 @@ def get_all_metacal(
         A random number generator; this is required if fixnoise is True and
         use_noise_image is False, or if psf is set to 'fitgauss'.
 
-        For psf is set to 'gauss', 'fitgauss' or a galsim object, it will be
+        If the psf is set to 'gauss', 'fitgauss' or a galsim object, it will be
         used to to add a small amount of noise to the rendered image of the psf
     use_noise_image: bool, optional
         If set to True, use the .noise attribute of the observation
