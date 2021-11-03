@@ -17,7 +17,7 @@
       model, be careful to use the fitted parameters rather than going through
       an intermediate gmix, which converts e1, e2 to g1, g2 and can fail in
       rare cases.
-    - Some AdmomFitter failures were mot being flagged properly.
+    - Some AdmomFitter failures were not being flagged properly.
 
 ## v2.0.3
 
