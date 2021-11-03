@@ -303,7 +303,9 @@ class AdmomFitter(object):
         except GMixRangeError:
             ares['flags'] = ngmix.flags.GMIX_RANGE_ERROR
 
-        result = get_result(ares, obs.jacobian.area)
+        # admom fills in the det
+        wgt_norm = 1.0 / (2 * np.pi * np.sqrt(wt_gmix["det"]))
+        result = get_result(ares, obs.jacobian.area, wgt_norm)
 
         return AdmomResult(obs=obs, result=result)
 
@@ -351,7 +353,7 @@ class AdmomFitter(object):
         return GMixModel(pars, "gauss")
 
 
-def get_result(ares, jac_area):
+def get_result(ares, jac_area, wgt_norm):
     """
     copy the result structure to a dict, and
     calculate a few more things
@@ -372,7 +374,6 @@ def get_result(ares, jac_area):
         else:
             res[n] = ares[n]
 
-    res["flags"] = 0
     res["flagstr"] = ""
     res["flux_flags"] = 0
     res["flux_flagstr"] = ""
@@ -403,16 +404,15 @@ def get_result(ares, jac_area):
     # handle flux-only flags
     if res['flags'] == 0:
         if res["T"] > gmix_nb.GMIX_LOW_DETVAL:
-            wgt = ngmix.GMixModel(
-                res["pars"],
-                'gauss',
-            )
-            wgt.set_norms()
-            norm = wgt.get_data()['norm'][0] * res['wsum']
-            res['flux'] = res['sums'][5] / jac_area / norm
+            # this is a fun set of factors
+            # jacobian area is because ngmix works in flux units
+            # the wgt_norm and wsum compute the weighted flux and normalize
+            # the weight kernel to peak at 1
+            fnorm = jac_area * wgt_norm * res["wsum"]
+            res['flux'] = res['sums'][5] / fnorm
 
             if res['sums_cov'][5, 5] > 0:
-                res["flux_err"] = np.sqrt(res['sums_cov'][5, 5]) / jac_area / norm
+                res["flux_err"] = np.sqrt(res['sums_cov'][5, 5]) / fnorm
                 res["s2n"] = res["flux"] / res["flux_err"]
             else:
                 res["flux_flags"] |= ngmix.flags.NONPOS_VAR
