@@ -303,9 +303,7 @@ class AdmomFitter(object):
         except GMixRangeError:
             ares['flags'] = ngmix.flags.GMIX_RANGE_ERROR
 
-        # admom fills in the det
-        wgt_norm = 1.0 / (2 * np.pi * np.sqrt(wt_gmix["det"]))
-        result = get_result(ares, obs.jacobian.area, wgt_norm)
+        result = get_result(ares, obs.jacobian.area, wt_gmix["norm"][0])
 
         return AdmomResult(obs=obs, result=result)
 
