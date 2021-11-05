@@ -1,4 +1,6 @@
-## v2.0.4 (unreleased)
+## v2.0.5 (unreleased)
+
+## v2.0.4
 
 ### new features
 
