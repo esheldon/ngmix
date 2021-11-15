@@ -942,7 +942,7 @@ class ObsList(list, MetadataMixin):
         """
         copy all the data into a new ObsList
         """
-        new_obslist = ObsList(meta=self.meta.copy())
+        new_obslist = ObsList(meta=copy.deepcopy(self._meta))
         for obs in self:
             new_obslist.append(obs.copy())
         return new_obslist
@@ -1058,7 +1058,7 @@ class MultiBandObsList(list, MetadataMixin):
         """
         copy all the data into a new MultiBandObsList
         """
-        new_mbobs = MultiBandObsList(meta=self.meta.copy())
+        new_mbobs = MultiBandObsList(meta=copy.deepcopy(self._meta))
 
         for obslist in self:
             new_mbobs.append(obslist.copy())
