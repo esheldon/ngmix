@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 import pytest
 
@@ -21,6 +22,39 @@ def test_multibandobslist_smoke():
     for obslist in mbobs:
         for obs in obslist:
             assert np.all(obs.image == rng.normal(size=(13, 15)))
+
+
+@pytest.mark.parametrize('copy_type', ['copy', 'copy.copy', 'copy.deepcopy'])
+def test_multibandobslist_copy(copy_type):
+    rng = np.random.RandomState(seed=11)
+    meta = {'duh': 5}
+
+    mbobs = MultiBandObsList(meta=meta)
+
+    for iband in range(2):
+        bmeta = {'iband': iband}
+        obslist = ObsList(meta=bmeta)
+        for iepoch in range(3):
+            emeta = {'iepoch': iepoch}
+            obs = Observation(
+                image=rng.normal(size=(13, 15)),
+                meta=emeta,
+            )
+
+            obslist.append(obs)
+        mbobs.append(obslist)
+
+    if copy_type == 'copy':
+        new_mbobs = mbobs.copy()
+    elif copy_type == 'copy.copy':
+        new_mbobs = copy.copy(mbobs)
+    else:
+        new_mbobs = copy.deepcopy(mbobs)
+
+    assert new_mbobs == mbobs
+
+    new_mbobs[1][1].image = new_mbobs[1][1].image * 5
+    assert new_mbobs != mbobs
 
 
 def test_multibandobslist_set():

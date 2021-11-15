@@ -419,6 +419,26 @@ class GMix(object):
         gmix._data[:] = self._data[:]
         return gmix
 
+    def __copy__(self):
+        return self.copy()
+
+    def __deepcopy__(self, memo):
+        result = self.copy()
+        memo[id(self)] = result
+        return result
+
+    def __eq__(self, gm):
+        """
+        we don't compare the lazily evaluated data
+        """
+        self_data = self.get_data()
+        gm_data = gm.get_data()
+
+        equal = True
+        for n in ('p', 'row', 'col', 'irr', 'irc', 'icc', 'det'):
+            equal &= np.all(self_data[n] == gm_data[n])
+        return equal
+
     def get_sheared(self, s1, s2=None):
         """
         Get a sheared version of the gaussian mixture

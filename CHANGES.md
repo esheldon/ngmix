@@ -2,9 +2,9 @@
 
 ### new features
 
-    - added get_data(), check for equality, and copy/deepcopy
-      for jacobians.
-    - implement copy/deepcopy for Observations
+    - implemented check for equality, copy() method, copy, and deepcopy
+      for Gmix objects, jacobians, and Observation/ObsList/MultiBandObsList
+    - added get_data() method for jacobian objects
 
 ## v2.0.4
 

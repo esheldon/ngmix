@@ -257,7 +257,9 @@ class Jacobian(object):
         return self.copy()
 
     def __deepcopy__(self, memo):
-        return self.copy()
+        result = self.copy()
+        memo[id(self)] = result
+        return result
 
     def __eq__(self, jacobian):
         self_data = self.get_data()

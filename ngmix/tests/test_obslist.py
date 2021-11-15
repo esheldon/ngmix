@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 import pytest
 
@@ -15,6 +16,27 @@ def test_obslist_smoke():
     rng = np.random.RandomState(seed=11)
     for obs in obslist:
         assert np.all(obs.image == rng.normal(size=(13, 15)))
+
+
+@pytest.mark.parametrize('copy_type', ['copy', 'copy.copy', 'copy.deepcopy'])
+def test_obslist_copy(copy_type):
+    rng = np.random.RandomState(seed=11)
+    meta = {'duh': 5}
+    obslist = ObsList(meta=meta)
+    for _ in range(3):
+        obslist.append(Observation(image=rng.normal(size=(13, 15))))
+
+    if copy_type == 'copy':
+        new_obslist = obslist.copy()
+    elif copy_type == 'copy.copy':
+        new_obslist = copy.copy(obslist)
+    else:
+        new_obslist = copy.deepcopy(obslist)
+
+    assert new_obslist == obslist
+
+    obslist[1].image = obslist[1].image*5
+    assert new_obslist != obslist
 
 
 def test_obslist_set():

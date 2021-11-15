@@ -730,7 +730,50 @@ class Observation(MetadataMixin):
         return self.copy()
 
     def __deepcopy__(self, memo):
-        return self.copy()
+        result = self.copy()
+        memo[id(self)] = result
+        return result
+
+    def __eq__(self, obs):
+        if not isinstance(obs, Observation):
+            return False
+
+        # attributes that all share
+        if self.meta != obs.meta:
+            return False
+
+        # image attributes
+        attrs = (
+            ('image', 'array'),
+            ('weight', 'array'),
+            ('bmask', 'array'),
+            ('ormask', 'array'),
+            ('mfrac', 'array'),
+            ('noise', 'array'),
+            ('psf', 'obj'),
+            ('gmix', 'obj'),
+            ('jacobian', 'obj'),
+            ('meta', 'obj'),
+        )
+        for attr, atype in attrs:
+            has = f'has_{attr}'
+            if not hasattr(self, has):
+                # these are probably required
+                self_has = obs_has = True
+            else:
+                self_has = getattr(self, has)()
+                obs_has = getattr(self, has)()
+            if self_has or obs_has:
+                if self_has and obs_has:
+
+                    self_data = getattr(self, attr)
+                    obs_data = getattr(obs, attr)
+                    if not np.all(self_data == obs_data):
+                        return False
+                else:
+                    return False
+
+        return True
 
     @property
     def store_pixels(self):
@@ -895,6 +938,32 @@ class ObsList(list, MetadataMixin):
 
         return Isum, Vsum, Npix
 
+    def copy(self):
+        """
+        copy all the data into a new ObsList
+        """
+        new_obslist = ObsList(meta=self.meta.copy())
+        for obs in self:
+            new_obslist.append(obs.copy())
+        return new_obslist
+
+    def __copy__(self):
+        return self.copy()
+
+    def __deepcopy__(self, memo):
+        result = self.copy()
+        memo[id(self)] = result
+        return result
+
+    def __eq__(self, obslist):
+        if len(self) != len(obslist):
+            return False
+
+        for self_obs, obs in zip(self, obslist):
+            if self_obs != obs:
+                return False
+        return True
+
     def __setitem__(self, index, obs):
         """
         over-riding this for type safety
@@ -984,6 +1053,34 @@ class MultiBandObsList(list, MetadataMixin):
             Npix += tNpix
 
         return Isum, Vsum, Npix
+
+    def copy(self):
+        """
+        copy all the data into a new MultiBandObsList
+        """
+        new_mbobs = MultiBandObsList(meta=self.meta.copy())
+
+        for obslist in self:
+            new_mbobs.append(obslist.copy())
+
+        return new_mbobs
+
+    def __copy__(self):
+        return self.copy()
+
+    def __deepcopy__(self, memo):
+        result = self.copy()
+        memo[id(self)] = result
+        return result
+
+    def __eq__(self, mbobs):
+        if len(self) != len(mbobs):
+            return False
+
+        for self_obslist, obslist in zip(self, mbobs):
+            if self_obslist != obslist:
+                return False
+        return True
 
     def __setitem__(self, index, obs_list):
         """
