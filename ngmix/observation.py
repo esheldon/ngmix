@@ -709,7 +709,7 @@ class Observation(MetadataMixin):
         else:
             mfrac = None
 
-        meta = copy.deepcopy(self.meta)
+        meta = copy.deepcopy(self._meta)
 
         return Observation(
             self.image.copy(),
