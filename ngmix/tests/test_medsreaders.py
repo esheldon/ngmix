@@ -90,4 +90,4 @@ def test_medsreaders_smoke(
             mbobs = mm.get_mbobs(i, weight_type=weight_type)
             if weight_type == 'weight':
                 for band in range(nband):
-                    assert len(mbobs[band] == m['ncutout'][i])
+                    assert len(mbobs[band]) == m['ncutout'][i]
