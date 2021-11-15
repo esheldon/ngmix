@@ -437,7 +437,6 @@ class GMix(object):
         self_data = self.get_data()
         gm_data = gm.get_data()
 
-        equal = True
         for n in ('p', 'row', 'col', 'irr', 'irc', 'icc', 'det'):
             if not np.all(self_data[n] == gm_data[n]):
                 return False

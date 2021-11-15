@@ -59,6 +59,7 @@ def test_multibandobslist_copy(copy_type):
     with pytest.raises(ValueError):
         mbobs == 3
 
+
 def test_multibandobslist_set():
     rng = np.random.RandomState(seed=11)
     meta = {'duh': 5}

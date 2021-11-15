@@ -182,6 +182,7 @@ def test_gmix_copy_and_equals(model, copy_type):
     with pytest.raises(ValueError):
         gm == 3
 
+
 @pytest.mark.parametrize('model', ['gauss', 'exp', 'dev', 'turb'])
 def test_gmix_get_sheared(model):
     row, col, g1, g2, T, flux = -0.5, -0.4, 0, 0, 0.8, 56
