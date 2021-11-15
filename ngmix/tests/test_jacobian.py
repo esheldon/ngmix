@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 import galsim
 import pytest
@@ -322,3 +323,86 @@ def test_unit_jacobian_missing_kwargs(kind):
 
     with pytest.raises(Exception):
         UnitJacobian(col=5, y=2)
+
+
+def test_jacobian_eq():
+    dudcol = 0.25
+    dudrow = 0.1
+    dvdcol = -0.4
+    dvdrow = 0.34
+    col = 5.6
+    row = -10.4
+
+    jac_rowcol = Jacobian(
+        col=col,
+        row=row,
+        dudcol=dudcol,
+        dudrow=dudrow,
+        dvdcol=dvdcol,
+        dvdrow=dvdrow,
+    )
+    assert jac_rowcol == jac_rowcol
+
+    jac_xy = Jacobian(
+        x=col,
+        y=row,
+        dudx=dudcol,
+        dudy=dudrow,
+        dvdx=dvdcol,
+        dvdy=dvdrow,
+    )
+    assert jac_rowcol == jac_xy
+
+    wcs = galsim.JacobianWCS(
+        dudx=dudcol,
+        dudy=dudrow,
+        dvdx=dvdcol,
+        dvdy=dvdrow)
+    jac_from_galsim = Jacobian(col=col, row=row, wcs=wcs)
+    assert jac_rowcol == jac_from_galsim
+
+    wcs = galsim.JacobianWCS(
+        dudx=dudcol,
+        dudy=dudrow,
+        dvdx=dvdcol,
+        dvdy=dvdrow)
+    jac_from_galsim_xy = Jacobian(x=col, y=row, wcs=wcs)
+    assert jac_rowcol == jac_from_galsim_xy
+
+    # now check one that is different gives not equal
+    jac_rowcol_diff = Jacobian(
+        col=col,
+        row=row,
+        dudcol=dudcol*2,
+        dudrow=dudrow,
+        dvdcol=dvdcol,
+        dvdrow=dvdrow,
+    )
+    assert jac_rowcol != jac_rowcol_diff
+
+
+def test_jacobian_copy():
+    dudcol = 0.25
+    dudrow = 0.1
+    dvdcol = -0.4
+    dvdrow = 0.34
+    col = 5.6
+    row = -10.4
+
+    jac = Jacobian(
+        col=col,
+        row=row,
+        dudcol=dudcol,
+        dudrow=dudrow,
+        dvdcol=dvdcol,
+        dvdrow=dvdrow,
+    )
+
+    jac_copy = jac_rowcol.copy()
+    assert jac == jac_copy
+
+    jac_copy_copy = copy.copy(jac_rowcol)
+    assert jac == jac_copy_copy
+
+    jac_copy_deepcopy = copy.deepcopy(jac_rowcol)
+    assert jac == jac_copy_deepcopy

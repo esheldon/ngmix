@@ -90,6 +90,17 @@ class Jacobian(object):
         else:
             raise ValueError("send by row,col or x,y")
 
+    def get_data(self):
+        """
+        Get a reference to the underlying numpy array that represents
+        the jacobian
+
+        Returns
+        -------
+        structured array reference
+        """
+        return self._data
+
     def get_cen(self):
         """
         Get the center of the coordinate system
@@ -241,6 +252,17 @@ class Jacobian(object):
                         dudcol=self.dudcol,
                         dvdrow=self.dvdrow,
                         dvdcol=self.dvdcol)
+
+    def __copy__(self):
+        return self.copy()
+
+    def __deepcopy__(self):
+        return self.copy()
+
+    def __eq__(self, jacobian):
+        self_data = self.get_data()
+        data = jacobian.get_data()
+        return self_data == data
 
     def get_galsim_wcs(self):
         """
