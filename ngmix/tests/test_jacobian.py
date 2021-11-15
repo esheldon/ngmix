@@ -406,3 +406,9 @@ def test_jacobian_copy():
 
     jac_copy_deepcopy = copy.deepcopy(jac)
     assert jac == jac_copy_deepcopy
+
+    jac.set_cen(row=3, col=5)
+    assert jac != jac_copy_deepcopy
+
+    with pytest.raises(ValueError):
+        jac == 3

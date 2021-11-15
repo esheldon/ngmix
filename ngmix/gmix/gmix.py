@@ -431,13 +431,17 @@ class GMix(object):
         """
         we don't compare the lazily evaluated data
         """
+        if not isinstance(gm, GMix):
+            raise ValueError(f'expected GMix, got {type(gm)}')
+
         self_data = self.get_data()
         gm_data = gm.get_data()
 
         equal = True
         for n in ('p', 'row', 'col', 'irr', 'irc', 'icc', 'det'):
-            equal &= np.all(self_data[n] == gm_data[n])
-        return equal
+            if not np.all(self_data[n] == gm_data[n]):
+                return False
+        return True
 
     def get_sheared(self, s1, s2=None):
         """

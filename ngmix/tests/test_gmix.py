@@ -179,6 +179,8 @@ def test_gmix_copy_and_equals(model, copy_type):
     new_gm.reset()
     assert np.allclose(new_gm.get_full_pars(), 0)
 
+    with pytest.raises(ValueError):
+        gm == 3
 
 @pytest.mark.parametrize('model', ['gauss', 'exp', 'dev', 'turb'])
 def test_gmix_get_sheared(model):
