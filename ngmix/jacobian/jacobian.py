@@ -1,30 +1,7 @@
+import numpy as np
 from numpy import zeros, sqrt, abs
 
 __all__ = ['Jacobian', 'DiagonalJacobian', 'UnitJacobian']
-
-_jacobian_dtype = [
-    ('row0', 'f8'),
-    ('col0', 'f8'),
-    ('dvdrow', 'f8'),
-    ('dvdcol', 'f8'),
-    ('dudrow', 'f8'),
-    ('dudcol', 'f8'),
-    ('det', 'f8'),
-    ('scale', 'f8')]
-
-_ROWCOL_REQ = [
-    'row', 'col',
-    'dvdrow',
-    'dvdcol',
-    'dudrow',
-    'dudcol']
-
-_XY_REQ = [
-    'x', 'y',
-    'dudx',
-    'dudy',
-    'dvdx',
-    'dvdy']
 
 
 class Jacobian(object):
@@ -262,9 +239,12 @@ class Jacobian(object):
         return result
 
     def __eq__(self, jacobian):
+        if not isinstance(jacobian, Jacobian):
+            raise ValueError(f'expected Jacobian, got {type(jacobian)}')
+
         self_data = self.get_data()
         data = jacobian.get_data()
-        return self_data == data
+        return np.all(self_data == data)
 
     def get_galsim_wcs(self):
         """
@@ -421,3 +401,28 @@ class UnitJacobian(DiagonalJacobian):
     """
     def __init__(self, **kw):
         super(UnitJacobian, self).__init__(scale=1.0, **kw)
+
+
+_jacobian_dtype = [
+    ('row0', 'f8'),
+    ('col0', 'f8'),
+    ('dvdrow', 'f8'),
+    ('dvdcol', 'f8'),
+    ('dudrow', 'f8'),
+    ('dudcol', 'f8'),
+    ('det', 'f8'),
+    ('scale', 'f8')]
+
+_ROWCOL_REQ = [
+    'row', 'col',
+    'dvdrow',
+    'dvdcol',
+    'dudrow',
+    'dudcol']
+
+_XY_REQ = [
+    'x', 'y',
+    'dudx',
+    'dudy',
+    'dvdx',
+    'dvdy']
