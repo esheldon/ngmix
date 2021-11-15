@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 import pytest
 
@@ -330,7 +331,8 @@ def test_observation_pixels_update_jacobian(image_data):
     assert np.all(obs.pixels == my_pixels)
 
 
-def test_observation_copy(image_data):
+@pytest.mark.parametrize('copy_type', ['copy', 'copy.copy', 'copy.deepcopy'])
+def test_observation_copy(image_data, copy_type):
     obs = Observation(
         image=image_data['image'],
         weight=image_data['weight'],
@@ -344,7 +346,12 @@ def test_observation_copy(image_data):
         mfrac=image_data['mfrac'],
     )
 
-    new_obs = obs.copy()
+    if copy_type == 'copy':
+        new_obs = obs.copy()
+    elif copy_type == 'copy.copy':
+        new_obs = copy.copy(obs)
+    else:
+        new_obs = copy.deepcopy(obs)
 
     rng = np.random.RandomState(seed=11)
 
