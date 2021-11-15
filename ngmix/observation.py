@@ -1069,7 +1069,7 @@ class MultiBandObsList(list, MetadataMixin):
         return self.copy()
 
     def __deepcopy__(self, memo):
-        result = self.copy()
+        result = self.copy(memo=memo)
         memo[id(self)] = result
         return result
 
