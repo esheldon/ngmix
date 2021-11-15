@@ -1,5 +1,10 @@
 ## v2.0.5 (unreleased)
 
+### new features
+
+    - added get_data(), check for equality, and copy/deepcopy
+      for jacobians.
+
 ## v2.0.4
 
 ### new features
