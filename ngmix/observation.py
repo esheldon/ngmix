@@ -736,7 +736,7 @@ class Observation(MetadataMixin):
 
     def __eq__(self, obs):
         if not isinstance(obs, Observation):
-            return False
+            raise ValueError(f'expected Observation, got {type(obs)}')
 
         # attributes that all share
         if self.meta != obs.meta:
@@ -956,6 +956,9 @@ class ObsList(list, MetadataMixin):
         return result
 
     def __eq__(self, obslist):
+        if not isinstance(obslist, ObsList):
+            raise ValueError(f'expected ObsList, got {type(obslist)}')
+
         if len(self) != len(obslist):
             return False
 
@@ -1074,6 +1077,9 @@ class MultiBandObsList(list, MetadataMixin):
         return result
 
     def __eq__(self, mbobs):
+        if not isinstance(mbobs, MultiBandObsList):
+            raise ValueError(f'expected MultiBandObsList, got {type(mbobs)}')
+
         if len(self) != len(mbobs):
             return False
 

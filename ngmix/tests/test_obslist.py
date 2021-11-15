@@ -38,6 +38,9 @@ def test_obslist_copy(copy_type):
     obslist[1].image = obslist[1].image*5
     assert new_obslist != obslist
 
+    with pytest.raises(ValueError):
+        obslist == 3
+
 
 def test_obslist_set():
     rng = np.random.RandomState(seed=11)

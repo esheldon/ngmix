@@ -409,6 +409,9 @@ def test_observation_copy(image_data, copy_type):
     new_obs.psf = old_psf
     assert new_obs == obs
 
+    with pytest.raises(ValueError):
+        obs == 3
+
 
 def _dotest_readonly_attrs(obs):
     attrs = ['image', 'weight', 'bmask', 'ormask', 'noise', 'mfrac']

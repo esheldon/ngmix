@@ -56,6 +56,8 @@ def test_multibandobslist_copy(copy_type):
     new_mbobs[1][1].image = new_mbobs[1][1].image * 5
     assert new_mbobs != mbobs
 
+    with pytest.raises(ValueError):
+        mbobs == 3
 
 def test_multibandobslist_set():
     rng = np.random.RandomState(seed=11)
