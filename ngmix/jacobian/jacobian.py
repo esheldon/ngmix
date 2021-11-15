@@ -256,7 +256,7 @@ class Jacobian(object):
     def __copy__(self):
         return self.copy()
 
-    def __deepcopy__(self):
+    def __deepcopy__(self, memo):
         return self.copy()
 
     def __eq__(self, jacobian):

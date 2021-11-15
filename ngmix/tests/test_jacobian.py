@@ -398,11 +398,11 @@ def test_jacobian_copy():
         dvdrow=dvdrow,
     )
 
-    jac_copy = jac_rowcol.copy()
+    jac_copy = jac.copy()
     assert jac == jac_copy
 
-    jac_copy_copy = copy.copy(jac_rowcol)
+    jac_copy_copy = copy.copy(jac)
     assert jac == jac_copy_copy
 
-    jac_copy_deepcopy = copy.deepcopy(jac_rowcol)
+    jac_copy_deepcopy = copy.deepcopy(jac)
     assert jac == jac_copy_deepcopy
