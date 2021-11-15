@@ -4,6 +4,7 @@
 
     - added get_data(), check for equality, and copy/deepcopy
       for jacobians.
+    - implement copy/deepcopy for Observations
 
 ## v2.0.4
 

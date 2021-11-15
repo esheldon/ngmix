@@ -726,6 +726,12 @@ class Observation(MetadataMixin):
             ignore_zero_weight=self._ignore_zero_weight,
         )
 
+    def __copy__(self):
+        return self.copy()
+
+    def __deepcopy__(self, memo):
+        return self.copy()
+
     @property
     def store_pixels(self):
         """getter for store_pixels attribute"""
