@@ -674,7 +674,7 @@ class Observation(MetadataMixin):
 
         return Isum, Vsum, Npix
 
-    def copy(self):
+    def copy(self, memo=None):
         """
         make a copy of the observation
         """
@@ -709,7 +709,7 @@ class Observation(MetadataMixin):
         else:
             mfrac = None
 
-        meta = copy.deepcopy(self._meta)
+        meta = copy.deepcopy(self._meta, memo=memo)
 
         return Observation(
             self.image.copy(),
@@ -730,7 +730,7 @@ class Observation(MetadataMixin):
         return self.copy()
 
     def __deepcopy__(self, memo):
-        result = self.copy()
+        result = self.copy(memo=memo)
         memo[id(self)] = result
         return result
 
@@ -938,20 +938,20 @@ class ObsList(list, MetadataMixin):
 
         return Isum, Vsum, Npix
 
-    def copy(self):
+    def copy(self, memo=None):
         """
         copy all the data into a new ObsList
         """
-        new_obslist = ObsList(meta=copy.deepcopy(self._meta))
+        new_obslist = ObsList(meta=copy.deepcopy(self._meta, memo))
         for obs in self:
-            new_obslist.append(obs.copy())
+            new_obslist.append(obs.copy(memo=memo))
         return new_obslist
 
     def __copy__(self):
         return self.copy()
 
     def __deepcopy__(self, memo):
-        result = self.copy()
+        result = self.copy(memo=memo)
         memo[id(self)] = result
         return result
 
@@ -1054,14 +1054,14 @@ class MultiBandObsList(list, MetadataMixin):
 
         return Isum, Vsum, Npix
 
-    def copy(self):
+    def copy(self, memo=None):
         """
         copy all the data into a new MultiBandObsList
         """
-        new_mbobs = MultiBandObsList(meta=copy.deepcopy(self._meta))
+        new_mbobs = MultiBandObsList(meta=copy.deepcopy(self._meta, memo=memo))
 
         for obslist in self:
-            new_mbobs.append(obslist.copy())
+            new_mbobs.append(obslist.copy(memo=memo))
 
         return new_mbobs
 
