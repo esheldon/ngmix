@@ -1,5 +1,11 @@
 ## v2.0.5 (unreleased)
 
+### new features
+
+    - implemented check for equality, copy() method, copy, and deepcopy
+      for Gmix objects, jacobians, and Observation/ObsList/MultiBandObsList
+    - added get_data() method for jacobian objects
+
 ## v2.0.4
 
 ### new features

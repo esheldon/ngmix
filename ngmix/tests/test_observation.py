@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 import pytest
 
@@ -330,7 +331,8 @@ def test_observation_pixels_update_jacobian(image_data):
     assert np.all(obs.pixels == my_pixels)
 
 
-def test_observation_copy(image_data):
+@pytest.mark.parametrize('copy_type', ['copy', 'copy.copy', 'copy.deepcopy'])
+def test_observation_copy(image_data, copy_type):
     obs = Observation(
         image=image_data['image'],
         weight=image_data['weight'],
@@ -344,67 +346,71 @@ def test_observation_copy(image_data):
         mfrac=image_data['mfrac'],
     )
 
-    new_obs = obs.copy()
+    if copy_type == 'copy':
+        new_obs = obs.copy()
+    elif copy_type == 'copy.copy':
+        new_obs = copy.copy(obs)
+    else:
+        new_obs = copy.deepcopy(obs)
+
+    assert new_obs == obs
 
     rng = np.random.RandomState(seed=11)
 
-    new_arr = rng.normal(size=image_data['image'].shape)
-    assert np.all(obs.image == new_obs.image)
-    new_obs.image = new_arr
-    assert np.all(obs.image != new_obs.image)
+    for attr, atype in (
+        ('image', 'f8'),
+        ('weight', 'f8'),
+        ('mfrac', 'f8'),
+        ('noise', 'f8'),
+        ('bmask', 'i4'),
+        ('ormask', 'i4'),
+    ):
+        old_arr = getattr(obs, attr)
+        new_arr = rng.normal(size=image_data['image'].shape).astype(atype)
+        setattr(new_obs, attr, new_arr)
+        assert new_obs != obs
+        setattr(new_obs, attr, old_arr)
+        assert new_obs == obs
 
-    new_arr = rng.normal(size=image_data['image'].shape)
-    assert np.all(obs.mfrac == new_obs.mfrac)
-    new_obs.mfrac = new_arr
-    assert np.all(obs.mfrac != new_obs.mfrac)
-
-    new_arr = np.exp(rng.normal(size=image_data['image'].shape))
-    assert np.all(obs.weight == new_obs.weight)
-    new_obs.weight = new_arr
-    assert np.all(obs.weight != new_obs.weight)
-
-    new_arr = (np.exp(rng.normal(size=image_data['image'].shape)) *
-               100).astype(np.int32)
-    assert np.all(obs.bmask == new_obs.bmask)
-    new_obs.bmask = new_arr
-    assert np.all(obs.bmask != new_obs.bmask)
-
-    new_arr = (np.exp(rng.normal(size=image_data['image'].shape)) *
-               100).astype(np.int32)
-    assert np.all(obs.ormask == new_obs.ormask)
-    new_obs.ormask = new_arr
-    assert np.all(obs.ormask != new_obs.ormask)
-
-    new_arr = rng.normal(size=image_data['image'].shape)
-    assert np.all(obs.noise == new_obs.noise)
-    new_obs.noise = new_arr
-    assert np.all(obs.noise != new_obs.noise)
-
+    old_jac = obs.jacobian
     new_jac = DiagonalJacobian(x=8, y=13, scale=1.2)
-    assert new_obs.jacobian.get_galsim_wcs() == obs.jacobian.get_galsim_wcs()
     new_obs.jacobian = new_jac
-    assert new_obs.jacobian.get_galsim_wcs() != obs.jacobian.get_galsim_wcs()
+    assert new_obs != obs
+    new_obs.jacobian = old_jac
+    assert new_obs == obs
 
+    old_meta = obs.meta
     new_meta = {'new': 5}
-    assert obs.meta == new_obs.meta
     new_obs.meta = new_meta
-    assert obs.meta != new_obs.meta
+    assert new_obs != obs
+    new_obs.meta = old_meta
+    assert new_obs == obs
 
     new_meta = {'blue': 10}
     new_meta.update(new_obs.meta)
+    new_obs.meta = new_meta
     obs.update_meta_data({'blue': 10})
-    assert obs.meta != new_obs.meta
+    assert obs == new_obs
 
+    old_gmix = obs.gmix
     new_gmix = GMix(pars=rng.uniform(size=6))
-    assert np.all(obs.gmix.get_full_pars() == new_obs.gmix.get_full_pars())
     new_obs.gmix = new_gmix
-    assert np.all(obs.gmix.get_full_pars() != new_obs.gmix.get_full_pars())
+    assert new_obs != obs
+    new_obs.gmix = old_gmix
+    assert new_obs == obs
 
+    old_psf = obs.psf
     new_psf = Observation(
-        image=rng.normal(size=obs.psf.image.shape), meta={'ispsf': True})
-    assert np.all(obs.psf.image == new_obs.psf.image)
+        image=rng.normal(size=obs.psf.image.shape),
+        meta={'ispsf': True},
+    )
     new_obs.psf = new_psf
-    assert np.all(obs.psf.image != new_obs.psf.image)
+    assert new_obs != obs
+    new_obs.psf = old_psf
+    assert new_obs == obs
+
+    with pytest.raises(ValueError):
+        obs == 3
 
 
 def _dotest_readonly_attrs(obs):

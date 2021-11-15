@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 import galsim
 
@@ -147,8 +148,9 @@ def test_gmix_reset(model):
     assert np.allclose(gm.get_full_pars(), 0)
 
 
+@pytest.mark.parametrize('copy_type', ['copy', 'copy.copy', 'copy.deepcopy'])
 @pytest.mark.parametrize('model', ['gauss', 'exp', 'dev', 'turb'])
-def test_gmix_copy(model):
+def test_gmix_copy_and_equals(model, copy_type):
     row, col, g1, g2, T, flux = -0.5, -0.4, -0.2, 0.3, 0.8, 56
     pars = np.array([row, col, g1, g2, T, flux])
     gm = make_gmix_model(pars, model)
@@ -158,13 +160,27 @@ def test_gmix_copy(model):
     assert np.allclose(gm.get_g1g2T(), [g1, g2, T])
     assert np.allclose(gm.get_cen(), [row, col])
 
-    new_gm = gm.copy()
-    new_gm.reset()
+    if copy_type == 'copy':
+        new_gm = gm.copy()
+    elif copy_type == 'copy.copy':
+        new_gm = copy.copy(gm)
+    else:
+        new_gm = copy.deepcopy(gm)
 
-    assert np.allclose(new_gm.get_full_pars(), 0)
+    assert new_gm == gm
+
+    new_gm.set_cen(row=3, col=5)
+    assert new_gm != gm
+
     assert np.allclose(gm.get_flux(), flux)
     assert np.allclose(gm.get_g1g2T(), [g1, g2, T])
     assert np.allclose(gm.get_cen(), [row, col])
+
+    new_gm.reset()
+    assert np.allclose(new_gm.get_full_pars(), 0)
+
+    with pytest.raises(ValueError):
+        gm == 3
 
 
 @pytest.mark.parametrize('model', ['gauss', 'exp', 'dev', 'turb'])
