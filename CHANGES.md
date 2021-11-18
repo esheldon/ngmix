@@ -16,6 +16,8 @@
     - It is no longer required to send a random number generator
       to the constructors for MetacalGaussPSF and MetacalAnalyticPSF.  If one
       is sent it is still used to add a small amount of noise.
+    - The metacal codes now use a copy() of the input observations when
+      creating their output.  This passes along all the internal data.
 
 ### bug fixes
 

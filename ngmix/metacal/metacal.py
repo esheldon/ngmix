@@ -8,7 +8,6 @@ import copy
 import logging
 import numpy as np
 from ..gexceptions import GMixRangeError, BootPSFFailure
-from ..observation import Observation
 from ..shape import Shape
 from .. import moments
 from .defaults import DEFAULT_STEP, METACAL_TYPES, METACAL_MINIMAL_TYPES
@@ -413,17 +412,14 @@ class MetacalDilatePSF(object):
 
     def _make_psf_obs(self, psf_im):
 
-        obs = self.obs
-        psf_obs = Observation(psf_im.array,
-                              weight=obs.psf.weight.copy(),
-                              jacobian=obs.psf.jacobian)
-        return psf_obs
+        new_psf_obs = self.obs.psf.copy()
+        new_psf_obs.image = psf_im.array
+        return new_psf_obs
 
     def _make_obs(self, im, psf_im):
         """
-        Make new Observation objects for the image and psf.
-        Copy out the weight maps and jacobians from the original
-        Observation.
+        b
+        Make new Observation objects with the new image and psf.
 
         parameters
         ----------
@@ -435,24 +431,9 @@ class MetacalDilatePSF(object):
         A new Observation
         """
 
-        obs = self.obs
-
-        psf_obs = self._make_psf_obs(psf_im)
-        psf_obs.meta.update(obs.psf.meta)
-
-        meta = {}
-        meta.update(obs.meta)
-        newobs = Observation(
-            im.array,
-            jacobian=obs.jacobian,
-            weight=obs.weight.copy(),
-            psf=psf_obs,
-            meta=meta,
-        )
-
-        if obs.has_bmask():
-            newobs.bmask = obs.bmask
-
+        newobs = self.obs.copy()
+        newobs.image = im.array
+        newobs.psf = self._make_psf_obs(psf_im)
         return newobs
 
 
@@ -568,19 +549,17 @@ class MetacalGaussPSF(MetacalDilatePSF):
         if self.psf_noise_image is not None:
             psf_im += self.psf_noise_image
 
-        obs = self.obs
+        new_psf_obs = self.obs.psf.copy()
+        with new_psf_obs.writeable():
+            new_psf_obs.image[:, :] = psf_im
+            new_psf_obs.weight[:, :] = self.psf_weight
 
-        cen = (np.array(psf_im.shape) - 1.0)/2.0
+            # Reset the center on the jacobian.
+            # We drew the model psf as the exact center
+            cen = (np.array(psf_im.shape) - 1.0)/2.0
+            new_psf_obs.jacobian.set_cen(row=cen[0], col=cen[1])
 
-        jacobian = obs.psf.jacobian.copy()
-        jacobian.set_cen(row=cen[0], col=cen[1])
-
-        psf_obs = Observation(
-            psf_im,
-            weight=self.psf_weight,
-            jacobian=jacobian,
-        )
-        return psf_obs
+        return new_psf_obs
 
 
 class MetacalFitGaussPSF(MetacalGaussPSF):
