@@ -1,4 +1,11 @@
 # flake8: noqa
+import warnings
+from numba import NumbaExperimentalFeatureWarning
+
+# numba recently started to warn about this experimental feature we have been
+# using for years
+
+warnings.filterwarnings('ignore', category=NumbaExperimentalFeatureWarning)
 
 from ._version import __version__
 
