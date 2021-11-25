@@ -2,6 +2,7 @@ import logging
 
 import numpy as np
 import scipy.fft as fft
+from numba import njit
 
 from ngmix.observation import Observation
 from ngmix.moments import fwhm_to_sigma, make_mom_result
@@ -32,11 +33,15 @@ class PrePSFMom(object):
         are aliases for the same thing.
     pad_factor : int, optional
         The factor by which to pad the FFTs used for the image. Default is 4.
+    ap_rad : float, optional
+        The apodization radius for the stamp in pixels. The default of 1.5 is likely
+        fine for most ground based surveys.
     """
-    def __init__(self, fwhm, kernel, pad_factor=4):
+    def __init__(self, fwhm, kernel, pad_factor=4, ap_rad=1.5):
         self.fwhm = fwhm
         self.pad_factor = pad_factor
         self.kernel = kernel
+        self.ap_rad = ap_rad
 
     def go(self, obs, return_kernels=False, no_psf=False):
         """Measure the pre-PSF ksigma moments.
@@ -73,6 +78,7 @@ class PrePSFMom(object):
         # pad image, psf and weight map, get FFTs, apply cen_phases
         kim, im_row, im_col = _zero_pad_and_compute_fft(
             obs.image, obs.jacobian.row0, obs.jacobian.col0, target_dim,
+            self.ap_rad,
         )
         fft_dim = kim.shape[0]
 
@@ -81,6 +87,7 @@ class PrePSFMom(object):
                 psf_obs.image,
                 psf_obs.jacobian.row0, psf_obs.jacobian.col0,
                 target_dim,
+                0,  # we do not apodize PSF stamps since it should not be needed
             )
         else:
             # delta function in k-space
@@ -174,12 +181,15 @@ class KSigmaMom(PrePSFMom):
         arcseconds.
     pad_factor : int, optional
         The factor by which to pad the FFTs used for the image. Default is 4.
+    ap_rad : float, optional
+        The apodization radius for the stamp in pixels. The default of 1.5 is likely
+        fine for most ground based surveys.
     """
 
     kind = "ksigma"
 
-    def __init__(self, fwhm, pad_factor=4):
-        super().__init__(fwhm, 'ksigma', pad_factor=pad_factor)
+    def __init__(self, fwhm, pad_factor=4, ap_rad=1.5):
+        super().__init__(fwhm, 'ksigma', pad_factor=pad_factor, ap_rad=ap_rad)
 
 
 class PGaussMom(PrePSFMom):
@@ -198,12 +208,15 @@ class PGaussMom(PrePSFMom):
         arcseconds.
     pad_factor : int, optional
         The factor by which to pad the FFTs used for the image. Default is 4.
+    ap_rad : float, optional
+        The apodization radius for the stamp in pixels. The default of 1.5 is likely
+        fine for most ground based surveys.
     """
 
     kind = "pgauss"
 
-    def __init__(self, fwhm, pad_factor=4):
-        super().__init__(fwhm, 'pgauss', pad_factor=pad_factor)
+    def __init__(self, fwhm, pad_factor=4, ap_rad=1.5):
+        super().__init__(fwhm, 'pgauss', pad_factor=pad_factor, ap_rad=ap_rad)
 
 
 # keep this here for API consistency
@@ -275,6 +288,41 @@ def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, d
     return mom, m_cov
 
 
+@njit
+def _ap_kern_kern(x, m, h):
+    # cumulative triweight kernel
+    y = (x - m) / h + 3
+    if y < -3:
+        return 0
+    elif y > 3:
+        return 1
+    else:
+        val = (
+            -5 * y ** 7 / 69984
+            + 7 * y ** 5 / 2592
+            - 35 * y ** 3 / 864
+            + 35 * y / 96
+            + 1 / 2
+        )
+        return val
+
+
+@njit
+def _build_square_apodization_mask(ap_rad, ap_mask):
+    ap_range = int(6*ap_rad + 0.5)
+
+    ny, nx = ap_mask.shape
+    for y in range(min(ap_range+1, ny)):
+        for x in range(nx):
+            ap_mask[y, x] *= _ap_kern_kern(y, ap_range, ap_rad)
+            ap_mask[ny-1 - y, x] *= _ap_kern_kern(y, ap_range, ap_rad)
+
+    for y in range(ny):
+        for x in range(min(ap_range+1, nx)):
+            ap_mask[y, x] *= _ap_kern_kern(x, ap_range, ap_rad)
+            ap_mask[y, nx - 1 - x] *= _ap_kern_kern(x, ap_range, ap_rad)
+
+
 def _zero_pad_image(im, target_dim):
     """zero pad an image, returning it and the offsets before and after
     the original image"""
@@ -315,11 +363,16 @@ def _compute_cen_phase_shift(cen_row, cen_col, dim, msk=None):
         return np.cos(kcen) + 1j*np.sin(kcen)
 
 
-def _zero_pad_and_compute_fft(im, cen_row, cen_col, target_dim):
+def _zero_pad_and_compute_fft(im, cen_row, cen_col, target_dim, ap_rad):
     """zero pad and compute the FFT
 
     Returns the fft, cen_row in the padded image, and cen_col in the padded image.
     """
+    if ap_rad > 0:
+        ap_mask = np.ones_like(im)
+        _build_square_apodization_mask(ap_rad, ap_mask)
+        im = im * ap_mask
+
     pim, pad_width_before, _ = _zero_pad_image(im, target_dim)
     pad_cen_row = cen_row + pad_width_before
     pad_cen_col = cen_col + pad_width_before
