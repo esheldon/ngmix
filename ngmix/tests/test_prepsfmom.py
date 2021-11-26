@@ -663,7 +663,7 @@ def test_prepsfmom_gauss_true_flux(
     2, 0.5,
 ])
 @pytest.mark.parametrize('image_size', [
-    53,
+    107,
 ])
 @pytest.mark.parametrize('pad_factor', [
     3.5, 4,
