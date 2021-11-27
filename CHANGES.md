@@ -5,6 +5,7 @@
     - implemented check for equality, copy() method, copy, and deepcopy
       for Gmix objects, jacobians, and Observation/ObsList/MultiBandObsList
     - added get_data() method for jacobian objects
+    - added apodization to the pre-PSF moments to help prevent FFT artifacts
 
 ## v2.0.4
 
