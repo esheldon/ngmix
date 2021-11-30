@@ -2,7 +2,7 @@ import galsim
 import numpy as np
 import pytest
 
-from ngmix.prepsfmom import KSigmaMom, PGaussMom
+from ngmix.prepsfmom import KSigmaMom, PGaussMom, _build_square_apodization_mask
 from ngmix import Jacobian
 from ngmix import Observation
 from ngmix.moments import make_mom_result
@@ -663,7 +663,7 @@ def test_prepsfmom_gauss_true_flux(
     2, 0.5,
 ])
 @pytest.mark.parametrize('image_size', [
-    53,
+    107,
 ])
 @pytest.mark.parametrize('pad_factor', [
     3.5, 4,
@@ -721,3 +721,109 @@ def test_prepsfmom_comp_to_gaussmom(
 
     for k in ["flux", "flux_err", "T", "T_err", "e", "e_cov"]:
         assert np.allclose(res[k], res_gmom[k], atol=0, rtol=1e-2)
+
+
+def _sim_apodize(flux_factor, ap_rad):
+    """
+    we are simulating an object at the center with a bright object right on the
+    edge of the stamp.
+
+    We then apply apodization to the image and measure the same Gaussian moment
+    with either the Fourier-space code or the real-space one.
+
+    We compare the case with zero apodization to non-zero in the test below
+    and assert that with apodization the results from Fourier-space match the
+    real-space results better.
+    """
+    rng = np.random.RandomState(seed=100)
+    image_size = 53
+    pixel_scale = 0.25
+    fwhm = 0.9
+    mom_fwhm = 2.0
+    pad_factor = 4
+
+    cen = (image_size - 1)/2
+    gs_wcs = galsim.ShearWCS(
+        pixel_scale, galsim.Shear(g1=-0, g2=0.0)).jacobian()
+    scale = np.sqrt(gs_wcs.pixelArea())
+    shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+    xy = gs_wcs.toImage(galsim.PositionD(shift))
+
+    jac = Jacobian(
+        y=cen + xy.y, x=cen + xy.x,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
+    gal = galsim.Gaussian(
+        fwhm=fwhm
+    ).shear(
+        g1=-0.1, g2=0.2
+    ).withFlux(
+        400
+    ).shift(
+        dx=shift[0], dy=shift[1]
+    )
+
+    # get true flux
+    im_true = gal.drawImage(
+        nx=image_size,
+        ny=image_size,
+        wcs=gs_wcs,
+    ).array
+
+    im = im_true.copy()
+    im += galsim.Exponential(
+        half_light_radius=fwhm
+    ).shear(
+        g1=-0.5, g2=0.2
+    ).shift(
+        cen*pixel_scale,
+        0,
+    ).withFlux(
+        400*flux_factor
+    ).drawImage(
+        nx=image_size,
+        ny=image_size,
+        wcs=gs_wcs,
+        method="real_space",
+    ).array
+
+    obs = Observation(
+        image=im,
+        jacobian=jac,
+    )
+    res = PGaussMom(fwhm=mom_fwhm, pad_factor=pad_factor, ap_rad=ap_rad).go(
+        obs=obs, no_psf=True, return_kernels=True,
+    )
+
+    ap_mask = np.ones_like(im)
+    if ap_rad > 0:
+        _build_square_apodization_mask(ap_rad, ap_mask)
+    obs_ap = Observation(
+        image=im * ap_mask,
+        jacobian=jac,
+    )
+
+    from ngmix.gaussmom import GaussMom
+    res_gmom = GaussMom(fwhm=mom_fwhm).go(obs=obs_ap)
+
+    return res, res_gmom
+
+
+@pytest.mark.parametrize("flux_factor", [1e2, 1e3, 1e5])
+def test_prepsfmom_apodize(flux_factor):
+    res, res_geom = _sim_apodize(flux_factor, 1.5)
+    ap_diffs = np.array([
+        np.abs(res[k] - res_geom[k])
+        for k in ["e1", "e2", "T", "flux"]
+    ])
+    print("apodized:", ap_diffs)
+
+    res, res_geom = _sim_apodize(flux_factor, 0)
+    zero_diffs = np.array([
+        np.abs(res[k] - res_geom[k])
+        for k in ["e1", "e2", "T", "flux"]
+    ])
+    print("non-apodized:", zero_diffs)
+
+    assert np.all(zero_diffs > ap_diffs)
