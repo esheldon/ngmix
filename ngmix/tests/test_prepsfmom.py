@@ -2,7 +2,11 @@ import galsim
 import numpy as np
 import pytest
 
-from ngmix.prepsfmom import KSigmaMom, PGaussMom, _build_square_apodization_mask
+from ngmix.prepsfmom import (
+    KSigmaMom, PGaussMom,
+    _build_square_apodization_mask,
+    PrePSFMom,
+)
 from ngmix import Jacobian
 from ngmix import Observation
 from ngmix.moments import make_mom_result
@@ -24,6 +28,19 @@ def _report_info(s, arr, mn, err):
             np.std(arr), None, None,
             flush=True,
         )
+
+
+def test_prepsfmom_kind():
+    fitter = PrePSFMom(2.0, 'gauss')
+    assert fitter.kind == 'pgauss'
+    fitter = PrePSFMom(2.0, 'pgauss')
+    assert fitter.kind == 'pgauss'
+    fitter = PrePSFMom(2.0, 'ksigma')
+    assert fitter.kind == 'ksigma'
+    fitter = PGaussMom(2.0)
+    assert fitter.kind == 'pgauss'
+    fitter = KSigmaMom(2.0)
+    assert fitter.kind == 'ksigma'
 
 
 @pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])

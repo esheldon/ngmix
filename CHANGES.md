@@ -1,3 +1,10 @@
+## v2.0.6
+
+### bug fixes
+
+    - Fixed a bug where the `kind` attribute was not set for the `PrePSFMom` fitter.
+
+
 ## v2.0.5
 
 ### new features

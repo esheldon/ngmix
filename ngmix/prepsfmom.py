@@ -42,6 +42,14 @@ class PrePSFMom(object):
         self.pad_factor = pad_factor
         self.kernel = kernel
         self.ap_rad = ap_rad
+        if self.kernel == "ksigma":
+            self.kind = "ksigma"
+        elif self.kernel in ["gauss", "pgauss"]:
+            self.kind = "pgauss"
+        else:
+            raise ValueError(
+                "The kernel '%s' for PrePSFMom is not recognized!" % self.kernel
+            )
 
     def go(self, obs, return_kernels=False, no_psf=False):
         """Measure the pre-PSF ksigma moments.
@@ -185,9 +193,6 @@ class KSigmaMom(PrePSFMom):
         The apodization radius for the stamp in pixels. The default of 1.5 is likely
         fine for most ground based surveys.
     """
-
-    kind = "ksigma"
-
     def __init__(self, fwhm, pad_factor=4, ap_rad=1.5):
         super().__init__(fwhm, 'ksigma', pad_factor=pad_factor, ap_rad=ap_rad)
 
@@ -212,9 +217,6 @@ class PGaussMom(PrePSFMom):
         The apodization radius for the stamp in pixels. The default of 1.5 is likely
         fine for most ground based surveys.
     """
-
-    kind = "pgauss"
-
     def __init__(self, fwhm, pad_factor=4, ap_rad=1.5):
         super().__init__(fwhm, 'pgauss', pad_factor=pad_factor, ap_rad=ap_rad)
 
