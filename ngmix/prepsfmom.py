@@ -193,9 +193,6 @@ class KSigmaMom(PrePSFMom):
         The apodization radius for the stamp in pixels. The default of 1.5 is likely
         fine for most ground based surveys.
     """
-
-    kind = "ksigma"
-
     def __init__(self, fwhm, pad_factor=4, ap_rad=1.5):
         super().__init__(fwhm, 'ksigma', pad_factor=pad_factor, ap_rad=ap_rad)
 
@@ -220,9 +217,6 @@ class PGaussMom(PrePSFMom):
         The apodization radius for the stamp in pixels. The default of 1.5 is likely
         fine for most ground based surveys.
     """
-
-    kind = "pgauss"
-
     def __init__(self, fwhm, pad_factor=4, ap_rad=1.5):
         super().__init__(fwhm, 'pgauss', pad_factor=pad_factor, ap_rad=ap_rad)
 
