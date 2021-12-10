@@ -31,11 +31,11 @@ def _report_info(s, arr, mn, err):
 
 
 def test_prepsfmom_kind():
-    fitter = PrePSFMom(2.0, filter='gauss')
+    fitter = PrePSFMom(2.0, 'gauss')
     assert fitter.kind == 'pgauss'
-    fitter = PrePSFMom(2.0, filter='pgauss')
+    fitter = PrePSFMom(2.0, 'pgauss')
     assert fitter.kind == 'pgauss'
-    fitter = PrePSFMom(2.0, filter='ksigma')
+    fitter = PrePSFMom(2.0, 'ksigma')
     assert fitter.kind == 'ksigma'
     fitter = PGaussMom(2.0)
     assert fitter.kind == 'pgauss'
