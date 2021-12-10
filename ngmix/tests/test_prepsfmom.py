@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from ngmix.prepsfmom import (
-    KSigmaMom, PGaussMom, 
+    KSigmaMom, PGaussMom,
     _build_square_apodization_mask,
     PrePSFMom,
 )
