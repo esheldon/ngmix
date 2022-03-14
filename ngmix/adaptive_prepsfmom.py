@@ -82,7 +82,7 @@ def _comp_rel_err(p1, p2, tol):
 class PrePSFAdmom(object):
     """Measure pre-PSF adaptive moments.
 
-    If the fwhm of the weight/kernel function is of similar size to the PSF or
+    If the minimum fwhm of the weight/kernel function is of similar size to the PSF or
     smaller, then the object properties returned by this fitter will be very noisy.
 
     Parameters
@@ -92,7 +92,7 @@ class PrePSFAdmom(object):
         to a round kernel as the FWHM approaches this minimum.
     delta_fwhm : float, optional.
         The shape of the weight kernel will go to round over region of 6*delta_fwhm.
-        Default is 0.01.
+        Default is 0.01 and tends to work well.
     pad_factor : int, optional
         The factor by which to pad the FFTs used for the image. Default is 4.
     ap_rad : float, optional
@@ -102,7 +102,7 @@ class PrePSFAdmom(object):
         Maximum number of iterations, default 200
     Ttol: float, optional
         Relative tolerance in the moments T <x^2> + <y^2> to determine
-        convergence, default 1.0e-3
+        convergence. Default is 1.0e-3.
     rng: np.random.RandomState or None, optional
         Random state for creating starting guess.
     """
@@ -166,13 +166,18 @@ class PrePSFAdmom(object):
             deltaT,
         )
         Iccold = Irrold = Ircold = np.nan
+        am_flags = 0
 
         for i in range(self.maxiter):
-            am_flags = 0
-            res, kernels = self._meas_mom(wrr, wrc, wcc, obs, d)
-            MT = res["mom"][mt_ind] / res["mom"][mf_ind]
-            M1 = res["mom"][m1_ind] / res["mom"][mf_ind]
-            M2 = res["mom"][m2_ind] / res["mom"][mf_ind]
+            mom, mom_cov, kernels = self._meas_mom(wrr, wrc, wcc, obs, d)
+
+            if mom[mf_ind] <= 0:
+                am_flags |= ngmix.flags.NONPOS_FLUX
+                break
+
+            MT = mom[mt_ind] / mom[mf_ind]
+            M1 = mom[m1_ind] / mom[mf_ind]
+            M2 = mom[m2_ind] / mom[mf_ind]
             Irc = M2 / 2.0
             Icc = (MT + M1) / 2.0
             Irr = (MT - M1) / 2.0
@@ -191,7 +196,6 @@ class PrePSFAdmom(object):
 
                 )
             ):
-                am_flags = 0
                 break
             else:
                 Iccold = Icc
@@ -200,14 +204,18 @@ class PrePSFAdmom(object):
                 wrr, wrc, wcc = _deweight_moments(
                     Irr, Irc, Icc, wrr, wrc, wcc, minT, deltaT
                 )
-                am_flags = 0
+
+        res = make_mom_result(mom, mom_cov)
+        e1, e2, T = mom2e(wrr, wrc, wcc)
+        res["weight_e1e2T"] = {"e1": e1, "e2": e2, "T": T}
+
+        res["numiter"] = i+1
+        if i+1 == self.maxiter:
+            am_flags |= ngmix.flags.MAXITER
 
         res["flags"] |= am_flags
         res["flux_flags"] |= am_flags
         res["T_flags"] |= am_flags
-        res["numiter"] = i+1
-        if i+1 == self.maxiter:
-            res["flags"] |= ngmix.flags.MAXITER
 
         res["flagstr"] = ngmix.flags.get_flags_str(res["flags"])
         res["T_flagstr"] = ngmix.flags.get_flags_str(res["T_flags"])
@@ -251,9 +259,7 @@ class PrePSFAdmom(object):
             kernels,
             d["im_row"] - d["psf_im_row"], d["im_col"] - d["psf_im_col"],
         )
-        res = make_mom_result(mom, mom_cov)
-        res["weight_pars"] = {"e1": e1, "e2": e2, "T": fwhm_to_T(fwhm)}
-        return res, kernels
+        return mom, mom_cov, kernels
 
     def _prep_data(self, obs, psf_obs):
         # pick the larger size
