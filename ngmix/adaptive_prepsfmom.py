@@ -3,7 +3,7 @@ import logging
 import numpy as np
 import scipy.fft as fft
 
-from ngmix.moments import make_mom_result, e2mom, fwhm_to_T, get_Tround
+from ngmix.moments import make_mom_result, e2mom, fwhm_to_T, get_Tround, get_T
 from ngmix.fastexp_nb import FASTEXP_MAX_CHI2, fexp_arr
 from ngmix.prepsfmom import (
     _measure_moments_fft,
@@ -29,8 +29,13 @@ def _mom2e1e2fwhm(Irr, Irc, Icc):
 
 
 def _scale_e1e2T(e1, e2, T, minT, deltaT, efac):
-    fac = _ap_kern_kern(get_Tround(T, e1, e2), minT + 6*deltaT, deltaT)
-    return fac*e1, fac*e2, T * fac + minT * (1-fac)
+    rfac = get_Tround(T, e1, e2)/T
+    fac = _ap_kern_kern(rfac * T, minT + 6*deltaT, deltaT)
+    return e1, e2, get_T(
+        rfac * T * fac + minT * (1-fac),
+        e1,
+        e2,
+    )
 
 
 def _truncate_e2mom(e1, e2, T, minT, deltaT):
