@@ -221,6 +221,9 @@ def test_prepsfmom_speed_and_cache():
     ).array
 
     # now we test the speed + caching
+    _gauss_kernels.cache_clear()
+    _zero_pad_and_compute_fft_cached_impl.cache_clear()
+
     # the first fit will do numba stuff, so we exclude it
     # we also perturb the various inputs to fool our caches
     fitter = PGaussMom(
