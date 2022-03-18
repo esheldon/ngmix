@@ -777,7 +777,7 @@ def test_moments_make_mom_result_flags():
 @pytest.mark.parametrize('image_size', [250])
 @pytest.mark.parametrize('psf_image_size', [33, 34])
 @pytest.mark.parametrize('pad_factor', [4, 3.5])
-def test_prepsfmom_gauss_true_flux(
+def test_prepsfmom_gauss_true_flux_T(
     pad_factor, psf_image_size, image_size, fwhm, psf_fwhm, pixel_scale,
     cls, extra_psf_fwhm
 ):
