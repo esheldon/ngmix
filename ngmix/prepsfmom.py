@@ -52,7 +52,10 @@ class PrePSFMom(object):
                 "The kernel '%s' for PrePSFMom is not recognized!" % self.kernel
             )
 
-    def go(self, obs, return_kernels=False, no_psf=False):
+    def go(
+            self, obs, return_kernels=False, no_psf=False,
+            extra_conv_psfs=None, extra_deconv_psfs=None,
+    ):
         """Measure the pre-PSF ksigma moments.
 
         Parameters
@@ -65,23 +68,32 @@ class PrePSFMom(object):
         no_psf : bool, optional
             If True, allow inputs without a PSF observation. Defaults to False
             so that any input observation without a PSF will raise an error.
+        extra_conv_psfs : list of ngmix obs, optional
+            If specified, these PSFs will be convolved into the image before the moments
+            are measured.
+        extra_deconv_psfs : list of ngmix obs, optional
+            If specified, these PSFs will be deconvolved from the image before the
+            moments are measured.
 
         Returns
         -------
         result dictionary
         """
-        psf_obs = _check_obs_and_get_psf_obs(obs, no_psf)
-        return self._meas(obs, psf_obs, return_kernels)
+        conv_psf_obs_list, deconv_psf_obs_list = _check_obs_and_get_psf_obs(
+            obs, no_psf,
+            extra_conv_psfs=extra_conv_psfs,
+            extra_deconv_psfs=extra_deconv_psfs,
+        )
+        return self._meas(obs, conv_psf_obs_list, deconv_psf_obs_list, return_kernels)
 
-    def _meas(self, obs, psf_obs, return_kernels):
-        # pick the larger size
-        if psf_obs is not None:
-            if obs.image.shape[0] > psf_obs.image.shape[0]:
-                target_dim = int(obs.image.shape[0] * self.pad_factor)
-            else:
-                target_dim = int(psf_obs.image.shape[0] * self.pad_factor)
-        else:
-            target_dim = int(obs.image.shape[0] * self.pad_factor)
+    def _meas(self, obs, conv_psf_obs_list, deconv_psf_obs_list, return_kernels):
+        # pick the largest size
+        target_dim = max(
+            max([o.shape[0] for o in conv_psf_obs_list]),
+            max([o.shape[0] for o in deconv_psf_obs_list]),
+            obs.shape[0],
+        )
+        target_dim = int(target_dim * self.pad_factor)
         eff_pad_factor = target_dim / obs.image.shape[0]
 
         # pad image, psf and weight map, get FFTs, apply cen_phases
@@ -91,18 +103,17 @@ class PrePSFMom(object):
         )
         fft_dim = kim.shape[0]
 
-        if psf_obs is not None:
-            kpsf_im, psf_im_row, psf_im_col = _zero_pad_and_compute_fft_cached(
-                psf_obs.image,
-                psf_obs.jacobian.row0, psf_obs.jacobian.col0,
-                target_dim,
-                0,  # we do not apodize PSF stamps since it should not be needed
-            )
-        else:
-            # delta function in k-space
-            kpsf_im = np.ones_like(kim, dtype=np.complex128)
-            psf_im_row = 0.0
-            psf_im_col = 0.0
+        (
+            deconv_kpsf_im,
+            deconv_psf_im_row,
+            deconv_psf_im_col,
+        ) = _zero_pad_and_compute_fft_cached_list(deconv_psf_obs_list, kim, target_dim)
+
+        (
+            conv_kpsf_im,
+            conv_psf_im_row,
+            conv_psf_im_col,
+        ) = _zero_pad_and_compute_fft_cached_list(conv_psf_obs_list, kim, target_dim)
 
         # the final, deconvolved image we want is
         #
@@ -129,17 +140,17 @@ class PrePSFMom(object):
         # now build the kernels
         if self.kernel == "ksigma":
             kernels = _ksigma_kernels(
-                target_dim,
-                self.fwhm,
-                obs.jacobian.dvdrow, obs.jacobian.dvdcol,
-                obs.jacobian.dudrow, obs.jacobian.dudcol,
+                int(target_dim),
+                float(self.fwhm),
+                float(obs.jacobian.dvdrow), float(obs.jacobian.dvdcol),
+                float(obs.jacobian.dudrow), float(obs.jacobian.dudcol),
             )
         elif self.kernel in ["gauss", "pgauss"]:
             kernels = _gauss_kernels(
-                target_dim,
-                self.fwhm,
-                obs.jacobian.dvdrow, obs.jacobian.dvdcol,
-                obs.jacobian.dudrow, obs.jacobian.dudcol,
+                int(target_dim),
+                float(self.fwhm),
+                float(obs.jacobian.dvdrow), float(obs.jacobian.dvdcol),
+                float(obs.jacobian.dudrow), float(obs.jacobian.dudcol),
             )
         else:
             raise ValueError(
@@ -152,8 +163,11 @@ class PrePSFMom(object):
 
         # run the actual measurements and return
         mom, mom_cov = _measure_moments_fft(
-            kim, kpsf_im, tot_var, eff_pad_factor, kernels,
-            im_row - psf_im_row, im_col - psf_im_col,
+            kim,
+            deconv_kpsf_im, conv_kpsf_im,
+            tot_var, eff_pad_factor, kernels,
+            im_row - deconv_psf_im_row + conv_psf_im_row,
+            im_col - deconv_psf_im_col + conv_psf_im_col,
         )
         res = make_mom_result(mom, mom_cov)
         if res['flags'] != 0:
@@ -226,19 +240,27 @@ class PGaussMom(PrePSFMom):
 PrePSFGaussMom = PGaussMom
 
 
-def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, dcol):
+def _measure_moments_fft(
+    kim, deconv_kpsf_im, conv_kpsf_im, tot_var, eff_pad_factor, kernels,
+    drow, dcol
+):
     # we only need to do things where the kernel is non-zero
     # this saves a bunch of CPU cycles
     msk = kernels["msk"]
     dim = kim.shape[0]
 
     # deconvolve PSF
-    kim, kpsf_im, _ = _deconvolve_im_psf_inplace(
-        kim[msk],
-        kpsf_im[msk],
-        # max amplitude is flux which is 0,0 in the standard FFT convention
-        np.abs(kpsf_im[0, 0]),
-    )
+    if deconv_kpsf_im is not None or conv_kpsf_im is not None:
+        kim, inv_kpsf_im, _ = _deconvolve_im_psf_inplace(
+            kim[msk],
+            deconv_kpsf_im[msk] if deconv_kpsf_im is not None else None,
+            # max amplitude is flux which is 0,0 in the standard FFT convention
+            np.abs(deconv_kpsf_im[0, 0]) if deconv_kpsf_im is not None else None,
+            conv_kpsf_im[msk] if conv_kpsf_im is not None else None,
+        )
+    else:
+        kim = kim[msk]
+        inv_kpsf_im = np.ones_like(kim, dtype=np.complex128)
 
     # put in phase shift as described above
     # the sin and cos are expensive so we only compute them where we will
@@ -279,7 +301,7 @@ def _measure_moments_fft(kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, d
     m_cov[1, 1] = 1
     tot_var *= eff_pad_factor**2
     tot_var_df4 = tot_var * df4
-    kerns = [fkp / kpsf_im, fkc / kpsf_im, fkr / kpsf_im, fkf / kpsf_im]
+    kerns = [fkp * inv_kpsf_im, fkc * inv_kpsf_im, fkr * inv_kpsf_im, fkf * inv_kpsf_im]
     conj_kerns = [np.conj(k) for k in kerns]
     for i in range(2, 6):
         for j in range(i, 6):
@@ -396,7 +418,7 @@ def _zero_pad_and_compute_fft_cached_impl(
 @functools.wraps(_zero_pad_and_compute_fft)
 def _zero_pad_and_compute_fft_cached(im, cen_row, cen_col, target_dim, ap_rad):
     return _zero_pad_and_compute_fft_cached_impl(
-        tuple(im), cen_row, cen_col, target_dim, ap_rad
+        tuple(im), float(cen_row), float(cen_col), int(target_dim), float(ap_rad)
     )
 
 
@@ -406,20 +428,65 @@ _zero_pad_and_compute_fft_cached.cache_clear \
     = _zero_pad_and_compute_fft_cached_impl.cache_clear
 
 
-def _deconvolve_im_psf_inplace(kim, kpsf_im, max_amp, min_psf_frac=1e-5):
+def _zero_pad_and_compute_fft_cached_list(psf_obs_list, kim, target_dim):
+    if len(psf_obs_list) == 0:
+        # delta function in k-space
+        kpsf_im = None
+        psf_im_row = 0.0
+        psf_im_col = 0.0
+    elif len(psf_obs_list) == 1:
+        return _zero_pad_and_compute_fft_cached(
+            psf_obs_list[0].image,
+            psf_obs_list[0].jacobian.row0, psf_obs_list[0].jacobian.col0,
+            target_dim,
+            0,  # we do not apodize PSF stamps since it should not be needed
+        )
+    else:
+        fft_res = [
+            _zero_pad_and_compute_fft_cached(
+                psf_obs.image,
+                psf_obs.jacobian.row0, psf_obs.jacobian.col0,
+                target_dim,
+                0,  # we do not apodize PSF stamps since it should not be needed
+            )
+            for psf_obs in psf_obs_list
+        ]
+        kpsf_im = np.prod([f[0] for f in fft_res], axis=0)
+        psf_im_row = sum([f[1] for f in fft_res])
+        psf_im_row = sum([f[2] for f in fft_res])
+
+    return kpsf_im, psf_im_row, psf_im_col
+
+
+def _deconvolve_im_psf_inplace(
+    kim, deconv_kpsf_im, max_amp, conv_kpsf_im, min_psf_frac=1e-5
+):
     """deconvolve the PSF from an image in place.
 
     Returns the deconvolved image, the kpsf_im used,
     and a bool mask marking PSF modes that were truncated
     """
     min_amp = min_psf_frac * max_amp
-    abs_kpsf_im = np.abs(kpsf_im)
-    msk = abs_kpsf_im <= min_amp
-    if np.any(msk):
-        kpsf_im[msk] = kpsf_im[msk] / abs_kpsf_im[msk] * min_amp
+    if deconv_kpsf_im is not None:
+        abs_kpsf_im = np.abs(deconv_kpsf_im)
+        msk = abs_kpsf_im <= min_amp
+        if np.any(msk):
+            deconv_kpsf_im[msk] = deconv_kpsf_im[msk] / abs_kpsf_im[msk] * min_amp
 
-    kim /= kpsf_im
-    return kim, kpsf_im, msk
+        if conv_kpsf_im is not None:
+            inv_kpsf_im = conv_kpsf_im / deconv_kpsf_im
+        else:
+            inv_kpsf_im = 1.0 / deconv_kpsf_im
+    else:
+        msk = np.ones_like(kim, dtype=bool)
+
+        if conv_kpsf_im is not None:
+            inv_kpsf_im = conv_kpsf_im
+        else:
+            inv_kpsf_im = np.ones_like(kim, dtype=np.complex128)
+
+    kim *= inv_kpsf_im
+    return kim, inv_kpsf_im, msk
 
 
 @functools.lru_cache(maxsize=128)
