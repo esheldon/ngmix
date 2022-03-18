@@ -692,6 +692,13 @@ def _gauss_kernels(
     )
 
 
+def _jacobian_close(jac1, jac2):
+    return np.allclose(
+        [jac1.dudcol, jac1.dudrow, jac1.dvdcol, jac1.dvdrow],
+        [jac2.dudcol, jac2.dudrow, jac2.dvdcol, jac2.dvdrow]
+    )
+
+
 def _check_obs_and_get_psf_obs(
     obs, no_psf, extra_conv_psfs=None, extra_deconv_psfs=None,
 ):
@@ -716,7 +723,7 @@ def _check_obs_and_get_psf_obs(
         deconv_psfs = [obs.get_psf()] + (extra_deconv_psfs or [])
 
         if any(
-            psf_obs.jacobian.get_galsim_wcs() != obs.jacobian.get_galsim_wcs()
+            not _jacobian_close(psf_obs.jacobian, obs.jacobian)
             for psf_obs in conv_psfs + deconv_psfs
         ):
             raise RuntimeError(
