@@ -7,6 +7,8 @@ from ngmix.prepsfmom import (
     KSigmaMom, PGaussMom,
     _build_square_apodization_mask,
     PrePSFMom,
+    _gauss_kernels,
+    _zero_pad_and_compute_fft_cached_impl,
 )
 from ngmix import Jacobian
 from ngmix import Observation
@@ -175,6 +177,30 @@ def test_prepsfmom_speed_and_cache():
 
     # now we test the speed + caching
     # the first fit will do numba stuff, so we exclude it
+    # we also perturb the various inputs to fool our caches
+    fitter = PGaussMom(
+        fwhm=mom_fwhm + 1e-3,
+    )
+
+    im += rng.normal(size=im.shape, scale=noise)
+    obs = Observation(
+        image=im,
+        weight=wgt,
+        jacobian=jac,
+        psf=Observation(image=psf_im + 1e-8, jacobian=psf_jac),
+    )
+
+    dt = time.time()
+    fitter.go(obs=obs)
+    dt = time.time() - dt
+    print("\n%0.4f ms for first fit" % (dt*1000))
+
+    # we miss once here
+    assert _gauss_kernels.cache_info().misses == 1
+    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 1
+
+    # the second fit will have numba cached, but not the other kernel and FFT caches
+    # we also perturb the various inputs to fool our caches
     fitter = PGaussMom(
         fwhm=mom_fwhm,
     )
@@ -190,7 +216,11 @@ def test_prepsfmom_speed_and_cache():
     dt = time.time()
     fitter.go(obs=obs)
     dt = time.time() - dt
-    print("\n%0.4f ms for first fit" % (dt*1000))
+    print("%0.4f ms for second fit" % (dt*1000))
+
+    # we miss twice since we changed the moments width and psf slightly
+    assert _gauss_kernels.cache_info().misses == 2
+    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 2
 
     # we test with full caching
     nfit = 1000
@@ -200,6 +230,10 @@ def test_prepsfmom_speed_and_cache():
     dt = time.time() - dt
 
     print("%0.4f ms per fit" % (dt/nfit*1000))
+
+    # we should never miss again for the calls above
+    assert _gauss_kernels.cache_info().misses == 2
+    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 2
 
 
 def _stack_list_of_dicts(res):
