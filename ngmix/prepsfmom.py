@@ -1,4 +1,5 @@
 import logging
+import functools
 
 import numpy as np
 import scipy.fft as fft
@@ -91,7 +92,7 @@ class PrePSFMom(object):
         fft_dim = kim.shape[0]
 
         if psf_obs is not None:
-            kpsf_im, psf_im_row, psf_im_col = _zero_pad_and_compute_fft(
+            kpsf_im, psf_im_row, psf_im_col = _zero_pad_and_compute_fft_cached(
                 psf_obs.image,
                 psf_obs.jacobian.row0, psf_obs.jacobian.col0,
                 target_dim,
@@ -382,6 +383,29 @@ def _zero_pad_and_compute_fft(im, cen_row, cen_col, target_dim, ap_rad):
     return kpim, pad_cen_row, pad_cen_col
 
 
+# see https://stackoverflow.com/a/52332109 for how this works
+@functools.lru_cache(maxsize=128)
+def _zero_pad_and_compute_fft_cached_impl(
+    im_tuple, cen_row, cen_col, target_dim, ap_rad
+):
+    return _zero_pad_and_compute_fft(
+        np.array(im_tuple), cen_row, cen_col, target_dim, ap_rad
+    )
+
+
+@functools.wraps(_zero_pad_and_compute_fft)
+def _zero_pad_and_compute_fft_cached(im, cen_row, cen_col, target_dim, ap_rad):
+    return _zero_pad_and_compute_fft_cached_impl(
+        tuple(im), cen_row, cen_col, target_dim, ap_rad
+    )
+
+
+_zero_pad_and_compute_fft_cached.cache_info \
+    = _zero_pad_and_compute_fft_cached_impl.cache_info
+_zero_pad_and_compute_fft_cached.cache_clear \
+    = _zero_pad_and_compute_fft_cached_impl.cache_clear
+
+
 def _deconvolve_im_psf_inplace(kim, kpsf_im, max_amp, min_psf_frac=1e-5):
     """deconvolve the PSF from an image in place.
 
@@ -398,6 +422,7 @@ def _deconvolve_im_psf_inplace(kim, kpsf_im, max_amp, min_psf_frac=1e-5):
     return kim, kpsf_im, msk
 
 
+@functools.lru_cache(maxsize=128)
 def _ksigma_kernels(
     dim,
     kernel_size,
@@ -505,6 +530,7 @@ def _ksigma_kernels(
     )
 
 
+@functools.lru_cache(maxsize=128)
 def _gauss_kernels(
     dim,
     kernel_size,
