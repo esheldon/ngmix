@@ -7,8 +7,6 @@ from ngmix.prepsfmom import (
     KSigmaMom, PGaussMom,
     _build_square_apodization_mask,
     PrePSFMom,
-    _gauss_kernels,
-    _zero_pad_and_compute_fft_cached_impl,
 )
 from ngmix import Jacobian
 from ngmix import Observation
@@ -61,6 +59,23 @@ def test_prepsfmom_raises_nopsf(cls):
 
 
 @pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
+def test_prepsfmom_raises_nopsf_with_extra(cls):
+    fitter = cls(20)
+    obs = Observation(image=np.zeros((1000, 1000)))
+    with pytest.raises(RuntimeError) as e:
+        fitter.go(obs, extra_deconv_psfs=[10], no_psf=True)
+    assert "You can only use extra conv." in str(e.value)
+
+    with pytest.raises(RuntimeError) as e:
+        fitter.go(obs, extra_conv_psfs=[10], no_psf=True)
+    assert "You can only use extra conv." in str(e.value)
+
+    with pytest.raises(RuntimeError) as e:
+        fitter.go(obs, extra_conv_psfs=[10], extra_deconv_psfs=[11], no_psf=True)
+    assert "You can only use extra conv." in str(e.value)
+
+
+@pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
 def test_prepsfmom_raises_nonsquare(cls):
     fitter = cls(20)
     obs = Observation(image=np.zeros((100, 90)))
@@ -95,38 +110,6 @@ def test_prepsfmom_raises_badjacob(cls):
     with pytest.raises(RuntimeError) as e:
         fitter.go(obs)
     assert "same WCS Jacobia" in str(e.value)
-
-
-def _stack_list_of_dicts(res):
-    def _get_dtype(v):
-        if isinstance(v, float):
-            return ('f8',)
-        elif isinstance(v, int):
-            return ('i4',)
-        elif isinstance(v, str):
-            return ('U256',)
-        elif hasattr(v, "dtype") and hasattr(v, "shape"):
-            if "float" in str(v.dtype):
-                dstr = "f8"
-            else:
-                dstr = "i8"
-
-            if len(v.shape) == 1:
-                return (dstr, v.shape[0])
-            else:
-                return (dstr, v.shape)
-        else:
-            raise RuntimeError("cannot interpret dtype of '%s'" % v)
-
-    dtype = []
-    for k, v in res[0].items():
-        dtype.append((k,) + _get_dtype(v))
-    d = np.zeros(len(res), dtype=dtype)
-    for i in range(len(res)):
-        for k, v in res[i].items():
-            d[k][i] = v
-
-    return d
 
 
 def test_prepsfmom_speed_and_cache():
@@ -191,36 +174,7 @@ def test_prepsfmom_speed_and_cache():
     ).array
 
     # now we test the speed + caching
-
-    # start by clearing the caches
-    _gauss_kernels.cache_clear()
-    _zero_pad_and_compute_fft_cached_impl.cache_clear()
-
     # the first fit will do numba stuff, so we exclude it
-    # we also perturb the various inputs to fool our caches
-    fitter = PGaussMom(
-        fwhm=mom_fwhm + 1e-3,
-    )
-
-    im += rng.normal(size=im.shape, scale=noise)
-    obs = Observation(
-        image=im,
-        weight=wgt,
-        jacobian=jac,
-        psf=Observation(image=psf_im + 1e-8, jacobian=psf_jac),
-    )
-
-    dt = time.time()
-    fitter.go(obs=obs)
-    dt = time.time() - dt
-    print("\n%0.4f ms for first fit" % (dt*1000))
-
-    # we miss once here
-    assert _gauss_kernels.cache_info().misses == 1
-    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 1
-
-    # the second fit will have numba cached, but not the other kernel and FFT caches
-    # we also perturb the various inputs to fool our caches
     fitter = PGaussMom(
         fwhm=mom_fwhm,
     )
@@ -236,14 +190,9 @@ def test_prepsfmom_speed_and_cache():
     dt = time.time()
     fitter.go(obs=obs)
     dt = time.time() - dt
-    print("%0.4f ms for second fit" % (dt*1000))
+    print("\n%0.4f ms for first fit" % (dt*1000))
 
-    # we miss twice since we changed the moments width and psf slightly
-    assert _gauss_kernels.cache_info().misses == 2
-    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 2
-
-    # finally, we test with full caching
-    # we also perturb the various inputs to fool our caches
+    # we test with full caching
     nfit = 1000
     dt = time.time()
     for _ in range(nfit):
@@ -252,9 +201,37 @@ def test_prepsfmom_speed_and_cache():
 
     print("%0.4f ms per fit" % (dt/nfit*1000))
 
-    # we should never miss again for the calls above
-    assert _gauss_kernels.cache_info().misses == 2
-    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 2
+
+def _stack_list_of_dicts(res):
+    def _get_dtype(v):
+        if isinstance(v, float):
+            return ('f8',)
+        elif isinstance(v, int):
+            return ('i4',)
+        elif isinstance(v, str):
+            return ('U256',)
+        elif hasattr(v, "dtype") and hasattr(v, "shape"):
+            if "float" in str(v.dtype):
+                dstr = "f8"
+            else:
+                dstr = "i8"
+
+            if len(v.shape) == 1:
+                return (dstr, v.shape[0])
+            else:
+                return (dstr, v.shape)
+        else:
+            raise RuntimeError("cannot interpret dtype of '%s'" % v)
+
+    dtype = []
+    for k, v in res[0].items():
+        dtype.append((k,) + _get_dtype(v))
+    d = np.zeros(len(res), dtype=dtype)
+    for i in range(len(res)):
+        for k, v in res[i].items():
+            d[k][i] = v
+
+    return d
 
 
 @pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
