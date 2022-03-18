@@ -114,6 +114,51 @@ def test_prepsfmom_raises_badjacob(cls):
     assert "same WCS Jacobia" in str(e.value)
 
 
+@pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
+def test_prepsfmom_raises_badjacob_extra_conv(cls):
+    fitter = cls(1.2)
+
+    gs_wcs = galsim.ShearWCS(
+        0.2, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
+    jac = Jacobian(
+        y=0, x=0,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
+    psf_jac = Jacobian(
+        y=0, x=0,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy*2)
+
+    obs = Observation(
+        image=np.zeros((10, 10)),
+        jacobian=jac,
+        psf=Observation(image=np.zeros((10, 10)), jacobian=jac),
+    )
+
+    with pytest.raises(RuntimeError) as e:
+        fitter.go(
+            obs,
+            extra_conv_psfs=[Observation(image=np.zeros((10, 10)), jacobian=psf_jac)],
+        )
+    assert "same WCS Jacobia" in str(e.value)
+
+    with pytest.raises(RuntimeError) as e:
+        fitter.go(
+            obs,
+            extra_deconv_psfs=[Observation(image=np.zeros((10, 10)), jacobian=psf_jac)],
+        )
+    assert "same WCS Jacobia" in str(e.value)
+
+    with pytest.raises(RuntimeError) as e:
+        fitter.go(
+            obs,
+            extra_conv_psfs=[Observation(image=np.zeros((10, 10)), jacobian=psf_jac)],
+            extra_deconv_psfs=[Observation(image=np.zeros((10, 10)), jacobian=psf_jac)],
+        )
+    assert "same WCS Jacobia" in str(e.value)
+
+
 def test_prepsfmom_speed_and_cache():
     image_size = 48
     psf_image_size = 53
