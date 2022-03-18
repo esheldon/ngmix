@@ -200,7 +200,6 @@ def test_prepsfmom_speed_and_cache():
     assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 1
 
     # the second fit will have numba cached, but not the other kernel and FFT caches
-    # we also perturb the various inputs to fool our caches
     fitter = PGaussMom(
         fwhm=mom_fwhm,
     )
@@ -222,7 +221,7 @@ def test_prepsfmom_speed_and_cache():
     assert _gauss_kernels.cache_info().misses == 2
     assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 2
 
-    # we test with full caching
+    # now we test with full caching
     nfit = 1000
     dt = time.time()
     for _ in range(nfit):
