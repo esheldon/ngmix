@@ -89,9 +89,11 @@ class PrePSFMom(object):
     def _meas(self, obs, conv_psf_obs_list, deconv_psf_obs_list, return_kernels):
         # pick the largest size
         target_dim = max(
-            max([o.shape[0] for o in conv_psf_obs_list]),
-            max([o.shape[0] for o in deconv_psf_obs_list]),
-            obs.shape[0],
+            max([o.image.shape[0] for o in conv_psf_obs_list])
+            if conv_psf_obs_list else -1,
+            max([o.image.shape[0] for o in deconv_psf_obs_list])
+            if deconv_psf_obs_list else -1,
+            obs.image.shape[0],
         )
         target_dim = int(target_dim * self.pad_factor)
         eff_pad_factor = target_dim / obs.image.shape[0]
@@ -418,7 +420,8 @@ def _zero_pad_and_compute_fft_cached_impl(
 @functools.wraps(_zero_pad_and_compute_fft)
 def _zero_pad_and_compute_fft_cached(im, cen_row, cen_col, target_dim, ap_rad):
     return _zero_pad_and_compute_fft_cached_impl(
-        tuple(im), float(cen_row), float(cen_col), int(target_dim), float(ap_rad)
+        tuple(tuple(ii) for ii in im),
+        float(cen_row), float(cen_col), int(target_dim), float(ap_rad)
     )
 
 
@@ -689,7 +692,9 @@ def _gauss_kernels(
     )
 
 
-def _check_obs_and_get_psf_obs(obs, no_psf):
+def _check_obs_and_get_psf_obs(
+    obs, no_psf, extra_conv_psfs=None, extra_deconv_psfs=None,
+):
     if not isinstance(obs, Observation):
         raise ValueError("input obs must be an Observation")
 
@@ -700,15 +705,26 @@ def _check_obs_and_get_psf_obs(obs, no_psf):
     if not obs.has_psf() and not no_psf:
         raise RuntimeError("The PSF must be set to measure a pre-PSF moment!")
 
-    if not no_psf:
-        psf_obs = obs.get_psf()
+    if no_psf and (extra_conv_psfs or extra_deconv_psfs):
+        raise RuntimeError(
+            "You can only use extra conv. or deconv. PSFs with observations "
+            "that have a PSF!"
+        )
 
-        if psf_obs.jacobian.get_galsim_wcs() != obs.jacobian.get_galsim_wcs():
+    if not no_psf:
+        conv_psfs = extra_conv_psfs or []
+        deconv_psfs = [obs.get_psf()] + (extra_deconv_psfs or [])
+
+        if any(
+            psf_obs.jacobian.get_galsim_wcs() != obs.jacobian.get_galsim_wcs()
+            for psf_obs in conv_psfs + deconv_psfs
+        ):
             raise RuntimeError(
                 "The PSF and observation must have the same WCS "
                 "Jacobian for measuring pre-PSF moments."
             )
     else:
-        psf_obs = None
+        conv_psfs = []
+        deconv_psfs = []
 
-    return psf_obs
+    return conv_psfs, deconv_psfs
