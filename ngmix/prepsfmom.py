@@ -456,7 +456,7 @@ def _zero_pad_and_compute_fft_cached_list(psf_obs_list, kim, target_dim):
         ]
         kpsf_im = np.prod([f[0] for f in fft_res], axis=0)
         psf_im_row = sum([f[1] for f in fft_res])
-        psf_im_row = sum([f[2] for f in fft_res])
+        psf_im_col = sum([f[2] for f in fft_res])
 
     return kpsf_im, psf_im_row, psf_im_col
 

@@ -770,6 +770,7 @@ def test_moments_make_mom_result_flags():
         assert res["T_flagstr"] == ""
 
 
+@pytest.mark.parametrize("extra_psf_fwhm", [None, 0.8, 1.1])
 @pytest.mark.parametrize("cls", [PGaussMom, KSigmaMom])
 @pytest.mark.parametrize('pixel_scale', [0.125, 0.25])
 @pytest.mark.parametrize('fwhm,psf_fwhm', [(0.6, 0.9)])
@@ -777,7 +778,8 @@ def test_moments_make_mom_result_flags():
 @pytest.mark.parametrize('psf_image_size', [33, 34])
 @pytest.mark.parametrize('pad_factor', [4, 3.5])
 def test_prepsfmom_gauss_true_flux(
-    pad_factor, psf_image_size, image_size, fwhm, psf_fwhm, pixel_scale, cls
+    pad_factor, psf_image_size, image_size, fwhm, psf_fwhm, pixel_scale,
+    cls, extra_psf_fwhm
 ):
     rng = np.random.RandomState(seed=100)
 
@@ -834,6 +836,27 @@ def test_prepsfmom_gauss_true_flux(
         wcs=gs_wcs
     ).array
 
+    if extra_psf_fwhm is not None:
+        extra_psf = galsim.Gaussian(
+            fwhm=extra_psf_fwhm
+        ).shear(
+            g1=-0.2, g2=0.3
+        )
+        extra_psf_shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+        extra_psf_xy = gs_wcs.toImage(galsim.PositionD(extra_psf_shift))
+        extra_psf_im = extra_psf.shift(
+            dx=extra_psf_shift[0], dy=extra_psf_shift[1]
+        ).drawImage(
+            nx=psf_image_size,
+            ny=psf_image_size,
+            wcs=gs_wcs
+        ).array
+        extra_psf_jac = Jacobian(
+            y=psf_cen + extra_psf_xy.y, x=psf_cen + extra_psf_xy.x,
+            dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+            dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy,
+        )
+
     fitter = cls(
         fwhm=mom_fwhm,
         pad_factor=pad_factor,
@@ -851,17 +874,48 @@ def test_prepsfmom_gauss_true_flux(
     )
     res = fitter.go(obs=obs, no_psf=True)
     flux_true = res["flux"]
+    T_true = res["T"]
     assert np.allclose(flux_true, 400, atol=0, rtol=5e-3)
 
-    obs = Observation(
-        image=im,
-        weight=wgt,
-        jacobian=jac,
-        psf=Observation(image=psf_im, jacobian=psf_jac),
-    )
-    res = fitter.go(obs=obs)
-    flux_true = res["flux"]
-    assert np.allclose(flux_true, 400, atol=0, rtol=5e-3)
+    if extra_psf_fwhm is None:
+        obs = Observation(
+            image=im,
+            weight=wgt,
+            jacobian=jac,
+            psf=Observation(image=psf_im, jacobian=psf_jac),
+        )
+        res = fitter.go(obs=obs)
+        flux_true = res["flux"]
+        assert np.allclose(flux_true, 400, atol=0, rtol=5e-3)
+        assert np.allclose(res["T"], T_true, atol=0, rtol=5e-4)
+    else:
+        # this should fail since it is the wrong PSF
+        obs = Observation(
+            image=im,
+            weight=wgt,
+            jacobian=jac,
+            psf=Observation(image=extra_psf_im, jacobian=extra_psf_jac),
+        )
+        res = fitter.go(obs=obs)
+        flux_true = res["flux"]
+        # we use a big relative difference since the T should be way off
+        assert not np.allclose(res["T"], T_true, atol=0, rtol=1e-1)
+
+        # this should work since we have the PSF correction in there
+        obs = Observation(
+            image=im,
+            weight=wgt,
+            jacobian=jac,
+            psf=Observation(image=extra_psf_im, jacobian=extra_psf_jac),
+        )
+        res = fitter.go(
+            obs=obs,
+            extra_deconv_psfs=[Observation(image=psf_im, jacobian=psf_jac)],
+            extra_conv_psfs=[obs.psf],
+        )
+        flux_true = res["flux"]
+        assert np.allclose(flux_true, 400, atol=0, rtol=5e-3)
+        assert np.allclose(res["T"], T_true, atol=0, rtol=5e-4)
 
 
 @pytest.mark.parametrize('pixel_scale', [0.25, 0.125])
