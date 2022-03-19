@@ -752,80 +752,19 @@ def test_prepsfmom_gauss_true_flux_T(
     cls, extra_psf_fwhm
 ):
     rng = np.random.RandomState(seed=100)
-
     snr = 1e8
     mom_fwhm = 15.0
 
-    cen = (image_size - 1)/2
-    psf_cen = (psf_image_size - 1)/2
-    gs_wcs = galsim.ShearWCS(
-        pixel_scale, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
-    scale = np.sqrt(gs_wcs.pixelArea())
-    shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
-    psf_shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
-    xy = gs_wcs.toImage(galsim.PositionD(shift))
-    psf_xy = gs_wcs.toImage(galsim.PositionD(psf_shift))
-
-    jac = Jacobian(
-        y=cen + xy.y, x=cen + xy.x,
-        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
-        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
-
-    psf_jac = Jacobian(
-        y=psf_cen + psf_xy.y, x=psf_cen + psf_xy.x,
-        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
-        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
-
-    gal = galsim.Gaussian(
-        fwhm=fwhm
-    ).shear(
-        g1=-0.1, g2=0.2
-    ).withFlux(
-        400
-    ).shift(
-        dx=shift[0], dy=shift[1]
+    sdata = _make_prepsfmom_sim(
+        image_size=image_size,
+        psf_image_size=psf_image_size,
+        pixel_scale=pixel_scale,
+        fwhm=fwhm,
+        psf_fwhm=psf_fwhm,
+        snr=snr,
+        rng=rng,
+        extra_psf_fwhm=extra_psf_fwhm,
     )
-    psf = galsim.Gaussian(
-        fwhm=psf_fwhm
-    ).shear(
-        g1=0.3, g2=-0.15
-    )
-    im = galsim.Convolve([gal, psf]).drawImage(
-        nx=image_size,
-        ny=image_size,
-        wcs=gs_wcs
-    ).array
-    noise = np.sqrt(np.sum(im**2)) / snr
-    wgt = np.ones_like(im) / noise**2
-
-    psf_im = psf.shift(
-        dx=psf_shift[0], dy=psf_shift[1]
-    ).drawImage(
-        nx=psf_image_size,
-        ny=psf_image_size,
-        wcs=gs_wcs
-    ).array
-
-    if extra_psf_fwhm is not None:
-        extra_psf = galsim.Gaussian(
-            fwhm=extra_psf_fwhm
-        ).shear(
-            g1=-0.2, g2=0.3
-        )
-        extra_psf_shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
-        extra_psf_xy = gs_wcs.toImage(galsim.PositionD(extra_psf_shift))
-        extra_psf_im = extra_psf.shift(
-            dx=extra_psf_shift[0], dy=extra_psf_shift[1]
-        ).drawImage(
-            nx=psf_image_size,
-            ny=psf_image_size,
-            wcs=gs_wcs
-        ).array
-        extra_psf_jac = Jacobian(
-            y=psf_cen + extra_psf_xy.y, x=psf_cen + extra_psf_xy.x,
-            dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
-            dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy,
-        )
 
     fitter = cls(
         fwhm=mom_fwhm,
@@ -833,14 +772,9 @@ def test_prepsfmom_gauss_true_flux_T(
     )
 
     # get true flux
-    im_true = gal.drawImage(
-        nx=image_size,
-        ny=image_size,
-        wcs=gs_wcs,
-        method='no_pixel').array
     obs = Observation(
-        image=im_true,
-        jacobian=jac,
+        image=sdata["im_true"],
+        jacobian=sdata["jac"],
     )
     res = fitter.go(obs=obs, no_psf=True)
     flux_true = res["flux"]
@@ -849,10 +783,10 @@ def test_prepsfmom_gauss_true_flux_T(
 
     if extra_psf_fwhm is None:
         obs = Observation(
-            image=im,
-            weight=wgt,
-            jacobian=jac,
-            psf=Observation(image=psf_im, jacobian=psf_jac),
+            image=sdata["im"],
+            weight=sdata["wgt"],
+            jacobian=sdata["jac"],
+            psf=Observation(image=sdata["psf_im"], jacobian=sdata["psf_jac"]),
         )
         res = fitter.go(obs=obs)
         flux_true = res["flux"]
@@ -861,10 +795,12 @@ def test_prepsfmom_gauss_true_flux_T(
     else:
         # this should fail since it is the wrong PSF
         obs = Observation(
-            image=im,
-            weight=wgt,
-            jacobian=jac,
-            psf=Observation(image=extra_psf_im, jacobian=extra_psf_jac),
+            image=sdata["im"],
+            weight=sdata["wgt"],
+            jacobian=sdata["jac"],
+            psf=Observation(
+                image=sdata["extra_psf_im"], jacobian=sdata["extra_psf_jac"]
+            ),
         )
         res = fitter.go(obs=obs)
         flux_true = res["flux"]
@@ -873,14 +809,19 @@ def test_prepsfmom_gauss_true_flux_T(
 
         # this should work since we have the PSF correction in there
         obs = Observation(
-            image=im,
-            weight=wgt,
-            jacobian=jac,
-            psf=Observation(image=extra_psf_im, jacobian=extra_psf_jac),
+            image=sdata["im"],
+            weight=sdata["wgt"],
+            jacobian=sdata["jac"],
+            psf=Observation(
+                image=sdata["extra_psf_im"],
+                jacobian=sdata["extra_psf_jac"]
+            ),
         )
         res = fitter.go(
             obs=obs,
-            extra_deconv_psfs=[Observation(image=psf_im, jacobian=psf_jac)],
+            extra_deconv_psfs=[Observation(
+                image=sdata["psf_im"], jacobian=sdata["psf_jac"],
+            )],
             extra_conv_psfs=[obs.psf],
         )
         flux_true = res["flux"]
