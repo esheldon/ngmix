@@ -751,6 +751,8 @@ def test_prepsfmom_gauss_true_flux_T(
     pad_factor, psf_image_size, image_size, fwhm, psf_fwhm, pixel_scale,
     cls, extra_psf_fwhm
 ):
+    """This test ensures the kernels are normalize properly so
+    we have the correct total flux, etc."""
     rng = np.random.RandomState(seed=100)
     snr = 1e8
     mom_fwhm = 15.0
@@ -779,6 +781,8 @@ def test_prepsfmom_gauss_true_flux_T(
     res = fitter.go(obs=obs, no_psf=True)
     flux_true = res["flux"]
     T_true = res["T"]
+    g1_true = res["e1"]
+    g2_true = res["e2"]
     assert np.allclose(flux_true, 400, atol=0, rtol=5e-3)
 
     if extra_psf_fwhm is None:
@@ -792,6 +796,8 @@ def test_prepsfmom_gauss_true_flux_T(
         flux_true = res["flux"]
         assert np.allclose(flux_true, 400, atol=0, rtol=5e-3)
         assert np.allclose(res["T"], T_true, atol=0, rtol=5e-4)
+        assert np.allclose(res["e1"], g1_true, atol=5e-3, rtol=5e-3)
+        assert np.allclose(res["e2"], g2_true, atol=5e-3, rtol=5e-3)
     else:
         # this should fail since it is the wrong PSF
         obs = Observation(
@@ -806,6 +812,8 @@ def test_prepsfmom_gauss_true_flux_T(
         flux_true = res["flux"]
         # we use a big relative difference since the T should be way off
         assert not np.allclose(res["T"], T_true, atol=0, rtol=1e-1)
+        assert not np.allclose(res["e1"], g1_true, atol=0, rtol=1e-1)
+        assert not np.allclose(res["e2"], g2_true, atol=0, rtol=1e-1)
 
         # this should work since we have the PSF correction in there
         obs = Observation(
@@ -827,6 +835,8 @@ def test_prepsfmom_gauss_true_flux_T(
         flux_true = res["flux"]
         assert np.allclose(flux_true, 400, atol=0, rtol=5e-3)
         assert np.allclose(res["T"], T_true, atol=0, rtol=5e-4)
+        assert np.allclose(res["e1"], g1_true, atol=5e-3, rtol=5e-3)
+        assert np.allclose(res["e2"], g2_true, atol=5e-3, rtol=5e-3)
 
 
 @pytest.mark.parametrize('pixel_scale', [0.25, 0.125])
