@@ -323,9 +323,10 @@ def _stack_list_of_dicts(res):
 @pytest.mark.parametrize('image_size', [57, 58])
 @pytest.mark.parametrize('psf_image_size', [33, 34])
 @pytest.mark.parametrize('pad_factor', [3.5, 2])
+@pytest.mark.parametrize("extra_psf_fwhm", [None, 0.8, 1.2])
 def test_prepsfmom_gauss(
     pad_factor, image_size, psf_image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm,
-    cls,
+    cls, extra_psf_fwhm,
 ):
     """fast test at a range of parameters to check that things come out ok"""
     rng = np.random.RandomState(seed=100)
@@ -380,6 +381,27 @@ def test_prepsfmom_gauss(
         wcs=gs_wcs
     ).array
 
+    if extra_psf_fwhm is not None:
+        extra_psf = galsim.Gaussian(
+            fwhm=extra_psf_fwhm
+        ).shear(
+            g1=-0.2, g2=0.3
+        )
+        extra_psf_shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+        extra_psf_xy = gs_wcs.toImage(galsim.PositionD(extra_psf_shift))
+        extra_psf_im = extra_psf.shift(
+            dx=extra_psf_shift[0], dy=extra_psf_shift[1]
+        ).drawImage(
+            nx=53,
+            ny=53,
+            wcs=gs_wcs
+        ).array
+        extra_psf_jac = Jacobian(
+            y=26 + extra_psf_xy.y, x=26 + extra_psf_xy.x,
+            dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+            dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy,
+        )
+
     fitter = cls(
         fwhm=mom_fwhm,
         pad_factor=pad_factor,
@@ -404,14 +426,29 @@ def test_prepsfmom_gauss(
     res = []
     for _ in range(100):
         _im = im + rng.normal(size=im.shape, scale=noise)
-        obs = Observation(
-            image=_im,
-            weight=wgt,
-            jacobian=jac,
-            psf=Observation(image=psf_im, jacobian=psf_jac),
-        )
+        if extra_psf_fwhm is None:
+            obs = Observation(
+                image=_im,
+                weight=wgt,
+                jacobian=jac,
+                psf=Observation(image=psf_im, jacobian=psf_jac),
+            )
 
-        _res = fitter.go(obs=obs)
+            _res = fitter.go(obs=obs)
+        else:
+            obs = Observation(
+                image=_im,
+                weight=wgt,
+                jacobian=jac,
+                psf=Observation(image=extra_psf_im, jacobian=extra_psf_jac),
+            )
+
+            _res = fitter.go(
+                obs=obs,
+                extra_deconv_psfs=[Observation(image=psf_im, jacobian=psf_jac)],
+                extra_conv_psfs=[obs.psf],
+            )
+
         if _res['flags'] == 0:
             res.append(_res)
 
@@ -452,8 +489,10 @@ def test_prepsfmom_gauss(
 @pytest.mark.parametrize('pad_factor', [
     1.5,
 ])
+@pytest.mark.parametrize("extra_psf_fwhm", [None, 0.8, 1.2])
 def test_prepsfmom_mn_cov(
     pad_factor, image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm, cls,
+    extra_psf_fwhm,
 ):
     """Slower test to make sure means and errors are right
     w/ tons of monte carlo samples.
@@ -509,6 +548,27 @@ def test_prepsfmom_mn_cov(
         wcs=gs_wcs
     ).array
 
+    if extra_psf_fwhm is not None:
+        extra_psf = galsim.Gaussian(
+            fwhm=extra_psf_fwhm
+        ).shear(
+            g1=-0.2, g2=0.3
+        )
+        extra_psf_shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+        extra_psf_xy = gs_wcs.toImage(galsim.PositionD(extra_psf_shift))
+        extra_psf_im = extra_psf.shift(
+            dx=extra_psf_shift[0], dy=extra_psf_shift[1]
+        ).drawImage(
+            nx=53,
+            ny=53,
+            wcs=gs_wcs
+        ).array
+        extra_psf_jac = Jacobian(
+            y=26 + extra_psf_xy.y, x=26 + extra_psf_xy.x,
+            dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+            dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy,
+        )
+
     fitter = cls(
         fwhm=mom_fwhm,
         pad_factor=pad_factor,
@@ -533,14 +593,29 @@ def test_prepsfmom_mn_cov(
     res = []
     for _ in range(10_000):
         _im = im + rng.normal(size=im.shape, scale=noise)
-        obs = Observation(
-            image=_im,
-            weight=wgt,
-            jacobian=jac,
-            psf=Observation(image=psf_im, jacobian=psf_jac),
-        )
+        if extra_psf_fwhm is None:
+            obs = Observation(
+                image=_im,
+                weight=wgt,
+                jacobian=jac,
+                psf=Observation(image=psf_im, jacobian=psf_jac),
+            )
 
-        _res = fitter.go(obs=obs)
+            _res = fitter.go(obs=obs)
+        else:
+            obs = Observation(
+                image=_im,
+                weight=wgt,
+                jacobian=jac,
+                psf=Observation(image=extra_psf_im, jacobian=extra_psf_jac),
+            )
+
+            _res = fitter.go(
+                obs=obs,
+                extra_deconv_psfs=[Observation(image=psf_im, jacobian=psf_jac)],
+                extra_conv_psfs=[obs.psf],
+            )
+
         if _res['flags'] == 0:
             res.append(_res)
 
