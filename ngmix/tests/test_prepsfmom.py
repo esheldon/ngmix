@@ -16,6 +16,38 @@ from ngmix.moments import make_mom_result
 import ngmix.flags
 
 
+def _stack_list_of_dicts(res):
+    def _get_dtype(v):
+        if isinstance(v, float):
+            return ('f8',)
+        elif isinstance(v, int):
+            return ('i4',)
+        elif isinstance(v, str):
+            return ('U256',)
+        elif hasattr(v, "dtype") and hasattr(v, "shape"):
+            if "float" in str(v.dtype):
+                dstr = "f8"
+            else:
+                dstr = "i8"
+
+            if len(v.shape) == 1:
+                return (dstr, v.shape[0])
+            else:
+                return (dstr, v.shape)
+        else:
+            raise RuntimeError("cannot interpret dtype of '%s'" % v)
+
+    dtype = []
+    for k, v in res[0].items():
+        dtype.append((k,) + _get_dtype(v))
+    d = np.zeros(len(res), dtype=dtype)
+    for i in range(len(res)):
+        for k, v in res[i].items():
+            d[k][i] = v
+
+    return d
+
+
 def _report_info(s, arr, mn, err):
     if mn is not None and err is not None:
         print(
@@ -31,6 +63,161 @@ def _report_info(s, arr, mn, err):
             np.std(arr), None, None,
             flush=True,
         )
+
+
+def _make_prepsfmom_sim(
+    *, image_size, psf_image_size, pixel_scale, rng, fwhm, psf_fwhm,
+    snr, extra_psf_fwhm
+):
+    cen = (image_size - 1)/2
+    psf_cen = (psf_image_size - 1)/2
+    gs_wcs = galsim.ShearWCS(
+        pixel_scale, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
+    scale = np.sqrt(gs_wcs.pixelArea())
+    shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+    psf_shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+    xy = gs_wcs.toImage(galsim.PositionD(shift))
+    psf_xy = gs_wcs.toImage(galsim.PositionD(psf_shift))
+
+    jac = Jacobian(
+        y=cen + xy.y, x=cen + xy.x,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
+    psf_jac = Jacobian(
+        y=psf_cen + psf_xy.y, x=psf_cen + psf_xy.x,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
+    gal = galsim.Gaussian(
+        fwhm=fwhm
+    ).shear(
+        g1=-0.1, g2=0.2
+    ).withFlux(
+        400
+    ).shift(
+        dx=shift[0], dy=shift[1]
+    )
+    psf = galsim.Gaussian(
+        fwhm=psf_fwhm
+    ).shear(
+        g1=0.3, g2=-0.15
+    )
+    im = galsim.Convolve([gal, psf]).drawImage(
+        nx=image_size,
+        ny=image_size,
+        wcs=gs_wcs
+    ).array
+    noise = np.sqrt(np.sum(im**2)) / snr
+    wgt = np.ones_like(im) / noise**2
+
+    psf_im = psf.shift(
+        dx=psf_shift[0], dy=psf_shift[1]
+    ).drawImage(
+        nx=psf_image_size,
+        ny=psf_image_size,
+        wcs=gs_wcs
+    ).array
+
+    if extra_psf_fwhm is not None:
+        extra_psf = galsim.Gaussian(
+            fwhm=extra_psf_fwhm
+        ).shear(
+            g1=-0.2, g2=0.3
+        )
+        extra_psf_shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+        extra_psf_xy = gs_wcs.toImage(galsim.PositionD(extra_psf_shift))
+        extra_psf_im = extra_psf.shift(
+            dx=extra_psf_shift[0], dy=extra_psf_shift[1]
+        ).drawImage(
+            nx=image_size,
+            ny=image_size,
+            wcs=gs_wcs
+        ).array
+        extra_psf_jac = Jacobian(
+            y=cen + extra_psf_xy.y, x=cen + extra_psf_xy.x,
+            dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+            dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy,
+        )
+    else:
+        extra_psf_im = None
+        extra_psf_jac = None
+
+    im_true = gal.drawImage(
+        nx=image_size,
+        ny=image_size,
+        wcs=gs_wcs,
+        method='no_pixel').array
+
+    return dict(
+        im=im,
+        im_true=im_true,
+        jac=jac,
+        psf_jac=psf_jac,
+        psf_im=psf_im,
+        noise=noise,
+        wgt=wgt,
+        extra_psf_im=extra_psf_im,
+        extra_psf_jac=extra_psf_jac,
+    )
+
+
+def _run_prepsfmom_sims(sdata, fitter, rng, nitr):
+    # get true flux
+    obs = Observation(
+        image=sdata["im_true"],
+        jacobian=sdata["jac"],
+    )
+    res = fitter.go(obs=obs, no_psf=True)
+    flux_true = res["flux"]
+    T_true = res["T"]
+    g1_true = res["e"][0]
+    g2_true = res["e"][1]
+
+    res = []
+    for _ in range(nitr):
+        _im = sdata["im"] + rng.normal(size=sdata["im"].shape, scale=sdata["noise"])
+        if sdata["extra_psf_fwhm"] is None:
+            obs = Observation(
+                image=_im,
+                weight=sdata["wgt"],
+                jacobian=sdata["jac"],
+                psf=Observation(image=sdata["psf_im"], jacobian=sdata["psf_jac"]),
+            )
+
+            _res = fitter.go(obs=obs)
+        else:
+            obs = Observation(
+                image=_im,
+                weight=sdata["wgt"],
+                jacobian=sdata["jac"],
+                psf=Observation(
+                    image=sdata["extra_psf_im"],
+                    jacobian=sdata["extra_psf_jac"],
+                ),
+            )
+
+            _res = fitter.go(
+                obs=obs,
+                extra_deconv_psfs=[Observation(
+                    image=sdata["psf_im"],
+                    jacobian=sdata["psf_jac"]
+                )],
+                extra_conv_psfs=[obs.psf],
+            )
+
+        if _res['flags'] == 0:
+            res.append(_res)
+
+    res = _stack_list_of_dicts(res)
+
+    return dict(
+        flux_true=flux_true,
+        T_true=T_true,
+        g1_true=g1_true,
+        g2_true=g2_true,
+        res=res,
+    )
 
 
 def test_prepsfmom_kind():
@@ -160,65 +347,20 @@ def test_prepsfmom_raises_badjacob_extra_conv(cls):
 
 
 def test_prepsfmom_speed_and_cache():
-    image_size = 48
-    psf_image_size = 53
-    pixel_scale = 0.263
-    fwhm = 0.9
-    psf_fwhm = 0.9
-    snr = 20
     mom_fwhm = 2
 
     rng = np.random.RandomState(seed=100)
 
-    cen = (image_size - 1)/2
-    psf_cen = (psf_image_size - 1)/2
-    gs_wcs = galsim.ShearWCS(
-        pixel_scale, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
-    scale = np.sqrt(gs_wcs.pixelArea())
-    shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
-    psf_shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
-    xy = gs_wcs.toImage(galsim.PositionD(shift))
-    psf_xy = gs_wcs.toImage(galsim.PositionD(psf_shift))
-
-    jac = Jacobian(
-        y=cen + xy.y, x=cen + xy.x,
-        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
-        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
-
-    psf_jac = Jacobian(
-        y=psf_cen + psf_xy.y, x=psf_cen + psf_xy.x,
-        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
-        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
-
-    gal = galsim.Gaussian(
-        fwhm=fwhm
-    ).shear(
-        g1=-0.1, g2=0.2
-    ).withFlux(
-        400
-    ).shift(
-        dx=shift[0], dy=shift[1]
+    sdata = _make_prepsfmom_sim(
+        image_size=48,
+        psf_image_size=53,
+        pixel_scale=0.263,
+        fwhm=0.9,
+        psf_fwhm=0.9,
+        snr=20,
+        rng=rng,
+        extra_psf_fwhm=None,
     )
-    psf = galsim.Gaussian(
-        fwhm=psf_fwhm
-    ).shear(
-        g1=0.3, g2=-0.15
-    )
-    im = galsim.Convolve([gal, psf]).drawImage(
-        nx=image_size,
-        ny=image_size,
-        wcs=gs_wcs
-    ).array
-    noise = np.sqrt(np.sum(im**2)) / snr
-    wgt = np.ones_like(im) / noise**2
-
-    psf_im = psf.shift(
-        dx=psf_shift[0], dy=psf_shift[1]
-    ).drawImage(
-        nx=psf_image_size,
-        ny=psf_image_size,
-        wcs=gs_wcs
-    ).array
 
     # now we test the speed + caching
     _gauss_kernels.cache_clear()
@@ -230,12 +372,12 @@ def test_prepsfmom_speed_and_cache():
         fwhm=mom_fwhm + 1e-3,
     )
 
-    im += rng.normal(size=im.shape, scale=noise)
+    im = sdata["im"] + rng.normal(size=sdata["im"].shape, scale=sdata["noise"])
     obs = Observation(
         image=im,
-        weight=wgt,
-        jacobian=jac,
-        psf=Observation(image=psf_im + 1e-8, jacobian=psf_jac),
+        weight=sdata["wgt"],
+        jacobian=sdata["jac"],
+        psf=Observation(image=sdata["psf_im"] + 1e-8, jacobian=sdata["psf_jac"]),
     )
 
     dt = time.time()
@@ -252,12 +394,11 @@ def test_prepsfmom_speed_and_cache():
         fwhm=mom_fwhm,
     )
 
-    im += rng.normal(size=im.shape, scale=noise)
     obs = Observation(
         image=im,
-        weight=wgt,
-        jacobian=jac,
-        psf=Observation(image=psf_im, jacobian=psf_jac),
+        weight=sdata["wgt"],
+        jacobian=sdata["jac"],
+        psf=Observation(image=sdata["psf_im"], jacobian=sdata["psf_jac"]),
     )
 
     dt = time.time()
@@ -283,38 +424,6 @@ def test_prepsfmom_speed_and_cache():
     assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 2
 
 
-def _stack_list_of_dicts(res):
-    def _get_dtype(v):
-        if isinstance(v, float):
-            return ('f8',)
-        elif isinstance(v, int):
-            return ('i4',)
-        elif isinstance(v, str):
-            return ('U256',)
-        elif hasattr(v, "dtype") and hasattr(v, "shape"):
-            if "float" in str(v.dtype):
-                dstr = "f8"
-            else:
-                dstr = "i8"
-
-            if len(v.shape) == 1:
-                return (dstr, v.shape[0])
-            else:
-                return (dstr, v.shape)
-        else:
-            raise RuntimeError("cannot interpret dtype of '%s'" % v)
-
-    dtype = []
-    for k, v in res[0].items():
-        dtype.append((k,) + _get_dtype(v))
-    d = np.zeros(len(res), dtype=dtype)
-    for i in range(len(res)):
-        for k, v in res[i].items():
-            d[k][i] = v
-
-    return d
-
-
 @pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
 @pytest.mark.parametrize('snr', [1e1, 1e3])
 @pytest.mark.parametrize('pixel_scale', [0.125, 0.25])
@@ -331,128 +440,28 @@ def test_prepsfmom_gauss(
     """fast test at a range of parameters to check that things come out ok"""
     rng = np.random.RandomState(seed=100)
 
-    cen = (image_size - 1)/2
-    psf_cen = (psf_image_size - 1)/2
-    gs_wcs = galsim.ShearWCS(
-        pixel_scale, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
-    scale = np.sqrt(gs_wcs.pixelArea())
-    shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
-    psf_shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
-    xy = gs_wcs.toImage(galsim.PositionD(shift))
-    psf_xy = gs_wcs.toImage(galsim.PositionD(psf_shift))
-
-    jac = Jacobian(
-        y=cen + xy.y, x=cen + xy.x,
-        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
-        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
-
-    psf_jac = Jacobian(
-        y=psf_cen + psf_xy.y, x=psf_cen + psf_xy.x,
-        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
-        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
-
-    gal = galsim.Gaussian(
-        fwhm=fwhm
-    ).shear(
-        g1=-0.1, g2=0.2
-    ).withFlux(
-        400
-    ).shift(
-        dx=shift[0], dy=shift[1]
+    sdata = _make_prepsfmom_sim(
+        image_size=image_size,
+        psf_image_size=psf_image_size,
+        pixel_scale=pixel_scale,
+        fwhm=fwhm,
+        psf_fwhm=psf_fwhm,
+        snr=snr,
+        rng=rng,
+        extra_psf_fwhm=extra_psf_fwhm,
     )
-    psf = galsim.Gaussian(
-        fwhm=psf_fwhm
-    ).shear(
-        g1=0.3, g2=-0.15
-    )
-    im = galsim.Convolve([gal, psf]).drawImage(
-        nx=image_size,
-        ny=image_size,
-        wcs=gs_wcs
-    ).array
-    noise = np.sqrt(np.sum(im**2)) / snr
-    wgt = np.ones_like(im) / noise**2
-
-    psf_im = psf.shift(
-        dx=psf_shift[0], dy=psf_shift[1]
-    ).drawImage(
-        nx=psf_image_size,
-        ny=psf_image_size,
-        wcs=gs_wcs
-    ).array
-
-    if extra_psf_fwhm is not None:
-        extra_psf = galsim.Gaussian(
-            fwhm=extra_psf_fwhm
-        ).shear(
-            g1=-0.2, g2=0.3
-        )
-        extra_psf_shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
-        extra_psf_xy = gs_wcs.toImage(galsim.PositionD(extra_psf_shift))
-        extra_psf_im = extra_psf.shift(
-            dx=extra_psf_shift[0], dy=extra_psf_shift[1]
-        ).drawImage(
-            nx=53,
-            ny=53,
-            wcs=gs_wcs
-        ).array
-        extra_psf_jac = Jacobian(
-            y=26 + extra_psf_xy.y, x=26 + extra_psf_xy.x,
-            dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
-            dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy,
-        )
 
     fitter = cls(
         fwhm=mom_fwhm,
         pad_factor=pad_factor,
     )
 
-    # get true flux
-    im_true = gal.drawImage(
-        nx=image_size,
-        ny=image_size,
-        wcs=gs_wcs,
-        method='no_pixel').array
-    obs = Observation(
-        image=im_true,
-        jacobian=jac,
-    )
-    res = cls(fwhm=mom_fwhm, pad_factor=pad_factor).go(obs=obs, no_psf=True)
-    flux_true = res["flux"]
-    T_true = res["T"]
-    g1_true = res["e"][0]
-    g2_true = res["e"][1]
-
-    res = []
-    for _ in range(100):
-        _im = im + rng.normal(size=im.shape, scale=noise)
-        if extra_psf_fwhm is None:
-            obs = Observation(
-                image=_im,
-                weight=wgt,
-                jacobian=jac,
-                psf=Observation(image=psf_im, jacobian=psf_jac),
-            )
-
-            _res = fitter.go(obs=obs)
-        else:
-            obs = Observation(
-                image=_im,
-                weight=wgt,
-                jacobian=jac,
-                psf=Observation(image=extra_psf_im, jacobian=extra_psf_jac),
-            )
-
-            _res = fitter.go(
-                obs=obs,
-                extra_deconv_psfs=[Observation(image=psf_im, jacobian=psf_jac)],
-                extra_conv_psfs=[obs.psf],
-            )
-
-        if _res['flags'] == 0:
-            res.append(_res)
-
-    res = _stack_list_of_dicts(res)
+    sres = _run_prepsfmom_sims(sdata, fitter, rng, 100)
+    flux_true = sres["flux_true"]
+    T_true = sres["T_true"]
+    g1_true = sres["g1_true"]
+    g2_true = sres["g2_true"]
+    res = sres["res"]
 
     if np.mean(res["flux"])/np.mean(res["flux_err"]) > 7:
         print("\n")
@@ -499,127 +508,28 @@ def test_prepsfmom_mn_cov(
     """
     rng = np.random.RandomState(seed=100)
 
-    cen = (image_size - 1)/2
-    gs_wcs = galsim.ShearWCS(
-        pixel_scale, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
-    scale = np.sqrt(gs_wcs.pixelArea())
-    shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
-    psf_shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
-    xy = gs_wcs.toImage(galsim.PositionD(shift))
-    psf_xy = gs_wcs.toImage(galsim.PositionD(psf_shift))
-
-    jac = Jacobian(
-        y=cen + xy.y, x=cen + xy.x,
-        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
-        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
-
-    psf_jac = Jacobian(
-        y=26 + psf_xy.y, x=26 + psf_xy.x,
-        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
-        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
-
-    gal = galsim.Gaussian(
-        fwhm=fwhm
-    ).shear(
-        g1=-0.1, g2=0.2
-    ).withFlux(
-        400
-    ).shift(
-        dx=shift[0], dy=shift[1]
+    sdata = _make_prepsfmom_sim(
+        image_size=image_size,
+        psf_image_size=53,
+        pixel_scale=pixel_scale,
+        fwhm=fwhm,
+        psf_fwhm=psf_fwhm,
+        snr=snr,
+        rng=rng,
+        extra_psf_fwhm=extra_psf_fwhm,
     )
-    psf = galsim.Gaussian(
-        fwhm=psf_fwhm
-    ).shear(
-        g1=0.3, g2=-0.15
-    )
-    im = galsim.Convolve([gal, psf]).drawImage(
-        nx=image_size,
-        ny=image_size,
-        wcs=gs_wcs
-    ).array
-    noise = np.sqrt(np.sum(im**2)) / snr
-    wgt = np.ones_like(im) / noise**2
-
-    psf_im = psf.shift(
-        dx=psf_shift[0], dy=psf_shift[1]
-    ).drawImage(
-        nx=53,
-        ny=53,
-        wcs=gs_wcs
-    ).array
-
-    if extra_psf_fwhm is not None:
-        extra_psf = galsim.Gaussian(
-            fwhm=extra_psf_fwhm
-        ).shear(
-            g1=-0.2, g2=0.3
-        )
-        extra_psf_shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
-        extra_psf_xy = gs_wcs.toImage(galsim.PositionD(extra_psf_shift))
-        extra_psf_im = extra_psf.shift(
-            dx=extra_psf_shift[0], dy=extra_psf_shift[1]
-        ).drawImage(
-            nx=53,
-            ny=53,
-            wcs=gs_wcs
-        ).array
-        extra_psf_jac = Jacobian(
-            y=26 + extra_psf_xy.y, x=26 + extra_psf_xy.x,
-            dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
-            dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy,
-        )
 
     fitter = cls(
         fwhm=mom_fwhm,
         pad_factor=pad_factor,
     )
 
-    # get true flux
-    im_true = gal.drawImage(
-        nx=image_size,
-        ny=image_size,
-        wcs=gs_wcs,
-        method='no_pixel').array
-    obs = Observation(
-        image=im_true,
-        jacobian=jac,
-    )
-    res = cls(fwhm=mom_fwhm, pad_factor=pad_factor).go(obs=obs, no_psf=True)
-    flux_true = res["flux"]
-    T_true = res["T"]
-    g1_true = res["e"][0]
-    g2_true = res["e"][1]
-
-    res = []
-    for _ in range(10_000):
-        _im = im + rng.normal(size=im.shape, scale=noise)
-        if extra_psf_fwhm is None:
-            obs = Observation(
-                image=_im,
-                weight=wgt,
-                jacobian=jac,
-                psf=Observation(image=psf_im, jacobian=psf_jac),
-            )
-
-            _res = fitter.go(obs=obs)
-        else:
-            obs = Observation(
-                image=_im,
-                weight=wgt,
-                jacobian=jac,
-                psf=Observation(image=extra_psf_im, jacobian=extra_psf_jac),
-            )
-
-            _res = fitter.go(
-                obs=obs,
-                extra_deconv_psfs=[Observation(image=psf_im, jacobian=psf_jac)],
-                extra_conv_psfs=[obs.psf],
-            )
-
-        if _res['flags'] == 0:
-            res.append(_res)
-
-    res = _stack_list_of_dicts(res)
+    sres = _run_prepsfmom_sims(sdata, fitter, rng, 10_000)
+    flux_true = sres["flux_true"]
+    T_true = sres["T_true"]
+    g1_true = sres["g1_true"]
+    g2_true = sres["g2_true"]
+    res = sres["res"]
 
     print("\n")
     _report_info("snr", np.mean(res["flux"])/np.mean(res["flux_err"]), None, None)
