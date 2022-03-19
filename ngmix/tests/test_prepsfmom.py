@@ -194,7 +194,7 @@ def _run_prepsfmom_sims(sdata, fitter, rng, nitr):
     g2_true = res["e"][1]
 
     no_psf = sdata["psf_im"] is None
-    if sdata["extra_psf_fwhm"] is not None:
+    if sdata["extra_psf_im"] is not None:
         assert not no_psf
 
     res = []
