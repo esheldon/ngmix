@@ -7,6 +7,8 @@ from ngmix.prepsfmom import (
     KSigmaMom, PGaussMom,
     _build_square_apodization_mask,
     PrePSFMom,
+    _gauss_kernels,
+    _zero_pad_and_compute_fft_cached_impl,
 )
 from ngmix import Jacobian
 from ngmix import Observation
@@ -157,12 +159,36 @@ def test_prepsfmom_speed_and_cache():
     ).array
 
     # now we test the speed + caching
+    _gauss_kernels.cache_clear()
+    _zero_pad_and_compute_fft_cached_impl.cache_clear()
+
     # the first fit will do numba stuff, so we exclude it
+    # we also perturb the various inputs to fool our caches
+    fitter = PGaussMom(
+        fwhm=mom_fwhm + 1e-3,
+    )
+
+    obs = Observation(
+        image=im + 1e-6,
+        weight=wgt,
+        jacobian=jac,
+        psf=Observation(image=psf_im + 1e-8, jacobian=psf_jac),
+    )
+
+    dt = time.time()
+    fitter.go(obs=obs)
+    dt1 = time.time() - dt
+    print("\n%0.4f ms for first fit" % (dt1*1000))
+
+    # we miss once here for kernels, twice for images
+    assert _gauss_kernels.cache_info().misses == 1
+    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 2
+
+    # the second fit will have numba cached, but not the other kernel and FFT caches
     fitter = PGaussMom(
         fwhm=mom_fwhm,
     )
 
-    im += rng.normal(size=im.shape, scale=noise)
     obs = Observation(
         image=im,
         weight=wgt,
@@ -172,17 +198,30 @@ def test_prepsfmom_speed_and_cache():
 
     dt = time.time()
     fitter.go(obs=obs)
-    dt = time.time() - dt
-    print("\n%0.4f ms for first fit" % (dt*1000))
+    dt2 = time.time() - dt
+    print("%0.4f ms for second fit" % (dt2*1000))
 
-    # we test with full caching
+    # we miss twice for kernels, total of 3 times since psf changed
+    assert _gauss_kernels.cache_info().misses == 2
+    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 4
+
+    # now we test with full caching
     nfit = 1000
     dt = time.time()
     for _ in range(nfit):
+        with obs.writeable():
+            obs.image += 1e-6
         fitter.go(obs=obs)
-    dt = time.time() - dt
+    dt3 = time.time() - dt
 
-    print("%0.4f ms per fit" % (dt/nfit*1000))
+    print("%0.4f ms per fit" % (dt3/nfit*1000))
+
+    # we should never miss again for the calls above
+    assert _gauss_kernels.cache_info().misses == 2
+    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 4 + nfit
+
+    assert dt2 < dt1
+    assert dt3/nfit < dt2
 
 
 def _stack_list_of_dicts(res):
