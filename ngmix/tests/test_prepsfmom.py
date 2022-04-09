@@ -220,7 +220,8 @@ def test_prepsfmom_speed_and_cache():
     assert _gauss_kernels.cache_info().misses == 2
     assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 4 + nfit
 
-    assert dt2 < dt1
+    # if numba stuff is cached this does not work so commented out
+    # assert dt2 < dt1
     assert dt3/nfit < dt2
 
 
