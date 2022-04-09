@@ -712,26 +712,20 @@ def _check_obs_and_get_psf_obs(
     if not obs.has_psf() and not no_psf:
         raise RuntimeError("The PSF must be set to measure a pre-PSF moment!")
 
-    if no_psf and (extra_conv_psfs or extra_deconv_psfs):
-        raise RuntimeError(
-            "You can only use extra conv. or deconv. PSFs with observations "
-            "that have a PSF!"
-        )
-
     if not no_psf:
         conv_psfs = extra_conv_psfs or []
         deconv_psfs = [obs.get_psf()] + (extra_deconv_psfs or [])
-
-        if any(
-            not _jacobian_close(psf_obs.jacobian, obs.jacobian)
-            for psf_obs in conv_psfs + deconv_psfs
-        ):
-            raise RuntimeError(
-                "The PSF and observation must have the same WCS "
-                "Jacobian for measuring pre-PSF moments."
-            )
     else:
-        conv_psfs = []
-        deconv_psfs = []
+        conv_psfs = extra_conv_psfs or []
+        deconv_psfs = extra_deconv_psfs or []
+
+    if any(
+        not _jacobian_close(psf_obs.jacobian, obs.jacobian)
+        for psf_obs in conv_psfs + deconv_psfs
+    ):
+        raise RuntimeError(
+            "The PSF and observation must have the same WCS "
+            "Jacobian for measuring pre-PSF moments."
+        )
 
     return conv_psfs, deconv_psfs
