@@ -2,6 +2,7 @@ import galsim
 import numpy as np
 import pytest
 import time
+from flaky import flaky
 
 from ngmix.prepsfmom import (
     KSigmaMom, PGaussMom,
@@ -97,6 +98,7 @@ def test_prepsfmom_raises_badjacob(cls):
     assert "same WCS Jacobia" in str(e.value)
 
 
+@flaky
 def test_prepsfmom_speed_and_cache():
     image_size = 48
     psf_image_size = 53
