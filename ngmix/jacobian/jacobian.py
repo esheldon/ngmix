@@ -318,8 +318,8 @@ class Jacobian(object):
 
     def __repr__(self):
         fmt = (
-            'row0: %-10.5g col0: %-10.5g dvdrow: %-10.5g '
-            'dvdcol: %-10.5g dudrow: %-10.5g dudcol: %-10.5g'
+            'ngmix.Jacobian(row=%r, col=%r, dvdrow=%r, '
+            'dvdcol=%r, dudrow=%r, dudcol=%r)'
         )
         return fmt % (self.row0,
                       self.col0,

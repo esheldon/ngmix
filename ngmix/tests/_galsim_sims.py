@@ -3,13 +3,12 @@ import ngmix
 import galsim
 
 
-def _get_obs(rng, set_noise_image=False, noise=1.0e-6):
+def _get_obs(rng, set_noise_image=False, noise=1.0e-6, psf_fwhm=0.9, n=None):
 
     psf_noise = 1.0e-6
 
     scale = 0.263
 
-    psf_fwhm = 0.9
     gal_fwhm = 0.7
 
     psf = galsim.Gaussian(fwhm=psf_fwhm)
@@ -18,7 +17,10 @@ def _get_obs(rng, set_noise_image=False, noise=1.0e-6):
     obj = galsim.Convolve(psf, obj0)
 
     psf_im = psf.drawImage(scale=scale).array
-    im = obj.drawImage(scale=scale).array
+    if n is not None:
+        im = obj.drawImage(scale=scale, nx=n, ny=n).array
+    else:
+        im = obj.drawImage(scale=scale).array
 
     psf_im += rng.normal(scale=psf_noise, size=psf_im.shape)
     im += rng.normal(scale=noise, size=im.shape)
