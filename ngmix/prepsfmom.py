@@ -37,11 +37,12 @@ class PrePSFMom(object):
         The apodization radius for the stamp in pixels. The default of 1.5 is likely
         fine for most ground based surveys.
     """
-    def __init__(self, fwhm, kernel, pad_factor=4, ap_rad=1.5):
+    def __init__(self, fwhm, kernel, pad_factor=4, ap_rad=1.5, fwhm_smooth=0):
         self.fwhm = fwhm
         self.pad_factor = pad_factor
         self.kernel = kernel
         self.ap_rad = ap_rad
+        self.fwhm_smooth = fwhm_smooth
         if self.kernel == "ksigma":
             self.kind = "ksigma"
         elif self.kernel in ["gauss", "pgauss"]:
@@ -132,6 +133,7 @@ class PrePSFMom(object):
                 self.fwhm,
                 obs.jacobian.dvdrow, obs.jacobian.dvdcol,
                 obs.jacobian.dudrow, obs.jacobian.dudcol,
+                fwhm_smooth=self.fwhm_smooth,
             )
         elif self.kernel in ["gauss", "pgauss"]:
             kernels = _gauss_kernels(
@@ -139,6 +141,7 @@ class PrePSFMom(object):
                 self.fwhm,
                 obs.jacobian.dvdrow, obs.jacobian.dvdcol,
                 obs.jacobian.dudrow, obs.jacobian.dudcol,
+                fwhm_smooth=self.fwhm_smooth,
             )
         else:
             raise ValueError(
@@ -193,8 +196,11 @@ class KSigmaMom(PrePSFMom):
         The apodization radius for the stamp in pixels. The default of 1.5 is likely
         fine for most ground based surveys.
     """
-    def __init__(self, fwhm, pad_factor=4, ap_rad=1.5):
-        super().__init__(fwhm, 'ksigma', pad_factor=pad_factor, ap_rad=ap_rad)
+    def __init__(self, fwhm, pad_factor=4, ap_rad=1.5, fwhm_smooth=0):
+        super().__init__(
+            fwhm, 'ksigma', pad_factor=pad_factor, ap_rad=ap_rad,
+            fwhm_smooth=fwhm_smooth,
+        )
 
 
 class PGaussMom(PrePSFMom):
@@ -217,8 +223,11 @@ class PGaussMom(PrePSFMom):
         The apodization radius for the stamp in pixels. The default of 1.5 is likely
         fine for most ground based surveys.
     """
-    def __init__(self, fwhm, pad_factor=4, ap_rad=1.5):
-        super().__init__(fwhm, 'pgauss', pad_factor=pad_factor, ap_rad=ap_rad)
+    def __init__(self, fwhm, pad_factor=4, ap_rad=1.5, fwhm_smooth=0):
+        super().__init__(
+            fwhm, 'pgauss', pad_factor=pad_factor, ap_rad=ap_rad,
+            fwhm_smooth=fwhm_smooth,
+        )
 
 
 # keep this here for API consistency
@@ -402,6 +411,7 @@ def _ksigma_kernels(
     dim,
     kernel_size,
     dvdrow, dvdcol, dudrow, dudcol,
+    fwhm_smooth=0,
 ):
     """This function builds a ksigma kernel in Fourier-space.
 
@@ -472,6 +482,16 @@ def _ksigma_kernels(
             "norm = %f (should be 1)!" % (kernel_size, nrm)
         )
 
+    # add smoothing after norm check above for kernel size
+    if fwhm_smooth > 0:
+        sigma_smooth = fwhm_to_sigma(fwhm_smooth)
+        chi2_2_smooth = sigma_smooth * sigma_smooth / 2 * fmag2
+        exp_val_smooth = np.zeros_like(karg)
+        msk_smooth = (chi2_2_smooth < FASTEXP_MAX_CHI2/2) & (chi2_2_smooth >= 0)
+        exp_val_smooth[msk_smooth] = fexp_arr(-chi2_2_smooth[msk_smooth])
+        fkf *= exp_val_smooth
+        knrm *= exp_val_smooth
+
     # the moment kernels take a bit more work
     # product by u^2 in real space is -dk^2/dku^2 in Fourier space
     # same holds for v and cross deriv is -dk^2/dkudkv
@@ -509,6 +529,7 @@ def _gauss_kernels(
     dim,
     kernel_size,
     dvdrow, dvdcol, dudrow, dudcol,
+    fwhm_smooth=0,
 ):
     """This function builds a Gaussian kernel in Fourier-space.
 
@@ -563,6 +584,16 @@ def _gauss_kernels(
             "FFT size appears to be too small for gauss kernel size %f: "
             "norm = %f (should be 1)!" % (kernel_size, nrm)
         )
+
+    # add smoothing after norm check above for kernel size
+    if fwhm_smooth > 0:
+        sigma_smooth = fwhm_to_sigma(fwhm_smooth)
+        chi2_2_smooth = sigma_smooth * sigma_smooth / 2 * fmag2
+        exp_val_smooth = np.zeros_like(exp_val)
+        msk_smooth = (chi2_2_smooth < FASTEXP_MAX_CHI2/2) & (chi2_2_smooth >= 0)
+        exp_val_smooth[msk_smooth] = fexp_arr(-chi2_2_smooth[msk_smooth])
+        fkf *= exp_val_smooth
+        knrm *= exp_val_smooth
 
     # the moment kernels take a bit more work
     # product by u^2 in real space is -dk^2/dku^2 in Fourier space
