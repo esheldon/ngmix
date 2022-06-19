@@ -1,4 +1,5 @@
 import logging
+import functools
 
 import numpy as np
 import scipy.fft as fft
@@ -85,14 +86,14 @@ class PrePSFMom(object):
         eff_pad_factor = target_dim / obs.image.shape[0]
 
         # pad image, psf and weight map, get FFTs, apply cen_phases
-        kim, im_row, im_col = _zero_pad_and_compute_fft(
+        kim, im_row, im_col = _zero_pad_and_compute_fft_cached(
             obs.image, obs.jacobian.row0, obs.jacobian.col0, target_dim,
             self.ap_rad,
         )
         fft_dim = kim.shape[0]
 
         if psf_obs is not None:
-            kpsf_im, psf_im_row, psf_im_col = _zero_pad_and_compute_fft(
+            kpsf_im, psf_im_row, psf_im_col = _zero_pad_and_compute_fft_cached(
                 psf_obs.image,
                 psf_obs.jacobian.row0, psf_obs.jacobian.col0,
                 target_dim,
@@ -129,19 +130,19 @@ class PrePSFMom(object):
         # now build the kernels
         if self.kernel == "ksigma":
             kernels = _ksigma_kernels(
-                target_dim,
-                self.fwhm,
-                obs.jacobian.dvdrow, obs.jacobian.dvdcol,
-                obs.jacobian.dudrow, obs.jacobian.dudcol,
-                fwhm_smooth=self.fwhm_smooth,
+                int(target_dim),
+                float(self.fwhm),
+                float(obs.jacobian.dvdrow), float(obs.jacobian.dvdcol),
+                float(obs.jacobian.dudrow), float(obs.jacobian.dudcol),
+                float(self.fwhm_smooth),
             )
         elif self.kernel in ["gauss", "pgauss"]:
             kernels = _gauss_kernels(
-                target_dim,
-                self.fwhm,
-                obs.jacobian.dvdrow, obs.jacobian.dvdcol,
-                obs.jacobian.dudrow, obs.jacobian.dudcol,
-                fwhm_smooth=self.fwhm_smooth,
+                int(target_dim),
+                float(self.fwhm),
+                float(obs.jacobian.dvdrow), float(obs.jacobian.dvdcol),
+                float(obs.jacobian.dudrow), float(obs.jacobian.dudcol),
+                float(self.fwhm_smooth),
             )
         else:
             raise ValueError(
@@ -374,7 +375,7 @@ def _compute_cen_phase_shift(cen_row, cen_col, dim, msk=None):
         return np.cos(kcen) + 1j*np.sin(kcen)
 
 
-def _zero_pad_and_compute_fft(im, cen_row, cen_col, target_dim, ap_rad):
+def _zero_pad_and_compute_fft_impl(im, cen_row, cen_col, target_dim, ap_rad):
     """zero pad and compute the FFT
 
     Returns the fft, cen_row in the padded image, and cen_col in the padded image.
@@ -389,6 +390,30 @@ def _zero_pad_and_compute_fft(im, cen_row, cen_col, target_dim, ap_rad):
     pad_cen_col = cen_col + pad_width_before
     kpim = fft.fftn(pim)
     return kpim, pad_cen_row, pad_cen_col
+
+
+# see https://stackoverflow.com/a/52332109 for how this works
+@functools.lru_cache(maxsize=128)
+def _zero_pad_and_compute_fft_cached_impl(
+    im_tuple, cen_row, cen_col, target_dim, ap_rad
+):
+    return _zero_pad_and_compute_fft_impl(
+        np.array(im_tuple), cen_row, cen_col, target_dim, ap_rad
+    )
+
+
+@functools.wraps(_zero_pad_and_compute_fft_impl)
+def _zero_pad_and_compute_fft_cached(im, cen_row, cen_col, target_dim, ap_rad):
+    return _zero_pad_and_compute_fft_cached_impl(
+        tuple(tuple(ii) for ii in im),
+        float(cen_row), float(cen_col), int(target_dim), float(ap_rad)
+    )
+
+
+_zero_pad_and_compute_fft_cached.cache_info \
+    = _zero_pad_and_compute_fft_cached_impl.cache_info
+_zero_pad_and_compute_fft_cached.cache_clear \
+    = _zero_pad_and_compute_fft_cached_impl.cache_clear
 
 
 def _deconvolve_im_psf_inplace(kim, kpsf_im, max_amp, min_psf_frac=1e-5):
@@ -407,11 +432,12 @@ def _deconvolve_im_psf_inplace(kim, kpsf_im, max_amp, min_psf_frac=1e-5):
     return kim, kpsf_im, msk
 
 
+@functools.lru_cache(maxsize=128)
 def _ksigma_kernels(
     dim,
     kernel_size,
     dvdrow, dvdcol, dudrow, dudcol,
-    fwhm_smooth=0,
+    fwhm_smooth,
 ):
     """This function builds a ksigma kernel in Fourier-space.
 
@@ -525,11 +551,12 @@ def _ksigma_kernels(
     )
 
 
+@functools.lru_cache(maxsize=128)
 def _gauss_kernels(
     dim,
     kernel_size,
     dvdrow, dvdcol, dudrow, dudcol,
-    fwhm_smooth=0,
+    fwhm_smooth,
 ):
     """This function builds a Gaussian kernel in Fourier-space.
 
