@@ -6,6 +6,7 @@ significantly.
 """
 import copy
 import logging
+from functools import lru_cache
 import numpy as np
 from ..gexceptions import GMixRangeError, BootPSFFailure
 from ..shape import Shape
@@ -18,6 +19,14 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=128)
+def _cached_galsim_stuff(img, wcs_repr, xinterp):
+    import galsim
+    image = galsim.Image(np.array(img), wcs=eval(wcs_repr))
+    image_int = galsim.InterpolatedImage(image, x_interpolant=xinterp)
+    return image, image_int
 
 
 class MetacalDilatePSF(object):
@@ -355,21 +364,23 @@ class MetacalDilatePSF(object):
         # these would share data with the original numpy arrays, make copies
         # to be sure they don't get modified
         #
-        self.image = galsim.Image(obs.image.copy(),
-                                  wcs=self.get_wcs())
+        image, image_int = _cached_galsim_stuff(
+            tuple(tuple(ii) for ii in obs.image.copy()),
+            repr(self.get_wcs()),
+            self.interp,
+        )
+        self.image = image
+        self.image_int = image_int
 
-        self.psf_image = galsim.Image(obs.psf.image.copy(),
-                                      wcs=self.get_psf_wcs())
-
-        # interpolated psf image
-        psf_int = galsim.InterpolatedImage(self.psf_image,
-                                           x_interpolant=self.interp)
+        psf_image, psf_int = _cached_galsim_stuff(
+            tuple(tuple(ii) for ii in obs.psf.image.copy()),
+            repr(self.get_psf_wcs()),
+            self.interp,
+        )
+        self.psf_image = psf_image
 
         # this can be used to deconvolve the psf from the galaxy image
         psf_int_inv = galsim.Deconvolve(psf_int)
-
-        self.image_int = galsim.InterpolatedImage(self.image,
-                                                  x_interpolant=self.interp)
 
         # deconvolved galaxy image, psf+pixel removed
         self.image_int_nopsf = galsim.Convolve(self.image_int,

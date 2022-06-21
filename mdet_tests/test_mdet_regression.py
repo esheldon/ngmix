@@ -265,7 +265,7 @@ def test_mdet_regression(fname, write=False):
                     ),
                 }
             else:
-                assert col in ["shear"]
+                assert col in ["shear", "shear_bands"]
 
 
 if __name__ == "__main__":

@@ -1,11 +1,15 @@
 import galsim
 import numpy as np
 import pytest
+import time
+from flaky import flaky
 
 from ngmix.prepsfmom import (
     KSigmaMom, PGaussMom,
     _build_square_apodization_mask,
     PrePSFMom,
+    _gauss_kernels,
+    _zero_pad_and_compute_fft_cached_impl,
 )
 from ngmix import Jacobian
 from ngmix import Observation
@@ -92,6 +96,135 @@ def test_prepsfmom_raises_badjacob(cls):
     with pytest.raises(RuntimeError) as e:
         fitter.go(obs)
     assert "same WCS Jacobia" in str(e.value)
+
+
+@flaky
+def test_prepsfmom_speed_and_cache():
+    image_size = 48
+    psf_image_size = 53
+    pixel_scale = 0.263
+    fwhm = 0.9
+    psf_fwhm = 0.9
+    snr = 20
+    mom_fwhm = 2
+
+    rng = np.random.RandomState(seed=100)
+
+    cen = (image_size - 1)/2
+    psf_cen = (psf_image_size - 1)/2
+    gs_wcs = galsim.ShearWCS(
+        pixel_scale, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
+    scale = np.sqrt(gs_wcs.pixelArea())
+    shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+    psf_shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+    xy = gs_wcs.toImage(galsim.PositionD(shift))
+    psf_xy = gs_wcs.toImage(galsim.PositionD(psf_shift))
+
+    jac = Jacobian(
+        y=cen + xy.y, x=cen + xy.x,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
+    psf_jac = Jacobian(
+        y=psf_cen + psf_xy.y, x=psf_cen + psf_xy.x,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
+    gal = galsim.Gaussian(
+        fwhm=fwhm
+    ).shear(
+        g1=-0.1, g2=0.2
+    ).withFlux(
+        400
+    ).shift(
+        dx=shift[0], dy=shift[1]
+    )
+    psf = galsim.Gaussian(
+        fwhm=psf_fwhm
+    ).shear(
+        g1=0.3, g2=-0.15
+    )
+    im = galsim.Convolve([gal, psf]).drawImage(
+        nx=image_size,
+        ny=image_size,
+        wcs=gs_wcs
+    ).array
+    noise = np.sqrt(np.sum(im**2)) / snr
+    wgt = np.ones_like(im) / noise**2
+
+    psf_im = psf.shift(
+        dx=psf_shift[0], dy=psf_shift[1]
+    ).drawImage(
+        nx=psf_image_size,
+        ny=psf_image_size,
+        wcs=gs_wcs
+    ).array
+
+    # now we test the speed + caching
+    _gauss_kernels.cache_clear()
+    _zero_pad_and_compute_fft_cached_impl.cache_clear()
+
+    # the first fit will do numba stuff, so we exclude it
+    # we also perturb the various inputs to fool our caches
+    fitter = PGaussMom(
+        fwhm=mom_fwhm + 1e-3,
+    )
+
+    obs = Observation(
+        image=im + 1e-6,
+        weight=wgt,
+        jacobian=jac,
+        psf=Observation(image=psf_im + 1e-8, jacobian=psf_jac),
+    )
+
+    dt = time.time()
+    fitter.go(obs=obs)
+    dt1 = time.time() - dt
+    print("\n%0.4f ms for first fit" % (dt1*1000))
+
+    # we miss once here for kernels, twice for images
+    assert _gauss_kernels.cache_info().misses == 1
+    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 2
+
+    # the second fit will have numba cached, but not the other kernel and FFT caches
+    fitter = PGaussMom(
+        fwhm=mom_fwhm,
+    )
+
+    obs = Observation(
+        image=im,
+        weight=wgt,
+        jacobian=jac,
+        psf=Observation(image=psf_im, jacobian=psf_jac),
+    )
+
+    dt = time.time()
+    fitter.go(obs=obs)
+    dt2 = time.time() - dt
+    print("%0.4f ms for second fit" % (dt2*1000))
+
+    # we miss twice for kernels, total of 3 times since psf changed
+    assert _gauss_kernels.cache_info().misses == 2
+    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 4
+
+    # now we test with full caching
+    nfit = 1000
+    dt = time.time()
+    for _ in range(nfit):
+        with obs.writeable():
+            obs.image += 1e-6
+        fitter.go(obs=obs)
+    dt3 = time.time() - dt
+
+    print("%0.4f ms per fit" % (dt3/nfit*1000))
+
+    # we should never miss again for the calls above
+    assert _gauss_kernels.cache_info().misses == 2
+    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 4 + nfit
+
+    # if numba stuff is cached this does not work so commented out
+    # assert dt2 < dt1
+    assert dt3/nfit < dt2*0.6
 
 
 def _stack_list_of_dicts(res):
