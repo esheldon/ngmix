@@ -6,6 +6,7 @@
       smoothing of the profile before the moments are measured.
     - Added `use_pix_weight` keyword to pre-PSF moments routines to enable inverse
       variance pixel weighting.
+    - Added caching of FFTs in metacal and pre-PSF moment rountines.
 
 
 ## v2.0.6

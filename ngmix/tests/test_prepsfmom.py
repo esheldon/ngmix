@@ -101,7 +101,7 @@ def test_prepsfmom_raises_badjacob(cls):
     assert "same WCS Jacobia" in str(e.value)
 
 
-@flaky
+@flaky(max_runs=10)
 def test_prepsfmom_speed_and_cache():
     image_size = 48
     psf_image_size = 53
