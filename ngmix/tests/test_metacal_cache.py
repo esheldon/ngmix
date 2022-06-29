@@ -1,11 +1,15 @@
 import time
 import numpy as np
+
+from flaky import flaky
+
 import ngmix
 import ngmix.metacal.metacal
 from ._galsim_sims import _get_obs
 from ..metacal.metacal import _cached_galsim_stuff
 
 
+@flaky(max_runs=10)
 def test_metacal_cache():
     # first warm up numba
     rng = np.random.RandomState(seed=100)
