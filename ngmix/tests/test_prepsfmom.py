@@ -933,7 +933,7 @@ def test_prepsfmom_comp_to_gaussmom_fwhm_smooth(
     res = PGaussMom(
         fwhm=mom_fwhm, pad_factor=pad_factor, fwhm_smooth=fwhm_smooth,
     ).go(
-        obs=obs, no_psf=True, return_kernels=True,
+        obs=obs, no_psf=True,
     )
 
     from ngmix.gaussmom import GaussMom
@@ -957,11 +957,14 @@ def test_prepsfmom_comp_to_gaussmom_fwhm_smooth(
         if k in res_gmom:
             print("%s:" % k, res[k], res_gmom[k])
 
-    for k in ["flux", "T", "e"]:
-        assert_allclose(res[k], res_gmom[k], atol=0, rtol=1e-2)
-    # the error do not match - not sure why
-    # for k in ["flux_err", "T_err", "e_cov"]:
-    #     assert_allclose(res[k], res_gmom[k], atol=0, rtol=5e-1)
+    assert_allclose(res["flux"], res_gmom["flux"], atol=0, rtol=5e-4)
+    assert_allclose(res["T"], res_gmom["T"], atol=0, rtol=1e-3)
+    assert_allclose(res["e"], res_gmom["e"], atol=0, rtol=1e-3)
+    # the errors do not match - this is because the underlying noise model is
+    # different - the pure gaussian moments weight map is an error on the convolved
+    # profile whereas the pre-PSF case uses error propagation through the
+    # smoothing kernel treating the weight map as applying to the unconvolved profile
+    # thus we do not test the errors
 
 
 def _sim_apodize(flux_factor, ap_rad):
