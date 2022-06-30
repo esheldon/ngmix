@@ -459,6 +459,15 @@ def _deconvolve_im_psf_inplace(kim, kpsf_im, max_amp, min_psf_frac=1e-5):
     return kim, kpsf_im, msk
 
 
+def _get_fwhm_smooth_profile(fwhm_smooth, fmag2):
+    sigma_smooth = fwhm_to_sigma(fwhm_smooth)
+    chi2_2_smooth = sigma_smooth * sigma_smooth / 2 * fmag2
+    exp_val_smooth = np.zeros_like(fmag2)
+    msk_smooth = (chi2_2_smooth < FASTEXP_MAX_CHI2/2) & (chi2_2_smooth >= 0)
+    exp_val_smooth[msk_smooth] = fexp_arr(-chi2_2_smooth[msk_smooth])
+    return exp_val_smooth
+
+
 @functools.lru_cache(maxsize=128)
 def _ksigma_kernels(
     dim,
@@ -537,11 +546,7 @@ def _ksigma_kernels(
 
     # add smoothing after norm check above for kernel size
     if fwhm_smooth > 0:
-        sigma_smooth = fwhm_to_sigma(fwhm_smooth)
-        chi2_2_smooth = sigma_smooth * sigma_smooth / 2 * fmag2
-        exp_val_smooth = np.zeros_like(karg)
-        msk_smooth = (chi2_2_smooth < FASTEXP_MAX_CHI2/2) & (chi2_2_smooth >= 0)
-        exp_val_smooth[msk_smooth] = fexp_arr(-chi2_2_smooth[msk_smooth])
+        exp_val_smooth = _get_fwhm_smooth_profile(fwhm_smooth, fmag2)
         fkf *= exp_val_smooth
         knrm *= exp_val_smooth
 
@@ -641,11 +646,7 @@ def _gauss_kernels(
 
     # add smoothing after norm check above for kernel size
     if fwhm_smooth > 0:
-        sigma_smooth = fwhm_to_sigma(fwhm_smooth)
-        chi2_2_smooth = sigma_smooth * sigma_smooth / 2 * fmag2
-        exp_val_smooth = np.zeros_like(exp_val)
-        msk_smooth = (chi2_2_smooth < FASTEXP_MAX_CHI2/2) & (chi2_2_smooth >= 0)
-        exp_val_smooth[msk_smooth] = fexp_arr(-chi2_2_smooth[msk_smooth])
+        exp_val_smooth = _get_fwhm_smooth_profile(fwhm_smooth, fmag2)
         fkf *= exp_val_smooth
         knrm *= exp_val_smooth
 
