@@ -1,3 +1,12 @@
+## v2.1.0
+
+### new features
+
+    - Added `fwhm_smooth` keyword to pre-PSF moments routines to allow for extra
+      smoothing of the profile before the moments are measured.
+    - Added caching of FFTs in metacal and pre-PSF moment rountines.
+
+
 ## v2.0.6
 
 ### bug fixes

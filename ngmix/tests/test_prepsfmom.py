@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 import time
 from flaky import flaky
+from numpy.testing import assert_allclose
 
 from ngmix.prepsfmom import (
     KSigmaMom, PGaussMom,
@@ -23,6 +24,7 @@ def _report_info(s, arr, mn, err):
             "%s:" % s,
             np.mean(arr), mn, np.mean(arr)/mn - 1,
             np.std(arr), err, np.std(arr)/err - 1,
+            np.abs(np.mean(arr))/np.std(arr),
             flush=True,
         )
     else:
@@ -30,6 +32,7 @@ def _report_info(s, arr, mn, err):
             "%s:" % s,
             np.mean(arr), None, None,
             np.std(arr), None, None,
+            None,
             flush=True,
         )
 
@@ -98,7 +101,7 @@ def test_prepsfmom_raises_badjacob(cls):
     assert "same WCS Jacobia" in str(e.value)
 
 
-@flaky
+@flaky(max_runs=10)
 def test_prepsfmom_speed_and_cache():
     image_size = 48
     psf_image_size = 53
@@ -370,15 +373,15 @@ def test_prepsfmom_gauss(
         _report_info("g2", res["e"][:, 1], g2_true, np.mean(res["e_err"][1]))
         mom_cov = np.cov(res["mom"].T)
         print("mom cov ratio:\n", np.mean(res["mom_cov"], axis=0)/mom_cov, flush=True)
-        assert np.allclose(
+        assert_allclose(
             np.abs(np.mean(res["flux"]) - flux_true)/np.mean(res["flux_err"]),
             0,
             atol=4,
             rtol=0,
         )
-        assert np.allclose(
+        assert_allclose(
             np.mean(res["flux"]), flux_true, atol=0, rtol=0.1)
-        assert np.allclose(
+        assert_allclose(
             np.std(res["flux"]), np.mean(res["flux_err"]), atol=0, rtol=0.2)
 
 
@@ -387,17 +390,13 @@ def test_prepsfmom_gauss(
     (PGaussMom, 2.0, 1e2),
 ])
 @pytest.mark.parametrize('pixel_scale', [0.25])
-@pytest.mark.parametrize('fwhm,psf_fwhm', [
-    (2.0, 1.0),
-])
-@pytest.mark.parametrize('image_size', [
-    53,
-])
-@pytest.mark.parametrize('pad_factor', [
-    1.5,
-])
-def test_prepsfmom_mn_cov(
+@pytest.mark.parametrize('fwhm,psf_fwhm', [(2.0, 1.0)])
+@pytest.mark.parametrize('image_size', [53])
+@pytest.mark.parametrize('pad_factor', [1.5])
+@pytest.mark.parametrize('fwhm_smooth', [0, 1])
+def test_prepsfmom_mn_cov_psf(
     pad_factor, image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm, cls,
+    fwhm_smooth,
 ):
     """Slower test to make sure means and errors are right
     w/ tons of monte carlo samples.
@@ -456,6 +455,7 @@ def test_prepsfmom_mn_cov(
     fitter = cls(
         fwhm=mom_fwhm,
         pad_factor=pad_factor,
+        fwhm_smooth=fwhm_smooth,
     )
 
     # get true flux
@@ -468,7 +468,7 @@ def test_prepsfmom_mn_cov(
         image=im_true,
         jacobian=jac,
     )
-    res = cls(fwhm=mom_fwhm, pad_factor=pad_factor).go(obs=obs, no_psf=True)
+    res = fitter.go(obs=obs, no_psf=True)
     flux_true = res["flux"]
     T_true = res["T"]
     g1_true = res["e"][0]
@@ -501,26 +501,26 @@ def test_prepsfmom_mn_cov(
     print("mom cov meas:\n", mom_cov, flush=True)
     print("mom cov pred:\n", np.mean(res["mom_cov"], axis=0), flush=True)
 
-    assert np.allclose(np.mean(res["flux"]), flux_true, atol=0, rtol=1e-2)
-    assert np.allclose(np.mean(res["T"]), T_true, atol=0, rtol=1e-2)
-    assert np.allclose(np.mean(res["e"][:, 0]), g1_true, atol=0, rtol=1e-2)
-    assert np.allclose(np.mean(res["e"][:, 1]), g2_true, atol=0, rtol=1e-2)
+    assert_allclose(np.mean(res["flux"]), flux_true, atol=0, rtol=1e-2)
+    assert_allclose(np.mean(res["T"]), T_true, atol=0, rtol=1e-2)
+    assert_allclose(np.mean(res["e"][:, 0]), g1_true, atol=0, rtol=2e-2)
+    assert_allclose(np.mean(res["e"][:, 1]), g2_true, atol=0, rtol=2e-2)
 
-    assert np.allclose(np.std(res["flux"]), np.mean(res["flux_err"]), atol=0, rtol=2e-2)
-    assert np.allclose(np.std(res["T"]), np.mean(res["T_err"]), atol=0, rtol=2e-2)
-    assert np.allclose(
+    assert_allclose(np.std(res["flux"]), np.mean(res["flux_err"]), atol=0, rtol=2e-2)
+    assert_allclose(np.std(res["T"]), np.mean(res["T_err"]), atol=0, rtol=2e-2)
+    assert_allclose(
         np.std(res["e"][:, 0]), np.mean(res["e_err"][:, 0]), atol=0, rtol=2e-2)
-    assert np.allclose(
+    assert_allclose(
         np.std(res["e"][:, 1]), np.mean(res["e_err"][:, 1]), atol=0, rtol=2e-2)
 
-    assert np.allclose(
+    assert_allclose(
         mom_cov[2:, 2:],
         np.mean(res["mom_cov"][:, 2:, 2:], axis=0),
         atol=2.5e-1,
         rtol=0,
     )
 
-    assert np.allclose(
+    assert_allclose(
         np.diagonal(mom_cov[2:, 2:]),
         np.diagonal(np.mean(res["mom_cov"][:, 2:, 2:], axis=0)),
         atol=0,
@@ -528,22 +528,119 @@ def test_prepsfmom_mn_cov(
     )
 
 
+@pytest.mark.parametrize("cls,mom_fwhm,snr", [(PGaussMom, 2.0, 1e2)])
+@pytest.mark.parametrize('pixel_scale', [0.25])
+@pytest.mark.parametrize('fwhm,psf_fwhm', [(2.0, 1.0)])
+@pytest.mark.parametrize('image_size', [53])
+@pytest.mark.parametrize('pad_factor', [1.5])
+def test_prepsfmom_fwhm_smooth_snr(
+    pad_factor, image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm, cls,
+):
+    def _run_sim_fwhm_smooth(fwhm_smooth):
+        rng = np.random.RandomState(seed=100)
+
+        cen = (image_size - 1)/2
+        gs_wcs = galsim.ShearWCS(
+            pixel_scale, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
+        scale = np.sqrt(gs_wcs.pixelArea())
+        shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+        psf_shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+        xy = gs_wcs.toImage(galsim.PositionD(shift))
+        psf_xy = gs_wcs.toImage(galsim.PositionD(psf_shift))
+
+        jac = Jacobian(
+            y=cen + xy.y, x=cen + xy.x,
+            dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+            dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
+        psf_jac = Jacobian(
+            y=26 + psf_xy.y, x=26 + psf_xy.x,
+            dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+            dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
+        gal = galsim.Gaussian(
+            fwhm=fwhm
+        ).shear(
+            g1=-0.1, g2=0.2
+        ).withFlux(
+            400
+        ).shift(
+            dx=shift[0], dy=shift[1]
+        )
+        psf = galsim.Gaussian(
+            fwhm=psf_fwhm
+        ).shear(
+            g1=0.3, g2=-0.15
+        )
+        im = galsim.Convolve([gal, psf]).drawImage(
+            nx=image_size,
+            ny=image_size,
+            wcs=gs_wcs
+        ).array
+        noise = np.sqrt(np.sum(im**2)) / snr
+        wgt = np.ones_like(im) / noise**2
+
+        psf_im = psf.shift(
+            dx=psf_shift[0], dy=psf_shift[1]
+        ).drawImage(
+            nx=53,
+            ny=53,
+            wcs=gs_wcs
+        ).array
+
+        fitter = cls(
+            fwhm=mom_fwhm,
+            pad_factor=pad_factor,
+            fwhm_smooth=fwhm_smooth,
+        )
+
+        # get true flux
+        im_true = gal.drawImage(
+            nx=image_size,
+            ny=image_size,
+            wcs=gs_wcs,
+            method='no_pixel').array
+        obs = Observation(
+            image=im_true,
+            jacobian=jac,
+        )
+        res = fitter.go(obs=obs, no_psf=True)
+
+        res = []
+        for _ in range(1_000):
+            _im = im + rng.normal(size=im.shape, scale=noise)
+            obs = Observation(
+                image=_im,
+                weight=wgt,
+                jacobian=jac,
+                psf=Observation(image=psf_im, jacobian=psf_jac),
+            )
+
+            _res = fitter.go(obs=obs)
+            if _res['flags'] == 0:
+                res.append(_res)
+
+        res = _stack_list_of_dicts(res)
+
+        return np.abs(np.mean(res["e"], axis=0))/np.std(res["e"], axis=0)
+
+    e_snr = _run_sim_fwhm_smooth(0)
+    e_snr_smooth = _run_sim_fwhm_smooth(1)
+
+    assert np.all(e_snr_smooth > e_snr)
+
+
 @pytest.mark.parametrize("cls,mom_fwhm,snr", [
-    (KSigmaMom, 2.0, 1e2),
     (PGaussMom, 2.0, 1e2),
+    (KSigmaMom, 2.0, 1e2),
 ])
 @pytest.mark.parametrize('pixel_scale', [0.25])
-@pytest.mark.parametrize('fwhm', [
-    2,
-])
-@pytest.mark.parametrize('image_size', [
-    53,
-])
-@pytest.mark.parametrize('pad_factor', [
-    1.5,
-])
+@pytest.mark.parametrize('fwhm', [2])
+@pytest.mark.parametrize('image_size', [53])
+@pytest.mark.parametrize('pad_factor', [1.5])
+@pytest.mark.parametrize('fwhm_smooth', [0, 1])
 def test_prepsfmom_mn_cov_nopsf(
-    pad_factor, image_size, fwhm, pixel_scale, snr, mom_fwhm, cls,
+    pad_factor, image_size, fwhm, pixel_scale, snr, mom_fwhm, cls, fwhm_smooth,
 ):
     """Slower test to make sure means and errors are right
     w/ tons of monte carlo samples.
@@ -582,6 +679,7 @@ def test_prepsfmom_mn_cov_nopsf(
     fitter = cls(
         fwhm=mom_fwhm,
         pad_factor=pad_factor,
+        fwhm_smooth=fwhm_smooth,
     )
 
     # get true flux
@@ -594,7 +692,10 @@ def test_prepsfmom_mn_cov_nopsf(
         image=im_true,
         jacobian=jac,
     )
-    res = cls(fwhm=mom_fwhm, pad_factor=pad_factor).go(obs=obs, no_psf=True)
+    res = cls(
+        fwhm=mom_fwhm, pad_factor=pad_factor,
+        fwhm_smooth=fwhm_smooth,
+    ).go(obs=obs, no_psf=True)
     flux_true = res["flux"]
     T_true = res["T"]
     g1_true = res["e"][0]
@@ -626,26 +727,26 @@ def test_prepsfmom_mn_cov_nopsf(
     print("mom cov meas:\n", mom_cov, flush=True)
     print("mom cov pred:\n", np.mean(res["mom_cov"], axis=0), flush=True)
 
-    assert np.allclose(np.mean(res["flux"]), flux_true, atol=0, rtol=1e-2)
-    assert np.allclose(np.mean(res["T"]), T_true, atol=0, rtol=1e-2)
-    assert np.allclose(np.mean(res["e"][:, 0]), g1_true, atol=0, rtol=1e-2)
-    assert np.allclose(np.mean(res["e"][:, 1]), g2_true, atol=0, rtol=1e-2)
+    assert_allclose(np.mean(res["flux"]), flux_true, atol=0, rtol=1e-2)
+    assert_allclose(np.mean(res["T"]), T_true, atol=0, rtol=1e-2)
+    assert_allclose(np.mean(res["e"][:, 0]), g1_true, atol=0, rtol=1e-2)
+    assert_allclose(np.mean(res["e"][:, 1]), g2_true, atol=0, rtol=1e-2)
 
-    assert np.allclose(np.std(res["flux"]), np.mean(res["flux_err"]), atol=0, rtol=2e-2)
-    assert np.allclose(np.std(res["T"]), np.mean(res["T_err"]), atol=0, rtol=2e-2)
-    assert np.allclose(
+    assert_allclose(np.std(res["flux"]), np.mean(res["flux_err"]), atol=0, rtol=2e-2)
+    assert_allclose(np.std(res["T"]), np.mean(res["T_err"]), atol=0, rtol=2e-2)
+    assert_allclose(
         np.std(res["e"][:, 0]), np.mean(res["e_err"][:, 0]), atol=0, rtol=2e-2)
-    assert np.allclose(
+    assert_allclose(
         np.std(res["e"][:, 1]), np.mean(res["e_err"][:, 1]), atol=0, rtol=2e-2)
 
-    assert np.allclose(
+    assert_allclose(
         mom_cov[2:, 2:],
         np.mean(res["mom_cov"][:, 2:, 2:], axis=0),
         atol=2.5e-1,
         rtol=0,
     )
 
-    assert np.allclose(
+    assert_allclose(
         np.diagonal(mom_cov[2:, 2:]),
         np.diagonal(np.mean(res["mom_cov"][:, 2:, 2:], axis=0)),
         atol=0,
@@ -795,7 +896,7 @@ def test_prepsfmom_gauss_true_flux(
     )
     res = fitter.go(obs=obs, no_psf=True)
     flux_true = res["flux"]
-    assert np.allclose(flux_true, 400, atol=0, rtol=5e-3)
+    assert_allclose(flux_true, 400, atol=0, rtol=5e-3)
 
     obs = Observation(
         image=im,
@@ -805,24 +906,16 @@ def test_prepsfmom_gauss_true_flux(
     )
     res = fitter.go(obs=obs)
     flux_true = res["flux"]
-    assert np.allclose(flux_true, 400, atol=0, rtol=5e-3)
+    assert_allclose(flux_true, 400, atol=0, rtol=5e-3)
 
 
 @pytest.mark.parametrize('pixel_scale', [0.25, 0.125])
-@pytest.mark.parametrize('fwhm', [
-    2, 0.5,
-])
-@pytest.mark.parametrize('image_size', [
-    107,
-])
-@pytest.mark.parametrize('pad_factor', [
-    3.5, 4,
-])
-@pytest.mark.parametrize('mom_fwhm', [
-    2, 2.5,
-])
+@pytest.mark.parametrize('fwhm', [2, 0.5])
+@pytest.mark.parametrize('image_size', [107])
+@pytest.mark.parametrize('pad_factor', [3.5, 4])
+@pytest.mark.parametrize('mom_fwhm', [2, 2.5])
 def test_prepsfmom_comp_to_gaussmom(
-    pad_factor, image_size, fwhm, pixel_scale, mom_fwhm,
+    pad_factor, image_size, fwhm, pixel_scale, mom_fwhm
 ):
     rng = np.random.RandomState(seed=100)
 
@@ -858,7 +951,9 @@ def test_prepsfmom_comp_to_gaussmom(
         image=im_true,
         jacobian=jac,
     )
-    res = PGaussMom(fwhm=mom_fwhm, pad_factor=pad_factor).go(
+    res = PGaussMom(
+        fwhm=mom_fwhm, pad_factor=pad_factor,
+    ).go(
         obs=obs, no_psf=True, return_kernels=True,
     )
 
@@ -870,7 +965,87 @@ def test_prepsfmom_comp_to_gaussmom(
             print("%s:" % k, res[k], res_gmom[k])
 
     for k in ["flux", "flux_err", "T", "T_err", "e", "e_cov"]:
-        assert np.allclose(res[k], res_gmom[k], atol=0, rtol=1e-2)
+        assert_allclose(res[k], res_gmom[k], atol=0, rtol=1e-2)
+
+
+@pytest.mark.parametrize('pixel_scale', [0.25, 0.125])
+@pytest.mark.parametrize('fwhm', [2, 0.5])
+@pytest.mark.parametrize('image_size', [107])
+@pytest.mark.parametrize('pad_factor', [3.5, 4])
+@pytest.mark.parametrize('mom_fwhm', [2, 2.5])
+@pytest.mark.parametrize('fwhm_smooth', [0, 1.5])
+def test_prepsfmom_comp_to_gaussmom_fwhm_smooth(
+    pad_factor, image_size, fwhm, pixel_scale, mom_fwhm, fwhm_smooth
+):
+    rng = np.random.RandomState(seed=100)
+
+    cen = (image_size - 1)/2
+    gs_wcs = galsim.ShearWCS(
+        pixel_scale, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
+    scale = np.sqrt(gs_wcs.pixelArea())
+    shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+    xy = gs_wcs.toImage(galsim.PositionD(shift))
+
+    jac = Jacobian(
+        y=cen + xy.y, x=cen + xy.x,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
+    gal = galsim.Gaussian(
+        fwhm=fwhm
+    ).shear(
+        g1=-0.1, g2=0.2
+    ).withFlux(
+        400
+    ).shift(
+        dx=shift[0], dy=shift[1]
+    )
+
+    # get true flux
+    im_true = gal.drawImage(
+        nx=image_size,
+        ny=image_size,
+        wcs=gs_wcs,
+    ).array
+    obs = Observation(
+        image=im_true,
+        jacobian=jac,
+    )
+    res = PGaussMom(
+        fwhm=mom_fwhm, pad_factor=pad_factor, fwhm_smooth=fwhm_smooth,
+    ).go(
+        obs=obs, no_psf=True,
+    )
+
+    from ngmix.gaussmom import GaussMom
+    if fwhm_smooth > 0:
+        im_true_smooth = galsim.Convolve(
+            [gal, galsim.Gaussian(fwhm=fwhm_smooth)]
+        ).drawImage(
+            nx=image_size,
+            ny=image_size,
+            wcs=gs_wcs,
+        ).array
+    else:
+        im_true_smooth = im_true
+    obs_smooth = Observation(
+        image=im_true_smooth,
+        jacobian=jac,
+    )
+    res_gmom = GaussMom(fwhm=mom_fwhm).go(obs=obs_smooth)
+
+    for k in sorted(res):
+        if k in res_gmom:
+            print("%s:" % k, res[k], res_gmom[k])
+
+    assert_allclose(res["flux"], res_gmom["flux"], atol=0, rtol=5e-4)
+    assert_allclose(res["T"], res_gmom["T"], atol=0, rtol=1e-3)
+    assert_allclose(res["e"], res_gmom["e"], atol=0, rtol=1e-3)
+    # the errors do not match - this is because the underlying noise model is
+    # different - the pure gaussian moments weight map is an error on the convolved
+    # profile whereas the pre-PSF case uses error propagation through the
+    # smoothing kernel treating the weight map as applying to the unconvolved profile
+    # thus we do not test the errors
 
 
 def _sim_apodize(flux_factor, ap_rad):
