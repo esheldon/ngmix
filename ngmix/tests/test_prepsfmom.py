@@ -393,11 +393,10 @@ def test_prepsfmom_gauss(
 @pytest.mark.parametrize('fwhm,psf_fwhm', [(2.0, 1.0)])
 @pytest.mark.parametrize('image_size', [53])
 @pytest.mark.parametrize('pad_factor', [1.5])
-@pytest.mark.parametrize('round', [True, False])
 @pytest.mark.parametrize('fwhm_smooth', [0, 1])
 def test_prepsfmom_mn_cov_psf(
     pad_factor, image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm, cls,
-    fwhm_smooth, round,
+    fwhm_smooth,
 ):
     """Slower test to make sure means and errors are right
     w/ tons of monte carlo samples.
@@ -434,11 +433,9 @@ def test_prepsfmom_mn_cov_psf(
     )
     psf = galsim.Gaussian(
         fwhm=psf_fwhm
+    ).shear(
+        g1=0.3, g2=-0.15
     )
-    if not round:
-        psf = psf.shear(
-            g1=0.3, g2=-0.15
-        )
     im = galsim.Convolve([gal, psf]).drawImage(
         nx=image_size,
         ny=image_size,
