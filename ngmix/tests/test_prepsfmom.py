@@ -386,7 +386,7 @@ def test_prepsfmom_gauss(
 
 
 @pytest.mark.parametrize("cls,mom_fwhm,snr", [
-    # (KSigmaMom, 2.0, 1e2),
+    (KSigmaMom, 2.0, 1e2),
     (PGaussMom, 2.0, 1e2),
 ])
 @pytest.mark.parametrize('pixel_scale', [0.25])
@@ -526,6 +526,108 @@ def test_prepsfmom_mn_cov_psf(
         atol=0,
         rtol=2e-2,
     )
+
+
+@pytest.mark.parametrize("cls,mom_fwhm,snr", [(PGaussMom, 2.0, 1e2)])
+@pytest.mark.parametrize('pixel_scale', [0.25])
+@pytest.mark.parametrize('fwhm,psf_fwhm', [(2.0, 1.0)])
+@pytest.mark.parametrize('image_size', [53])
+@pytest.mark.parametrize('pad_factor', [1.5])
+def test_prepsfmom_fwhm_smooth_snr(
+    pad_factor, image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm, cls,
+):
+    def _run_sim_fwhm_smooth(fwhm_smooth):
+        rng = np.random.RandomState(seed=100)
+
+        cen = (image_size - 1)/2
+        gs_wcs = galsim.ShearWCS(
+            pixel_scale, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
+        scale = np.sqrt(gs_wcs.pixelArea())
+        shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+        psf_shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+        xy = gs_wcs.toImage(galsim.PositionD(shift))
+        psf_xy = gs_wcs.toImage(galsim.PositionD(psf_shift))
+
+        jac = Jacobian(
+            y=cen + xy.y, x=cen + xy.x,
+            dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+            dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
+        psf_jac = Jacobian(
+            y=26 + psf_xy.y, x=26 + psf_xy.x,
+            dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+            dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
+        gal = galsim.Gaussian(
+            fwhm=fwhm
+        ).shear(
+            g1=-0.1, g2=0.2
+        ).withFlux(
+            400
+        ).shift(
+            dx=shift[0], dy=shift[1]
+        )
+        psf = galsim.Gaussian(
+            fwhm=psf_fwhm
+        ).shear(
+            g1=0.3, g2=-0.15
+        )
+        im = galsim.Convolve([gal, psf]).drawImage(
+            nx=image_size,
+            ny=image_size,
+            wcs=gs_wcs
+        ).array
+        noise = np.sqrt(np.sum(im**2)) / snr
+        wgt = np.ones_like(im) / noise**2
+
+        psf_im = psf.shift(
+            dx=psf_shift[0], dy=psf_shift[1]
+        ).drawImage(
+            nx=53,
+            ny=53,
+            wcs=gs_wcs
+        ).array
+
+        fitter = cls(
+            fwhm=mom_fwhm,
+            pad_factor=pad_factor,
+            fwhm_smooth=fwhm_smooth,
+        )
+
+        # get true flux
+        im_true = gal.drawImage(
+            nx=image_size,
+            ny=image_size,
+            wcs=gs_wcs,
+            method='no_pixel').array
+        obs = Observation(
+            image=im_true,
+            jacobian=jac,
+        )
+        res = fitter.go(obs=obs, no_psf=True)
+
+        res = []
+        for _ in range(1_000):
+            _im = im + rng.normal(size=im.shape, scale=noise)
+            obs = Observation(
+                image=_im,
+                weight=wgt,
+                jacobian=jac,
+                psf=Observation(image=psf_im, jacobian=psf_jac),
+            )
+
+            _res = fitter.go(obs=obs)
+            if _res['flags'] == 0:
+                res.append(_res)
+
+        res = _stack_list_of_dicts(res)
+
+        return np.abs(np.mean(res["e"], axis=0))/np.std(res["e"], axis=0)
+
+    e_snr = _run_sim_fwhm_smooth(0)
+    e_snr_smooth = _run_sim_fwhm_smooth(1)
+
+    assert np.all(e_snr_smooth > e_snr)
 
 
 @pytest.mark.parametrize("cls,mom_fwhm,snr", [
