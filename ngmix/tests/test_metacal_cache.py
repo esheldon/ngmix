@@ -40,8 +40,5 @@ def test_metacal_cache():
     print("third time: %r seconds (< %r?)" % (t2, t1*0.7), flush=True)
     print(_cached_galsim_stuff.cache_info(), flush=True)
 
-    # numba should be slower always but we do not care how much
-    assert t1 < t0
-
     # we expect roughly 30% gains
     assert t2 < t1*0.7
