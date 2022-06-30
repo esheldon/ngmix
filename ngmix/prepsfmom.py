@@ -41,22 +41,15 @@ class PrePSFMom(object):
         If non-zero, this optional applies additional Gaussian smoothing to the
         object before computing the moments. Typically a non-zero value results
         in less shape noise.
-    use_pix_weight : bool, optional
-        If `True`, this option applies inverse pixel variance weighting in Fourier
-        space when computing the moments. Typically this optional results in poorer
-        performance, but for round PSFs, it results in similar performance as
-        `fwhm_smooth`.
     """
     def __init__(
-        self, fwhm, kernel, pad_factor=4, ap_rad=1.5,
-        fwhm_smooth=0, use_pix_weight=False
+        self, fwhm, kernel, pad_factor=4, ap_rad=1.5, fwhm_smooth=0
     ):
         self.fwhm = fwhm
         self.pad_factor = pad_factor
         self.kernel = kernel
         self.ap_rad = ap_rad
         self.fwhm_smooth = fwhm_smooth
-        self.use_pix_weight = use_pix_weight
         if self.kernel == "ksigma":
             self.kind = "ksigma"
         elif self.kernel in ["gauss", "pgauss"]:
@@ -170,7 +163,6 @@ class PrePSFMom(object):
         mom, mom_cov = _measure_moments_fft(
             kim, kpsf_im, tot_var, eff_pad_factor, kernels,
             im_row - psf_im_row, im_col - psf_im_col,
-            use_pix_weight=self.use_pix_weight,
         )
         res = make_mom_result(mom, mom_cov)
         if res['flags'] != 0:
@@ -214,18 +206,13 @@ class KSigmaMom(PrePSFMom):
         If non-zero, this optional applies additional Gaussian smoothing to the
         object before computing the moments. Typically a non-zero value results
         in less shape noise.
-    use_pix_weight : bool, optional
-        If `True`, this option applies inverse pixel variance weighting in Fourier
-        space when computing the moments. Typically this optional results in poorer
-        performance, but for round PSFs, it results in similar performance as
-        `fwhm_smooth`.
     """
     def __init__(
-        self, fwhm, pad_factor=4, ap_rad=1.5, fwhm_smooth=0, use_pix_weight=False,
+        self, fwhm, pad_factor=4, ap_rad=1.5, fwhm_smooth=0
     ):
         super().__init__(
             fwhm, 'ksigma', pad_factor=pad_factor, ap_rad=ap_rad,
-            fwhm_smooth=fwhm_smooth, use_pix_weight=use_pix_weight,
+            fwhm_smooth=fwhm_smooth,
         )
 
 
@@ -252,18 +239,13 @@ class PGaussMom(PrePSFMom):
         If non-zero, this optional applies additional Gaussian smoothing to the
         object before computing the moments. Typically a non-zero value results
         in less shape noise.
-    use_pix_weight : bool, optional
-        If `True`, this option applies inverse pixel variance weighting in Fourier
-        space when computing the moments. Typically this optional results in poorer
-        performance, but for round PSFs, it results in similar performance as
-        `fwhm_smooth`.
     """
     def __init__(
-        self, fwhm, pad_factor=4, ap_rad=1.5, fwhm_smooth=0, use_pix_weight=False,
+        self, fwhm, pad_factor=4, ap_rad=1.5, fwhm_smooth=0,
     ):
         super().__init__(
             fwhm, 'pgauss', pad_factor=pad_factor, ap_rad=ap_rad,
-            fwhm_smooth=fwhm_smooth, use_pix_weight=use_pix_weight,
+            fwhm_smooth=fwhm_smooth,
         )
 
 
@@ -272,7 +254,7 @@ PrePSFGaussMom = PGaussMom
 
 
 def _measure_moments_fft(
-    kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, dcol, use_pix_weight=False,
+    kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, dcol,
 ):
     # we only need to do things where the kernel is non-zero
     # this saves a bunch of CPU cycles
@@ -309,15 +291,10 @@ def _measure_moments_fft(
     fkp = kernels["fkp"]
     fkc = kernels["fkc"]
 
-    if use_pix_weight:
-        wgt = (kpsf_im * np.conj(kpsf_im)).real
-    else:
-        wgt = 1.0
-
-    mf = np.sum((kim * fkf * wgt).real) * df2
-    mr = np.sum((kim * fkr * wgt).real) * df2
-    mp = np.sum((kim * fkp * wgt).real) * df2
-    mc = np.sum((kim * fkc * wgt).real) * df2
+    mf = np.sum((kim * fkf).real) * df2
+    mr = np.sum((kim * fkr).real) * df2
+    mp = np.sum((kim * fkp).real) * df2
+    mc = np.sum((kim * fkc).real) * df2
 
     # build a covariance matrix of the moments
     # here we assume each Fourier mode is independent and sum the variances
@@ -331,7 +308,7 @@ def _measure_moments_fft(
     m_cov[1, 1] = 1
     tot_var *= eff_pad_factor**2
     tot_var_df4 = tot_var * df4
-    psf_kerns_fac = wgt / kpsf_im
+    psf_kerns_fac = 1 / kpsf_im
     kerns = [
         fkp * psf_kerns_fac,
         fkc * psf_kerns_fac,

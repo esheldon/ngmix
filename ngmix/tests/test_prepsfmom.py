@@ -394,13 +394,10 @@ def test_prepsfmom_gauss(
 @pytest.mark.parametrize('image_size', [53])
 @pytest.mark.parametrize('pad_factor', [1.5])
 @pytest.mark.parametrize('round', [True, False])
-@pytest.mark.parametrize(
-    'fwhm_smooth,use_pix_weight',
-    [(0, False), (0, True), (1, False)],
-)
+@pytest.mark.parametrize('fwhm_smooth', [0, 1])
 def test_prepsfmom_mn_cov_psf(
     pad_factor, image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm, cls,
-    use_pix_weight, fwhm_smooth, round,
+    fwhm_smooth, round,
 ):
     """Slower test to make sure means and errors are right
     w/ tons of monte carlo samples.
@@ -461,35 +458,20 @@ def test_prepsfmom_mn_cov_psf(
     fitter = cls(
         fwhm=mom_fwhm,
         pad_factor=pad_factor,
-        use_pix_weight=use_pix_weight,
         fwhm_smooth=fwhm_smooth,
     )
 
     # get true flux
-    if use_pix_weight:
-        im_true = galsim.Convolve([gal, psf]).drawImage(
-            nx=image_size,
-            ny=image_size,
-            wcs=gs_wcs,
-            method='no_pixel').array
-        obs = Observation(
-            image=im_true,
-            weight=wgt,
-            jacobian=jac,
-            psf=Observation(image=psf_im, jacobian=psf_jac),
-        )
-        res = fitter.go(obs=obs)
-    else:
-        im_true = gal.drawImage(
-            nx=image_size,
-            ny=image_size,
-            wcs=gs_wcs,
-            method='no_pixel').array
-        obs = Observation(
-            image=im_true,
-            jacobian=jac,
-        )
-        res = fitter.go(obs=obs, no_psf=True)
+    im_true = gal.drawImage(
+        nx=image_size,
+        ny=image_size,
+        wcs=gs_wcs,
+        method='no_pixel').array
+    obs = Observation(
+        image=im_true,
+        jacobian=jac,
+    )
+    res = fitter.go(obs=obs, no_psf=True)
     flux_true = res["flux"]
     T_true = res["T"]
     g1_true = res["e"][0]

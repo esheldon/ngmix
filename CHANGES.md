@@ -4,8 +4,6 @@
 
     - Added `fwhm_smooth` keyword to pre-PSF moments routines to allow for extra
       smoothing of the profile before the moments are measured.
-    - Added `use_pix_weight` keyword to pre-PSF moments routines to enable inverse
-      variance pixel weighting.
     - Added caching of FFTs in metacal and pre-PSF moment rountines.
 
 
