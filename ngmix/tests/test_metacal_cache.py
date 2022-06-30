@@ -11,6 +11,8 @@ from ..metacal.metacal import _cached_galsim_stuff
 
 @flaky(max_runs=10)
 def test_metacal_cache():
+    _cached_galsim_stuff.cache_clear()
+
     # first warm up numba
     rng = np.random.RandomState(seed=100)
     obs = _get_obs(rng, noise=0.005, set_noise_image=True, psf_fwhm=0.8, n=300)
