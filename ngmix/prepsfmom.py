@@ -164,7 +164,7 @@ class PrePSFMom(object):
             kim, kpsf_im, tot_var, eff_pad_factor, kernels,
             im_row - psf_im_row, im_col - psf_im_col,
         )
-        res = make_mom_result(mom, mom_cov, mom_norm)
+        res = make_mom_result(mom, mom_cov, mom_norm=mom_norm)
         if res['flags'] != 0:
             logger.debug("pre-psf moments failed: %s" % res['flagstr'])
 
