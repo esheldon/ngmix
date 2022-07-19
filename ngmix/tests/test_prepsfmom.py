@@ -806,7 +806,7 @@ def test_moments_make_mom_result_flags():
         _mom_cov = mom_cov.copy()
         _mom_cov[4, i] = np.nan
         _mom_cov[i, 4] = np.nan
-        res = make_mom_result(mom, _mom_cov, 1)
+        res = make_mom_result(mom, _mom_cov, mom_norm=1)
         assert (res["flags"] & ngmix.flags.NONPOS_SHAPE_VAR) != 0
         assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_SHAPE_VAR] in res["flagstr"]
         assert res["flux_flags"] == 0
