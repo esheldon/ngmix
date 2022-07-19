@@ -160,11 +160,11 @@ class PrePSFMom(object):
         tot_var = np.sum(1.0 / obs.weight[msk])
 
         # run the actual measurements and return
-        mom, mom_cov = _measure_moments_fft(
+        mom, mom_cov, mom_norm = _measure_moments_fft(
             kim, kpsf_im, tot_var, eff_pad_factor, kernels,
             im_row - psf_im_row, im_col - psf_im_col,
         )
-        res = make_mom_result(mom, mom_cov)
+        res = make_mom_result(mom, mom_cov, mom_norm)
         if res['flags'] != 0:
             logger.debug("pre-psf moments failed: %s" % res['flagstr'])
 
@@ -291,6 +291,7 @@ def _measure_moments_fft(
     fkp = kernels["fkp"]
     fkc = kernels["fkc"]
 
+    mom_norm = np.sum(kernels["fk00"].real) * df2
     mf = np.sum((kim * fkf).real) * df2
     mr = np.sum((kim * fkr).real) * df2
     mp = np.sum((kim * fkp).real) * df2
@@ -324,7 +325,7 @@ def _measure_moments_fft(
 
     mom = np.array([np.nan, np.nan, mp, mc, mr, mf])
 
-    return mom, m_cov
+    return mom, m_cov, mom_norm
 
 
 @njit
@@ -580,6 +581,7 @@ def _ksigma_kernels(
         fkc=fkc,
         msk=msk,
         nrm=nrm,
+        fk00=fkf[0, 0],
     )
 
 
@@ -679,6 +681,7 @@ def _gauss_kernels(
         fkc=fkc,
         msk=msk,
         nrm=nrm,
+        fk00=fkf[0, 0],
     )
 
 

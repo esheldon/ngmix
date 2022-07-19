@@ -349,7 +349,7 @@ def g2mom(g1, g2, T):
     return Irr, Irc, Icc
 
 
-def make_mom_result(mom, mom_cov):
+def make_mom_result(mom, mom_cov, mom_norm):
     """Make a fitting results dict from a set of moments.
 
     Parameters
@@ -358,6 +358,8 @@ def make_mom_result(mom, mom_cov):
         The array of moments in the order [Mv, Mu, M1, M2, MT, MF].
     mom_cov : np.ndarray
         The array of moment covariances.
+    mom_norm : float
+        The sum of the moment weight function itself.
 
     Returns
     -------
@@ -389,6 +391,7 @@ def make_mom_result(mom, mom_cov):
     res["flux"] = mom[mf_ind]
     res["mom"] = mom
     res["mom_cov"] = mom_cov
+    res["mom_norm"] = mom_norm
     res["flux_flags"] = 0
     res["flux_flagstr"] = ""
     res["T_flags"] = 0

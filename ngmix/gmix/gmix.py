@@ -1244,16 +1244,8 @@ def get_weighted_moments_stats(ares):
         else:
             res[n] = ares[n]
 
-    scales = np.array([res["sums"][5]] * 5 + [1.0])
-    res["mom"] = res["sums"].copy()
-    res["mom"] /= scales
-    res["mom_cov"] = res["sums_cov"].copy()
-    for i in range(6):
-        for j in range(6):
-            res["mom_cov"][i, j] = res["mom_cov"][i, j]/scales[i]/scales[j]
-
     res.update(
-        moments.make_mom_result(res["mom"], res["mom_cov"])
+        moments.make_mom_result(res["sums"], res["sums_cov"], res["wsum"])
     )
 
     return res
