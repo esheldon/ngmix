@@ -581,7 +581,7 @@ def _ksigma_kernels(
         fkc=fkc,
         msk=msk,
         nrm=nrm,
-        fk00=fkf[0, 0],
+        fk00=fkf[0],
     )
 
 
@@ -681,7 +681,7 @@ def _gauss_kernels(
         fkc=fkc,
         msk=msk,
         nrm=nrm,
-        fk00=fkf[0, 0],
+        fk00=fkf[0],
     )
 
 
