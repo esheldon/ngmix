@@ -914,6 +914,7 @@ def test_prepsfmom_gauss_true_flux(
 @pytest.mark.parametrize('pad_factor', [3.5, 4])
 @pytest.mark.parametrize('mom_fwhm', [2, 2.5])
 @pytest.mark.parametrize('cls', [PGaussMom, KSigmaMom])
+@pytest.mark.parametrize('fwhm_smooth', [0, 1.5])
 def test_prepsfmom_mom_norm(
     pad_factor, image_size, pixel_scale, mom_fwhm, cls,
 ):
@@ -936,7 +937,7 @@ def test_prepsfmom_mom_norm(
         jacobian=jac,
     )
     res = cls(
-        fwhm=mom_fwhm, pad_factor=pad_factor,
+        fwhm=mom_fwhm, pad_factor=pad_factor, fwhm_smooth=fwhm_smooth,
     ).go(
         obs=obs, no_psf=True,
     )
