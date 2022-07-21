@@ -1245,7 +1245,7 @@ def get_weighted_moments_stats(ares):
             res[n] = ares[n]
 
     res.update(
-        moments.make_mom_result(res["sums"], res["sums_cov"], res["wsum"])
+        moments.make_mom_result(res["sums"].copy(), res["sums_cov"].copy(), res["wsum"])
     )
 
     return res

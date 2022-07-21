@@ -910,11 +910,45 @@ def test_prepsfmom_gauss_true_flux(
 
 
 @pytest.mark.parametrize('pixel_scale', [0.25, 0.125])
+@pytest.mark.parametrize('image_size', [107])
+@pytest.mark.parametrize('pad_factor', [3.5, 4])
+@pytest.mark.parametrize('mom_fwhm', [2, 2.5])
+@pytest.mark.parametrize('cls', [PGaussMom, KSigmaMom])
+def test_prepsfmom_mom_norm(
+    pad_factor, image_size, pixel_scale, mom_fwhm, cls,
+):
+    rng = np.random.RandomState(seed=100)
+
+    cen = (image_size - 1)/2
+    gs_wcs = galsim.ShearWCS(
+        pixel_scale, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
+    scale = np.sqrt(gs_wcs.pixelArea())
+    shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+    xy = gs_wcs.toImage(galsim.PositionD(shift))
+
+    jac = Jacobian(
+        y=cen + xy.y, x=cen + xy.x,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
+    obs = Observation(
+        image=np.ones((image_size, image_size)),
+        jacobian=jac,
+    )
+    res = cls(
+        fwhm=mom_fwhm, pad_factor=pad_factor,
+    ).go(
+        obs=obs, no_psf=True,
+    )
+    assert_allclose(res["mom_norm"], res["flux"], atol=0, rtol=2e-4)
+
+
+@pytest.mark.parametrize('pixel_scale', [0.25, 0.125])
 @pytest.mark.parametrize('fwhm', [2, 0.5])
 @pytest.mark.parametrize('image_size', [107])
 @pytest.mark.parametrize('pad_factor', [3.5, 4])
 @pytest.mark.parametrize('mom_fwhm', [2, 2.5])
-def test_prepsfmom_comp_to_gaussmom(
+def test_prepsfmom_comp_to_gaussmom_simple(
     pad_factor, image_size, fwhm, pixel_scale, mom_fwhm
 ):
     rng = np.random.RandomState(seed=100)
