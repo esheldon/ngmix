@@ -3,7 +3,9 @@
 ### bug fixes
 
     - Fixed 1/area normalization for all moments fields in `GaussMom` results.
+### changes
 
+    - Changed "mom*" fields in the moments outputs to "sums*".
 ### new features
 
     - Added `fwhm_smooth` keyword to pre-PSF moments routines to allow for extra
