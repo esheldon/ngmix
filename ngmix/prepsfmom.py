@@ -545,12 +545,6 @@ def _ksigma_kernels(
             "norm = %f (should be 1)!" % (kernel_size, nrm)
         )
 
-    # add smoothing after norm check above for kernel size
-    if fwhm_smooth > 0:
-        exp_val_smooth = _get_fwhm_smooth_profile(fwhm_smooth, fmag2)
-        fkf *= exp_val_smooth
-        knrm *= exp_val_smooth
-
     # the moment kernels take a bit more work
     # product by u^2 in real space is -dk^2/dku^2 in Fourier space
     # same holds for v and cross deriv is -dk^2/dkudkv
@@ -564,6 +558,13 @@ def _ksigma_kernels(
     # code is all that efficient anyways.
     two_knrm_dWdk2 = (-knrm * 8.0 / kmax2) * karg3
     four_knrm_dW2dk22 = (knrm * 48 / kmax2**2) * karg2
+
+    # add smoothing after norm check above for kernel size
+    if fwhm_smooth > 0:
+        exp_val_smooth = _get_fwhm_smooth_profile(fwhm_smooth, fmag2)
+        fkf *= exp_val_smooth
+        two_knrm_dWdk2 *= exp_val_smooth
+        four_knrm_dW2dk22 *= exp_val_smooth
 
     # the linear combinations here measure the moments proportional to the size
     # and shears - see the Mf, Mr, M+, Mx moments in Bernstein et al., arXiv:1508.05655
@@ -650,7 +651,6 @@ def _gauss_kernels(
     if fwhm_smooth > 0:
         exp_val_smooth = _get_fwhm_smooth_profile(fwhm_smooth, fmag2)
         fkf *= exp_val_smooth
-        knrm *= exp_val_smooth
 
     # the moment kernels take a bit more work
     # product by u^2 in real space is -dk^2/dku^2 in Fourier space
