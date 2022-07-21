@@ -916,7 +916,7 @@ def test_prepsfmom_gauss_true_flux(
 @pytest.mark.parametrize('cls', [PGaussMom, KSigmaMom])
 @pytest.mark.parametrize('fwhm_smooth', [0, 1.5])
 def test_prepsfmom_mom_norm(
-    pad_factor, image_size, pixel_scale, mom_fwhm, cls,
+    pad_factor, image_size, pixel_scale, mom_fwhm, cls, fwhm_smooth,
 ):
     rng = np.random.RandomState(seed=100)
 
