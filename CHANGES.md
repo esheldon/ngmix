@@ -1,5 +1,9 @@
 ## v2.1.0
 
+### bug fixes
+
+    - Fixed 1/area normalization for all moments fields in `GaussMom` results.
+
 ### new features
 
     - Added `fwhm_smooth` keyword to pre-PSF moments routines to allow for extra
