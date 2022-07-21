@@ -762,7 +762,7 @@ def test_moments_make_mom_result_flags():
     for i in range(2, 6):
         _mom_cov = mom_cov.copy()
         _mom_cov[i, i] = -1
-        res = make_mom_result(mom, _mom_cov, 1)
+        res = make_mom_result(mom, _mom_cov, mom_norm=1)
         assert (res["flags"] & ngmix.flags.NONPOS_VAR) != 0
         assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_VAR] in res["flagstr"]
         if i == 5:
@@ -782,7 +782,7 @@ def test_moments_make_mom_result_flags():
     # neg flux
     _mom = mom.copy()
     _mom[5] = -1
-    res = make_mom_result(_mom, mom_cov, 1)
+    res = make_mom_result(_mom, mom_cov, mom_norm=1)
     assert (res["flags"] & ngmix.flags.NONPOS_FLUX) != 0
     assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_FLUX] in res["flagstr"]
     assert res["flux_flags"] == 0
@@ -793,7 +793,7 @@ def test_moments_make_mom_result_flags():
     # neg T
     _mom = mom.copy()
     _mom[4] = -1
-    res = make_mom_result(_mom, mom_cov, 1)
+    res = make_mom_result(_mom, mom_cov, mom_norm=1)
     assert (res["flags"] & ngmix.flags.NONPOS_SIZE) != 0
     assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_SIZE] in res["flagstr"]
     assert res["flux_flags"] == 0
@@ -806,7 +806,7 @@ def test_moments_make_mom_result_flags():
         _mom_cov = mom_cov.copy()
         _mom_cov[4, i] = np.nan
         _mom_cov[i, 4] = np.nan
-        res = make_mom_result(mom, _mom_cov, 1)
+        res = make_mom_result(mom, _mom_cov, mom_norm=1)
         assert (res["flags"] & ngmix.flags.NONPOS_SHAPE_VAR) != 0
         assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_SHAPE_VAR] in res["flagstr"]
         assert res["flux_flags"] == 0
