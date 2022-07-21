@@ -232,7 +232,10 @@ def test_mdet_regression(fname, write=False):
     else:
         old_data = fitsio.read(fname)
         for col in old_data.dtype.names:
-            if ('psf_' in col or 'ratio' in col) and '1.3.9' in fname:
+            if (
+                ('psf_' in col or 'ratio' in col)
+                and ('1.3.9' in fname or '2.0' in fname)
+            ):
                 rtol = 1.0e-4
                 atol = 1.0e-4
             else:

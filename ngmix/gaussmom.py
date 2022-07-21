@@ -58,6 +58,11 @@ class GaussMom(object):
         res['flux'] *= fac
         res['flux_err'] *= fac
         res['pars'][5] *= fac
+        res["sums"] *= fac
+        res["sums_cov"] *= fac**2
+        res["sums_norm"] *= fac
+        res["wsum"] *= fac
+        res["sums_err"] *= fac
         return res
 
     def _set_mompars(self):

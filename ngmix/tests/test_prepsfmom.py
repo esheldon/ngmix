@@ -371,8 +371,8 @@ def test_prepsfmom_gauss(
         _report_info("T", res["T"], T_true, np.mean(res["T_err"]))
         _report_info("g1", res["e"][:, 0], g1_true, np.mean(res["e_err"][0]))
         _report_info("g2", res["e"][:, 1], g2_true, np.mean(res["e_err"][1]))
-        mom_cov = np.cov(res["mom"].T)
-        print("mom cov ratio:\n", np.mean(res["mom_cov"], axis=0)/mom_cov, flush=True)
+        mom_cov = np.cov(res["sums"].T)
+        print("sums cov ratio:\n", np.mean(res["sums_cov"], axis=0)/mom_cov, flush=True)
         assert_allclose(
             np.abs(np.mean(res["flux"]) - flux_true)/np.mean(res["flux_err"]),
             0,
@@ -496,10 +496,10 @@ def test_prepsfmom_mn_cov_psf(
     _report_info("T", res["T"], T_true, np.mean(res["T_err"]))
     _report_info("g1", res["e"][:, 0], g1_true, np.mean(res["e_err"][0]))
     _report_info("g2", res["e"][:, 1], g2_true, np.mean(res["e_err"][1]))
-    mom_cov = np.cov(res["mom"].T)
-    print("mom cov ratio:\n", np.mean(res["mom_cov"], axis=0)/mom_cov, flush=True)
-    print("mom cov meas:\n", mom_cov, flush=True)
-    print("mom cov pred:\n", np.mean(res["mom_cov"], axis=0), flush=True)
+    mom_cov = np.cov(res["sums"].T)
+    print("sums cov ratio:\n", np.mean(res["sums_cov"], axis=0)/mom_cov, flush=True)
+    print("sums cov meas:\n", mom_cov, flush=True)
+    print("sums cov pred:\n", np.mean(res["sums_cov"], axis=0), flush=True)
 
     assert_allclose(np.mean(res["flux"]), flux_true, atol=0, rtol=1e-2)
     assert_allclose(np.mean(res["T"]), T_true, atol=0, rtol=1e-2)
@@ -515,14 +515,14 @@ def test_prepsfmom_mn_cov_psf(
 
     assert_allclose(
         mom_cov[2:, 2:],
-        np.mean(res["mom_cov"][:, 2:, 2:], axis=0),
+        np.mean(res["sums_cov"][:, 2:, 2:], axis=0),
         atol=2.5e-1,
         rtol=0,
     )
 
     assert_allclose(
         np.diagonal(mom_cov[2:, 2:]),
-        np.diagonal(np.mean(res["mom_cov"][:, 2:, 2:], axis=0)),
+        np.diagonal(np.mean(res["sums_cov"][:, 2:, 2:], axis=0)),
         atol=0,
         rtol=2e-2,
     )
@@ -722,10 +722,10 @@ def test_prepsfmom_mn_cov_nopsf(
     _report_info("T", res["T"], T_true, np.mean(res["T_err"]))
     _report_info("g1", res["e"][:, 0], g1_true, np.mean(res["e_err"][0]))
     _report_info("g2", res["e"][:, 1], g2_true, np.mean(res["e_err"][1]))
-    mom_cov = np.cov(res["mom"].T)
-    print("mom cov ratio:\n", np.mean(res["mom_cov"], axis=0)/mom_cov, flush=True)
-    print("mom cov meas:\n", mom_cov, flush=True)
-    print("mom cov pred:\n", np.mean(res["mom_cov"], axis=0), flush=True)
+    mom_cov = np.cov(res["sums"].T)
+    print("sums cov ratio:\n", np.mean(res["sums_cov"], axis=0)/mom_cov, flush=True)
+    print("sums cov meas:\n", mom_cov, flush=True)
+    print("sums cov pred:\n", np.mean(res["sums_cov"], axis=0), flush=True)
 
     assert_allclose(np.mean(res["flux"]), flux_true, atol=0, rtol=1e-2)
     assert_allclose(np.mean(res["T"]), T_true, atol=0, rtol=1e-2)
@@ -741,14 +741,14 @@ def test_prepsfmom_mn_cov_nopsf(
 
     assert_allclose(
         mom_cov[2:, 2:],
-        np.mean(res["mom_cov"][:, 2:, 2:], axis=0),
+        np.mean(res["sums_cov"][:, 2:, 2:], axis=0),
         atol=2.5e-1,
         rtol=0,
     )
 
     assert_allclose(
         np.diagonal(mom_cov[2:, 2:]),
-        np.diagonal(np.mean(res["mom_cov"][:, 2:, 2:], axis=0)),
+        np.diagonal(np.mean(res["sums_cov"][:, 2:, 2:], axis=0)),
         atol=0,
         rtol=2e-2,
     )
@@ -762,7 +762,7 @@ def test_moments_make_mom_result_flags():
     for i in range(2, 6):
         _mom_cov = mom_cov.copy()
         _mom_cov[i, i] = -1
-        res = make_mom_result(mom, _mom_cov)
+        res = make_mom_result(mom, _mom_cov, sums_norm=1)
         assert (res["flags"] & ngmix.flags.NONPOS_VAR) != 0
         assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_VAR] in res["flagstr"]
         if i == 5:
@@ -782,7 +782,7 @@ def test_moments_make_mom_result_flags():
     # neg flux
     _mom = mom.copy()
     _mom[5] = -1
-    res = make_mom_result(_mom, mom_cov)
+    res = make_mom_result(_mom, mom_cov, sums_norm=1)
     assert (res["flags"] & ngmix.flags.NONPOS_FLUX) != 0
     assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_FLUX] in res["flagstr"]
     assert res["flux_flags"] == 0
@@ -793,7 +793,7 @@ def test_moments_make_mom_result_flags():
     # neg T
     _mom = mom.copy()
     _mom[4] = -1
-    res = make_mom_result(_mom, mom_cov)
+    res = make_mom_result(_mom, mom_cov, sums_norm=1)
     assert (res["flags"] & ngmix.flags.NONPOS_SIZE) != 0
     assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_SIZE] in res["flagstr"]
     assert res["flux_flags"] == 0
@@ -806,7 +806,7 @@ def test_moments_make_mom_result_flags():
         _mom_cov = mom_cov.copy()
         _mom_cov[4, i] = np.nan
         _mom_cov[i, 4] = np.nan
-        res = make_mom_result(mom, _mom_cov)
+        res = make_mom_result(mom, _mom_cov, sums_norm=1)
         assert (res["flags"] & ngmix.flags.NONPOS_SHAPE_VAR) != 0
         assert ngmix.flags.NAME_MAP[ngmix.flags.NONPOS_SHAPE_VAR] in res["flagstr"]
         assert res["flux_flags"] == 0
@@ -910,11 +910,45 @@ def test_prepsfmom_gauss_true_flux(
 
 
 @pytest.mark.parametrize('pixel_scale', [0.25, 0.125])
+@pytest.mark.parametrize('image_size', [107])
+@pytest.mark.parametrize('pad_factor', [3.5, 4])
+@pytest.mark.parametrize('mom_fwhm', [2, 2.5])
+@pytest.mark.parametrize('cls', [PGaussMom, KSigmaMom])
+def test_prepsfmom_mom_norm(
+    pad_factor, image_size, pixel_scale, mom_fwhm, cls,
+):
+    rng = np.random.RandomState(seed=100)
+
+    cen = (image_size - 1)/2
+    gs_wcs = galsim.ShearWCS(
+        pixel_scale, galsim.Shear(g1=-0.1, g2=0.06)).jacobian()
+    scale = np.sqrt(gs_wcs.pixelArea())
+    shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
+    xy = gs_wcs.toImage(galsim.PositionD(shift))
+
+    jac = Jacobian(
+        y=cen + xy.y, x=cen + xy.x,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+
+    obs = Observation(
+        image=np.ones((image_size, image_size)),
+        jacobian=jac,
+    )
+    res = cls(
+        fwhm=mom_fwhm, pad_factor=pad_factor,
+    ).go(
+        obs=obs, no_psf=True,
+    )
+    assert_allclose(res["sums_norm"], res["flux"], atol=0, rtol=2e-4)
+
+
+@pytest.mark.parametrize('pixel_scale', [0.25, 0.125])
 @pytest.mark.parametrize('fwhm', [2, 0.5])
 @pytest.mark.parametrize('image_size', [107])
 @pytest.mark.parametrize('pad_factor', [3.5, 4])
 @pytest.mark.parametrize('mom_fwhm', [2, 2.5])
-def test_prepsfmom_comp_to_gaussmom(
+def test_prepsfmom_comp_to_gaussmom_simple(
     pad_factor, image_size, fwhm, pixel_scale, mom_fwhm
 ):
     rng = np.random.RandomState(seed=100)

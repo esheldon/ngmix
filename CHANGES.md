@@ -1,10 +1,17 @@
 ## v2.1.0
 
+### bug fixes
+
+    - Fixed 1/area normalization for all moments fields in `GaussMom` results.
+### changes
+
+    - Changed "mom*" fields in the moments outputs to "sums*".
 ### new features
 
     - Added `fwhm_smooth` keyword to pre-PSF moments routines to allow for extra
       smoothing of the profile before the moments are measured.
     - Added caching of FFTs in metacal and pre-PSF moment rountines.
+    - Added moments weight function normalization.
 
 
 ## v2.0.6
