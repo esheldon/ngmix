@@ -1178,8 +1178,33 @@ def _sim_apodize(flux_factor, ap_rad):
     ap_mask = np.ones_like(im)
     if ap_rad > 0:
         _build_square_apodization_mask(ap_rad, ap_mask)
+
+    # get true flux
+    im_nopixel = gal.drawImage(
+        nx=image_size,
+        ny=image_size,
+        wcs=gs_wcs,
+        method="no_pixel",
+    ).array
+
+    im_nopixel += galsim.Exponential(
+        half_light_radius=fwhm
+    ).shear(
+        g1=-0.5, g2=0.2
+    ).shift(
+        cen*pixel_scale,
+        0,
+    ).withFlux(
+        400*flux_factor
+    ).drawImage(
+        nx=image_size,
+        ny=image_size,
+        wcs=gs_wcs,
+        method="no_pixel",
+    ).array
+
     obs_ap = Observation(
-        image=im * ap_mask,
+        image=im_nopixel * ap_mask,
         jacobian=jac,
     )
 
