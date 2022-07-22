@@ -337,7 +337,7 @@ def test_prepsfmom_gauss(
         nx=image_size,
         ny=image_size,
         wcs=gs_wcs,
-        method='no_pixel').array
+    ).array
     obs = Observation(
         image=im_true,
         jacobian=jac,
@@ -463,7 +463,7 @@ def test_prepsfmom_mn_cov_psf(
         nx=image_size,
         ny=image_size,
         wcs=gs_wcs,
-        method='no_pixel').array
+    ).array
     obs = Observation(
         image=im_true,
         jacobian=jac,
@@ -599,7 +599,7 @@ def test_prepsfmom_fwhm_smooth_snr(
             nx=image_size,
             ny=image_size,
             wcs=gs_wcs,
-            method='no_pixel').array
+        ).array
         obs = Observation(
             image=im_true,
             jacobian=jac,
@@ -889,7 +889,7 @@ def test_prepsfmom_gauss_true_flux(
         nx=image_size,
         ny=image_size,
         wcs=gs_wcs,
-        method='no_pixel').array
+    ).array
     obs = Observation(
         image=im_true,
         jacobian=jac,
@@ -982,10 +982,22 @@ def test_prepsfmom_comp_to_gaussmom_simple(
         ny=image_size,
         wcs=gs_wcs,
     ).array
+    im_true_nopixel = gal.drawImage(
+        nx=image_size,
+        ny=image_size,
+        wcs=gs_wcs,
+        method="no_pixel",
+    ).array
+
     obs = Observation(
         image=im_true,
         jacobian=jac,
     )
+    obs_nopixel = Observation(
+        image=im_true_nopixel,
+        jacobian=jac,
+    )
+
     res = PGaussMom(
         fwhm=mom_fwhm, pad_factor=pad_factor,
     ).go(
@@ -993,14 +1005,14 @@ def test_prepsfmom_comp_to_gaussmom_simple(
     )
 
     from ngmix.gaussmom import GaussMom
-    res_gmom = GaussMom(fwhm=mom_fwhm).go(obs=obs)
+    res_gmom = GaussMom(fwhm=mom_fwhm).go(obs=obs_nopixel)
 
     for k in sorted(res):
         if k in res_gmom:
             print("%s:" % k, res[k], res_gmom[k])
 
     for k in ["flux", "flux_err", "T", "T_err", "e", "e_cov"]:
-        assert_allclose(res[k], res_gmom[k], atol=0, rtol=1e-2)
+        assert_allclose(res[k], res_gmom[k], atol=0, rtol=2.5e-2)
 
 
 @pytest.mark.parametrize('pixel_scale', [0.25, 0.125])
@@ -1060,9 +1072,16 @@ def test_prepsfmom_comp_to_gaussmom_fwhm_smooth(
             nx=image_size,
             ny=image_size,
             wcs=gs_wcs,
+            method="no_pixel",
         ).array
     else:
-        im_true_smooth = im_true
+        im_true_smooth = gal.drawImage(
+            nx=image_size,
+            ny=image_size,
+            wcs=gs_wcs,
+            method="no_pixel",
+        ).array
+
     obs_smooth = Observation(
         image=im_true_smooth,
         jacobian=jac,
@@ -1074,8 +1093,8 @@ def test_prepsfmom_comp_to_gaussmom_fwhm_smooth(
             print("%s:" % k, res[k], res_gmom[k])
 
     assert_allclose(res["flux"], res_gmom["flux"], atol=0, rtol=5e-4)
-    assert_allclose(res["T"], res_gmom["T"], atol=0, rtol=1e-3)
-    assert_allclose(res["e"], res_gmom["e"], atol=0, rtol=1e-3)
+    assert_allclose(res["T"], res_gmom["T"], atol=0, rtol=2e-3)
+    assert_allclose(res["e"], res_gmom["e"], atol=0, rtol=3e-3)
     # the errors do not match - this is because the underlying noise model is
     # different - the pure gaussian moments weight map is an error on the convolved
     # profile whereas the pre-PSF case uses error propagation through the

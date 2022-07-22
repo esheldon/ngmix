@@ -106,8 +106,13 @@ class PrePSFMom(object):
                 0,  # we do not apodize PSF stamps since it should not be needed
             )
         else:
-            # delta function in k-space
-            kpsf_im = np.ones_like(kim, dtype=np.complex128)
+            if False:
+                # delta function in real-space
+                kpsf_im = np.ones_like(kim, dtype=np.complex128)
+            else:
+                # pixel in real-space
+                kpsf_im = _pixel_fft(kim.shape[0])
+
             psf_im_row = 0.0
             psf_im_col = 0.0
 
@@ -420,6 +425,17 @@ def _zero_pad_and_compute_fft_impl(im, cen_row, cen_col, target_dim, ap_rad):
     return kpim, pad_cen_row, pad_cen_col
 
 
+@functools.lru_cache(maxsize=128)
+def _pixel_fft(dim):
+    # pixel in real-space
+    f = fft.fftfreq(dim)
+    f = np.sinc(f)
+    fx = f.reshape(1, -1)
+    fy = f.reshape(-1, 1)
+    kpsf_im = fx * fy
+    return kpsf_im
+
+
 # see https://stackoverflow.com/a/52332109 for how this works
 @functools.lru_cache(maxsize=128)
 def _zero_pad_and_compute_fft_cached_impl(
@@ -452,9 +468,13 @@ def _deconvolve_im_psf_inplace(kim, kpsf_im, max_amp, min_psf_frac=1e-5):
     """
     min_amp = min_psf_frac * max_amp
     abs_kpsf_im = np.abs(kpsf_im)
-    msk = abs_kpsf_im <= min_amp
+    msk = (abs_kpsf_im <= min_amp) & (abs_kpsf_im != 0)
     if np.any(msk):
         kpsf_im[msk] = kpsf_im[msk] / abs_kpsf_im[msk] * min_amp
+
+    msk = (abs_kpsf_im <= min_amp) & (abs_kpsf_im == 0)
+    if np.any(msk):
+        kpsf_im[msk] = min_amp
 
     kim /= kpsf_im
     return kim, kpsf_im, msk
