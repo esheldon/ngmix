@@ -371,6 +371,7 @@ def get_result(ares, jac_area, wgt_norm):
             res[n] = ares[n].reshape((6, 6)).copy()
         else:
             res[n] = ares[n]
+    res["sums_norm"] = ares["wsum"]
 
     res["flagstr"] = ""
     res["flux_flags"] = 0
