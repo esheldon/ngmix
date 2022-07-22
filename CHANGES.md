@@ -12,6 +12,7 @@
     - Added moments weight function normalization.
     - Changed `mom*` fields in the moments outputs to `sums*`.
     - Added `sums_norm` field to adaptive moments outputs.
+    - The prePSF moments now deconvolve the pixel when running with no PSF.
 
 
 ## v2.0.6
