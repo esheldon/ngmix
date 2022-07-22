@@ -106,12 +106,8 @@ class PrePSFMom(object):
                 0,  # we do not apodize PSF stamps since it should not be needed
             )
         else:
-            if False:
-                # delta function in real-space
-                kpsf_im = np.ones_like(kim, dtype=np.complex128)
-            else:
-                # pixel in real-space
-                kpsf_im = _pixel_fft(kim.shape[0])
+            # pixel in real-space
+            kpsf_im = _pixel_fft(kim.shape[0])
 
             psf_im_row = 0.0
             psf_im_col = 0.0
