@@ -510,7 +510,7 @@ def regularize_mom_shapes(res, fwhm_reg):
         The original moments result before regularization.
     fwhm_reg : float
         The regularization FWHM value. Typically this should be of order the size of
-        the PSF for a prePSF moment.
+        the PSF for a pre-PSF moment.
 
     Returns
     -------
