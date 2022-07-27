@@ -94,8 +94,6 @@ def test_moments_moms_to_e1e2_raises():
 @pytest.mark.parametrize("fwhm_reg", [0, 0.8])
 @pytest.mark.parametrize("has_nan", [True, False])
 def test_regularize_mom_shapes(fwhm_reg, has_nan):
-    rng = np.random.RandomState(seed=100)
-
     fwhm = 0.9
     image_size = 107
     cen = (image_size - 1)/2
