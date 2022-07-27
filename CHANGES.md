@@ -1,3 +1,10 @@
+## unreleased
+
+### new features
+
+   - Added function to regularize moments results.
+
+
 ## v2.1.0
 
 ### bug fixes
