@@ -276,6 +276,23 @@ def _measure_moments_fft(
         cen_phase = _compute_cen_phase_shift(drow, dcol, dim, msk=msk)
         kim *= cen_phase
 
+    # we only sum where the kernel is nonzero
+    fkf = kernels["fkf"]
+    fkr = kernels["fkr"]
+    fkp = kernels["fkp"]
+    fkc = kernels["fkc"]
+
+    mom_norm = kernels["fk00"]
+    return _numba_bits(
+        kim, fkf, fkr, fkp, fkc, eff_pad_factor, kpsf_im, mom_norm, tot_var, dim,
+    )
+
+
+@njit
+def _numba_bits(
+    kim, fkf, fkr, fkp, fkc, eff_pad_factor, kpsf_im, mom_norm, tot_var, dim,
+):
+
     # build the flux, radial, plus and cross kernels / moments
     # the inverse FFT in our convention has a factor of 1/n per dimension
     # the sums below are inverse FFTs but only computing the values at the
@@ -285,22 +302,6 @@ def _measure_moments_fft(
     df2 = df * df
     df4 = df2 * df2
 
-    # we only sum where the kernel is nonzero
-    fkf = kernels["fkf"]
-    fkr = kernels["fkr"]
-    fkp = kernels["fkp"]
-    fkc = kernels["fkc"]
-
-    mom_norm = kernels["fk00"]
-    return _numba_bits(
-        kim, fkf, fkr, fkp, fkc, eff_pad_factor, kpsf_im, mom_norm, tot_var, df2, df4
-    )
-
-
-@njit
-def _numba_bits(
-    kim, fkf, fkr, fkp, fkc, eff_pad_factor, kpsf_im, mom_norm, tot_var, df2, df4
-):
     mf = np.sum((kim * fkf).real) * df2
     mr = np.sum((kim * fkr).real) * df2
     mp = np.sum((kim * fkp).real) * df2
@@ -402,51 +403,20 @@ def _compute_cen_phase_shift(cen_row, cen_col, dim, msk=None):
     of that profile will result in an FFT centered at the profile.
     """
     f = fft.fftfreq(dim) * (2.0 * np.pi)
+    # this reshaping makes sure the arrays broadcast nicely into a grid
+    fx = f.reshape(1, -1)
+    fy = f.reshape(-1, 1)
+    kcen = fy*cen_row + fx*cen_col
+
     if msk is not None:
-        _msk = np.ravel(msk).astype(int)
-        return _comp_phase_loop_msk(cen_row, cen_col, f, _msk, np.sum(_msk))
-    else:
-        return _comp_phase_double_loop(cen_row, cen_col, f)
+        kcen = kcen[msk]
 
-    # old code not optimized
-    # # this reshaping makes sure the arrays broadcast nicely into a grid
-    # fx = f.reshape(1, -1)
-    # fy = f.reshape(-1, 1)
-    # kcen = fy*cen_row + fx*cen_col
-    #
-    # if msk is not None:
-    #     kcen = kcen[msk]
-    #
-    # return np.cos(kcen) + 1j*np.sin(kcen)
+    return _comp_phase(kcen)
 
 
 @njit
-def _comp_phase_loop_msk(cen_row, cen_col, f, msk, tot):
-    n = f.shape[0]
-    res = np.zeros(tot, dtype=np.cdouble)
-    loc = 0
-    rloc = 0
-    for j in range(n):
-        row_fac = f[j] * cen_row
-        for i in range(n):
-            if msk[loc]:
-                kcen = f[i] * cen_col + row_fac
-                res[rloc] = np.cos(kcen) + 1j*np.sin(kcen)
-                rloc += 1
-            loc += 1
-    return res
-
-
-@njit
-def _comp_phase_double_loop(cen_row, cen_col, f):
-    n = f.shape[0]
-    res = np.zeros((n, n), dtype=np.cdouble)
-    for j in range(n):
-        row_fac = f[j] * cen_row
-        for i in range(n):
-            kcen = f[i] * cen_col + row_fac
-            res[j, i] = np.cos(kcen) + 1j*np.sin(kcen)
-    return res
+def _comp_phase(kcen):
+    return np.cos(kcen) + 1j*np.sin(kcen)
 
 
 def _zero_pad_and_compute_fft_impl(im, cen_row, cen_col, target_dim, ap_rad):

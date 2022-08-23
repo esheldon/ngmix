@@ -211,7 +211,7 @@ def test_prepsfmom_speed_and_cache():
     assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 4
 
     # now we test with full caching
-    nfit = 1000
+    nfit = 2000
     dt = time.time()
     for _ in range(nfit):
         with obs.writeable():
