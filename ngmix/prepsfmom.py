@@ -292,6 +292,15 @@ def _measure_moments_fft(
     fkc = kernels["fkc"]
 
     mom_norm = kernels["fk00"]
+    return _numba_bits(
+        kim, fkf, fkr, fkp, fkc, eff_pad_factor, kpsf_im, mom_norm, tot_var, df2, df4
+    )
+
+
+@njit
+def _numba_bits(
+    kim, fkf, fkr, fkp, fkc, eff_pad_factor, kpsf_im, mom_norm, tot_var, df2, df4
+):
     mf = np.sum((kim * fkf).real) * df2
     mr = np.sum((kim * fkr).real) * df2
     mp = np.sum((kim * fkp).real) * df2
