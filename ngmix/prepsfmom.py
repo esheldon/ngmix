@@ -402,14 +402,51 @@ def _compute_cen_phase_shift(cen_row, cen_col, dim, msk=None):
     of that profile will result in an FFT centered at the profile.
     """
     f = fft.fftfreq(dim) * (2.0 * np.pi)
-    # this reshaping makes sure the arrays broadcast nicely into a grid
-    fx = f.reshape(1, -1)
-    fy = f.reshape(-1, 1)
-    kcen = fy*cen_row + fx*cen_col
     if msk is not None:
-        return np.cos(kcen[msk]) + 1j*np.sin(kcen[msk])
+        _msk = np.ravel(msk).astype(int)
+        return _comp_phase_loop_msk(cen_row, cen_col, f, _msk, np.sum(_msk))
     else:
-        return np.cos(kcen) + 1j*np.sin(kcen)
+        return _comp_phase_double_loop(cen_row, cen_col, f)
+
+    # old code not optimized
+    # # this reshaping makes sure the arrays broadcast nicely into a grid
+    # fx = f.reshape(1, -1)
+    # fy = f.reshape(-1, 1)
+    # kcen = fy*cen_row + fx*cen_col
+    #
+    # if msk is not None:
+    #     kcen = kcen[msk]
+    #
+    # return np.cos(kcen) + 1j*np.sin(kcen)
+
+
+@njit
+def _comp_phase_loop_msk(cen_row, cen_col, f, msk, tot):
+    n = f.shape[0]
+    res = np.zeros(tot, dtype=np.cdouble)
+    loc = 0
+    rloc = 0
+    for j in range(n):
+        row_fac = f[j] * cen_row
+        for i in range(n):
+            if msk[loc]:
+                kcen = f[i] * cen_col + row_fac
+                res[rloc] = np.cos(kcen) + 1j*np.sin(kcen)
+                rloc += 1
+            loc += 1
+    return res
+
+
+@njit
+def _comp_phase_double_loop(cen_row, cen_col, f):
+    n = f.shape[0]
+    res = np.zeros((n, n), dtype=np.cdouble)
+    for j in range(n):
+        row_fac = f[j] * cen_row
+        for i in range(n):
+            kcen = f[i] * cen_col + row_fac
+            res[j, i] = np.cos(kcen) + 1j*np.sin(kcen)
+    return res
 
 
 def _zero_pad_and_compute_fft_impl(im, cen_row, cen_col, target_dim, ap_rad):
