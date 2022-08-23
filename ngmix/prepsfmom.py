@@ -92,14 +92,14 @@ class PrePSFMom(object):
         eff_pad_factor = target_dim / obs.image.shape[0]
 
         # pad image, psf and weight map, get FFTs, apply cen_phases
-        kim, im_row, im_col = _zero_pad_and_compute_fft_cached(
+        kim, im_row, im_col = _zero_pad_and_compute_fft_impl(
             obs.image, obs.jacobian.row0, obs.jacobian.col0, target_dim,
             self.ap_rad,
         )
         fft_dim = kim.shape[0]
 
         if psf_obs is not None:
-            kpsf_im, psf_im_row, psf_im_col = _zero_pad_and_compute_fft_cached(
+            kpsf_im, psf_im_row, psf_im_col = _zero_pad_and_compute_fft_impl(
                 psf_obs.image,
                 psf_obs.jacobian.row0, psf_obs.jacobian.col0,
                 target_dim,
