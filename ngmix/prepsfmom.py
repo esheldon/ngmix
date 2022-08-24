@@ -276,7 +276,6 @@ def _measure_moments_fft(
         cen_phase = _compute_cen_phase_shift(drow, dcol, dim, msk=msk)
         kim *= cen_phase
 
-    # we only sum where the kernel is nonzero
     fkf = kernels["fkf"]
     fkr = kernels["fkr"]
     fkp = kernels["fkp"]
@@ -302,6 +301,7 @@ def _measure_moments_fft_numba(
     df2 = df * df
     df4 = df2 * df2
 
+    # we only sum where the kernel is nonzero
     mf = np.sum((kim * fkf).real) * df2
     mr = np.sum((kim * fkr).real) * df2
     mp = np.sum((kim * fkp).real) * df2
