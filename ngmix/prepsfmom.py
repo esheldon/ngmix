@@ -276,6 +276,22 @@ def _measure_moments_fft(
         cen_phase = _compute_cen_phase_shift(drow, dcol, dim, msk=msk)
         kim *= cen_phase
 
+    fkf = kernels["fkf"]
+    fkr = kernels["fkr"]
+    fkp = kernels["fkp"]
+    fkc = kernels["fkc"]
+
+    mom_norm = kernels["fk00"]
+
+    return _measure_moments_fft_numba(
+        kim, kpsf_im, dim, eff_pad_factor, fkf, fkr, fkp, fkc, mom_norm, tot_var,
+    )
+
+
+@njit
+def _measure_moments_fft_numba(
+    kim, kpsf_im, dim, eff_pad_factor, fkf, fkr, fkp, fkc, mom_norm, tot_var,
+):
     # build the flux, radial, plus and cross kernels / moments
     # the inverse FFT in our convention has a factor of 1/n per dimension
     # the sums below are inverse FFTs but only computing the values at the
@@ -286,12 +302,6 @@ def _measure_moments_fft(
     df4 = df2 * df2
 
     # we only sum where the kernel is nonzero
-    fkf = kernels["fkf"]
-    fkr = kernels["fkr"]
-    fkp = kernels["fkp"]
-    fkc = kernels["fkc"]
-
-    mom_norm = kernels["fk00"]
     mf = np.sum((kim * fkf).real) * df2
     mr = np.sum((kim * fkr).real) * df2
     mp = np.sum((kim * fkp).real) * df2
@@ -387,6 +397,34 @@ def _zero_pad_image(im, target_dim):
 
 
 def _compute_cen_phase_shift(cen_row, cen_col, dim, msk=None):
+    """computes exp(i*2*pi*k*cen) for shifting the phases of FFTS.
+
+    If you feed the centroid of a profile, then this factor times the raw FFT
+    of that profile will result in an FFT centered at the profile.
+    """
+    f = fft.fftfreq(dim)
+    pxy = _compute_cen_phase_shift_numba(f, cen_row, cen_col)
+
+    if msk is not None:
+        pxy = pxy[msk]
+
+    return pxy
+
+
+@njit
+def _compute_cen_phase_shift_numba(f, cen_row, cen_col):
+    # this reshaping makes sure the arrays broadcast nicely into a grid
+    fx = f.reshape(1, -1)
+    fy = f.reshape(-1, 1)
+    kcen_x = fx * (2.0 * np.pi * cen_col)
+    kcen_y = fy * (2.0 * np.pi * cen_row)
+    px = np.cos(kcen_x) + 1j*np.sin(kcen_x)
+    py = np.cos(kcen_y) + 1j*np.sin(kcen_y)
+    pxy = px * py
+    return pxy
+
+
+def _compute_cen_phase_shift_orig(cen_row, cen_col, dim, msk=None):
     """computes exp(i*2*pi*k*cen) for shifting the phases of FFTS.
 
     If you feed the centroid of a profile, then this factor times the raw FFT

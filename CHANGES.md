@@ -1,8 +1,9 @@
-## unreleased
+## v2.2.0
 
 ### new features
 
    - Added function to regularize moments results.
+   - Added numba to pre-PSF moments to reduce runtime.
 
 
 ## v2.1.0
