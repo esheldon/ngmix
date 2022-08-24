@@ -301,6 +301,7 @@ def _measure_moments_fft_numba(
     df2 = df * df
     df4 = df2 * df2
 
+    # we only sum where the kernel is nonzero
     mf = np.sum((kim * fkf).real) * df2
     mr = np.sum((kim * fkr).real) * df2
     mp = np.sum((kim * fkp).real) * df2
