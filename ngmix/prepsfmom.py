@@ -403,6 +403,16 @@ def _compute_cen_phase_shift(cen_row, cen_col, dim, msk=None):
     of that profile will result in an FFT centered at the profile.
     """
     f = fft.fftfreq(dim) * (2.0 * np.pi)
+    pxy = _compute_cen_phase_shift_numba(f, cen_row, cen_col)
+
+    if msk is not None:
+        pxy = pxy[msk]
+
+    return pxy
+
+
+@njit
+def _compute_cen_phase_shift_numba(f, cen_row, cen_col):
     # this reshaping makes sure the arrays broadcast nicely into a grid
     fx = f.reshape(1, -1)
     fy = f.reshape(-1, 1)
@@ -410,11 +420,7 @@ def _compute_cen_phase_shift(cen_row, cen_col, dim, msk=None):
     kcen_y = fy*cen_row
     px = np.cos(kcen_x) + 1j*np.sin(kcen_x)
     py = np.cos(kcen_y) + 1j*np.sin(kcen_y)
-
     pxy = px * py
-    if msk is not None:
-        pxy = pxy[msk]
-
     return pxy
 
 
