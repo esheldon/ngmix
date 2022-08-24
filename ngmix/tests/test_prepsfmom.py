@@ -11,11 +11,32 @@ from ngmix.prepsfmom import (
     PrePSFMom,
     _gauss_kernels,
     _zero_pad_and_compute_fft_cached_impl,
+    _compute_cen_phase_shift,
+    _compute_cen_phase_shift_orig,
 )
 from ngmix import Jacobian
 from ngmix import Observation
 from ngmix.moments import make_mom_result
 import ngmix.flags
+
+
+@pytest.mark.parametrize("row", [-0.4, 0, 1.2, 4.5])
+@pytest.mark.parametrize("col", [-0.32434, 0, 1.43232, 4.56775])
+@pytest.mark.parametrize("dim,msk", [
+    (100, None),
+    (453, None),
+    (3, np.array([[True, False, True], [True, True, False], [True, True, True]])),
+    (4, np.array([
+        [False, True, False, True],
+        [False, True, True, False],
+        [True, True, True, True],
+        [False, False, True, False]])),
+])
+def test_cen_phase_shift(row, col, msk, dim):
+    np.testing.assert_allclose(
+        _compute_cen_phase_shift(row, col, dim, msk=msk),
+        _compute_cen_phase_shift_orig(row, col, dim, msk=msk)
+    )
 
 
 def _report_info(s, arr, mn, err):
