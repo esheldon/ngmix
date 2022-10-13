@@ -94,7 +94,7 @@ def test_noprior_guessers_smoke(guesser_type, nband, with_prior):
 
 @pytest.mark.parametrize(
     'guesser_type',
-    ['TFluxAndPrior', 'TPSFFluxAndPrior', 'BD', 'BDF', 'Prior'],
+    ['TFluxAndPrior', 'TPSFFluxAndPrior', 'BD', 'BDF', 'BDFPSFlux', 'Prior'],
 )
 @pytest.mark.parametrize('nband', [None, 1, 2])
 def test_prior_guessers_smoke(guesser_type, nband):
@@ -113,7 +113,7 @@ def test_prior_guessers_smoke(guesser_type, nband):
 
         # this always gets coverage
         assert guesser_type in [
-            'TFluxAndPrior', 'TPSFFluxAndPrior', 'BD', 'BDF', 'Prior',
+            'TFluxAndPrior', 'TPSFFluxAndPrior', 'BD', 'BDF', 'BDFPSFlux', 'Prior',
         ]
 
         T_center = 0.001
@@ -150,7 +150,7 @@ def test_prior_guessers_smoke(guesser_type, nband):
                 T=T_center, flux=flux_center, prior=prior,
             )
             npars = 7 + nband_use
-        elif guesser_type == 'BDF':
+        elif guesser_type in ('BDF', 'BDFPSFlux'):
             prior = ngmix.joint_prior.PriorBDFSep(
                 cen_prior=ngmix.priors.CenPrior(0.0, 0.0, 0.1, 0.1, rng=rng),
                 g_prior=ngmix.priors.GPriorBA(0.3, rng=rng),
@@ -158,9 +158,14 @@ def test_prior_guessers_smoke(guesser_type, nband):
                 T_prior=ngmix.priors.FlatPrior(-1.0, 1.e5, rng=rng),
                 F_prior=[ngmix.priors.FlatPrior(-1.0, 1.e5, rng=rng)]*nband_use,
             )
-            guesser = guessers.BDFGuesser(
-                T=T_center, flux=flux_center, prior=prior,
-            )
+            if guesser_type == 'BDF':
+                guesser = guessers.BDFGuesser(
+                    T=T_center, flux=flux_center, prior=prior,
+                )
+            else:
+                guesser = guessers.BDFPSFFluxGuesser(
+                    T=T_center, prior=prior,
+                )
             npars = 6 + nband_use
 
         guess = guesser(obs=data['obs'])
