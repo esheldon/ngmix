@@ -1,3 +1,19 @@
+## v2.2.1
+
+### New Features
+
+   - Added new guesser BDFPSFFluxGuesser, makes a flux guess
+     based on the PSF flux
+
+### Performance
+   - Added O(N) phase shift computation for pre-psf moments
+
+### Misc
+
+   - ignore NumbaExperimentalFeatureWarning being spewed by
+     numba.  We can ignore these, as the features are of order
+     ten years old from the time of writing
+
 ## v2.2.0
 
 ### new features

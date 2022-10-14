@@ -322,6 +322,60 @@ class TFluxAndPriorGuesser(object):
         return guess
 
 
+class BDFPSFFluxGuesser(TPSFFluxGuesser):
+    """
+    Make BDF guesses from the input T, the psf flux and the prior
+
+    parameters
+    ----------
+    T: float
+        Center for T guesses
+    prior:
+        cen, g drawn from this prior
+    """
+
+    def __init__(self, T, prior):
+        self.T = T
+        self.prior = prior
+        self._id_last = None
+        self._psf_fluxes = None
+        self.rng = self.prior.cen_prior.rng
+
+    def __call__(self, obs, nrand=1):
+        """
+        center, shape are just distributed around zero
+
+        obs: Observation
+            The observation(s) used for psf fluxes
+        nrand: int, optional
+            Number of samples to draw.  Default 1
+        """
+        rng = self.prior.cen_prior.rng
+
+        fluxes = self._get_psf_fluxes(obs=obs)
+
+        guess = self.prior.sample(nrand)
+
+        nband = fluxes.size
+
+        r = rng.uniform(low=-0.1, high=0.1, size=nrand)
+        guess[:, 4] = self.T * (1.0 + r)
+
+        # fracdev prior
+        guess[:, 5] = rng.uniform(low=0.4, high=0.6, size=nrand)
+
+        for band in range(nband):
+            r = rng.uniform(low=-0.1, high=0.1, size=nrand)
+            guess[:, 6 + band] = fluxes[band] * (1.0 + r)
+
+        _fix_guess(guess, self.prior)
+
+        if nrand == 1:
+            guess = guess[0, :]
+
+        return guess
+
+
 class BDFGuesser(object):
     """
     Make BDF guesses from the input T, flux and prior
@@ -368,8 +422,7 @@ class BDFGuesser(object):
             r = rng.uniform(low=-0.1, high=0.1, size=nrand)
             guess[:, 6 + band] = fluxes[band] * (1.0 + r)
 
-        if self.prior is not None:
-            _fix_guess(guess, self.prior)
+        _fix_guess(guess, self.prior)
 
         if nrand == 1:
             guess = guess[0, :]
