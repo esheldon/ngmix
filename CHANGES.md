@@ -1,3 +1,10 @@
+## v2.3.0
+
+### new features
+
+   - Caching in pre-psf moments and metacal is now optional
+     with an API to turn it on. Default is off.
+
 ## v2.2.1
 
 ### New Features
