@@ -59,7 +59,7 @@ def _report_info(s, arr, mn, err):
         )
 
 
-def test_prepsfmom_kind():
+def test_prepsfmom_kind(prepsfmom_caching):
     fitter = PrePSFMom(2.0, 'gauss')
     assert fitter.kind == 'pgauss'
     fitter = PrePSFMom(2.0, 'pgauss')
@@ -73,7 +73,7 @@ def test_prepsfmom_kind():
 
 
 @pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
-def test_prepsfmom_raises_nopsf(cls):
+def test_prepsfmom_raises_nopsf(cls, prepsfmom_caching):
     fitter = cls(20)
     obs = Observation(image=np.zeros((1000, 1000)))
     with pytest.raises(RuntimeError) as e:
@@ -87,7 +87,7 @@ def test_prepsfmom_raises_nopsf(cls):
 
 
 @pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
-def test_prepsfmom_raises_nonsquare(cls):
+def test_prepsfmom_raises_nonsquare(cls, prepsfmom_caching):
     fitter = cls(20)
     obs = Observation(image=np.zeros((100, 90)))
     with pytest.raises(ValueError) as e:
@@ -97,7 +97,7 @@ def test_prepsfmom_raises_nonsquare(cls):
 
 
 @pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
-def test_prepsfmom_raises_badjacob(cls):
+def test_prepsfmom_raises_badjacob(cls, prepsfmom_caching):
     fitter = cls(1.2)
 
     gs_wcs = galsim.ShearWCS(
@@ -317,7 +317,7 @@ def _stack_list_of_dicts(res):
 @pytest.mark.parametrize('pad_factor', [3.5, 2])
 def test_prepsfmom_gauss(
     pad_factor, image_size, psf_image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm,
-    cls,
+    cls, prepsfmom_caching,
 ):
     """fast test at a range of parameters to check that things come out ok"""
     rng = np.random.RandomState(seed=100)
@@ -441,7 +441,7 @@ def test_prepsfmom_gauss(
 @pytest.mark.parametrize('fwhm_smooth', [0, 1])
 def test_prepsfmom_mn_cov_psf(
     pad_factor, image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm, cls,
-    fwhm_smooth,
+    fwhm_smooth, prepsfmom_caching,
 ):
     """Slower test to make sure means and errors are right
     w/ tons of monte carlo samples.
@@ -580,6 +580,7 @@ def test_prepsfmom_mn_cov_psf(
 @pytest.mark.parametrize('pad_factor', [1.5])
 def test_prepsfmom_fwhm_smooth_snr(
     pad_factor, image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm, cls,
+    prepsfmom_caching,
 ):
     def _run_sim_fwhm_smooth(fwhm_smooth):
         rng = np.random.RandomState(seed=100)
@@ -686,6 +687,7 @@ def test_prepsfmom_fwhm_smooth_snr(
 @pytest.mark.parametrize('fwhm_smooth', [0, 1])
 def test_prepsfmom_mn_cov_nopsf(
     pad_factor, image_size, fwhm, pixel_scale, snr, mom_fwhm, cls, fwhm_smooth,
+    prepsfmom_caching,
 ):
     """Slower test to make sure means and errors are right
     w/ tons of monte carlo samples.
@@ -867,7 +869,8 @@ def test_moments_make_mom_result_flags():
 @pytest.mark.parametrize('psf_image_size', [33, 34])
 @pytest.mark.parametrize('pad_factor', [4, 3.5])
 def test_prepsfmom_gauss_true_flux(
-    pad_factor, psf_image_size, image_size, fwhm, psf_fwhm, pixel_scale, cls
+    pad_factor, psf_image_size, image_size, fwhm, psf_fwhm, pixel_scale, cls,
+    prepsfmom_caching,
 ):
     rng = np.random.RandomState(seed=100)
 
@@ -962,6 +965,7 @@ def test_prepsfmom_gauss_true_flux(
 @pytest.mark.parametrize('fwhm_smooth', [0, 1.5])
 def test_prepsfmom_mom_norm(
     pad_factor, image_size, pixel_scale, mom_fwhm, cls, fwhm_smooth,
+    prepsfmom_caching,
 ):
     rng = np.random.RandomState(seed=100)
 
@@ -995,7 +999,7 @@ def test_prepsfmom_mom_norm(
 @pytest.mark.parametrize('pad_factor', [3.5, 4])
 @pytest.mark.parametrize('mom_fwhm', [2, 2.5])
 def test_prepsfmom_comp_to_gaussmom_simple(
-    pad_factor, image_size, fwhm, pixel_scale, mom_fwhm
+    pad_factor, image_size, fwhm, pixel_scale, mom_fwhm, prepsfmom_caching,
 ):
     rng = np.random.RandomState(seed=100)
 
@@ -1055,7 +1059,8 @@ def test_prepsfmom_comp_to_gaussmom_simple(
 @pytest.mark.parametrize('mom_fwhm', [2, 2.5])
 @pytest.mark.parametrize('fwhm_smooth', [0, 1.5])
 def test_prepsfmom_comp_to_gaussmom_fwhm_smooth(
-    pad_factor, image_size, fwhm, pixel_scale, mom_fwhm, fwhm_smooth
+    pad_factor, image_size, fwhm, pixel_scale, mom_fwhm, fwhm_smooth,
+    prepsfmom_caching,
 ):
     rng = np.random.RandomState(seed=100)
 
@@ -1216,7 +1221,7 @@ def _sim_apodize(flux_factor, ap_rad):
 
 
 @pytest.mark.parametrize("flux_factor", [1e2, 1e3, 1e5])
-def test_prepsfmom_apodize(flux_factor):
+def test_prepsfmom_apodize(flux_factor, prepsfmom_caching):
     res, res_geom = _sim_apodize(flux_factor, 1.5)
     ap_diffs = np.array([
         np.abs(res[k] - res_geom[k])
