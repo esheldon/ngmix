@@ -545,14 +545,14 @@ def _ksigma_kernels(
     fwhm_smooth,
 ):
     if USE_KERNEL_CACHE:
-        _ksigma_kernels_cached(
+        return _ksigma_kernels_cached(
             dim,
             kernel_size,
             dvdrow, dvdcol, dudrow, dudcol,
             fwhm_smooth,
         )
     else:
-        _ksigma_kernels_impl(
+        return _ksigma_kernels_impl(
             dim,
             kernel_size,
             dvdrow, dvdcol, dudrow, dudcol,
