@@ -32,6 +32,7 @@ def turn_on_galsim_caching():
 def turn_off_galsim_caching():
     global USE_GALSIM_CACHE
     USE_GALSIM_CACHE = False
+    _cached_galsim_stuff.cache_clear()
 
 
 def _galsim_stuff(img, wcs, xinterp):

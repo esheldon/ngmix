@@ -25,6 +25,7 @@ def turn_on_fft_caching():
 def turn_off_fft_caching():
     global USE_FFT_CACHE
     USE_FFT_CACHE = False
+    _zero_pad_and_compute_fft_cached_impl.cache_clear()
 
 
 def turn_on_kernel_caching():
@@ -35,6 +36,8 @@ def turn_on_kernel_caching():
 def turn_off_kernel_caching():
     global USE_KERNEL_CACHE
     USE_KERNEL_CACHE = False
+    _gauss_kernels_cached.cache_clear()
+    _ksigma_kernels_cached.cache_clear()
 
 
 class PrePSFMom(object):
