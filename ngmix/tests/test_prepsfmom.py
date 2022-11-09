@@ -9,13 +9,14 @@ from ngmix.prepsfmom import (
     KSigmaMom, PGaussMom,
     _build_square_apodization_mask,
     PrePSFMom,
-    _gauss_kernels,
+    _gauss_kernels_cached,
     _zero_pad_and_compute_fft_cached_impl,
     _compute_cen_phase_shift,
     _compute_cen_phase_shift_orig,
 )
 from ngmix import Jacobian
 from ngmix import Observation
+import ngmix.prepsfmom
 from ngmix.moments import make_mom_result
 import ngmix.flags
 
@@ -123,7 +124,15 @@ def test_prepsfmom_raises_badjacob(cls):
 
 
 @flaky(max_runs=10)
-def test_prepsfmom_speed_and_cache():
+@pytest.mark.parametrize("use_cache", [True, False])
+def test_prepsfmom_speed_and_cache(use_cache):
+    if use_cache:
+        ngmix.prepsfmom.turn_on_fft_caching()
+        ngmix.prepsfmom.turn_on_kernel_caching()
+    else:
+        ngmix.prepsfmom.turn_off_fft_caching()
+        ngmix.prepsfmom.turn_off_kernel_caching()
+
     image_size = 48
     psf_image_size = 53
     pixel_scale = 0.263
@@ -185,7 +194,7 @@ def test_prepsfmom_speed_and_cache():
     ).array
 
     # now we test the speed + caching
-    _gauss_kernels.cache_clear()
+    _gauss_kernels_cached.cache_clear()
     _zero_pad_and_compute_fft_cached_impl.cache_clear()
 
     # the first fit will do numba stuff, so we exclude it
@@ -207,8 +216,12 @@ def test_prepsfmom_speed_and_cache():
     print("\n%0.4f ms for first fit" % (dt1*1000))
 
     # we miss once here for kernels, twice for images
-    assert _gauss_kernels.cache_info().misses == 1
-    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 2
+    if use_cache:
+        assert _gauss_kernels_cached.cache_info().misses == 1
+        assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 2
+    else:
+        assert _gauss_kernels_cached.cache_info().misses == 0
+        assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 0
 
     # the second fit will have numba cached, but not the other kernel and FFT caches
     fitter = PGaussMom(
@@ -228,8 +241,12 @@ def test_prepsfmom_speed_and_cache():
     print("%0.4f ms for second fit" % (dt2*1000))
 
     # we miss twice for kernels, total of 3 times since psf changed
-    assert _gauss_kernels.cache_info().misses == 2
-    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 4
+    if use_cache:
+        assert _gauss_kernels_cached.cache_info().misses == 2
+        assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 4
+    else:
+        assert _gauss_kernels_cached.cache_info().misses == 0
+        assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 0
 
     # now we test with full caching
     nfit = 1000
@@ -243,12 +260,19 @@ def test_prepsfmom_speed_and_cache():
     print("%0.4f ms per fit" % (dt3/nfit*1000))
 
     # we should never miss again for the calls above
-    assert _gauss_kernels.cache_info().misses == 2
-    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 4 + nfit
+    if use_cache:
+        assert _gauss_kernels_cached.cache_info().misses == 2
+        assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 4 + nfit
+    else:
+        assert _gauss_kernels_cached.cache_info().misses == 0
+        assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 0
 
     # if numba stuff is cached this does not work so commented out
     # assert dt2 < dt1
-    assert dt3/nfit < dt2*0.6
+    if use_cache:
+        assert dt3/nfit < dt2*0.6
+    else:
+        assert dt3/nfit >= dt2*0.6
 
 
 def _stack_list_of_dicts(res):

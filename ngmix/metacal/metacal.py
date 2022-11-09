@@ -21,12 +21,41 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-@lru_cache(maxsize=128)
-def _cached_galsim_stuff(img, wcs_repr, xinterp):
+USE_GALSIM_CACHE = False
+
+
+def turn_on_galsim_caching():
+    global USE_GALSIM_CACHE
+    USE_GALSIM_CACHE = True
+
+
+def turn_off_galsim_caching():
+    global USE_GALSIM_CACHE
+    USE_GALSIM_CACHE = False
+
+
+def _galsim_stuff(img, wcs, xinterp):
+    if USE_GALSIM_CACHE:
+        return _cached_galsim_stuff(
+            tuple(tuple(ii) for ii in img),
+            repr(wcs),
+            xinterp,
+        )
+    else:
+        return _galsim_stuff_impl(img, wcs, xinterp)
+
+
+def _galsim_stuff_impl(img, wcs, xinterp):
     import galsim
-    image = galsim.Image(np.array(img), wcs=eval(wcs_repr))
+    image = galsim.Image(img, wcs=wcs)
     image_int = galsim.InterpolatedImage(image, x_interpolant=xinterp)
     return image, image_int
+
+
+@lru_cache(maxsize=128)
+def _cached_galsim_stuff(img, wcs_repr, xinterp):
+    import galsim  # noqa
+    return _galsim_stuff_impl(np.array(img), eval(wcs_repr), xinterp)
 
 
 class MetacalDilatePSF(object):
@@ -364,17 +393,17 @@ class MetacalDilatePSF(object):
         # these would share data with the original numpy arrays, make copies
         # to be sure they don't get modified
         #
-        image, image_int = _cached_galsim_stuff(
-            tuple(tuple(ii) for ii in obs.image.copy()),
-            repr(self.get_wcs()),
+        image, image_int = _galsim_stuff(
+            obs.image.copy(),
+            self.get_wcs(),
             self.interp,
         )
         self.image = image
         self.image_int = image_int
 
-        psf_image, psf_int = _cached_galsim_stuff(
-            tuple(tuple(ii) for ii in obs.psf.image.copy()),
-            repr(self.get_psf_wcs()),
+        psf_image, psf_int = _galsim_stuff(
+            obs.psf.image.copy(),
+            self.get_psf_wcs(),
             self.interp,
         )
         self.psf_image = psf_image
