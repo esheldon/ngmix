@@ -51,7 +51,7 @@ def _get_obs(rng):
     return obs
 
 
-def test_metacal_fixnoise_noise_image():
+def test_metacal_fixnoise_noise_image(metacal_caching):
 
     rng = np.random.RandomState(seed=100)
     obs = _get_obs(rng)

@@ -7,7 +7,7 @@ from ._galsim_sims import _get_obs
 
 
 @pytest.mark.parametrize('psf', ['gauss', 'fitgauss', 'galsim_obj', 'dilate'])
-def test_metacal_smoke(psf):
+def test_metacal_smoke(psf, metacal_caching):
     rng = np.random.RandomState(seed=100)
 
     obs = _get_obs(rng, noise=0.005)
@@ -44,7 +44,7 @@ def test_metacal_smoke(psf):
 
 @pytest.mark.parametrize('psf', ['gauss', 'fitgauss', 'galsim_obj'])
 @pytest.mark.parametrize('send_rng', [True, False])
-def test_metacal_send_rng(psf, send_rng):
+def test_metacal_send_rng(psf, send_rng, metacal_caching):
 
     rng = np.random.RandomState(seed=100)
     obs = _get_obs(rng, noise=0.005)
@@ -77,7 +77,7 @@ def test_metacal_send_rng(psf, send_rng):
 
 
 @pytest.mark.parametrize('psf', ['gauss', 'fitgauss', 'galsim_obj', 'dilate'])
-def test_metacal_types_smoke(psf):
+def test_metacal_types_smoke(psf, metacal_caching):
     rng = np.random.RandomState(seed=100)
 
     obs = _get_obs(rng, noise=0.005)
@@ -104,7 +104,7 @@ def test_metacal_types_smoke(psf):
 
 @pytest.mark.parametrize('otype', ['obs', 'obslist', 'mbobs'])
 @pytest.mark.parametrize('set_noise_image', [True, False])
-def test_metacal_fixnoise_smoke(otype, set_noise_image):
+def test_metacal_fixnoise_smoke(otype, set_noise_image, metacal_caching):
     rng = np.random.RandomState(seed=100)
 
     obs = _get_obs(rng, noise=0.005, set_noise_image=set_noise_image)
@@ -132,7 +132,7 @@ def test_metacal_fixnoise_smoke(otype, set_noise_image):
 
 
 @pytest.mark.parametrize('fixnoise', [True, False])
-def test_metacal_fixnoise(fixnoise):
+def test_metacal_fixnoise(fixnoise, metacal_caching):
     rng = np.random.RandomState(seed=100)
 
     obs = _get_obs(rng, noise=0.005)
@@ -152,7 +152,7 @@ def test_metacal_fixnoise(fixnoise):
             assert mobs.pixels[0]['ierr'] == np.sqrt(obs.weight[0, 0])
 
 
-def test_metacal_fixnoise_noise_image():
+def test_metacal_fixnoise_noise_image(metacal_caching):
     rng = np.random.RandomState(seed=100)
 
     obs = _get_obs(rng, noise=0.005, set_noise_image=True)
@@ -171,7 +171,7 @@ def test_metacal_fixnoise_noise_image():
         assert mobs.pixels[0]['ierr'] == np.sqrt(obs.weight[0, 0]/2)
 
 
-def test_metacal_errors():
+def test_metacal_errors(metacal_caching):
     rng = np.random.RandomState(seed=100)
     obs = _get_obs(rng, noise=0.005, set_noise_image=True)
 
@@ -208,6 +208,6 @@ def _do_test_low_psf_s2n():
         ngmix.metacal.get_all_metacal(obs=obs, rng=rng, psf='fitgauss')
 
 
-def test_low_psf_s2n():
+def test_low_psf_s2n(metacal_caching):
     with pytest.raises(ngmix.BootPSFFailure):
         _do_test_low_psf_s2n()

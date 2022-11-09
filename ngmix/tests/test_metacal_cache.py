@@ -2,6 +2,7 @@ import time
 import numpy as np
 
 from flaky import flaky
+import pytest
 
 import ngmix
 import ngmix.metacal.metacal
@@ -10,7 +11,13 @@ from ..metacal.metacal import _cached_galsim_stuff
 
 
 @flaky(max_runs=10)
-def test_metacal_cache():
+@pytest.mark.parametrize("use_cache", [True, False])
+def test_metacal_cache(use_cache):
+    if use_cache:
+        ngmix.metacal.metacal.turn_on_galsim_caching()
+    else:
+        ngmix.metacal.metacal.turn_off_galsim_caching()
+
     _cached_galsim_stuff.cache_clear()
 
     # first warm up numba
@@ -41,4 +48,7 @@ def test_metacal_cache():
     print(_cached_galsim_stuff.cache_info(), flush=True)
 
     # we expect roughly 30% gains
-    assert t2 < t1*0.7
+    if use_cache:
+        assert t2 < t1*0.7
+    else:
+        assert t2 >= t1*0.7
