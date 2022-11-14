@@ -233,9 +233,7 @@ def test_admom_fill(dozeros):
 
     flux = 100
     noise = 0.5
-    # noise = 0.01
     fwhm = 1.1
-    # T = ngmix.moments.fwhm_to_T(fwhm)
     image_size = 48
     cen = (image_size - 1)/2
     scale = 0.2
@@ -301,12 +299,9 @@ def test_admom_fill(dozeros):
             ignore_zero_weight=False,
         )
 
-        # guess = ngmix.GMixModel([drow, dcol, g1, g2, T, flux], "gauss")
-        # print('guess:', guess.get_e1e2T())
         res = ngmix.admom.run_admom(
             obs=obs,
             guess=1,
-            # guess=guess,
             rng=rng,
         )
         if res['flux_flags'] == 0:
@@ -336,7 +331,6 @@ def test_admom_fill(dozeros):
     check_error('e1 err', e1vals - true_e1vals, e1err_vals, tol=0.1)
     check_error('e2 err', e2vals - true_e2vals, e2err_vals, tol=0.1)
     # T will be biased by noise
+    # T = ngmix.moments.fwhm_to_T(fwhm)
     # check('T', Tvals, T)
     check_error('T err:', Tvals, Terr_vals, tol=0.1)
-
-    # raise ValueError('blah')
