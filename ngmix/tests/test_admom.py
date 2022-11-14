@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 
 import ngmix
-from ngmix.moments import fwhm_to_T, T_to_fwhm
-from ngmix import Jacobian, Observation
+from ngmix.moments import fwhm_to_T
+# from ngmix import Jacobian, Observation
 import ngmix.flags
 
 
@@ -103,13 +103,13 @@ def test_admom(g1_true, g2_true, wcs_g1, wcs_g2):
 
     tres['flags'] = 0
     tres['sums_cov'][:, :] = np.nan
-    tres = ngmix.admom.admom.get_result(tres, 1.0, 1.0)
+    tres = ngmix.admom.admom.get_result(tres)
     assert np.isnan(tres['e1err'])
 
     tres = copy.deepcopy(res)
     tres['flags'] = 0
     tres['pars'][4] = -1
-    tres = ngmix.admom.admom.get_result(tres, 1.0, 1.0)
+    tres = ngmix.admom.admom.get_result(tres)
     assert tres['flags'] == ngmix.flags.NONPOS_SIZE
 
 
@@ -208,45 +208,190 @@ def test_admom_find_cen(g1_true, g2_true, snr):
     assert np.abs(dcol_mean)/dcol_err < 5, (dcol_mean/dcol_err)
 
 
-@pytest.mark.parametrize('pixel_scale', [0.25, 0.125])
-@pytest.mark.parametrize('fwhm', [2, 0.5])
-@pytest.mark.parametrize('image_size', [53])
-@pytest.mark.parametrize('mom_fwhm', [2, 2.5])
-def test_admom_comp_to_gaussmom_flux(image_size, fwhm, pixel_scale, mom_fwhm):
+# @pytest.mark.parametrize('pixel_scale', [0.25, 0.125])
+# @pytest.mark.parametrize('fwhm', [2, 0.5])
+# @pytest.mark.parametrize('image_size', [53])
+# @pytest.mark.parametrize('mom_fwhm', [2, 2.5])
+# def test_admom_comp_to_gaussmom_flux(image_size, fwhm, pixel_scale, mom_fwhm):
+#     cen = (image_size - 1)/2
+#     gs_wcs = galsim.PixelScale(pixel_scale).jacobian()
+#
+#     jac = Jacobian(
+#         y=cen, x=cen,
+#         dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+#         dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+#
+#     gal = galsim.Gaussian(
+#         fwhm=fwhm
+#     ).withFlux(
+#         400
+#     )
+#
+#     # get true flux
+#     im_true = gal.drawImage(
+#         nx=image_size,
+#         ny=image_size,
+#         wcs=gs_wcs,
+#     ).array
+#     obs = Observation(
+#         image=im_true,
+#         jacobian=jac,
+#     )
+#
+#     Tguess = fwhm_to_T(fwhm)
+#     res = ngmix.admom.run_admom(obs=obs, guess=Tguess)
+#
+#     from ngmix.gaussmom import GaussMom
+#     res_gmom = GaussMom(fwhm=T_to_fwhm(res["T"])).go(obs=obs)
+#
+#     for k in sorted(res):
+#         if k in res_gmom:
+#             print("%s:" % k, res[k], res_gmom[k])
+#
+#     for k in ["flux", "flux_err"]:
+#         assert np.allclose(res[k], res_gmom[k], atol=0, rtol=1e-2)
+
+
+def check(name, vals, expected, errs=None):
+    mn = vals.mean()
+    std = vals.std()
+    err = std / np.sqrt(vals.size)
+    print(f'{name} expected: {expected} mean: {mn} +/- {err}')
+    assert np.abs(mn - expected) / err < 4
+
+
+def check_error(name, vals, errs, tol):
+    std = vals.std()
+    merr = np.mean(errs)
+
+    print(f'{name} std: {std} predicted {merr}')
+    assert np.abs(merr/std - 1) < 0.4
+
+
+@pytest.mark.parametrize('dozeros', [False, True])
+def test_admom_fill(dozeros):
+    """
+    test that the flux is recovered within errors
+    """
+    rng = np.random.RandomState(seed=550)
+    ntrial = 1000
+
+    flux = 100
+    noise = 0.5
+    # noise = 0.01
+    fwhm = 1.1
+    # T = ngmix.moments.fwhm_to_T(fwhm)
+    image_size = 48
     cen = (image_size - 1)/2
-    gs_wcs = galsim.PixelScale(pixel_scale).jacobian()
+    scale = 0.2
+    shift_scale = scale/2
 
-    jac = Jacobian(
-        y=cen, x=cen,
-        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
-        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+    fluxes = []
+    flux_errors = []
+    e1vals = []
+    e2vals = []
+    e1err_vals = []
+    e2err_vals = []
+    Tvals = []
+    Terr_vals = []
+    true_e1vals = []
+    true_e2vals = []
 
-    gal = galsim.Gaussian(
-        fwhm=fwhm
-    ).withFlux(
-        400
-    )
+    for _ in range(ntrial):
+        drow, dcol = rng.uniform(
+            low=-shift_scale,
+            high=shift_scale,
+            size=2,
+        )
 
-    # get true flux
-    im_true = gal.drawImage(
-        nx=image_size,
-        ny=image_size,
-        wcs=gs_wcs,
-    ).array
-    obs = Observation(
-        image=im_true,
-        jacobian=jac,
-    )
+        while True:
+            g1, g2 = rng.normal(scale=0.05, size=2)
+            if np.sqrt(g1**2 + g2**2) < 1:
+                shear = galsim.Shear(g1=g1, g2=g2)
+                break
 
-    Tguess = fwhm_to_T(fwhm)
-    res = ngmix.admom.run_admom(obs=obs, guess=Tguess)
+        obj = galsim.Gaussian(
+            flux=flux,
+            fwhm=fwhm,
+        ).shear(
+            g1=g1, g2=g2,
+        ).shift(
+            dcol, drow,
+        )
 
-    from ngmix.gaussmom import GaussMom
-    res_gmom = GaussMom(fwhm=T_to_fwhm(res["T"])).go(obs=obs)
+        gsim = obj.drawImage(
+            nx=image_size,
+            ny=image_size,
+            scale=scale,
+            method='no_pixel',
+        )
+        im = gsim.array
+        im += rng.normal(scale=noise, size=im.shape)
 
-    for k in sorted(res):
-        if k in res_gmom:
-            print("%s:" % k, res[k], res_gmom[k])
+        wgt = im * 0 + 1 / noise**2
+        if dozeros:
+            # rav = wgt.ravel()
+            # rind = rng.randint(0, rav.size, int(0.02 * im.size))
+            # rav[rind] = 0
+            randcol = rng.randint(
+                low=image_size//2 - 2,
+                high=image_size//2 + 2,
+            )
+            wgt[:, randcol] = 0
+            im[:, randcol] = 0
+            # wbad = np.where(wgt == 0)
+            # im[wbad] = 0
+            # for k in (1, 2, 3):
+            #     wgt_rot = np.rot90(wgt, k=k)
+            #     wgt_rot[wbad] = 0
+            #     imrot = np.rot90(im, k=k)
+            #     imrot[wbad] = 0
 
-    for k in ["flux", "flux_err"]:
-        assert np.allclose(res[k], res_gmom[k], atol=0, rtol=1e-2)
+        jac = ngmix.DiagonalJacobian(row=cen, col=cen, scale=scale)
+
+        obs = ngmix.Observation(
+            image=im,
+            weight=wgt,
+            jacobian=jac,
+            ignore_zero_weight=False,
+        )
+
+        # guess = ngmix.GMixModel([drow, dcol, g1, g2, T, flux], "gauss")
+        # print('guess:', guess.get_e1e2T())
+        res = ngmix.admom.run_admom(
+            obs=obs,
+            guess=1,
+            # guess=guess,
+            rng=rng,
+        )
+        if res['flux_flags'] == 0:
+            fluxes.append(res['flux'])
+            flux_errors.append(res['flux_err'])
+            true_e1vals.append(shear.e1)
+            true_e2vals.append(shear.e2)
+            e1vals.append(res['e1'])
+            e2vals.append(res['e2'])
+            e1err_vals.append(res['e1err'])
+            e2err_vals.append(res['e2err'])
+            Tvals.append(res['T'])
+            Terr_vals.append(res['T_err'])
+
+    fluxes = np.array(fluxes)
+    flux_errors = np.array(flux_errors)
+    true_e1vals = np.array(true_e1vals)
+    true_e2vals = np.array(true_e2vals)
+    e1vals = np.array(e1vals)
+    e2vals = np.array(e2vals)
+    Tvals = np.array(Tvals)
+
+    check('flux', fluxes, flux)
+    check_error('flux err:', fluxes, flux_errors, tol=0.4)
+    check('e1', e1vals - true_e1vals, 0)
+    check('e2', e2vals - true_e2vals, 0)
+    check_error('e1 err', e1vals - true_e1vals, e1err_vals, tol=0.1)
+    check_error('e2 err', e2vals - true_e2vals, e2err_vals, tol=0.1)
+    # T will be biased by noise
+    # check('T', Tvals, T)
+    check_error('T err:', Tvals, Terr_vals, tol=0.1)
+
+    # raise ValueError('blah')

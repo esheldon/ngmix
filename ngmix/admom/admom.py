@@ -3,7 +3,10 @@ __all__ = ['run_admom', 'find_cen_admom', 'AdmomFitter']
 import numpy as np
 from numpy import diag
 
-from ..gmix import GMix, GMixModel, gmix_nb
+from ..gmix import (
+    GMix, GMixModel,
+    # gmix_nb,
+)
 from ..moments import fwhm_to_T
 from ..shape import e1e2_to_g1g2
 from ..observation import Observation
@@ -207,7 +210,7 @@ class AdmomResult(dict):
         Returns
         -------
         image: array
-            Image of the model, including the PSF if a psf was sent
+            Image of the model
         """
         if self['flags'] != 0:
             raise RuntimeError('cannot create image, fit failed')
@@ -303,16 +306,21 @@ class AdmomFitter(object):
         except GMixRangeError:
             ares['flags'] = ngmix.flags.GMIX_RANGE_ERROR
 
-        result = get_result(ares, obs.jacobian.area, wt_gmix["norm"][0])
+        result = get_result(
+            ares=ares,
+            # jac_area=obs.jacobian.area,
+            # wt_gmix["norm"][0],
+        )
 
         return AdmomResult(obs=obs, result=result)
 
     def _get_guess(self, obs, guess):
         if isinstance(guess, GMix):
-            guess_gmix = guess
+            guess_gmix = guess.copy()
         else:
             Tguess = guess  # noqa
             guess_gmix = self._generate_guess(obs=obs, Tguess=Tguess)
+
         return guess_gmix
 
     def _set_conf(self, maxiter, shiftmax, etol, Ttol, cenonly):  # noqa
@@ -351,7 +359,7 @@ class AdmomFitter(object):
         return GMixModel(pars, "gauss")
 
 
-def get_result(ares, jac_area, wgt_norm):
+def get_result(ares):
     """
     copy the result structure to a dict, and
     calculate a few more things
@@ -374,14 +382,11 @@ def get_result(ares, jac_area, wgt_norm):
     res["sums_norm"] = ares["wsum"]
 
     res["flagstr"] = ""
-    res["flux_flags"] = 0
     res["flux_flagstr"] = ""
     res["T_flags"] = 0
     res["T_flagstr"] = ""
 
-    res['flux'] = np.nan
     res['flux_mean'] = np.nan
-    res["flux_err"] = np.nan
     res["T"] = np.nan
     res["T_err"] = np.nan
     res["s2n"] = np.nan
@@ -400,25 +405,11 @@ def get_result(ares, jac_area, wgt_norm):
         res['flux_mean'] = flux_sum/res['wsum']
         res['pars'][5] = res['flux_mean']
 
-    # handle flux-only flags
-    if res['flags'] == 0:
-        if res["T"] > gmix_nb.GMIX_LOW_DETVAL:
-            # this is a fun set of factors
-            # jacobian area is because ngmix works in flux units
-            # the wgt_norm and wsum compute the weighted flux and normalize
-            # the weight kernel to peak at 1
-            fnorm = jac_area * wgt_norm * res["wsum"]
-            res['flux'] = res['sums'][5] / fnorm
-
-            if res['sums_cov'][5, 5] > 0:
-                res["flux_err"] = np.sqrt(res['sums_cov'][5, 5]) / fnorm
-                res["s2n"] = res["flux"] / res["flux_err"]
-            else:
-                res["flux_flags"] |= ngmix.flags.NONPOS_VAR
+    if res['flux_flags'] == 0:
+        if res['flux_err'] > 0:
+            res['s2n'] = res['flux'] / res['flux_err']
         else:
-            res["flux_flags"] |= ngmix.flags.NONPOS_SIZE
-    else:
-        res['flux_flags'] |= res['flags']
+            res['flux_flags'] |= ngmix.flags.NONPOS_VAR
 
     # handle flux+T only
     if res['flags'] == 0:
@@ -433,7 +424,7 @@ def get_result(ares, jac_area, wgt_norm):
                     res['sums_cov'][4, 5],
                 )
             else:
-                # flux <= 0.0
+                # weighted flux <= 0.0
                 res["T_flags"] |= ngmix.flags.NONPOS_FLUX
         else:
             res["T_flags"] |= ngmix.flags.NONPOS_VAR
@@ -502,6 +493,9 @@ _admom_result_dtype = [
     ('pars', 'f8', 6),
     # temporary
     ('F', 'f8', 6),
+    ('flux_flags', 'i4'),
+    ('flux', 'f8'),
+    ('flux_err', 'f8'),
 ]
 
 _admom_conf_dtype = [

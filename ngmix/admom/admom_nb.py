@@ -27,6 +27,8 @@ def admom(confarray, wt, pixels, resarray):
     roworig = wt['row'][0]
     colorig = wt['col'][0]
 
+    min_ierr = get_min_ierr(pixels)
+
     e1old = e2old = Told = np.nan
     for i in range(conf['maxiter']):
 
@@ -36,6 +38,14 @@ def admom(confarray, wt, pixels, resarray):
 
         # due to check above, this should not raise an exception
         gmix_set_norms(wt)
+
+        if i == 0:
+            # first run with min_err=0 ignores zero weight pixels
+            use_min_ierr = 0
+        else:
+            use_min_ierr = min_ierr
+
+        admom_set_flux(wt, pixels, res, use_min_ierr)
 
         clear_result(res)
         admom_censums(wt, pixels, res)
@@ -53,7 +63,7 @@ def admom(confarray, wt, pixels, resarray):
             break
 
         clear_result(res)
-        admom_momsums(wt, pixels, res)
+        admom_momsums(wt, pixels, res, min_ierr)
 
         if res['sums'][5] <= 0.0:
             res['flags'] = ngmix.flags.NONPOS_FLUX
@@ -102,9 +112,152 @@ def admom(confarray, wt, pixels, resarray):
             Told = T
 
     res['numiter'] = i+1
+    admom_set_flux_err(wt, pixels, res)
 
     if res['numiter'] == conf['maxiter']:
         res['flags'] = ngmix.flags.MAXITER
+
+
+@njit
+def get_min_ierr(pixels):
+    """
+    get the min 1/err for pixels with non zero 1/err
+    """
+    min_ierr = np.inf
+
+    n_pixels = pixels.size
+    for i in range(n_pixels):
+        pixel = pixels[i]
+        ierr = pixel['ierr']
+        if ierr > 0 and ierr < min_ierr:
+            min_ierr = ierr
+
+    return min_ierr
+
+
+@njit
+def admom_set_flux(wt, pixels, res, min_ierr):
+    """
+    calculate a tempalte flux using the weight, and filling
+    in pixels with the model as needed
+
+    Parameters
+    ----------
+    wt: gmix
+        The weight gmix
+    pixels: pixels array
+        Array of pixels, possibly with zero 1/ierr
+    res: admom result
+        The result struct
+    min_ierr: float
+        The minimum non zero 1/err
+
+    Side Effects
+    -----------
+    the flux for the weight function and in the res are set
+    """
+    min_ivar = min_ierr**2
+
+    xcorr_sum = 0.0
+    msq_sum = 0.0
+
+    oflux = wt['p'][0]
+    iflux = 1 / oflux
+
+    n_pixels = pixels.size
+    for i in range(n_pixels):
+
+        pixel = pixels[i]
+
+        if pixel['ierr'] <= 0 and min_ierr <= 0:
+            # this is most likely a first run at setting the flux,
+            # ignore zero weight pixels
+            continue
+
+        if pixel['ierr'] < min_ierr:
+            ivar = min_ivar
+        else:
+            ivar = pixel['ierr']**2
+
+        model = gmix_eval_pixel_fast(wt, pixel) * iflux
+
+        if pixel['ierr'] <= 0:
+            val = model * oflux
+        else:
+            val = pixel['val']
+
+        xcorr_sum += model * val * ivar
+        msq_sum += model * model * ivar
+
+    flux = xcorr_sum / msq_sum
+
+    res['flux'] = flux
+
+    wt['p'][0] = flux
+    gmix_set_norms(wt)
+
+
+@njit
+def admom_set_flux_err(wt, pixels, res):
+    """
+    calculate the tempalte flux error
+
+    Parameters
+    ----------
+    wt: gmix
+        The weight gmix
+    pixels: pixels array
+        Array of pixels, possibly with zero 1/ierr
+    res: admom result
+        The result struct
+
+    Side Effects
+    -----------
+    the flux_err for the res is set, as well as possibly
+    flux_flags
+    """
+
+    totpix = pixels.size
+
+    chi2sum = 0.0
+    msq_sum = 0.0
+    iflux = 1 / wt['p'][0]
+
+    n_pixels = pixels.size
+    for i in range(n_pixels):
+
+        pixel = pixels[i]
+        if pixel['ierr'] <= 0:
+            # Don't use bad pixels for the error estimate, because we filled in
+            # with the model.  Errors will reflect zero information from these
+            # pixels, which may be an overestimate
+            continue
+
+        ivar = pixel['ierr']**2
+
+        model = gmix_eval_pixel_fast(wt, pixel)
+
+        if pixel['ierr'] <= 0:
+            val = model
+        else:
+            val = pixel['val']
+
+        chi2sum += (model - val)**2 * ivar
+        msq_sum += model * model * ivar
+
+    if msq_sum == 0 or totpix == 1:
+        # same as ngmix.flags.DIV_ZERO
+        res['flux_flags'] = 2**14
+    else:
+        # normalize the model squared sum
+        msq_sum *= iflux**2
+        arg = chi2sum / msq_sum / (totpix - 1)
+        if arg >= 0.0:
+            res['flux_err'] = np.sqrt(arg)
+        else:
+            # same as ngmix.flags.NOPOS_FLUX
+            res['flux_flags'] = 4
+            res['flux_err'] = np.nan
 
 
 @njit
@@ -117,9 +270,16 @@ def admom_censums(wt, pixels, res):
     for i in range(n_pixels):
 
         pixel = pixels[i]
+
         weight = gmix_eval_pixel_fast(wt, pixel)
 
-        wdata = weight*pixel['val']
+        # fill in bad pixels with the model
+        if pixel['ierr'] <= 0.0:
+            val = weight
+        else:
+            val = pixel['val']
+
+        wdata = weight * val
 
         res['npix'] += 1
         res['sums'][0] += wdata*pixel['v']
@@ -128,10 +288,12 @@ def admom_censums(wt, pixels, res):
 
 
 @njit
-def admom_momsums(wt, pixels, res):
+def admom_momsums(wt, pixels, res, min_ierr):
     """
     do sums for calculating the weighted moments
     """
+
+    min_ivar = min_ierr**2
 
     vcen = wt['row'][0]
     ucen = wt['col'][0]
@@ -143,12 +305,21 @@ def admom_momsums(wt, pixels, res):
         pixel = pixels[i_pixel]
         weight = gmix_eval_pixel_fast(wt, pixel)
 
-        var = 1.0/(pixel['ierr']*pixel['ierr'])
+        if pixel['ierr'] < min_ierr:
+            var = 1/min_ivar
+        else:
+            var = 1.0/pixel['ierr']**2
 
         vmod = pixel['v']-vcen
         umod = pixel['u']-ucen
 
-        wdata = weight*pixel['val']
+        # fill in with the model
+        if pixel['ierr'] <= 0:
+            val = weight
+        else:
+            val = pixel['val']
+
+        wdata = weight * val
         w2 = weight*weight
 
         F[0] = pixel['v']
