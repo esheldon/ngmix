@@ -80,6 +80,10 @@ def write_cutouts(
     noise,
     psf_fwhm,
 ):
+
+    # one pixel will be zero weight
+    rind = rng.randint(low=0, high=box_size, size=2)
+
     for cutout_type in cutout_types:
 
         dtype = get_dtype(cutout_type)
@@ -122,6 +126,8 @@ def write_cutouts(
                     imdata = np.zeros((box_size, box_size), dtype=dtype)
                     if cutout_type == 'weight':
                         imdata[:, :] = 1.0/noise**2
+
+                    imdata[rind[0], rind[1]] = 0
 
                 hdu.write(imdata, start=object_data['start_row'][iobj, icut])
 

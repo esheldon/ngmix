@@ -74,8 +74,19 @@ def test_medsreaders_smoke(
         assert mm.size == m.size
 
         # lists of mbobs.  full set versus subset
-        mbobs_list = mm.get_mbobs_list(weight_type=weight_type)
-        assert len(mbobs_list) == mm.size
+        for ignore in [True, False]:
+            # our fake meds has a zero weight pixel in each image
+            mbobs_list = mm.get_mbobs_list(
+                weight_type=weight_type, ignore_zero_weight=ignore,
+            )
+            assert len(mbobs_list) == mm.size
+            for mbobs in mbobs_list:
+                for obslist in mbobs:
+                    for obs in obslist:
+                        if ignore:
+                            assert obs.pixels.size < obs.image.size
+                        else:
+                            assert obs.pixels.size == obs.image.size
 
         ind = [1, 3]
         mbobs_list = mm.get_mbobs_list(indices=ind, weight_type=weight_type)
@@ -91,3 +102,4 @@ def test_medsreaders_smoke(
             if weight_type == 'weight':
                 for band in range(nband):
                     assert len(mbobs[band]) == m['ncutout'][i]
+
