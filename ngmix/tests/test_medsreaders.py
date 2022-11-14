@@ -102,4 +102,3 @@ def test_medsreaders_smoke(
             if weight_type == 'weight':
                 for band in range(nband):
                     assert len(mbobs[band]) == m['ncutout'][i]
-
