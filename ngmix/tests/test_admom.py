@@ -208,50 +208,6 @@ def test_admom_find_cen(g1_true, g2_true, snr):
     assert np.abs(dcol_mean)/dcol_err < 5, (dcol_mean/dcol_err)
 
 
-# @pytest.mark.parametrize('pixel_scale', [0.25, 0.125])
-# @pytest.mark.parametrize('fwhm', [2, 0.5])
-# @pytest.mark.parametrize('image_size', [53])
-# @pytest.mark.parametrize('mom_fwhm', [2, 2.5])
-# def test_admom_comp_to_gaussmom_flux(image_size, fwhm, pixel_scale, mom_fwhm):
-#     cen = (image_size - 1)/2
-#     gs_wcs = galsim.PixelScale(pixel_scale).jacobian()
-#
-#     jac = Jacobian(
-#         y=cen, x=cen,
-#         dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
-#         dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
-#
-#     gal = galsim.Gaussian(
-#         fwhm=fwhm
-#     ).withFlux(
-#         400
-#     )
-#
-#     # get true flux
-#     im_true = gal.drawImage(
-#         nx=image_size,
-#         ny=image_size,
-#         wcs=gs_wcs,
-#     ).array
-#     obs = Observation(
-#         image=im_true,
-#         jacobian=jac,
-#     )
-#
-#     Tguess = fwhm_to_T(fwhm)
-#     res = ngmix.admom.run_admom(obs=obs, guess=Tguess)
-#
-#     from ngmix.gaussmom import GaussMom
-#     res_gmom = GaussMom(fwhm=T_to_fwhm(res["T"])).go(obs=obs)
-#
-#     for k in sorted(res):
-#         if k in res_gmom:
-#             print("%s:" % k, res[k], res_gmom[k])
-#
-#     for k in ["flux", "flux_err"]:
-#         assert np.allclose(res[k], res_gmom[k], atol=0, rtol=1e-2)
-
-
 def check(name, vals, expected, errs=None):
     mn = vals.mean()
     std = vals.std()
