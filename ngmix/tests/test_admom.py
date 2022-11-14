@@ -5,7 +5,6 @@ import pytest
 
 import ngmix
 from ngmix.moments import fwhm_to_T
-# from ngmix import Jacobian, Observation
 import ngmix.flags
 
 
@@ -227,7 +226,7 @@ def check_error(name, vals, errs, tol):
 @pytest.mark.parametrize('dozeros', [False, True])
 def test_admom_fill(dozeros):
     """
-    test that the flux is recovered within errors
+    test admom flux and filling in zero weight pixels
     """
     rng = np.random.RandomState(seed=550)
     ntrial = 1000
@@ -286,22 +285,12 @@ def test_admom_fill(dozeros):
 
         wgt = im * 0 + 1 / noise**2
         if dozeros:
-            # rav = wgt.ravel()
-            # rind = rng.randint(0, rav.size, int(0.02 * im.size))
-            # rav[rind] = 0
             randcol = rng.randint(
                 low=image_size//2 - 2,
                 high=image_size//2 + 2,
             )
             wgt[:, randcol] = 0
             im[:, randcol] = 0
-            # wbad = np.where(wgt == 0)
-            # im[wbad] = 0
-            # for k in (1, 2, 3):
-            #     wgt_rot = np.rot90(wgt, k=k)
-            #     wgt_rot[wbad] = 0
-            #     imrot = np.rot90(im, k=k)
-            #     imrot[wbad] = 0
 
         jac = ngmix.DiagonalJacobian(row=cen, col=cen, scale=scale)
 
