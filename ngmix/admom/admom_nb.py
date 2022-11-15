@@ -246,8 +246,7 @@ def admom_set_flux_err(wt, pixels, res):
         msq_sum += model * model * ivar
 
     if msq_sum == 0 or totpix == 1:
-        # same as ngmix.flags.DIV_ZERO
-        res['flux_flags'] = 2**14
+        res['flux_flags'] = ngmix.flags.DIV_ZERO
     else:
         # normalize the model squared sum
         msq_sum *= iflux**2
@@ -255,8 +254,7 @@ def admom_set_flux_err(wt, pixels, res):
         if arg >= 0.0:
             res['flux_err'] = np.sqrt(arg)
         else:
-            # same as ngmix.flags.NOPOS_FLUX
-            res['flux_flags'] = 4
+            res['flux_flags'] = ngmix.flags.NONPOS_FLUX
             res['flux_err'] = np.nan
 
 
