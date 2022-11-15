@@ -690,7 +690,7 @@ def get_weighted_sums(wt, pixels, res, maxrad):
         umod = pixel["u"] - ucen
 
         rad2 = umod * umod + vmod * vmod
-        if rad2 < maxrad2:
+        if rad2 < maxrad2 and pixel['ierr'] > 0:
 
             weight = gmix_eval_pixel(wt, pixel)
             var = 1.0 / (pixel["ierr"] * pixel["ierr"])
