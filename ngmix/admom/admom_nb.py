@@ -28,6 +28,8 @@ def admom(confarray, wt, pixels, resarray):
     colorig = wt['col'][0]
 
     min_ierr = get_min_ierr(pixels)
+    if min_ierr == np.inf:
+        res['flags'] = ngmix.flags.NO_GOOD_PIXELS
 
     e1old = e2old = Told = np.nan
     for i in range(conf['maxiter']):
@@ -46,6 +48,8 @@ def admom(confarray, wt, pixels, resarray):
             use_min_ierr = min_ierr
 
         admom_set_flux(wt, pixels, res, use_min_ierr)
+        if res['flux_flags'] != 0:
+            break
 
         clear_result(res)
         admom_censums(wt, pixels, res)
@@ -116,6 +120,8 @@ def admom(confarray, wt, pixels, resarray):
 
     if res['numiter'] == conf['maxiter']:
         res['flags'] = ngmix.flags.MAXITER
+    if res['flux_flags'] != 0:
+        res['flags'] |= res['flux_flags']
 
 
 @njit
@@ -162,6 +168,11 @@ def admom_set_flux(wt, pixels, res, min_ierr):
     msq_sum = 0.0
 
     oflux = wt['p'][0]
+    if oflux == 0.0:
+        oflux = 1.0
+        wt['p'][0] = oflux
+        gmix_set_norms(wt)
+
     iflux = 1 / oflux
 
     n_pixels = pixels.size
@@ -189,12 +200,18 @@ def admom_set_flux(wt, pixels, res, min_ierr):
         xcorr_sum += model * val * ivar
         msq_sum += model * model * ivar
 
-    flux = xcorr_sum / msq_sum
+    if msq_sum <= 0:
+        res['flux_flags'] = ngmix.flags.NONPOS_FLUX
+        res['flux_flags'] = ngmix.flags.DIV_ZERO
+    else:
+        flux = xcorr_sum / msq_sum
+        if flux <= 0:
+            res['flux_flags'] = ngmix.flags.NONPOS_FLUX
+        else:
+            res['flux'] = flux
 
-    res['flux'] = flux
-
-    wt['p'][0] = flux
-    gmix_set_norms(wt)
+            wt['p'][0] = flux
+            gmix_set_norms(wt)
 
 
 @njit
@@ -221,7 +238,12 @@ def admom_set_flux_err(wt, pixels, res):
 
     chi2sum = 0.0
     msq_sum = 0.0
-    iflux = 1 / wt['p'][0]
+    flux = wt['p'][0]
+    if flux <= 0:
+        res['flux_flags'] = ngmix.flags.NONPOS_FLUX
+        return
+
+    iflux = 1 / flux
 
     n_pixels = pixels.size
     for i in range(n_pixels):
@@ -245,7 +267,7 @@ def admom_set_flux_err(wt, pixels, res):
         chi2sum += (model - val)**2 * ivar
         msq_sum += model * model * ivar
 
-    if msq_sum == 0 or totpix == 1:
+    if msq_sum <= 0 or totpix == 1:
         res['flux_flags'] = ngmix.flags.DIV_ZERO
     else:
         # normalize the model squared sum
