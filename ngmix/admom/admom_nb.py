@@ -116,7 +116,7 @@ def admom(confarray, wt, pixels, resarray):
             Told = T
 
     res['numiter'] = i+1
-    admom_set_flux_err(wt, pixels, res)
+    # admom_set_flux_err(wt, pixels, res, min_ierr)
 
     if res['numiter'] == conf['maxiter']:
         res['flags'] = ngmix.flags.MAXITER
@@ -215,7 +215,7 @@ def admom_set_flux(wt, pixels, res, min_ierr):
 
 
 @njit
-def admom_set_flux_err(wt, pixels, res):
+def admom_set_flux_err(wt, pixels, res, min_ierr):
     """
     calculate the tempalte flux error
 
@@ -234,44 +234,40 @@ def admom_set_flux_err(wt, pixels, res):
     flux_flags
     """
 
+    min_ivar = min_ierr**2
+
     totpix = pixels.size
 
     chi2sum = 0.0
     msq_sum = 0.0
+
     flux = wt['p'][0]
     if flux <= 0:
         res['flux_flags'] = ngmix.flags.NONPOS_FLUX
         return
-
-    iflux = 1 / flux
+    iflux2 = 1 / flux**2
 
     n_pixels = pixels.size
     for i in range(n_pixels):
 
         pixel = pixels[i]
-        if pixel['ierr'] <= 0:
-            # Don't use bad pixels for the error estimate, because we filled in
-            # with the model.  Errors will reflect zero information from these
-            # pixels, which may be an overestimate
-            continue
-
-        ivar = pixel['ierr']**2
 
         model = gmix_eval_pixel_fast(wt, pixel)
 
         if pixel['ierr'] <= 0:
-            val = model
+            chi2sum += 1
+            ivar = min_ivar
         else:
             val = pixel['val']
+            ivar = pixel['ierr']**2
+            chi2sum += (model - val)**2 * ivar
 
-        chi2sum += (model - val)**2 * ivar
-        msq_sum += model * model * ivar
+        # model here should be normalized to 1
+        msq_sum += model * model * iflux2 * ivar
 
     if msq_sum <= 0 or totpix == 1:
         res['flux_flags'] = ngmix.flags.DIV_ZERO
     else:
-        # normalize the model squared sum
-        msq_sum *= iflux**2
         arg = chi2sum / msq_sum / (totpix - 1)
         if arg >= 0.0:
             res['flux_err'] = np.sqrt(arg)

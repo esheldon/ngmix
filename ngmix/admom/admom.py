@@ -409,11 +409,19 @@ def get_result(ares):
         res['flux_mean'] = flux_sum/res['wsum']
         res['pars'][5] = res['flux_mean']
 
-    if res['flux_flags'] == 0:
-        if res['flux_err'] > 0:
-            res['s2n'] = res['flux'] / res['flux_err']
-        else:
-            res['flux_flags'] |= ngmix.flags.NONPOS_VAR
+    # if res['flux_flags'] == 0:
+    #     if res['flux_err'] > 0:
+    #         res['s2n'] = res['flux'] / res['flux_err']
+    #     else:
+    #         res['flux_flags'] |= ngmix.flags.NONPOS_VAR
+
+    fc = res['sums_cov'][5, 5]
+    if fc > 0:
+        res['s2n'] = res['sums'][5] / np.sqrt(fc)
+        res['flux_err'] = res['flux'] / res['s2n']
+    else:
+        res['flux_flags'] |= ngmix.flags.NONPOS_VAR
+        res['flags'] |= ngmix.flags.NONPOS_VAR
 
     # handle flux+T only
     if res['flags'] == 0:
