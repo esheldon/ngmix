@@ -321,6 +321,10 @@ class AdmomFitter(object):
             Tguess = guess  # noqa
             guess_gmix = self._generate_guess(obs=obs, Tguess=Tguess)
 
+        flux = guess_gmix.get_flux()
+        if flux <= 0.0:
+            guess_gmix.set_flux(1.0)
+
         return guess_gmix
 
     def _set_conf(self, maxiter, shiftmax, etol, Ttol, cenonly):  # noqa
