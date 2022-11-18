@@ -1,5 +1,10 @@
 # flake8: noqa
 
+from numba.core.errors import NumbaExperimentalFeatureWarning
+import warnings
+
+warnings.simplefilter('ignore', category=NumbaExperimentalFeatureWarning)
+
 from ._version import __version__
 
 from . import util

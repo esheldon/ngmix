@@ -13,6 +13,32 @@ from ngmix.fastexp_nb import FASTEXP_MAX_CHI2, fexp_arr
 
 logger = logging.getLogger(__name__)
 
+USE_FFT_CACHE = False
+USE_KERNEL_CACHE = False
+
+
+def turn_on_fft_caching():
+    global USE_FFT_CACHE
+    USE_FFT_CACHE = True
+
+
+def turn_off_fft_caching():
+    global USE_FFT_CACHE
+    USE_FFT_CACHE = False
+    _zero_pad_and_compute_fft_cached_impl.cache_clear()
+
+
+def turn_on_kernel_caching():
+    global USE_KERNEL_CACHE
+    USE_KERNEL_CACHE = True
+
+
+def turn_off_kernel_caching():
+    global USE_KERNEL_CACHE
+    USE_KERNEL_CACHE = False
+    _gauss_kernels_cached.cache_clear()
+    _ksigma_kernels_cached.cache_clear()
+
 
 class PrePSFMom(object):
     """Measure pre-PSF weighted real-space moments.
@@ -92,14 +118,14 @@ class PrePSFMom(object):
         eff_pad_factor = target_dim / obs.image.shape[0]
 
         # pad image, psf and weight map, get FFTs, apply cen_phases
-        kim, im_row, im_col = _zero_pad_and_compute_fft_cached(
+        kim, im_row, im_col = _zero_pad_and_compute_fft_maybe_cached(
             obs.image, obs.jacobian.row0, obs.jacobian.col0, target_dim,
             self.ap_rad,
         )
         fft_dim = kim.shape[0]
 
         if psf_obs is not None:
-            kpsf_im, psf_im_row, psf_im_col = _zero_pad_and_compute_fft_cached(
+            kpsf_im, psf_im_row, psf_im_col = _zero_pad_and_compute_fft_maybe_cached(
                 psf_obs.image,
                 psf_obs.jacobian.row0, psf_obs.jacobian.col0,
                 target_dim,
@@ -277,6 +303,22 @@ def _measure_moments_fft(
         cen_phase = _compute_cen_phase_shift(drow, dcol, dim, msk=msk)
         kim *= cen_phase
 
+    fkf = kernels["fkf"]
+    fkr = kernels["fkr"]
+    fkp = kernels["fkp"]
+    fkc = kernels["fkc"]
+
+    mom_norm = kernels["fk00"]
+
+    return _measure_moments_fft_numba(
+        kim, kpsf_im, dim, eff_pad_factor, fkf, fkr, fkp, fkc, mom_norm, tot_var,
+    )
+
+
+@njit
+def _measure_moments_fft_numba(
+    kim, kpsf_im, dim, eff_pad_factor, fkf, fkr, fkp, fkc, mom_norm, tot_var,
+):
     # build the flux, radial, plus and cross kernels / moments
     # the inverse FFT in our convention has a factor of 1/n per dimension
     # the sums below are inverse FFTs but only computing the values at the
@@ -287,12 +329,6 @@ def _measure_moments_fft(
     df4 = df2 * df2
 
     # we only sum where the kernel is nonzero
-    fkf = kernels["fkf"]
-    fkr = kernels["fkr"]
-    fkp = kernels["fkp"]
-    fkc = kernels["fkc"]
-
-    mom_norm = kernels["fk00"]
     mf = np.sum((kim * fkf).real) * df2
     mr = np.sum((kim * fkr).real) * df2
     mp = np.sum((kim * fkp).real) * df2
@@ -393,6 +429,34 @@ def _compute_cen_phase_shift(cen_row, cen_col, dim, msk=None):
     If you feed the centroid of a profile, then this factor times the raw FFT
     of that profile will result in an FFT centered at the profile.
     """
+    f = fft.fftfreq(dim)
+    pxy = _compute_cen_phase_shift_numba(f, cen_row, cen_col)
+
+    if msk is not None:
+        pxy = pxy[msk]
+
+    return pxy
+
+
+@njit
+def _compute_cen_phase_shift_numba(f, cen_row, cen_col):
+    # this reshaping makes sure the arrays broadcast nicely into a grid
+    fx = f.reshape(1, -1)
+    fy = f.reshape(-1, 1)
+    kcen_x = fx * (2.0 * np.pi * cen_col)
+    kcen_y = fy * (2.0 * np.pi * cen_row)
+    px = np.cos(kcen_x) + 1j*np.sin(kcen_x)
+    py = np.cos(kcen_y) + 1j*np.sin(kcen_y)
+    pxy = px * py
+    return pxy
+
+
+def _compute_cen_phase_shift_orig(cen_row, cen_col, dim, msk=None):
+    """computes exp(i*2*pi*k*cen) for shifting the phases of FFTS.
+
+    If you feed the centroid of a profile, then this factor times the raw FFT
+    of that profile will result in an FFT centered at the profile.
+    """
     f = fft.fftfreq(dim) * (2.0 * np.pi)
     # this reshaping makes sure the arrays broadcast nicely into a grid
     fx = f.reshape(1, -1)
@@ -443,16 +507,21 @@ def _zero_pad_and_compute_fft_cached_impl(
 
 
 @functools.wraps(_zero_pad_and_compute_fft_impl)
-def _zero_pad_and_compute_fft_cached(im, cen_row, cen_col, target_dim, ap_rad):
-    return _zero_pad_and_compute_fft_cached_impl(
-        tuple(tuple(ii) for ii in im),
-        float(cen_row), float(cen_col), int(target_dim), float(ap_rad)
-    )
+def _zero_pad_and_compute_fft_maybe_cached(im, cen_row, cen_col, target_dim, ap_rad):
+    if USE_FFT_CACHE:
+        return _zero_pad_and_compute_fft_cached_impl(
+            tuple(tuple(ii) for ii in im),
+            float(cen_row), float(cen_col), int(target_dim), float(ap_rad)
+        )
+    else:
+        return _zero_pad_and_compute_fft_impl(
+            im, cen_row, cen_col, target_dim, ap_rad,
+        )
 
 
-_zero_pad_and_compute_fft_cached.cache_info \
+_zero_pad_and_compute_fft_maybe_cached.cache_info \
     = _zero_pad_and_compute_fft_cached_impl.cache_info
-_zero_pad_and_compute_fft_cached.cache_clear \
+_zero_pad_and_compute_fft_maybe_cached.cache_clear \
     = _zero_pad_and_compute_fft_cached_impl.cache_clear
 
 
@@ -485,8 +554,44 @@ def _get_fwhm_smooth_profile(fwhm_smooth, fmag2):
     return exp_val_smooth
 
 
-@functools.lru_cache(maxsize=128)
 def _ksigma_kernels(
+    dim,
+    kernel_size,
+    dvdrow, dvdcol, dudrow, dudcol,
+    fwhm_smooth,
+):
+    if USE_KERNEL_CACHE:
+        return _ksigma_kernels_cached(
+            dim,
+            kernel_size,
+            dvdrow, dvdcol, dudrow, dudcol,
+            fwhm_smooth,
+        )
+    else:
+        return _ksigma_kernels_impl(
+            dim,
+            kernel_size,
+            dvdrow, dvdcol, dudrow, dudcol,
+            fwhm_smooth,
+        )
+
+
+@functools.lru_cache(maxsize=128)
+def _ksigma_kernels_cached(
+    dim,
+    kernel_size,
+    dvdrow, dvdcol, dudrow, dudcol,
+    fwhm_smooth,
+):
+    return _ksigma_kernels_impl(
+        dim,
+        kernel_size,
+        dvdrow, dvdcol, dudrow, dudcol,
+        fwhm_smooth,
+    )
+
+
+def _ksigma_kernels_impl(
     dim,
     kernel_size,
     dvdrow, dvdcol, dudrow, dudcol,
@@ -602,8 +707,44 @@ def _ksigma_kernels(
     )
 
 
-@functools.lru_cache(maxsize=128)
 def _gauss_kernels(
+    dim,
+    kernel_size,
+    dvdrow, dvdcol, dudrow, dudcol,
+    fwhm_smooth,
+):
+    if USE_KERNEL_CACHE:
+        return _gauss_kernels_cached(
+            dim,
+            kernel_size,
+            dvdrow, dvdcol, dudrow, dudcol,
+            fwhm_smooth,
+        )
+    else:
+        return _gauss_kernels_impl(
+            dim,
+            kernel_size,
+            dvdrow, dvdcol, dudrow, dudcol,
+            fwhm_smooth,
+        )
+
+
+@functools.lru_cache(maxsize=128)
+def _gauss_kernels_cached(
+    dim,
+    kernel_size,
+    dvdrow, dvdcol, dudrow, dudcol,
+    fwhm_smooth,
+):
+    return _gauss_kernels_impl(
+        dim,
+        kernel_size,
+        dvdrow, dvdcol, dudrow, dudcol,
+        fwhm_smooth,
+    )
+
+
+def _gauss_kernels_impl(
     dim,
     kernel_size,
     dvdrow, dvdcol, dudrow, dudcol,

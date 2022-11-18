@@ -1,6 +1,10 @@
 import numpy as np
 
 import pytest
+import galsim
+from ..gaussmom import GaussMom
+from ..jacobian import Jacobian
+from ..observation import Observation
 
 from ..gexceptions import GMixRangeError
 
@@ -22,6 +26,7 @@ from ..moments import (
     mom2g,
     e2mom,
     g2mom,
+    regularize_mom_shapes,
 )
 
 
@@ -84,3 +89,68 @@ def test_moments_moms_to_e1e2_raises():
 
     with pytest.raises(GMixRangeError):
         moms_to_e1e2(np.array([0.1]), np.array([0.2]), np.array([-0.1]))
+
+
+@pytest.mark.parametrize("fwhm_reg", [0, 0.8])
+@pytest.mark.parametrize("has_nan", [True, False])
+def test_regularize_mom_shapes(fwhm_reg, has_nan):
+    fwhm = 0.9
+    image_size = 107
+    cen = (image_size - 1)/2
+    gs_wcs = galsim.ShearWCS(
+        0.125, galsim.Shear(g1=0, g2=0)).jacobian()
+
+    obj = galsim.Gaussian(
+        fwhm=fwhm
+    ).shear(
+        g1=-0.1, g2=0.3
+    ).withFlux(
+        400)
+    im = obj.drawImage(
+        nx=image_size,
+        ny=image_size,
+        wcs=gs_wcs,
+        method='no_pixel').array
+    noise = np.sqrt(np.sum(im**2)) / 1e2
+    wgt = np.ones_like(im) / noise**2
+
+    fitter = GaussMom(fwhm=1.2)
+
+    # get true flux
+    jac = Jacobian(
+        y=cen, x=cen,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy)
+    obs = Observation(
+        image=im,
+        jacobian=jac,
+        weight=wgt,
+    )
+    res = fitter.go(obs=obs)
+
+    if has_nan:
+        res["sums"][0] = np.nan
+        res["sums"][1] = np.nan
+
+    res_reg = regularize_mom_shapes(res, fwhm_reg)
+
+    if has_nan:
+        assert np.isnan(res_reg["sums"][0])
+        assert np.isnan(res_reg["sums"][1])
+    assert np.all(np.isfinite(res_reg["sums"][2:]))
+
+    T_reg = fwhm_to_T(fwhm_reg)
+
+    if not has_nan:
+        assert np.allclose(res["sums"][[0, 1]], res_reg["sums"][[0, 1]])
+    assert np.allclose(res["sums"][4] + T_reg * res["sums"][5], res_reg["sums"][4])
+    if fwhm_reg > 0:
+        assert not np.allclose(res["sums"][4], res_reg["sums"][4])
+    assert np.allclose(res["sums"][[2, 3, 5]], res_reg["sums"][[2, 3, 5]])
+    for col in ["flux", "flux_err", "T", "T_err", "T_flags", "s2n"]:
+        assert np.allclose(res[col], res_reg[col])
+    for col in ["e1", "e2", "e", "e_err", "e_cov"]:
+        if fwhm_reg > 0:
+            assert not np.allclose(res[col], res_reg[col])
+        else:
+            assert np.allclose(res[col], res_reg[col])

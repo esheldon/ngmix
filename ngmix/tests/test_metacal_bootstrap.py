@@ -20,7 +20,9 @@ FRAC_TOL = 5.0e-4
 @pytest.mark.parametrize('use_bootstrapper', [False, True])
 @pytest.mark.parametrize('nband', [None, 2])
 @pytest.mark.parametrize('nepoch', [None, 2])
-def test_metacal_bootstrap_max_smoke(noise, use_bootstrapper, nband, nepoch):
+def test_metacal_bootstrap_max_smoke(
+    noise, use_bootstrapper, nband, nepoch, metacal_caching
+):
     """
     test a metacal bootstrapper with maxlike fitting
     """
@@ -95,7 +97,9 @@ def test_metacal_bootstrap_max_smoke(noise, use_bootstrapper, nband, nepoch):
 
 @pytest.mark.parametrize('noise', [1.0e-8, 0.01])
 @pytest.mark.parametrize('use_bootstrapper', [False, True])
-def test_metacal_bootstrap_gaussmom_smoke(noise, use_bootstrapper):
+def test_metacal_bootstrap_gaussmom_smoke(
+    noise, use_bootstrapper, metacal_caching,
+):
     """
     test a metacal bootstrapper with gaussian moments
     """
@@ -138,7 +142,7 @@ def test_metacal_bootstrap_gaussmom_smoke(noise, use_bootstrapper):
             assert 'result' in obsdict[key].psf.meta
 
 
-def test_metacal_bootstrap_gaussmom_response():
+def test_metacal_bootstrap_gaussmom_response(metacal_caching):
     """
     test a metacal bootstrapper with gaussian moments
     """

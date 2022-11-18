@@ -489,3 +489,69 @@ def make_mom_result(sums, sums_cov, sums_norm=None):
     res["T_flagstr"] = ngmix.flags.get_flags_str(res["T_flags"])
 
     return res
+
+
+def regularize_mom_shapes(res, fwhm_reg):
+    """Apply regularization to the shapes computed from moments sums.
+
+    This routine transforms the shapes as
+
+        e_{1,2} = M_{1,2}/(T + T_reg)
+
+    where T_reg is the T value equivalent to fwhm_reg, T is the original T value
+    from the moments, and M_{1,2} are the moments for shapes e_{1,2}.
+
+    This form of regularization is equivalent, for Gaussians, to convolving the Gaussian
+    with an isotropic Gaussian smoothing kernel of size fwhm_reg.
+
+    Parameters
+    ----------
+    res : dict
+        The original moments result before regularization.
+    fwhm_reg : float
+        The regularization FWHM value. Typically this should be of order the size of
+        the PSF for a pre-PSF moment.
+
+    Returns
+    -------
+    res_reg : dict
+        The regularized moments result. The size and flux are unchanged.
+    """
+    if fwhm_reg > 0:
+        raw_mom = res["sums"]
+        raw_mom_cov = res["sums_cov"]
+
+        T_reg = fwhm_to_T(fwhm_reg)
+
+        # the moments are not normalized and are sums, so convert T_reg to a sum using
+        # the flux sum first via T_reg -> T_reg * raw_mom[5]
+        amat = np.eye(6)
+        amat[4, 5] = T_reg
+
+        # the pre-PSF fitters do not fill out the centroid moments so hack around that
+        raw_mom_orig = raw_mom.copy()
+        if np.isnan(raw_mom_orig[0]):
+            raw_mom[0] = 0
+        if np.isnan(raw_mom_orig[1]):
+            raw_mom[1] = 0
+        reg_mom = np.dot(amat, raw_mom)
+        if np.isnan(raw_mom_orig[0]):
+            raw_mom[0] = np.nan
+            reg_mom[0] = np.nan
+        if np.isnan(raw_mom_orig[1]):
+            raw_mom[1] = np.nan
+            reg_mom[1] = np.nan
+
+        reg_mom_cov = np.dot(amat, np.dot(raw_mom_cov, amat.T))
+        momres = make_mom_result(reg_mom, reg_mom_cov)
+
+        # use old T
+        for col in ["T", "T_err", "T_flags", "T_flagstr"]:
+            momres[col] = res[col]
+
+        momres["flags"] |= res["flags"]
+        momres["flagstr"] = ngmix.flags.get_flags_str(momres["flags"])
+
+        return momres
+    else:
+        return res

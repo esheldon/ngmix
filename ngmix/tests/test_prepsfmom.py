@@ -9,13 +9,35 @@ from ngmix.prepsfmom import (
     KSigmaMom, PGaussMom,
     _build_square_apodization_mask,
     PrePSFMom,
-    _gauss_kernels,
+    _gauss_kernels_cached,
     _zero_pad_and_compute_fft_cached_impl,
+    _compute_cen_phase_shift,
+    _compute_cen_phase_shift_orig,
 )
 from ngmix import Jacobian
 from ngmix import Observation
+import ngmix.prepsfmom
 from ngmix.moments import make_mom_result
 import ngmix.flags
+
+
+@pytest.mark.parametrize("row", [-0.4, 0, 1.2, 4.5])
+@pytest.mark.parametrize("col", [-0.32434, 0, 1.43232, 4.56775])
+@pytest.mark.parametrize("dim,msk", [
+    (100, None),
+    (453, None),
+    (3, np.array([[True, False, True], [True, True, False], [True, True, True]])),
+    (4, np.array([
+        [False, True, False, True],
+        [False, True, True, False],
+        [True, True, True, True],
+        [False, False, True, False]])),
+])
+def test_cen_phase_shift(row, col, msk, dim):
+    np.testing.assert_allclose(
+        _compute_cen_phase_shift(row, col, dim, msk=msk),
+        _compute_cen_phase_shift_orig(row, col, dim, msk=msk)
+    )
 
 
 def _report_info(s, arr, mn, err):
@@ -37,7 +59,7 @@ def _report_info(s, arr, mn, err):
         )
 
 
-def test_prepsfmom_kind():
+def test_prepsfmom_kind(prepsfmom_caching):
     fitter = PrePSFMom(2.0, 'gauss')
     assert fitter.kind == 'pgauss'
     fitter = PrePSFMom(2.0, 'pgauss')
@@ -51,7 +73,7 @@ def test_prepsfmom_kind():
 
 
 @pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
-def test_prepsfmom_raises_nopsf(cls):
+def test_prepsfmom_raises_nopsf(cls, prepsfmom_caching):
     fitter = cls(20)
     obs = Observation(image=np.zeros((1000, 1000)))
     with pytest.raises(RuntimeError) as e:
@@ -65,7 +87,7 @@ def test_prepsfmom_raises_nopsf(cls):
 
 
 @pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
-def test_prepsfmom_raises_nonsquare(cls):
+def test_prepsfmom_raises_nonsquare(cls, prepsfmom_caching):
     fitter = cls(20)
     obs = Observation(image=np.zeros((100, 90)))
     with pytest.raises(ValueError) as e:
@@ -75,7 +97,7 @@ def test_prepsfmom_raises_nonsquare(cls):
 
 
 @pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
-def test_prepsfmom_raises_badjacob(cls):
+def test_prepsfmom_raises_badjacob(cls, prepsfmom_caching):
     fitter = cls(1.2)
 
     gs_wcs = galsim.ShearWCS(
@@ -102,7 +124,15 @@ def test_prepsfmom_raises_badjacob(cls):
 
 
 @flaky(max_runs=10)
-def test_prepsfmom_speed_and_cache():
+@pytest.mark.parametrize("use_cache", [True, False])
+def test_prepsfmom_speed_and_cache(use_cache):
+    if use_cache:
+        ngmix.prepsfmom.turn_on_fft_caching()
+        ngmix.prepsfmom.turn_on_kernel_caching()
+    else:
+        ngmix.prepsfmom.turn_off_fft_caching()
+        ngmix.prepsfmom.turn_off_kernel_caching()
+
     image_size = 48
     psf_image_size = 53
     pixel_scale = 0.263
@@ -164,7 +194,7 @@ def test_prepsfmom_speed_and_cache():
     ).array
 
     # now we test the speed + caching
-    _gauss_kernels.cache_clear()
+    _gauss_kernels_cached.cache_clear()
     _zero_pad_and_compute_fft_cached_impl.cache_clear()
 
     # the first fit will do numba stuff, so we exclude it
@@ -186,8 +216,12 @@ def test_prepsfmom_speed_and_cache():
     print("\n%0.4f ms for first fit" % (dt1*1000))
 
     # we miss once here for kernels, twice for images
-    assert _gauss_kernels.cache_info().misses == 1
-    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 2
+    if use_cache:
+        assert _gauss_kernels_cached.cache_info().misses == 1
+        assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 2
+    else:
+        assert _gauss_kernels_cached.cache_info().misses == 0
+        assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 0
 
     # the second fit will have numba cached, but not the other kernel and FFT caches
     fitter = PGaussMom(
@@ -207,8 +241,12 @@ def test_prepsfmom_speed_and_cache():
     print("%0.4f ms for second fit" % (dt2*1000))
 
     # we miss twice for kernels, total of 3 times since psf changed
-    assert _gauss_kernels.cache_info().misses == 2
-    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 4
+    if use_cache:
+        assert _gauss_kernels_cached.cache_info().misses == 2
+        assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 4
+    else:
+        assert _gauss_kernels_cached.cache_info().misses == 0
+        assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 0
 
     # now we test with full caching
     nfit = 1000
@@ -222,12 +260,19 @@ def test_prepsfmom_speed_and_cache():
     print("%0.4f ms per fit" % (dt3/nfit*1000))
 
     # we should never miss again for the calls above
-    assert _gauss_kernels.cache_info().misses == 2
-    assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 4 + nfit
+    if use_cache:
+        assert _gauss_kernels_cached.cache_info().misses == 2
+        assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 4 + nfit
+    else:
+        assert _gauss_kernels_cached.cache_info().misses == 0
+        assert _zero_pad_and_compute_fft_cached_impl.cache_info().misses == 0
 
     # if numba stuff is cached this does not work so commented out
     # assert dt2 < dt1
-    assert dt3/nfit < dt2*0.6
+    if use_cache:
+        assert dt3/nfit < dt2*0.6
+    else:
+        assert dt3/nfit >= dt2*0.6
 
 
 def _stack_list_of_dicts(res):
@@ -272,7 +317,7 @@ def _stack_list_of_dicts(res):
 @pytest.mark.parametrize('pad_factor', [3.5, 2])
 def test_prepsfmom_gauss(
     pad_factor, image_size, psf_image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm,
-    cls,
+    cls, prepsfmom_caching,
 ):
     """fast test at a range of parameters to check that things come out ok"""
     rng = np.random.RandomState(seed=100)
@@ -396,7 +441,7 @@ def test_prepsfmom_gauss(
 @pytest.mark.parametrize('fwhm_smooth', [0, 1])
 def test_prepsfmom_mn_cov_psf(
     pad_factor, image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm, cls,
-    fwhm_smooth,
+    fwhm_smooth, prepsfmom_caching,
 ):
     """Slower test to make sure means and errors are right
     w/ tons of monte carlo samples.
@@ -535,6 +580,7 @@ def test_prepsfmom_mn_cov_psf(
 @pytest.mark.parametrize('pad_factor', [1.5])
 def test_prepsfmom_fwhm_smooth_snr(
     pad_factor, image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm, cls,
+    prepsfmom_caching,
 ):
     def _run_sim_fwhm_smooth(fwhm_smooth):
         rng = np.random.RandomState(seed=100)
@@ -641,6 +687,7 @@ def test_prepsfmom_fwhm_smooth_snr(
 @pytest.mark.parametrize('fwhm_smooth', [0, 1])
 def test_prepsfmom_mn_cov_nopsf(
     pad_factor, image_size, fwhm, pixel_scale, snr, mom_fwhm, cls, fwhm_smooth,
+    prepsfmom_caching,
 ):
     """Slower test to make sure means and errors are right
     w/ tons of monte carlo samples.
@@ -822,7 +869,8 @@ def test_moments_make_mom_result_flags():
 @pytest.mark.parametrize('psf_image_size', [33, 34])
 @pytest.mark.parametrize('pad_factor', [4, 3.5])
 def test_prepsfmom_gauss_true_flux(
-    pad_factor, psf_image_size, image_size, fwhm, psf_fwhm, pixel_scale, cls
+    pad_factor, psf_image_size, image_size, fwhm, psf_fwhm, pixel_scale, cls,
+    prepsfmom_caching,
 ):
     rng = np.random.RandomState(seed=100)
 
@@ -917,6 +965,7 @@ def test_prepsfmom_gauss_true_flux(
 @pytest.mark.parametrize('fwhm_smooth', [0, 1.5])
 def test_prepsfmom_mom_norm(
     pad_factor, image_size, pixel_scale, mom_fwhm, cls, fwhm_smooth,
+    prepsfmom_caching,
 ):
     rng = np.random.RandomState(seed=100)
 
@@ -950,7 +999,7 @@ def test_prepsfmom_mom_norm(
 @pytest.mark.parametrize('pad_factor', [3.5, 4])
 @pytest.mark.parametrize('mom_fwhm', [2, 2.5])
 def test_prepsfmom_comp_to_gaussmom_simple(
-    pad_factor, image_size, fwhm, pixel_scale, mom_fwhm
+    pad_factor, image_size, fwhm, pixel_scale, mom_fwhm, prepsfmom_caching,
 ):
     rng = np.random.RandomState(seed=100)
 
@@ -1022,7 +1071,8 @@ def test_prepsfmom_comp_to_gaussmom_simple(
 @pytest.mark.parametrize('mom_fwhm', [2, 2.5])
 @pytest.mark.parametrize('fwhm_smooth', [0, 1.5])
 def test_prepsfmom_comp_to_gaussmom_fwhm_smooth(
-    pad_factor, image_size, fwhm, pixel_scale, mom_fwhm, fwhm_smooth
+    pad_factor, image_size, fwhm, pixel_scale, mom_fwhm, fwhm_smooth,
+    prepsfmom_caching,
 ):
     rng = np.random.RandomState(seed=100)
 
@@ -1215,7 +1265,7 @@ def _sim_apodize(flux_factor, ap_rad):
 
 
 @pytest.mark.parametrize("flux_factor", [1e2, 1e3, 1e5])
-def test_prepsfmom_apodize(flux_factor):
+def test_prepsfmom_apodize(flux_factor, prepsfmom_caching):
     res, res_geom = _sim_apodize(flux_factor, 1.5)
     ap_diffs = np.array([
         np.abs(res[k] - res_geom[k])

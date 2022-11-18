@@ -115,7 +115,7 @@ def test_leastsqbound_smoke(use_prior):
 def test_leastsqbound_bounds(fracdev_bounds):
     rng = np.random.RandomState(2830)
 
-    ntrial = 10
+    ntrial = 100
     fit_model = 'bd'
     scale = 0.263
 
