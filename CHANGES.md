@@ -4,6 +4,7 @@
 
    - Caching in pre-psf moments and metacal is now optional
      with an API to turn it on. Default is off.
+   - Pixel in pre-PSF moments is not deconvolved when doing PSFs.
 
 ## v2.2.1
 
