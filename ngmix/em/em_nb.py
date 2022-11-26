@@ -301,9 +301,12 @@ def gmix_set_from_sums(gmix,
         With dtype _sums_dtype
     """
 
-    minval = 1.0e-4
+    # minval = 1.0e-4
+    # minval = -1.0e-1
 
     _, _, psf_irr, psf_irc, psf_icc, _ = gmix_get_moms(gmix_psf)
+    psf_T = psf_irr + psf_icc
+    minval = -0.5*psf_T/2
 
     n_gauss = gmix.size
     for i in range(n_gauss):
@@ -330,7 +333,8 @@ def gmix_set_from_sums(gmix,
         # currently are forcing the sizes of pre-psf gaussians to
         # be positive.  We may be able to relax this
 
-        if irr < 0.0 or icc < 0.0:
+        # if irr < 0.0 or icc < 0.0:
+        if irr < minval or icc < minval:
             irr, irc, icc = minval, 0.0, minval
 
         # this causes oscillations in likelihood
