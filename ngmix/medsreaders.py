@@ -224,6 +224,11 @@ class NGMixMEDS(_MEDS):
         except Exception:
             mfrac = None
 
+        try:
+            seg = self.get_cutout(iobj, icutout, type='seg')
+        except Exception:
+            seg = None
+
         if weight_type == 'uberseg':
             wt = self.get_uberseg(iobj, icutout)
         elif weight_type == 'cweight':
@@ -275,6 +280,7 @@ class NGMixMEDS(_MEDS):
             weight=wt,
             bmask=bmask,
             ormask=ormask,
+            seg=seg,
             noise=noise,
             meta=meta,
             jacobian=jacobian,

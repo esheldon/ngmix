@@ -51,6 +51,7 @@ def test_medsreaders_smoke(
                 assert len(obslist) == m['ncutout'][iobj], ('iobj: %s' % iobj)
 
             for obs in obslist:
+                assert obs.has_seg()
                 if with_psf:
                     assert obs.has_psf()
                 if with_bmask:

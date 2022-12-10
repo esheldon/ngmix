@@ -14,6 +14,15 @@ def image_data():
     rng = np.random.RandomState(seed=10)
 
     data = {}
+
+    rows, cols = np.mgrid[0:dims[0], 0:dims[1]]
+    cen = (np.array(dims)-1)/2
+    rows = rows - cen[0]
+    cols = cols - cen[1]
+    w = np.where((rows**2 + cols**2) < 4)
+    seg = np.zeros(dims, dtype='i2')
+    seg[w] = 1
+    data['seg'] = seg
     for key in ['image', 'weight', 'bmask', 'ormask', 'noise', 'mfrac']:
         data[key] = rng.normal(size=dims)
 
@@ -21,6 +30,7 @@ def image_data():
             data[key] = np.exp(data[key])
         elif key in ['bmask', 'ormask']:
             data[key] = np.clip(data[key] * 100, 0, np.inf).astype(np.int32)
+
     data['jacobian'] = DiagonalJacobian(x=7, y=6, scale=0.25)
     data['meta'] = {'pi': 3.14}
     data['psf'] = Observation(
@@ -42,6 +52,7 @@ def test_observation_get_has(image_data):
     assert not obs.has_psf_gmix()
     assert not obs.has_gmix()
     assert not obs.has_mfrac()
+    assert not obs.has_seg()
 
     obs = Observation(
         image=image_data['image'],
@@ -65,6 +76,13 @@ def test_observation_get_has(image_data):
         noise=image_data['noise'])
     assert np.all(obs.noise == image_data['noise'])
     assert obs.has_noise()
+
+    obs = Observation(
+        image=image_data['image'],
+        seg=image_data['seg'],
+    )
+    assert np.all(obs.seg == image_data['seg'])
+    assert obs.has_seg()
 
     obs = Observation(
         image=image_data['image'],
@@ -115,6 +133,7 @@ def test_observation_set(image_data):
         bmask=image_data['bmask'],
         ormask=image_data['ormask'],
         noise=image_data['noise'],
+        seg=image_data['seg'],
         jacobian=image_data['jacobian'],
         gmix=image_data['gmix'],
         psf=image_data['psf'],
@@ -161,6 +180,13 @@ def test_observation_set(image_data):
     assert np.all(obs.noise == new_arr)
     obs.noise = None
     assert not obs.has_noise()
+
+    new_arr = np.zeros(image_data['seg'].shape, dtype='i2') + 3
+    assert np.all(obs.seg != new_arr)
+    obs.seg = new_arr
+    assert np.all(obs.seg == new_arr)
+    obs.seg = None
+    assert not obs.has_seg()
 
     new_jac = DiagonalJacobian(x=8, y=13, scale=1.2)
     assert new_jac.get_galsim_wcs() != obs.jacobian.get_galsim_wcs()
