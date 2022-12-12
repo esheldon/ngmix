@@ -114,4 +114,4 @@ def test_medsreaders_coadd_seg():
             for obs, cobs in zip(obslist[1:], cobslist[1:]):
                 if np.any(obs.seg != cobs.seg):
                     some_differed = True
-    assert some_differed
+        assert some_differed
