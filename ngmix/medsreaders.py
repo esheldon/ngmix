@@ -241,8 +241,8 @@ class NGMixMEDS(_MEDS):
         try:
             if seg_type == 'seg':
                 seg = self.get_cutout(iobj, icutout, type='seg')
-            elif seg_type == 'cseg':
-                seg = self.get_cseg_cutout(iobj, icutout)
+            elif seg_type == 'coadd':
+                seg = self.interpolate_coadd_seg(iobj, icutout)
             else:
                 raise ValueError(f'bad seg_type "{seg_type}"')
         except Exception:

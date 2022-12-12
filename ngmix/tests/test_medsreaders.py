@@ -94,7 +94,7 @@ def test_medsreaders_smoke(
                     assert len(mbobs[band]) == m['ncutout'][i]
 
 
-def test_medsreaders_cseg():
+def test_medsreaders_coadd_seg():
     import ngmix.medsreaders
     from ._fakemeds import make_fake_meds
 
@@ -107,8 +107,11 @@ def test_medsreaders_cseg():
         # test reading from single meds file
         m = ngmix.medsreaders.NGMixMEDS(fname)
 
+        some_differed = False
         for iobj in range(m.size):
             obslist = m.get_obslist(iobj, seg_type='seg')
-            cobslist = m.get_obslist(iobj, seg_type='cseg')
+            cobslist = m.get_obslist(iobj, seg_type='coadd')
             for obs, cobs in zip(obslist[1:], cobslist[1:]):
-                assert np.any(obs.seg != cobs.seg)
+                if np.any(obs.seg != cobs.seg):
+                    some_differed = True
+    assert some_differed
