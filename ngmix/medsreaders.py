@@ -46,7 +46,7 @@ class MultiBandNGMixMEDS(object):
         """
         return self.mlist[0].size
 
-    def get_mbobs_list(self, indices=None, weight_type='weight'):
+    def get_mbobs_list(self, indices=None, weight_type='weight', seg_type='seg'):
         """Get a list of `MultiBandObsList` for all or a set of objects.
 
         Parameters
@@ -64,6 +64,9 @@ class MultiBandNGMixMEDS(object):
                 'cseg-canonical': same as 'cseg' but uses the postage stamp
                     center instead of the object's position.
             Default is 'weight'
+        seg_type: string, optional
+            If 'seg' use the seg for each epoch, if 'cseg' use the coadd seg
+            composited onto the single epoch frame
 
         Returns
         -------
@@ -75,12 +78,12 @@ class MultiBandNGMixMEDS(object):
 
         list_of_obs = []
         for iobj in indices:
-            mbobs = self.get_mbobs(iobj, weight_type=weight_type)
+            mbobs = self.get_mbobs(iobj, weight_type=weight_type, seg_type=seg_type)
             list_of_obs.append(mbobs)
 
         return list_of_obs
 
-    def get_mbobs(self, iobj, weight_type='weight'):
+    def get_mbobs(self, iobj, weight_type='weight', seg_type='seg'):
         """Get a `MultiBandObsList` for a given object.
 
         Parameters
@@ -97,6 +100,9 @@ class MultiBandNGMixMEDS(object):
                 'cseg-canonical': same as 'cseg' but uses the postage stamp
                     center instead of the object's position.
             Default is 'weight'
+        seg_type: string, optional
+            If 'seg' use the seg for each epoch, if 'cseg' use the coadd seg
+            composited onto the single epoch frame
 
         Returns
         -------
@@ -107,14 +113,14 @@ class MultiBandNGMixMEDS(object):
         mbobs = MultiBandObsList()
 
         for m in self.mlist:
-            obslist = m.get_obslist(iobj, weight_type=weight_type)
+            obslist = m.get_obslist(iobj, weight_type=weight_type, seg_type=seg_type)
             mbobs.append(obslist)
 
         return mbobs
 
 
 class NGMixMEDS(_MEDS):
-    def get_obslist(self, iobj, weight_type='weight'):
+    def get_obslist(self, iobj, weight_type='weight', seg_type='seg'):
         """Get an ngmix ObsList for all observations.
 
         Parameters
@@ -131,6 +137,9 @@ class NGMixMEDS(_MEDS):
                 'cseg-canonical': same as 'cseg' but uses the postage stamp
                     center instead of the object's position.
             Default is 'weight'
+        seg_type: string, optional
+            If 'seg' use the seg for each epoch, if 'cseg' use the coadd seg
+            composited onto the single epoch frame
 
         Returns
         -------
@@ -140,7 +149,9 @@ class NGMixMEDS(_MEDS):
         obslist = ObsList()
         for icut in range(self._cat['ncutout'][iobj]):
             try:
-                obs = self.get_obs(iobj, icut, weight_type=weight_type)
+                obs = self.get_obs(
+                    iobj, icut, weight_type=weight_type, seg_type=seg_type,
+                )
                 obslist.append(obs)
             except GMixFatalError:
                 logger.debug('zero weight observation found, skipping')
@@ -177,7 +188,7 @@ class NGMixMEDS(_MEDS):
             dvdrow=jd['dvdrow'],
             dvdcol=jd['dvdcol'])
 
-    def get_obs(self, iobj, icutout, weight_type='weight'):
+    def get_obs(self, iobj, icutout, weight_type='weight', seg_type='seg'):
         """Get an ngmix Observation.
 
         Parameters
@@ -196,6 +207,9 @@ class NGMixMEDS(_MEDS):
                 'cseg-canonical': same as 'cseg' but uses the postage stamp
                     center instead of the object's position.
             Default is 'weight'
+        seg_type: string, optional
+            If 'seg' use the seg for each epoch, if 'cseg' use the coadd seg
+            composited onto the single epoch frame
 
         Returns
         -------
@@ -223,6 +237,16 @@ class NGMixMEDS(_MEDS):
             mfrac = self.get_cutout(iobj, icutout, type='mfrac')
         except Exception:
             mfrac = None
+
+        try:
+            if seg_type == 'seg':
+                seg = self.get_cutout(iobj, icutout, type='seg')
+            elif seg_type == 'coadd':
+                seg = self.interpolate_coadd_seg(iobj, icutout)
+            else:
+                raise ValueError(f'bad seg_type "{seg_type}"')
+        except Exception:
+            seg = None
 
         if weight_type == 'uberseg':
             wt = self.get_uberseg(iobj, icutout)
@@ -275,6 +299,7 @@ class NGMixMEDS(_MEDS):
             weight=wt,
             bmask=bmask,
             ormask=ormask,
+            seg=seg,
             noise=noise,
             meta=meta,
             jacobian=jacobian,

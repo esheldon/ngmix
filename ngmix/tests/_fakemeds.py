@@ -117,7 +117,16 @@ def write_cutouts(
                     imdata += rng.normal(scale=1.0e-6, size=imdata.shape)
                 elif cutout_type == 'seg':
                     imdata = np.zeros((box_size, box_size), dtype=dtype)
-                    imdata[:, :] = object_data['number'][iobj]
+
+                    rows, cols = np.mgrid[0:box_size, 0:box_size]
+
+                    row = object_data['cutout_row'][iobj, icut]
+                    col = object_data['cutout_col'][iobj, icut]
+                    rows = rows - row
+                    cols = cols - col
+                    w = np.where((rows**2 + cols**2) < 4)
+                    imdata[w] = object_data['number'][iobj]
+
                 else:
                     imdata = np.zeros((box_size, box_size), dtype=dtype)
                     if cutout_type == 'weight':

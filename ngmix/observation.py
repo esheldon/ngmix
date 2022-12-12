@@ -78,6 +78,8 @@ class Observation(MetadataMixin):
         A bitmask array
     ormask: ndarray, optional
         A bitmask array
+    seg: ndarray, optional
+        A segmentatio map
     noise: ndarray, optional
         A noise field to associate with this observation
     jacobian: Jacobian, optional
@@ -116,6 +118,7 @@ class Observation(MetadataMixin):
                  weight=None,
                  bmask=None,
                  ormask=None,
+                 seg=None,
                  noise=None,
                  jacobian=None,
                  gmix=None,
@@ -148,6 +151,7 @@ class Observation(MetadataMixin):
         # optional, if None nothing is set
         self.set_bmask(bmask)
         self.set_ormask(ormask)
+        self.set_seg(seg)
         self.set_noise(noise)
         self.set_gmix(gmix)
         self.set_psf(psf)
@@ -248,6 +252,22 @@ class Observation(MetadataMixin):
         set the ormask
         """
         self.set_ormask(ormask)
+
+    @property
+    def seg(self):
+        """
+        getter for segmentation map
+
+        returns a read-only reference
+        """
+        return self._get_view(self._seg)
+
+    @seg.setter
+    def seg(self, seg):
+        """
+        set the segmentation map
+        """
+        self.set_seg(seg)
 
     @property
     def noise(self):
@@ -473,6 +493,40 @@ class Observation(MetadataMixin):
         returns True if a bitmask is set
         """
         if hasattr(self, '_ormask'):
+            return True
+        else:
+            return False
+
+    def set_seg(self, seg):
+        """
+        Set the segmentation map
+
+        parameters
+        ----------
+        seg: ndarray (or None)
+            The new segmentation image.
+        """
+        if seg is None:
+            if self.has_seg():
+                del self._seg
+        else:
+
+            image = self.image
+
+            # force contiguous C, but we don't know what dtype to expect
+            seg = np.ascontiguousarray(seg)
+            assert len(seg.shape) == 2, "seg must be 2d"
+
+            assert (seg.shape == image.shape), \
+                "image and seg must be same shape"
+
+            self._seg = seg
+
+    def has_seg(self):
+        """
+        returns True if a seg is set
+        """
+        if hasattr(self, '_seg'):
             return True
         else:
             return False
