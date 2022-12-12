@@ -92,3 +92,23 @@ def test_medsreaders_smoke(
             if weight_type == 'weight':
                 for band in range(nband):
                     assert len(mbobs[band]) == m['ncutout'][i]
+
+
+def test_medsreaders_cseg():
+    import ngmix.medsreaders
+    from ._fakemeds import make_fake_meds
+
+    rng = np.random.RandomState(542)
+
+    with tempfile.TemporaryDirectory() as tdir:
+        fname = os.path.join(tdir, 'test-meds.fits')
+        make_fake_meds(fname=fname, rng=rng)
+
+        # test reading from single meds file
+        m = ngmix.medsreaders.NGMixMEDS(fname)
+
+        for iobj in range(m.size):
+            obslist = m.get_obslist(iobj, seg_type='seg')
+            cobslist = m.get_obslist(iobj, seg_type='cseg')
+            for obs, cobs in zip(obslist[1:], cobslist[1:]):
+                assert np.any(obs.seg != cobs.seg)
