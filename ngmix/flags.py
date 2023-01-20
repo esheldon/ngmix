@@ -19,6 +19,7 @@ EIG_NOTFINITE = 2 ** 13
 
 DIV_ZERO = 2 ** 14  # division by zero
 ZERO_DOF = 2 ** 15  # dof zero so can't do chi^2/dof
+NO_GOOD_PIXELS = 2 ** 15  # no non-zero weight pixels
 
 # these mappings keep the API the same
 EM_RANGE_ERROR = GMIX_RANGE_ERROR

@@ -46,8 +46,11 @@ class MultiBandNGMixMEDS(object):
         """
         return self.mlist[0].size
 
-    def get_mbobs_list(self, indices=None, weight_type='weight'):
-        """Get a list of `MultiBandObsList` for all or a set of objects.
+    def get_mbobs_list(
+        self, indices=None, weight_type='weight', ignore_zero_weight=True,
+    ):
+        """
+        Get a list of `MultiBandObsList` for all or a set of objects.
 
         Parameters
         ----------
@@ -64,6 +67,10 @@ class MultiBandNGMixMEDS(object):
                 'cseg-canonical': same as 'cseg' but uses the postage stamp
                     center instead of the object's position.
             Default is 'weight'
+        ignore_zero_weight: bool
+            If ignore_zero_weight is True, then zero-weight pixels are ignored when
+            constructing the internal pixels array.  If False, then zero-weight
+            pixels are included in the internal pixels array.
 
         Returns
         -------
@@ -75,13 +82,18 @@ class MultiBandNGMixMEDS(object):
 
         list_of_obs = []
         for iobj in indices:
-            mbobs = self.get_mbobs(iobj, weight_type=weight_type)
+            mbobs = self.get_mbobs(
+                iobj,
+                weight_type=weight_type,
+                ignore_zero_weight=ignore_zero_weight,
+            )
             list_of_obs.append(mbobs)
 
         return list_of_obs
 
-    def get_mbobs(self, iobj, weight_type='weight'):
-        """Get a `MultiBandObsList` for a given object.
+    def get_mbobs(self, iobj, weight_type='weight', ignore_zero_weight=True):
+        """
+        Get a `MultiBandObsList` for a given object.
 
         Parameters
         ----------
@@ -97,6 +109,10 @@ class MultiBandNGMixMEDS(object):
                 'cseg-canonical': same as 'cseg' but uses the postage stamp
                     center instead of the object's position.
             Default is 'weight'
+        ignore_zero_weight: bool
+            If ignore_zero_weight is True, then zero-weight pixels are ignored when
+            constructing the internal pixels array.  If False, then zero-weight
+            pixels are included in the internal pixels array.
 
         Returns
         -------
@@ -107,15 +123,22 @@ class MultiBandNGMixMEDS(object):
         mbobs = MultiBandObsList()
 
         for m in self.mlist:
-            obslist = m.get_obslist(iobj, weight_type=weight_type)
+            obslist = m.get_obslist(
+                iobj,
+                weight_type=weight_type,
+                ignore_zero_weight=ignore_zero_weight,
+            )
             mbobs.append(obslist)
 
         return mbobs
 
 
 class NGMixMEDS(_MEDS):
-    def get_obslist(self, iobj, weight_type='weight'):
-        """Get an ngmix ObsList for all observations.
+    def get_obslist(
+        self, iobj, weight_type='weight', ignore_zero_weight=True,
+    ):
+        """
+        Get an ngmix ObsList for all observations.
 
         Parameters
         ----------
@@ -131,6 +154,10 @@ class NGMixMEDS(_MEDS):
                 'cseg-canonical': same as 'cseg' but uses the postage stamp
                     center instead of the object's position.
             Default is 'weight'
+        ignore_zero_weight: bool
+            If ignore_zero_weight is True, then zero-weight pixels are ignored when
+            constructing the internal pixels array.  If False, then zero-weight
+            pixels are included in the internal pixels array.
 
         Returns
         -------
@@ -140,7 +167,10 @@ class NGMixMEDS(_MEDS):
         obslist = ObsList()
         for icut in range(self._cat['ncutout'][iobj]):
             try:
-                obs = self.get_obs(iobj, icut, weight_type=weight_type)
+                obs = self.get_obs(
+                    iobj, icut, weight_type=weight_type,
+                    ignore_zero_weight=ignore_zero_weight,
+                )
                 obslist.append(obs)
             except GMixFatalError:
                 logger.debug('zero weight observation found, skipping')
@@ -177,8 +207,12 @@ class NGMixMEDS(_MEDS):
             dvdrow=jd['dvdrow'],
             dvdcol=jd['dvdcol'])
 
-    def get_obs(self, iobj, icutout, weight_type='weight'):
-        """Get an ngmix Observation.
+    def get_obs(
+        self, iobj, icutout, weight_type='weight',
+        ignore_zero_weight=True,
+    ):
+        """
+        Get an ngmix Observation.
 
         Parameters
         ----------
@@ -196,6 +230,11 @@ class NGMixMEDS(_MEDS):
                 'cseg-canonical': same as 'cseg' but uses the postage stamp
                     center instead of the object's position.
             Default is 'weight'
+
+        ignore_zero_weight: bool
+            If ignore_zero_weight is True, then zero-weight pixels are ignored when
+            constructing the internal pixels array.  If False, then zero-weight
+            pixels are included in the internal pixels array.
 
         Returns
         -------
@@ -280,6 +319,7 @@ class NGMixMEDS(_MEDS):
             jacobian=jacobian,
             psf=psf_obs,
             mfrac=mfrac,
+            ignore_zero_weight=ignore_zero_weight,
         )
 
         return obs

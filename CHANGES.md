@@ -1,3 +1,13 @@
+## v2.3.1
+
+### New Features
+
+    - Adaptive moments now calculate the flux of the model rather than a weighted
+      aperture flux.  The flux is a template flux (same method as
+      PSFFluxFitter) and is thus nearly unbiased when fitting gaussian object.
+    - Adaptive moments now fill in zero weight pixels using the current model.
+      This avoids biases due to lack of symmetry in the input data.
+
 ## v2.3.0
 
 ### new features
