@@ -419,6 +419,7 @@ class MetacalDilatePSF(object):
         # interpolated psf deconvolved from pixel.  This is what
         # we dilate, shear, etc and reconvolve the image by
         self.psf_int_nopix = galsim.Convolve([psf_int, self.pixel_inv])
+        self.psf_int = psf_int
 
     def get_wcs(self):
         """
@@ -572,15 +573,15 @@ class MetacalGaussPSF(MetacalDilatePSF):
         _do_dilate for the algorithm
 
         """
-        import galsim
+        # import galsim
 
         assert doshear is False, 'no shearing gauss psf'
 
         gauss_psf = _get_gauss_target_psf(
-            self.psf_int_nopix, flux=self.psf_flux,
+            self.psf_int,
+            flux=self.psf_flux,
         )
-        psf_grown_nopix = _do_dilate(gauss_psf, shear)
-        psf_grown = galsim.Convolve(psf_grown_nopix, self.pixel)
+        psf_grown = _do_dilate(gauss_psf, shear)
         return psf_grown
 
     def _make_psf_obs(self, gsim):

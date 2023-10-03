@@ -1,3 +1,10 @@
+## v2.3.1
+
+## Bug Fixes
+
+    - The metacal psf reconvolution method 'gauss' (which uses MetacalGaussPSF)
+      now works with a complex WCS
+
 ## v2.3.0
 
 ### new features
