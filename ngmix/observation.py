@@ -463,8 +463,9 @@ class Observation(MetadataMixin):
             ormask = np.ascontiguousarray(ormask)
             assert len(ormask.shape) == 2, "ormask must be 2d"
 
-            assert (ormask.shape == image.shape),\
+            assert (ormask.shape == image.shape), (
                 "image and ormask must be same shape"
+            )
 
             self._ormask = ormask
 
@@ -1006,8 +1007,9 @@ class MultiBandObsList(list, MetadataMixin):
             An ObsList. An AssertionError will be raised if `obs_list` is not
             an `ngmix.ObsList`.
         """
-        assert isinstance(obs_list, ObsList),\
+        assert isinstance(obs_list, ObsList), (
             'obs_list should be of type ObsList'
+        )
         super(MultiBandObsList, self).append(obs_list)
 
     def get_s2n(self):
@@ -1092,8 +1094,9 @@ class MultiBandObsList(list, MetadataMixin):
         """
         over-riding this for type safety
         """
-        assert isinstance(obs_list, ObsList),\
+        assert isinstance(obs_list, ObsList), (
             'obs_list should be of type ObsList'
+        )
         super(MultiBandObsList, self).__setitem__(index, obs_list)
 
 
@@ -1306,8 +1309,9 @@ class KObsList(list, MetadataMixin):
         """
         over-riding this for type safety
         """
-        assert isinstance(kobs, KObservation),\
+        assert isinstance(kobs, KObservation), (
             'kobs should be of type KObservation'
+        )
         super(KObsList, self).__setitem__(index, kobs)
 
 

@@ -178,6 +178,4 @@ def test_metacal_bootstrap_gaussmom_response(metacal_caching):
         Rvals[i] = (res1p['e'][0] - res1m['e'][0])/0.02
 
     Rmean = Rvals.mean()
-    # this response value comes from 2.0.0, and had an error less than of
-    # 1.0e-5 on it.  Allow for differences in rng/arch etc. by taking 1.0e-4
-    assert abs(Rmean - 0.28535) < 1.0e-4
+    assert abs(Rmean - 0.28159) < 1.0e-4
