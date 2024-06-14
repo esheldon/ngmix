@@ -145,9 +145,9 @@ def test_em_2gauss(noise):
     f1 = pars[0]
     f2 = pars[6]
     if f1 > f2:
-        indices = [1, 0]
+        indices = [1, 0]  # pragma: no cover
     else:
-        indices = [0, 1]
+        indices = [0, 1]  # pragma: no cover
 
     # only check pars for no noise
     if noise == 0.0:
@@ -213,9 +213,9 @@ def test_em_2gauss_withpsf(noise):
     f1 = pars[0]
     f2 = pars[6]
     if f1 > f2:
-        indices = [1, 0]
+        indices = [1, 0]  # pragma: no cover
     else:
-        indices = [0, 1]
+        indices = [0, 1]  # pragma: no cover
 
     # only check pars for no noise
     if noise == 0.0:

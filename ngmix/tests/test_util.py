@@ -46,5 +46,5 @@ def test_get_ratio_err_array():
 
 
 if __name__ == '__main__':
-    test_get_ratio_err_scalar()
-    test_get_ratio_err_array()
+    test_get_ratio_err_scalar()  # pragma: no cover
+    test_get_ratio_err_array()  # pragma: no cover

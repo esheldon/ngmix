@@ -77,7 +77,7 @@ def test_metacal_accuracy(psf):
     assert np.abs(m - 0.00034) < 1.0e-4
 
 
-def _make_struct(res, obs, shear_type):
+def _make_struct(res, obs, shear_type):  # pragma: no cover
     """
     make the data structure
     Parameters
