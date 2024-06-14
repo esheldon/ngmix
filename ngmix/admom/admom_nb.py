@@ -86,6 +86,7 @@ def admom(confarray, wt, pixels, resarray):
             res['pars'][3] = 2.0*wt['irc'][0]
             res['pars'][4] = wt['icc'][0] + wt['irr'][0]
             res['pars'][5] = 1.0
+            res['rho4'] = res['sums'][6] / res['sums'][5]
 
             break
 
@@ -151,19 +152,26 @@ def admom_momsums(wt, pixels, res):
         wdata = weight*pixel['val']
         w2 = weight*weight
 
+        chi2 = (
+            wt["dcc"][0] * vmod * vmod
+            + wt["drr"][0] * umod * umod
+            - 2.0 * wt["drc"][0] * vmod * umod
+        )
+
         F[0] = pixel['v']
         F[1] = pixel['u']
         F[2] = umod*umod - vmod*vmod
         F[3] = 2*vmod*umod
         F[4] = umod*umod + vmod*vmod
         F[5] = 1.0
+        F[6] = chi2 * chi2
 
         res['wsum'] += weight
         res['npix'] += 1
 
-        for i in range(6):
+        for i in range(7):
             res['sums'][i] += wdata*F[i]
-            for j in range(6):
+            for j in range(7):
                 res['sums_cov'][i, j] += w2*var*F[i]*F[j]
 
 
@@ -228,8 +236,8 @@ def clear_result(res):
     res['sums'][:] = 0.0
     res['sums_cov'][:, :] = 0.0
     res['pars'][:] = np.nan
+    res['rho4'] = np.nan
 
     # res['flags']=0
     # res['numiter']=0
-    # res['nimage']=0
     # res['F'][:]=0.0
