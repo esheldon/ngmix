@@ -538,7 +538,7 @@ def leastsqbound(func, x0, args=(), bounds=None, Dfun=None, full_output=0,
                              retval[1]['ipvt'] - 1)).T
         cov_x = None
         if info in [1, 2, 3, 4]:
-            from numpy.dual import inv
+            from numpy.linalg import inv
             from numpy.linalg import LinAlgError
             perm = take(eye(n), retval[1]['ipvt'] - 1, 0)
             r = triu(transpose(retval[1]['fjac'])[:n, :])
