@@ -34,7 +34,7 @@ def make_fake_meds(
     import fitsio
 
     if cutout_types is None:
-        cutout_types = copy.deepcopy(CUTOUT_TYPES)
+        cutout_types = copy.deepcopy(CUTOUT_TYPES)  # pragma: no cover
 
     with_psf = 'psf' in cutout_types
 
