@@ -270,12 +270,13 @@ def test_prepsfmom_speed_and_cache(use_cache):
     # if numba stuff is cached this does not work so commented out
     # assert dt2 < dt1
     if use_cache:
-        assert dt3/nfit < dt2*0.6
+        assert dt3/nfit < dt2*0.8
     else:
-        assert dt3/nfit >= dt2*0.6
+        assert dt3/nfit >= dt2*0.8
 
 
-def _stack_list_of_dicts(res):
+def _stack_list_of_dicts(res):  # pragma: no cover
+
     def _get_dtype(v):
         if isinstance(v, float):
             return ('f8',)

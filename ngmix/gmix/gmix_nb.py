@@ -672,7 +672,18 @@ def g1g2_to_e1e2(g1, g2):
 @njit
 def get_weighted_sums(wt, pixels, res, maxrad):
     """
-    do sums for calculating the weighted moments
+    Do sums for calculating the weighted moments.
+
+    Parameters
+    ----------
+    wt: array
+        The gaussian mixture with dtype ngmix.gmix.gmix._gauss2d_dtype
+    pixels: array
+        Array of pixels
+    res: array
+        The result array
+    maxrad: float
+        Maximum radius in u, v coordinates
     """
 
     maxrad2 = maxrad ** 2

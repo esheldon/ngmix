@@ -1,5 +1,9 @@
 ## v2.3.1
 
+### new features
+
+    - Add calculation of "rho4" to the adaptive moments code.
+
 ## Bug Fixes
 
     - The metacal psf reconvolution method 'gauss' (which uses MetacalGaussPSF)

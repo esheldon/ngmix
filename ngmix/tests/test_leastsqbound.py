@@ -105,7 +105,7 @@ def test_leastsqbound_smoke(use_prior):
         try:
             res = bootstrap(obs=obs, runner=runner, psf_runner=psf_runner)
             allflags[i] = res['flags']
-        except ngmix.BootPSFFailure:
+        except ngmix.BootPSFFailure:  # pragma: no cover
             allflags[i] = 1
 
     assert np.any(allflags == 0)

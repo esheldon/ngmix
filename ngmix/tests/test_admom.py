@@ -27,12 +27,14 @@ def test_admom(g1_true, g2_true, wcs_g1, wcs_g2):
     ).shear(
         g1=g1_true, g2=g2_true
     ).withFlux(
-        400)
+        400,
+    )
     im = obj.drawImage(
         nx=image_size,
         ny=image_size,
         wcs=gs_wcs,
-        method='no_pixel').array
+        method='no_pixel',
+    ).array
     noise = np.sqrt(np.sum(im**2)) / 1e18
     wgt = np.ones_like(im) / noise**2
     scale = np.sqrt(gs_wcs.pixelArea())
@@ -40,6 +42,7 @@ def test_admom(g1_true, g2_true, wcs_g1, wcs_g2):
     g1arr = []
     g2arr = []
     Tarr = []
+    rho4arr = []
     for _ in range(50):
         shift = rng.uniform(low=-scale/2, high=scale/2, size=2)
         xy = gs_wcs.toImage(galsim.PositionD(shift))
@@ -75,6 +78,7 @@ def test_admom(g1_true, g2_true, wcs_g1, wcs_g2):
             g1arr.append(_g1)
             g2arr.append(_g2)
             Tarr.append(_T)
+            rho4arr.append(res['rho4'])
 
             fim = res.make_image()
             assert fim.shape == im.shape
@@ -94,6 +98,9 @@ def test_admom(g1_true, g2_true, wcs_g1, wcs_g2):
     if g1_true == 0 and g2_true == 0:
         T = np.mean(Tarr)
         assert np.abs(T - fwhm_to_T(fwhm)) < 1e-6
+        rho4_mean = np.mean(rho4arr)
+        # gaussians have rho4 of 2.0
+        assert np.abs(rho4_mean - 2) < 1e-5
 
     with pytest.raises(ValueError):
         ngmix.admom.run_admom(None, None)

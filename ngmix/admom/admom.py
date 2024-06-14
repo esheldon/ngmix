@@ -167,14 +167,66 @@ def find_cen_admom(
 class AdmomResult(dict):
     """
     Represent a fit using adaptive moments, and generate images and mixtures
-    for the best fit
+    for the best fit.  This inherits from dict and has entries for
+    the results of adaptive moments.
 
     Parameters
     ----------
     obs: observation(s)
         Observation, ObsList, or MultiBandObsList
     result: dict
-        the basic fit result, to bad added to this object's keys
+        the basic fit result, to be added to this object's keys
+
+    The entries will include, but not be limited to
+    -----------------------------------------------
+    flags: int
+        flags for processing
+    flagstr: str
+        Explanation of flags
+    numiter: int
+        number of iterations in adaptive moments algorithm
+    npix: int
+        Number of pixels used
+    flux_flags: int
+        Flags for flux
+    flux_flagstr: int
+        Explanation of flux flags
+    flux: float
+        Flux estimate
+    flux_err: float
+        Error on flux estimate
+    T_flags: int
+        Flags for T
+    T_flagstr: int
+        Explanation of T flags
+    T: float
+        T for gaussian
+    T_err: float
+        Error on T
+    e1: float
+        First ellipticity parameter
+    e1_err: float
+        Error on first ellipticity parameter
+    e2: float
+        Second ellipticity parameter
+    e2_err: float
+        Error on second ellipticity parameter
+    rho4_flags: int
+        Flags for rho4
+    rho4_flagstr: int
+        Explanation of rho4 flags
+    rho4: float
+        rho4 for gaussian
+    rho4_err: float
+        Error on rho4
+    pars: array
+        Array of gaussian pars, size 6 with [v, u, e1, e2, T, flux]
+    wsum: float
+        Sum of weights over pixels
+    sums: array
+        Array of size 7, holding sums for
+    sums_cov: array
+        Covariance sums, shape (7, 7)
     """
 
     def __init__(self, obs, result):
@@ -368,7 +420,7 @@ def get_result(ares, jac_area, wgt_norm):
         if n == 'sums':
             res[n] = ares[n].copy()
         elif n == 'sums_cov':
-            res[n] = ares[n].reshape((6, 6)).copy()
+            res[n] = ares[n].reshape((7, 7)).copy()
         else:
             res[n] = ares[n]
     res["sums_norm"] = ares["wsum"]
@@ -378,12 +430,16 @@ def get_result(ares, jac_area, wgt_norm):
     res["flux_flagstr"] = ""
     res["T_flags"] = 0
     res["T_flagstr"] = ""
+    res["rho4_flags"] = 0
+    res["rho4_flagstr"] = ""
 
     res['flux'] = np.nan
     res['flux_mean'] = np.nan
     res["flux_err"] = np.nan
     res["T"] = np.nan
     res["T_err"] = np.nan
+    res["rho4"] = np.nan
+    res["rho4_err"] = np.nan
     res["s2n"] = np.nan
     res["e1"] = np.nan
     res["e2"] = np.nan
@@ -396,6 +452,7 @@ def get_result(ares, jac_area, wgt_norm):
     # set things we always set if flags are ok
     if res['flags'] == 0:
         res['T'] = res['pars'][4]
+        res['rho4'] = ares['rho4']
         flux_sum = res['sums'][5]
         res['flux_mean'] = flux_sum/res['wsum']
         res['pars'][5] = res['flux_mean']
@@ -420,8 +477,8 @@ def get_result(ares, jac_area, wgt_norm):
     else:
         res['flux_flags'] |= res['flags']
 
-    # handle flux+T only
     if res['flags'] == 0:
+        # T
         if res['sums_cov'][4, 4] > 0 and res['sums_cov'][5, 5] > 0:
             if res['sums'][5] > 0:
                 # the sums include the weight, so need factor of two to correct
@@ -437,8 +494,28 @@ def get_result(ares, jac_area, wgt_norm):
                 res["T_flags"] |= ngmix.flags.NONPOS_FLUX
         else:
             res["T_flags"] |= ngmix.flags.NONPOS_VAR
+
+        # rho4
+        if res['sums_cov'][6, 6] > 0 and res['sums_cov'][5, 5] > 0:
+            if res['sums'][5] > 0:
+                res['rho4'] = res['sums'][6] / res['sums'][5]
+                # the sums include the weight, so need factor of two to correct
+                res['rho4_err'] = 4*get_ratio_error(
+                    res['sums'][6],
+                    res['sums'][5],
+                    res['sums_cov'][6, 6],
+                    res['sums_cov'][5, 5],
+                    res['sums_cov'][6, 5],
+                )
+            else:
+                # flux <= 0.0
+                res["rho4_flags"] |= ngmix.flags.NONPOS_FLUX
+        else:
+            res["rho4_flags"] |= ngmix.flags.NONPOS_VAR
+
     else:
         res['T_flags'] |= res['flags']
+        res['rho4_flags'] |= res['flags']
 
     # now handle full flags
     if not np.all(np.diagonal(res['sums_cov'][2:, 2:]) > 0):
@@ -486,6 +563,7 @@ def get_result(ares, jac_area, wgt_norm):
     res['flagstr'] = ngmix.flags.get_flags_str(res['flags'])
     res['flux_flagstr'] = ngmix.flags.get_flags_str(res['flux_flags'])
     res['T_flagstr'] = ngmix.flags.get_flags_str(res['T_flags'])
+    res['rho4_flagstr'] = ngmix.flags.get_flags_str(res['rho4_flags'])
 
     return res
 
@@ -493,15 +571,15 @@ def get_result(ares, jac_area, wgt_norm):
 _admom_result_dtype = [
     ('flags', 'i4'),
     ('numiter', 'i4'),
-    ('nimage', 'i4'),
     ('npix', 'i4'),
     ('wsum', 'f8'),
 
-    ('sums', 'f8', 6),
-    ('sums_cov', 'f8', (6, 6)),
+    ('sums', 'f8', 7),
+    ('sums_cov', 'f8', (7, 7)),
     ('pars', 'f8', 6),
+    ('rho4', 'f8'),
     # temporary
-    ('F', 'f8', 6),
+    ('F', 'f8', 7),
 ]
 
 _admom_conf_dtype = [
