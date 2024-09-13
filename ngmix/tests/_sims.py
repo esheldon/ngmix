@@ -1,6 +1,6 @@
 import numpy as np
 
-from ngmix import DiagonalJacobian, GMix, GMixModel
+from ngmix import DiagonalJacobian, Jacobian, GMix, GMixModel
 from ngmix import Observation, ObsList, MultiBandObsList
 
 PIXEL_SCALE = 0.263
@@ -225,4 +225,33 @@ def get_psf_obs(*, rng, T=TPSF, model="turb", noise=1.0e-6):
     return {
         'obs': Observation(im, weight=weight, jacobian=jacob),
         'gmix': gm,
+    }
+
+
+def get_noisy_obs(rng):
+    """
+    A noisy image; with the right seed this triggered
+    a bug that we fixed
+    """
+    # import fitsio
+    dim = 25
+    noise = 50.559849582916115
+
+    im = rng.normal(scale=noise, size=(dim, dim))
+
+    dims = im.shape
+    cen = (np.array(dims) - 1.0) / 2.0
+
+    jacob = Jacobian(
+        row=cen[0], col=cen[1],
+        dvdrow=-0.15179598030886227,
+        dvdcol=0.13007044200963258,
+        dudrow=-0.13014613410130665,
+        dudcol=-0.15185634442578344,
+    )
+
+    noise = im.std()
+    weight = im*0 + 1/noise**2
+    return {
+        'obs': Observation(im, weight=weight, jacobian=jacob),
     }

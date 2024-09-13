@@ -873,6 +873,9 @@ class GMixPSFGuesser(object):
             # deweight assuming true profile is a gaussian
             T = 1.0/(1/Tmeas - 1/Tweight)
             flux = res['flux'] * np.pi * (Tweight + T) / area
+            if T < 0:
+                T = res['T']
+                flux = res['flux']
 
         return T, flux
 

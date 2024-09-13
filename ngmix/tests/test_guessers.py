@@ -4,7 +4,7 @@ import numpy as np
 import ngmix
 from ngmix import guessers
 from ngmix.gmix import get_coellip_npars
-from ._sims import get_model_obs, get_psf_obs
+from ._sims import get_model_obs, get_psf_obs, get_noisy_obs
 from ._priors import get_prior
 
 
@@ -245,3 +245,16 @@ def test_guessers_errors():
 
     with pytest.raises(ValueError):
         ngmix.guessers.CoellipPSFGuesser(rng=rng, ngauss=1000)
+
+
+def test_mom_guesser_badsize():
+    """
+    tests a case where moms used for guess are bad
+    so a fallback guess is used
+    """
+    rng = np.random.default_rng(354365)
+    guesser = ngmix.guessers.GMixPSFGuesser(
+        rng=rng, ngauss=1, guess_from_moms=True,
+    )
+    data = get_noisy_obs(rng=rng)
+    guesser(data['obs'])
