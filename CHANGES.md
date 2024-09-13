@@ -1,3 +1,11 @@
+## v2.3.2 (not yet released)
+
+## Bug Fixes
+
+    - Fixed bug when moments are used in guesser and size is bad.
+      Only affected rng such as np.random.default_rng that checks
+      range for uniform
+
 ## v2.3.1
 
 ### new features
