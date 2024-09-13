@@ -230,7 +230,8 @@ def get_psf_obs(*, rng, T=TPSF, model="turb", noise=1.0e-6):
 
 def get_noisy_obs(rng):
     """
-    highlight a single pixel
+    A noisy image; with the right seed this triggered
+    a bug that we fixed
     """
     # import fitsio
     dim = 25
