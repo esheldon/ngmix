@@ -160,10 +160,12 @@ class GMixND(object):
         -------
         plot object
         """
+        import numpy as np
         import esutil as eu
-        import hickory
+        import matplotlib.pyplot as mplt
+        from itertools import cycle
 
-        plt = hickory.Plot(**plot_kws)
+        fig, ax = mplt.subplots()
 
         if data is not None:
 
@@ -183,15 +185,19 @@ class GMixND(object):
                 dx_model = dx_data/10
                 npts = int((max - min)/dx_model)
 
-            xvals = numpy.linspace(
+            xvals = np.linspace(
                 min,
                 max,
                 npts,
             )
             dx_model = xvals[1] - xvals[0]
 
-            plt.bar(hd['center'], hd['hist'], label='data', width=dx_data,
-                    alpha=0.5, color='#a6a6a6')
+            ax.bar(
+                hd['center'], hd['hist'], label='data',
+                width=dx_data,
+                alpha=0.5,
+                color='#a6a6a6',
+            )
 
         else:
             if npts is None:
@@ -201,7 +207,7 @@ class GMixND(object):
             if max is None:
                 raise ValueError('send max if not sending data')
 
-            xvals = numpy.linspace(min, max, npts)
+            xvals = np.linspace(min, max, npts)
 
         predicted = self.get_prob_array(xvals)
 
@@ -212,21 +218,26 @@ class GMixND(object):
         else:
             fac = 1
 
-        plt.curve(xvals, predicted, label='model')
+        lines = ["-", "--", "-.", ":"]
+        linecycler = cycle(lines)
+
+        ax.plot(xvals, predicted, ls=next(linecycler), label='model')
+
         for i in range(self.ngauss):
             predicted = fac*self.get_prob_array(xvals, component=i)
 
             label = 'component %d' % i
-            plt.curve(xvals, predicted, label=label)
+            ax.plot(xvals, predicted, label=label, ls=next(linecycler))
 
+        ax.legend()
         if show:
-            plt.show()
+            mplt.show()
 
         if file is not None:
             print('writing:', file)
-            plt.savefig(file, dpi=dpi)
+            fig.savefig(file, dpi=dpi)
 
-        return plt
+        return fig, ax
 
     def save_mixture(self, fname):
         """
