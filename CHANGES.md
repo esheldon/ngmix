@@ -6,6 +6,10 @@
       Only affected rng such as np.random.default_rng that checks
       range for uniform
 
+## compatibility
+
+    - Convert GMixND.plot to use matplotlib
+
 ## v2.3.1
 
 ### new features
