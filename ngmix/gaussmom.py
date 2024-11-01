@@ -12,12 +12,17 @@ class GaussMom(object):
     ----------
     fwhm: float
         The FWHM of the Gaussian weight function.
+    with_higher_order: bool, optional
+        If set to True, return higher order moments in the sums/sums_cov
+        arrays.  See ngmix.moments.MOMENTS_NAME_MAP for a map between
+        name and index.
     """
 
     kind = "wmom"
 
-    def __init__(self, fwhm):
+    def __init__(self, fwhm, with_higher_order=False):
         self.fwhm = fwhm
+        self.with_higher_order = with_higher_order
         self._set_mompars()
 
     def go(self, obs):
@@ -46,7 +51,9 @@ class GaussMom(object):
         measure weighted moments
         """
 
-        res = self.weight.get_weighted_moments(obs=obs, maxrad=1.e9)
+        res = self.weight.get_weighted_moments(
+            obs=obs, with_higher_order=self.with_higher_order,
+        )
 
         if res['flags'] != 0:
             return res

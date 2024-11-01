@@ -9,6 +9,7 @@ from ngmix.gmix import make_gmix_model
 from ngmix.shape import g1g2_to_e1e2
 from ngmix.shape import Shape
 import ngmix.moments
+from ngmix.moments import MOMENTS_NAME_MAP
 from ngmix import DiagonalJacobian, Observation
 
 
@@ -486,3 +487,171 @@ def test_gmix_concat():
         ic = len(gm1) + i
         for name in ('p', 'row', 'col', 'irr', 'irc', 'icc'):
             assert gm2data[name][i] == gmcdata[name][ic]
+
+
+@pytest.mark.parametrize('do_higher', [False, True])
+def test_higher_order_smoke(do_higher):
+    fwhm = 0.9
+    T = ngmix.moments.fwhm_to_T(fwhm)
+    scale = 0.263
+
+    obj = galsim.Gaussian(fwhm=fwhm)
+    im = obj.drawImage(
+        scale=scale,
+    ).array
+
+    cen = (np.array(im.shape) - 1) / 2
+    jacobian = ngmix.DiagonalJacobian(row=cen[0], col=cen[1], scale=scale)
+    obs = Observation(image=im, jacobian=jacobian)
+
+    wt = ngmix.GMixModel(
+        pars=[0, 0, 0, 0, T, 1.0],
+        model='gauss',
+    )
+
+    res = wt.get_weighted_moments(obs, with_higher_order=do_higher)
+    if do_higher:
+        assert res['sums'].shape == (17, )
+        assert res['sums_cov'].shape == (17, 17)
+
+        assert MOMENTS_NAME_MAP['M00'] == MOMENTS_NAME_MAP['MF']
+        assert MOMENTS_NAME_MAP['M10'] == MOMENTS_NAME_MAP['Mu']
+        assert MOMENTS_NAME_MAP['M01'] == MOMENTS_NAME_MAP['Mv']
+        assert MOMENTS_NAME_MAP['M11'] == MOMENTS_NAME_MAP['MT']
+        assert MOMENTS_NAME_MAP['M20'] == MOMENTS_NAME_MAP['M1']
+        assert MOMENTS_NAME_MAP['M02'] == MOMENTS_NAME_MAP['M2']
+
+        for name, ind in MOMENTS_NAME_MAP.items():
+            # make sure the index is valid
+            res['sums'][ind]
+    else:
+        assert res['sums'].shape == (6, )
+        assert res['sums_cov'].shape == (6, 6)
+
+
+def test_higher_order():
+    rng = np.random.RandomState(seed=35)
+    fwhm = 0.9
+    T = ngmix.moments.fwhm_to_T(fwhm)
+    sigma = ngmix.moments.fwhm_to_sigma(fwhm)
+    scale = 0.125
+    image_size = 107
+
+    ntrial = 100
+
+    rho4s = np.zeros(ntrial)
+    rho6s = np.zeros(ntrial)
+    rho8s = np.zeros(ntrial)
+
+    rho_M21 = np.zeros(ntrial)
+    rho_M12 = np.zeros(ntrial)
+    rho_M30 = np.zeros(ntrial)
+    rho_M03 = np.zeros(ntrial)
+
+    rho_M31 = np.zeros(ntrial)
+    rho_M13 = np.zeros(ntrial)
+
+    rho_M40 = np.zeros(ntrial)
+    rho_M14 = np.zeros(ntrial)
+
+    for i in range(ntrial):
+        obj = galsim.Gaussian(fwhm=fwhm)
+
+        row_offset, col_offset = rng.uniform(low=-0.5, high=0.5, size=2)
+
+        im = obj.drawImage(
+            nx=image_size,
+            ny=image_size,
+            offset=(col_offset, row_offset),
+            scale=scale,
+            method='no_pixel',
+        ).array
+
+        imcen = (np.array(im.shape) - 1) / 2
+
+        cen = imcen + (row_offset, col_offset)
+
+        jacobian = ngmix.DiagonalJacobian(row=cen[0], col=cen[1], scale=scale)
+
+        obs = Observation(image=im, jacobian=jacobian)
+
+        wt = ngmix.GMixModel(
+            pars=[0, 0, 0, 0, T, 1.0],
+            model='gauss',
+        )
+
+        res = wt.get_weighted_moments(obs, with_higher_order=True)
+
+        f_ind = MOMENTS_NAME_MAP["MF"]
+
+        M22_ind = MOMENTS_NAME_MAP["M22"]
+        rho4s[i] = res['sums'][M22_ind] / res['sums'][f_ind] / sigma**4
+
+        M33_ind = MOMENTS_NAME_MAP["M33"]
+        rho6s[i] = res['sums'][M33_ind] / res['sums'][f_ind] / sigma**6
+
+        M44_ind = MOMENTS_NAME_MAP["M44"]
+        rho8s[i] = res['sums'][M44_ind] / res['sums'][f_ind] / sigma**8
+
+        M21_ind = MOMENTS_NAME_MAP["M21"]
+        rho_M21[i] = res['sums'][M21_ind] / res['sums'][f_ind] / sigma**3
+
+        M12_ind = MOMENTS_NAME_MAP["M12"]
+        rho_M12[i] = res['sums'][M12_ind] / res['sums'][f_ind] / sigma**3
+
+        M30_ind = MOMENTS_NAME_MAP["M30"]
+        rho_M30[i] = res['sums'][M30_ind] / res['sums'][f_ind] / sigma**3
+
+        M03_ind = MOMENTS_NAME_MAP["M03"]
+        rho_M03[i] = res['sums'][M03_ind] / res['sums'][f_ind] / sigma**3
+
+        M31_ind = MOMENTS_NAME_MAP["M31"]
+        rho_M31[i] = res['sums'][M31_ind] / res['sums'][f_ind] / sigma**4
+
+        M13_ind = MOMENTS_NAME_MAP["M13"]
+        rho_M13[i] = res['sums'][M13_ind] / res['sums'][f_ind] / sigma**4
+
+        M40_ind = MOMENTS_NAME_MAP["M40"]
+        rho_M40[i] = res['sums'][M40_ind] / res['sums'][f_ind] / sigma**4
+
+        M14_ind = MOMENTS_NAME_MAP["M14"]
+        rho_M14[i] = res['sums'][M14_ind] / res['sums'][f_ind] / sigma**4
+
+    rho4_mean = rho4s.mean()
+    rho4_std = rho4s.std()
+    print(f'rho4: {rho4_mean:.3g} std: {rho4_std:.3g}')
+    assert np.abs(rho4_mean - 2) < 1e-5
+
+    rho6_mean = rho6s.mean()
+    rho6_std = rho6s.std()
+    print(f'rho6: {rho6_mean:.3g} std: {rho6_std:.3g}')
+    assert np.abs(rho6_mean - 6) < 1e-5
+
+    rho8_mean = rho8s.mean()
+    rho8_std = rho8s.std()
+    print(f'rho8: {rho8_mean:.3g} std: {rho8_std:.3g}')
+    assert np.abs(rho8_mean - 24) < 1e-5
+
+    rho_M21_mean = rho_M21.mean()
+    assert np.abs(rho_M21_mean) < 1e-5
+
+    rho_M12_mean = rho_M12.mean()
+    assert np.abs(rho_M12_mean) < 1e-5
+
+    rho_M30_mean = rho_M30.mean()
+    assert np.abs(rho_M30_mean) < 1e-5
+
+    rho_M03_mean = rho_M03.mean()
+    assert np.abs(rho_M03_mean) < 1e-5
+
+    rho_M31_mean = rho_M31.mean()
+    assert np.abs(rho_M31_mean) < 1e-5
+
+    rho_M13_mean = rho_M13.mean()
+    assert np.abs(rho_M13_mean) < 1e-5
+
+    rho_M40_mean = rho_M40.mean()
+    assert np.abs(rho_M40_mean) < 1e-5
+
+    rho_M14_mean = rho_M14.mean()
+    assert np.abs(rho_M14_mean) < 1e-5

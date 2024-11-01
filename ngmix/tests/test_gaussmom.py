@@ -6,7 +6,7 @@ import ngmix
 from ngmix import Jacobian
 from ngmix.gaussmom import GaussMom
 from ngmix import Observation
-from ngmix.moments import fwhm_to_T
+from ngmix.moments import fwhm_to_T, MOMENTS_NAME_MAP, fwhm_to_sigma
 from ngmix.shape import e1e2_to_g1g2
 
 
@@ -112,6 +112,76 @@ def test_gaussmom_smoke(g1_true, g2_true, wcs_g1, wcs_g2, weight_fac):
     if weight_fac > 1:
         assert np.allclose(flux_true, np.sum(im))
     assert np.abs(np.mean(farr) - flux_true) < 1e-4, (np.mean(farr), np.std(farr))
+
+
+@pytest.mark.parametrize('do_higher', [False, True])
+def test_gaussmom_higher_smoke(do_higher):
+    fwhm = 0.9
+    scale = 0.263
+
+    obj = galsim.Gaussian(fwhm=fwhm)
+    im = obj.drawImage(
+        scale=scale,
+    ).array
+
+    cen = (np.array(im.shape) - 1) / 2
+    jacobian = ngmix.DiagonalJacobian(row=cen[0], col=cen[1], scale=scale)
+    obs = Observation(image=im, jacobian=jacobian)
+
+    fitter = GaussMom(fwhm=1.2, with_higher_order=do_higher)
+
+    res = fitter.go(obs)
+    if do_higher:
+        assert res['sums'].shape == (17, )
+        assert res['sums_cov'].shape == (17, 17)
+    else:
+        assert res['sums'].shape == (6, )
+        assert res['sums_cov'].shape == (6, 6)
+
+
+def test_gaussmom_higher_order():
+    rng = np.random.RandomState(seed=35)
+    fwhm = 0.9
+    sigma = fwhm_to_sigma(fwhm)
+    scale = 0.125
+    image_size = 107
+
+    ntrial = 100
+
+    rho4s = np.zeros(ntrial)
+    for i in range(ntrial):
+        obj = galsim.Gaussian(fwhm=fwhm)
+
+        row_offset, col_offset = rng.uniform(low=-0.5, high=0.5, size=2)
+
+        im = obj.drawImage(
+            nx=image_size,
+            ny=image_size,
+            offset=(col_offset, row_offset),
+            scale=scale,
+            method='no_pixel',
+        ).array
+
+        imcen = (np.array(im.shape) - 1) / 2
+
+        cen = imcen + (row_offset, col_offset)
+
+        jacobian = ngmix.DiagonalJacobian(row=cen[0], col=cen[1], scale=scale)
+
+        obs = Observation(image=im, jacobian=jacobian)
+
+        fitter = GaussMom(fwhm=fwhm, with_higher_order=True)
+
+        res = fitter.go(obs)
+
+        f_ind = MOMENTS_NAME_MAP["MF"]
+        M22_ind = MOMENTS_NAME_MAP["M22"]
+        rho4s[i] = res['sums'][M22_ind] / res['sums'][f_ind] / sigma**4
+
+    rho4_mean = rho4s.mean()
+    rho4_std = rho4s.std()
+    print(f'rho4: {rho4_mean:.3g} std: {rho4_std:.3g}')
+    assert np.abs(rho4_mean - 2) < 1e-5
 
 
 def test_gaussmom_flags():
