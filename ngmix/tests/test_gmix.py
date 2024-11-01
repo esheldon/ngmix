@@ -606,16 +606,16 @@ def test_higher_order():
         rho_M03[i] = res['sums'][M03_ind] / res['sums'][f_ind] / sigma**3
 
         M31_ind = MOMENTS_NAME_MAP["M31"]
-        rho_M31[i] = res['sums'][M31_ind] / res['sums'][f_ind] / sigma**3
+        rho_M31[i] = res['sums'][M31_ind] / res['sums'][f_ind] / sigma**4
 
         M13_ind = MOMENTS_NAME_MAP["M13"]
-        rho_M13[i] = res['sums'][M13_ind] / res['sums'][f_ind] / sigma**3
+        rho_M13[i] = res['sums'][M13_ind] / res['sums'][f_ind] / sigma**4
 
         M40_ind = MOMENTS_NAME_MAP["M40"]
-        rho_M40[i] = res['sums'][M40_ind] / res['sums'][f_ind] / sigma**3
+        rho_M40[i] = res['sums'][M40_ind] / res['sums'][f_ind] / sigma**4
 
         M14_ind = MOMENTS_NAME_MAP["M14"]
-        rho_M14[i] = res['sums'][M14_ind] / res['sums'][f_ind] / sigma**3
+        rho_M14[i] = res['sums'][M14_ind] / res['sums'][f_ind] / sigma**4
 
     rho4_mean = rho4s.mean()
     rho4_std = rho4s.std()
