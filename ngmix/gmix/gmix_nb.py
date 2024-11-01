@@ -726,6 +726,104 @@ def get_weighted_sums(wt, pixels, res, maxrad):
 
 
 @njit
+def get_higher_weighted_sums(wt, pixels, res, maxrad):
+    """
+    Do sums for calculating the weighted moments.
+
+    Parameters
+    ----------
+    wt: array
+        The gaussian mixture with dtype ngmix.gmix.gmix._gauss2d_dtype
+    pixels: array
+        Array of pixels
+    res: array
+        The result array
+    maxrad: float
+        Maximum radius in u, v coordinates
+    """
+
+    maxrad2 = maxrad ** 2
+
+    vcen = wt["row"][0]
+    ucen = wt["col"][0]
+
+    F = res["F"]
+    nmom = F.size
+
+    n_pixels = pixels.size
+    for i_pixel in range(n_pixels):
+
+        pixel = pixels[i_pixel]
+
+        # v and u are really dv and du
+        v = pixel["v"] - vcen
+        u = pixel["u"] - ucen
+
+        r2 = u * u + v * v
+        if r2 < maxrad2:
+
+            weight = gmix_eval_pixel(wt, pixel)
+            var = 1.0 / (pixel["ierr"] * pixel["ierr"])
+
+            wdata = weight * pixel["val"]
+            w2 = weight * weight
+
+            u2 = u ** 2
+            v2 = v ** 2
+            vu = v * u
+            u4 = u2 ** 2
+            v4 = v2 ** 2
+
+            r4 = r2 * r2
+            r6 = r4 * r2
+            r8 = r6 * r2
+
+            # the order for first 6 matches get_weighted_sums
+            F[0] = pixel["v"]
+            F[1] = pixel["u"]
+            F[2] = u2 - v2
+            F[3] = 2 * vu
+            F[4] = r2
+            F[5] = 1.0
+
+            # third
+            # M_{21} &= \sum W(u,v) I(u,v) du (du^2 + dv^2)
+            F[6] = u * r2
+            # M_{12} &= \sum W(u,v) I(u,v) dv (du^2 + dv^2)
+            F[7] = v * r2
+            # M_{30} &= \sum W(u,v) I(u,v) du (du^2 - 3 dv^2)
+            F[8] = u * (u2 - 3 * v2)
+            # M_{03} &= \sum W(u,v) I(u,v) dv (3 du^2 - dv^2)
+            F[9] = v * (3 * u2 - v2)
+
+            # fourth
+            # M_{22} &= \sum W(u,v) I(u,v) (du^2 + dv^2)^2
+            F[10] = r4
+            # M_{31} &= \sum W(u,v) I(u,v) (du^2 + dv^2) (du^2 - dv^2)
+            F[11] = r2 * (u2 - v2)
+            # M_{13} &= \sum W(u,v) I(u,v) (du^2 + dv^2) (2 du dv)
+            F[12] = r2 * 2 * u * v
+            # M_{40} &= \sum W(u,v) I(u,v) (du^4 - 6 du^2 dv^2 + dv^4)
+            F[13] = u4 - 6 * u2 * v2 + v4
+            # M_{04} &= \sum W(u,v) I(u,v) (du^2 - dv^2) (4 du dv)
+            F[14] = (u2 - v2) * 4 * u * v
+
+            # pure radial momentes 6, 8
+            # M_{33} &= \sum W(u,v) I(u,v) r^6
+            F[15] = r6
+            # M_{44} &= \sum W(u,v) I(u,v) r^8
+            F[16] = r8
+
+            res["wsum"] += weight
+            res["npix"] += 1
+
+            for i in range(nmom):
+                res["sums"][i] += wdata * F[i]
+                for j in range(nmom):
+                    res["sums_cov"][i, j] += w2 * var * F[i] * F[j]
+
+
+@njit
 def get_loglike(gmix, pixels):
     """
     get the log likelihood

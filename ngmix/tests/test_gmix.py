@@ -486,3 +486,81 @@ def test_gmix_concat():
         ic = len(gm1) + i
         for name in ('p', 'row', 'col', 'irr', 'irc', 'icc'):
             assert gm2data[name][i] == gmcdata[name][ic]
+
+
+@pytest.mark.parametrize('do_higher', [False, True])
+def test_higher_order_smoke(do_higher):
+    fwhm = 0.9
+    T = ngmix.moments.fwhm_to_T(fwhm)
+    scale = 0.263
+
+    obj = galsim.Gaussian(fwhm=fwhm)
+    im = obj.drawImage(
+        scale=scale,
+    ).array
+
+    cen = (np.array(im.shape) - 1) / 2
+    jacobian = ngmix.DiagonalJacobian(row=cen[0], col=cen[1], scale=scale)
+    obs = Observation(image=im, jacobian=jacobian)
+
+    wt = ngmix.GMixModel(
+        pars=[0, 0, 0, 0, T, 1.0],
+        model='gauss',
+    )
+
+    res = wt.get_weighted_moments(obs, higher=do_higher)
+    if do_higher:
+        assert res['sums'].shape == (17, )
+        assert res['sums_cov'].shape == (17, 17)
+    else:
+        assert res['sums'].shape == (6, )
+        assert res['sums_cov'].shape == (6, 6)
+
+
+def test_higher_order():
+    rng = np.random.RandomState(seed=35)
+    fwhm = 0.9
+    T = ngmix.moments.fwhm_to_T(fwhm)
+    sigma = ngmix.moments.fwhm_to_sigma(fwhm)
+    scale = 0.125
+    image_size = 107
+
+    ntrial = 100
+
+    rho4s = np.zeros(ntrial)
+    for i in range(ntrial):
+        obj = galsim.Gaussian(fwhm=fwhm)
+
+        row_offset, col_offset = rng.uniform(low=-0.5, high=0.5, size=2)
+
+        im = obj.drawImage(
+            nx=image_size,
+            ny=image_size,
+            offset=(col_offset, row_offset),
+            scale=scale,
+            method='no_pixel',
+        ).array
+
+        imcen = (np.array(im.shape) - 1) / 2
+
+        cen = imcen + (row_offset, col_offset)
+
+        jacobian = ngmix.DiagonalJacobian(row=cen[0], col=cen[1], scale=scale)
+
+        obs = Observation(image=im, jacobian=jacobian)
+
+        wt = ngmix.GMixModel(
+            pars=[0, 0, 0, 0, T, 1.0],
+            model='gauss',
+        )
+
+        res = wt.get_weighted_moments(obs, higher=True)
+
+        f_ind = ngmix.moments.MOMENTS_NAME_MAP["MF"]
+        M22_ind = ngmix.moments.MOMENTS_NAME_MAP["M22"]
+        rho4s[i] = res['sums'][M22_ind] / res['sums'][f_ind] / sigma**4
+
+    rho4_mean = rho4s.mean()
+    rho4_std = rho4s.std()
+    print(f'rho4: {rho4_mean:.3g} std: {rho4_std:.3g}')
+    assert np.abs(rho4_mean - 2) < 1e-5

@@ -6,12 +6,50 @@ import ngmix.flags
 from .util import get_ratio_error
 
 MOMENTS_NAME_MAP = {
+    # v
     "Mv": 0,
+    # u
     "Mu": 1,
+    # u^2 - v^2
     "M1": 2,
+    # v * u
     "M2": 3,
+    # v^2 + u^2
     "MT": 4,
+    # 1 (flux)
     "MF": 5,
+
+    # notation from piff.util.calculate_moments
+    # third order
+
+    # u * r^2
+    "M21": 6,
+    # v * r^2
+    "M12": 7,
+    # u * (u^2 - 3 * v^2)
+    "M30": 8,
+    # v * (3 * u^2 - v^2)
+    "M03": 9,
+
+    # fourth order
+    # r^4
+    "M22": 10,
+    # r^2 * (u^ - v^)
+    "M31": 11,
+    # r^2 * 2 * u * v
+    "M13": 12,
+    # u^4 - 6 * u^2 * v^2 + v^4
+    "M40": 13,
+    # (u^2 - v^2) * 4 * u * v
+    "M14": 14,
+
+    # 6th order
+    # r^6
+    "M33": 15,
+
+    # 8th order
+    # r^8
+    "M44": 16,
 }
 
 
@@ -368,14 +406,14 @@ def make_mom_result(sums, sums_cov, sums_norm=None):
         A dictionary of results.
     """
     # for safety...
-    if len(sums) != 6:
+    if len(sums) != 6 and len(sums) != 17:
         raise ValueError(
-            "You must pass exactly 6 unnormalized moments in the order "
-            "[Mv, Mu, M1, M2, MT, MF] for ngmix.moments.make_mom_result."
+            "You must pass exactly 6 or 17 unnormalized moments in the order "
+            "[Mv, Mu, M1, M2, MT, MF, ...] for ngmix.moments.make_mom_result."
         )
-    if sums_cov.shape != (6, 6):
+    if sums_cov.shape != (6, 6) and sums_cov.shape != (17, 17):
         raise ValueError(
-            "You must pass a 6x6 matrix for ngmix.moments.make_mom_result."
+            "You must pass a 6x6 or 17x17 matrix for ngmix.moments.make_mom_result."
         )
 
     mv_ind = MOMENTS_NAME_MAP["Mv"]

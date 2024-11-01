@@ -638,7 +638,7 @@ class GMix(object):
             gm, obs._pixels, fdiff, start,
         )
 
-    def get_weighted_moments(self, obs, maxrad):
+    def get_weighted_moments(self, obs, maxrad=None, higher=False):
         """
         Get weighted moments using this mixture as the weight, including
         e1,e2,T,s2n etc.  If you just want the raw moments use
@@ -647,21 +647,28 @@ class GMix(object):
         If you want the expected fluxes, you should set the flux to the inverse
         of the normalization which is 2*pi*sqrt(det)
 
-        parameters
+        Parameters
         ----------
         obs: Observation
             The Observation to compare with. See ngmix.observation.Observation
             The Observation must have a weight map set
+        maxrad: float, optional
+            If sent, limit moments to within the specified maximum radius
+        higher: bool, optional
+            If set to True, return higher order moments in the sums/sums_cov
+            arrays.  See ngmix.moments.MOMENTS_NAME_MAP for a map between
+            name and index.
 
-        returns:
-            result array with basic sums as well as summary statistics
-            such as e1,e2,T,s2n etc.
+        Returns
+        -------
+        result array with basic sums as well as summary statistics
+        such as e1,e2,T,s2n etc.
         """
 
-        res = self.get_weighted_sums(obs, maxrad)
+        res = self.get_weighted_sums(obs, maxrad=maxrad, higher=higher)
         return get_weighted_moments_stats(res)
 
-    def get_weighted_sums(self, obs, maxrad, res=None):
+    def get_weighted_sums(self, obs, maxrad=None, higher=False, res=None):
         """
         Get weighted moments using this mixture as the weight.  To
         get more summary statistics use get_weighted_moments or
@@ -672,25 +679,41 @@ class GMix(object):
         obs: Observation
             The Observation to compare with. See ngmix.observation.Observation
             The Observation must have a weight map set
+        maxrad: float, optional
+            If sent, limit moments to within the specified maximum radius
+        higher: bool, optional
+            If set to True, return higher order moments in the sums/sums_cov
+            arrays.  See ngmix.moments.MOMENTS_NAME_MAP for a map between
+            name and index.
         res: result array, optional
             If sent, sums will be added to the array rather than making
             a new one
+
+        Returns
+        -------
+        result array with sums
         """
         from . import gmix_nb
 
         self.set_norms_if_needed()
 
+        if maxrad is None:
+            maxrad = np.inf
+
         if res is None:
-            dt = np.dtype(_moments_result_dtype, align=True)
+            dt0 = get_moments_result_dtype(higher=higher)
+            dt = np.dtype(dt0, align=True)
             resarray = np.zeros(1, dtype=dt)
             res = resarray[0]
 
         wt_gm = self.get_data()
 
         # this will add to the sums
-        gmix_nb.get_weighted_sums(
-            wt_gm, obs.pixels, res, maxrad,
-        )
+        if higher:
+            gmix_nb.get_higher_weighted_sums(wt_gm, obs.pixels, res, maxrad)
+        else:
+            gmix_nb.get_weighted_sums(wt_gm, obs.pixels, res, maxrad)
+
         return res
 
     def get_model_s2n_sum(self, obs):
@@ -1251,14 +1274,20 @@ def get_weighted_moments_stats(ares):
     return res
 
 
-_moments_result_dtype = [
-    ('flags', 'i4'),
-    ('npix', 'i4'),
-    ('wsum', 'f8'),
+def get_moments_result_dtype(higher=False):
+    if higher:
+        nmom = 17
+    else:
+        nmom = 6
 
-    ('sums', 'f8', 6),
-    ('sums_cov', 'f8', (6, 6)),
-    ('pars', 'f8', 6),
-    # temporary
-    ('F', 'f8', 6),
-]
+    return [
+        ('flags', 'i4'),
+        ('npix', 'i4'),
+        ('wsum', 'f8'),
+
+        ('sums', 'f8', nmom),
+        ('sums_cov', 'f8', (nmom, nmom)),
+        ('pars', 'f8', nmom),
+        # temporary
+        ('F', 'f8', nmom),
+    ]
