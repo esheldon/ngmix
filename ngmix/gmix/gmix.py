@@ -700,7 +700,9 @@ class GMix(object):
         self.set_norms_if_needed()
 
         if maxrad is None:
-            maxrad = np.inf
+            T = self.get_T()
+            sigma = np.sqrt(T/2)
+            maxrad = 100 * sigma
 
         if res is None:
             dt0 = get_moments_result_dtype(with_higher_order=with_higher_order)
