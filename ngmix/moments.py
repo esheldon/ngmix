@@ -22,6 +22,14 @@ MOMENTS_NAME_MAP = {
     # notation from piff.util.calculate_moments
     # third order
 
+    # these are same as above but with the alternative notation
+    "M00": 5,  # same as MF
+    "M10": 1,  # same as Mu
+    "M01": 0,  # same as Mv
+    "M11": 4,  # same as MT
+    "M20": 2,  # same as M1
+    "M02": 3,  # same as M2
+
     # u * r^2
     "M21": 6,
     # v * r^2

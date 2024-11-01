@@ -9,6 +9,7 @@ from ngmix.gmix import make_gmix_model
 from ngmix.shape import g1g2_to_e1e2
 from ngmix.shape import Shape
 import ngmix.moments
+from ngmix.moments import MOMENTS_NAME_MAP
 from ngmix import DiagonalJacobian, Observation
 
 
@@ -512,6 +513,17 @@ def test_higher_order_smoke(do_higher):
     if do_higher:
         assert res['sums'].shape == (17, )
         assert res['sums_cov'].shape == (17, 17)
+
+        assert MOMENTS_NAME_MAP['M00'] == MOMENTS_NAME_MAP['MF']
+        assert MOMENTS_NAME_MAP['M10'] == MOMENTS_NAME_MAP['Mu']
+        assert MOMENTS_NAME_MAP['M01'] == MOMENTS_NAME_MAP['Mv']
+        assert MOMENTS_NAME_MAP['M11'] == MOMENTS_NAME_MAP['MT']
+        assert MOMENTS_NAME_MAP['M20'] == MOMENTS_NAME_MAP['M1']
+        assert MOMENTS_NAME_MAP['M02'] == MOMENTS_NAME_MAP['M2']
+
+        for name, ind in MOMENTS_NAME_MAP.items():
+            # make sure the index is valid
+            res['sums'][ind]
     else:
         assert res['sums'].shape == (6, )
         assert res['sums_cov'].shape == (6, 6)
@@ -556,8 +568,8 @@ def test_higher_order():
 
         res = wt.get_weighted_moments(obs, higher=True)
 
-        f_ind = ngmix.moments.MOMENTS_NAME_MAP["MF"]
-        M22_ind = ngmix.moments.MOMENTS_NAME_MAP["M22"]
+        f_ind = MOMENTS_NAME_MAP["MF"]
+        M22_ind = MOMENTS_NAME_MAP["M22"]
         rho4s[i] = res['sums'][M22_ind] / res['sums'][f_ind] / sigma**4
 
     rho4_mean = rho4s.mean()
