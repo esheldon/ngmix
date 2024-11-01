@@ -787,31 +787,20 @@ def get_higher_weighted_sums(wt, pixels, res, maxrad):
             F[5] = 1.0
 
             # third
-            # M_{21} &= \sum W(u,v) I(u,v) du (du^2 + dv^2)
             F[6] = u * r2
-            # M_{12} &= \sum W(u,v) I(u,v) dv (du^2 + dv^2)
             F[7] = v * r2
-            # M_{30} &= \sum W(u,v) I(u,v) du (du^2 - 3 dv^2)
             F[8] = u * (u2 - 3 * v2)
-            # M_{03} &= \sum W(u,v) I(u,v) dv (3 du^2 - dv^2)
             F[9] = v * (3 * u2 - v2)
 
             # fourth
-            # M_{22} &= \sum W(u,v) I(u,v) (du^2 + dv^2)^2
             F[10] = r4
-            # M_{31} &= \sum W(u,v) I(u,v) (du^2 + dv^2) (du^2 - dv^2)
             F[11] = r2 * (u2 - v2)
-            # M_{13} &= \sum W(u,v) I(u,v) (du^2 + dv^2) (2 du dv)
             F[12] = r2 * 2 * u * v
-            # M_{40} &= \sum W(u,v) I(u,v) (du^4 - 6 du^2 dv^2 + dv^4)
             F[13] = u4 - 6 * u2 * v2 + v4
-            # M_{04} &= \sum W(u,v) I(u,v) (du^2 - dv^2) (4 du dv)
             F[14] = (u2 - v2) * 4 * u * v
 
-            # pure radial momentes 6, 8
-            # M_{33} &= \sum W(u,v) I(u,v) r^6
+            # Additional pure radial momentes 6, 8
             F[15] = r6
-            # M_{44} &= \sum W(u,v) I(u,v) r^8
             F[16] = r8
 
             res["wsum"] += weight
