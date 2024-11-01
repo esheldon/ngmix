@@ -726,7 +726,7 @@ def get_weighted_sums(wt, pixels, res, maxrad):
 
 
 @njit
-def get_higher_weighted_sums(wt, pixels, res, maxrad):
+def get_higher_order_weighted_sums(wt, pixels, res, maxrad):
     """
     Do sums for calculating the weighted moments.
 

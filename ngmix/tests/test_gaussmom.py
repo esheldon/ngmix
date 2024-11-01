@@ -128,7 +128,7 @@ def test_gaussmom_higher_smoke(do_higher):
     jacobian = ngmix.DiagonalJacobian(row=cen[0], col=cen[1], scale=scale)
     obs = Observation(image=im, jacobian=jacobian)
 
-    fitter = GaussMom(fwhm=1.2, higher=do_higher)
+    fitter = GaussMom(fwhm=1.2, with_higher_order=do_higher)
 
     res = fitter.go(obs)
     if do_higher:
@@ -170,7 +170,7 @@ def test_gaussmom_higher_order():
 
         obs = Observation(image=im, jacobian=jacobian)
 
-        fitter = GaussMom(fwhm=fwhm, higher=True)
+        fitter = GaussMom(fwhm=fwhm, with_higher_order=True)
 
         res = fitter.go(obs)
 

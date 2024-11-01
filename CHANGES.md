@@ -4,8 +4,8 @@
 ## New features
 
     - Added optional calculation of higher order moments when calling
-        gmix.get_weighted_moments(obs, higher=True)
-      This is also available with GaussMom(fwhm, higher=True)
+        gmix.get_weighted_moments(obs, with_higher_order=True)
+      This is also available with GaussMom(fwhm, with_higher_order=True)
 
       Currently the sums are calculated and are stored in a larger "sums" and
       "sums_cov" arrays in the results.  No normalized moments are returned.

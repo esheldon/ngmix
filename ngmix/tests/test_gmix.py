@@ -509,7 +509,7 @@ def test_higher_order_smoke(do_higher):
         model='gauss',
     )
 
-    res = wt.get_weighted_moments(obs, higher=do_higher)
+    res = wt.get_weighted_moments(obs, with_higher_order=do_higher)
     if do_higher:
         assert res['sums'].shape == (17, )
         assert res['sums_cov'].shape == (17, 17)
@@ -566,7 +566,7 @@ def test_higher_order():
             model='gauss',
         )
 
-        res = wt.get_weighted_moments(obs, higher=True)
+        res = wt.get_weighted_moments(obs, with_higher_order=True)
 
         f_ind = MOMENTS_NAME_MAP["MF"]
         M22_ind = MOMENTS_NAME_MAP["M22"]

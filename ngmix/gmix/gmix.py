@@ -638,7 +638,7 @@ class GMix(object):
             gm, obs._pixels, fdiff, start,
         )
 
-    def get_weighted_moments(self, obs, maxrad=None, higher=False):
+    def get_weighted_moments(self, obs, maxrad=None, with_higher_order=False):
         """
         Get weighted moments using this mixture as the weight, including
         e1,e2,T,s2n etc.  If you just want the raw moments use
@@ -654,7 +654,7 @@ class GMix(object):
             The Observation must have a weight map set
         maxrad: float, optional
             If sent, limit moments to within the specified maximum radius
-        higher: bool, optional
+        with_higher_order: bool, optional
             If set to True, return higher order moments in the sums/sums_cov
             arrays.  See ngmix.moments.MOMENTS_NAME_MAP for a map between
             name and index.
@@ -665,10 +665,12 @@ class GMix(object):
         such as e1,e2,T,s2n etc.
         """
 
-        res = self.get_weighted_sums(obs, maxrad=maxrad, higher=higher)
+        res = self.get_weighted_sums(
+            obs, maxrad=maxrad, with_higher_order=with_higher_order,
+        )
         return get_weighted_moments_stats(res)
 
-    def get_weighted_sums(self, obs, maxrad=None, higher=False, res=None):
+    def get_weighted_sums(self, obs, maxrad=None, with_higher_order=False, res=None):
         """
         Get weighted moments using this mixture as the weight.  To
         get more summary statistics use get_weighted_moments or
@@ -681,7 +683,7 @@ class GMix(object):
             The Observation must have a weight map set
         maxrad: float, optional
             If sent, limit moments to within the specified maximum radius
-        higher: bool, optional
+        with_higher_order: bool, optional
             If set to True, return higher order moments in the sums/sums_cov
             arrays.  See ngmix.moments.MOMENTS_NAME_MAP for a map between
             name and index.
@@ -701,7 +703,7 @@ class GMix(object):
             maxrad = np.inf
 
         if res is None:
-            dt0 = get_moments_result_dtype(higher=higher)
+            dt0 = get_moments_result_dtype(with_higher_order=with_higher_order)
             dt = np.dtype(dt0, align=True)
             resarray = np.zeros(1, dtype=dt)
             res = resarray[0]
@@ -709,8 +711,8 @@ class GMix(object):
         wt_gm = self.get_data()
 
         # this will add to the sums
-        if higher:
-            gmix_nb.get_higher_weighted_sums(wt_gm, obs.pixels, res, maxrad)
+        if with_higher_order:
+            gmix_nb.get_higher_order_weighted_sums(wt_gm, obs.pixels, res, maxrad)
         else:
             gmix_nb.get_weighted_sums(wt_gm, obs.pixels, res, maxrad)
 
@@ -1274,8 +1276,8 @@ def get_weighted_moments_stats(ares):
     return res
 
 
-def get_moments_result_dtype(higher=False):
-    if higher:
+def get_moments_result_dtype(with_higher_order=False):
+    if with_higher_order:
         nmom = 17
     else:
         nmom = 6
