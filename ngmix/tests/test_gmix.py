@@ -540,6 +540,8 @@ def test_higher_order():
     ntrial = 100
 
     rho4s = np.zeros(ntrial)
+    rho6s = np.zeros(ntrial)
+    rho8s = np.zeros(ntrial)
     for i in range(ntrial):
         obj = galsim.Gaussian(fwhm=fwhm)
 
@@ -569,10 +571,27 @@ def test_higher_order():
         res = wt.get_weighted_moments(obs, with_higher_order=True)
 
         f_ind = MOMENTS_NAME_MAP["MF"]
+
         M22_ind = MOMENTS_NAME_MAP["M22"]
         rho4s[i] = res['sums'][M22_ind] / res['sums'][f_ind] / sigma**4
+
+        M33_ind = MOMENTS_NAME_MAP["M33"]
+        rho6s[i] = res['sums'][M33_ind] / res['sums'][f_ind] / sigma**6
+
+        M44_ind = MOMENTS_NAME_MAP["M44"]
+        rho8s[i] = res['sums'][M44_ind] / res['sums'][f_ind] / sigma**8
 
     rho4_mean = rho4s.mean()
     rho4_std = rho4s.std()
     print(f'rho4: {rho4_mean:.3g} std: {rho4_std:.3g}')
     assert np.abs(rho4_mean - 2) < 1e-5
+
+    rho6_mean = rho6s.mean()
+    rho6_std = rho6s.std()
+    print(f'rho6: {rho6_mean:.3g} std: {rho6_std:.3g}')
+    assert np.abs(rho6_mean - 6) < 1e-5
+
+    rho8_mean = rho8s.mean()
+    rho8_std = rho8s.std()
+    print(f'rho8: {rho8_mean:.3g} std: {rho8_std:.3g}')
+    assert np.abs(rho8_mean - 24) < 1e-5
