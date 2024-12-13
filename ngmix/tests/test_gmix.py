@@ -550,16 +550,16 @@ def test_higher_order():
     rho6s = np.zeros(ntrial)
     rho8s = np.zeros(ntrial)
 
-    rho_M21 = np.zeros(ntrial)
-    rho_M12 = np.zeros(ntrial)
-    rho_M30 = np.zeros(ntrial)
-    rho_M03 = np.zeros(ntrial)
+    M21 = np.zeros(ntrial)
+    M12 = np.zeros(ntrial)
+    M30 = np.zeros(ntrial)
+    M03 = np.zeros(ntrial)
 
-    rho_M31 = np.zeros(ntrial)
-    rho_M13 = np.zeros(ntrial)
+    M31 = np.zeros(ntrial)
+    M13 = np.zeros(ntrial)
 
-    rho_M40 = np.zeros(ntrial)
-    rho_M14 = np.zeros(ntrial)
+    M40 = np.zeros(ntrial)
+    M14 = np.zeros(ntrial)
 
     for i in range(ntrial):
         obj = galsim.Gaussian(fwhm=fwhm)
@@ -589,40 +589,20 @@ def test_higher_order():
 
         res = wt.get_weighted_moments(obs, with_higher_order=True)
 
-        f_ind = MOMENTS_NAME_MAP["MF"]
+        # these will be non zero
+        rho4s[i] = res['M22'] / sigma**4
+        rho6s[i] = res['M33'] / sigma**6
+        rho8s[i] = res['M44'] / sigma**8
 
-        M22_ind = MOMENTS_NAME_MAP["M22"]
-        rho4s[i] = res['sums'][M22_ind] / res['sums'][f_ind] / sigma**4
-
-        M33_ind = MOMENTS_NAME_MAP["M33"]
-        rho6s[i] = res['sums'][M33_ind] / res['sums'][f_ind] / sigma**6
-
-        M44_ind = MOMENTS_NAME_MAP["M44"]
-        rho8s[i] = res['sums'][M44_ind] / res['sums'][f_ind] / sigma**8
-
-        M21_ind = MOMENTS_NAME_MAP["M21"]
-        rho_M21[i] = res['sums'][M21_ind] / res['sums'][f_ind] / sigma**3
-
-        M12_ind = MOMENTS_NAME_MAP["M12"]
-        rho_M12[i] = res['sums'][M12_ind] / res['sums'][f_ind] / sigma**3
-
-        M30_ind = MOMENTS_NAME_MAP["M30"]
-        rho_M30[i] = res['sums'][M30_ind] / res['sums'][f_ind] / sigma**3
-
-        M03_ind = MOMENTS_NAME_MAP["M03"]
-        rho_M03[i] = res['sums'][M03_ind] / res['sums'][f_ind] / sigma**3
-
-        M31_ind = MOMENTS_NAME_MAP["M31"]
-        rho_M31[i] = res['sums'][M31_ind] / res['sums'][f_ind] / sigma**4
-
-        M13_ind = MOMENTS_NAME_MAP["M13"]
-        rho_M13[i] = res['sums'][M13_ind] / res['sums'][f_ind] / sigma**4
-
-        M40_ind = MOMENTS_NAME_MAP["M40"]
-        rho_M40[i] = res['sums'][M40_ind] / res['sums'][f_ind] / sigma**4
-
-        M14_ind = MOMENTS_NAME_MAP["M14"]
-        rho_M14[i] = res['sums'][M14_ind] / res['sums'][f_ind] / sigma**4
+        # these are ~zero
+        M21[i] = res['M21'] / sigma**3
+        M12[i] = res['M12'] / sigma**3
+        M30[i] = res['M30'] / sigma**3
+        M03[i] = res['M03'] / sigma**3
+        M31[i] = res['M31'] / sigma**4
+        M13[i] = res['M13'] / sigma**4
+        M40[i] = res['M40'] / sigma**4
+        M14[i] = res['M14'] / sigma**4
 
     rho4_mean = rho4s.mean()
     rho4_std = rho4s.std()
@@ -639,26 +619,69 @@ def test_higher_order():
     print(f'rho8: {rho8_mean:.3g} std: {rho8_std:.3g}')
     assert np.abs(rho8_mean - 24) < 1e-5
 
-    rho_M21_mean = rho_M21.mean()
-    assert np.abs(rho_M21_mean) < 1e-5
+    M21_mean = M21.mean()
+    assert np.abs(M21_mean) < 1e-5
 
-    rho_M12_mean = rho_M12.mean()
-    assert np.abs(rho_M12_mean) < 1e-5
+    M12_mean = M12.mean()
+    assert np.abs(M12_mean) < 1e-5
 
-    rho_M30_mean = rho_M30.mean()
-    assert np.abs(rho_M30_mean) < 1e-5
+    M30_mean = M30.mean()
+    assert np.abs(M30_mean) < 1e-5
 
-    rho_M03_mean = rho_M03.mean()
-    assert np.abs(rho_M03_mean) < 1e-5
+    M03_mean = M03.mean()
+    assert np.abs(M03_mean) < 1e-5
 
-    rho_M31_mean = rho_M31.mean()
-    assert np.abs(rho_M31_mean) < 1e-5
+    M31_mean = M31.mean()
+    assert np.abs(M31_mean) < 1e-5
 
-    rho_M13_mean = rho_M13.mean()
-    assert np.abs(rho_M13_mean) < 1e-5
+    M13_mean = M13.mean()
+    assert np.abs(M13_mean) < 1e-5
 
-    rho_M40_mean = rho_M40.mean()
-    assert np.abs(rho_M40_mean) < 1e-5
+    M40_mean = M40.mean()
+    assert np.abs(M40_mean) < 1e-5
 
-    rho_M14_mean = rho_M14.mean()
-    assert np.abs(rho_M14_mean) < 1e-5
+    M14_mean = M14.mean()
+    assert np.abs(M14_mean) < 1e-5
+
+
+def test_higher_order_nan():
+    rng = np.random.RandomState(seed=35)
+    fwhm = 0.9
+    T = ngmix.moments.fwhm_to_T(fwhm)
+    scale = 0.125
+    image_size = 107
+
+    obj = galsim.Gaussian(fwhm=fwhm)
+
+    row_offset, col_offset = rng.uniform(low=-0.5, high=0.5, size=2)
+
+    im = obj.drawImage(
+        nx=image_size,
+        ny=image_size,
+        offset=(col_offset, row_offset),
+        scale=scale,
+        method='no_pixel',
+    ).array
+
+    imcen = (np.array(im.shape) - 1) / 2
+
+    cen = imcen + (row_offset, col_offset)
+
+    jacobian = ngmix.DiagonalJacobian(row=cen[0], col=cen[1], scale=scale)
+
+    obs = Observation(image=im, jacobian=jacobian)
+
+    wt = ngmix.GMixModel(
+        pars=[0, 0, 0, 0, T, 1.0],
+        model='gauss',
+    )
+
+    res0 = wt.get_weighted_sums(obs, with_higher_order=True)
+    res0['sums'][5] = -1
+
+    res = ngmix.gmix.get_weighted_moments_stats(res0)
+
+    for key in MOMENTS_NAME_MAP:
+        if key in ['M00', 'MF']:
+            continue
+        assert np.isnan(res[key])
