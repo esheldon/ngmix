@@ -524,9 +524,16 @@ def test_higher_order_smoke(do_higher):
         for name, ind in MOMENTS_NAME_MAP.items():
             # make sure the index is valid
             res['sums'][ind]
+            assert name in res and np.isfinite(res[name])
+            err_name = f'{name}_err'
+            assert err_name in res and np.isfinite(res[err_name])
     else:
         assert res['sums'].shape == (6, )
         assert res['sums_cov'].shape == (6, 6)
+
+        for name, ind in MOMENTS_NAME_MAP.items():
+            if ind > 5:
+                assert name not in res
 
 
 def test_higher_order():

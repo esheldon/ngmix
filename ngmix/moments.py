@@ -534,7 +534,45 @@ def make_mom_result(sums, sums_cov, sums_norm=None):
     res["flux_flagstr"] = ngmix.flags.get_flags_str(res["flux_flags"])
     res["T_flagstr"] = ngmix.flags.get_flags_str(res["T_flags"])
 
+    _add_moments_by_name(res)
+
     return res
+
+
+def _add_moments_by_name(res):
+    sums = res['sums']
+    sums_cov = res['sums_cov']
+
+    mf_ind = MOMENTS_NAME_MAP["MF"]
+    fsum = sums[mf_ind]
+    fsum_err = np.sqrt(sums_cov[mf_ind, mf_ind])
+
+    # add in named sums normalized by flux sum (weight * image).sum()
+    # we don't store flags or errors for these
+    mkeys = list(MOMENTS_NAME_MAP.keys())
+    for name in mkeys:
+        ind = MOMENTS_NAME_MAP[name]
+        if ind > sums.size-1:
+            continue
+
+        err_name = f'{name}_err'
+
+        if name in ['MF', 'M00']:
+            res[name] = fsum
+            res[err_name] = fsum_err
+        else:
+            if fsum > 0:
+                res[name] = sums[ind] / fsum
+                res[err_name] = get_ratio_error(
+                    sums[ind],
+                    sums[mf_ind],
+                    sums_cov[ind, ind],
+                    sums_cov[mf_ind, mf_ind],
+                    sums_cov[ind, mf_ind],
+                )
+            else:
+                res[name] = np.nan
+                res[err_name] = np.nan
 
 
 def regularize_mom_shapes(res, fwhm_reg):
