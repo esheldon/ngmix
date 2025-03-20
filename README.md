@@ -1,7 +1,7 @@
 ngmix
 =====
 
-[![Build Status](https://travis-ci.com/esheldon/ngmix.svg?branch=master)](https://travis-ci.com/esheldon/ngmix)
+[![Build Status](https://github.com/esheldon/ngmix/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/esheldon/ngmix/actions/workflows/test.yml)
 
 Gaussian mixture models and other tools for working with 2d images, implemented
 in python. The code is made fast using the numba package.
