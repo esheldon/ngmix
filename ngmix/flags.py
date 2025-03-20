@@ -1,3 +1,5 @@
+import numpy as np
+
 NO_ATTEMPT = 2**0
 CEN_SHIFT = 2**1
 NONPOS_FLUX = 2**2
@@ -77,7 +79,7 @@ def get_flags_str(val, name_map=None):
     nstrs = []
     for pow in range(32):
         fval = 2**pow
-        if ((val & fval) != 0):
+        if ((np.uint32(val) & fval) != 0):
             if fval in name_map:
                 nstrs.append(name_map[fval])
             else:
