@@ -6,7 +6,7 @@ import numpy as np
 
 from ..gexceptions import GMixRangeError
 from .random import make_rng
-from ..defaults import LOWVAL
+from ..defaults import LOWVAL, copy_if_needed
 
 
 class PriorBase(object):
@@ -260,7 +260,7 @@ class TwoSidedErf(PriorBase):
             The locations at which to evaluate
         """
 
-        vals = np.array(vals, ndmin=1, dtype="f8", copy=False)
+        vals = np.array(vals, ndmin=1, dtype="f8", copy=copy_if_needed)
         pvals = np.zeros(vals.size)
 
         for i in range(vals.size):
@@ -309,7 +309,7 @@ class TwoSidedErf(PriorBase):
         vals: number
             The locations at which to evaluate
         """
-        vals = np.array(vals, ndmin=1, dtype="f8", copy=False)
+        vals = np.array(vals, ndmin=1, dtype="f8", copy=copy_if_needed)
         fdiff = np.zeros(vals.size)
 
         for i in range(vals.size):
@@ -780,7 +780,7 @@ class LogNormal(PriorBase):
         vals: array
             The locations at which to evaluate
         """
-        vals = np.array(vals, dtype="f8", copy=False)
+        vals = np.array(vals, dtype="f8", copy=copy_if_needed)
         if self.shift is not None:
             vals = vals - self.shift
 

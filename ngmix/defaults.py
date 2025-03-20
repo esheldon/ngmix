@@ -1,5 +1,10 @@
 import numpy as np
 
+# Shim to support numpy >= 2 and < 2.0.0.
+if np.lib.NumpyVersion(np.__version__) >= "2.0.0":
+    copy_if_needed = None
+else:
+    copy_if_needed = False
 
 # default values
 PDEF = -9.999e9  # parameter defaults

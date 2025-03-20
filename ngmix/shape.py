@@ -1,5 +1,6 @@
 import numpy
 
+from .defaults import copy_if_needed
 from .gexceptions import GMixRangeError
 
 ONE_MINUS_EPS = 0.9999999999999999
@@ -362,8 +363,8 @@ def e1e2_to_eta1eta2(e1, e2):
     """
 
     if not isinstance(e1, numpy.ndarray):
-        e1 = numpy.array(e1, ndmin=1, copy=False)
-        e2 = numpy.array(e2, ndmin=1, copy=False)
+        e1 = numpy.array(e1, ndmin=1, copy=copy_if_needed)
+        e2 = numpy.array(e2, ndmin=1, copy=copy_if_needed)
         is_scalar = True
     else:
         is_scalar = False
@@ -408,8 +409,8 @@ def eta1eta2_to_g1g2(eta1, eta2):
     """
 
     if not isinstance(eta1, numpy.ndarray):
-        eta1 = numpy.array(eta1, ndmin=1, copy=False)
-        eta2 = numpy.array(eta2, ndmin=1, copy=False)
+        eta1 = numpy.array(eta1, ndmin=1, copy=copy_if_needed)
+        eta2 = numpy.array(eta2, ndmin=1, copy=copy_if_needed)
         is_scalar = True
     else:
         is_scalar = False

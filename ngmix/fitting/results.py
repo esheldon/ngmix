@@ -3,7 +3,7 @@ import copy
 import numpy as np
 from .. import gmix
 from ..gexceptions import GMixRangeError
-from ..defaults import PDEF, CDEF, LOWVAL, BIGVAL
+from ..defaults import PDEF, CDEF, LOWVAL, BIGVAL, copy_if_needed
 from ..observation import Observation, ObsList, get_mb_obs
 from ..gmix.gmix_nb import gmix_convolve_fill, fill_fdiff
 from ..gmix import GMixList, MultiBandGMixList
@@ -361,7 +361,7 @@ class FitModel(dict):
         setup the mixtures based on the initial guess
         """
 
-        guess = np.array(guess, dtype="f8", copy=False)
+        guess = np.array(guess, dtype="f8", copy=copy_if_needed)
 
         npars = guess.size
         mess = "guess has npars=%d, expected %d" % (npars, self.npars)
