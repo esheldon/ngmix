@@ -77,9 +77,9 @@ def get_flags_str(val, name_map=None):
         name_map = NAME_MAP
 
     nstrs = []
-    for pow in range(32):
+    for pow in range(31):
         fval = 2**pow
-        if ((np.uint32(val) & fval) != 0):
+        if ((np.array(val).astype(np.uint32) & fval) != 0):
             if fval in name_map:
                 nstrs.append(name_map[fval])
             else:
