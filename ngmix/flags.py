@@ -84,7 +84,7 @@ def get_flags_str(val, name_map=None):
     # Cast to uint64 to ensure to allow for maximal flexibility.
     # This is because the second argument to the bitwise AND operator (&) below
     # would get implicitly cast to the same type as `val`.
-    val = np.array(val, dtype=np.uint64)
+    val = np.array(val, dtype=np.uint32)
 
     nstrs = []
     for pow in range(31):
