@@ -11,6 +11,8 @@ from ..flags import get_flags_str, NAME_MAP, LOW_DET
 def test_get_flags_str(dtype):
     """Test that get_flags_str works for different integer types."""
     # Set a high-enough bit in addition to the lower bit to ensure things work.
-    val = np.array(LOW_DET | 2**45, dtype=dtype)
+    val = np.array(LOW_DET, dtype=dtype)
+    if val.itemsize > 4:
+        val |= 2**45
     flag_str = get_flags_str(val, NAME_MAP)
     assert flag_str == NAME_MAP[LOW_DET]
