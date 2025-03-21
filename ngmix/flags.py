@@ -63,7 +63,7 @@ def get_flags_str(val, name_map=None):
     Parameters
     ----------
     val : int
-        The flag value. This must be in the range [0, 2**32).
+        The flag value. This must be non-negative.
     name_map : dict, optional
         A dictionary mapping values to names. Default is global at
         ngmix.flags.NAME_MAP.
@@ -76,14 +76,20 @@ def get_flags_str(val, name_map=None):
     if name_map is None:
         name_map = NAME_MAP
 
-    if val < 0 or val >= 2**32:
-        import warnings
-        warnings.warn(f"Flag value {val} is out of range [0, 2**32).")
+    # Negative values are always invalid and cause confusion if cast to an
+    # unsigned integer.
+    if val < 0:
+        raise ValueError(f"Flag value {val} must be non-negative.")
+
+    # Cast to uint64 to ensure to allow for maximal flexibility.
+    # This is because the second argument to the bitwise AND operator (&) below
+    # would get implicitly cast to the same type as `val`.
+    val = np.array(val, dtype=np.uint64)
 
     nstrs = []
     for pow in range(31):
         fval = 2**pow
-        if ((np.array(val).astype(np.uint32) & fval) != 0):
+        if ((val & fval) != 0):
             if fval in name_map:
                 nstrs.append(name_map[fval])
             else:
