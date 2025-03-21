@@ -63,7 +63,7 @@ def get_flags_str(val, name_map=None):
     Parameters
     ----------
     val : int
-        The flag value.
+        The flag value. This must be in the range [0, 2**32).
     name_map : dict, optional
         A dictionary mapping values to names. Default is global at
         ngmix.flags.NAME_MAP.
