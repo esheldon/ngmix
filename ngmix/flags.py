@@ -76,6 +76,10 @@ def get_flags_str(val, name_map=None):
     if name_map is None:
         name_map = NAME_MAP
 
+    if val < 0 or val >= 2**32:
+        import warnings
+        warnings.warn(f"Flag value {val} is out of range [0, 2**32).")
+
     nstrs = []
     for pow in range(31):
         fval = 2**pow
