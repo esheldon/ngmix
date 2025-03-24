@@ -81,7 +81,7 @@ def get_flags_str(val, name_map=None):
     if val < 0:
         raise ValueError(f"Flag value {val} must be non-negative.")
 
-    # Cast to uint64 to ensure to allow for maximal flexibility.
+    # Cast to uint32 is sufficient given the range of flags.
     # This is because the second argument to the bitwise AND operator (&) below
     # would get implicitly cast to the same type as `val`.
     val = np.array(val, dtype=np.uint32)
