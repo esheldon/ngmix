@@ -1,3 +1,13 @@
+## v2.4.0
+
+### Compatibility
+
+    - Update to use either numpy>2. or 1.x
+
+ ### Misc
+
+    - Raise an exception if negative integers are passed to ``get_flags_str``.
+
 ## v2.3.2
 
 

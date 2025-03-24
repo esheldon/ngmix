@@ -1,3 +1,5 @@
+import numpy as np
+
 NO_ATTEMPT = 2**0
 CEN_SHIFT = 2**1
 NONPOS_FLUX = 2**2
@@ -61,7 +63,7 @@ def get_flags_str(val, name_map=None):
     Parameters
     ----------
     val : int
-        The flag value.
+        The flag value. This must be non-negative.
     name_map : dict, optional
         A dictionary mapping values to names. Default is global at
         ngmix.flags.NAME_MAP.
@@ -74,8 +76,18 @@ def get_flags_str(val, name_map=None):
     if name_map is None:
         name_map = NAME_MAP
 
+    # Negative values are always invalid and cause confusion if cast to an
+    # unsigned integer.
+    if val < 0:
+        raise ValueError(f"Flag value {val} must be non-negative.")
+
+    # Cast to uint32 is sufficient given the range of flags.
+    # This is because the second argument to the bitwise AND operator (&) below
+    # would get implicitly cast to the same type as `val`.
+    val = np.array(val, dtype=np.uint32)
+
     nstrs = []
-    for pow in range(32):
+    for pow in range(31):
         fval = 2**pow
         if ((val & fval) != 0):
             if fval in name_map:

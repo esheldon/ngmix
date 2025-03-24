@@ -5,6 +5,7 @@ import logging
 import numpy as np
 from .gmix import GMixModel, GMixCM
 from .gexceptions import GMixRangeError
+from ngmix.defaults import copy_if_needed
 from ngmix.flags import NO_ATTEMPT, GMIX_RANGE_ERROR
 
 DEFAULT_FLUX = np.nan
@@ -117,10 +118,10 @@ def _prepare(pars,
              TdByTe=None,
              mask=None):
 
-    pars = np.array(pars, dtype='f8', ndmin=2, copy=False)
+    pars = np.array(pars, dtype='f8', ndmin=2, copy=copy_if_needed)
 
     if mask is not None:
-        mask = np.array(mask, dtype=bool, ndmin=1, copy=False)
+        mask = np.array(mask, dtype=bool, ndmin=1, copy=copy_if_needed)
         assert mask.shape[0] == pars.shape[0], \
             'mask and pars must be same length'
     else:
@@ -128,8 +129,8 @@ def _prepare(pars,
 
     if model == 'cm':
 
-        fracdev = np.array(fracdev, dtype='f8', ndmin=1, copy=False)
-        TdByTe = np.array(TdByTe, dtype='f8', ndmin=1, copy=False)
+        fracdev = np.array(fracdev, dtype='f8', ndmin=1, copy=copy_if_needed)
+        TdByTe = np.array(TdByTe, dtype='f8', ndmin=1, copy=copy_if_needed)
         assert fracdev.size == pars.shape[0], 'fracdev/pars must be same size'
         assert TdByTe.size == pars.shape[0], 'TdByTe/pars must be same length'
 

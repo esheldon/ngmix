@@ -10,7 +10,7 @@ from .random import srandu
 from .priors import PriorBase
 import logging
 from ..util import print_pars
-from ..defaults import LOWVAL
+from ..defaults import LOWVAL, copy_if_needed
 
 LOGGER = logging.getLogger(__name__)
 
@@ -115,8 +115,8 @@ class GPriorBase(PriorBase):
         Get the 2d prior for the array inputs
         """
 
-        g1arr = array(g1arr, dtype="f8", copy=False)
-        g2arr = array(g2arr, dtype="f8", copy=False)
+        g1arr = array(g1arr, dtype="f8", copy=copy_if_needed)
+        g2arr = array(g2arr, dtype="f8", copy=copy_if_needed)
 
         output = numpy.zeros(g1arr.size) + LOWVAL
         self.fill_lnprob_array2d(g1arr, g2arr, output)
@@ -133,8 +133,8 @@ class GPriorBase(PriorBase):
         Get the 2d prior for the array inputs
         """
 
-        g1arr = array(g1arr, dtype="f8", copy=False)
-        g2arr = array(g2arr, dtype="f8", copy=False)
+        g1arr = array(g1arr, dtype="f8", copy=copy_if_needed)
+        g2arr = array(g2arr, dtype="f8", copy=copy_if_needed)
 
         output = numpy.zeros(g1arr.size)
         self.fill_prob_array2d(g1arr, g2arr, output)
@@ -151,7 +151,7 @@ class GPriorBase(PriorBase):
         Get the 1d prior for the array inputs
         """
 
-        garr = array(garr, dtype="f8", copy=False)
+        garr = array(garr, dtype="f8", copy=copy_if_needed)
 
         output = numpy.zeros(garr.size)
         self.fill_prob_array1d(garr, output)
@@ -726,8 +726,8 @@ class ZDisk2D(PriorBase):
         """
         get prob at the input positions
         """
-        x = numpy.array(x, dtype="f8", ndmin=1, copy=False)
-        y = numpy.array(y, dtype="f8", ndmin=1, copy=False)
+        x = numpy.array(x, dtype="f8", ndmin=1, copy=copy_if_needed)
+        y = numpy.array(y, dtype="f8", ndmin=1, copy=copy_if_needed)
         out = numpy.zeros(x.size, dtype="f8")
 
         r2 = x ** 2 + y ** 2

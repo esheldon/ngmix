@@ -5,7 +5,7 @@ __all__ = [
 import numpy as np
 from .results import FitModel, PSFFluxFitModel
 from ..gexceptions import GMixRangeError
-from ..defaults import LOWVAL
+from ..defaults import copy_if_needed, LOWVAL
 from .. import observation
 from ..observation import Observation, ObsList, MultiBandObsList
 
@@ -269,7 +269,7 @@ class GalsimFitModel(FitModel):
         exception
         """
 
-        guess = np.array(guess, dtype="f8", copy=False)
+        guess = np.array(guess, dtype="f8", copy=copy_if_needed)
         if guess.size != self.npars:
             raise ValueError(
                 "expected %d entries in the "
