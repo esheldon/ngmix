@@ -1,12 +1,18 @@
 ## v2.4.0
 
+### New features
+
+    - Add normalized moments by name for moments measurements.
+      Also add uncertainties.
+
 ### Compatibility
 
-    - Update to use either numpy>2. or 1.x
+    - Update to use either numpy>2. or 1.x (Arun K.)
 
- ### Misc
+### Misc
 
     - Raise an exception if negative integers are passed to ``get_flags_str``.
+      (Arun K.)
 
 ## v2.3.2
 
