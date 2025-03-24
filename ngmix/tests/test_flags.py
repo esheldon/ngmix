@@ -14,6 +14,9 @@ def test_get_flags_str(dtype):
     # This should be a flag that is defined in NAME_MAP.
     # When converting to a type with fewer bits, only the least-significant
     # bits are kept and the more-significant bits are discarded.
-    val = np.array(LOW_DET | 2**45).astype(dtype)
+    bit_string = LOW_DET | 2 ** 45
+    val = np.array(bit_string).astype(dtype)
+    # Check that the least signficant bits are kept.
+    assert val == (bit_string) & (2**(8*val.itemsize) - 1)  # itemsize is in bytes.
     flag_str = get_flags_str(val, NAME_MAP)
     assert flag_str == NAME_MAP[LOW_DET]
