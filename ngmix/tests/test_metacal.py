@@ -85,14 +85,46 @@ def test_metacal_types_smoke(psf, metacal_caching):
     if psf == 'galsim_obj':
         psf = galsim.Gaussian(fwhm=0.9)
 
-    # shuld automatically add 1p
+    # test with only noshear
     types = ['noshear']
     obs_dict = ngmix.metacal.get_all_metacal(
         obs, rng=rng, psf=psf, types=types,
     )
 
     assert len(obs_dict) == len(types)
-    for type in types + ['1p']:
+    for type in types:
+        assert type in obs_dict
+
+        mobs = obs_dict[type]
+        assert mobs.image.shape == obs.image.shape
+        assert np.all(mobs.image != obs.image)
+        assert mobs.psf.image.shape == obs.psf.image.shape
+        assert np.all(mobs.psf.image != obs.psf.image)
+
+    # test with noshear and another shear
+    types = ['noshear', '1m']
+    obs_dict = ngmix.metacal.get_all_metacal(
+        obs, rng=rng, psf=psf, types=types,
+    )
+
+    assert len(obs_dict) == len(types)
+    for type in types:
+        assert type in obs_dict
+
+        mobs = obs_dict[type]
+        assert mobs.image.shape == obs.image.shape
+        assert np.all(mobs.image != obs.image)
+        assert mobs.psf.image.shape == obs.psf.image.shape
+        assert np.all(mobs.psf.image != obs.psf.image)
+
+    # test with other shears
+    types = ['1p', '1m']
+    obs_dict = ngmix.metacal.get_all_metacal(
+        obs, rng=rng, psf=psf, types=types,
+    )
+
+    assert len(obs_dict) == len(types)
+    for type in types:
         assert type in obs_dict
 
         mobs = obs_dict[type]
