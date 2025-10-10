@@ -165,7 +165,9 @@ class MetacalDilatePSF(object):
         for type in types:
             sh = shdict[type]
 
-            if (type == 'noshear') and (len(types) == 1):
+            if (type == 'noshear') and (
+                len([type for type in types if 'psf' not in type]) == 1
+            ):
                 # only need noshear
                 _newpsf_image, _newpsf_obj = self.get_target_psf(sh, 'gal_shear')
                 _unsheared_image = self.get_target_image(_newpsf_obj, shear=None)
