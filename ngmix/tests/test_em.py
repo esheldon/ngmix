@@ -330,3 +330,42 @@ def test_em_errors():
 
     with pytest.raises(RuntimeError):
         emresult.get_convolved_gmix()
+
+
+def test_em_sky_1gauss():
+    """
+    see if we can recover a sky value
+    """
+
+    rng = np.random.RandomState(42587)
+    noise = 0.0001
+    ngauss = 1
+    data = get_ngauss_obs(rng=rng, ngauss=ngauss, noise=noise)
+
+    true_sky = 0.01 * data['obs'].image.max()
+
+    data['obs'].image = data['obs'].image + true_sky
+
+    obs = data['obs']
+    gm = data['gmix']
+
+    pixel_scale = obs.jacobian.scale
+
+    pars = gm.get_full_pars()
+
+    gm_guess = gm.copy()
+    randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
+
+    fitter = ngmix.em.EMFitter(vary_sky=True)
+    obs_sky, send_sky = ngmix.em.prep_obs(obs)
+    res = fitter.go(obs=obs_sky, guess=gm_guess, sky=send_sky)
+
+    assert res['flags'] == 0 
+
+    fit_sky = res['sky'] - send_sky
+    print(f'send_sky: {send_sky}')
+    print(f'true_sky: {true_sky} fit_sky: {fit_sky}')
+    fracdiff = abs(fit_sky / true_sky) - 1
+    print(f'fracdiff: {fracdiff}')
+
+    assert fracdiff < 0.01
