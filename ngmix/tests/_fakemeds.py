@@ -123,7 +123,7 @@ def write_cutouts(
                     if cutout_type == 'weight':
                         imdata[:, :] = 1.0/noise**2
 
-                hdu.write(imdata, start=object_data['start_row'][iobj, icut])
+                hdu.write(imdata.ravel(), start=object_data['start_row'][iobj, icut])
 
 
 def make_model_image(row, col, box_size, fwhm, flux):
