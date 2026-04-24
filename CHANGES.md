@@ -1,3 +1,17 @@
+## v2.4.1 (not yet released)
+
+### Bug Fixes
+
+    - em prep_obs now does a full copy of the Observation
+    - Deal with possible zero division in get_weighted_sums
+    - Fix location of np.linalg.LinAlgError
+
+### Unit Tests
+
+    - Added unit test of em sky fitting
+    - Fix fastexp speed test
+    - Fix bug in unit test where meds writing failed
+
 ## v2.4.0
 
 ### New features

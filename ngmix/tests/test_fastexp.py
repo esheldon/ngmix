@@ -2,7 +2,6 @@ import time
 import numpy as np
 from numba import njit
 import pytest
-# from flaky import flaky
 
 from ngmix.fastexp_nb import fexp
 
