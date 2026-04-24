@@ -174,7 +174,7 @@ def _test_cov(pcov):
         if wneg.size > 0:
             flags |= LM_NEG_COV_DIAG
 
-    except np.linalg.linalg.LinAlgError:
+    except np.linalg.LinAlgError:
         flags |= EIG_NOTFINITE
 
     return flags

@@ -87,18 +87,8 @@ def prep_obs(obs):
     """
 
     imsky, sky = prep_image(obs.image)
-    if obs.has_psf():
-        newobs = Observation(
-            imsky,
-            jacobian=obs.jacobian,
-            psf=obs.psf,
-        )
-    else:
-        newobs = Observation(
-            imsky,
-            jacobian=obs.jacobian,
-        )
-
+    newobs = obs.copy()
+    newobs.image = imsky
     return newobs, sky
 
 

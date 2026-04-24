@@ -51,16 +51,16 @@ def test_em_1gauss(noise):
     fitpars = fit_gm.get_full_pars()
 
     if noise == 0.0:
-        assert abs(fitpars[0]/pars[0]-1) < FRAC_TOL
-        assert abs(fitpars[1]-pars[1]) < pixel_scale/10
-        assert abs(fitpars[2]-pars[2]) < pixel_scale/10
-        assert abs(fitpars[3]/pars[3]-1) < FRAC_TOL
-        assert abs(fitpars[4]/pars[4]-1) < FRAC_TOL
-        assert abs(fitpars[5]/pars[5]-1) < FRAC_TOL
+        assert abs(fitpars[0] / pars[0] - 1) < FRAC_TOL
+        assert abs(fitpars[1] - pars[1]) < pixel_scale / 10
+        assert abs(fitpars[2] - pars[2]) < pixel_scale / 10
+        assert abs(fitpars[3] / pars[3] - 1) < FRAC_TOL
+        assert abs(fitpars[4] / pars[4] - 1) < FRAC_TOL
+        assert abs(fitpars[5] / pars[5] - 1) < FRAC_TOL
 
     # check reconstructed image allowing for noise
     imfit = res.make_image()
-    imtol = 0.001 / pixel_scale**2 + noise*5
+    imtol = 0.001 / pixel_scale**2 + noise * 5
     assert np.all(np.abs(imfit - obs.image) < imtol)
 
 
@@ -99,16 +99,16 @@ def test_em_1gauss_prep():
     fitpars = fit_gm.get_full_pars()
 
     if noise == 0.0:
-        assert abs(fitpars[0]/pars[0]-1) < FRAC_TOL
-        assert abs(fitpars[1]-pars[1]) < pixel_scale/10
-        assert abs(fitpars[2]-pars[2]) < pixel_scale/10
-        assert abs(fitpars[3]/pars[3]-1) < FRAC_TOL
-        assert abs(fitpars[4]/pars[4]-1) < FRAC_TOL
-        assert abs(fitpars[5]/pars[5]-1) < FRAC_TOL
+        assert abs(fitpars[0] / pars[0] - 1) < FRAC_TOL
+        assert abs(fitpars[1] - pars[1]) < pixel_scale / 10
+        assert abs(fitpars[2] - pars[2]) < pixel_scale / 10
+        assert abs(fitpars[3] / pars[3] - 1) < FRAC_TOL
+        assert abs(fitpars[4] / pars[4] - 1) < FRAC_TOL
+        assert abs(fitpars[5] / pars[5] - 1) < FRAC_TOL
 
     # check reconstructed image allowing for noise
     imfit = res.make_image()
-    imtol = 0.001 / pixel_scale**2 + noise*5
+    imtol = 0.001 / pixel_scale**2 + noise * 5
     assert np.all(np.abs(imfit - obs.image) < imtol)
 
 
@@ -152,25 +152,25 @@ def test_em_2gauss(noise):
     # only check pars for no noise
     if noise == 0.0:
         for i in range(ngauss):
-            start = i*6
-            end = (i+1)*6
+            start = i * 6
+            end = (i + 1) * 6
 
             truepars = pars[start:end]
 
-            fitstart = indices[i]*6
-            fitend = (indices[i]+1)*6
+            fitstart = indices[i] * 6
+            fitend = (indices[i] + 1) * 6
             thispars = fitpars[fitstart:fitend]
 
-            assert abs(thispars[0]/truepars[0]-1) < FRAC_TOL
-            assert abs(thispars[1]-truepars[1]) < pixel_scale/10
-            assert abs(thispars[2]-truepars[2]) < pixel_scale/10
-            assert abs(thispars[3]/truepars[3]-1) < FRAC_TOL
-            assert abs(thispars[4]/truepars[4]-1) < FRAC_TOL
-            assert abs(thispars[5]/truepars[5]-1) < FRAC_TOL
+            assert abs(thispars[0] / truepars[0] - 1) < FRAC_TOL
+            assert abs(thispars[1] - truepars[1]) < pixel_scale / 10
+            assert abs(thispars[2] - truepars[2]) < pixel_scale / 10
+            assert abs(thispars[3] / truepars[3] - 1) < FRAC_TOL
+            assert abs(thispars[4] / truepars[4] - 1) < FRAC_TOL
+            assert abs(thispars[5] / truepars[5] - 1) < FRAC_TOL
 
     # check reconstructed image allowing for noise
     imfit = res.make_image()
-    imtol = 0.001 / pixel_scale**2 + noise*5
+    imtol = 0.001 / pixel_scale**2 + noise * 5
     assert np.all(np.abs(imfit - obs.image) < imtol)
 
 
@@ -187,7 +187,10 @@ def test_em_2gauss_withpsf(noise):
     rng = np.random.RandomState(587)
     ngauss = 2
     data = get_ngauss_obs(
-        rng=rng, ngauss=ngauss, noise=noise, with_psf=True,
+        rng=rng,
+        ngauss=ngauss,
+        noise=noise,
+        with_psf=True,
     )
     obs = data['obs']
     gm = data['gmix']
@@ -220,26 +223,26 @@ def test_em_2gauss_withpsf(noise):
     # only check pars for no noise
     if noise == 0.0:
         for i in range(ngauss):
-            start = i*6
-            end = (i+1)*6
+            start = i * 6
+            end = (i + 1) * 6
 
             truepars = pars[start:end]
 
-            fitstart = indices[i]*6
-            fitend = (indices[i]+1)*6
+            fitstart = indices[i] * 6
+            fitend = (indices[i] + 1) * 6
             thispars = fitpars[fitstart:fitend]
 
             # seems irc is harder to get right, boost tolerance
-            assert abs(thispars[0]/truepars[0]-1) < FRAC_TOL
-            assert abs(thispars[1]-truepars[1]) < pixel_scale/10
-            assert abs(thispars[2]-truepars[2]) < pixel_scale/10
-            assert abs(thispars[3]/truepars[3]-1) < FRAC_TOL
-            assert abs(thispars[4]/truepars[4]-1) < FRAC_TOL * 3
-            assert abs(thispars[5]/truepars[5]-1) < FRAC_TOL
+            assert abs(thispars[0] / truepars[0] - 1) < FRAC_TOL
+            assert abs(thispars[1] - truepars[1]) < pixel_scale / 10
+            assert abs(thispars[2] - truepars[2]) < pixel_scale / 10
+            assert abs(thispars[3] / truepars[3] - 1) < FRAC_TOL
+            assert abs(thispars[4] / truepars[4] - 1) < FRAC_TOL * 3
+            assert abs(thispars[5] / truepars[5] - 1) < FRAC_TOL
 
     # check reconstructed image allowing for noise
     imfit = res.make_image()
-    imtol = 0.001 / pixel_scale**2 + noise*5
+    imtol = 0.001 / pixel_scale**2 + noise * 5
     assert np.all(np.abs(imfit - obs.image) < imtol)
 
 
@@ -263,7 +266,7 @@ def test_em_types(em_type, noise):
 
     gm_guess = gm.copy()
 
-    fixcen, fluxonly, fixcov = [False]*3
+    fixcen, fluxonly, fixcov = [False] * 3
 
     if em_type == 'fixcen':
         fixcen = True
@@ -273,7 +276,11 @@ def test_em_types(em_type, noise):
         fixcov = True
 
     res = ngmix.em.run_em(
-        obs=obs, guess=gm_guess, fixcen=fixcen, fixcov=fixcov, fluxonly=fluxonly,
+        obs=obs,
+        guess=gm_guess,
+        fixcen=fixcen,
+        fixcov=fixcov,
+        fluxonly=fluxonly,
     )
 
     assert res['flags'] == 0
@@ -283,12 +290,12 @@ def test_em_types(em_type, noise):
     fitpars = fit_gm.get_full_pars()
 
     if noise == 0.0:
-        assert abs(fitpars[0]/pars[0]-1) < FRAC_TOL
-        assert abs(fitpars[1]-pars[1]) < pixel_scale/10
-        assert abs(fitpars[2]-pars[2]) < pixel_scale/10
-        assert abs(fitpars[3]/pars[3]-1) < FRAC_TOL
-        assert abs(fitpars[4]/pars[4]-1) < FRAC_TOL
-        assert abs(fitpars[5]/pars[5]-1) < FRAC_TOL
+        assert abs(fitpars[0] / pars[0] - 1) < FRAC_TOL
+        assert abs(fitpars[1] - pars[1]) < pixel_scale / 10
+        assert abs(fitpars[2] - pars[2]) < pixel_scale / 10
+        assert abs(fitpars[3] / pars[3] - 1) < FRAC_TOL
+        assert abs(fitpars[4] / pars[4] - 1) < FRAC_TOL
+        assert abs(fitpars[5] / pars[5] - 1) < FRAC_TOL
 
 
 def test_em_errors():
@@ -330,3 +337,77 @@ def test_em_errors():
 
     with pytest.raises(RuntimeError):
         emresult.get_convolved_gmix()
+
+
+def test_em_sky_1gauss():
+    """
+    see if we can recover a sky value
+    """
+
+    rng = np.random.RandomState(42587)
+    noise = 0.0001
+    ngauss = 1
+    data = get_ngauss_obs(rng=rng, ngauss=ngauss, noise=noise)
+
+    true_sky = 0.01 * data['obs'].image.max()
+
+    data['obs'].image = data['obs'].image + true_sky
+
+    obs = data['obs']
+    gm = data['gmix']
+
+    pixel_scale = obs.jacobian.scale
+
+    gm_guess = gm.copy()
+    randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale)
+
+    fitter = ngmix.em.EMFitter(vary_sky=True)
+    obs_sky, send_sky = ngmix.em.prep_obs(obs)
+    res = fitter.go(obs=obs_sky, guess=gm_guess, sky=send_sky)
+
+    assert res['flags'] == 0
+
+    fit_sky = res['sky'] - send_sky
+    print(f'send_sky: {send_sky}')
+    print(f'true_sky: {true_sky} fit_sky: {fit_sky}')
+    fracdiff = abs(fit_sky / true_sky) - 1
+    print(f'fracdiff: {fracdiff}')
+
+    assert fracdiff < 0.01
+
+
+@pytest.mark.parametrize('ngauss', [1, 2])
+def test_em_sky(ngauss):
+    """
+    see if we can recover a sky value
+    """
+
+    rng = np.random.RandomState(42587)
+    noise = 0.0001
+    data = get_ngauss_obs(rng=rng, ngauss=ngauss, noise=noise)
+
+    true_sky = 0.01 * data['obs'].image.max()
+
+    data['obs'].image = data['obs'].image + true_sky
+
+    obs = data['obs']
+    gm = data['gmix']
+
+    pixel_scale = obs.jacobian.scale
+
+    gm_guess = gm.copy()
+    randomize_gmix(rng=rng, gmix=gm_guess, pixel_scale=pixel_scale / 10)
+
+    fitter = ngmix.em.EMFitter(vary_sky=True, maxiter=5000)
+    obs_sky, send_sky = ngmix.em.prep_obs(obs)
+    res = fitter.go(obs=obs_sky, guess=gm_guess, sky=send_sky)
+
+    assert res['flags'] == 0
+
+    fit_sky = res['sky'] - send_sky
+    print(f'send_sky: {send_sky}')
+    print(f'true_sky: {true_sky} fit_sky: {fit_sky}')
+    fracdiff = abs(fit_sky / true_sky) - 1
+    print(f'fracdiff: {fracdiff}')
+
+    assert fracdiff < 0.01

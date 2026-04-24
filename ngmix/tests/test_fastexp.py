@@ -1,7 +1,7 @@
 import time
 import numpy as np
+from numba import njit
 import pytest
-from flaky import flaky
 
 from ngmix.fastexp_nb import fexp
 
@@ -15,22 +15,30 @@ def test_fastexp_smoke(x):
     assert np.allclose(np.exp(x), fexp(x), rtol=4.0e-5)
 
 
-@pytest.mark.parametrize('x', vals)
-@flaky
-def test_fastexp_timing(x):
-    # call a few tims for numba overhead
+@njit
+def _do_fexp(x):
+    csum = 0.0
+    for i in range(x.size):
+        csum += fexp(x[i])
+
+    return csum
+
+
+def test_fastexp_timing():
+    x = np.linspace(-12, -7, 50)
+
     for _ in range(2):
-        fexp(x)
+        _do_fexp(x)
 
     t0 = time.time()
     for _ in range(1000):
-        np.exp(x)
+        slow_sum = np.exp(x).sum()
     t0 = time.time() - t0
 
     t0f = time.time()
     for _ in range(1000):
-        fexp(x)
+        fast_sum = _do_fexp(x)
     t0f = time.time() - t0f
 
-    # it should be faster
     assert t0f < t0, {'numpy': t0, 'fastexp': t0f}
+    assert np.allclose(slow_sum, fast_sum, rtol=4.0e-5)
