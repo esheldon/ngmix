@@ -18,8 +18,8 @@ def test_fastexp_smoke(x):
 @pytest.mark.parametrize('x', vals)
 @flaky
 def test_fastexp_timing(x):
-    # call a few tims for numba overhead
-    for _ in range(2):
+    # call a few times for numba overhead
+    for _ in range(20):
         fexp(x)
 
     t0 = time.time()
