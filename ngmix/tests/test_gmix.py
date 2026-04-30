@@ -687,23 +687,26 @@ def test_higher_order_nan():
         assert np.isnan(res[key])
 
 
-@pytest.mark.parametrize('model', ['gauss', 'turb', 'coellip5'])
+@pytest.mark.parametrize('model', ['gauss', 'turb', 'coellip5', 'offset5'])
 def test_gmix_scale_T(model):
     from ngmix.guessers import _moffat5_fguess, _moffat5_pguess
 
+    rng = np.random.RandomState(5)
+
     flux = 1.5
-    Torig = ngmix.moments.fwhm_to_T(0.93)
     scale = 0.9
 
-    if model == 'coellip5':
+    Tstart = ngmix.moments.fwhm_to_T(0.93)
+
+    if model in ['coellip5', 'offset5']:
         npars = ngmix.gmix.get_coellip_npars(5)
         pars = np.zeros(npars)
 
-        pars[4] = Torig * _moffat5_fguess[0]
-        pars[5] = Torig * _moffat5_fguess[1]
-        pars[6] = Torig * _moffat5_fguess[2]
-        pars[7] = Torig * _moffat5_fguess[3]
-        pars[8] = Torig * _moffat5_fguess[4]
+        pars[4] = Tstart * _moffat5_fguess[0]
+        pars[5] = Tstart * _moffat5_fguess[1]
+        pars[6] = Tstart * _moffat5_fguess[2]
+        pars[7] = Tstart * _moffat5_fguess[3]
+        pars[8] = Tstart * _moffat5_fguess[4]
 
         pars[9] = flux * _moffat5_pguess[0]
         pars[10] = flux * _moffat5_pguess[1]
@@ -713,7 +716,16 @@ def test_gmix_scale_T(model):
 
         gm = ngmix.GMixCoellip(pars)
 
+        if model == 'offset5':
+            gmdata = gm.get_data()
+            gmdata['row'] += rng.uniform(low=-0.1, high=0.1, size=5)
+            gmdata['col'] += rng.uniform(low=-0.1, high=0.1, size=5)
+
+        Torig = gm.get_T()
+
     else:
+        Torig = Tstart
+
         gm = ngmix.GMixModel(
             pars=[0.1, -0.05, 0.03, 0.01, Torig, flux],
             model=model,
