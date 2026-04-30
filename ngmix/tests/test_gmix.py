@@ -731,4 +731,4 @@ def test_gmix_set_T(model):
     assert np.allclose(Tcalc, Tnew)
 
     with pytest.raises(ValueError):
-        gm.set_T(-0.0001)
+        gm.set_T(0.0)

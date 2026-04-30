@@ -210,8 +210,8 @@ class GMix(object):
             The new T value for the gaussian mixture
         """
 
-        if T <= 0.0:
-            raise ValueError(f'Requested T {T} <= 0.0')
+        if T == 0.0:
+            raise ValueError(f'Requested T {T} == 0.0')
 
         Torig = self.get_T()
 
