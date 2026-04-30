@@ -200,6 +200,32 @@ class GMix(object):
 
         return T
 
+    def set_T(self, T):
+        """
+        Set the overal T for the gmix
+
+        Parameters
+        ----------
+        T: float
+            The new T value for the gaussian mixture
+        """
+
+        if T <= 0.0:
+            raise ValueError(f'Requested T {T} <= 0.0')
+
+        Torig = self.get_T()
+
+        gm = self.get_data()
+
+        factor = T / Torig
+
+        gm['irr'] *= factor
+        gm['irc'] *= factor
+        gm['icc'] *= factor
+
+        # we will need to reset the pnorm values
+        gm["norm_set"] = 0
+
     def get_sigma(self):
         """
         get sigma=sqrt(T/2)

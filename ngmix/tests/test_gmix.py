@@ -685,3 +685,50 @@ def test_higher_order_nan():
         if key in ['M00', 'MF']:
             continue
         assert np.isnan(res[key])
+
+
+@pytest.mark.parametrize('model', ['gauss', 'turb', 'coellip5'])
+def test_gmix_set_T(model):
+    from ngmix.guessers import _moffat5_fguess, _moffat5_pguess
+
+    flux = 1.5
+    Torig = ngmix.moments.fwhm_to_T(0.93)
+    Tnew = ngmix.moments.fwhm_to_T(0.8)
+
+    if model == 'coellip5':
+        npars = ngmix.gmix.get_coellip_npars(5)
+        pars = np.zeros(npars)
+
+        pars[4] = Torig * _moffat5_fguess[0]
+        pars[5] = Torig * _moffat5_fguess[1]
+        pars[6] = Torig * _moffat5_fguess[2]
+        pars[7] = Torig * _moffat5_fguess[3]
+        pars[8] = Torig * _moffat5_fguess[4]
+
+        pars[9] = flux * _moffat5_pguess[0]
+        pars[10] = flux * _moffat5_pguess[1]
+        pars[11] = flux * _moffat5_pguess[2]
+        pars[12] = flux * _moffat5_pguess[3]
+        pars[13] = flux * _moffat5_pguess[4]
+
+        gm = ngmix.GMixCoellip(pars)
+
+    else:
+        gm = ngmix.GMixModel(
+            pars=[0.1, -0.05, 0.03, 0.01, Torig, flux],
+            model=model,
+        )
+
+    Tcalc_orig = gm.get_T()
+    assert np.allclose(Tcalc_orig, Torig)
+
+    gm.set_T(Tnew)
+
+    # make sure we reset the state to norms not set
+    assert gm.get_data()['norm_set'][0] == 0
+
+    Tcalc = gm.get_T()
+    assert np.allclose(Tcalc, Tnew)
+
+    with pytest.raises(ValueError):
+        gm.set_T(-0.0001)
