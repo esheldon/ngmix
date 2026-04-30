@@ -688,12 +688,12 @@ def test_higher_order_nan():
 
 
 @pytest.mark.parametrize('model', ['gauss', 'turb', 'coellip5'])
-def test_gmix_set_T(model):
+def test_gmix_scale_T(model):
     from ngmix.guessers import _moffat5_fguess, _moffat5_pguess
 
     flux = 1.5
     Torig = ngmix.moments.fwhm_to_T(0.93)
-    Tnew = ngmix.moments.fwhm_to_T(0.8)
+    scale = 0.9
 
     if model == 'coellip5':
         npars = ngmix.gmix.get_coellip_npars(5)
@@ -722,13 +722,13 @@ def test_gmix_set_T(model):
     Tcalc_orig = gm.get_T()
     assert np.allclose(Tcalc_orig, Torig)
 
-    gm.set_T(Tnew)
+    gm.scale_T(scale)
 
     # make sure we reset the state to norms not set
     assert gm.get_data()['norm_set'][0] == 0
 
     Tcalc = gm.get_T()
-    assert np.allclose(Tcalc, Tnew)
+    assert np.allclose(Tcalc, Torig * scale)
 
     with pytest.raises(ValueError):
-        gm.set_T(0.0)
+        gm.scale_T(-1.0)

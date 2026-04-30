@@ -200,28 +200,24 @@ class GMix(object):
 
         return T
 
-    def set_T(self, T):
+    def scale_T(self, scale):
         """
-        Set the overal T for the gmix
+        Scale the overall T for the Gaussian Mixture
 
         Parameters
         ----------
-        T: float
-            The new T value for the gaussian mixture
+        scale: float
+            Value to scale the T for the mixture.
         """
 
-        if T == 0.0:
-            raise ValueError(f'Requested T {T} == 0.0')
-
-        Torig = self.get_T()
+        if scale < 0.0:
+            raise ValueError(f'Requested scale {scale} < 0')
 
         gm = self.get_data()
 
-        factor = T / Torig
-
-        gm['irr'] *= factor
-        gm['irc'] *= factor
-        gm['icc'] *= factor
+        gm['irr'] *= scale
+        gm['irc'] *= scale
+        gm['icc'] *= scale
 
         # we will need to reset the pnorm values
         gm["norm_set"] = 0

@@ -2,7 +2,7 @@
 
 ### New features
 
-    - Added method set_T() to gausian mixtures.
+    - Added method scale_T() to gausian mixtures.
 
 ### Bug Fixes
 
@@ -15,7 +15,7 @@
     - Added unit test of em sky fitting
     - Fix fastexp speed test
     - Fix bug in unit test where meds writing failed
-    - Added unit test of gmix set_T()
+    - Added unit test of gmix scale_T()
 
 ## v2.4.0
 
