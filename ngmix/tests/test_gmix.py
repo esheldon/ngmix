@@ -722,6 +722,7 @@ def test_gmix_scale_T(model):
             gmdata['col'] += rng.uniform(low=-0.1, high=0.1, size=5)
 
         Torig = gm.get_T()
+        assert Torig != Tstart
 
     else:
         Torig = Tstart
