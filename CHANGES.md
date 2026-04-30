@@ -1,5 +1,9 @@
 ## v2.4.1 (not yet released)
 
+### New features
+
+    - Added method scale_T() to gausian mixtures.
+
 ### Bug Fixes
 
     - em prep_obs now does a full copy of the Observation
@@ -11,6 +15,7 @@
     - Added unit test of em sky fitting
     - Fix fastexp speed test
     - Fix bug in unit test where meds writing failed
+    - Added unit test of gmix scale_T()
 
 ## v2.4.0
 

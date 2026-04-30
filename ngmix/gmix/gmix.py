@@ -200,6 +200,39 @@ class GMix(object):
 
         return T
 
+    def scale_T(self, scale):
+        """
+        Scale the overall T for the Gaussian Mixture
+
+        Parameters
+        ----------
+        scale: float
+            Value to scale the T for the mixture.
+        """
+
+        if scale < 0.0:
+            raise ValueError(f'Requested scale {scale} < 0')
+
+        gm = self.get_data().copy()
+
+        row0, col0 = self.get_cen()
+        gm['row'] -= row0
+        gm['col'] -= col0
+
+        gm['row'] *= np.sqrt(scale)
+        gm['col'] *= np.sqrt(scale)
+        gm['irr'] *= scale
+        gm['irc'] *= scale
+        gm['icc'] *= scale
+
+        gm['row'] += row0
+        gm['col'] += col0
+
+        # we will need to reset the pnorm values
+        gm["norm_set"] = 0
+
+        self._data = gm
+
     def get_sigma(self):
         """
         get sigma=sqrt(T/2)
