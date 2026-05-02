@@ -143,15 +143,11 @@ class MetacalDilatePSF(object):
             for t in types:
                 assert t in METACAL_TYPES, 'bad metacal type: %s' % t
 
-        # we add 1p here if we want noshear since we get both of those
-        # at once below
-
-        if 'noshear' in types and '1p' not in types:
-            types.append('1p')
-
         shdict = {}
 
         # galshear keys
+        shdict['noshear'] = Shape(0.0, 0.0)
+
         shdict['1m'] = Shape(-step, 0.0)
         shdict['1p'] = Shape(+step, 0.0)
 
@@ -167,16 +163,21 @@ class MetacalDilatePSF(object):
         odict = {}
 
         for type in types:
-            if type == 'noshear':
-                # we get noshear with 1p
-                continue
-
             sh = shdict[type]
+
+            if (type == 'noshear') and (
+                len([type for type in types if 'psf' not in type]) == 1
+            ):
+                # only need noshear
+                _newpsf_image, _newpsf_obj = self.get_target_psf(sh, 'gal_shear')
+                _unsheared_image = self.get_target_image(_newpsf_obj, shear=None)
+                obs = self._make_obs(_unsheared_image, _newpsf_image)
+                obs.psf.galsim_obj = _newpsf_obj
 
             if 'psf' in type:
                 obs = self.get_obs_psfshear(sh)
             else:
-                if type == '1p':
+                if ("noshear" in types) and ("noshear" not in odict.keys()):
                     # add in noshear from this one
                     obs, obs_noshear = self.get_obs_galshear(
                         sh,
