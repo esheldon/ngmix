@@ -2,6 +2,7 @@
 
 ### New features
 
+    - Allow fwhm as size for Moffat galsim fitter
     - Added method scale_T() to gausian mixtures.
 
 ### Bug Fixes
@@ -9,6 +10,9 @@
     - em prep_obs now does a full copy of the Observation
     - Deal with possible zero division in get_weighted_sums
     - Fix location of np.linalg.LinAlgError
+    - Galsim fitters get_band_pars did not conform to the
+      Fitter interface.  The first parameters has been
+      ranamed to pars (from pars_in).
 
 ### Unit Tests
 

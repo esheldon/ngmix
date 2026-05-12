@@ -99,16 +99,24 @@ class GalsimMoffatFitter(GalsimFitter):
     prior: ngmix prior, optional
         For example ngmix.priors.PriorSimpleSep can
         be used as a separable prior on center, g, size, flux.
+    size_type: string
+        How pars[4] should be interpreted.  Default is 'r50' but
+        also valid is 'fwhm', 'half_light_radius' and 'hlr'.
+
+        The default of r50 was a mistake, but is kept for backward
+        compatibility.
     fit_pars: dict, optional
         parameters for the lm fitter, e.g. maxfev, ftol, xtol
     """
 
-    def __init__(self, prior=None, fit_pars=None):
+    def __init__(self, prior=None, size_type='r50', fit_pars=None):
+        self.size_type = size_type
         super().__init__(model="moffat", prior=prior, fit_pars=fit_pars)
 
     def _make_fit_model(self, obs, guess):
         return GalsimMoffatFitModel(
             obs=obs, guess=guess, prior=self.prior,
+            size_type=self.size_type,
         )
 
 
