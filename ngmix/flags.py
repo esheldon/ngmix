@@ -87,11 +87,12 @@ def get_flags_str(val, name_map=None):
     val = np.array(val, dtype=np.uint32)
 
     nstrs = []
+    fval = 1
     for pow in range(31):
-        fval = 2**pow
         if ((val & fval) != 0):
             if fval in name_map:
                 nstrs.append(name_map[fval])
             else:
                 nstrs.append("bit 2**%d" % pow)
+        fval *= 2
     return "|".join(nstrs)
