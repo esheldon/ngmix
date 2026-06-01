@@ -93,7 +93,7 @@ def get_flags_str(val, name_map=None):
         # The bitwise & operation with this mask sets all bits 32 and higher
         # to zero. Thus the resulting int will fit into a unit32 numpy type.
         val = val & 0xFFFFFFFF
-    val = np.asarray(val, dtype=np.uint32)[0]
+    val = np.asarray([val], dtype=np.uint32)[0]
 
     nstrs = []
     fval = 1
