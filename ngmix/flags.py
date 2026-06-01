@@ -85,15 +85,7 @@ def get_flags_str(val, name_map=None):
     # Cast to uint32 is sufficient given the range of flags.
     # This is because the second argument to the bitwise AND operator (&) below
     # would get implicitly cast to the same type as `val`.
-    if isinstance(val, int):
-        # Python 3.9 doesn't like to compute bitwise & with uint64 types,
-        # so we only do this for python ints where it is needed.
-        # The value 0xFFFFFFFF is an int with bits 0 to 31 (inclusive)
-        # set to 1 and the rest set to 0.
-        # The bitwise & operation with this mask sets all bits 32 and higher
-        # to zero. Thus the resulting int will fit into a unit32 numpy type.
-        val = val & 0xFFFFFFFF
-    val = np.asarray(val, dtype=np.uint32)
+    val = np.asarray(val).astype(np.uint32)
 
     nstrs = []
     fval = 1
