@@ -63,7 +63,8 @@ def get_flags_str(val, name_map=None):
     Parameters
     ----------
     val : int
-        The flag value. This must be non-negative.
+        The flag value. This must be non-negative. Only the first 32 bits
+        (0 to 31) are considered. Any bits beyond this are ignored.
     name_map : dict, optional
         A dictionary mapping values to names. Default is global at
         ngmix.flags.NAME_MAP.
