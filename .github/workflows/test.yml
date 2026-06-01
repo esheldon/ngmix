@@ -49,6 +49,10 @@ jobs:
             pytest-xdist \
             flaky
 
+          if [[ "${{ matrix.pyver }}" == "3.9" ]]; then
+            conda install numpy=1
+          fi
+
           python -m pip install -e .
 
       - name: lint
