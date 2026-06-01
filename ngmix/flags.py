@@ -84,6 +84,8 @@ def get_flags_str(val, name_map=None):
     # Cast to uint32 is sufficient given the range of flags.
     # This is because the second argument to the bitwise AND operator (&) below
     # would get implicitly cast to the same type as `val`.
+    if val >= 2**32:
+        val = val & 0xFFFFFFFF
     val = np.uint32(val)
 
     nstrs = []
