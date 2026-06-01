@@ -84,7 +84,7 @@ def get_flags_str(val, name_map=None):
     # Cast to uint32 is sufficient given the range of flags.
     # This is because the second argument to the bitwise AND operator (&) below
     # would get implicitly cast to the same type as `val`.
-    val = np.array(val, dtype=np.uint32)
+    val = np.asarray([val], dtype=np.uint32)[0]
 
     nstrs = []
     fval = 1
