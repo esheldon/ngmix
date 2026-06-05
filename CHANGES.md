@@ -17,6 +17,10 @@
     - Fix bug in unit test where meds writing failed
     - Added unit test of gmix scale_T()
 
+### Performance
+
+    - Avoid slowdown in get_flags_str due to type casting
+
 ## v2.4.0
 
 ### New features

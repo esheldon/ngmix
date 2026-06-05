@@ -63,7 +63,8 @@ def get_flags_str(val, name_map=None):
     Parameters
     ----------
     val : int
-        The flag value. This must be non-negative.
+        The flag value. This must be non-negative. Only the first 32 bits
+        (0 to 31) are considered. Any bits beyond this are ignored.
     name_map : dict, optional
         A dictionary mapping values to names. Default is global at
         ngmix.flags.NAME_MAP.
@@ -84,14 +85,23 @@ def get_flags_str(val, name_map=None):
     # Cast to uint32 is sufficient given the range of flags.
     # This is because the second argument to the bitwise AND operator (&) below
     # would get implicitly cast to the same type as `val`.
-    val = np.array(val, dtype=np.uint32)
+    if isinstance(val, int):
+        # Python 3.9 doesn't like to compute bitwise & with uint64 types,
+        # so we only do this for python ints where it is needed.
+        # The value 0xFFFFFFFF is an int with bits 0 to 31 (inclusive)
+        # set to 1 and the rest set to 0.
+        # The bitwise & operation with this mask sets all bits 32 and higher
+        # to zero. Thus the resulting int will fit into a unit32 numpy type.
+        val = val & 0xFFFFFFFF
+    val = np.asarray([val], dtype=np.uint32)[0]
 
     nstrs = []
+    fval = 1
     for pow in range(31):
-        fval = 2**pow
         if ((val & fval) != 0):
             if fval in name_map:
                 nstrs.append(name_map[fval])
             else:
                 nstrs.append("bit 2**%d" % pow)
+        fval *= 2
     return "|".join(nstrs)
