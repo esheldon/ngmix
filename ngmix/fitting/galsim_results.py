@@ -175,18 +175,18 @@ class GalsimFitModel(FitModel):
         else:
             raise NotImplementedError("can't fit '%s'" % self.model)
 
-    def get_band_pars(self, pars_in, band):
+    def get_band_pars(self, pars, band):
         """
         Get pars for the specified band
 
         input pars are [c1, c2, e1, e2, r50, flux1, flux2, ....]
         """
 
-        pars = self._band_pars
+        band_pars = self._band_pars
 
-        pars[0:5] = pars_in[0:5]
-        pars[5] = pars_in[5 + band]
-        return pars
+        band_pars[0:5] = pars[0:5]
+        band_pars[5] = pars[5 + band]
+        return band_pars
 
     def _set_totpix(self):
         """
@@ -403,18 +403,18 @@ class GalsimSpergelFitModel(GalsimFitModel):
 
         return gal
 
-    def get_band_pars(self, pars_in, band):
+    def get_band_pars(self, pars, band):
         """
         Get linear pars for the specified band
 
         input pars are [c1, c2, e1, e2, r50, nu, flux1, flux2, ....]
         """
 
-        pars = self._band_pars
+        band_pars = self._band_pars
 
-        pars[0:6] = pars_in[0:6]
-        pars[6] = pars_in[6 + band]
-        return pars
+        band_pars[0:6] = pars[0:6]
+        band_pars[6] = pars[6 + band]
+        return band_pars
 
     def _set_n_prior_pars(self):
         if self.prior is None:
@@ -435,12 +435,19 @@ class GalsimMoffatFitModel(GalsimFitModel):
         Observation, ObsList, or MultiBandObsList
     guess: array-like
         starting parameters for the lm fitter
+    size_type: string
+        How pars[4] should be interpreted.  Default is 'r50' but
+        also valid is 'fwhm', 'half_light_radius' and 'hlr'
+
+        The default of r50 was a mistake, but is kept for backward
+        compatibility.
     prior: ngmix prior, optional
         For example ngmix.priors.PriorSimpleSep can
         be used as a separable prior on center, g, size, flux.
     """
 
-    def __init__(self, obs, guess, prior=None):
+    def __init__(self, obs, guess, size_type='r50', prior=None):
+        self.size_type = size_type
         super().__init__(obs=obs, model='moffat', guess=guess, prior=prior)
 
     def _set_model_class(self):
@@ -454,30 +461,38 @@ class GalsimMoffatFitModel(GalsimFitModel):
         """
         import galsim
 
-        r50 = pars[4]
-        beta = pars[5]
-        flux = pars[6]
+        kw = {
+            'beta': pars[5],
+            'flux': pars[6],
+        }
+
+        if self.size_type in ['r50', 'half_light_radius', 'hlr']:
+            kw['half_light_radius'] = pars[4]
+        elif self.size_type == 'fwhm':
+            kw['fwhm'] = pars[4]
+        else:
+            raise ValueError(f'bad size_type {self.size_type}')
 
         # generic RuntimeError thrown
         try:
-            gal = galsim.Moffat(beta, half_light_radius=r50, flux=flux,)
+            gal = galsim.Moffat(**kw)
         except RuntimeError as err:
             raise GMixRangeError(str(err))
 
         return gal
 
-    def get_band_pars(self, pars_in, band):
+    def get_band_pars(self, pars, band):
         """
         Get linear pars for the specified band
 
         input pars are [c1, c2, e1, e2, r50, beta, flux1, flux2, ....]
         """
 
-        pars = self._band_pars
+        band_pars = self._band_pars
 
-        pars[0:6] = pars_in[0:6]
-        pars[6] = pars_in[6 + band]
-        return pars
+        band_pars[0:6] = pars[0:6]
+        band_pars[6] = pars[6 + band]
+        return band_pars
 
     def _set_prior(self, prior=None):
         self.prior = prior

@@ -271,7 +271,7 @@ def test_ml_fitting_galsim_moffat_smoke():
         jacobian=jac,
     )
 
-    fitter = ngmix.fitting.GalsimMoffatFitter()
+    fitter = ngmix.fitting.GalsimMoffatFitter(size_type='fwhm')
 
     guess = np.zeros(7)
 
@@ -279,7 +279,7 @@ def test_ml_fitting_galsim_moffat_smoke():
     guess[1] = rng.uniform(low=-0.1, high=0.1)
     guess[2] = rng.uniform(low=-0.1, high=0.1)
     guess[3] = rng.uniform(low=-0.1, high=0.1)
-    guess[4] = moff.half_light_radius * rng.uniform(low=0.9, high=1.1)
+    guess[4] = moff.fwhm * rng.uniform(low=0.9, high=1.1)
     guess[5] = rng.uniform(low=1.5, high=3)
     guess[6] = flux * rng.uniform(low=0.9, high=1.1)
 
