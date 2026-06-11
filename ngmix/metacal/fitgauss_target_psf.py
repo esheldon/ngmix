@@ -6,17 +6,33 @@ from .. import moments
 logger = logging.getLogger(__name__)
 
 
-def get_fitgauss_target_psf(psfobs, rng, psf_flux=None):
+def get_fitgauss_target_psf(psfobs, rng, flux=None):
     """
-    do the gaussian fit.
+    Determine a reconvolution kernel based on a Gaussian fit
 
-    try the following in order
+    The model is then made isotropic with size based on the
+    largest eigenvalue of the covariance matrix.
+
+    Try fitting the following in order
         - adaptive moments
         - maximim likelihood
         - see if there is already a gmix object
 
+    if the above all fail, raise BootPSFFailure
 
-    if the above all fail, rase BootPSFFailure
+    Parameters
+    ----------
+    psfobs: Observation
+        The psf image observation
+    rng: np.random.RandomState
+        The random number generator
+    flux: float, optional
+        Optional psf flux for final image.  If not sent,
+        it is determined by the sum of psfobs.image
+
+    Returns
+    -------
+    galsim.Gaussian
     """
     import galsim
 
@@ -79,12 +95,12 @@ def get_fitgauss_target_psf(psfobs, rng, psf_flux=None):
     T_dilated = T * dilation
     sigma = np.sqrt(T_dilated / 2.0)
 
-    if psf_flux is None:
-        psf_flux = psfobs.image.sum()
+    if flux is None:
+        flux = psfobs.image.sum()
 
     return galsim.Gaussian(
         sigma=sigma,
-        flux=psf_flux,
+        flux=flux,
     )
 
 
