@@ -178,4 +178,7 @@ def test_metacal_bootstrap_gaussmom_response(metacal_caching):
         Rvals[i] = (res1p['e'][0] - res1m['e'][0])/0.02
 
     Rmean = Rvals.mean()
-    assert abs(Rmean - 0.28159) < 1.0e-4
+    # note the expected value of R changed when the
+    # psf='gauss' method was updated (ESS 2026-06-10)
+    # assert abs(Rmean - 0.28159) < 1.0e-4
+    assert abs(Rmean - 0.27409) < 1.0e-4
