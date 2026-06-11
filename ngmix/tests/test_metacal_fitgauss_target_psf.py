@@ -1,13 +1,5 @@
 """
-Tests of metacal.gauss_target_psf.get_gauss_target_psf, the noise-robust
-derivation of the round gaussian target reconvolution psf used by
-psf='gauss'.
-
-The key property is stability against noise in the psf image: the
-threshold crossing is found on the azimuthally averaged k profile, so
-the derived kernel size is flat with psf image S/N.  The old pixelwise
-min derivation (_get_gauss_target_psf) is an extreme value statistic
-and the kernel grows rapidly as the S/N drops.
+Tests of metacal.fitgauss_target_psf.get_fitgauss_target_psf
 """
 import galsim
 import numpy as np
@@ -30,6 +22,7 @@ def _get_interpolated_image(im):
 
 def test_fitgauss_target_psf_gaussian_analytic():
     """
+    Test the fitting returns a matching gaussian in the zero noise, round case
     """
 
     rng = np.random.RandomState(8282)
@@ -61,11 +54,11 @@ def test_fitgauss_target_psf_gaussian_analytic():
 ])
 def test_fitgauss_target_psf_noise_stability(s2n, mean_tol, trial_tol):
     """
-    the derived kernel fwhm is flat with psf image S/N: the mean over
-    noise realizations stays within a few percent of the noiseless
-    value even at S/N = 100, with no knowledge of the noise level
+    Test that the derived kernel fwhm is flat with psf image S/N: the mean over
+    noise realizations stays within a few percent of the noiseless value even
+    at S/N = 100, with no knowledge of the noise level
     """
-    rng = np.random.RandomState(8312)
+    rng = np.random.RandomState(3232)
 
     psf_im = _get_moffat_psf_image()
 

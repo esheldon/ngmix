@@ -673,8 +673,8 @@ class MetacalFitGaussPSF(MetacalGaussPSF):
 
         self.gauss_psf = get_fitgauss_target_psf(
             psfobs=self.obs.psf,
+            flux=self.psf_flux,
             rng=self.rng,
-            psf_flux=self.psf_flux,
         )
 
 
