@@ -12,6 +12,7 @@ from ..gexceptions import GMixRangeError, BootPSFFailure
 from ..shape import Shape
 from .. import moments
 from .defaults import DEFAULT_STEP, METACAL_TYPES, METACAL_MINIMAL_TYPES
+from . gauss_target_psf import get_gauss_target_psf
 
 
 __all__ = [
@@ -577,7 +578,7 @@ class MetacalGaussPSF(MetacalDilatePSF):
 
         assert doshear is False, 'no shearing gauss psf'
 
-        gauss_psf = _get_gauss_target_psf(
+        gauss_psf = get_gauss_target_psf(
             self.psf_int,
             flux=self.psf_flux,
         )
@@ -845,6 +846,8 @@ def _check_shape(shape):
 
 def _get_gauss_target_psf(psf, flux):
     """
+    Deprecated, use metacal.gauss_target_psf.get_gauss_target_psf
+
     taken from galsim/tests/test_metacal.py
 
 
