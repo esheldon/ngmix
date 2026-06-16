@@ -1,5 +1,6 @@
 __all__ = ['get_all_metacal']
 
+import warnings
 import copy
 import numpy as np
 import logging
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 def get_all_metacal(
     obs,
-    psf='gauss',
+    psf=None,
     step=DEFAULT_STEP,
     fixnoise=True,
     rng=None,
@@ -34,8 +35,8 @@ def get_all_metacal(
     obs: Observation, ObsList, or MultiBandObsList
         The values in the dict correspond to these
     psf: string or galsim object, optional
-        PSF to use for metacal.  Default 'gauss', but note the default
-        will change to 'azgauss' in version 2.5
+        PSF to use for metacal.  Defaults to 'gauss', but note the default will
+        change to 'azgauss' in version 2.5
 
             'azgauss': Noise-robust round gaussian reconvolution kernel derived
                 from azimuthal average of PSF power.
@@ -82,6 +83,15 @@ def get_all_metacal(
             2m -> ( 0, -shear)
         simular for 1p_psf etc.
     """
+
+    if psf is None:
+        warnings.warn(
+            "The default reconvolution psf will change from "
+            "'gauss' to 'azgauss' in ngmix version 2.5",
+            FutureWarning,
+            stacklevel=2
+        )
+        psf = 'gauss'
 
     if fixnoise:
         odict = _get_all_metacal_fixnoise(
