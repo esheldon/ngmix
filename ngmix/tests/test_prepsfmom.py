@@ -461,7 +461,7 @@ def test_prepsfmom_mn_cov_psf(
         pytest.skip(
             "Skipping `test_prepsfmom_mn_cov_psf` to save time."
         )
-    
+
     rng = np.random.RandomState(seed=100)
 
     cen = (image_size - 1)/2
