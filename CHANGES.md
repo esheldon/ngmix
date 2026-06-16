@@ -4,6 +4,9 @@
 
     - Allow fwhm as size for Moffat galsim fitter
     - Added method scale_T() to gausian mixtures.
+    - Added new metacal psf reconvolution method 'azgauss',
+      which is a noise-robust version of the old 'gauss'
+      method.
 
 ### Bug Fixes
 
