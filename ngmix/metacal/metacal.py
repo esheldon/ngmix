@@ -4,6 +4,7 @@ code to create sheared images for use in metacalibration
 Originally based off reading through Eric Huffs code; it has departed
 significantly.
 """
+
 import copy
 import logging
 from functools import lru_cache
@@ -11,11 +12,15 @@ import numpy as np
 from ..gexceptions import GMixRangeError
 from ..shape import Shape
 from .defaults import DEFAULT_STEP, METACAL_TYPES, METACAL_MINIMAL_TYPES
-from . gauss_target_psf import get_gauss_target_psf
+from .azgauss_target_psf import get_azgauss_target_psf
 
 
 __all__ = [
-    'MetacalDilatePSF', 'MetacalGaussPSF', 'MetacalFitGaussPSF', 'MetacalAnalyticPSF',
+    'MetacalDilatePSF',
+    'MetacalAzGaussPSF',
+    'MetacalGaussPSF',
+    'MetacalFitGaussPSF',
+    'MetacalAnalyticPSF',
 ]
 
 logger = logging.getLogger(__name__)
@@ -48,6 +53,7 @@ def _galsim_stuff(img, wcs, xinterp):
 
 def _galsim_stuff_impl(img, wcs, xinterp):
     import galsim
+
     image = galsim.Image(img, wcs=wcs)
     image_int = galsim.InterpolatedImage(image, x_interpolant=xinterp)
     return image, image_int
@@ -56,6 +62,7 @@ def _galsim_stuff_impl(img, wcs, xinterp):
 @lru_cache(maxsize=128)
 def _cached_galsim_stuff(img, wcs_repr, xinterp):
     import galsim  # noqa
+
     return _galsim_stuff_impl(np.array(img), eval(wcs_repr), xinterp)
 
 
@@ -179,8 +186,7 @@ class MetacalDilatePSF(object):
                 if type == '1p':
                     # add in noshear from this one
                     obs, obs_noshear = self.get_obs_galshear(
-                        sh,
-                        get_unsheared=True
+                        sh, get_unsheared=True
                     )
                     odict['noshear'] = obs_noshear
                 else:
@@ -296,7 +302,11 @@ class MetacalDilatePSF(object):
         """
         import galsim
 
-        psf_grown_nopix = self._do_dilate(self.psf_int_nopix, shear, doshear=doshear)
+        psf_grown_nopix = self._do_dilate(
+            self.psf_int_nopix,
+            shear,
+            doshear=doshear,
+        )
 
         if doshear:
             psf_grown_nopix = psf_grown_nopix.shear(g1=shear.g1, g2=shear.g2)
@@ -413,8 +423,7 @@ class MetacalDilatePSF(object):
         psf_int_inv = galsim.Deconvolve(psf_int)
 
         # deconvolved galaxy image, psf+pixel removed
-        self.image_int_nopsf = galsim.Convolve(self.image_int,
-                                               psf_int_inv)
+        self.image_int_nopsf = galsim.Convolve(self.image_int, psf_int_inv)
 
         # interpolated psf deconvolved from pixel.  This is what
         # we dilate, shear, etc and reconvolve the image by
@@ -555,7 +564,7 @@ class MetacalAzGaussPSF(MetacalDilatePSF):
         pim = self.obs.psf.image
         self.psf_flux = pim.sum()
 
-        self.psf_noise = pim.max()/50000.0
+        self.psf_noise = pim.max() / 50000.0
 
         if self.rng is not None:
             self.psf_noise_image = self.rng.normal(
@@ -565,7 +574,7 @@ class MetacalAzGaussPSF(MetacalDilatePSF):
         else:
             self.psf_noise_image = None
 
-        self.psf_weight = pim * 0 + 1.0/self.psf_noise**2
+        self.psf_weight = pim * 0 + 1.0 / self.psf_noise**2
 
     def _get_dilated_psf(self, shear, doshear=False):
         """
@@ -577,7 +586,7 @@ class MetacalAzGaussPSF(MetacalDilatePSF):
 
         assert doshear is False, 'no shearing gauss psf'
 
-        gauss_psf = get_gauss_target_psf(
+        gauss_psf = get_azgauss_target_psf(
             self.psf_int,
             flux=self.psf_flux,
         )
@@ -598,7 +607,7 @@ class MetacalAzGaussPSF(MetacalDilatePSF):
 
             # Reset the center on the jacobian.
             # We drew the model psf as the exact center
-            cen = (np.array(psf_im.shape) - 1.0)/2.0
+            cen = (np.array(psf_im.shape) - 1.0) / 2.0
             new_psf_obs.jacobian.set_cen(row=cen[0], col=cen[1])
 
         return new_psf_obs
@@ -691,6 +700,7 @@ class MetacalFitGaussPSF(MetacalGaussPSF):
     # you can also get an unsheared, just convolved obs
     R_obs1m, R_obs1m_unsheared = mc.get_obs_galshear(sh1p, get_unsheared=True)
     """
+
     def __init__(self, obs, rng=None):
         super().__init__(obs=obs, rng=rng)
         if rng is None:
@@ -767,8 +777,10 @@ class MetacalAnalyticPSF(MetacalGaussPSF):
     # you can also get an unsheared, just convolved obs
     R_obs1m, R_obs1m_unsheared = mc.get_obs_galshear(sh1p, get_unsheared=True)
     """
+
     def __init__(self, obs, psf, rng=None):
         import galsim
+
         super().__init__(obs=obs, rng=rng)
 
         assert isinstance(psf, galsim.GSObject)
@@ -801,7 +813,7 @@ def _do_dilate(obj, shear):
         The shape to use for dilation
     """
     g = np.sqrt(shear.g1**2 + shear.g2**2)
-    dilation = 1.0 + 2.0*g
+    dilation = 1.0 + 2.0 * g
     return obj.dilate(dilation)
 
 
@@ -824,22 +836,24 @@ def _get_gauss_target_psf(psf, flux):
     """
     import galsim
 
-    dk = psf.stepk/4.0
+    dk = psf.stepk / 4.0
 
-    small_kval = 1.e-2    # Find the k where the given psf hits this kvalue
-    smaller_kval = 3.e-3  # Target PSF will have this kvalue at the same k
+    small_kval = 1.0e-2  # Find the k where the given psf hits this kvalue
+    smaller_kval = 3.0e-3  # Target PSF will have this kvalue at the same k
 
     kim = psf.drawKImage(scale=dk)
     karr_r = kim.real.array
     # Find the smallest r where the kval < small_kval
     nk = karr_r.shape[0]
-    kx, ky = np.meshgrid(np.arange(-nk/2, nk/2), np.arange(-nk/2, nk/2))
+    kx, ky = np.meshgrid(
+        np.arange(-nk / 2, nk / 2), np.arange(-nk / 2, nk / 2)
+    )
     ksq = (kx**2 + ky**2) * dk**2
     ksq_max = np.min(ksq[karr_r < small_kval * psf.flux])
 
     # We take our target PSF to be the (round) Gaussian that is even smaller at
     # this ksq
     # exp(-0.5 * ksq_max * sigma_sq) = smaller_kval
-    sigma_sq = -2. * np.log(smaller_kval) / ksq_max
+    sigma_sq = -2.0 * np.log(smaller_kval) / ksq_max
 
     return galsim.Gaussian(sigma=np.sqrt(sigma_sq), flux=flux)
