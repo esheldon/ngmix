@@ -1,7 +1,7 @@
 """
-Tests of metacal.gauss_target_psf.get_gauss_target_psf, the noise-robust
+Tests of metacal.azgauss_target_psf.get_azgauss_target_psf, the noise-robust
 derivation of the round gaussian target reconvolution psf used by
-psf='gauss'.
+psf='azgauss'.
 
 The key property is stability against noise in the psf image: the
 threshold crossing is found on the azimuthally averaged k profile, so
@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 from ngmix.metacal import get_azgauss_target_psf
-from ngmix.metacal.gauss_target_psf import SMALL_KVAL, SMALLER_KVAL
+from ngmix.metacal.azgauss_target_psf import SMALL_KVAL, SMALLER_KVAL
 from ngmix.metacal.metacal import _get_gauss_target_psf
 
 SCALE = 0.2
