@@ -31,7 +31,7 @@ SMALL_KVAL = 3.0e-2    # find the k where the given psf hits this kvalue
 SMALLER_KVAL = 9.0e-3  # target PSF will have this kvalue at the same k
 
 
-def get_gauss_target_psf(
+def get_azgauss_target_psf(
     psf,
     flux,
     small_kval=SMALL_KVAL,

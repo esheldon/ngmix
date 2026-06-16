@@ -13,7 +13,7 @@ import galsim
 import numpy as np
 import pytest
 
-from ngmix.metacal import get_gauss_target_psf
+from ngmix.metacal import get_azgauss_target_psf
 from ngmix.metacal.gauss_target_psf import SMALL_KVAL, SMALLER_KVAL
 from ngmix.metacal.metacal import _get_gauss_target_psf
 
@@ -38,7 +38,7 @@ def test_gauss_target_psf_gaussian_analytic():
     psf = galsim.Gaussian(fwhm=0.9)
     im = psf.drawImage(nx=48, ny=48, scale=SCALE).array
 
-    gauss = get_gauss_target_psf(_get_interpolated_image(im), flux=1.0)
+    gauss = get_azgauss_target_psf(_get_interpolated_image(im), flux=1.0)
 
     expected_sigma = psf.sigma * np.sqrt(
         np.log(SMALLER_KVAL) / np.log(SMALL_KVAL)
@@ -61,7 +61,7 @@ def test_gauss_target_psf_noise_stability(s2n, mean_tol, trial_tol):
     rng = np.random.RandomState(8312)
 
     psf_im = _get_moffat_psf_image()
-    ref_fwhm = get_gauss_target_psf(
+    ref_fwhm = get_azgauss_target_psf(
         _get_interpolated_image(psf_im), flux=1.0,
     ).fwhm
 
@@ -71,7 +71,7 @@ def test_gauss_target_psf_noise_stability(s2n, mean_tol, trial_tol):
     fwhms = np.zeros(ntrial)
     for i in range(ntrial):
         noisy_im = psf_im + rng.normal(scale=noise_sigma, size=psf_im.shape)
-        fwhms[i] = get_gauss_target_psf(
+        fwhms[i] = get_azgauss_target_psf(
             _get_interpolated_image(noisy_im), flux=1.0,
         ).fwhm
 
@@ -90,7 +90,7 @@ def test_gauss_target_psf_beats_pixelwise_min():
 
     psf_im = _get_moffat_psf_image()
     ii = _get_interpolated_image(psf_im)
-    ref_new = get_gauss_target_psf(ii, flux=1.0).fwhm
+    ref_new = get_azgauss_target_psf(ii, flux=1.0).fwhm
     ref_old = _get_gauss_target_psf(ii, flux=1.0).fwhm
 
     noise_sigma = np.sqrt((psf_im**2).sum()) / 100
@@ -101,7 +101,7 @@ def test_gauss_target_psf_beats_pixelwise_min():
     for i in range(ntrial):
         noisy_im = psf_im + rng.normal(scale=noise_sigma, size=psf_im.shape)
         ii = _get_interpolated_image(noisy_im)
-        fwhms_new[i] = get_gauss_target_psf(ii, flux=1.0).fwhm
+        fwhms_new[i] = get_azgauss_target_psf(ii, flux=1.0).fwhm
         fwhms_old[i] = _get_gauss_target_psf(ii, flux=1.0).fwhm
 
     fracdev_new = fwhms_new.mean() / ref_new - 1

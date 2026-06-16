@@ -479,7 +479,7 @@ class MetacalDilatePSF(object):
         return newobs
 
 
-class MetacalGaussPSF(MetacalDilatePSF):
+class MetacalAzGaussPSF(MetacalDilatePSF):
     """
     Create manipulated images for use in metacalibration.  The reconvolution
     kernel is a gaussian generated based on the input psf
@@ -496,7 +496,7 @@ class MetacalGaussPSF(MetacalDilatePSF):
     examples
     --------
 
-    mc = MetacalGaussPFF(obs)
+    mc = MetacalAzGaussPFF(obs)
 
     # observations used to calculate R
 
@@ -602,6 +602,59 @@ class MetacalGaussPSF(MetacalDilatePSF):
             new_psf_obs.jacobian.set_cen(row=cen[0], col=cen[1])
 
         return new_psf_obs
+
+
+class MetacalGaussPSF(MetacalAzGaussPSF):
+    """
+    Create manipulated images for use in metacalibration.  The reconvolution
+    kernel is a gaussian generated based on the input psf
+
+    Parameters
+    ----------
+    obs: ngmix.Observation
+        The observation must have a psf observation set, holding
+        the psf image
+    rng: numpy.random.RandomState, optional
+        Optional random number generator for adding a small amount of noise to
+        the gaussian psf image
+
+    examples
+    --------
+
+    mc = MetacalGaussPFF(obs)
+
+    # observations used to calculate R
+
+    sh1m=ngmix.Shape(-0.01,  0.00 )
+    sh1p=ngmix.Shape( 0.01,  0.00 )
+    sh2m=ngmix.Shape( 0.00, -0.01 )
+    sh2p=ngmix.Shape( 0.00,  0.01 )
+
+    R_obs1m = mc.get_obs_galshear(sh1m)
+    R_obs1p = mc.get_obs_galshear(sh1p)
+    R_obs2m = mc.get_obs_galshear(sh2m)
+    R_obs2p = mc.get_obs_galshear(sh2p)
+
+    # you can also get an unsheared, just convolved obs
+    R_obs1m, R_obs1m_unsheared = mc.get_obs_galshear(sh1p, get_unsheared=True)
+    """
+
+    def _get_dilated_psf(self, shear, doshear=False):
+        """
+        dilate the psf by the input shear and reconvolve by the pixel.  See
+        _do_dilate for the algorithm
+
+        """
+        # import galsim
+
+        assert doshear is False, 'no shearing gauss psf'
+
+        gauss_psf = _get_gauss_target_psf(
+            self.psf_int,
+            flux=self.psf_flux,
+        )
+        psf_grown = _do_dilate(gauss_psf, shear)
+        return psf_grown
 
 
 class MetacalFitGaussPSF(MetacalGaussPSF):

@@ -161,6 +161,7 @@ def test_metacal_bootstrap_gaussmom_response(metacal_caching):
         runner=runner, psf_runner=psf_runner,
         rng=rng,
         types=['1p', '1m'],
+        psf='gauss',
     )
 
     Rvals = np.zeros(ntrial)
@@ -175,10 +176,47 @@ def test_metacal_bootstrap_gaussmom_response(metacal_caching):
         res1p = resdict['1p']
         res1m = resdict['1m']
 
-        Rvals[i] = (res1p['e'][0] - res1m['e'][0])/0.02
+        Rvals[i] = (res1p['e'][0] - res1m['e'][0]) / 0.02
 
     Rmean = Rvals.mean()
-    # note the expected value of R changed when the
-    # psf='gauss' method was updated (ESS 2026-06-10)
-    # assert abs(Rmean - 0.28159) < 1.0e-4
+    assert abs(Rmean - 0.28159) < 1.0e-4
+
+
+def test_metacal_bootstrap_gaussmom_response_azgauss(metacal_caching):
+    """
+    test a metacal bootstrapper with gaussian moments
+    """
+
+    rng = np.random.RandomState(2830)
+    ntrial = 50
+
+    fwhm = 1.2
+    fitter = GaussMom(fwhm=fwhm)
+    psf_fitter = GaussMom(fwhm=fwhm)
+
+    psf_runner = PSFRunner(fitter=psf_fitter)
+    runner = Runner(fitter=fitter)
+
+    boot = MetacalBootstrapper(
+        runner=runner, psf_runner=psf_runner,
+        rng=rng,
+        types=['1p', '1m'],
+        psf='azgauss',
+    )
+
+    Rvals = np.zeros(ntrial)
+    for i in range(ntrial):
+        obs = _get_obs(
+            rng=rng,
+            set_noise_image=False,
+        )
+
+        resdict, obsdict = boot.go(obs)
+
+        res1p = resdict['1p']
+        res1m = resdict['1m']
+
+        Rvals[i] = (res1p['e'][0] - res1m['e'][0]) / 0.02
+
+    Rmean = Rvals.mean()
     assert abs(Rmean - 0.27409) < 1.0e-4
