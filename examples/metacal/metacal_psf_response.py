@@ -3,7 +3,7 @@ Metacalibration (https://arxiv.org/abs/1702.02600, https://arxiv.org/abs/1702.02
 
 In this example we perform basic metacalibration with no object detection or
 object selections, same as metacal.py, but with GalsimFitter and PSF response
-correction implemented.
+correction implemented. The PSF used for this example is the SuperBIT optical design.
 
 We use a bootstrapper to run measurements on the object, with GalsimFitter
 (exponential model) for galaxy fitting and adaptive moments for PSF shape
@@ -24,30 +24,46 @@ m and c are estimated from a weighted linear fit over 5 input shear values:
     shear_rec = (1 + m) * shear_true + c
 
 Expected output (low noise, no blending, ntrial=1000, psf='dilate'):
-    S/N: 50976.7
-    R11: 0.999596
-    R11_psf: 2.65024e-05
-    m: 0.000421002 +/- 0.000118555 (99.7% conf)
-    c: 1.21787e-07 +/- 1.66119e-06 (99.7% conf)
+    S/N: 73510.3
+    R11: 0.999571
+    R11_psf: 3.32287e-06
+    m: 0.000384931 +/- 0.00038159 (99.7% conf)
+    c: 6.24475e-07 +/- 7.63179e-06 (99.7% conf)
 """
-
 import numpy as np
 import ngmix
 import galsim
-from scipy.optimize import curve_fit
 
-lm_pars = {'maxfev':2000, 'xtol':5.0e-5, 'ftol':5.0e-5}
+# SuperBIT optical design (fixed instrument parameters)
+_SBIT_LAM_NM      = 475      # observing wavelength [nm]
+_SBIT_TEL_DIAM_M  = 0.5      # telescope diameter [m]
+_SBIT_OBSCURATION = 0.380    # central obscuration (fraction of diameter)
+_SBIT_NSTRUTS     = 4
+_SBIT_STRUT_THICK = 0.087
+_SBIT_JITTER_FWHM = 0.467    # pointing-jitter FWHM [arcsec]
+
+# Zernike aberrations in the Noll convention (index 0 ignored; index 1 = piston,
+# which has no effect on the PSF image; first shape-changing term is [4]=defocus).
+_SBIT_ABERRATIONS = np.zeros(38)
+_SBIT_ABERRATIONS[4]  = -0.02474205   # defocus
+_SBIT_ABERRATIONS[11] = -0.01544329   # primary spherical
+_SBIT_ABERRATIONS[22] =  0.00199235   # secondary spherical
+_SBIT_ABERRATIONS[26] =  0.00000017
+_SBIT_ABERRATIONS[37] =  0.00000004
+
 
 def main():
     args = get_args()
-    shear_true_vals = [-0.02, -0.01, 0.0, 0.01, 0.02]
-    step = 0.02  # metacal shear step
+    shear_true_vals = [-0.02, 0.02]
+    step = 0.02 
+    
+    psf = bit_psf(psf_g1=-0.02, psf_g2=-0.02)
 
     rng = np.random.RandomState(args.seed)
 
-    prior   = get_prior(rng=rng, scale=0.263)
+    prior   = get_prior(rng=rng, scale=0.141)
     guesser = ngmix.guessers.TFluxAndPriorGuesser(rng=rng, T=0.2, flux=1.0, prior=prior)
-    fitter  = ngmix.fitting.GalsimFitter(model='exp', prior=prior, fit_pars=lm_pars)
+    fitter  = ngmix.fitting.GalsimFitter(model='exp', prior=prior)
     runner  = ngmix.runners.Runner(fitter=fitter, guesser=guesser, ntry=20)
 
     boot = ngmix.metacal.MetacalBootstrapper(
@@ -64,7 +80,7 @@ def main():
         dlist, g_psf = [], []
 
         for i in progress(args.ntrial, miniters=10):
-            obs = make_data(rng=rng, noise=args.noise, shear=[shear_val, 0.0])
+            obs = make_data(rng=rng, noise=args.noise, shear=[shear_val, 0.0], psf=psf)
             resdict, obsdict = boot.go(obs)
 
             for stype, sres in resdict.items():
@@ -101,22 +117,18 @@ def main():
         shear_rec.append(shear[0])
         shear_rec_err.append(shear_err[0])
 
-    # weighted linear fit: shear_rec = (1+m)*shear_true + c
-    shear_true_arr = np.array(shear_true_vals)
-    shear_rec_arr  = np.array(shear_rec)
-    shear_rec_err_arr = np.array(shear_rec_err)
-    
-    def linear(g_true, slope, intercept):
-        return slope * g_true + intercept
-    
-    (slope, intercept), cov = curve_fit(
-    linear, shear_true_arr, shear_rec_arr, sigma=shear_rec_err_arr, absolute_sigma=True
-    )
-    
-    m    = slope - 1
-    c    = intercept
-    merr = np.sqrt(cov[0, 0])
-    cerr = np.sqrt(cov[1, 1])
+    x  = np.array(shear_true_vals)        # [-0.02, +0.02]
+    y  = np.array(shear_rec)
+    ye = np.array(shear_rec_err)
+
+    dx = x[1] - x[0]                       # = 0.04
+
+    slope = (y[1] - y[0]) / dx
+    c     = (y[1] + y[0]) / 2              # intercept = mean, since x is symmetric about 0
+    m     = slope - 1
+
+    merr = np.sqrt(ye[0]**2 + ye[1]**2) / dx
+    cerr = np.sqrt(ye[0]**2 + ye[1]**2) / 2
 
     s2n = data['s2n'][w].mean()
     print('S/N: %g'                     % s2n)
@@ -170,7 +182,6 @@ def make_struct(res, obs, shear_type):
         ('s2n', 'f8'),
         ('g', 'f8', 2),
         ('hlr', 'f8'),
-        ('Tpsf', 'f8'),
     ]
     data = np.zeros(1, dtype=dt)
     data['shear_type'] = shear_type
@@ -184,11 +195,6 @@ def make_struct(res, obs, shear_type):
         data['s2n'] = np.nan
         data['g'] = np.nan
         data['T'] = np.nan
-        data['Tpsf'] = np.nan
-
-        # we only have one epoch and band, so we can get the psf T from the
-        # observation rather than averaging over epochs/bands
-        data['Tpsf'] = obs.psf.meta['result']['T']
 
     return data
 
@@ -242,7 +248,34 @@ def get_admoms(obs, rng):
     e1, e2 = ngmix.shape.e1e2_to_g1g2(e1, e2)  
     return {"e1": e1, "e2": e2, "T": T, "flags": res["flags"]}  
 
-def make_data(rng, noise, shear):
+def bit_psf(psf_g1, psf_g2):
+    """
+    Build the SuperBIT PSF: optical model (with fixed aberrations) convolved
+    with Gaussian pointing jitter, then sheared by (psf_g1, psf_g2).
+
+    Parameters
+    ----------
+    psf_g1, psf_g2 : float
+        Applied PSF shear components.
+
+    Returns
+    -------
+    galsim.GSObject
+        The sheared PSF.
+    """
+    jitter = galsim.Gaussian(flux=1.0, fwhm=_SBIT_JITTER_FWHM)
+    optics = galsim.OpticalPSF(
+        lam=_SBIT_LAM_NM,
+        diam=_SBIT_TEL_DIAM_M,
+        obscuration=_SBIT_OBSCURATION,
+        nstruts=_SBIT_NSTRUTS,
+        strut_angle=90 * galsim.degrees,
+        strut_thick=_SBIT_STRUT_THICK,
+        aberrations=_SBIT_ABERRATIONS,
+    )
+    return galsim.Convolve([jitter, optics]).shear(g1=psf_g1, g2=psf_g2)
+
+def make_data(rng, noise, shear, psf):
     """
     simulate an exponential object with moffat psf
 
@@ -254,26 +287,18 @@ def make_data(rng, noise, shear):
         Noise for the image
     shear: (g1, g2)
         The shear in each component
+    psf: galsim.GSObject
+        The PSF to convolve with the galaxy
 
     Returns
     -------
     ngmix.Observation
     """
+    scale = 0.141
+    npix_psf = 128
 
-    psf_noise = 1.0e-6
-
-    scale = 0.263
-
-    psf_fwhm = 0.9
     gal_hlr = 0.5
     dy, dx = rng.uniform(low=-scale/2, high=scale/2, size=2)
-
-    psf = galsim.Moffat(
-        beta=2.5, fwhm=psf_fwhm,
-    ).shear(
-        g1=0.02,
-        g2=-0.01,
-    )
 
     obj0 = galsim.Exponential(
         half_light_radius=gal_hlr,
@@ -287,10 +312,9 @@ def make_data(rng, noise, shear):
 
     obj = galsim.Convolve(psf, obj0)
 
-    psf_im = psf.drawImage(scale=scale).array
+    psf_im = psf.drawImage(nx=npix_psf, ny=npix_psf, scale=scale).array
     im = obj.drawImage(scale=scale).array
 
-    psf_im += rng.normal(scale=psf_noise, size=psf_im.shape)
     im += rng.normal(scale=noise, size=im.shape)
 
     cen = (np.array(im.shape)-1.0)/2.0
@@ -304,11 +328,9 @@ def make_data(rng, noise, shear):
     )
 
     wt = im*0 + 1.0/noise**2
-    psf_wt = psf_im*0 + 1.0/psf_noise**2
 
     psf_obs = ngmix.Observation(
         psf_im,
-        weight=psf_wt,
         jacobian=psf_jacobian,
     )
 
@@ -348,7 +370,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=31415,
                         help='seed for rng')
-    parser.add_argument('--ntrial', type=int, default=1000,
+    parser.add_argument('--ntrial', type=int, default=100,
                         help='number of trials')
     parser.add_argument('--noise', type=float, default=1.0e-6,
                         help='noise for images')
