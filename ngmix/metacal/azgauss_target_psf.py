@@ -2,6 +2,12 @@
 Noise-robust derivation of the round gaussian target reconvolution PSF
 for metacal.
 
+The algorithm looks for a scale where the originl PSFs power drops below a
+certain threshold SMALL_KVAL relative to the maximum (default 3.0e-2).  It then
+"pins" the reconvolution kernel to have SMALLER_KVAL at that scale (by default,
+0.3 of SMALL_KVAL) which uniquely determines the FWHM of the round Gaussian
+kernel.
+
 Drop-in replacement for metacal._get_gauss_target_psf (originally from galsim
 tests/test_metacal.py).  That version finds the pinning scale with a pixelwise
 min over the k image; the min is an extreme value statistic over the noisy k
