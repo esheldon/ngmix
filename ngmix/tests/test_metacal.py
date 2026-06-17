@@ -6,7 +6,9 @@ import pytest
 from ._galsim_sims import _get_obs
 
 
-@pytest.mark.parametrize('psf', ['gauss', 'fitgauss', 'galsim_obj', 'dilate'])
+@pytest.mark.parametrize('psf', [
+    'azgauss', 'gauss', 'fitgauss', 'galsim_obj', 'dilate',
+])
 def test_metacal_smoke(psf, metacal_caching):
     rng = np.random.RandomState(seed=100)
 
@@ -42,7 +44,7 @@ def test_metacal_smoke(psf, metacal_caching):
         assert np.all(obs_dict['noshear'].image != obs_dict['2m_psf'].image)
 
 
-@pytest.mark.parametrize('psf', ['gauss', 'fitgauss', 'galsim_obj'])
+@pytest.mark.parametrize('psf', ['azgauss', 'gauss', 'fitgauss', 'galsim_obj'])
 @pytest.mark.parametrize('send_rng', [True, False])
 def test_metacal_send_rng(psf, send_rng, metacal_caching):
 
@@ -53,7 +55,9 @@ def test_metacal_send_rng(psf, send_rng, metacal_caching):
         psf = galsim.Gaussian(fwhm=0.9)
 
     kw = {
-        'psf': psf, 'fixnoise': False, 'types': ['noshear', '1p', '1m'],
+        'psf': psf,
+        'fixnoise': False,
+        'types': ['noshear', '1p', '1m'],
     }
     if send_rng:
         kw['rng'] = rng
@@ -76,7 +80,9 @@ def test_metacal_send_rng(psf, send_rng, metacal_caching):
             assert np.allclose(psf_image1, psf_image2)
 
 
-@pytest.mark.parametrize('psf', ['gauss', 'fitgauss', 'galsim_obj', 'dilate'])
+@pytest.mark.parametrize('psf', [
+    'azgauss', 'gauss', 'fitgauss', 'galsim_obj', 'dilate',
+])
 def test_metacal_types_smoke(psf, metacal_caching):
     rng = np.random.RandomState(seed=100)
 
@@ -88,7 +94,10 @@ def test_metacal_types_smoke(psf, metacal_caching):
     # shuld automatically add 1p
     types = ['noshear']
     obs_dict = ngmix.metacal.get_all_metacal(
-        obs, rng=rng, psf=psf, types=types,
+        obs,
+        rng=rng,
+        psf=psf,
+        types=types,
     )
 
     assert len(obs_dict) == len(types)
@@ -126,7 +135,9 @@ def test_metacal_fixnoise_smoke(otype, set_noise_image, metacal_caching):
         check_type = ngmix.Observation
 
     resdict = ngmix.metacal.get_all_metacal(
-        obs, rng=rng, use_noise_image=set_noise_image,
+        obs,
+        rng=rng,
+        use_noise_image=set_noise_image,
     )
     assert isinstance(resdict['noshear'], check_type)
 
@@ -145,8 +156,8 @@ def test_metacal_fixnoise(fixnoise, metacal_caching):
         assert mobs.psf.image.shape == obs.psf.image.shape
         assert np.all(mobs.psf.image != obs.psf.image)
         if fixnoise:
-            assert mobs.weight[0, 0] == obs.weight[0, 0]/2
-            assert mobs.pixels[0]['ierr'] == np.sqrt(obs.weight[0, 0]/2)
+            assert mobs.weight[0, 0] == obs.weight[0, 0] / 2
+            assert mobs.pixels[0]['ierr'] == np.sqrt(obs.weight[0, 0] / 2)
         else:
             assert mobs.weight[0, 0] == obs.weight[0, 0]
             assert mobs.pixels[0]['ierr'] == np.sqrt(obs.weight[0, 0])
@@ -167,8 +178,8 @@ def test_metacal_fixnoise_noise_image(metacal_caching):
         assert mobs.psf.image.shape == obs.psf.image.shape
         assert np.all(mobs.psf.image != obs.psf.image)
 
-        assert mobs.weight[0, 0] == obs.weight[0, 0]/2
-        assert mobs.pixels[0]['ierr'] == np.sqrt(obs.weight[0, 0]/2)
+        assert mobs.weight[0, 0] == obs.weight[0, 0] / 2
+        assert mobs.pixels[0]['ierr'] == np.sqrt(obs.weight[0, 0] / 2)
 
 
 def test_metacal_errors(metacal_caching):
@@ -203,7 +214,7 @@ def _do_test_low_psf_s2n():
             psf_im = obs.psf.image
             psf_wt = obs.psf.weight
             psf_im += rng.normal(scale=noise, size=psf_im.shape)
-            psf_wt[:, :] = 1.0/noise**2
+            psf_wt[:, :] = 1.0 / noise**2
 
         ngmix.metacal.get_all_metacal(obs=obs, rng=rng, psf='fitgauss')
 
@@ -211,3 +222,14 @@ def _do_test_low_psf_s2n():
 def test_low_psf_s2n(metacal_caching):
     with pytest.raises(ngmix.BootPSFFailure):
         _do_test_low_psf_s2n()
+
+
+# remove this after 2.5 is released
+def test_metacal_psf_default_warning():
+    rng = np.random.RandomState(seed=8282)
+
+    obs = _get_obs(rng, noise=0.005)
+
+    # this tests FutureWarning in addition to deprecated
+    with pytest.deprecated_call():
+        _ = ngmix.metacal.get_all_metacal(obs, rng=rng)

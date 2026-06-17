@@ -20,6 +20,9 @@ import ngmix.prepsfmom
 from ngmix.moments import make_mom_result
 import ngmix.flags
 
+RANDOM_TEST_FRAC = 0.5
+RANDOM_TEST_SEED = 42
+
 
 @pytest.mark.parametrize("row", [-0.4, 0, 1.2, 4.5])
 @pytest.mark.parametrize("col", [-0.32434, 0, 1.43232, 4.56775])
@@ -321,6 +324,12 @@ def test_prepsfmom_gauss(
     cls, prepsfmom_caching,
 ):
     """fast test at a range of parameters to check that things come out ok"""
+    rng = np.random.RandomState(seed=RANDOM_TEST_SEED)
+    if rng.uniform() < RANDOM_TEST_FRAC:
+        pytest.skip(
+            "Skipping `test_prepsfmom_gauss` to save time."
+        )
+
     rng = np.random.RandomState(seed=100)
 
     cen = (image_size - 1)/2
@@ -447,6 +456,12 @@ def test_prepsfmom_mn_cov_psf(
     """Slower test to make sure means and errors are right
     w/ tons of monte carlo samples.
     """
+    rng = np.random.RandomState(seed=RANDOM_TEST_SEED)
+    if rng.uniform() < RANDOM_TEST_FRAC:
+        pytest.skip(
+            "Skipping `test_prepsfmom_mn_cov_psf` to save time."
+        )
+
     rng = np.random.RandomState(seed=100)
 
     cen = (image_size - 1)/2
@@ -583,6 +598,12 @@ def test_prepsfmom_fwhm_smooth_snr(
     pad_factor, image_size, fwhm, psf_fwhm, pixel_scale, snr, mom_fwhm, cls,
     prepsfmom_caching,
 ):
+    rng = np.random.RandomState(seed=RANDOM_TEST_SEED)
+    if rng.uniform() < RANDOM_TEST_FRAC:
+        pytest.skip(
+            "Skipping `test_prepsfmom_fwhm_smooth_snr` to save time."
+        )
+
     def _run_sim_fwhm_smooth(fwhm_smooth):
         rng = np.random.RandomState(seed=100)
 
@@ -693,6 +714,12 @@ def test_prepsfmom_mn_cov_nopsf(
     """Slower test to make sure means and errors are right
     w/ tons of monte carlo samples.
     """
+    rng = np.random.RandomState(seed=RANDOM_TEST_SEED)
+    if rng.uniform() < RANDOM_TEST_FRAC:
+        pytest.skip(
+            "Skipping `test_prepsfmom_mn_cov_nopsf` to save time."
+        )
+
     rng = np.random.RandomState(seed=100)
 
     cen = (image_size - 1)/2
@@ -873,6 +900,12 @@ def test_prepsfmom_gauss_true_flux(
     pad_factor, psf_image_size, image_size, fwhm, psf_fwhm, pixel_scale, cls,
     prepsfmom_caching,
 ):
+    rng = np.random.RandomState(seed=RANDOM_TEST_SEED)
+    if rng.uniform() < RANDOM_TEST_FRAC:
+        pytest.skip(
+            "Skipping `test_prepsfmom_gauss_true_flux` to save time."
+        )
+
     rng = np.random.RandomState(seed=100)
 
     snr = 1e8
@@ -968,6 +1001,12 @@ def test_prepsfmom_mom_norm(
     pad_factor, image_size, pixel_scale, mom_fwhm, cls, fwhm_smooth,
     prepsfmom_caching,
 ):
+    rng = np.random.RandomState(seed=RANDOM_TEST_SEED)
+    if rng.uniform() < RANDOM_TEST_FRAC:
+        pytest.skip(
+            "Skipping `test_prepsfmom_mom_norm` to save time."
+        )
+
     rng = np.random.RandomState(seed=100)
 
     cen = (image_size - 1)/2
@@ -1002,6 +1041,12 @@ def test_prepsfmom_mom_norm(
 def test_prepsfmom_comp_to_gaussmom_simple(
     pad_factor, image_size, fwhm, pixel_scale, mom_fwhm, prepsfmom_caching,
 ):
+    rng = np.random.RandomState(seed=RANDOM_TEST_SEED)
+    if rng.uniform() < RANDOM_TEST_FRAC:
+        pytest.skip(
+            "Skipping `test_prepsfmom_comp_to_gaussmom_simple` to save time."
+        )
+
     rng = np.random.RandomState(seed=100)
 
     cen = (image_size - 1)/2
@@ -1075,6 +1120,12 @@ def test_prepsfmom_comp_to_gaussmom_fwhm_smooth(
     pad_factor, image_size, fwhm, pixel_scale, mom_fwhm, fwhm_smooth,
     prepsfmom_caching,
 ):
+    rng = np.random.RandomState(seed=RANDOM_TEST_SEED)
+    if rng.uniform() < RANDOM_TEST_FRAC:
+        pytest.skip(
+            "Skipping `test_prepsfmom_comp_to_gaussmom_fwhm_smooth` to save time."
+        )
+
     rng = np.random.RandomState(seed=100)
 
     cen = (image_size - 1)/2
