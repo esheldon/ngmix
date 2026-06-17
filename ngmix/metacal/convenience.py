@@ -1,5 +1,6 @@
 __all__ = ['get_all_metacal']
 
+import warnings
 import copy
 import numpy as np
 import logging
@@ -7,7 +8,11 @@ from .defaults import DEFAULT_STEP
 from .. import simobs
 from ..observation import Observation, ObsList, MultiBandObsList
 from .metacal import (
-    MetacalDilatePSF, MetacalGaussPSF, MetacalFitGaussPSF, MetacalAnalyticPSF,
+    MetacalDilatePSF,
+    MetacalAzGaussPSF,
+    MetacalGaussPSF,
+    MetacalFitGaussPSF,
+    MetacalAnalyticPSF,
 )
 
 logger = logging.getLogger(__name__)
@@ -15,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 def get_all_metacal(
     obs,
-    psf='gauss',
+    psf=None,
     step=DEFAULT_STEP,
     fixnoise=True,
     rng=None,
@@ -30,11 +35,13 @@ def get_all_metacal(
     obs: Observation, ObsList, or MultiBandObsList
         The values in the dict correspond to these
     psf: string or galsim object, optional
-        PSF to use for metacal.  Default 'gauss'.  Note 'fitgauss'
-        will usually produce a smaller psf, but it can fail.
+        PSF to use for metacal.  Defaults to 'gauss', but note the default will
+        change to 'azgauss' in version 2.5
 
-            'gauss': reconvolve gaussian that is larger than
-                the original and round.
+            'azgauss': Noise-robust round gaussian reconvolution kernel derived
+                from azimuthal average of PSF power.
+            'gauss': Same as 'azgauss' but using individual k pixels
+                to derive kernal.  Not noise robust, do not use.
             'fitgauss': fit a gaussian to the PSF and make
                 use round, dilated version for reconvolution
             galsim object: any arbitrary galsim object
@@ -77,6 +84,15 @@ def get_all_metacal(
         simular for 1p_psf etc.
     """
 
+    if psf is None:
+        warnings.warn(
+            "The default reconvolution psf will change from "
+            "'gauss' to 'azgauss' in ngmix version 2.5",
+            FutureWarning,
+            stacklevel=2
+        )
+        psf = 'gauss'
+
     if fixnoise:
         odict = _get_all_metacal_fixnoise(
             obs, step=step, rng=rng,
@@ -113,7 +129,9 @@ def _get_all_metacal(
             m = MetacalDilatePSF(obs)
         else:
 
-            if psf == 'gauss':
+            if psf == 'azgauss':
+                m = MetacalAzGaussPSF(obs=obs, rng=rng)
+            elif psf == 'gauss':
                 m = MetacalGaussPSF(obs=obs, rng=rng)
             elif psf == 'fitgauss':
                 m = MetacalFitGaussPSF(obs=obs, rng=rng)
@@ -285,13 +303,13 @@ def _doadd_single_obs(obs, nobs):
             (nobs.weight != 0.0)
         )
         if wpos[0].size > 0:
-            tvar = obs.weight*0
+            tvar = obs.weight * 0
             # add the variances
             tvar[wpos] = (
-                1.0/obs.weight[wpos] +
-                1.0/nobs.weight[wpos]
+                1.0 / obs.weight[wpos] +
+                1.0 / nobs.weight[wpos]
             )
-            obs.weight[wpos] = 1.0/tvar[wpos]
+            obs.weight[wpos] = 1.0 / tvar[wpos]
 
 
 def _replace_image_with_noise(obs):
