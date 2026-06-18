@@ -233,3 +233,26 @@ def test_metacal_psf_default_warning():
     # this tests FutureWarning in addition to deprecated
     with pytest.deprecated_call():
         _ = ngmix.metacal.get_all_metacal(obs, rng=rng)
+
+
+def test_metacal_noncontiguous():
+    rng = np.random.RandomState(seed=932)
+
+    tobs = _get_obs(rng, noise=0.005, n=48)
+
+    timage = np.zeros(tobs.image.shape, dtype='>f8')
+    timage[:, :] = tobs.image
+    tsub_image = tobs.image[10:48 - 10, 10:48 - 10]
+
+    obs = ngmix.Observation(
+        image=tsub_image,
+        jacobian=tobs.jacobian,
+        psf=tobs.psf,
+    )
+
+    from espy.ptpython_tools import embed
+    embed(globals(), locals())
+
+    _ = ngmix.metacal.get_all_metacal(
+        obs, rng=rng, psf='azgauss', fixnoise=False,
+    )

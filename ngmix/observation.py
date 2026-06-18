@@ -330,8 +330,12 @@ class Observation(MetadataMixin):
         else:
             image_old = None
 
-        # force f8 with native byte ordering, contiguous C layout
-        image = np.ascontiguousarray(image, dtype='f8')
+        # force f8 with native byte ordering for numba.  Only copies if not
+        # native f8.
+        #
+        # Note most codes work from the pixel array which converts to native,
+        # so this is a safety net for other codes (are there any?)
+        image = np.asarray(image, dtype='f8')
 
         assert len(image.shape) == 2, "image must be 2d"
 
@@ -361,8 +365,8 @@ class Observation(MetadataMixin):
 
         image = self.image
         if weight is not None:
-            # force f8 with native byte ordering, contiguous C layout
-            weight = np.ascontiguousarray(weight, dtype='f8')
+            # See note in set_image
+            weight = np.asarray(weight, dtype='f8')
             assert len(weight.shape) == 2, "weight must be 2d"
 
             mess = "image and weight must be same shape"
@@ -391,8 +395,8 @@ class Observation(MetadataMixin):
 
             image = self.image
 
-            # force contiguous C, but we don't know what dtype to expect
-            mfrac = np.ascontiguousarray(mfrac)
+            # See note in set_image
+            mfrac = np.asarray(mfrac)
             assert len(mfrac.shape) == 2, "mfrac must be 2d"
 
             assert (mfrac.shape == image.shape), \
@@ -425,8 +429,7 @@ class Observation(MetadataMixin):
 
             image = self.image
 
-            # force contiguous C, but we don't know what dtype to expect
-            bmask = np.ascontiguousarray(bmask)
+            bmask = np.asarray(bmask)
             assert len(bmask.shape) == 2, "bmask must be 2d"
 
             assert (bmask.shape == image.shape), \
@@ -459,8 +462,7 @@ class Observation(MetadataMixin):
 
             image = self.image
 
-            # force contiguous C, but we don't know what dtype to expect
-            ormask = np.ascontiguousarray(ormask)
+            ormask = np.asarray(ormask)
             assert len(ormask.shape) == 2, "ormask must be 2d"
 
             assert (ormask.shape == image.shape), (
@@ -494,8 +496,8 @@ class Observation(MetadataMixin):
 
             image = self.image
 
-            # force contiguous C, but we don't know what dtype to expect
-            noise = np.ascontiguousarray(noise)
+            # See note in set_image
+            noise = np.asarray(noise)
             assert len(noise.shape) == 2, "noise must be 2d"
 
             assert (noise.shape == image.shape), \
