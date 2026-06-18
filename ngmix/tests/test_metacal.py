@@ -250,9 +250,6 @@ def test_metacal_noncontiguous():
         psf=tobs.psf,
     )
 
-    from espy.ptpython_tools import embed
-    embed(globals(), locals())
-
     _ = ngmix.metacal.get_all_metacal(
         obs, rng=rng, psf='azgauss', fixnoise=False,
     )
