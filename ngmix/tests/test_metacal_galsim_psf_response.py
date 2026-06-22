@@ -206,6 +206,7 @@ def _make_data(rng, noise, shear, psf):
     """
 
     psf_npix = 128
+    npix = 128
     
     scale = 0.141
 
@@ -225,7 +226,7 @@ def _make_data(rng, noise, shear, psf):
     obj = galsim.Convolve(psf, obj0)
 
     psf_im = psf.drawImage(nx=psf_npix, ny=psf_npix, scale=scale).array
-    im = obj.drawImage(scale=scale).array
+    im = obj.drawImage(nx=npix, ny=npix, scale=scale).array
 
     im += rng.normal(scale=noise, size=im.shape)
 
