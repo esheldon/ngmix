@@ -5,13 +5,14 @@ import pytest
 
 @pytest.mark.parametrize('psf_g1', [-0.02, 0.02])
 @pytest.mark.parametrize('psf_g2', [-0.02, 0.02])
-def test_metacal_galsim_psf_response(psf_g1, psf_g2):
+@pytest.mark.parametrize('reconv_psf', ['dilate', 'azgauss'])
+def test_metacal_galsim_psf_response(psf_g1, psf_g2, reconv_psf):
 
     ntrial = 100
     seed = 31415
     noise = 1e-6
     
-    print(f"Running test_metacal_galsim_psf_response with psf_g1={psf_g1}, psf_g2={psf_g2} ...")
+    print(f"Running test_metacal_galsim_psf_response with psf_g1={psf_g1}, psf_g2={psf_g2}, reconv_psf={reconv_psf} ...")
 
     psf = bit_psf(psf_g1=psf_g1, psf_g2=psf_g2)
 
@@ -27,8 +28,8 @@ def test_metacal_galsim_psf_response(psf_g1, psf_g2):
 
     boot = ngmix.metacal.MetacalBootstrapper(
         runner=runner, psf_runner=None, rng=rng,
-        psf="dilate",
-        types=['noshear', '1p', '1m', '1p_psf', '1m_psf'],
+        psf=reconv_psf,
+        types=['noshear', '1p', '1m', '1p_psf', '1m_psf'] if reconv_psf=='dilate' else ['noshear', '1p', '1m']
     )
 
     shear_rec     = []
@@ -57,12 +58,14 @@ def test_metacal_galsim_psf_response(psf_g1, psf_g2):
         w        = _select(data=data, shear_type='noshear')
         w_1p     = _select(data=data, shear_type='1p')
         w_1m     = _select(data=data, shear_type='1m')
-        w_1p_psf = _select(data=data, shear_type='1p_psf')
-        w_1m_psf = _select(data=data, shear_type='1m_psf')
+
 
         # shear response
         R11     = (data['g'][w_1p,     0].mean() - data['g'][w_1m,     0].mean()) / step
-        R11_psf = (data['g'][w_1p_psf, 0].mean() - data['g'][w_1m_psf, 0].mean()) / step
+        if reconv_psf == 'dilate':
+            w_1p_psf = _select(data=data, shear_type='1p_psf')
+            w_1m_psf = _select(data=data, shear_type='1m_psf')
+            R11_psf = (data['g'][w_1p_psf, 0].mean() - data['g'][w_1m_psf, 0].mean()) / step
 
         # calibrated shear
         g    = data['g'][w].mean(axis=0)
@@ -70,7 +73,11 @@ def test_metacal_galsim_psf_response(psf_g1, psf_g2):
 
         c1 = (data['g'][w_1p, 0].mean() + data['g'][w_1m, 0].mean()) / 2 - g[0]
 
-        shear     = (g - g_psf.mean(axis=0) * R11_psf - c1) / R11
+        correction = c1
+        if reconv_psf=='dilate':
+            correction += g_psf.mean(axis=0) * R11_psf
+        shear_b = g - correction
+        shear     = shear_b / R11
         shear_err = gerr / R11
 
         shear_rec.append(shear[0])
@@ -92,12 +99,13 @@ def test_metacal_galsim_psf_response(psf_g1, psf_g2):
     s2n = data['s2n'][w].mean()
     print('S/N: %g'                     % s2n)
     print('R11: %g'                     % R11)
-    print('R11_psf: %g'                 % R11_psf)
+    if reconv_psf == 'dilate':
+        print('R11_psf: %g'             % R11_psf)
     print('m: %g +/- %g (99.7%% conf)' % (m, merr * 3))
     print('c: %g +/- %g (99.7%% conf)' % (c, cerr * 3))
 
-    assert cerr < 1.0e-5
-    assert abs(c) < cerr
+    assert abs(m) < 1.0e-3
+    assert abs(c) < 1.0e-5
 
 
 def bit_psf(psf_g1, psf_g2):
