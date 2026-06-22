@@ -16,6 +16,8 @@
     - Galsim fitters get_band_pars did not conform to the
       Fitter interface.  The first parameters has been
       ranamed to pars (from pars_in).
+    - Not really a bug, but now allow non-contiguous arrays
+      in Observations without a copy.
 
 ### Unit Tests
 
@@ -23,6 +25,7 @@
     - Fix fastexp speed test
     - Fix bug in unit test where meds writing failed
     - Added unit test of gmix scale_T()
+    - Added test of non-contiguous
 
 ### Performance
 
