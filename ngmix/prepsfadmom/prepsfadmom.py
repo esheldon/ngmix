@@ -27,25 +27,28 @@ resolved.
 __all__ = ['run_prepsf_admom', 'PrePSFAdmomFitter', 'PrePSFAdmomResult']
 
 import logging
+import functools
 
 import numpy as np
 import scipy.fft as fft
 
-from .observation import get_mb_obs, MultiBandObsList
-from .gmix import GMix, GMixModel
-from .gmix.gmix_nb import GMIX_LOW_DETVAL
-from .moments import fwhm_to_T, T_to_fwhm, e2mom
-from .shape import e1e2_to_g1g2
-from .util import get_ratio_error
-from .gexceptions import FFTRangeError
-from .fastexp_nb import FASTEXP_MAX_CHI2
-from .prepsfmom import (
-    _zero_pad_and_compute_fft_maybe_cached,
-    _compute_cen_phase_shift,
+from ..observation import get_mb_obs, MultiBandObsList
+from ..gmix import GMix, GMixModel
+from ..gmix.gmix_nb import GMIX_LOW_DETVAL
+from ..moments import fwhm_to_T, T_to_fwhm, e2mom
+from ..shape import e1e2_to_g1g2
+from ..util import get_ratio_error
+from ..gexceptions import FFTRangeError
+from ..fastexp_nb import FASTEXP_MAX_CHI2
+from .. import prepsfmom
+from ..prepsfmom import (
+    _zero_pad_image,
+    _build_square_apodization_mask,
     _deconvolve_im_psf_inplace,
     _check_obs_and_get_psf_obs,
     _pixel_fft,
 )
+from .prepsfadmom_nb import admom_ksums, admom_finalize
 import ngmix.flags
 
 logger = logging.getLogger(__name__)
@@ -54,6 +57,7 @@ DEFAULT_MAXITER = 200
 DEFAULT_SHIFTMAX = 5.0  # pixels for scale=1
 DEFAULT_ETOL = 1.0e-5
 DEFAULT_TTOL = 1.0e-3
+DEFAULT_CENTOL = 1.0e-4  # pixels for scale=1
 DEFAULT_SMOOTH_FAC = 1.05
 
 
@@ -67,6 +71,7 @@ def run_prepsf_admom(
     shiftmax=DEFAULT_SHIFTMAX,
     etol=DEFAULT_ETOL,
     Ttol=DEFAULT_TTOL,
+    cen_tol=DEFAULT_CENTOL,
     no_psf=False,
     rng=None,
 ):
@@ -107,6 +112,9 @@ def run_prepsf_admom(
         default 1.0e-5
     Ttol: float, optional
         relative tolerance in T to determine convergence, default 1.0e-3
+    cen_tol: float, optional
+        absolute tolerance in the center to determine convergence,
+        default 1.0e-4 (1.0e-4 pixels if the jacobian scale is 1)
     no_psf: bool, optional
         If True, allow inputs without a PSF observation; only the pixel
         window function is deconvolved.  fwhm_smooth= must be sent in
@@ -128,6 +136,7 @@ def run_prepsf_admom(
         shiftmax=shiftmax,
         etol=etol,
         Ttol=Ttol,
+        cen_tol=cen_tol,
         rng=rng,
     )
     return fitter.go(obs=obs, guess=guess, no_psf=no_psf)
@@ -229,6 +238,9 @@ class PrePSFAdmomFitter(object):
         default 1.0e-5
     Ttol: float, optional
         relative tolerance in T to determine convergence, default 1.0e-3
+    cen_tol: float, optional
+        absolute tolerance in the center to determine convergence,
+        default 1.0e-4 (1.0e-4 pixels if the jacobian scale is 1)
     rng: np.random.RandomState, optional
         Random state used to generate guesses from a T guess and for
         PSF fits when choosing the smoothing automatically.
@@ -258,6 +270,7 @@ class PrePSFAdmomFitter(object):
         shiftmax=DEFAULT_SHIFTMAX,
         etol=DEFAULT_ETOL,
         Ttol=DEFAULT_TTOL,
+        cen_tol=DEFAULT_CENTOL,
         rng=None,
     ):
 
@@ -269,6 +282,7 @@ class PrePSFAdmomFitter(object):
         self.shiftmax = shiftmax
         self.etol = etol
         self.Ttol = Ttol
+        self.cen_tol = cen_tol
         self.rng = rng
 
     def go(self, obs, guess=None, no_psf=False):
@@ -344,9 +358,6 @@ class PrePSFAdmomFitter(object):
         vorig = v0
         uorig = u0
 
-        for epoch in epochs:
-            self._rephase(epoch, v0, u0)
-
         flags = 0
         e1old = e2old = Told = np.nan
         numiter = 0
@@ -359,35 +370,31 @@ class PrePSFAdmomFitter(object):
                 flags = ngmix.flags.LOW_DET
                 break
 
-            # first pass: update the center
-            sums = self._accumulate(epochs, Sigma)
+            sums = self._accumulate(epochs, Sigma, v0, u0)
 
             if sums[5] <= 0:
                 flags = ngmix.flags.NONPOS_FLUX
                 break
 
-            v0 += sums[0] / sums[5]
-            u0 += sums[1] / sums[5]
+            # update the center, and refer the second moments to the
+            # updated center with the exact centroid correction
+            # <(x - d)_i (x - d)_j> = <x_i x_j> - d_i d_j.  The weight
+            # center lags by one iteration, which vanishes at the fixed
+            # point
+            finv = 1.0 / sums[5]
+            dv = sums[0] * finv
+            du = sums[1] * finv
+            v0 += dv
+            u0 += du
 
             if (abs(v0 - vorig) > self.shiftmax
                     or abs(u0 - uorig) > self.shiftmax):
                 flags = ngmix.flags.CEN_SHIFT
                 break
 
-            for epoch in epochs:
-                self._rephase(epoch, v0, u0)
-
-            # second pass: measure the moments about the new center
-            sums = self._accumulate(epochs, Sigma)
-
-            if sums[5] <= 0:
-                flags = ngmix.flags.NONPOS_FLUX
-                break
-
-            finv = 1.0 / sums[5]
-            M1 = sums[2] * finv
-            M2 = sums[3] * finv
-            T = sums[4] * finv
+            M1 = sums[2] * finv - (du * du - dv * dv)
+            M2 = sums[3] * finv - 2 * dv * du
+            T = sums[4] * finv - (dv * dv + du * du)
 
             if T <= 0:
                 flags = ngmix.flags.NONPOS_SIZE
@@ -396,9 +403,13 @@ class PrePSFAdmomFitter(object):
             e1 = M1 / T
             e2 = M2 / T
 
+            # the centroid correction decouples the center from the
+            # moments, so the center must be tested explicitly
             if (abs(e1 - e1old) < self.etol
                     and abs(e2 - e2old) < self.etol
-                    and abs(T / Told - 1) < self.Ttol):
+                    and abs(T / Told - 1) < self.Ttol
+                    and abs(dv) < self.cen_tol
+                    and abs(du) < self.cen_tol):
                 break
 
             M = np.array([
@@ -456,7 +467,9 @@ class PrePSFAdmomFitter(object):
         }
 
         if flags == 0:
-            sums, sums_cov = self._get_sums_and_cov(epochs, Sigma)
+            sums, sums_cov, fluxes, flux_vars = self._finalize(
+                epochs, nband, Sigma, v0, u0,
+            )
             res['sums'] = sums
             res['sums_cov'] = sums_cov
 
@@ -467,7 +480,6 @@ class PrePSFAdmomFitter(object):
 
             res['T'] = Tgal
 
-            fluxes, flux_vars = self._get_band_fluxes(epochs, nband, Sigma)
             res['flux'] = fluxes
             if np.all(flux_vars > 0):
                 res['flux_err'] = np.sqrt(flux_vars)
@@ -538,7 +550,7 @@ class PrePSFAdmomFitter(object):
 
         return res
 
-    def _accumulate(self, epochs, Sigma):
+    def _accumulate(self, epochs, Sigma, v0, u0):
         """
         accumulate the k-space moment sums over epochs
 
@@ -546,18 +558,26 @@ class PrePSFAdmomFitter(object):
         normalized to sky units
         """
         sums = np.zeros(6)
+        esums = np.zeros(6)
         for epoch in epochs:
-            fac = epoch['weight'] * epoch['detAtinv']
-            esums = _ksums(
-                epoch['kim'], epoch['kv'], epoch['ku'], Sigma,
-                epoch['df2'],
+            alpha, beta = _get_phase_angles(epoch, v0, u0)
+            admom_ksums(
+                epoch['kim'], epoch['iy'], epoch['ix'], epoch['dim'],
+                alpha, beta, epoch['kv'], epoch['ku'],
+                Sigma[0, 0], Sigma[0, 1], Sigma[1, 1], epoch['df2'],
+                esums,
             )
-            sums += fac * esums
+            sums += epoch['weight'] * epoch['detAtinv'] * esums
         return sums
 
-    def _get_band_fluxes(self, epochs, nband, Sigma):
+    def _finalize(self, epochs, nband, Sigma, v0, u0):
         """
-        get per-band fluxes and variances using the converged weight
+        get the final accumulated sums, their covariance, and the
+        per-band fluxes and variances, using the converged weight
+
+        The covariance follows the prepsfmom convention: each Fourier
+        mode is treated as independent with variance equal to the total
+        variance of the input image.
 
         The flux normalization: the raw flux sum corresponds to a
         weighted flux with an effective real-space kernel of peak value
@@ -568,95 +588,38 @@ class PrePSFAdmomFitter(object):
         """
         knrm = 2 * np.pi * np.sqrt(_det2(Sigma))
 
+        sums = np.zeros(6)
+        cov = np.zeros((6, 6))
+        esums = np.zeros(6)
+        ecov = np.zeros((6, 6))
+
         fsums = np.zeros(nband)
         fvars = np.zeros(nband)
         wsums = np.zeros(nband)
 
         for epoch in epochs:
+            alpha, beta = _get_phase_angles(epoch, v0, u0)
+            admom_finalize(
+                epoch['kim'], epoch['iy'], epoch['ix'], epoch['dim'],
+                alpha, beta, epoch['kv'], epoch['ku'],
+                Sigma[0, 0], Sigma[0, 1], Sigma[1, 1], epoch['df2'],
+                epoch['err_fac2'],
+                esums, ecov,
+            )
+            fac = epoch['weight'] * epoch['detAtinv']
+            nfac = epoch['tot_var'] * epoch['df2'] ** 2
+
+            sums += fac * esums
+            cov += fac ** 2 * nfac * ecov
+
             band = epoch['band']
-            w = epoch['weight']
-            det = epoch['detAtinv']
-
-            esums = _ksums(
-                epoch['kim'], epoch['kv'], epoch['ku'], Sigma,
-                epoch['df2'],
-            )
-            wk = _weight_kernel(epoch['kv'], epoch['ku'], Sigma)
-
-            # variance of the raw flux sum for this epoch
-            fvar = (
-                np.sum(wk * wk * epoch['err_fac2'])
-                * epoch['tot_var'] * epoch['df2'] ** 2
-            )
-
-            fsums[band] += w * det * esums[5]
-            fvars[band] += (w * det) ** 2 * fvar
-            wsums[band] += w
+            fsums[band] += fac * esums[5]
+            fvars[band] += fac ** 2 * nfac * ecov[5, 5]
+            wsums[band] += epoch['weight']
 
         fluxes = 2 * knrm * fsums / wsums
         flux_vars = (2 * knrm / wsums) ** 2 * fvars
-        return fluxes, flux_vars
-
-    def _get_sums_and_cov(self, epochs, Sigma):
-        """
-        get the final accumulated sums and their covariance
-
-        The covariance follows the prepsfmom convention: each Fourier
-        mode is treated as independent with variance equal to the total
-        variance of the input image.  The center sums come from the
-        imaginary part and are independent of the even sums.
-        """
-        sums = self._accumulate(epochs, Sigma)
-
-        cov = np.zeros((6, 6))
-        for epoch in epochs:
-            fac2 = (epoch['weight'] * epoch['detAtinv']) ** 2
-            nfac = epoch['tot_var'] * epoch['df2'] ** 2
-
-            kv = epoch['kv']
-            ku = epoch['ku']
-            wk = _weight_kernel(kv, ku, Sigma)
-
-            Sv = Sigma[0, 0] * kv + Sigma[0, 1] * ku
-            Su = Sigma[0, 1] * kv + Sigma[1, 1] * ku
-
-            kerns = [
-                Sv * wk,                                     # v
-                Su * wk,                                     # u
-                (Sv * Sv - Su * Su) * wk + (
-                    Sigma[1, 1] - Sigma[0, 0]) * wk,         # M1
-                2 * (Sigma[0, 1] - Sv * Su) * wk,            # M2
-                (Sigma[0, 0] + Sigma[1, 1]) * wk - (
-                    Sv * Sv + Su * Su) * wk,                 # T
-                wk,                                          # flux
-            ]
-            # the v, u sums come from the imaginary part and do not
-            # covary with the even sums
-            for i in range(6):
-                for j in range(i, 6):
-                    if (i < 2) != (j < 2):
-                        continue
-                    val = fac2 * nfac * np.sum(
-                        kerns[i] * kerns[j] * epoch['err_fac2']
-                    )
-                    cov[i, j] += val
-                    if i != j:
-                        cov[j, i] += val
-
-        return sums, cov
-
-    def _rephase(self, epoch, v0, u0):
-        """
-        phase shift the k-space image so the effective center is at
-        (v0, u0) relative to the jacobian center
-        """
-        if v0 == 0 and u0 == 0:
-            epoch['kim'] = epoch['kim0']
-        else:
-            phase = epoch['kv'] * v0 + epoch['ku'] * u0
-            epoch['kim'] = epoch['kim0'] * (
-                np.cos(phase) + 1j * np.sin(phase)
-            )
+        return sums, cov, fluxes, flux_vars
 
     def _prep_epoch(self, obs, band, Tsmooth, no_psf):
         """
@@ -677,88 +640,65 @@ class PrePSFAdmomFitter(object):
             target_dim = int(obs.image.shape[0] * self.pad_factor)
         eff_pad_factor = target_dim / obs.image.shape[0]
 
-        kim, im_row, im_col = _zero_pad_and_compute_fft_maybe_cached(
+        # the image is real, so we work with the rfft half plane;
+        # conjugate modes are folded in with the symmetry weights
+        kim, im_row, im_col = _zero_pad_and_compute_rfft(
             obs.image, obs.jacobian.row0, obs.jacobian.col0, target_dim,
             self.ap_rad,
         )
         dim = kim.shape[0]
 
         if psf_obs is not None:
-            kpsf, psf_row, psf_col = _zero_pad_and_compute_fft_maybe_cached(
+            kpsf, psf_row, psf_col = _zero_pad_and_compute_rfft(
                 psf_obs.image,
                 psf_obs.jacobian.row0, psf_obs.jacobian.col0,
                 target_dim,
                 0,  # we do not apodize PSF stamps
             )
         else:
-            kpsf = _pixel_fft(dim)
+            kpsf = _pixel_fft(dim)[:, :dim // 2 + 1]
             psf_row = 0.0
             psf_col = 0.0
 
         max_amp = np.abs(kpsf[0, 0])
 
-        # the k grids in sky coordinates
-        f = fft.fftfreq(dim) * (2.0 * np.pi)
-        fx = f.reshape(1, -1)
-        fy = f.reshape(-1, 1)
+        # the k grids, mode selection and smoothing profile are shared
+        # between fits with the same stamp geometry, so they are cached
         jac = obs.jacobian
-        Atinv = np.linalg.inv(
-            [[jac.dvdrow, jac.dvdcol], [jac.dudrow, jac.dudcol]]
-        ).T
-        kv = Atinv[0, 0] * fy + Atinv[0, 1] * fx
-        ku = Atinv[1, 0] * fy + Atinv[1, 1] * fx
-        detAtinv = np.abs(np.linalg.det(Atinv))
+        grids = _get_kspace_grids(
+            dim, jac.dvdrow, jac.dvdcol, jac.dudrow, jac.dudcol,
+            float(Tsmooth),
+        )
 
-        # smoothing profile; we only keep modes where it is significant
-        if Tsmooth > 0:
-            sigma2_sm = Tsmooth / 2
-            chi2_2 = 0.5 * sigma2_sm * (kv * kv + ku * ku)
-            msk = chi2_2 < FASTEXP_MAX_CHI2 / 2
-            smooth = np.exp(-chi2_2[msk])
-
-            # check that the smoothing kernel is contained in the FFT
-            # region; the converged weight is at least this large so
-            # this covers the worst case.  the tolerance is loose since
-            # small truncations only produce correspondingly small
-            # biases in the moments
-            nrm = np.sum(smooth) * detAtinv * 2 * np.pi * sigma2_sm / dim**2
-            if not np.allclose(nrm, 1.0, atol=1e-3, rtol=0):
-                raise FFTRangeError(
-                    'FFT size appears too small for smoothing fwhm %g: '
-                    'norm = %f (should be 1)' % (T_to_fwhm(Tsmooth), nrm)
-                )
-        else:
-            msk = np.ones(kim.shape, dtype=bool)
-            smooth = 1.0
-
-        kv = kv[msk]
-        ku = ku[msk]
-        kim = kim[msk]
-        kpsf = kpsf[msk]
+        # extract the masked modes
+        kim = kim[grids['iy'], grids['ix']]
+        kpsf = kpsf[grids['iy'], grids['ix']]
 
         kim, kpsf, _ = _deconvolve_im_psf_inplace(kim, kpsf, max_amp)
 
-        # phase shift so the effective center is the image jacobian
-        # center; the psf centering phase cancels in the deconvolution
-        # except for this difference
-        drow = im_row - psf_row
-        dcol = im_col - psf_col
-        if drow != 0 or dcol != 0:
-            kim *= _compute_cen_phase_shift(drow, dcol, dim, msk=msk)
-
-        kim *= smooth
-
-        # factor for noise propagation: the effective kernels act on the
-        # raw image fft, so include the smoothing and deconvolution
-        err_fac2 = (smooth / np.abs(kpsf)) ** 2
+        # fold holds the smoothing profile times the conjugate symmetry
+        # weights; fold2 has the squared smoothing for the noise, where
+        # the symmetry weight enters once
+        kim *= grids['fold']
+        # factor for noise propagation: the effective kernels act on
+        # the raw image fft, so include the smoothing and deconvolution
+        err_fac2 = grids['fold2'] / np.abs(kpsf) ** 2
 
         return {
             'band': band,
-            'kim0': kim,
             'kim': kim,
-            'kv': kv,
-            'ku': ku,
-            'detAtinv': detAtinv,
+            'iy': grids['iy'],
+            'ix': grids['ix'],
+            'dim': dim,
+            'kv': grids['kv'],
+            'ku': grids['ku'],
+            'Atinv': grids['Atinv'],
+            # the phase shift putting the effective center at the image
+            # jacobian center; the psf centering phase cancels in the
+            # deconvolution except for this difference
+            'drow': im_row - psf_row,
+            'dcol': im_col - psf_col,
+            'detAtinv': grids['detAtinv'],
             'df2': 1.0 / dim ** 2,
             'tot_var': tot_var * eff_pad_factor ** 2,
             'err_fac2': err_fac2,
@@ -777,7 +717,7 @@ class PrePSFAdmomFitter(object):
                 'send fwhm_smooth= (0 to disable) when no_psf=True'
             )
 
-        from .admom import run_admom
+        from ..admom import run_admom
 
         Tmax = 0.0
         for obslist in mb_obs:
@@ -835,52 +775,140 @@ class PrePSFAdmomFitter(object):
         return self.rng
 
 
-def _ksums(kim, kv, ku, Sigma, df2):
+def _get_phase_angles(epoch, v0, u0):
     """
-    weighted real-space moment sums evaluated in k-space
+    get the centering phase angles per unit row/col frequency
 
-    kim must already be phase shifted to the current center.  Returns
-    [v, u, M1, M2, T, flux] sums, all sharing the same normalization.
+    The base phase (drow, dcol) centers the fft at the image jacobian
+    center; the (v0, u0) sky offsets are converted to pixel offsets
+    with the jacobian.  The phase for a mode is then
+    exp(i (f1d[iy] alpha + f1d[ix] beta)) which is applied inside the
+    numba kernels using two 1d phasor arrays.
     """
-    Sv = Sigma[0, 0] * kv + Sigma[0, 1] * ku
-    Su = Sigma[0, 1] * kv + Sigma[1, 1] * ku
-    chi2 = kv * Sv + ku * Su
-    wk = np.exp(-0.5 * chi2)
-
-    re = kim.real
-    im = kim.imag
-
-    wre = wk * re
-    wim = wk * im
-
-    sums = np.zeros(6)
-    # first moments about the current center come from the imaginary
-    # part; multiplication by x_i in real space is i d/dk_i in k-space
-    sums[0] = -np.sum(Sv * wim)
-    sums[1] = -np.sum(Su * wim)
-
-    # second moments: -d^2 W/dk_i dk_j = (Sigma_ij - (Sigma k)_i
-    # (Sigma k)_j) W
-    vv = Sigma[0, 0] * np.sum(wre) - np.sum(Sv * Sv * wre)
-    vu = Sigma[0, 1] * np.sum(wre) - np.sum(Sv * Su * wre)
-    uu = Sigma[1, 1] * np.sum(wre) - np.sum(Su * Su * wre)
-
-    sums[2] = uu - vv
-    sums[3] = 2 * vu
-    sums[4] = uu + vv
-    sums[5] = np.sum(wre)
-
-    sums *= df2
-    return sums
+    A = epoch['Atinv']
+    alpha = epoch['drow'] + A[0, 0] * v0 + A[1, 0] * u0
+    beta = epoch['dcol'] + A[0, 1] * v0 + A[1, 1] * u0
+    return alpha, beta
 
 
-def _weight_kernel(kv, ku, Sigma):
+@functools.lru_cache(maxsize=16)
+def _get_kspace_grids(dim, dvdrow, dvdcol, dudrow, dudcol, Tsmooth):
     """
-    the gaussian weight evaluated on the k grid
+    get the k grids in sky coordinates over the rfft half plane, the
+    selection of modes where the smoothing kernel is significant, and
+    the smoothing profile folded with the conjugate symmetry weights.
+    These only depend on the stamp geometry and smoothing, so they are
+    cached and shared between fits; the returned arrays are marked
+    read-only.
     """
-    Sv = Sigma[0, 0] * kv + Sigma[0, 1] * ku
-    Su = Sigma[0, 1] * kv + Sigma[1, 1] * ku
-    return np.exp(-0.5 * (kv * Sv + ku * Su))
+    half = dim // 2 + 1
+    f1d = fft.fftfreq(dim) * (2.0 * np.pi)
+    fx = f1d[:half].reshape(1, -1)
+    fy = f1d.reshape(-1, 1)
+    Atinv = np.linalg.inv(
+        [[dvdrow, dvdcol], [dudrow, dudcol]]
+    ).T
+    kv = Atinv[0, 0] * fy + Atinv[0, 1] * fx
+    ku = Atinv[1, 0] * fy + Atinv[1, 1] * fx
+    detAtinv = np.abs(np.linalg.det(Atinv))
+
+    kmag2 = kv * kv + ku * ku
+
+    # we only keep modes where the smoothing kernel is significant
+    if Tsmooth > 0:
+        chi2_2 = 0.25 * Tsmooth * kmag2
+        msk = chi2_2 < FASTEXP_MAX_CHI2 / 2
+    else:
+        msk = np.ones((dim, half), dtype=bool)
+
+    iy, ix = np.where(msk)
+
+    kmag2 = kmag2[msk]
+    kv = kv[msk]
+    ku = ku[msk]
+
+    # conjugate symmetry weights: modes with 0 < kx < nyquist appear
+    # twice in the full plane
+    wsym = np.ones(ix.size)
+    if dim % 2 == 0:
+        wsym[(ix > 0) & (ix < dim // 2)] = 2.0
+    else:
+        wsym[ix > 0] = 2.0
+
+    if Tsmooth > 0:
+        smooth = np.exp(-0.25 * Tsmooth * kmag2)
+
+        # check that the smoothing kernel is contained in the FFT
+        # region; the converged weight is at least this large so this
+        # covers the worst case.  the tolerance is loose since small
+        # truncations only produce correspondingly small biases in the
+        # moments
+        nrm = np.sum(wsym * smooth) * detAtinv * np.pi * Tsmooth / dim**2
+        if not np.allclose(nrm, 1.0, atol=1e-3, rtol=0):
+            raise FFTRangeError(
+                'FFT size appears too small for smoothing fwhm %g: '
+                'norm = %f (should be 1)' % (T_to_fwhm(Tsmooth), nrm)
+            )
+
+        fold = wsym * smooth
+        fold2 = wsym * smooth * smooth
+    else:
+        fold = wsym
+        fold2 = wsym
+
+    grids = {
+        'kv': kv,
+        'ku': ku,
+        'iy': iy,
+        'ix': ix,
+        'fold': fold,
+        'fold2': fold2,
+        'Atinv': Atinv,
+        'detAtinv': detAtinv,
+    }
+    for key in ['kv', 'ku', 'iy', 'ix', 'fold', 'fold2', 'Atinv']:
+        grids[key].flags.writeable = False
+    return grids
+
+
+def _zero_pad_and_compute_rfft_impl(im, cen_row, cen_col, target_dim, ap_rad):
+    """
+    zero pad and compute the real fft, returning the fft and the center
+    location in the padded image
+    """
+    if ap_rad > 0:
+        ap_mask = np.ones_like(im)
+        _build_square_apodization_mask(ap_rad, ap_mask)
+        im = im * ap_mask
+
+    pim, pad_width_before, _ = _zero_pad_image(im, target_dim)
+    pad_cen_row = cen_row + pad_width_before
+    pad_cen_col = cen_col + pad_width_before
+    kpim = fft.rfftn(pim)
+    return kpim, pad_cen_row, pad_cen_col
+
+
+@functools.lru_cache(maxsize=128)
+def _zero_pad_and_compute_rfft_cached(
+    im_tuple, cen_row, cen_col, target_dim, ap_rad
+):
+    return _zero_pad_and_compute_rfft_impl(
+        np.array(im_tuple), cen_row, cen_col, target_dim, ap_rad
+    )
+
+
+@functools.wraps(_zero_pad_and_compute_rfft_impl)
+def _zero_pad_and_compute_rfft(im, cen_row, cen_col, target_dim, ap_rad):
+    # respect the fft caching switch in prepsfmom
+    if prepsfmom.USE_FFT_CACHE:
+        return _zero_pad_and_compute_rfft_cached(
+            tuple(tuple(ii) for ii in im),
+            float(cen_row), float(cen_col), int(target_dim), float(ap_rad),
+        )
+    else:
+        return _zero_pad_and_compute_rfft_impl(
+            im, cen_row, cen_col, target_dim, ap_rad,
+        )
 
 
 def _det2(M):
