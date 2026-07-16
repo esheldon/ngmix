@@ -2,6 +2,13 @@
 
 ### New features
 
+    - Added ngmix.prepsfadmom with PrePSFAdmomFitter/run_prepsf_admom,
+      adaptive moments measured in Fourier space.  The PSF is
+      deconvolved and a common round gaussian smoothing is applied for
+      stability, so the fit measures pre-PSF moments.  Supports joint
+      fitting over multiple epochs and bands with a common center and
+      covariance, measuring fluxes per band with a common pre-seeing
+      aperture, so colors are independent of the per-band PSFs.
     - Allow fwhm as size for Moffat galsim fitter
     - Added method scale_T() to gausian mixtures.
     - Added new metacal psf reconvolution method 'azgauss',
