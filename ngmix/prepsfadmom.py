@@ -248,16 +248,18 @@ class PrePSFAdmomFitter(object):
 
     kind = 'pam'
 
-    def __init__(self,
-                 fwhm_smooth=None,
-                 smooth_fac=DEFAULT_SMOOTH_FAC,
-                 pad_factor=4,
-                 ap_rad=1.5,
-                 maxiter=DEFAULT_MAXITER,
-                 shiftmax=DEFAULT_SHIFTMAX,
-                 etol=DEFAULT_ETOL,
-                 Ttol=DEFAULT_TTOL,
-                 rng=None):
+    def __init__(
+        self,
+        fwhm_smooth=None,
+        smooth_fac=DEFAULT_SMOOTH_FAC,
+        pad_factor=4,
+        ap_rad=1.5,
+        maxiter=DEFAULT_MAXITER,
+        shiftmax=DEFAULT_SHIFTMAX,
+        etol=DEFAULT_ETOL,
+        Ttol=DEFAULT_TTOL,
+        rng=None,
+    ):
 
         self.fwhm_smooth = fwhm_smooth
         self.smooth_fac = smooth_fac

@@ -18,7 +18,9 @@ GSPARAMS = galsim.GSParams(
 
 
 def _gauss_cov(e1, e2, T):
-    """covariance matrix [[Ivv, Ivu], [Ivu, Iuu]] with e1 = <uu-vv>/T"""
+    """
+    covariance matrix [[Ivv, Ivu], [Ivu, Iuu]] with e1 = <uu-vv>/T
+    """
     return 0.5 * np.array([
         [T * (1 - e1), T * e2],
         [T * e2, T * (1 + e1)],
@@ -26,7 +28,9 @@ def _gauss_cov(e1, e2, T):
 
 
 def _cov_to_gauss(Sigma, flux):
-    """galsim gaussian with the given covariance matrix"""
+    """
+    galsim gaussian with the given covariance matrix
+    """
     T = Sigma[0, 0] + Sigma[1, 1]
     e1 = (Sigma[1, 1] - Sigma[0, 0]) / T
     e2 = 2 * Sigma[0, 1] / T
