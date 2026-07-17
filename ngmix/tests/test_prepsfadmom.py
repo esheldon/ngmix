@@ -407,12 +407,52 @@ def test_prepsfadmom_errors():
     Ttot = 0.6 + fwhm_to_T(0.9)
     assert np.abs(res['T'] / Ttot - 1) < 1.0e-2
 
-    # non square images raise
-    im = np.zeros((48, 50))
-    jac = ngmix.DiagonalJacobian(scale=0.25, row=23.5, col=24.5)
-    obs_rect = Observation(im, jacobian=jac)
-    with pytest.raises(ValueError):
-        run_prepsf_admom(
-            obs_rect, guess=0.5, no_psf=True, fwhm_smooth=1.0,
-            rng=np.random.RandomState(3),
+
+def test_prepsfadmom_nonsquare():
+    """
+    non square images are zero padded to square internally: a
+    rectangular stamp cut from a square stamp gives the same result,
+    including the errors, since the noise scaling uses the actual
+    pixel count
+    """
+    gs_wcs = galsim.ShearWCS(
+        0.25, galsim.Shear(g1=-0.1, g2=0.06),
+    ).jacobian()
+    obs = _make_obs(0.1, -0.05, 0.6, 3.5, 0.9, gs_wcs)
+
+    # ap_rad=0 so the only difference between the stamps is the
+    # trimmed pixels themselves, which hold negligible flux
+    res = run_prepsf_admom(
+        obs, guess=0.6, ap_rad=0, rng=np.random.RandomState(5),
+    )
+    assert res['flags'] == 0
+
+    ntrim = 8
+    for axis in (0, 1):
+        row0, col0 = obs.jacobian.row0, obs.jacobian.col0
+        if axis == 0:
+            rim = obs.image[ntrim:-ntrim, :]
+            rwgt = obs.weight[ntrim:-ntrim, :]
+            row0 = row0 - ntrim
+        else:
+            rim = obs.image[:, ntrim:-ntrim]
+            rwgt = obs.weight[:, ntrim:-ntrim]
+            col0 = col0 - ntrim
+
+        rjac = Jacobian(
+            y=row0, x=col0,
+            dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+            dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy,
         )
+        robs = Observation(
+            rim, jacobian=rjac, weight=rwgt, psf=obs.psf,
+        )
+        rres = run_prepsf_admom(
+            robs, guess=0.6, ap_rad=0, rng=np.random.RandomState(5),
+        )
+        assert rres['flags'] == 0
+
+        for key in ['flux', 'T', 'e1', 'e2']:
+            assert np.allclose(rres[key], res[key], rtol=0, atol=1.0e-6)
+        for key in ['flux_err', 'T_err']:
+            assert np.allclose(rres[key], res[key], rtol=1.0e-6, atol=0)

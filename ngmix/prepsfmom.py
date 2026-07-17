@@ -91,7 +91,8 @@ class PrePSFMom(object):
         Parameters
         ----------
         obs : ngmix.Observation
-            The observation to measure.  The image data must be square.
+            The observation to measure.  Non-square images are zero
+            padded to square internally.
         return_kernels : bool, optional
             If True, return the kernels used for the flux and moments.
             Defaults to False.
@@ -107,15 +108,17 @@ class PrePSFMom(object):
         return self._meas(obs, psf_obs, return_kernels)
 
     def _meas(self, obs, psf_obs, return_kernels):
-        # pick the larger size
+        # pick the largest dimension of the image and psf
         if psf_obs is not None:
-            if obs.image.shape[0] > psf_obs.image.shape[0]:
-                target_dim = int(obs.image.shape[0] * self.pad_factor)
-            else:
-                target_dim = int(psf_obs.image.shape[0] * self.pad_factor)
+            max_dim = max(obs.image.shape + psf_obs.image.shape)
         else:
-            target_dim = int(obs.image.shape[0] * self.pad_factor)
-        eff_pad_factor = target_dim / obs.image.shape[0]
+            max_dim = max(obs.image.shape)
+        target_dim = int(max_dim * self.pad_factor)
+        # the square of this is the ratio of padded to unpadded pixel
+        # counts, used to scale the noise
+        eff_pad_factor = target_dim / np.sqrt(
+            obs.image.shape[0] * obs.image.shape[1]
+        )
 
         # pad image, psf and weight map, get FFTs, apply cen_phases
         kim, im_row, im_col = _zero_pad_and_compute_fft_maybe_cached(
@@ -401,26 +404,25 @@ def _build_square_apodization_mask(ap_rad, ap_mask):
 
 
 def _zero_pad_image(im, target_dim):
-    """zero pad an image, returning it and the offsets before and after
-    the original image"""
-    twice_pad_width = target_dim - im.shape[0]
-    # if the extra number of pixels we need is odd, we add those on the
-    # second half
-    if twice_pad_width % 2 == 0:
+    """zero pad an image to (target_dim, target_dim), returning it and
+    the row and column offsets of the original image within it"""
+    pads = []
+    for dim in im.shape:
+        twice_pad_width = target_dim - dim
+        # if the extra number of pixels we need is odd, we add those on
+        # the second half
         pad_width_before = twice_pad_width // 2
-        pad_width_after = pad_width_before
-    else:
-        pad_width_before = twice_pad_width // 2
-        pad_width_after = pad_width_before + 1
+        pad_width_after = twice_pad_width - pad_width_before
+        pads.append((pad_width_before, pad_width_after))
 
     im_padded = np.pad(
         im,
-        (pad_width_before, pad_width_after),
+        pads,
         mode='constant',
         constant_values=0,
     )
 
-    return im_padded, pad_width_before, pad_width_after
+    return im_padded, pads[0][0], pads[1][0]
 
 
 def _compute_cen_phase_shift(cen_row, cen_col, dim, msk=None):
@@ -478,9 +480,9 @@ def _zero_pad_and_compute_fft_impl(im, cen_row, cen_col, target_dim, ap_rad):
         _build_square_apodization_mask(ap_rad, ap_mask)
         im = im * ap_mask
 
-    pim, pad_width_before, _ = _zero_pad_image(im, target_dim)
-    pad_cen_row = cen_row + pad_width_before
-    pad_cen_col = cen_col + pad_width_before
+    pim, pad_row_before, pad_col_before = _zero_pad_image(im, target_dim)
+    pad_cen_row = cen_row + pad_row_before
+    pad_cen_col = cen_col + pad_col_before
     kpim = fft.fftn(pim)
     return kpim, pad_cen_row, pad_cen_col
 
@@ -845,10 +847,6 @@ def _gauss_kernels_impl(
 def _check_obs_and_get_psf_obs(obs, no_psf):
     if not isinstance(obs, Observation):
         raise ValueError("input obs must be an Observation")
-
-    shape = obs.image.shape
-    if shape[0] != shape[1]:
-        raise ValueError(f'pre-psf moments require a square image, got {shape}')
 
     if not obs.has_psf() and not no_psf:
         raise RuntimeError("The PSF must be set to measure a pre-PSF moment!")

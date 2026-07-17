@@ -90,13 +90,72 @@ def test_prepsfmom_raises_nopsf(cls, prepsfmom_caching):
 
 
 @pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
-def test_prepsfmom_raises_nonsquare(cls, prepsfmom_caching):
-    fitter = cls(20)
-    obs = Observation(image=np.zeros((100, 90)))
-    with pytest.raises(ValueError) as e:
-        fitter.go(obs)
+@pytest.mark.parametrize("trim_axis", [0, 1])
+def test_prepsfmom_nonsquare(cls, trim_axis, prepsfmom_caching):
+    """
+    Test that a rectangular stamp cut from a square stamp gives the same
+    result, including the errors: the pixels are identical and the noise
+    scaling uses the actual pixel count
+    """
+    rng = np.random.RandomState(seed=10)
 
-    assert "square" in str(e.value)
+    image_size = 64
+    ntrim = 16
+    cen = (image_size - 1) / 2
+    scale = 0.25
+
+    gal = galsim.Gaussian(fwhm=0.9).shear(g1=-0.1, g2=0.2).withFlux(400)
+    psf = galsim.Gaussian(fwhm=0.8).shear(g1=0.05, g2=-0.05)
+    im = galsim.Convolve([gal, psf]).drawImage(
+        nx=image_size, ny=image_size, scale=scale,
+    ).array
+    im += rng.normal(size=im.shape, scale=1.0e-4)
+    wgt = np.ones_like(im) / 1.0e-4**2
+    psf_im = psf.drawImage(
+        nx=33, ny=33, scale=scale,
+    ).array
+
+    def _jac(row, col):
+        return Jacobian(
+            y=row, x=col, dudx=scale, dudy=0, dvdx=0, dvdy=scale,
+        )
+
+    psf_obs = Observation(image=psf_im, jacobian=_jac(16, 16))
+    obs = Observation(
+        image=im,
+        weight=wgt,
+        jacobian=_jac(cen, cen),
+        psf=psf_obs,
+    )
+
+    # trim half the pad from each side along one axis; the object is
+    # compact so the removed pixels are noise at ~1e-4 of the flux
+    if trim_axis == 0:
+        rim = im[ntrim:-ntrim, :]
+        rwgt = wgt[ntrim:-ntrim, :]
+        rjac = _jac(cen - ntrim, cen)
+    else:
+        rim = im[:, ntrim:-ntrim]
+        rwgt = wgt[:, ntrim:-ntrim]
+        rjac = _jac(cen, cen - ntrim)
+
+    robs = Observation(image=rim, weight=rwgt, jacobian=rjac, psf=psf_obs)
+
+    # ap_rad=0 so the only difference between the stamps is the
+    # trimmed pixels themselves; the default edge taper would touch
+    # different pixels in the two stamps
+    fitter = cls(2.0, ap_rad=0)
+    res = fitter.go(obs)
+    rres = fitter.go(robs)
+
+    assert res['flags'] == 0
+    assert rres['flags'] == 0
+    for key in ['flux', 'T', 'e1', 'e2']:
+        assert_allclose(rres[key], res[key], rtol=0, atol=1.0e-3)
+    # same noise density and same effective aperture, so the errors
+    # agree despite the different pixel counts
+    for key in ['flux_err', 'T_err']:
+        assert_allclose(rres[key], res[key], rtol=1.0e-3, atol=0)
 
 
 @pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])

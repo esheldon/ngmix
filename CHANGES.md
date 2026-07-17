@@ -9,6 +9,9 @@
       fitting over multiple epochs and bands with a common center and
       covariance, measuring fluxes per band with a common pre-seeing
       aperture, so colors are independent of the per-band PSFs.
+    - The pre-PSF moment fitters (prepsfmom and prepsfadmom) now
+      accept non-square images, which are zero padded to square
+      internally.
     - Allow fwhm as size for Moffat galsim fitter
     - Added method scale_T() to gausian mixtures.
     - Added new metacal psf reconvolution method 'azgauss',

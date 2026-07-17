@@ -633,12 +633,16 @@ class PrePSFAdmomFitter(object):
             raise ValueError('no positive weight pixels in observation')
         tot_var = np.sum(1.0 / obs.weight[wmsk])
 
-        if psf_obs is not None and (
-                psf_obs.image.shape[0] > obs.image.shape[0]):
-            target_dim = int(psf_obs.image.shape[0] * self.pad_factor)
+        if psf_obs is not None:
+            max_dim = max(obs.image.shape + psf_obs.image.shape)
         else:
-            target_dim = int(obs.image.shape[0] * self.pad_factor)
-        eff_pad_factor = target_dim / obs.image.shape[0]
+            max_dim = max(obs.image.shape)
+        target_dim = int(max_dim * self.pad_factor)
+        # the square of this is the ratio of padded to unpadded pixel
+        # counts, used to scale the noise
+        eff_pad_factor = target_dim / np.sqrt(
+            obs.image.shape[0] * obs.image.shape[1]
+        )
 
         # the image is real, so we work with the rfft half plane;
         # conjugate modes are folded in with the symmetry weights
@@ -881,9 +885,9 @@ def _zero_pad_and_compute_rfft_impl(im, cen_row, cen_col, target_dim, ap_rad):
         _build_square_apodization_mask(ap_rad, ap_mask)
         im = im * ap_mask
 
-    pim, pad_width_before, _ = _zero_pad_image(im, target_dim)
-    pad_cen_row = cen_row + pad_width_before
-    pad_cen_col = cen_col + pad_width_before
+    pim, pad_row_before, pad_col_before = _zero_pad_image(im, target_dim)
+    pad_cen_row = cen_row + pad_row_before
+    pad_cen_col = cen_col + pad_col_before
     kpim = fft.rfftn(pim)
     return kpim, pad_cen_row, pad_cen_col
 
