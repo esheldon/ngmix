@@ -1182,3 +1182,68 @@ def test_prepsfadmom_model_ksums_kernel_parity():
                 model, band, dv, du, Sw, detAtinv, Tsmooth,
             )
             assert np.allclose(sums, expected, rtol=1.0e-12, atol=1.0e-14)
+
+
+def test_prepsfadmom_e_flags():
+    """
+    e_flags marks unusable ellipticities while the per-quantity T and
+    flux flags stay clean
+    """
+    gs_wcs = galsim.PixelScale(0.25).jacobian()
+    obs = _make_obs(0.1, -0.05, 0.6, 3.5, 0.9, gs_wcs)
+    rng = np.random.RandomState(9)
+
+    # a clean fit has usable shapes
+    res = run_prepsf_admom(obs, model='gauss', rng=rng)
+    assert res['flags'] == 0
+    assert res['e_flags'] == 0
+    assert np.all(np.isfinite(res['e']))
+
+    # a star has no shape by construction: the overall flags stay
+    # clean but e_flags is set
+    res = run_prepsf_admom(obs, model='star', rng=rng)
+    assert res['flags'] == 0
+    assert res['e_flags'] != 0
+    assert res['T_flags'] == 0
+    assert res['flux_flags'] == 0
+    assert np.all(np.isnan(res['e']))
+
+
+def test_prepsfadmom_deweight_nonpos():
+    """
+    measured moments exceeding the weight in both eigendirections
+    give N = M^-1 - Sigma^-1 negative definite with positive
+    determinant; deweight must flag instead of returning a negative
+    definite weight, which would drive chi2 < 0 in the k-sum kernels
+    and index the fastexp lookup table out of range
+    """
+    from ngmix.prepsfadmom import deweight
+
+    Sigma = np.diag([0.5, 0.5])
+    M = np.diag([1.0, 1.0])
+    newSigma, flags = deweight(M, Sigma)
+    assert flags != 0
+
+
+def test_prepsfadmom_ksums_nonpos_weight_guard():
+    """
+    the k-sum kernel must return finite (zero) sums for a non
+    positive definite weight rather than reading past the fastexp
+    table
+    """
+    from ngmix.prepsfadmom.prepsfadmom_nb import admom_ksums
+
+    dim = 8
+    iy = np.array([0, 1, 2])
+    ix = np.array([1, 2, 3])
+    kim = np.ones(3, dtype=np.complex128)
+    kv = np.array([0.1, 0.2, 0.3])
+    ku = np.array([0.2, 0.1, 0.1])
+    sums = np.zeros(6)
+
+    admom_ksums(
+        kim, iy, ix, dim, 0.0, 0.0, kv, ku,
+        -1.0, 0.0, -1.0, 1.0, sums,
+    )
+    assert np.all(np.isfinite(sums))
+    assert np.all(sums == 0)

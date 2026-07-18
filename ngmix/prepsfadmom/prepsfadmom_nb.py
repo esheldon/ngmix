@@ -84,7 +84,10 @@ def admom_ksums(
         Su = wvu * kvi + wuu * kui
         chi2 = kvi * Sv + kui * Su
 
-        if chi2 > FASTEXP_MAX_CHI2:
+        # chi2 < 0 means a non positive definite weight was sent;
+        # skip the mode rather than indexing the fastexp table out
+        # of range
+        if chi2 > FASTEXP_MAX_CHI2 or chi2 < 0:
             continue
         wk = fexp(-0.5 * chi2)
 
@@ -171,7 +174,10 @@ def admom_finalize(
         Su = wvu * kvi + wuu * kui
         chi2 = kvi * Sv + kui * Su
 
-        if chi2 > FASTEXP_MAX_CHI2:
+        # chi2 < 0 means a non positive definite weight was sent;
+        # skip the mode rather than indexing the fastexp table out
+        # of range
+        if chi2 > FASTEXP_MAX_CHI2 or chi2 < 0:
             continue
         wk = fexp(-0.5 * chi2)
 

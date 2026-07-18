@@ -813,6 +813,7 @@ class PAdmomFitter(object):
             'e': np.array([np.nan, np.nan]),
             'e_err': np.array([np.nan, np.nan]),
             'e_cov': np.diag([np.nan, np.nan]),
+            'e_flags': 0,
             'T': np.nan,
             'T_err': np.nan,
             'T_flags': 0,
@@ -890,8 +891,10 @@ class PAdmomFitter(object):
 
             if model_state is not None and model_state['type'] == 'star':
                 # a delta function has no shape; this is by
-                # construction, not a failure
-                pass
+                # construction, not a failure, so the overall flags
+                # stay clean, but e_flags still marks the
+                # ellipticities unusable
+                res['e_flags'] |= ngmix.flags.NONPOS_SIZE
             elif shape_ok:
                 res['e1'] = M1 / Tgal
                 res['e2'] = M2 / Tgal
@@ -954,21 +957,26 @@ class PAdmomFitter(object):
                     ])
                 else:
                     res['flags'] |= ngmix.flags.NONPOS_SHAPE_VAR
+                    res['e_flags'] |= ngmix.flags.NONPOS_SHAPE_VAR
             else:
                 # a converged fit can have non-positive size after the
                 # smoothing is subtracted; the fluxes and T are still
                 # usable but the shape is undefined
                 res['flags'] |= ngmix.flags.NONPOS_SIZE
+                res['e_flags'] |= ngmix.flags.NONPOS_SIZE
 
         # propagate fitting failures, but not the post-hoc NONPOS_SIZE
         # or NONPOS_SHAPE_VAR set above, for which T and flux are still
-        # usable
+        # usable; e_flags == 0 iff the ellipticities and their errors
+        # are usable
         res['T_flags'] |= flags
         res['flux_flags'] |= flags
+        res['e_flags'] |= flags
 
         res['flagstr'] = ngmix.flags.get_flags_str(res['flags'])
         res['T_flagstr'] = ngmix.flags.get_flags_str(res['T_flags'])
         res['flux_flagstr'] = ngmix.flags.get_flags_str(res['flux_flags'])
+        res['e_flagstr'] = ngmix.flags.get_flags_str(res['e_flags'])
 
         return res
 
@@ -1141,8 +1149,13 @@ def deweight(M, Sigma):
     Nuu = M[0, 0] * idetm - Sigma[0, 0] * idetw
     Nvu = -M[0, 1] * idetm + Sigma[0, 1] * idetw
 
+    # a positive determinant is not sufficient for a 2x2 symmetric
+    # matrix: both eigenvalues negative also gives det > 0.  That
+    # happens when the measured moments exceed the weight in both
+    # eigendirections (e.g. heavy neighbor contamination), and the
+    # inverse would be a negative definite weight
     detn = Nvv * Nuu - Nvu * Nvu
-    if detn <= GMIX_LOW_DETVAL:
+    if detn <= GMIX_LOW_DETVAL or Nvv <= 0 or Nuu <= 0:
         return Sigma, ngmix.flags.LOW_DET
 
     idetn = 1.0 / detn
