@@ -900,6 +900,51 @@ def test_prepsfadmom_model_exp_noise():
     assert 0.8 < np.mean(e1es) / np.std(e1s) < 1.05
 
 
+def test_prepsfadmom_runner():
+    """
+    PAdmomFitter works in the standard runner framework: a PSFRunner
+    fills the psf gmix, which the fitter uses for the automatic
+    smoothing choice, and the object fit runs through Runner with a
+    guesser providing gmix guesses
+    """
+    rng = np.random.RandomState(11)
+    gs_wcs = galsim.PixelScale(0.25).jacobian()
+
+    obs0 = _make_obs(0.1, -0.05, 0.6, 3.5, 0.9, gs_wcs)
+    noise = np.sqrt(np.sum(obs0.image ** 2)) / 20.0
+    obs = _make_obs(
+        0.1, -0.05, 0.6, 3.5, 0.9, gs_wcs, noise=noise, rng=rng,
+    )
+
+    psf_runner = ngmix.runners.PSFRunner(
+        fitter=ngmix.admom.AdmomFitter(rng=rng),
+        guesser=ngmix.guessers.GMixPSFGuesser(rng=rng, ngauss=1),
+        ntry=2,
+    )
+    psf_runner.go(obs=obs)
+    assert obs.psf.has_gmix()
+
+    runner = ngmix.runners.Runner(
+        fitter=PAdmomFitter(rng=rng),
+        guesser=ngmix.guessers.GMixPSFGuesser(
+            rng=rng, ngauss=1, guess_from_moms=True,
+        ),
+        ntry=2,
+    )
+    res = runner.go(obs=obs)
+    assert res['flags'] == 0
+
+    # the smoothing came from the fitted psf gmix, with no internal
+    # psf fitting
+    Tpsf = obs.psf.gmix.get_T()
+    expected = 1.05 * ngmix.moments.T_to_fwhm(Tpsf)
+    assert np.abs(res['fwhm_smooth'] / expected - 1) < 1.0e-8
+
+    # sensible recovery at this s/n
+    assert np.abs(res['flux'] / 3.5 - 1) < 0.2
+    assert np.abs(res['T'] / 0.6 - 1) < 0.4
+
+
 @pytest.mark.parametrize('model', ['gauss', 'exp'])
 def test_prepsfadmom_e_cov(model):
     """
