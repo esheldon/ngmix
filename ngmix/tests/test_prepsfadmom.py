@@ -956,14 +956,14 @@ def test_prepsfadmom_e_cov(model):
     assert np.abs(emp - rep) < 4 * se
 
 
-def test_prepsfadmom_model_sandwich_gauss_anchor():
+def test_prepsfadmommodel_sandwich_gauss_anchor():
     """
     the model sandwich evaluated for a single gaussian family reduces
     exactly to the analytic gauss delta method, for arbitrary inputs,
     and the family response is dSfam = 4 dM
     """
-    from ngmix.prepsfadmom.prepsfadmom import (
-        _flux_var_delta, _model_sandwich,
+    from ngmix.prepsfadmom.errors import (
+        flux_var_delta, model_sandwich,
     )
 
     rng = np.random.RandomState(9)
@@ -980,8 +980,8 @@ def test_prepsfadmom_model_sandwich_gauss_anchor():
     fvars = np.array([0.3, 0.4])
     fmcovs = rng.normal(size=(2, 3)) * 0.1
 
-    raw_delta = _flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs)
-    raw_sw, fam_cov = _model_sandwich(
+    raw_delta = flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs)
+    raw_sw, fam_cov = model_sandwich(
         'gauss', Sfam, Sigma, Tsmooth, sums, cov, fsums, fvars, fmcovs,
     )
     assert np.allclose(raw_sw, raw_delta, rtol=1.0e-5, atol=0)

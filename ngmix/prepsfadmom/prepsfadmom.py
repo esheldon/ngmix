@@ -24,7 +24,10 @@ exact for gaussian profiles.  Without smoothing the iteration is
 unstable in the presence of noise unless the object is very well
 resolved.
 """
-__all__ = ['run_prepsf_admom', 'PrePSFAdmomFitter', 'PrePSFAdmomResult']
+__all__ = [
+    'run_prepsf_admom', 'PrePSFAdmomFitter', 'PrePSFAdmomResult',
+    'get_phase_angles', 'deweight',
+]
 
 import logging
 import functools
@@ -49,7 +52,8 @@ from ..prepsfmom import (
     _pixel_fft,
 )
 from .prepsfadmom_nb import admom_ksums, admom_finalize
-from .models import model_ksums, cov_from_e, exp_model_valid
+from .models import model_ksums, cov_from_e, exp_model_valid, det2
+from .errors import flux_var_delta, model_sandwich
 import ngmix.flags
 
 logger = logging.getLogger(__name__)
@@ -326,7 +330,7 @@ class PrePSFAdmomFitter(object):
     standard covariance of an estimator defined by conditions
     g(theta; data) = 0: at first order Cov(theta) = J^-1 Cov(g) J^-T
     with J = dg/dtheta.  The model derivatives in J are
-    evaluated in closed form for the mixture (see _model_sandwich);
+    evaluated in closed form for the mixture (see model_sandwich);
     the only approximation beyond first order is replacing the data
     by the converged model, which is second order at the matched
     moments.  The errors match the observed scatter at the ~5
@@ -473,7 +477,7 @@ class PrePSFAdmomFitter(object):
             numiter = i + 1
 
             if (Sigma[0, 0] <= 0 or Sigma[1, 1] <= 0
-                    or _det2(Sigma) < GMIX_LOW_DETVAL):
+                    or det2(Sigma) < GMIX_LOW_DETVAL):
                 flags = ngmix.flags.LOW_DET
                 break
 
@@ -523,7 +527,7 @@ class PrePSFAdmomFitter(object):
                 [0.5 * (T - M1), 0.5 * M2],
                 [0.5 * M2, 0.5 * (T + M1)],
             ])
-            Sigma, flags = _deweight(M, Sigma)
+            Sigma, flags = deweight(M, Sigma)
             if flags != 0:
                 break
 
@@ -578,7 +582,7 @@ class PrePSFAdmomFitter(object):
             numiter = i + 1
 
             if (Sigma[0, 0] <= 0 or Sigma[1, 1] <= 0
-                    or _det2(Sigma) < GMIX_LOW_DETVAL):
+                    or det2(Sigma) < GMIX_LOW_DETVAL):
                 flags = ngmix.flags.LOW_DET
                 break
 
@@ -611,7 +615,7 @@ class PrePSFAdmomFitter(object):
                 [0.5 * (Tm - M1), 0.5 * M2],
                 [0.5 * M2, 0.5 * (Tm + M1)],
             ])
-            newSigma, dflags = _deweight(M, Sigma)
+            newSigma, dflags = deweight(M, Sigma)
             if dflags != 0:
                 flags = dflags
                 break
@@ -631,7 +635,7 @@ class PrePSFAdmomFitter(object):
                 [0.5 * (Tp - Mp1), 0.5 * Mp2],
                 [0.5 * Mp2, 0.5 * (Tp + Mp1)],
             ])
-            Sp, pflags = _deweight(Mpred, Sigma)
+            Sp, pflags = deweight(Mpred, Sigma)
 
             if pflags == 0:
                 # shift the family covariance by the deweight-mapped
@@ -802,7 +806,7 @@ class PrePSFAdmomFitter(object):
                 M2 = 2 * Sfam[0, 1]
                 # the family covariance can scatter out of positive
                 # definite, where the shape is undefined
-                shape_ok = Tgal > 0 and _det2(Sfam) > 0
+                shape_ok = Tgal > 0 and det2(Sfam) > 0
             else:
                 # star: a delta function has no size or shape
                 Tgal = 0.0
@@ -938,7 +942,7 @@ class PrePSFAdmomFitter(object):
         sums = np.zeros(6)
         esums = np.zeros(6)
         for epoch in epochs:
-            alpha, beta = _get_phase_angles(epoch, v0, u0)
+            alpha, beta = get_phase_angles(epoch, v0, u0)
             admom_ksums(
                 epoch['kim'], epoch['iy'], epoch['ix'], epoch['dim'],
                 alpha, beta, epoch['kv'], epoch['ku'],
@@ -962,7 +966,7 @@ class PrePSFAdmomFitter(object):
         err_fac2, either white at the level set by the weight map or
         measured per mode from the attached noise image.  The flux
         variances include the response of the adaptive weight to the
-        noise; see _flux_var_delta.
+        noise; see flux_var_delta.
 
         The flux normalization: the raw flux sum corresponds to a
         weighted flux with an effective real-space kernel of peak value
@@ -971,7 +975,7 @@ class PrePSFAdmomFitter(object):
         to the total flux at the fixed point of the iteration.  The
         smoothing preserves flux, so this also holds when smoothing.
         """
-        knrm = 2 * np.pi * np.sqrt(_det2(Sigma))
+        knrm = 2 * np.pi * np.sqrt(det2(Sigma))
 
         sums = np.zeros(6)
         cov = np.zeros((6, 6))
@@ -986,7 +990,7 @@ class PrePSFAdmomFitter(object):
         wsums = np.zeros(nband)
 
         for epoch in epochs:
-            alpha, beta = _get_phase_angles(epoch, v0, u0)
+            alpha, beta = get_phase_angles(epoch, v0, u0)
             admom_finalize(
                 epoch['kim'], epoch['iy'], epoch['ix'], epoch['dim'],
                 alpha, beta, epoch['kv'], epoch['ku'],
@@ -1009,7 +1013,7 @@ class PrePSFAdmomFitter(object):
         fam_cov = None
         if model_state is None:
             fluxes = 2 * knrm * fsums / wsums
-            flux_vars = (2 * knrm / wsums) ** 2 * _flux_var_delta(
+            flux_vars = (2 * knrm / wsums) ** 2 * flux_var_delta(
                 Sigma, sums, cov, fsums, fvars, fmcovs,
             )
         else:
@@ -1026,7 +1030,7 @@ class PrePSFAdmomFitter(object):
                 # variance is exact
                 rawvars = fvars
             else:
-                rawvars, fam_cov = _model_sandwich(
+                rawvars, fam_cov = model_sandwich(
                     'exp', model_state['cov'], Sigma, Tsmooth,
                     sums, cov, fsums, fvars, fmcovs,
                 )
@@ -1216,205 +1220,7 @@ class PrePSFAdmomFitter(object):
         return self.rng
 
 
-def _flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
-    """
-    variance of the raw per-band flux sums, including the first order
-    response of the adaptive weight to the noise (the delta method)
-
-    The converged weight satisfies the fixed point conditions
-    M(Sigma) = Sigma / 2, where M is the measured weighted covariance,
-    a ratio of the joint moment sums.  By the implicit function
-    theorem the weight fluctuation is dSigma = -J^-1 dM with
-    J = dM/dSigma - 1/2.  For the gaussian implied by the converged
-    weight, dM/dSigma = 1/4 exactly at the fixed point, for any
-    ellipticity and smoothing, so dSigma = 4 dM.  The flux
-    normalization (proportional to sqrt(det Sigma)) and the kernel
-    response of the flux sum combine to dln F = tr(Sigma^-1 dM), and
-    for a single band the fixed weight flux fluctuation cancels
-    exactly, leaving
-
-        dF / F = tr(Sigma^-1 dS_M) / S_F
-
-    in terms of the second moment sum fluctuations alone.  For a
-    round gaussian with matched weight and white noise this doubles
-    the fixed weight variance.  With multiple bands the band flux sum
-    and the joint conditions are distinct and their cross covariances
-    enter; the band flux sums covary only with their own epochs'
-    contribution to the joint sums.
-
-    Parameters
-    ----------
-    Sigma: 2x2 array
-        The converged weight covariance
-    sums: array of size 6
-        The accumulated joint sums
-    cov: array (6, 6)
-        The covariance of the joint sums
-    fsums: array of size nband
-        The accumulated per band flux sums
-    fvars: array of size nband
-        The variances of the per band flux sums
-    fmcovs: array (nband, 3)
-        The covariance of the joint (M1, M2, T) sums with the per
-        band flux sums
-
-    Returns
-    -------
-    The variance of the per band flux sums including the weight
-    response; scale by the same normalization as the raw flux sums.
-    """
-    Winv = np.linalg.inv(Sigma)
-    # tr(Winv dS_M) = b . dS in the (M1, M2, T) sums basis
-    b = np.array([
-        0.5 * (Winv[1, 1] - Winv[0, 0]),
-        Winv[0, 1],
-        0.5 * (Winv[0, 0] + Winv[1, 1]),
-    ])
-
-    cmm = cov[2:5, 2:5]
-    cmf = cov[2:5, 5]
-    cff = cov[5, 5]
-
-    # dF_b is proportional to dS_Fb - r dS_F + r b . dS_M with
-    # r = S_Fb / S_F the band share of the joint flux sum
-    r = fsums / sums[5]
-    bcb = b @ cmm @ b
-    return (
-        fvars
-        + r ** 2 * (cff + bcb - 2 * (b @ cmf))
-        + 2 * r * (fmcovs @ b - fvars)
-    )
-
-
-def _mbasis_cov(M1, M2, T):
-    """covariance matrix from (M1, M2, T) moment components"""
-    return 0.5 * np.array([
-        [T - M1, M2],
-        [M2, T + M1],
-    ])
-
-
-def _model_pred_mbasis(model_type, Sfam, Sigma, Tsmooth):
-    """
-    the predicted weighted moment ratios (M1, M2, T) and the log of
-    the unit flux prediction for a model family covariance, at unit
-    detAtinv; the ratios and the log derivative are the same for
-    every epoch and band
-    """
-    if model_type == 'exp':
-        state = {'type': 'exp', 'cov': Sfam, 'F': np.ones(1)}
-    else:
-        # single gaussian family, used to validate against the
-        # analytic gauss delta method
-        state = {
-            'type': 'gauss',
-            'cov_sm': Sfam + np.diag([Tsmooth / 2, Tsmooth / 2]),
-            'F': np.ones(1),
-        }
-    s = model_ksums(state, 0, 0.0, 0.0, Sigma, 1.0, Tsmooth)
-    return s[2:5] / s[5], np.log(s[5])
-
-
-def _model_sandwich(
-    model_type, Sfam, Sigma, Tsmooth, sums, cov, fsums, fvars, fmcovs,
-):
-    """
-    first order (sandwich) errors for the moment matched model fits
-
-    The estimating equations are the weight condition
-    M_meas(Sigma) = Sigma/2, the family condition
-    M_pred(Sigma, Sfam) = M_meas, and per band F_b N_b = fs_b with
-    N_b the unit flux model prediction.  Evaluated with the data
-    replaced by the converged model, the Jacobian is block
-    triangular: the family and flux conditions lose their explicit
-    weight dependence, leaving
-
-        dSfam = B^-1 dM,    B = dM_pred/dSfam
-        dF_b/F_b = dfs_b/fs_b - (dln N/dSfam) . dSfam
-
-    where dM is the noise fluctuation of the measured moment ratios.
-    B and the normalization derivative are evaluated in closed form
-    (by central differences on the analytic predictions), so unlike
-    the gauss delta method there is no gaussian approximation beyond
-    replacing the data by the converged model; for a single gaussian
-    family this reduces exactly to _flux_var_delta.
-
-    Parameters
-    ----------
-    model_type: str
-        'exp', or 'gauss' for validation
-    Sfam: (2, 2) array
-        The converged family covariance
-    Sigma: (2, 2) array
-        The converged weight covariance
-    Tsmooth: float
-        The smoothing T
-    sums, cov, fsums, fvars, fmcovs:
-        As for _flux_var_delta
-
-    Returns
-    -------
-    var_raw: array of size nband
-        The variance of the per band flux sums including the family
-        response; scale by the same normalization as the raw sums
-    fam_cov: (3, 3) array
-        The covariance of the family (M1, M2, T) parameters
-    """
-    Tw = Sigma[0, 0] + Sigma[1, 1]
-    h = 1.0e-6 * Tw
-    fam0 = np.array([
-        Sfam[1, 1] - Sfam[0, 0], 2 * Sfam[0, 1],
-        Sfam[0, 0] + Sfam[1, 1],
-    ])
-
-    B = np.zeros((3, 3))
-    dlnu = np.zeros(3)
-    for i in range(3):
-        famp = fam0.copy()
-        famm = fam0.copy()
-        famp[i] += h
-        famm[i] -= h
-        rp, lp = _model_pred_mbasis(
-            model_type, _mbasis_cov(*famp), Sigma, Tsmooth,
-        )
-        rm, lm = _model_pred_mbasis(
-            model_type, _mbasis_cov(*famm), Sigma, Tsmooth,
-        )
-        B[:, i] = (rp - rm) / (2 * h)
-        dlnu[i] = (lp - lm) / (2 * h)
-
-    # the noise fluctuation of the measured ratios,
-    # dM = (dS_M - mvec dS_F) / S_F, in terms of the raw sums
-    sfj = sums[5]
-    mvec = np.array([
-        Sigma[1, 1] - Sigma[0, 0], 2 * Sigma[0, 1], Tw,
-    ]) / 2
-    css = cov[2:5, 2:5]
-    csf = cov[2:5, 5]
-    cff = cov[5, 5]
-    cmm = (
-        css - np.outer(mvec, csf) - np.outer(csf, mvec)
-        + np.outer(mvec, mvec) * cff
-    ) / sfj ** 2
-
-    Binv = np.linalg.inv(B)
-    fam_cov = Binv @ cmm @ Binv.T
-    a = np.linalg.solve(B.T, dlnu)
-
-    # dF_b is proportional to dS_Fb - fs_b a . dM; the band flux
-    # sums covary only with their own epochs' part of the joint sums
-    aca = a @ cmm @ a
-    var_raw = np.zeros(fsums.size)
-    for band in range(fsums.size):
-        acmf = (a @ fmcovs[band] - (a @ mvec) * fvars[band]) / sfj
-        var_raw[band] = (
-            fvars[band] + fsums[band] ** 2 * aca
-            - 2 * fsums[band] * acmf
-        )
-    return var_raw, fam_cov
-
-
-def _get_phase_angles(epoch, v0, u0):
+def get_phase_angles(epoch, v0, u0):
     """
     get the centering phase angles per unit row/col frequency
 
@@ -1550,21 +1356,17 @@ def _zero_pad_and_compute_rfft(im, cen_row, cen_col, target_dim, ap_rad):
         )
 
 
-def _det2(M):
-    return M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]
-
-
-def _deweight(M, Sigma):
+def deweight(M, Sigma):
     """
     deweight the measured moments, returning the new weight covariance
 
     Sigma_new = (M^{-1} - Sigma^{-1})^{-1}
     """
-    detm = _det2(M)
+    detm = det2(M)
     if detm <= GMIX_LOW_DETVAL:
         return Sigma, ngmix.flags.LOW_DET
 
-    detw = _det2(Sigma)
+    detw = det2(Sigma)
     if detw <= GMIX_LOW_DETVAL:
         return Sigma, ngmix.flags.LOW_DET
 
