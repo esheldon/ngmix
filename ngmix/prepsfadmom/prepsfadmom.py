@@ -49,6 +49,7 @@ from ..prepsfmom import (
     _pixel_fft,
 )
 from .prepsfadmom_nb import admom_ksums, admom_finalize
+from .models import model_ksums, cov_from_e, exp_model_valid
 import ngmix.flags
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ DEFAULT_SMOOTH_FAC = 1.05
 
 def run_prepsf_admom(
     obs, guess=None,
+    model='gauss',
     fwhm_smooth=None,
     smooth_fac=DEFAULT_SMOOTH_FAC,
     pad_factor=4,
@@ -89,6 +91,20 @@ def run_prepsf_admom(
         A guess for the fitter.  Can be a full gaussian mixture or a
         single value for the pre-PSF T, in which case the rest of the
         parameters are generated.  If not sent, a default guess is used.
+    model: str, optional
+        The object model: 'gauss' (default), 'exp' or 'star'.  With
+        'gauss' the fit is the standard adaptive moments fixed point.
+        With 'exp' the ngmix 6-gaussian exponential expansion is fit
+        by matching its weighted moments to the measured ones; T, e1
+        and e2 are then the exponential family parameters and the
+        fluxes are total model fluxes rather than gaussian aperture
+        fluxes.  The family size is not clipped and can scatter
+        through zero for marginally resolved objects, keeping
+        ensemble averages unbiased; the shape is then undefined and
+        NONPOS_SIZE is set while T and the fluxes remain usable.
+        With 'star' the object is a pre-psf delta function:
+        the weight is the smoothing gaussian, only the center and the
+        per band fluxes are fit, and fwhm_smooth must be positive.
     fwhm_smooth: float, optional
         The fwhm of the common round gaussian smoothing applied to the
         deconvolved images.  If not sent, it is chosen automatically as
@@ -138,6 +154,7 @@ def run_prepsf_admom(
     PrePSFAdmomResult
     """
     fitter = PrePSFAdmomFitter(
+        model=model,
         fwhm_smooth=fwhm_smooth,
         smooth_fac=smooth_fac,
         pad_factor=pad_factor,
@@ -200,14 +217,24 @@ class PrePSFAdmomResult(dict):
 
     def get_gmix(self):
         """
-        get a gmix representing the best fit pre-PSF gaussian, normalized
+        get a gmix representing the best fit pre-PSF model, normalized
         to unit flux
         """
         if self['flags'] != 0:
             raise RuntimeError('cannot create gmix, fit failed')
 
+        model = self.get('model', 'gauss')
+
         pars = self['pars'].copy()
         pars[5] = 1.0
+
+        if model == 'star':
+            # a T=0 gaussian representing the pre-psf delta function;
+            # this is allowed so it can be convolved with a psf later,
+            # and only errors if evaluated directly
+            pars[2] = 0.0
+            pars[3] = 0.0
+            return GMixModel(pars, 'gauss')
 
         e1 = pars[2] / pars[4]
         e2 = pars[3] / pars[4]
@@ -216,7 +243,7 @@ class PrePSFAdmomResult(dict):
         pars[2] = g1
         pars[3] = g2
 
-        return GMixModel(pars, "gauss")
+        return GMixModel(pars, model)
 
 
 class PrePSFAdmomFitter(object):
@@ -225,6 +252,20 @@ class PrePSFAdmomFitter(object):
 
     Parameters
     ----------
+    model: str, optional
+        The object model: 'gauss' (default), 'exp' or 'star'.  With
+        'gauss' the fit is the standard adaptive moments fixed point.
+        With 'exp' the ngmix 6-gaussian exponential expansion is fit
+        by matching its weighted moments to the measured ones; T, e1
+        and e2 are then the exponential family parameters and the
+        fluxes are total model fluxes rather than gaussian aperture
+        fluxes.  The family size is not clipped and can scatter
+        through zero for marginally resolved objects, keeping
+        ensemble averages unbiased; the shape is then undefined and
+        NONPOS_SIZE is set while T and the fluxes remain usable.
+        With 'star' the object is a pre-psf delta function:
+        the weight is the smoothing gaussian, only the center and the
+        per band fluxes are fit, and fwhm_smooth must be positive.
     fwhm_smooth: float, optional
         The fwhm of the common round gaussian smoothing applied to the
         deconvolved images.  If not sent, it is chosen automatically as
@@ -277,6 +318,16 @@ class PrePSFAdmomFitter(object):
     errors are first order and remain approximate at very low s/n or
     for strongly non-gaussian profiles.
 
+    For model='exp' the flux is the total model flux, whose
+    normalization couples to the fitted family size.  The reported
+    errors carry the weight response of the gauss fixed point but
+    not yet the response of the family normalization, and
+    underestimate the observed total flux scatter by ~20 percent at
+    moderate s/n; the T and shape errors are those of the converged
+    gaussian weight, an approximation to the family parameter
+    errors.  For model='star' the weight is frozen and the fixed
+    weight flux errors are exact.
+
     By default the noise is assumed white, with each Fourier mode
     assigned the same power, set by the weight map.  With
     use_noise_image=True the power is instead measured per mode from
@@ -295,6 +346,7 @@ class PrePSFAdmomFitter(object):
 
     def __init__(
         self,
+        model='gauss',
         fwhm_smooth=None,
         smooth_fac=DEFAULT_SMOOTH_FAC,
         pad_factor=4,
@@ -308,6 +360,12 @@ class PrePSFAdmomFitter(object):
         rng=None,
     ):
 
+        if model not in ('gauss', 'exp', 'star'):
+            raise ValueError(
+                f"bad model '{model}', expected 'gauss', 'exp' "
+                "or 'star'"
+            )
+        self.model = model
         self.fwhm_smooth = fwhm_smooth
         self.smooth_fac = smooth_fac
         self.pad_factor = pad_factor
@@ -350,6 +408,11 @@ class PrePSFAdmomFitter(object):
         fwhm_smooth = self._get_fwhm_smooth(mb_obs, no_psf)
         Tsmooth = fwhm_to_T(fwhm_smooth) if fwhm_smooth > 0 else 0.0
 
+        if self.model == 'star' and Tsmooth <= 0:
+            raise ValueError(
+                'the star model requires positive fwhm_smooth'
+            )
+
         epochs = []
         for band, obslist in enumerate(mb_obs):
             for tobs in obslist:
@@ -382,6 +445,10 @@ class PrePSFAdmomFitter(object):
         the adaptive moments iteration, accumulating the k-space sums
         over all epochs
         """
+        if self.model == 'exp':
+            return self._run_admom_exp(epochs, nband, guess_gmix, Tsmooth)
+        elif self.model == 'star':
+            return self._run_admom_star(epochs, nband, guess_gmix, Tsmooth)
 
         cen_guess = guess_gmix.get_cen()
         v0 = cen_guess[0]
@@ -466,18 +533,222 @@ class PrePSFAdmomFitter(object):
             Sigma=Sigma, v0=v0, u0=u0, Tsmooth=Tsmooth,
         )
 
+    def _run_admom_exp(self, epochs, nband, guess_gmix, Tsmooth):
+        """
+        fit the 6-gaussian exponential expansion by moment matching.
+        The weight follows the standard deweight iteration on the
+        measured moments, and the family covariance is shifted by the
+        difference of the deweight-mapped measured and predicted
+        moments, which has near unit gain; for a single-gaussian
+        family this reduces exactly to the standard deweight update.
+        The smoothing covariance cancels in the difference.
+
+        The family state is the covariance matrix Sfam, which is not
+        constrained to be positive definite: the model only enters
+        the sums through the smoothed component covariances, so the
+        family size can scatter through zero and the ellipticity is
+        not clipped.  A proposed update is accepted when every
+        smoothed component gives a positive definite total covariance
+        (exp_model_valid); otherwise the step is damped, and the fit
+        is flagged if no valid step is found.  The etol convergence
+        criterion applies to the family covariance change relative to
+        the weight T.
+        """
+        cen_guess = guess_gmix.get_cen()
+        v0 = cen_guess[0]
+        u0 = cen_guess[1]
+        e1g, e2g, Tg = guess_gmix.get_e1e2T()
+        irr, irc, icc = e2mom(e1g, e2g, Tg + Tsmooth)
+        Sigma = np.array([[irr, irc], [irc, icc]])
+        Sfam = cov_from_e(e1g, e2g, Tg)
+
+        vorig = v0
+        uorig = u0
+
+        flags = 0
+        numiter = 0
+        unit_state = {'type': 'exp', 'cov': Sfam, 'F': np.ones(1)}
+
+        for i in range(self.maxiter):
+            numiter = i + 1
+
+            if (Sigma[0, 0] <= 0 or Sigma[1, 1] <= 0
+                    or _det2(Sigma) < GMIX_LOW_DETVAL):
+                flags = ngmix.flags.LOW_DET
+                break
+
+            sums = self._accumulate(epochs, Sigma, v0, u0)
+
+            if sums[5] <= 0:
+                flags = ngmix.flags.NONPOS_FLUX
+                break
+
+            finv = 1.0 / sums[5]
+            dv = sums[0] * finv
+            du = sums[1] * finv
+            v0 += dv
+            u0 += du
+
+            if (abs(v0 - vorig) > self.shiftmax
+                    or abs(u0 - uorig) > self.shiftmax):
+                flags = ngmix.flags.CEN_SHIFT
+                break
+
+            M1 = sums[2] * finv - (du * du - dv * dv)
+            M2 = sums[3] * finv - 2 * dv * du
+            Tm = sums[4] * finv - (dv * dv + du * du)
+
+            if Tm <= 0:
+                flags = ngmix.flags.NONPOS_SIZE
+                break
+
+            M = np.array([
+                [0.5 * (Tm - M1), 0.5 * M2],
+                [0.5 * M2, 0.5 * (Tm + M1)],
+            ])
+            newSigma, dflags = _deweight(M, Sigma)
+            if dflags != 0:
+                flags = dflags
+                break
+
+            # the model predicted moment ratios; with a common center
+            # and common structure across epochs these are the same
+            # for every epoch, so one closed-form evaluation suffices
+            unit_state['cov'] = Sfam
+            psums = model_ksums(
+                unit_state, 0, 0.0, 0.0, Sigma, 1.0, Tsmooth,
+            )
+            pinv = 1.0 / psums[5]
+            Mp1 = psums[2] * pinv
+            Mp2 = psums[3] * pinv
+            Tp = psums[4] * pinv
+            Mpred = np.array([
+                [0.5 * (Tp - Mp1), 0.5 * Mp2],
+                [0.5 * Mp2, 0.5 * (Tp + Mp1)],
+            ])
+            Sp, pflags = _deweight(Mpred, Sigma)
+
+            if pflags == 0:
+                # shift the family covariance by the deweight-mapped
+                # difference of the measured and predicted moments
+                shift = newSigma - Sp
+            else:
+                # gain-1 fallback on the weighted moment ratios,
+                # composed in matrix form: scale by the T ratio and
+                # shift the anisotropy by the ratio differences
+                Tf = Sfam[0, 0] + Sfam[1, 1]
+                fac = Tm / Tp
+                de1 = M1 / Tm - Mp1 / Tp
+                de2 = M2 / Tm - Mp2 / Tp
+                shift = (fac - 1) * Sfam + 0.5 * fac * Tf * np.array([
+                    [-de1, de2],
+                    [de2, de1],
+                ])
+
+            # accept the largest step, damping if needed, for which
+            # the smoothed model components stay positive definite
+            accepted = False
+            for _ in range(10):
+                prop = Sfam + shift
+                if exp_model_valid(prop, newSigma, Tsmooth):
+                    accepted = True
+                    break
+                shift = 0.5 * shift
+            if not accepted:
+                flags = ngmix.flags.LOW_DET
+                break
+
+            scale = newSigma[0, 0] + newSigma[1, 1]
+            converged = (
+                np.abs(prop - Sfam).max() < self.etol * scale
+                and abs(dv) < self.cen_tol
+                and abs(du) < self.cen_tol
+            )
+            Sfam = prop
+            Sigma = newSigma
+
+            if converged:
+                break
+        else:
+            flags = ngmix.flags.MAXITER
+
+        model_state = {
+            'type': 'exp', 'cov': Sfam, 'F': np.ones(nband),
+        }
+        return self._get_result(
+            epochs=epochs, nband=nband, flags=flags, numiter=numiter,
+            Sigma=Sigma, v0=v0, u0=u0, Tsmooth=Tsmooth,
+            model_state=model_state,
+        )
+
+    def _run_admom_star(self, epochs, nband, guess_gmix, Tsmooth):
+        """
+        star model: a pre-psf delta function.  In the smoothed plane
+        both the object and the matched weight are the smoothing
+        gaussian; the weight is frozen and only the center is
+        iterated
+        """
+        cen_guess = guess_gmix.get_cen()
+        v0 = cen_guess[0]
+        u0 = cen_guess[1]
+        vorig = v0
+        uorig = u0
+        Sigma = np.diag([Tsmooth / 2, Tsmooth / 2])
+
+        flags = 0
+        numiter = 0
+        for i in range(self.maxiter):
+            numiter = i + 1
+
+            sums = self._accumulate(epochs, Sigma, v0, u0)
+
+            if sums[5] <= 0:
+                flags = ngmix.flags.NONPOS_FLUX
+                break
+
+            finv = 1.0 / sums[5]
+            dv = sums[0] * finv
+            du = sums[1] * finv
+            v0 += dv
+            u0 += du
+
+            if (abs(v0 - vorig) > self.shiftmax
+                    or abs(u0 - uorig) > self.shiftmax):
+                flags = ngmix.flags.CEN_SHIFT
+                break
+
+            if abs(dv) < self.cen_tol and abs(du) < self.cen_tol:
+                break
+        else:
+            flags = ngmix.flags.MAXITER
+
+        model_state = {
+            'type': 'star',
+            'cov_sm': np.diag([Tsmooth / 2, Tsmooth / 2]),
+            'F': np.ones(nband),
+        }
+        return self._get_result(
+            epochs=epochs, nband=nband, flags=flags, numiter=numiter,
+            Sigma=Sigma, v0=v0, u0=u0, Tsmooth=Tsmooth,
+            model_state=model_state,
+        )
+
     def _get_result(
         self, epochs, nband, flags, numiter, Sigma, v0, u0, Tsmooth,
+        model_state=None,
     ):
         """
         package the result, measuring the per-band fluxes and the
-        errors with the converged weight
+        errors with the converged weight.  model_state, sent for the
+        non-gauss models, holds the converged family parameters and
+        sets the flux normalization
         """
 
         res = {
             'flags': flags,
             'numiter': numiter,
             'nband': nband,
+            'model': self.model,
             'cen': np.array([v0, u0]),
             'pars': np.zeros(6) + np.nan,
             'sums': np.zeros(6) + np.nan,
@@ -503,15 +774,32 @@ class PrePSFAdmomFitter(object):
 
         if flags == 0:
             sums, sums_cov, fluxes, flux_vars = self._finalize(
-                epochs, nband, Sigma, v0, u0,
+                epochs, nband, Sigma, v0, u0, Tsmooth,
+                model_state=model_state,
             )
             res['sums'] = sums
             res['sums_cov'] = sums_cov
 
             Twt = Sigma[0, 0] + Sigma[1, 1]
-            Tgal = Twt - Tsmooth
-            M1 = Sigma[1, 1] - Sigma[0, 0]
-            M2 = 2 * Sigma[0, 1]
+            if model_state is None:
+                Tgal = Twt - Tsmooth
+                M1 = Sigma[1, 1] - Sigma[0, 0]
+                M2 = 2 * Sigma[0, 1]
+                shape_ok = Tgal > 0
+            elif model_state['type'] == 'exp':
+                Sfam = model_state['cov']
+                Tgal = Sfam[0, 0] + Sfam[1, 1]
+                M1 = Sfam[1, 1] - Sfam[0, 0]
+                M2 = 2 * Sfam[0, 1]
+                # the family covariance can scatter out of positive
+                # definite, where the shape is undefined
+                shape_ok = Tgal > 0 and _det2(Sfam) > 0
+            else:
+                # star: a delta function has no size or shape
+                Tgal = 0.0
+                M1 = 0.0
+                M2 = 0.0
+                shape_ok = False
 
             res['T'] = Tgal
 
@@ -524,7 +812,10 @@ class PrePSFAdmomFitter(object):
             else:
                 res['flux_flags'] |= ngmix.flags.NONPOS_VAR
 
-            if sums_cov[4, 4] > 0 and sums_cov[5, 5] > 0:
+            if model_state is not None and model_state['type'] == 'star':
+                # T is fixed at zero by the model, not measured
+                pass
+            elif sums_cov[4, 4] > 0 and sums_cov[5, 5] > 0:
                 # the sums include the weight, so need a factor of two
                 # to correct, as in real-space adaptive moments
                 res['T_err'] = 4 * get_ratio_error(
@@ -538,7 +829,11 @@ class PrePSFAdmomFitter(object):
                 v0, u0, M1, M2, Tgal, np.sum(fluxes),
             ])
 
-            if Tgal > 0:
+            if model_state is not None and model_state['type'] == 'star':
+                # a delta function has no shape; this is by
+                # construction, not a failure
+                pass
+            elif shape_ok:
                 res['e1'] = M1 / Tgal
                 res['e2'] = M2 / Tgal
                 res['e'] = np.array([res['e1'], res['e2']])
@@ -605,10 +900,14 @@ class PrePSFAdmomFitter(object):
             sums += epoch['weight'] * epoch['detAtinv'] * esums
         return sums
 
-    def _finalize(self, epochs, nband, Sigma, v0, u0):
+    def _finalize(self, epochs, nband, Sigma, v0, u0, Tsmooth,
+                  model_state=None):
         """
         get the final accumulated sums, their covariance, and the
-        per-band fluxes and variances, using the converged weight
+        per-band fluxes and variances, using the converged weight.
+        With a model_state the fluxes are normalized by the unit flux
+        model predictions instead of the gaussian fixed point factor;
+        for the gauss model at the fixed point the two agree.
 
         The covariance treats each Fourier mode as independent with
         variance given by the noise power carried in the per-epoch
@@ -659,10 +958,29 @@ class PrePSFAdmomFitter(object):
             fmcovs[band] += fac ** 2 * nfac * ecov[2:5, 5]
             wsums[band] += epoch['weight']
 
-        fluxes = 2 * knrm * fsums / wsums
-        flux_vars = (2 * knrm / wsums) ** 2 * _flux_var_delta(
-            Sigma, sums, cov, fsums, fvars, fmcovs,
-        )
+        if model_state is None:
+            fluxes = 2 * knrm * fsums / wsums
+            flux_vars = (2 * knrm / wsums) ** 2 * _flux_var_delta(
+                Sigma, sums, cov, fsums, fvars, fmcovs,
+            )
+        else:
+            upred = np.zeros(nband)
+            for epoch in epochs:
+                fac = epoch['weight'] * epoch['detAtinv']
+                upred[epoch['band']] += fac * model_ksums(
+                    model_state, epoch['band'], 0.0, 0.0, Sigma,
+                    epoch['detAtinv'], Tsmooth,
+                )[5]
+            fluxes = fsums / upred
+            if model_state['type'] == 'star':
+                # the weight is frozen for stars, so the fixed weight
+                # variance is exact
+                rawvars = fvars
+            else:
+                rawvars = _flux_var_delta(
+                    Sigma, sums, cov, fsums, fvars, fmcovs,
+                )
+            flux_vars = rawvars / upred ** 2
         return sums, cov, fluxes, flux_vars
 
     def _prep_epoch(self, obs, band, Tsmooth, no_psf):

@@ -654,3 +654,329 @@ def test_prepsfadmom_noise_multiband():
     for band in range(2):
         ratio = np.mean(fluxerrs[band]) / np.std(fluxes[band])
         assert np.abs(ratio - 1) < 0.15
+
+
+def _make_exp_mix_obs(
+    e1, e2, T, flux, psf_fwhm, gs_wcs, dim=48,
+    offset_pix=(0.0, 0.0), noise=1.0e-9, rng=None,
+):
+    """
+    render the ngmix 6-gaussian exponential expansion exactly, each
+    component convolved with the gaussian psf analytically
+    """
+    from ngmix.prepsfadmom.models import get_exp_comps, cov_from_e
+
+    Tpsf = fwhm_to_T(psf_fwhm)
+    parts = []
+    for frac, cT in get_exp_comps():
+        Sigma = cov_from_e(e1, e2, cT * T) + np.diag([Tpsf / 2] * 2)
+        parts.append(_cov_to_gauss(Sigma, flux * frac))
+    obj = galsim.Add(parts)
+    psf = galsim.Gaussian(fwhm=psf_fwhm, gsparams=GSPARAMS)
+
+    cen = (dim - 1) / 2
+    im = obj.drawImage(
+        nx=dim, ny=dim, wcs=gs_wcs,
+        offset=(offset_pix[1], offset_pix[0]),
+    ).array
+    if rng is not None:
+        im = im + rng.normal(scale=noise, size=im.shape)
+    psf_im = psf.drawImage(nx=dim, ny=dim, wcs=gs_wcs).array
+
+    jac = Jacobian(
+        y=cen, x=cen,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy,
+    )
+    psf_obs = Observation(psf_im, jacobian=jac)
+    return Observation(
+        im, jacobian=jac, weight=np.ones_like(im) / noise ** 2,
+        psf=psf_obs,
+    )
+
+
+def test_prepsfadmom_model_exp():
+    """
+    noiseless exact 6-gaussian exponential: the moment matched family
+    parameters and the total flux are recovered nearly exactly,
+    including with an offset center and a sheared wcs
+    """
+    e1_true, e2_true, T_true, flux_true = 0.1, -0.05, 0.5, 4.0
+
+    gs_wcs = galsim.ShearWCS(
+        0.25, galsim.Shear(g1=-0.1, g2=0.06),
+    ).jacobian()
+
+    obs = _make_exp_mix_obs(
+        e1_true, e2_true, T_true, flux_true, 0.9, gs_wcs,
+        offset_pix=(0.4, -0.3),
+    )
+    res = run_prepsf_admom(
+        obs, guess=0.4, model='exp', rng=np.random.RandomState(3),
+    )
+    assert res['flags'] == 0
+    assert res['model'] == 'exp'
+    assert np.abs(res['e1'] - e1_true) < 1.0e-3
+    assert np.abs(res['e2'] - e2_true) < 1.0e-3
+    assert np.abs(res['T'] / T_true - 1) < 2.0e-3
+    assert np.abs(res['flux'] / flux_true - 1) < 1.0e-3
+
+    dv = gs_wcs.dvdx * (-0.3) + gs_wcs.dvdy * 0.4
+    du = gs_wcs.dudx * (-0.3) + gs_wcs.dudy * 0.4
+    assert np.abs(res['cen'][0] - dv) < 1.0e-3
+    assert np.abs(res['cen'][1] - du) < 1.0e-3
+
+    gm = res.get_gmix()
+    assert np.abs(gm.get_T() / T_true - 1) < 2.0e-3
+
+
+def test_prepsfadmom_model_exp_galsim():
+    """
+    a true galsim exponential in three bands: with the exp model the
+    fluxes are total fluxes, recovered at the fidelity of the
+    6-gaussian expansion (~0.2 percent), and colors are exact
+    """
+    gs_wcs = galsim.PixelScale(0.25).jacobian()
+    psf_fwhms = [1.1, 0.9, 0.8]
+    fluxes = [2.0, 3.5, 4.5]
+
+    gal = galsim.Exponential(
+        half_light_radius=0.5, gsparams=GSPARAMS,
+    ).shear(g1=0.08, g2=0.03)
+
+    dim = 48
+    cen = (dim - 1) / 2
+    jac = Jacobian(
+        y=cen, x=cen,
+        dudx=gs_wcs.dudx, dudy=gs_wcs.dudy,
+        dvdx=gs_wcs.dvdx, dvdy=gs_wcs.dvdy,
+    )
+    mbobs = MultiBandObsList()
+    for pf, fl in zip(psf_fwhms, fluxes):
+        psf = galsim.Gaussian(fwhm=pf, gsparams=GSPARAMS)
+        im = galsim.Convolve(gal * fl, psf, gsparams=GSPARAMS).drawImage(
+            nx=dim, ny=dim, wcs=gs_wcs).array
+        psf_im = psf.drawImage(nx=dim, ny=dim, wcs=gs_wcs).array
+        obslist = ObsList()
+        obslist.append(Observation(
+            im, jacobian=jac, weight=np.ones_like(im) * 1.0e18,
+            psf=Observation(psf_im, jacobian=jac),
+        ))
+        mbobs.append(obslist)
+
+    res = run_prepsf_admom(
+        mbobs, guess=0.5, model='exp', rng=np.random.RandomState(3),
+    )
+    assert res['flags'] == 0
+
+    fnorm = res['flux'] / np.array(fluxes)
+    # total fluxes, limited by the 6-gaussian expansion fidelity
+    assert np.all(np.abs(fnorm - 1) < 0.01)
+    # colors are exact
+    assert np.all(np.abs(fnorm / fnorm[0] - 1) < 1.0e-3)
+
+
+def test_prepsfadmom_model_star():
+    """
+    star model: a pre-psf delta function.  The flux is recovered
+    exactly for noiseless data, T is zero by construction, and with
+    noise the fixed weight flux errors are exact since the weight is
+    frozen
+    """
+    rng = np.random.RandomState(88)
+    gs_wcs = galsim.PixelScale(0.25).jacobian()
+    dim = 48
+    cen = (dim - 1) / 2
+    flux_true = 7.0
+
+    psf = galsim.Gaussian(fwhm=0.9)
+    psf_im = psf.drawImage(nx=dim, ny=dim, wcs=gs_wcs).array
+    im0 = psf.withFlux(flux_true).drawImage(
+        nx=dim, ny=dim, wcs=gs_wcs, offset=(-0.3, 0.4),
+    ).array
+
+    jac = Jacobian(
+        y=cen, x=cen, dudx=0.25, dudy=0, dvdx=0, dvdy=0.25,
+    )
+    psf_obs = Observation(psf_im, jacobian=jac)
+
+    obs = Observation(
+        im0, jacobian=jac, weight=np.ones_like(im0) * 1.0e18,
+        psf=psf_obs,
+    )
+    res = run_prepsf_admom(
+        obs, model='star', fwhm_smooth=1.2,
+        rng=np.random.RandomState(3),
+    )
+    assert res['flags'] == 0
+    assert res['model'] == 'star'
+    assert np.abs(res['flux'] / flux_true - 1) < 1.0e-3
+    assert res['T'] == 0.0
+    assert np.isnan(res['e1'])
+    assert np.isnan(res['T_err'])
+
+    # the center is recovered, in sky units
+    assert np.abs(res['cen'][0] - 0.4 * 0.25) < 1.0e-3
+    assert np.abs(res['cen'][1] + 0.3 * 0.25) < 1.0e-3
+
+    # the star gmix is a T=0 delta function, allowed so it can be
+    # convolved with a psf later
+    gm = res.get_gmix()
+    assert gm.get_T() == 0.0
+
+    # frozen weight: the fixed weight errors are exact
+    ntrial = 200
+    noise = np.sqrt(np.sum(im0 ** 2)) / 20.0
+    wgt = np.ones_like(im0) / noise ** 2
+    fitter = PrePSFAdmomFitter(model='star', fwhm_smooth=1.2, rng=rng)
+    fxs, fes = [], []
+    for i in range(ntrial):
+        nobs = Observation(
+            im0 + rng.normal(scale=noise, size=im0.shape),
+            jacobian=jac, weight=wgt, psf=psf_obs,
+        )
+        nres = fitter.go(nobs)
+        assert nres['flags'] == 0
+        fxs.append(nres['flux'])
+        fes.append(nres['flux_err'])
+
+    assert np.abs(np.mean(fes) / np.std(fxs) - 1) < 0.15
+    assert np.abs(np.median(fxs) / flux_true - 1) < 0.02
+
+
+def test_prepsfadmom_model_exp_noise():
+    """
+    exp model with noise.
+
+    Test the fit is robust and the total flux is recovered.  The flux errors
+    carry the gauss weight response but not yet the family normalization
+    response, so they underestimate the total flux scatter by ~20 percent (see
+    the fitter Notes)
+    """
+    ntrial = 200
+    rng = np.random.RandomState(42)
+    gs_wcs = galsim.PixelScale(0.25).jacobian()
+    dim = 48
+    cen = (dim - 1) / 2
+
+    jac = Jacobian(
+        y=cen, x=cen, dudx=0.25, dudy=0, dvdx=0, dvdy=0.25,
+    )
+    psf = galsim.Gaussian(fwhm=0.9)
+    psf_im = psf.drawImage(nx=dim, ny=dim, wcs=gs_wcs).array
+    psf_obs = Observation(psf_im, jacobian=jac)
+
+    gal = galsim.Exponential(
+        half_light_radius=0.5,
+    ).shear(e1=0.1, e2=-0.05) * 4.0
+    im0 = galsim.Convolve(gal, psf).drawImage(
+        nx=dim, ny=dim, wcs=gs_wcs,
+    ).array
+    noise = np.sqrt(np.sum(im0 ** 2)) / 20.0
+    wgt = np.ones_like(im0) / noise ** 2
+
+    fitter = PrePSFAdmomFitter(model='exp', rng=rng)
+    fxs, fes = [], []
+    nfail = 0
+    for i in range(ntrial):
+        obs = Observation(
+            im0 + rng.normal(scale=noise, size=im0.shape),
+            jacobian=jac, weight=wgt, psf=psf_obs,
+        )
+        res = fitter.go(obs, guess=0.4)
+        if res['flags'] != 0:
+            nfail += 1
+            continue
+        fxs.append(res['flux'])
+        fes.append(res['flux_err'])
+
+    assert nfail < ntrial * 0.02
+    assert np.abs(np.median(fxs) / 4.0 - 1) < 0.03
+    ratio = np.mean(fes) / np.std(fxs)
+    assert 0.65 < ratio < 0.95
+
+
+@pytest.mark.parametrize('model', ['gauss', 'exp'])
+def test_prepsfadmom_model_star_data(model):
+    """
+    Test that the star data fit with the adaptive models scatters T through
+    zero for both the gauss fit (via the smoothing subtraction) and the exp
+    fit (via the unconstrained family covariance).  The shape is undefined
+    when the size or the family covariance is non positive, but T and the
+    fluxes remain usable
+    """
+    ntrial = 200
+    rng = np.random.RandomState(55)
+    gs_wcs = galsim.PixelScale(0.25).jacobian()
+    dim = 48
+    cen = (dim - 1) / 2
+
+    jac = Jacobian(
+        y=cen, x=cen, dudx=0.25, dudy=0, dvdx=0, dvdy=0.25,
+    )
+    psf = galsim.Gaussian(fwhm=0.9)
+    psf_im = psf.drawImage(nx=dim, ny=dim, wcs=gs_wcs).array
+    psf_obs = Observation(psf_im, jacobian=jac)
+
+    im0 = psf_im * 7.0
+    noise = np.sqrt(np.sum(im0 ** 2)) / 25.0
+    wgt = np.ones_like(im0) / noise ** 2
+
+    fitter = PrePSFAdmomFitter(model=model, rng=rng)
+    Ts = []
+    for i in range(ntrial):
+        obs = Observation(
+            im0 + rng.normal(scale=noise, size=im0.shape),
+            jacobian=jac, weight=wgt, psf=psf_obs,
+        )
+        res = fitter.go(obs, guess=0.1)
+        # size and fluxes are usable even when the shape is not
+        assert res['T_flags'] == 0
+        assert res['flux_flags'] == 0
+        Ts.append(res['T'])
+
+    Ts = np.array(Ts)
+    # substantial scatter on both sides of zero, impossible with a
+    # clipped size; the mean carries only the usual second order
+    # admom noise bias, small compared to the per object scatter
+    frac_neg = (Ts < 0).mean()
+    assert 0.2 < frac_neg < 0.8
+    assert np.abs(np.mean(Ts)) < 0.5 * np.std(Ts)
+
+
+def test_prepsfadmom_model_exp_highe():
+    """
+    a highly elliptical exp
+    """
+    e1_true, e2_true, T_true, flux_true = 0.92, 0.05, 0.5, 4.0
+    gs_wcs = galsim.PixelScale(0.25).jacobian()
+
+    obs = _make_exp_mix_obs(
+        e1_true, e2_true, T_true, flux_true, 0.9, gs_wcs, dim=64,
+    )
+    res = run_prepsf_admom(
+        obs, guess=0.4, model='exp', rng=np.random.RandomState(3),
+    )
+    assert res['flags'] == 0
+    assert np.abs(res['e1'] - e1_true) < 1.0e-3
+    assert np.abs(res['e2'] - e2_true) < 1.0e-3
+    assert np.abs(res['T'] / T_true - 1) < 2.0e-3
+    assert np.abs(res['flux'] / flux_true - 1) < 1.0e-3
+
+
+def test_prepsfadmom_model_errors():
+    """
+    model error conditions raise
+    """
+    with pytest.raises(ValueError):
+        PrePSFAdmomFitter(model='dev')
+
+    gs_wcs = galsim.PixelScale(0.25).jacobian()
+    obs = _make_obs(0.1, -0.05, 0.6, 3.5, 0.9, gs_wcs)
+
+    # the star model requires positive smoothing
+    with pytest.raises(ValueError):
+        run_prepsf_admom(
+            obs, model='star', fwhm_smooth=0,
+            rng=np.random.RandomState(3),
+        )

@@ -22,6 +22,15 @@
       around the fixed point of the iteration), removing the ~sqrt(2)
       underestimate of the flux scatter from the fixed weight
       assumption.  The reported s2n is correspondingly smaller.
+    - prepsfadmom accepts model='exp' and model='star' in addition to
+      the default 'gauss'.  With 'exp' the ngmix 6-gaussian
+      exponential expansion is fit by moment matching with an
+      adaptive moments style update; T, e1, e2 are the family
+      parameters and fluxes are total model fluxes.  The family
+      covariance is not clipped: the size scatters through zero for
+      marginally resolved objects, keeping ensemble averages
+      unbiased.  With 'star' the object is a pre-psf delta function
+      with only the center and per band fluxes fit.
     - Allow fwhm as size for Moffat galsim fitter
     - Added method scale_T() to gausian mixtures.
     - Added new metacal psf reconvolution method 'azgauss',
