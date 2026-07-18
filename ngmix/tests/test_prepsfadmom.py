@@ -848,10 +848,9 @@ def test_prepsfadmom_model_exp_noise():
     """
     exp model with noise.
 
-    Test the fit is robust and the total flux is recovered.  The flux errors
-    carry the gauss weight response but not yet the family normalization
-    response, so they underestimate the total flux scatter by ~20 percent (see
-    the fitter Notes)
+    Test the fit is robust, the total flux is recovered, and the sandwich
+    errors for flux, T and e match the observed scatter up to second order
+    effects at this s/n
     """
     ntrial = 200
     rng = np.random.RandomState(42)
@@ -876,7 +875,7 @@ def test_prepsfadmom_model_exp_noise():
     wgt = np.ones_like(im0) / noise ** 2
 
     fitter = PrePSFAdmomFitter(model='exp', rng=rng)
-    fxs, fes = [], []
+    fxs, fes, Ts, Tes, e1s, e1es = [], [], [], [], [], []
     nfail = 0
     for i in range(ntrial):
         obs = Observation(
@@ -889,11 +888,118 @@ def test_prepsfadmom_model_exp_noise():
             continue
         fxs.append(res['flux'])
         fes.append(res['flux_err'])
+        Ts.append(res['T'])
+        Tes.append(res['T_err'])
+        e1s.append(res['e1'])
+        e1es.append(res['e1err'])
 
     assert nfail < ntrial * 0.02
     assert np.abs(np.median(fxs) / 4.0 - 1) < 0.03
-    ratio = np.mean(fes) / np.std(fxs)
-    assert 0.65 < ratio < 0.95
+    assert 0.8 < np.mean(fes) / np.std(fxs) < 1.05
+    assert 0.8 < np.mean(Tes) / np.std(Ts) < 1.05
+    assert 0.8 < np.mean(e1es) / np.std(e1s) < 1.05
+
+
+@pytest.mark.parametrize('model', ['gauss', 'exp'])
+def test_prepsfadmom_e_cov(model):
+    """
+    the reported e1-e2 covariance is consistent with the empirical
+    covariance of the measured shapes.  The noise correlation is
+    small for these configurations, so this is a consistency check
+    at the statistical precision of the trials, plus structural
+    checks per fit
+    """
+    ntrial = 400
+    rng = np.random.RandomState(77)
+    gs_wcs = galsim.PixelScale(0.25).jacobian()
+
+    if model == 'gauss':
+        obs0 = _make_obs(0.35, 0.25, 0.6, 4.0, 0.9, gs_wcs)
+    else:
+        obs0 = _make_exp_mix_obs(0.35, 0.25, 0.5, 4.0, 0.9, gs_wcs)
+    im0 = obs0.image
+    noise = np.sqrt(np.sum(im0 ** 2)) / 25.0
+    wgt = np.ones_like(im0) / noise ** 2
+
+    fitter = PrePSFAdmomFitter(model=model, rng=rng)
+    e1s, e2s, covs = [], [], []
+    nfail = 0
+    for i in range(ntrial):
+        obs = Observation(
+            im0 + rng.normal(scale=noise, size=im0.shape),
+            jacobian=obs0.jacobian, weight=wgt, psf=obs0.psf,
+        )
+        res = fitter.go(obs, guess=0.5)
+        if res['flags'] != 0:
+            nfail += 1
+            continue
+
+        # symmetric, and consistent with the errors (the linearized
+        # covariance matrix is positive semi definite)
+        ecov = res['e_cov']
+        assert ecov[0, 1] == ecov[1, 0]
+        assert np.abs(ecov[0, 1]) <= (
+            res['e1err'] * res['e2err'] * (1 + 1.0e-10)
+        )
+
+        e1s.append(res['e1'])
+        e2s.append(res['e2'])
+        covs.append(ecov[0, 1])
+
+    assert nfail < ntrial * 0.02
+
+    e1s = np.array(e1s)
+    e2s = np.array(e2s)
+    emp = np.cov(e1s, e2s)[0, 1]
+    rep = np.mean(covs)
+    se = e1s.std() * e2s.std() / np.sqrt(e1s.size)
+    assert np.abs(emp - rep) < 4 * se
+
+
+def test_prepsfadmom_model_sandwich_gauss_anchor():
+    """
+    the model sandwich evaluated for a single gaussian family reduces
+    exactly to the analytic gauss delta method, for arbitrary inputs,
+    and the family response is dSfam = 4 dM
+    """
+    from ngmix.prepsfadmom.prepsfadmom import (
+        _flux_var_delta, _model_sandwich,
+    )
+
+    rng = np.random.RandomState(9)
+    Tsmooth = 0.8
+    Sigma = np.array([[0.9, 0.08], [0.08, 1.1]])
+    # the gauss fixed point: smoothed family covariance = weight
+    Sfam = Sigma - np.diag([Tsmooth / 2] * 2)
+
+    sums = np.zeros(6)
+    sums[5] = 5.0
+    G = rng.normal(size=(6, 6))
+    cov = G @ G.T
+    fsums = np.array([2.0, 3.0])
+    fvars = np.array([0.3, 0.4])
+    fmcovs = rng.normal(size=(2, 3)) * 0.1
+
+    raw_delta = _flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs)
+    raw_sw, fam_cov = _model_sandwich(
+        'gauss', Sfam, Sigma, Tsmooth, sums, cov, fsums, fvars, fmcovs,
+    )
+    assert np.allclose(raw_sw, raw_delta, rtol=1.0e-5, atol=0)
+
+    # B = 1/4 for the single gaussian family, so the family
+    # covariance is 16 times the measured ratio covariance
+    mvec = np.array([
+        Sigma[1, 1] - Sigma[0, 0], 2 * Sigma[0, 1],
+        Sigma[0, 0] + Sigma[1, 1],
+    ]) / 2
+    css = cov[2:5, 2:5]
+    csf = cov[2:5, 5]
+    cff = cov[5, 5]
+    cmm = (
+        css - np.outer(mvec, csf) - np.outer(csf, mvec)
+        + np.outer(mvec, mvec) * cff
+    ) / sums[5] ** 2
+    assert np.allclose(fam_cov, 16 * cmm, rtol=1.0e-4, atol=0)
 
 
 @pytest.mark.parametrize('model', ['gauss', 'exp'])
@@ -923,7 +1029,7 @@ def test_prepsfadmom_model_star_data(model):
     wgt = np.ones_like(im0) / noise ** 2
 
     fitter = PrePSFAdmomFitter(model=model, rng=rng)
-    Ts = []
+    Ts, Tes = [], []
     for i in range(ntrial):
         obs = Observation(
             im0 + rng.normal(scale=noise, size=im0.shape),
@@ -934,6 +1040,7 @@ def test_prepsfadmom_model_star_data(model):
         assert res['T_flags'] == 0
         assert res['flux_flags'] == 0
         Ts.append(res['T'])
+        Tes.append(res['T_err'])
 
     Ts = np.array(Ts)
     # substantial scatter on both sides of zero, impossible with a
@@ -942,6 +1049,9 @@ def test_prepsfadmom_model_star_data(model):
     frac_neg = (Ts < 0).mean()
     assert 0.2 < frac_neg < 0.8
     assert np.abs(np.mean(Ts)) < 0.5 * np.std(Ts)
+
+    # the size errors are calibrated through zero
+    assert np.abs(np.mean(Tes) / np.std(Ts) - 1) < 0.15
 
 
 def test_prepsfadmom_model_exp_highe():

@@ -194,6 +194,9 @@ class PrePSFAdmomResult(dict):
         Offset of the common center from the image jacobian centers
     e1, e2: float
         Pre-PSF ellipticity parameters, with errors e1err, e2err
+    e_cov: array (2, 2)
+        The covariance matrix of e1 and e2, including their
+        covariance
     T: float
         Pre-PSF T, with error T_err.  This is the T of the converged
         weight with the smoothing subtracted, and can be non-positive
@@ -318,15 +321,17 @@ class PrePSFAdmomFitter(object):
     errors are first order and remain approximate at very low s/n or
     for strongly non-gaussian profiles.
 
-    For model='exp' the flux is the total model flux, whose
-    normalization couples to the fitted family size.  The reported
-    errors carry the weight response of the gauss fixed point but
-    not yet the response of the family normalization, and
-    underestimate the observed total flux scatter by ~20 percent at
-    moderate s/n; the T and shape errors are those of the converged
-    gaussian weight, an approximation to the family parameter
-    errors.  For model='star' the weight is frozen and the fixed
-    weight flux errors are exact.
+    For model='exp' the flux, T and shape errors come from the full
+    sandwich over the moment matching conditions.  "Sandwich" is the
+    standard covariance of an estimator defined by conditions
+    g(theta; data) = 0: at first order Cov(theta) = J^-1 Cov(g) J^-T
+    with J = dg/dtheta.  The model derivatives in J are
+    evaluated in closed form for the mixture (see _model_sandwich);
+    the only approximation beyond first order is replacing the data
+    by the converged model, which is second order at the matched
+    moments.  The errors match the observed scatter at the ~5
+    percent level at s/n 20, improving with s/n.  For model='star'
+    the weight is frozen and the fixed weight flux errors are exact.
 
     By default the noise is assumed white, with each Fourier mode
     assigned the same power, set by the weight map.  With
@@ -777,7 +782,7 @@ class PrePSFAdmomFitter(object):
         }
 
         if flags == 0:
-            sums, sums_cov, fluxes, flux_vars = self._finalize(
+            sums, sums_cov, fluxes, flux_vars, fam_cov = self._finalize(
                 epochs, nband, Sigma, v0, u0, Tsmooth,
                 model_state=model_state,
             )
@@ -819,6 +824,12 @@ class PrePSFAdmomFitter(object):
             if model_state is not None and model_state['type'] == 'star':
                 # T is fixed at zero by the model, not measured
                 pass
+            elif model_state is not None:
+                # exp: from the family covariance sandwich
+                if fam_cov[2, 2] > 0:
+                    res['T_err'] = np.sqrt(fam_cov[2, 2])
+                else:
+                    res['T_flags'] |= ngmix.flags.NONPOS_VAR
             elif sums_cov[4, 4] > 0 and sums_cov[5, 5] > 0:
                 # the sums include the weight, so need a factor of two
                 # to correct, as in real-space adaptive moments
@@ -842,28 +853,61 @@ class PrePSFAdmomFitter(object):
                 res['e2'] = M2 / Tgal
                 res['e'] = np.array([res['e1'], res['e2']])
 
-                if sums_cov[2, 2] > 0 and sums_cov[3, 3] > 0:
+                e1err = np.nan
+                e2err = np.nan
+                e12cov = np.nan
+                if model_state is not None:
+                    # exp: linearize e = M/T over the family
+                    # covariance sandwich
+                    ev1 = (
+                        fam_cov[0, 0]
+                        - 2 * res['e1'] * fam_cov[0, 2]
+                        + res['e1'] ** 2 * fam_cov[2, 2]
+                    ) / Tgal ** 2
+                    ev2 = (
+                        fam_cov[1, 1]
+                        - 2 * res['e2'] * fam_cov[1, 2]
+                        + res['e2'] ** 2 * fam_cov[2, 2]
+                    ) / Tgal ** 2
+                    if ev1 > 0 and ev2 > 0:
+                        e1err = np.sqrt(ev1)
+                        e2err = np.sqrt(ev2)
+                        e12cov = (
+                            fam_cov[0, 1]
+                            - res['e1'] * fam_cov[1, 2]
+                            - res['e2'] * fam_cov[0, 2]
+                            + res['e1'] * res['e2'] * fam_cov[2, 2]
+                        ) / Tgal ** 2
+                elif sums_cov[2, 2] > 0 and sums_cov[3, 3] > 0:
                     # the lever arm Twt/Tgal accounts for the smoothing
                     # subtraction in the denominator of e = M1/Tgal
                     lever = Twt / Tgal
-                    res['e1err'] = lever * 2 * get_ratio_error(
+                    e1err = lever * 2 * get_ratio_error(
                         sums[2], sums[4],
                         sums_cov[2, 2], sums_cov[4, 4], sums_cov[2, 4],
                     )
-                    res['e2err'] = lever * 2 * get_ratio_error(
+                    e2err = lever * 2 * get_ratio_error(
                         sums[3], sums[4],
                         sums_cov[3, 3], sums_cov[4, 4], sums_cov[3, 4],
                     )
-                    if (not np.isfinite(res['e1err'])
-                            or not np.isfinite(res['e2err'])):
-                        res['e1err'] = np.nan
-                        res['e2err'] = np.nan
-                        res['flags'] |= ngmix.flags.NONPOS_SHAPE_VAR
-                    else:
-                        res['e_err'] = np.array([res['e1err'], res['e2err']])
-                        res['e_cov'] = np.diag(
-                            [res['e1err'] ** 2, res['e2err'] ** 2]
-                        )
+                    # the covariance of the two moment ratios with the
+                    # common denominator, consistent with get_ratio_var
+                    r1 = sums[2] / sums[4]
+                    r2 = sums[3] / sums[4]
+                    e12cov = (lever * 2) ** 2 * (
+                        sums_cov[2, 3] - r1 * sums_cov[3, 4]
+                        - r2 * sums_cov[2, 4] + r1 * r2 * sums_cov[4, 4]
+                    ) / sums[4] ** 2
+
+                if (np.isfinite(e1err) and np.isfinite(e2err)
+                        and np.isfinite(e12cov)):
+                    res['e1err'] = e1err
+                    res['e2err'] = e2err
+                    res['e_err'] = np.array([e1err, e2err])
+                    res['e_cov'] = np.array([
+                        [e1err ** 2, e12cov],
+                        [e12cov, e2err ** 2],
+                    ])
                 else:
                     res['flags'] |= ngmix.flags.NONPOS_SHAPE_VAR
             else:
@@ -962,6 +1006,7 @@ class PrePSFAdmomFitter(object):
             fmcovs[band] += fac ** 2 * nfac * ecov[2:5, 5]
             wsums[band] += epoch['weight']
 
+        fam_cov = None
         if model_state is None:
             fluxes = 2 * knrm * fsums / wsums
             flux_vars = (2 * knrm / wsums) ** 2 * _flux_var_delta(
@@ -981,11 +1026,12 @@ class PrePSFAdmomFitter(object):
                 # variance is exact
                 rawvars = fvars
             else:
-                rawvars = _flux_var_delta(
-                    Sigma, sums, cov, fsums, fvars, fmcovs,
+                rawvars, fam_cov = _model_sandwich(
+                    'exp', model_state['cov'], Sigma, Tsmooth,
+                    sums, cov, fsums, fvars, fmcovs,
                 )
             flux_vars = rawvars / upred ** 2
-        return sums, cov, fluxes, flux_vars
+        return sums, cov, fluxes, flux_vars, fam_cov
 
     def _prep_epoch(self, obs, band, Tsmooth, no_psf):
         """
@@ -1238,6 +1284,134 @@ def _flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
         + r ** 2 * (cff + bcb - 2 * (b @ cmf))
         + 2 * r * (fmcovs @ b - fvars)
     )
+
+
+def _mbasis_cov(M1, M2, T):
+    """covariance matrix from (M1, M2, T) moment components"""
+    return 0.5 * np.array([
+        [T - M1, M2],
+        [M2, T + M1],
+    ])
+
+
+def _model_pred_mbasis(model_type, Sfam, Sigma, Tsmooth):
+    """
+    the predicted weighted moment ratios (M1, M2, T) and the log of
+    the unit flux prediction for a model family covariance, at unit
+    detAtinv; the ratios and the log derivative are the same for
+    every epoch and band
+    """
+    if model_type == 'exp':
+        state = {'type': 'exp', 'cov': Sfam, 'F': np.ones(1)}
+    else:
+        # single gaussian family, used to validate against the
+        # analytic gauss delta method
+        state = {
+            'type': 'gauss',
+            'cov_sm': Sfam + np.diag([Tsmooth / 2, Tsmooth / 2]),
+            'F': np.ones(1),
+        }
+    s = model_ksums(state, 0, 0.0, 0.0, Sigma, 1.0, Tsmooth)
+    return s[2:5] / s[5], np.log(s[5])
+
+
+def _model_sandwich(
+    model_type, Sfam, Sigma, Tsmooth, sums, cov, fsums, fvars, fmcovs,
+):
+    """
+    first order (sandwich) errors for the moment matched model fits
+
+    The estimating equations are the weight condition
+    M_meas(Sigma) = Sigma/2, the family condition
+    M_pred(Sigma, Sfam) = M_meas, and per band F_b N_b = fs_b with
+    N_b the unit flux model prediction.  Evaluated with the data
+    replaced by the converged model, the Jacobian is block
+    triangular: the family and flux conditions lose their explicit
+    weight dependence, leaving
+
+        dSfam = B^-1 dM,    B = dM_pred/dSfam
+        dF_b/F_b = dfs_b/fs_b - (dln N/dSfam) . dSfam
+
+    where dM is the noise fluctuation of the measured moment ratios.
+    B and the normalization derivative are evaluated in closed form
+    (by central differences on the analytic predictions), so unlike
+    the gauss delta method there is no gaussian approximation beyond
+    replacing the data by the converged model; for a single gaussian
+    family this reduces exactly to _flux_var_delta.
+
+    Parameters
+    ----------
+    model_type: str
+        'exp', or 'gauss' for validation
+    Sfam: (2, 2) array
+        The converged family covariance
+    Sigma: (2, 2) array
+        The converged weight covariance
+    Tsmooth: float
+        The smoothing T
+    sums, cov, fsums, fvars, fmcovs:
+        As for _flux_var_delta
+
+    Returns
+    -------
+    var_raw: array of size nband
+        The variance of the per band flux sums including the family
+        response; scale by the same normalization as the raw sums
+    fam_cov: (3, 3) array
+        The covariance of the family (M1, M2, T) parameters
+    """
+    Tw = Sigma[0, 0] + Sigma[1, 1]
+    h = 1.0e-6 * Tw
+    fam0 = np.array([
+        Sfam[1, 1] - Sfam[0, 0], 2 * Sfam[0, 1],
+        Sfam[0, 0] + Sfam[1, 1],
+    ])
+
+    B = np.zeros((3, 3))
+    dlnu = np.zeros(3)
+    for i in range(3):
+        famp = fam0.copy()
+        famm = fam0.copy()
+        famp[i] += h
+        famm[i] -= h
+        rp, lp = _model_pred_mbasis(
+            model_type, _mbasis_cov(*famp), Sigma, Tsmooth,
+        )
+        rm, lm = _model_pred_mbasis(
+            model_type, _mbasis_cov(*famm), Sigma, Tsmooth,
+        )
+        B[:, i] = (rp - rm) / (2 * h)
+        dlnu[i] = (lp - lm) / (2 * h)
+
+    # the noise fluctuation of the measured ratios,
+    # dM = (dS_M - mvec dS_F) / S_F, in terms of the raw sums
+    sfj = sums[5]
+    mvec = np.array([
+        Sigma[1, 1] - Sigma[0, 0], 2 * Sigma[0, 1], Tw,
+    ]) / 2
+    css = cov[2:5, 2:5]
+    csf = cov[2:5, 5]
+    cff = cov[5, 5]
+    cmm = (
+        css - np.outer(mvec, csf) - np.outer(csf, mvec)
+        + np.outer(mvec, mvec) * cff
+    ) / sfj ** 2
+
+    Binv = np.linalg.inv(B)
+    fam_cov = Binv @ cmm @ Binv.T
+    a = np.linalg.solve(B.T, dlnu)
+
+    # dF_b is proportional to dS_Fb - fs_b a . dM; the band flux
+    # sums covary only with their own epochs' part of the joint sums
+    aca = a @ cmm @ a
+    var_raw = np.zeros(fsums.size)
+    for band in range(fsums.size):
+        acmf = (a @ fmcovs[band] - (a @ mvec) * fvars[band]) / sfj
+        var_raw[band] = (
+            fvars[band] + fsums[band] ** 2 * aca
+            - 2 * fsums[band] * acmf
+        )
+    return var_raw, fam_cov
 
 
 def _get_phase_angles(epoch, v0, u0):

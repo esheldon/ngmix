@@ -27,6 +27,10 @@
       expansion is fit by moment matching with an adaptive moments style
       update.  With 'star' the object is a pre-psf delta function with
       only the center and per band fluxes fit.
+    - The model='exp' flux, T and shape errors use a sandwich over
+      the moment matching conditions with closed form model
+      derivatives, matching the observed scatter at the ~5 percent
+      level at s/n 20.
     - Allow fwhm as size for Moffat galsim fitter
     - Added method scale_T() to gausian mixtures.
     - Added new metacal psf reconvolution method 'azgauss',
