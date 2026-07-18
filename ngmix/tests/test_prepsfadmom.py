@@ -317,12 +317,10 @@ def test_prepsfadmom_noise():
     assert np.abs(np.median(e2s) - e2_true) < 0.05
     assert np.abs(np.median(fluxes) / flux_true - 1) < 0.1
 
-    # the errors assume a fixed weight, as in real-space adaptive
-    # moments.  The shape errors match the scatter well; the flux
-    # errors underestimate the scatter because the flux couples to the
-    # fitted size, at the same level as for real-space admom (~30%
-    # at this s/n)
-    assert 0.55 < np.mean(fluxerrs) / np.std(fluxes) < 1.1
+    # the errors include the first order response of the adaptive
+    # weight to the noise, so both the flux and shape errors should
+    # match the observed scatter
+    assert np.abs(np.mean(fluxerrs) / np.std(fluxes) - 1) < 0.15
     assert np.abs(np.mean(e1errs) / np.std(e1s) - 1) < 0.3
 
 
@@ -588,12 +586,71 @@ def test_prepsfadmom_noise_image_correlated():
     ratio_a_e1 = np.std(e1s_a) / np.mean(e1errs_a)
     ratio_b_e1 = np.std(e1s_b) / np.mean(e1errs_b)
 
+    # with the delta method weight response the errors are absolutely
+    # calibrated in both cases
+    assert np.abs(ratio_a_flux - 1) < 0.15
+    assert np.abs(ratio_b_flux - 1) < 0.2
+    assert np.abs(ratio_a_e1 - 1) < 0.2
+    assert np.abs(ratio_b_e1 - 1) < 0.2
+
     # the white noise assumption would report errors scaled from case a
     # by the pixel std, badly underestimating the observed scatter
     werr_b = np.mean(fluxerrs_a) * sigma_corr / sigma_white
-    assert np.std(fluxes_b) / werr_b > 2.0 * ratio_a_flux
+    assert np.std(fluxes_b) / werr_b > 2.0
 
     # the per-mode errors track the scatter as well as the white errors
-    # do for white noise, including the common fixed-weight bias
+    # do for white noise
     assert np.abs(ratio_b_flux / ratio_a_flux - 1) < 0.2
     assert np.abs(ratio_b_e1 / ratio_a_e1 - 1) < 0.2
+
+
+def test_prepsfadmom_noise_multiband():
+    """
+    per band flux errors with the joint weight: the weight response
+    term couples each band flux to the joint moment conditions, so
+    the errors need the cross covariance of the band flux sums with
+    the joint sums.  Check the reported errors match the observed
+    scatter in each band
+    """
+    ntrial = 200
+    rng = np.random.RandomState(271828)
+    gs_wcs = galsim.PixelScale(0.25).jacobian()
+
+    e1_true, e2_true, T_true = 0.2, -0.1, 0.6
+    band_fluxes = [3.5, 5.5]
+    psf_fwhms = [0.9, 0.8]
+
+    # per band noise for flux s/n ~ 15 and 25
+    noises = []
+    for flux, pf, s2n in zip(band_fluxes, psf_fwhms, [15.0, 25.0]):
+        obs0 = _make_obs(e1_true, e2_true, T_true, flux, pf, gs_wcs)
+        noises.append(np.sqrt(np.sum(obs0.image ** 2)) / s2n)
+
+    fitter = PrePSFAdmomFitter(rng=rng)
+
+    fluxes = [[], []]
+    fluxerrs = [[], []]
+    nfail = 0
+    for i in range(ntrial):
+        mbobs = MultiBandObsList()
+        for flux, pf, noise in zip(band_fluxes, psf_fwhms, noises):
+            obslist = ObsList()
+            obslist.append(_make_obs(
+                e1_true, e2_true, T_true, flux, pf, gs_wcs,
+                noise=noise, rng=rng,
+            ))
+            mbobs.append(obslist)
+
+        res = fitter.go(mbobs, guess=0.6)
+        if res['flags'] != 0:
+            nfail += 1
+            continue
+        for band in range(2):
+            fluxes[band].append(res['flux'][band])
+            fluxerrs[band].append(res['flux_err'][band])
+
+    assert nfail < ntrial * 0.02
+
+    for band in range(2):
+        ratio = np.mean(fluxerrs[band]) / np.std(fluxes[band])
+        assert np.abs(ratio - 1) < 0.15

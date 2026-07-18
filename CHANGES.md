@@ -17,6 +17,11 @@
       observation instead of assuming white noise from the weight map.
       This makes the error estimates correct for stationary correlated
       noise, such as that induced by metacal.
+    - The prepsfadmom flux errors include the first order response of
+      the adaptive weight to the noise (a delta method expansion
+      around the fixed point of the iteration), removing the ~sqrt(2)
+      underestimate of the flux scatter from the fixed weight
+      assumption.  The reported s2n is correspondingly smaller.
     - Allow fwhm as size for Moffat galsim fitter
     - Added method scale_T() to gausian mixtures.
     - Added new metacal psf reconvolution method 'azgauss',

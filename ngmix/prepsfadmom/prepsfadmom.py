@@ -267,11 +267,15 @@ class PrePSFAdmomFitter(object):
 
     Notes
     -----
-    The reported errors are derived assuming a fixed weight function, as
-    in real-space adaptive moments, and are approximate.  In particular
-    the flux errors underestimate the observed scatter because the flux
-    couples to the fitted size; the level of underestimation matches
-    that of real-space adaptive moments.
+    The reported errors include the first order response of the
+    adaptive weight to the noise, propagated through the fixed point
+    conditions of the iteration (the delta method), with the
+    derivatives evaluated analytically for the gaussian implied by
+    the converged weight.  For the flux this doubles the naive fixed
+    weight variance of a gaussian object; the T and shape errors
+    carry the same response through the deweighting factors.  The
+    errors are first order and remain approximate at very low s/n or
+    for strongly non-gaussian profiles.
 
     By default the noise is assumed white, with each Fourier mode
     assigned the same power, set by the weight map.  With
@@ -609,7 +613,9 @@ class PrePSFAdmomFitter(object):
         The covariance treats each Fourier mode as independent with
         variance given by the noise power carried in the per-epoch
         err_fac2, either white at the level set by the weight map or
-        measured per mode from the attached noise image.
+        measured per mode from the attached noise image.  The flux
+        variances include the response of the adaptive weight to the
+        noise; see _flux_var_delta.
 
         The flux normalization: the raw flux sum corresponds to a
         weighted flux with an effective real-space kernel of peak value
@@ -627,6 +633,9 @@ class PrePSFAdmomFitter(object):
 
         fsums = np.zeros(nband)
         fvars = np.zeros(nband)
+        # cov of the joint (M1, M2, T) sums with the band flux sums,
+        # for the weight response term in the flux errors
+        fmcovs = np.zeros((nband, 3))
         wsums = np.zeros(nband)
 
         for epoch in epochs:
@@ -647,10 +656,13 @@ class PrePSFAdmomFitter(object):
             band = epoch['band']
             fsums[band] += fac * esums[5]
             fvars[band] += fac ** 2 * nfac * ecov[5, 5]
+            fmcovs[band] += fac ** 2 * nfac * ecov[2:5, 5]
             wsums[band] += epoch['weight']
 
         fluxes = 2 * knrm * fsums / wsums
-        flux_vars = (2 * knrm / wsums) ** 2 * fvars
+        flux_vars = (2 * knrm / wsums) ** 2 * _flux_var_delta(
+            Sigma, sums, cov, fsums, fvars, fmcovs,
+        )
         return sums, cov, fluxes, flux_vars
 
     def _prep_epoch(self, obs, band, Tsmooth, no_psf):
@@ -834,6 +846,76 @@ class PrePSFAdmomFitter(object):
         if self.rng is None:
             self.rng = np.random.RandomState()
         return self.rng
+
+
+def _flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
+    """
+    variance of the raw per-band flux sums, including the first order
+    response of the adaptive weight to the noise (the delta method)
+
+    The converged weight satisfies the fixed point conditions
+    M(Sigma) = Sigma / 2, where M is the measured weighted covariance,
+    a ratio of the joint moment sums.  By the implicit function
+    theorem the weight fluctuation is dSigma = -J^-1 dM with
+    J = dM/dSigma - 1/2.  For the gaussian implied by the converged
+    weight, dM/dSigma = 1/4 exactly at the fixed point, for any
+    ellipticity and smoothing, so dSigma = 4 dM.  The flux
+    normalization (proportional to sqrt(det Sigma)) and the kernel
+    response of the flux sum combine to dln F = tr(Sigma^-1 dM), and
+    for a single band the fixed weight flux fluctuation cancels
+    exactly, leaving
+
+        dF / F = tr(Sigma^-1 dS_M) / S_F
+
+    in terms of the second moment sum fluctuations alone.  For a
+    round gaussian with matched weight and white noise this doubles
+    the fixed weight variance.  With multiple bands the band flux sum
+    and the joint conditions are distinct and their cross covariances
+    enter; the band flux sums covary only with their own epochs'
+    contribution to the joint sums.
+
+    Parameters
+    ----------
+    Sigma: 2x2 array
+        The converged weight covariance
+    sums: array of size 6
+        The accumulated joint sums
+    cov: array (6, 6)
+        The covariance of the joint sums
+    fsums: array of size nband
+        The accumulated per band flux sums
+    fvars: array of size nband
+        The variances of the per band flux sums
+    fmcovs: array (nband, 3)
+        The covariance of the joint (M1, M2, T) sums with the per
+        band flux sums
+
+    Returns
+    -------
+    The variance of the per band flux sums including the weight
+    response; scale by the same normalization as the raw flux sums.
+    """
+    Winv = np.linalg.inv(Sigma)
+    # tr(Winv dS_M) = b . dS in the (M1, M2, T) sums basis
+    b = np.array([
+        0.5 * (Winv[1, 1] - Winv[0, 0]),
+        Winv[0, 1],
+        0.5 * (Winv[0, 0] + Winv[1, 1]),
+    ])
+
+    cmm = cov[2:5, 2:5]
+    cmf = cov[2:5, 5]
+    cff = cov[5, 5]
+
+    # dF_b is proportional to dS_Fb - r dS_F + r b . dS_M with
+    # r = S_Fb / S_F the band share of the joint flux sum
+    r = fsums / sums[5]
+    bcb = b @ cmm @ b
+    return (
+        fvars
+        + r ** 2 * (cff + bcb - 2 * (b @ cmf))
+        + 2 * r * (fmcovs @ b - fvars)
+    )
 
 
 def _get_phase_angles(epoch, v0, u0):
