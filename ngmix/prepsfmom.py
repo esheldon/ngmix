@@ -67,15 +67,26 @@ class PrePSFMom(object):
         If non-zero, this optional applies additional Gaussian smoothing to the
         object before computing the moments. Typically a non-zero value results
         in less shape noise.
+    use_noise_image : bool, optional
+        If True, estimate the per-mode noise power for the error
+        estimates from the noise image attached to the observation
+        (obs.noise), instead of assuming white noise at the level set
+        by the weight map.  This makes the errors correct for
+        stationary correlated noise, such as that induced by metacal.
+        The noise image must be an independent realization of the
+        noise, in the same frame as the image (e.g. as maintained by
+        metacal).  The measured moments are unchanged.  Default False.
     """
     def __init__(
-        self, fwhm, kernel, pad_factor=4, ap_rad=1.5, fwhm_smooth=0
+        self, fwhm, kernel, pad_factor=4, ap_rad=1.5, fwhm_smooth=0,
+        use_noise_image=False,
     ):
         self.fwhm = fwhm
         self.pad_factor = pad_factor
         self.kernel = kernel
         self.ap_rad = ap_rad
         self.fwhm_smooth = fwhm_smooth
+        self.use_noise_image = use_noise_image
         if self.kernel == "ksigma":
             self.kind = "ksigma"
         elif self.kernel in ["gauss", "pgauss"]:
@@ -186,9 +197,32 @@ class PrePSFMom(object):
         msk = obs.weight > 0
         tot_var = np.sum(1.0 / obs.weight[msk])
 
+        # the noise power per mode, white from the weight map or measured
+        # from the attached noise realization.  In both cases the
+        # eff_pad_factor boost accounts for treating the modes of the zero
+        # padded image as independent.  The noise is not apodized: the taper
+        # is part of the padding window, whose effect on the noise in the
+        # moments vanishes for kernels supported in the stamp interior, and
+        # the boost corresponds to the plain zero pad window
+        if self.use_noise_image:
+            if not obs.has_noise():
+                raise ValueError(
+                    'obs.noise must be set when use_noise_image=True'
+                )
+            knoise, _, _ = _zero_pad_and_compute_fft_maybe_cached(
+                obs.noise, obs.jacobian.row0, obs.jacobian.col0,
+                target_dim, 0,
+            )
+            pnoise = np.abs(knoise[kernels["msk"]]) ** 2
+            pnoise *= eff_pad_factor ** 2
+        else:
+            pnoise = np.full(
+                kernels["fkf"].size, tot_var * eff_pad_factor ** 2,
+            )
+
         # run the actual measurements and return
         mom, mom_cov, mom_norm = _measure_moments_fft(
-            kim, kpsf_im, tot_var, eff_pad_factor, kernels,
+            kim, kpsf_im, pnoise, kernels,
             im_row - psf_im_row, im_col - psf_im_col,
         )
         res = make_mom_result(mom, mom_cov, sums_norm=mom_norm)
@@ -233,13 +267,23 @@ class KSigmaMom(PrePSFMom):
         If non-zero, this optional applies additional Gaussian smoothing to the
         object before computing the moments. Typically a non-zero value results
         in less shape noise.
+    use_noise_image : bool, optional
+        If True, estimate the per-mode noise power for the error
+        estimates from the noise image attached to the observation
+        (obs.noise), instead of assuming white noise at the level set
+        by the weight map.  This makes the errors correct for
+        stationary correlated noise, such as that induced by metacal.
+        The noise image must be an independent realization of the
+        noise, in the same frame as the image (e.g. as maintained by
+        metacal).  The measured moments are unchanged.  Default False.
     """
     def __init__(
-        self, fwhm, pad_factor=4, ap_rad=1.5, fwhm_smooth=0
+        self, fwhm, pad_factor=4, ap_rad=1.5, fwhm_smooth=0,
+        use_noise_image=False,
     ):
         super().__init__(
             fwhm, 'ksigma', pad_factor=pad_factor, ap_rad=ap_rad,
-            fwhm_smooth=fwhm_smooth,
+            fwhm_smooth=fwhm_smooth, use_noise_image=use_noise_image,
         )
 
 
@@ -266,13 +310,23 @@ class PGaussMom(PrePSFMom):
         If non-zero, this optional applies additional Gaussian smoothing to the
         object before computing the moments. Typically a non-zero value results
         in less shape noise.
+    use_noise_image : bool, optional
+        If True, estimate the per-mode noise power for the error
+        estimates from the noise image attached to the observation
+        (obs.noise), instead of assuming white noise at the level set
+        by the weight map.  This makes the errors correct for
+        stationary correlated noise, such as that induced by metacal.
+        The noise image must be an independent realization of the
+        noise, in the same frame as the image (e.g. as maintained by
+        metacal).  The measured moments are unchanged.  Default False.
     """
     def __init__(
         self, fwhm, pad_factor=4, ap_rad=1.5, fwhm_smooth=0,
+        use_noise_image=False,
     ):
         super().__init__(
             fwhm, 'pgauss', pad_factor=pad_factor, ap_rad=ap_rad,
-            fwhm_smooth=fwhm_smooth,
+            fwhm_smooth=fwhm_smooth, use_noise_image=use_noise_image,
         )
 
 
@@ -281,7 +335,7 @@ PrePSFGaussMom = PGaussMom
 
 
 def _measure_moments_fft(
-    kim, kpsf_im, tot_var, eff_pad_factor, kernels, drow, dcol,
+    kim, kpsf_im, pnoise, kernels, drow, dcol,
 ):
     # we only need to do things where the kernel is non-zero
     # this saves a bunch of CPU cycles
@@ -311,13 +365,13 @@ def _measure_moments_fft(
     mom_norm = kernels["fk00"]
 
     return _measure_moments_fft_numba(
-        kim, kpsf_im, dim, eff_pad_factor, fkf, fkr, fkp, fkc, mom_norm, tot_var,
+        kim, kpsf_im, dim, fkf, fkr, fkp, fkc, mom_norm, pnoise,
     )
 
 
 @njit
 def _measure_moments_fft_numba(
-    kim, kpsf_im, dim, eff_pad_factor, fkf, fkr, fkp, fkc, mom_norm, tot_var,
+    kim, kpsf_im, dim, fkf, fkr, fkp, fkc, mom_norm, pnoise,
 ):
     # build the flux, radial, plus and cross kernels / moments
     # the inverse FFT in our convention has a factor of 1/n per dimension
@@ -335,17 +389,17 @@ def _measure_moments_fft_numba(
     mc = np.sum((kim * fkc).real) * df2
 
     # build a covariance matrix of the moments
-    # here we assume each Fourier mode is independent and sum the variances
-    # the variance in each mode is simply the total variance over the input image
-    # we need a factor of the padding to correct for something...
+    # here we treat each Fourier mode as independent with variance given by
+    # the per-mode noise power pnoise.  For white noise pnoise is constant,
+    # the total variance over the input image boosted by the square of the
+    # effective padding factor, which accounts for treating the modes of
+    # the zero padded image as independent
     m_cov = np.zeros((6, 6))
     # TODO
     # FIXME
     # set these for real
     m_cov[0, 0] = 1
     m_cov[1, 1] = 1
-    tot_var *= eff_pad_factor**2
-    tot_var_df4 = tot_var * df4
     psf_kerns_fac = 1 / kpsf_im
     kerns = [
         fkp * psf_kerns_fac,
@@ -357,7 +411,9 @@ def _measure_moments_fft_numba(
     for i in range(2, 6):
         for j in range(i, 6):
             # subtract two since kernels start at second moments
-            m_cov[i, j] = np.sum((kerns[i-2] * conj_kerns[j-2]).real) * tot_var_df4
+            m_cov[i, j] = np.sum(
+                (kerns[i-2] * conj_kerns[j-2]).real * pnoise
+            ) * df4
             m_cov[j, i] = m_cov[i, j]
 
     mom = np.array([np.nan, np.nan, mp, mc, mr, mf])
