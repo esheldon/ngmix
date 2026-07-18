@@ -25,7 +25,7 @@ unstable in the presence of noise unless the object is very well
 resolved.
 """
 __all__ = [
-    'run_prepsf_admom', 'PrePSFAdmomFitter', 'PrePSFAdmomResult',
+    'run_prepsf_admom', 'PAdmomFitter', 'PAdmomResult',
     'get_phase_angles', 'deweight',
 ]
 
@@ -143,9 +143,9 @@ def run_prepsf_admom(
 
     Returns
     -------
-    PrePSFAdmomResult
+    PAdmomResult
     """
-    fitter = PrePSFAdmomFitter(
+    fitter = PAdmomFitter(
         model=model,
         fwhm_smooth=fwhm_smooth,
         smooth_fac=smooth_fac,
@@ -162,7 +162,7 @@ def run_prepsf_admom(
     return fitter.go(obs=obs, guess=guess, no_psf=no_psf)
 
 
-class PrePSFAdmomResult(dict):
+class PAdmomResult(dict):
     """
     Represent a pre-PSF adaptive moments fit.  This inherits from dict
     and has entries for the results of the fit.
@@ -241,7 +241,7 @@ class PrePSFAdmomResult(dict):
         return GMixModel(pars, model)
 
 
-class PrePSFAdmomFitter(object):
+class PAdmomFitter(object):
     """
     Measure pre-PSF adaptive moments in Fourier space
 
@@ -397,7 +397,7 @@ class PrePSFAdmomFitter(object):
 
         Returns
         -------
-        PrePSFAdmomResult
+        PAdmomResult
         """
         is_mb = isinstance(obs, MultiBandObsList)
         mb_obs = get_mb_obs(obs)
@@ -442,7 +442,7 @@ class PrePSFAdmomFitter(object):
             result['flux'] = result['flux'][0]
             result['flux_err'] = result['flux_err'][0]
 
-        return PrePSFAdmomResult(obs=obs, result=result)
+        return PAdmomResult(obs=obs, result=result)
 
     def _run_admom(self, epochs, nband, guess_gmix, Tsmooth):
         """

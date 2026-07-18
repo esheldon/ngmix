@@ -133,7 +133,7 @@ def prep_epoch(
     use_noise_image: bool, optional
         If True, measure the per mode noise power from the noise
         image attached to the observation (obs.noise); see
-        PrePSFAdmomFitter.  Default False.
+        PAdmomFitter.  Default False.
     no_psf: bool, optional
         If True, allow an observation without a psf; only the pixel
         window function is deconvolved.  Default False.

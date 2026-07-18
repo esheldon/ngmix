@@ -2,7 +2,7 @@
 
 ### New features
 
-    - Added ngmix.prepsfadmom with PrePSFAdmomFitter/run_prepsf_admom,
+    - Added ngmix.prepsfadmom with PAdmomFitter/run_prepsf_admom,
       adaptive moments measured in Fourier space.  The PSF is
       deconvolved and a common round gaussian smoothing is applied for
       stability, so the fit measures pre-PSF moments.  Supports joint

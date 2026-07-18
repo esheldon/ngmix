@@ -6,7 +6,7 @@ from scipy.ndimage import gaussian_filter
 import ngmix
 from ngmix.moments import fwhm_to_T
 from ngmix import Jacobian, Observation, ObsList, MultiBandObsList
-from ngmix.prepsfadmom import run_prepsf_admom, PrePSFAdmomFitter
+from ngmix.prepsfadmom import run_prepsf_admom, PAdmomFitter
 import ngmix.flags
 
 
@@ -288,7 +288,7 @@ def test_prepsfadmom_noise():
     obs0 = _make_obs(e1_true, e2_true, T_true, flux_true, 0.9, gs_wcs)
     noise = np.sqrt(np.sum(obs0.image ** 2)) / 15.0
 
-    fitter = PrePSFAdmomFitter(rng=rng)
+    fitter = PAdmomFitter(rng=rng)
 
     e1s, e2s, fluxes = [], [], []
     e1errs, fluxerrs = [], []
@@ -338,7 +338,7 @@ def test_prepsfadmom_small_object():
     obs0 = _make_obs(0.1, -0.05, T_true, 3.5, 0.9, gs_wcs)
     noise = np.sqrt(np.sum(obs0.image ** 2)) / 100.0
 
-    fitter = PrePSFAdmomFitter(rng=rng)
+    fitter = PAdmomFitter(rng=rng)
 
     Ts = []
     for i in range(ntrial):
@@ -543,8 +543,8 @@ def test_prepsfadmom_noise_image_correlated():
             rng.normal(size=dims), filt_sigma, mode='wrap',
         ) * (sigma_corr / fac)
 
-    fitter_white = PrePSFAdmomFitter(rng=rng)
-    fitter_pm = PrePSFAdmomFitter(use_noise_image=True, rng=rng)
+    fitter_white = PAdmomFitter(rng=rng)
+    fitter_pm = PAdmomFitter(use_noise_image=True, rng=rng)
 
     fluxes_a, e1s_a, fluxerrs_a, e1errs_a = [], [], [], []
     fluxes_b, e1s_b, fluxerrs_b, e1errs_b = [], [], [], []
@@ -626,7 +626,7 @@ def test_prepsfadmom_noise_multiband():
         obs0 = _make_obs(e1_true, e2_true, T_true, flux, pf, gs_wcs)
         noises.append(np.sqrt(np.sum(obs0.image ** 2)) / s2n)
 
-    fitter = PrePSFAdmomFitter(rng=rng)
+    fitter = PAdmomFitter(rng=rng)
 
     fluxes = [[], []]
     fluxerrs = [[], []]
@@ -828,7 +828,7 @@ def test_prepsfadmom_model_star():
     ntrial = 200
     noise = np.sqrt(np.sum(im0 ** 2)) / 20.0
     wgt = np.ones_like(im0) / noise ** 2
-    fitter = PrePSFAdmomFitter(model='star', fwhm_smooth=1.2, rng=rng)
+    fitter = PAdmomFitter(model='star', fwhm_smooth=1.2, rng=rng)
     fxs, fes = [], []
     for i in range(ntrial):
         nobs = Observation(
@@ -874,7 +874,7 @@ def test_prepsfadmom_model_exp_noise():
     noise = np.sqrt(np.sum(im0 ** 2)) / 20.0
     wgt = np.ones_like(im0) / noise ** 2
 
-    fitter = PrePSFAdmomFitter(model='exp', rng=rng)
+    fitter = PAdmomFitter(model='exp', rng=rng)
     fxs, fes, Ts, Tes, e1s, e1es = [], [], [], [], [], []
     nfail = 0
     for i in range(ntrial):
@@ -921,7 +921,7 @@ def test_prepsfadmom_e_cov(model):
     noise = np.sqrt(np.sum(im0 ** 2)) / 25.0
     wgt = np.ones_like(im0) / noise ** 2
 
-    fitter = PrePSFAdmomFitter(model=model, rng=rng)
+    fitter = PAdmomFitter(model=model, rng=rng)
     e1s, e2s, covs = [], [], []
     nfail = 0
     for i in range(ntrial):
@@ -1028,7 +1028,7 @@ def test_prepsfadmom_model_star_data(model):
     noise = np.sqrt(np.sum(im0 ** 2)) / 25.0
     wgt = np.ones_like(im0) / noise ** 2
 
-    fitter = PrePSFAdmomFitter(model=model, rng=rng)
+    fitter = PAdmomFitter(model=model, rng=rng)
     Ts, Tes = [], []
     for i in range(ntrial):
         obs = Observation(
@@ -1079,7 +1079,7 @@ def test_prepsfadmom_model_errors():
     model error conditions raise
     """
     with pytest.raises(ValueError):
-        PrePSFAdmomFitter(model='dev')
+        PAdmomFitter(model='dev')
 
     gs_wcs = galsim.PixelScale(0.25).jacobian()
     obs = _make_obs(0.1, -0.05, 0.6, 3.5, 0.9, gs_wcs)
