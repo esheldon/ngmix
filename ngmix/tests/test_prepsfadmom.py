@@ -1135,3 +1135,50 @@ def test_prepsfadmom_model_errors():
             obs, model='star', fwhm_smooth=0,
             rng=np.random.RandomState(3),
         )
+
+
+def test_prepsfadmom_model_ksums_kernel_parity():
+    """
+    the numba kernel backed model_ksums must match the python
+    gauss_model_ksums reference summed over components, for all model
+    types and both exp parametrizations, with offsets and a
+    non-trivial k-space area factor
+    """
+    from ngmix.prepsfadmom.models import (
+        model_ksums, gauss_model_ksums, get_exp_comps, cov_from_e,
+    )
+
+    Tsmooth = 0.35
+    smooth_cov = np.diag([Tsmooth / 2, Tsmooth / 2])
+    Sw = np.array([[0.31, 0.04], [0.04, 0.27]])
+    dv, du = 0.83, -1.21
+    detAtinv = 3.7
+    F = np.array([2.5, 1.5])
+
+    Sfam = cov_from_e(0.2, -0.1, 0.8)
+    models = [
+        {'type': 'gauss', 'cov_sm': cov_from_e(0.1, -0.05, 0.6) + smooth_cov,
+         'F': F},
+        {'type': 'star', 'cov_sm': smooth_cov, 'F': F},
+        {'type': 'exp', 'e1': 0.2, 'e2': -0.1, 'T': 0.8, 'F': F},
+        {'type': 'exp', 'cov': Sfam, 'F': F},
+    ]
+
+    for model in models:
+        for band in range(F.size):
+            if model['type'] == 'exp':
+                expected = np.zeros(6)
+                for frac, cT in get_exp_comps():
+                    So = cT * Sfam + smooth_cov
+                    expected += gauss_model_ksums(
+                        model['F'][band] * frac, So, dv, du, Sw, detAtinv,
+                    )
+            else:
+                expected = gauss_model_ksums(
+                    model['F'][band], model['cov_sm'], dv, du, Sw, detAtinv,
+                )
+
+            sums = model_ksums(
+                model, band, dv, du, Sw, detAtinv, Tsmooth,
+            )
+            assert np.allclose(sums, expected, rtol=1.0e-12, atol=1.0e-14)

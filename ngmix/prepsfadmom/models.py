@@ -121,30 +121,70 @@ def get_exp_comps():
     return _EXP_COMPS
 
 
-def model_ksums(model, band, dv, du, Sw, detAtinv, Tsmooth):
+def model_comps(model, Tsmooth):
     """
-    closed-form weighted moment sums of an object model, dispatching
-    on the model type
+    the gaussian components of a model in the smoothed plane
+
+    Parameters
+    ----------
+    model: dict
+        model dict, see the module docstring
+    Tsmooth: float
+        T of the gaussian smoothing
+
+    Returns
+    -------
+    fracs, So00, So01, So11: arrays
+        per component flux fractions and covariances in the smoothed
+        plane
     """
     if model['type'] in ('gauss', 'star'):
-        return gauss_model_ksums(
-            model['F'][band], model['cov_sm'], dv, du, Sw, detAtinv,
+        c = model['cov_sm']
+        return (
+            np.ones(1),
+            np.array([c[0, 0]]),
+            np.array([c[0, 1]]),
+            np.array([c[1, 1]]),
         )
     elif model['type'] == 'exp':
-        total = np.zeros(6)
-        smooth_cov = np.diag([Tsmooth / 2, Tsmooth / 2])
         if 'cov' in model:
             Sfam = model['cov']
         else:
             Sfam = cov_from_e(model['e1'], model['e2'], model['T'])
-        for frac, cT in get_exp_comps():
-            So = cT * Sfam + smooth_cov
-            total += gauss_model_ksums(
-                model['F'][band] * frac, So, dv, du, Sw, detAtinv,
-            )
-        return total
+        smooth = Tsmooth / 2
+        comps = get_exp_comps()
+        n = len(comps)
+        fracs = np.zeros(n)
+        So00 = np.zeros(n)
+        So01 = np.zeros(n)
+        So11 = np.zeros(n)
+        for k, (frac, cT) in enumerate(comps):
+            fracs[k] = frac
+            So00[k] = cT * Sfam[0, 0] + smooth
+            So01[k] = cT * Sfam[0, 1]
+            So11[k] = cT * Sfam[1, 1] + smooth
+        return fracs, So00, So01, So11
     else:
         raise ValueError(f"bad model type: '{model['type']}'")
+
+
+def model_ksums(model, band, dv, du, Sw, detAtinv, Tsmooth):
+    """
+    closed-form weighted moment sums of an object model, dispatching
+    on the model type, evaluated via the numba kernel
+    """
+    from .models_nb import gauss_comps_ksums
+
+    fracs, So00, So01, So11 = model_comps(model, Tsmooth)
+    F = model['F'][band] * fracs
+    n = F.size
+    sums = np.zeros(6)
+    gauss_comps_ksums(
+        F, So00, So01, So11,
+        np.full(n, float(dv)), np.full(n, float(du)),
+        Sw[0, 0], Sw[0, 1], Sw[1, 1], float(detAtinv), sums,
+    )
+    return sums
 
 
 def exp_model_valid(Sfam, Sw, Tsmooth):
