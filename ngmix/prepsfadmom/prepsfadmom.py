@@ -30,30 +30,19 @@ __all__ = [
 ]
 
 import logging
-import functools
 
 import numpy as np
-import scipy.fft as fft
 
 from ..observation import get_mb_obs, MultiBandObsList
 from ..gmix import GMix, GMixModel
 from ..gmix.gmix_nb import GMIX_LOW_DETVAL
-from ..moments import fwhm_to_T, T_to_fwhm, e2mom
+from ..moments import fwhm_to_T, e2mom
 from ..shape import e1e2_to_g1g2
 from ..util import get_ratio_error
-from ..gexceptions import FFTRangeError
-from ..fastexp_nb import FASTEXP_MAX_CHI2
-from .. import prepsfmom
-from ..prepsfmom import (
-    _zero_pad_image,
-    _build_square_apodization_mask,
-    _deconvolve_im_psf_inplace,
-    _check_obs_and_get_psf_obs,
-    _pixel_fft,
-)
 from .prepsfadmom_nb import admom_ksums, admom_finalize
 from .models import model_ksums, cov_from_e, exp_model_valid, det2
 from .errors import flux_var_delta, model_sandwich
+from .prep import choose_fwhm_smooth, prep_epoch, DEFAULT_SMOOTH_FAC
 import ngmix.flags
 
 logger = logging.getLogger(__name__)
@@ -63,7 +52,6 @@ DEFAULT_SHIFTMAX = 5.0  # pixels for scale=1
 DEFAULT_ETOL = 1.0e-5
 DEFAULT_TTOL = 1.0e-3
 DEFAULT_CENTOL = 1.0e-4  # pixels for scale=1
-DEFAULT_SMOOTH_FAC = 1.05
 
 
 def run_prepsf_admom(
@@ -414,7 +402,11 @@ class PrePSFAdmomFitter(object):
         is_mb = isinstance(obs, MultiBandObsList)
         mb_obs = get_mb_obs(obs)
 
-        fwhm_smooth = self._get_fwhm_smooth(mb_obs, no_psf)
+        fwhm_smooth = choose_fwhm_smooth(
+            mb_obs, fwhm_smooth=self.fwhm_smooth,
+            smooth_fac=self.smooth_fac, no_psf=no_psf,
+            rng=self._get_rng(),
+        )
         Tsmooth = fwhm_to_T(fwhm_smooth) if fwhm_smooth > 0 else 0.0
 
         if self.model == 'star' and Tsmooth <= 0:
@@ -425,9 +417,12 @@ class PrePSFAdmomFitter(object):
         epochs = []
         for band, obslist in enumerate(mb_obs):
             for tobs in obslist:
-                epochs.append(
-                    self._prep_epoch(tobs, band, Tsmooth, no_psf)
-                )
+                epochs.append(prep_epoch(
+                    tobs, band=band, fwhm_smooth=fwhm_smooth,
+                    pad_factor=self.pad_factor, ap_rad=self.ap_rad,
+                    use_noise_image=self.use_noise_image,
+                    no_psf=no_psf,
+                ))
 
         if len(epochs) == 0:
             raise ValueError('no epochs sent')
@@ -1037,163 +1032,6 @@ class PrePSFAdmomFitter(object):
             flux_vars = rawvars / upred ** 2
         return sums, cov, fluxes, flux_vars, fam_cov
 
-    def _prep_epoch(self, obs, band, Tsmooth, no_psf):
-        """
-        FFT the image and psf, deconvolve the psf, apply the smoothing,
-        and store the k grids and noise information
-        """
-        psf_obs = _check_obs_and_get_psf_obs(obs, no_psf)
-
-        wmsk = obs.weight > 0
-        if not np.any(wmsk):
-            raise ValueError('no positive weight pixels in observation')
-        tot_var = np.sum(1.0 / obs.weight[wmsk])
-
-        if psf_obs is not None:
-            max_dim = max(obs.image.shape + psf_obs.image.shape)
-        else:
-            max_dim = max(obs.image.shape)
-        target_dim = int(max_dim * self.pad_factor)
-        # the square of this is the ratio of padded to unpadded pixel
-        # counts, used to scale the noise
-        eff_pad_factor = target_dim / np.sqrt(
-            obs.image.shape[0] * obs.image.shape[1]
-        )
-
-        # the image is real, so we work with the rfft half plane;
-        # conjugate modes are folded in with the symmetry weights
-        kim, im_row, im_col = _zero_pad_and_compute_rfft(
-            obs.image, obs.jacobian.row0, obs.jacobian.col0, target_dim,
-            self.ap_rad,
-        )
-        dim = kim.shape[0]
-
-        if psf_obs is not None:
-            kpsf, psf_row, psf_col = _zero_pad_and_compute_rfft(
-                psf_obs.image,
-                psf_obs.jacobian.row0, psf_obs.jacobian.col0,
-                target_dim,
-                0,  # we do not apodize PSF stamps
-            )
-        else:
-            kpsf = _pixel_fft(dim)[:, :dim // 2 + 1]
-            psf_row = 0.0
-            psf_col = 0.0
-
-        max_amp = np.abs(kpsf[0, 0])
-
-        # the k grids, mode selection and smoothing profile are shared
-        # between fits with the same stamp geometry, so they are cached
-        jac = obs.jacobian
-        grids = _get_kspace_grids(
-            dim, jac.dvdrow, jac.dvdcol, jac.dudrow, jac.dudcol,
-            float(Tsmooth),
-        )
-
-        # extract the masked modes
-        kim = kim[grids['iy'], grids['ix']]
-        kpsf = kpsf[grids['iy'], grids['ix']]
-
-        kim, kpsf, _ = _deconvolve_im_psf_inplace(kim, kpsf, max_amp)
-
-        # fold holds the smoothing profile times the conjugate symmetry
-        # weights; fold2 has the squared smoothing for the noise, where
-        # the symmetry weight enters once
-        kim *= grids['fold']
-
-        # the noise power per mode, white from the weight map or
-        # measured from the attached noise realization.  In both cases
-        # the eff_pad_factor boost accounts for treating the modes of
-        # the zero padded image as independent.  The noise is not
-        # apodized: the taper is part of the padding window, whose
-        # effect on the noise in the moments vanishes for kernels
-        # supported in the stamp interior, and the boost corresponds to
-        # the plain zero pad window
-        if self.use_noise_image:
-            if not obs.has_noise():
-                raise ValueError(
-                    'obs.noise must be set when use_noise_image=True'
-                )
-            knoise, _, _ = _zero_pad_and_compute_rfft(
-                obs.noise, obs.jacobian.row0, obs.jacobian.col0,
-                target_dim, 0,
-            )
-            pnoise = np.abs(knoise[grids['iy'], grids['ix']]) ** 2
-            pnoise *= eff_pad_factor ** 2
-        else:
-            pnoise = tot_var * eff_pad_factor ** 2
-
-        # factor for noise propagation: the effective kernels act on
-        # the raw image fft, so include the noise power, the smoothing
-        # and the deconvolution
-        err_fac2 = grids['fold2'] * pnoise / np.abs(kpsf) ** 2
-
-        return {
-            'band': band,
-            'kim': kim,
-            'iy': grids['iy'],
-            'ix': grids['ix'],
-            'dim': dim,
-            'kv': grids['kv'],
-            'ku': grids['ku'],
-            'Atinv': grids['Atinv'],
-            # the phase shift putting the effective center at the image
-            # jacobian center; the psf centering phase cancels in the
-            # deconvolution except for this difference
-            'drow': im_row - psf_row,
-            'dcol': im_col - psf_col,
-            'detAtinv': grids['detAtinv'],
-            'df2': 1.0 / dim ** 2,
-            'err_fac2': err_fac2,
-            # the relative epoch weights always come from the weight
-            # maps, even when the noise power comes from a noise image
-            'weight': 1.0 / (tot_var * eff_pad_factor ** 2),
-        }
-
-    def _get_fwhm_smooth(self, mb_obs, no_psf):
-        """
-        get the smoothing fwhm, fitting the PSFs if it was not sent
-        """
-        if self.fwhm_smooth is not None:
-            return self.fwhm_smooth
-
-        if no_psf:
-            raise ValueError(
-                'send fwhm_smooth= (0 to disable) when no_psf=True'
-            )
-
-        from ..admom import run_admom
-
-        Tmax = 0.0
-        for obslist in mb_obs:
-            for obs in obslist:
-                if not obs.has_psf():
-                    raise RuntimeError(
-                        "The PSF must be set to measure a pre-PSF moment!"
-                    )
-                psf_obs = obs.psf
-                if psf_obs.has_gmix():
-                    T = psf_obs.gmix.get_T()
-                else:
-                    scale = psf_obs.jacobian.get_scale()
-                    T = None
-                    for fac in [3.0, 1.5, 6.0]:
-                        Tguess = fwhm_to_T(fac * scale)
-                        pres = run_admom(
-                            psf_obs, guess=Tguess, rng=self._get_rng(),
-                        )
-                        if pres['flags'] == 0:
-                            T = pres['T']
-                            break
-                    if T is None:
-                        raise RuntimeError(
-                            'could not fit PSF to choose the smoothing; '
-                            'send fwhm_smooth= explicitly'
-                        )
-                Tmax = max(Tmax, T)
-
-        return self.smooth_fac * T_to_fwhm(Tmax)
-
     def _get_guess(self, mb_obs, guess, Tsmooth):
         if isinstance(guess, GMix):
             return guess
@@ -1234,126 +1072,6 @@ def get_phase_angles(epoch, v0, u0):
     alpha = epoch['drow'] + A[0, 0] * v0 + A[1, 0] * u0
     beta = epoch['dcol'] + A[0, 1] * v0 + A[1, 1] * u0
     return alpha, beta
-
-
-@functools.lru_cache(maxsize=16)
-def _get_kspace_grids(dim, dvdrow, dvdcol, dudrow, dudcol, Tsmooth):
-    """
-    get the k grids in sky coordinates over the rfft half plane, the
-    selection of modes where the smoothing kernel is significant, and
-    the smoothing profile folded with the conjugate symmetry weights.
-    These only depend on the stamp geometry and smoothing, so they are
-    cached and shared between fits; the returned arrays are marked
-    read-only.
-    """
-    half = dim // 2 + 1
-    f1d = fft.fftfreq(dim) * (2.0 * np.pi)
-    fx = f1d[:half].reshape(1, -1)
-    fy = f1d.reshape(-1, 1)
-    Atinv = np.linalg.inv(
-        [[dvdrow, dvdcol], [dudrow, dudcol]]
-    ).T
-    kv = Atinv[0, 0] * fy + Atinv[0, 1] * fx
-    ku = Atinv[1, 0] * fy + Atinv[1, 1] * fx
-    detAtinv = np.abs(np.linalg.det(Atinv))
-
-    kmag2 = kv * kv + ku * ku
-
-    # we only keep modes where the smoothing kernel is significant
-    if Tsmooth > 0:
-        chi2_2 = 0.25 * Tsmooth * kmag2
-        msk = chi2_2 < FASTEXP_MAX_CHI2 / 2
-    else:
-        msk = np.ones((dim, half), dtype=bool)
-
-    iy, ix = np.where(msk)
-
-    kmag2 = kmag2[msk]
-    kv = kv[msk]
-    ku = ku[msk]
-
-    # conjugate symmetry weights: modes with 0 < kx < nyquist appear
-    # twice in the full plane
-    wsym = np.ones(ix.size)
-    if dim % 2 == 0:
-        wsym[(ix > 0) & (ix < dim // 2)] = 2.0
-    else:
-        wsym[ix > 0] = 2.0
-
-    if Tsmooth > 0:
-        smooth = np.exp(-0.25 * Tsmooth * kmag2)
-
-        # check that the smoothing kernel is contained in the FFT
-        # region; the converged weight is at least this large so this
-        # covers the worst case.  the tolerance is loose since small
-        # truncations only produce correspondingly small biases in the
-        # moments
-        nrm = np.sum(wsym * smooth) * detAtinv * np.pi * Tsmooth / dim**2
-        if not np.allclose(nrm, 1.0, atol=1e-3, rtol=0):
-            raise FFTRangeError(
-                'FFT size appears too small for smoothing fwhm %g: '
-                'norm = %f (should be 1)' % (T_to_fwhm(Tsmooth), nrm)
-            )
-
-        fold = wsym * smooth
-        fold2 = wsym * smooth * smooth
-    else:
-        fold = wsym
-        fold2 = wsym
-
-    grids = {
-        'kv': kv,
-        'ku': ku,
-        'iy': iy,
-        'ix': ix,
-        'fold': fold,
-        'fold2': fold2,
-        'Atinv': Atinv,
-        'detAtinv': detAtinv,
-    }
-    for key in ['kv', 'ku', 'iy', 'ix', 'fold', 'fold2', 'Atinv']:
-        grids[key].flags.writeable = False
-    return grids
-
-
-def _zero_pad_and_compute_rfft_impl(im, cen_row, cen_col, target_dim, ap_rad):
-    """
-    zero pad and compute the real fft, returning the fft and the center
-    location in the padded image
-    """
-    if ap_rad > 0:
-        ap_mask = np.ones_like(im)
-        _build_square_apodization_mask(ap_rad, ap_mask)
-        im = im * ap_mask
-
-    pim, pad_row_before, pad_col_before = _zero_pad_image(im, target_dim)
-    pad_cen_row = cen_row + pad_row_before
-    pad_cen_col = cen_col + pad_col_before
-    kpim = fft.rfftn(pim)
-    return kpim, pad_cen_row, pad_cen_col
-
-
-@functools.lru_cache(maxsize=128)
-def _zero_pad_and_compute_rfft_cached(
-    im_tuple, cen_row, cen_col, target_dim, ap_rad
-):
-    return _zero_pad_and_compute_rfft_impl(
-        np.array(im_tuple), cen_row, cen_col, target_dim, ap_rad
-    )
-
-
-@functools.wraps(_zero_pad_and_compute_rfft_impl)
-def _zero_pad_and_compute_rfft(im, cen_row, cen_col, target_dim, ap_rad):
-    # respect the fft caching switch in prepsfmom
-    if prepsfmom.USE_FFT_CACHE:
-        return _zero_pad_and_compute_rfft_cached(
-            tuple(tuple(ii) for ii in im),
-            float(cen_row), float(cen_col), int(target_dim), float(ap_rad),
-        )
-    else:
-        return _zero_pad_and_compute_rfft_impl(
-            im, cen_row, cen_col, target_dim, ap_rad,
-        )
 
 
 def deweight(M, Sigma):
