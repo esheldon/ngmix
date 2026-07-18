@@ -555,8 +555,25 @@ class PAdmomFitter(object):
         smoothed component gives a positive definite total covariance
         (exp_model_valid); otherwise the step is damped, and the fit
         is flagged if no valid step is found.  The etol convergence
-        criterion applies to the family covariance change relative to
-        the weight T.
+        criterion applies to the raw family covariance shift relative
+        to the weight T.
+
+        The linear convergence of the coupled weight/family iteration
+        is accelerated with guarded Steffensen extrapolation: pairs of
+        plain steps estimate the contraction ratio and the remaining
+        geometric series is applied in a single boosted step.  This is
+        the vector form of Aitken's delta-squared process iterated as
+        in Steffensen's method [1] [2]; the ratio estimate from the
+        inner product of successive differences is the rank-one case
+        of the vector extrapolation methods reviewed in [3].
+
+        [1] A. C. Aitken (1926), "On Bernoulli's numerical solution
+            of algebraic equations", Proc. Roy. Soc. Edinburgh 46,
+            289
+        [2] J. F. Steffensen (1933), "Remarks on iteration", Skand.
+            Aktuarietidskr. 16, 64
+        [3] A. Sidi (2017), "Vector Extrapolation Methods with
+            Applications", SIAM
         """
         cen_guess = guess_gmix.get_cen()
         v0 = cen_guess[0]
@@ -572,6 +589,10 @@ class PAdmomFitter(object):
         flags = 0
         numiter = 0
         unit_state = {'type': 'exp', 'cov': Sfam, 'F': np.ones(1)}
+
+        # last accepted plain (unboosted, undamped) shift, for the
+        # extrapolation ratio; None whenever a fresh pair is needed
+        prev_shift = None
 
         for i in range(self.maxiter):
             numiter = i + 1
@@ -649,6 +670,21 @@ class PAdmomFitter(object):
                     [de2, de1],
                 ])
 
+            # Steffensen-style extrapolation: the iteration converges
+            # linearly with a steady ratio, so two successive plain
+            # steps give the ratio and the remaining geometric series
+            # can be summed in one boosted step.  Guarded to the
+            # primary update branch and a stable ratio range
+            raw_shift = shift
+            boosted = False
+            if pflags == 0 and prev_shift is not None:
+                denom = np.sum(prev_shift * prev_shift)
+                if denom > 0:
+                    rho = np.sum(raw_shift * prev_shift) / denom
+                    if 0.2 < rho < 0.9:
+                        shift = raw_shift / (1 - rho)
+                        boosted = True
+
             # accept the largest step, damping if needed, for which
             # the smoothed model components stay positive definite
             accepted = False
@@ -662,13 +698,22 @@ class PAdmomFitter(object):
                 flags = ngmix.flags.LOW_DET
                 break
 
+            # the ratio estimate needs a fresh pair of plain steps
+            # after a boost, a damped step, or a fallback update
+            if idamp == 0 and not boosted and pflags == 0:
+                prev_shift = raw_shift
+            else:
+                prev_shift = None
+
             scale = newSigma[0, 0] + newSigma[1, 1]
-            # convergence requires an undamped step: a damped step can
-            # be small only because it was shortened at the validity
-            # boundary, not because the fit has settled
+            # convergence requires an undamped step and is tested on
+            # the raw fixed-point residual, not the boosted step: a
+            # damped step can be small only because it was shortened
+            # at the validity boundary, not because the fit has
+            # settled
             converged = (
                 idamp == 0
-                and np.abs(prop - Sfam).max() < self.etol * scale
+                and np.abs(raw_shift).max() < self.etol * scale
                 and abs(dv) < self.cen_tol
                 and abs(du) < self.cen_tol
             )
