@@ -648,7 +648,7 @@ class PrePSFAdmomFitter(object):
             # accept the largest step, damping if needed, for which
             # the smoothed model components stay positive definite
             accepted = False
-            for _ in range(10):
+            for idamp in range(10):
                 prop = Sfam + shift
                 if exp_model_valid(prop, newSigma, Tsmooth):
                     accepted = True
@@ -659,8 +659,12 @@ class PrePSFAdmomFitter(object):
                 break
 
             scale = newSigma[0, 0] + newSigma[1, 1]
+            # convergence requires an undamped step: a damped step can
+            # be small only because it was shortened at the validity
+            # boundary, not because the fit has settled
             converged = (
-                np.abs(prop - Sfam).max() < self.etol * scale
+                idamp == 0
+                and np.abs(prop - Sfam).max() < self.etol * scale
                 and abs(dv) < self.cen_tol
                 and abs(du) < self.cen_tol
             )
