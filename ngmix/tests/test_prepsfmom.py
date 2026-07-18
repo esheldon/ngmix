@@ -223,6 +223,101 @@ def test_prepsfmom_noise_image_correlated(cls, prepsfmom_caching):
 
 
 @pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
+def test_prepsfmom_noise_image_color(cls, prepsfmom_caching):
+    """
+    colors from fluxes measured with the same pre-psf aperture are
+    absolutely calibrated, both the value and the error: the fixed
+    aperture factor cancels in the flux ratio, the per-band psfs do
+    not enter, and the flux errors are exact for the fixed weight.
+    The noise is correlated and the errors use the attached noise
+    images
+    """
+    ntrial = 200
+    filt_sigma = 1.25
+    rng = np.random.RandomState(seed=8712)
+
+    image_size = 48
+    cen = (image_size - 1) / 2
+    scale = 0.25
+
+    band_fluxes = [400.0, 600.0]
+    gal = galsim.Gaussian(fwhm=0.9).shear(g1=-0.1, g2=0.2)
+    # different psfs in the two bands; the pre-psf aperture makes the
+    # color independent of them
+    psfs = [
+        galsim.Gaussian(fwhm=0.9).shear(g1=0.05, g2=-0.03),
+        galsim.Gaussian(fwhm=0.8).shear(g1=-0.02, g2=0.04),
+    ]
+
+    jac = Jacobian(y=cen, x=cen, dudx=scale, dudy=0, dvdx=0, dvdy=scale)
+    pjac = Jacobian(y=16, x=16, dudx=scale, dudy=0, dvdx=0, dvdy=scale)
+
+    ims0 = []
+    psf_obss = []
+    for flux, psf in zip(band_fluxes, psfs):
+        ims0.append(
+            galsim.Convolve(gal.withFlux(flux), psf).drawImage(
+                nx=image_size, ny=image_size, scale=scale,
+            ).array
+        )
+        psf_im = psf.drawImage(nx=33, ny=33, scale=scale).array
+        psf_obss.append(Observation(image=psf_im, jacobian=pjac))
+
+    # effective s/n ~ 40 and 30 in the two bands; see the correlated
+    # noise test for the scaling of the pixel std
+    sigmas = [
+        np.sqrt(np.sum(ims0[0] ** 2)) / 40.0 / 4.0,
+        np.sqrt(np.sum(ims0[1] ** 2)) / 30.0 / 4.0,
+    ]
+
+    # the pixel std of a filtered unit white field, for normalization
+    fac = gaussian_filter(
+        rng.normal(size=(2000, 2000)), filt_sigma, mode='wrap',
+    ).std()
+
+    def _corr_noise(sigma):
+        return gaussian_filter(
+            rng.normal(size=ims0[0].shape), filt_sigma, mode='wrap',
+        ) * (sigma / fac)
+
+    fitter = cls(2.0, use_noise_image=True)
+
+    color_true = -2.5 * np.log10(band_fluxes[0] / band_fluxes[1])
+    colors, color_errs = [], []
+    for i in range(ntrial):
+        fluxes = []
+        fracerr2 = 0.0
+        for im0, sigma, psf_obs in zip(ims0, sigmas, psf_obss):
+            obs = Observation(
+                image=im0 + _corr_noise(sigma),
+                weight=np.ones_like(im0) / sigma ** 2,
+                jacobian=jac,
+                psf=psf_obs,
+                noise=_corr_noise(sigma),
+            )
+            res = fitter.go(obs)
+            assert res['flags'] == 0
+            fluxes.append(res['flux'])
+            fracerr2 += (res['flux_err'] / res['flux']) ** 2
+
+        colors.append(-2.5 * np.log10(fluxes[0] / fluxes[1]))
+        color_errs.append(2.5 / np.log(10) * np.sqrt(fracerr2))
+
+    colors = np.array(colors)
+
+    # the aperture flux ratio equals the true flux ratio, so the mean
+    # color is unbiased; the tolerance is statistical
+    assert np.abs(np.mean(colors) - color_true) < (
+        4 * np.std(colors) / np.sqrt(ntrial)
+    )
+
+    # the band noises are independent and the flux errors are exact,
+    # so the propagated color error matches the observed scatter
+    # absolutely
+    assert_allclose(np.std(colors), np.mean(color_errs), rtol=0.15, atol=0)
+
+
+@pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
 def test_prepsfmom_noise_image_raises(cls, prepsfmom_caching):
     """
     use_noise_image requires obs.noise to be set
