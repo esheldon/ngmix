@@ -12,6 +12,11 @@
     - The pre-PSF moment fitters (prepsfmom and prepsfadmom) now
       accept non-square images, which are zero padded to square
       internally.
+    - prepsfadmom accepts use_noise_image=True, estimating the noise
+      power per Fourier mode from the noise image attached to each
+      observation instead of assuming white noise from the weight map.
+      This makes the error estimates correct for stationary correlated
+      noise, such as that induced by metacal.
     - Allow fwhm as size for Moffat galsim fitter
     - Added method scale_T() to gausian mixtures.
     - Added new metacal psf reconvolution method 'azgauss',

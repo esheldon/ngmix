@@ -73,6 +73,7 @@ def run_prepsf_admom(
     Ttol=DEFAULT_TTOL,
     cen_tol=DEFAULT_CENTOL,
     no_psf=False,
+    use_noise_image=False,
     rng=None,
 ):
     """
@@ -119,6 +120,15 @@ def run_prepsf_admom(
         If True, allow inputs without a PSF observation; only the pixel
         window function is deconvolved.  fwhm_smooth= must be sent in
         this case.  Defaults to False.
+    use_noise_image: bool, optional
+        If True, estimate the per-mode noise power for the error
+        estimates from the noise image attached to each observation
+        (obs.noise), instead of assuming white noise at the level set
+        by the weight map.  This makes the errors correct for
+        stationary correlated noise, such as that induced by metacal.
+        The noise image must be an independent realization of the
+        noise, in the same frame as the image (e.g. as maintained by
+        metacal).  The measured moments are unchanged.  Default False.
     rng: np.random.RandomState, optional
         Random state used to generate guesses from a T guess and for
         PSF fits when choosing the smoothing automatically.
@@ -137,6 +147,7 @@ def run_prepsf_admom(
         etol=etol,
         Ttol=Ttol,
         cen_tol=cen_tol,
+        use_noise_image=use_noise_image,
         rng=rng,
     )
     return fitter.go(obs=obs, guess=guess, no_psf=no_psf)
@@ -241,6 +252,15 @@ class PrePSFAdmomFitter(object):
     cen_tol: float, optional
         absolute tolerance in the center to determine convergence,
         default 1.0e-4 (1.0e-4 pixels if the jacobian scale is 1)
+    use_noise_image: bool, optional
+        If True, estimate the per-mode noise power for the error
+        estimates from the noise image attached to each observation
+        (obs.noise), instead of assuming white noise at the level set
+        by the weight map.  This makes the errors correct for
+        stationary correlated noise, such as that induced by metacal.
+        The noise image must be an independent realization of the
+        noise, in the same frame as the image (e.g. as maintained by
+        metacal).  The measured moments are unchanged.  Default False.
     rng: np.random.RandomState, optional
         Random state used to generate guesses from a T guess and for
         PSF fits when choosing the smoothing automatically.
@@ -253,9 +273,18 @@ class PrePSFAdmomFitter(object):
     couples to the fitted size; the level of underestimation matches
     that of real-space adaptive moments.
 
+    By default the noise is assumed white, with each Fourier mode
+    assigned the same power, set by the weight map.  With
+    use_noise_image=True the power is instead measured per mode from
+    the attached noise realization, which is exact in the mean for any
+    stationary noise; the single-realization scatter self-averages in
+    the error sums over many modes.
+
     Bad pixels cannot be masked in Fourier space; images should have
-    defects interpolated before fitting.  The weight maps are only used
-    to set the overall noise level of each epoch.
+    defects interpolated before fitting.  The weight maps set the
+    overall noise level of each epoch and the relative weights of
+    epochs in the joint fit; the latter holds even when
+    use_noise_image=True.
     """
 
     kind = 'pam'
@@ -271,6 +300,7 @@ class PrePSFAdmomFitter(object):
         etol=DEFAULT_ETOL,
         Ttol=DEFAULT_TTOL,
         cen_tol=DEFAULT_CENTOL,
+        use_noise_image=False,
         rng=None,
     ):
 
@@ -283,6 +313,7 @@ class PrePSFAdmomFitter(object):
         self.etol = etol
         self.Ttol = Ttol
         self.cen_tol = cen_tol
+        self.use_noise_image = use_noise_image
         self.rng = rng
 
     def go(self, obs, guess=None, no_psf=False):
@@ -575,9 +606,10 @@ class PrePSFAdmomFitter(object):
         get the final accumulated sums, their covariance, and the
         per-band fluxes and variances, using the converged weight
 
-        The covariance follows the prepsfmom convention: each Fourier
-        mode is treated as independent with variance equal to the total
-        variance of the input image.
+        The covariance treats each Fourier mode as independent with
+        variance given by the noise power carried in the per-epoch
+        err_fac2, either white at the level set by the weight map or
+        measured per mode from the attached noise image.
 
         The flux normalization: the raw flux sum corresponds to a
         weighted flux with an effective real-space kernel of peak value
@@ -607,7 +639,7 @@ class PrePSFAdmomFitter(object):
                 esums, ecov,
             )
             fac = epoch['weight'] * epoch['detAtinv']
-            nfac = epoch['tot_var'] * epoch['df2'] ** 2
+            nfac = epoch['df2'] ** 2
 
             sums += fac * esums
             cov += fac ** 2 * nfac * ecov
@@ -684,9 +716,33 @@ class PrePSFAdmomFitter(object):
         # weights; fold2 has the squared smoothing for the noise, where
         # the symmetry weight enters once
         kim *= grids['fold']
+
+        # the noise power per mode, white from the weight map or
+        # measured from the attached noise realization.  In both cases
+        # the eff_pad_factor boost accounts for treating the modes of
+        # the zero padded image as independent.  The noise is not
+        # apodized: the taper is part of the padding window, whose
+        # effect on the noise in the moments vanishes for kernels
+        # supported in the stamp interior, and the boost corresponds to
+        # the plain zero pad window
+        if self.use_noise_image:
+            if not obs.has_noise():
+                raise ValueError(
+                    'obs.noise must be set when use_noise_image=True'
+                )
+            knoise, _, _ = _zero_pad_and_compute_rfft(
+                obs.noise, obs.jacobian.row0, obs.jacobian.col0,
+                target_dim, 0,
+            )
+            pnoise = np.abs(knoise[grids['iy'], grids['ix']]) ** 2
+            pnoise *= eff_pad_factor ** 2
+        else:
+            pnoise = tot_var * eff_pad_factor ** 2
+
         # factor for noise propagation: the effective kernels act on
-        # the raw image fft, so include the smoothing and deconvolution
-        err_fac2 = grids['fold2'] / np.abs(kpsf) ** 2
+        # the raw image fft, so include the noise power, the smoothing
+        # and the deconvolution
+        err_fac2 = grids['fold2'] * pnoise / np.abs(kpsf) ** 2
 
         return {
             'band': band,
@@ -704,8 +760,9 @@ class PrePSFAdmomFitter(object):
             'dcol': im_col - psf_col,
             'detAtinv': grids['detAtinv'],
             'df2': 1.0 / dim ** 2,
-            'tot_var': tot_var * eff_pad_factor ** 2,
             'err_fac2': err_fac2,
+            # the relative epoch weights always come from the weight
+            # maps, even when the noise power comes from a noise image
             'weight': 1.0 / (tot_var * eff_pad_factor ** 2),
         }
 

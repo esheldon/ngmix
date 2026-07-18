@@ -135,12 +135,13 @@ def admom_finalize(
     Same as admom_ksums, plus
 
     err_fac2: 1d array
-        |smooth/kpsf|^2 at the masked modes, the squared magnitude of
-        the factors relating the effective kernels to the raw image fft
+        The noise power times |smooth/kpsf|^2 at the masked modes: the
+        per-mode variance of the raw image fft times the squared
+        magnitude of the factors relating the effective kernels to it
     sums: array of size 6
         output [v, u, M1, M2, T, flux] sums
     cov_raw: array (6, 6)
-        output kernel cross sums; multiply by tot_var * df2^2 to get the
+        output kernel cross sums; multiply by df2^2 to get the
         covariance of the unnormalized sums.  The center sums come from
         the imaginary part and do not covary with the even sums.
     """

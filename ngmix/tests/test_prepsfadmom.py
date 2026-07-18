@@ -1,6 +1,7 @@
 import galsim
 import numpy as np
 import pytest
+from scipy.ndimage import gaussian_filter
 
 import ngmix
 from ngmix.moments import fwhm_to_T
@@ -407,6 +408,13 @@ def test_prepsfadmom_errors():
     Ttot = 0.6 + fwhm_to_T(0.9)
     assert np.abs(res['T'] / Ttot - 1) < 1.0e-2
 
+    # use_noise_image requires obs.noise to be set
+    with pytest.raises(ValueError):
+        run_prepsf_admom(
+            obs, guess=0.5, use_noise_image=True,
+            rng=np.random.RandomState(3),
+        )
+
 
 def test_prepsfadmom_nonsquare():
     """
@@ -456,3 +464,136 @@ def test_prepsfadmom_nonsquare():
             assert np.allclose(rres[key], res[key], rtol=0, atol=1.0e-6)
         for key in ['flux_err', 'T_err']:
             assert np.allclose(rres[key], res[key], rtol=1.0e-6, atol=0)
+
+
+def test_prepsfadmom_noise_image_white():
+    """
+    for white noise, the per-mode noise power measured from an attached
+    noise image agrees with the weight map errors in the mean over
+    realizations, and the measured moments are unchanged.  The single
+    realization scatter of the errors is several percent, set by the
+    number of independent noise modes under the kernel
+    """
+    nreal = 20
+    rng = np.random.RandomState(991)
+    gs_wcs = galsim.PixelScale(0.25).jacobian()
+
+    obs0 = _make_obs(0.1, -0.05, 0.6, 3.5, 0.9, gs_wcs)
+    noise = np.sqrt(np.sum(obs0.image ** 2)) / 40.0
+
+    obs = _make_obs(
+        0.1, -0.05, 0.6, 3.5, 0.9, gs_wcs, noise=noise, rng=rng,
+    )
+    res = run_prepsf_admom(obs, guess=0.6, rng=np.random.RandomState(5))
+    assert res['flags'] == 0
+
+    errs = {key: [] for key in ['flux_err', 'T_err', 'e1err', 'e2err']}
+    for i in range(nreal):
+        nobs = Observation(
+            obs.image, jacobian=obs.jacobian, weight=obs.weight,
+            psf=obs.psf,
+            noise=rng.normal(scale=noise, size=obs.image.shape),
+        )
+        nres = run_prepsf_admom(
+            nobs, guess=0.6, use_noise_image=True,
+            rng=np.random.RandomState(5),
+        )
+        assert nres['flags'] == 0
+
+        # the noise image affects only the errors
+        for key in ['flux', 'T', 'e1', 'e2']:
+            assert np.allclose(nres[key], res[key], rtol=0, atol=0)
+
+        for key in errs:
+            assert np.allclose(nres[key], res[key], rtol=0.3, atol=0)
+            errs[key].append(nres[key])
+
+    for key in errs:
+        assert np.allclose(np.mean(errs[key]), res[key], rtol=0.05, atol=0)
+
+
+def test_prepsfadmom_noise_image_correlated():
+    """
+    for correlated noise, the errors from the per-mode noise power
+    match the observed scatter with the same fidelity as the weight map
+    errors do for white noise, while the white noise assumption
+    underestimates the scatter badly
+    """
+    ntrial = 200
+    filt_sigma = 1.25
+    rng = np.random.RandomState(8231)
+    gs_wcs = galsim.PixelScale(0.25).jacobian()
+
+    e1_true, e2_true, T_true, flux_true = 0.2, -0.1, 0.6, 3.5
+    obs0 = _make_obs(e1_true, e2_true, T_true, flux_true, 0.9, gs_wcs)
+    dims = obs0.image.shape
+
+    # white noise for s/n ~ 20.  The correlated noise boosts the power
+    # at the scales of the kernel by roughly the effective area of the
+    # filter, so its pixel std is scaled down to keep a similar
+    # effective s/n
+    sigma_white = np.sqrt(np.sum(obs0.image ** 2)) / 20.0
+    sigma_corr = sigma_white / 4.0
+
+    # the pixel std of a filtered unit white field, for normalization
+    fac = gaussian_filter(
+        rng.normal(size=(2000, 2000)), filt_sigma, mode='wrap',
+    ).std()
+
+    def _corr_noise():
+        return gaussian_filter(
+            rng.normal(size=dims), filt_sigma, mode='wrap',
+        ) * (sigma_corr / fac)
+
+    fitter_white = PrePSFAdmomFitter(rng=rng)
+    fitter_pm = PrePSFAdmomFitter(use_noise_image=True, rng=rng)
+
+    fluxes_a, e1s_a, fluxerrs_a, e1errs_a = [], [], [], []
+    fluxes_b, e1s_b, fluxerrs_b, e1errs_b = [], [], [], []
+    nfail = 0
+    for i in range(ntrial):
+        obs = Observation(
+            obs0.image + rng.normal(scale=sigma_white, size=dims),
+            jacobian=obs0.jacobian,
+            weight=np.ones(dims) / sigma_white ** 2,
+            psf=obs0.psf,
+        )
+        res = fitter_white.go(obs, guess=0.6)
+
+        nobs = Observation(
+            obs0.image + _corr_noise(),
+            jacobian=obs0.jacobian,
+            weight=np.ones(dims) / sigma_corr ** 2,
+            psf=obs0.psf,
+            noise=_corr_noise(),
+        )
+        nres = fitter_pm.go(nobs, guess=0.6)
+
+        if res['flags'] != 0 or nres['flags'] != 0:
+            nfail += 1
+            continue
+        fluxes_a.append(res['flux'])
+        e1s_a.append(res['e1'])
+        fluxerrs_a.append(res['flux_err'])
+        e1errs_a.append(res['e1err'])
+        fluxes_b.append(nres['flux'])
+        e1s_b.append(nres['e1'])
+        fluxerrs_b.append(nres['flux_err'])
+        e1errs_b.append(nres['e1err'])
+
+    assert nfail < ntrial * 0.02
+
+    ratio_a_flux = np.std(fluxes_a) / np.mean(fluxerrs_a)
+    ratio_b_flux = np.std(fluxes_b) / np.mean(fluxerrs_b)
+    ratio_a_e1 = np.std(e1s_a) / np.mean(e1errs_a)
+    ratio_b_e1 = np.std(e1s_b) / np.mean(e1errs_b)
+
+    # the white noise assumption would report errors scaled from case a
+    # by the pixel std, badly underestimating the observed scatter
+    werr_b = np.mean(fluxerrs_a) * sigma_corr / sigma_white
+    assert np.std(fluxes_b) / werr_b > 2.0 * ratio_a_flux
+
+    # the per-mode errors track the scatter as well as the white errors
+    # do for white noise, including the common fixed-weight bias
+    assert np.abs(ratio_b_flux / ratio_a_flux - 1) < 0.2
+    assert np.abs(ratio_b_e1 / ratio_a_e1 - 1) < 0.2
