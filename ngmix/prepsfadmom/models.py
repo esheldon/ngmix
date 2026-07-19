@@ -27,7 +27,9 @@ Model dicts:
         covariance and is never updated
     {'type': 'exp', 'e1':, 'e2':, 'T':, 'F': (nband,)}
     {'type': 'exp', 'cov': (2,2), 'F': (nband,)}
-        the ngmix 6-gaussian exponential expansion, coelliptical with
+    {'type': 'dev', ...}
+        the ngmix 6-gaussian exponential expansion (or the
+        10-gaussian de Vaucouleurs expansion), coelliptical with
         fixed flux fractions and size ratios; T and e (or the family
         covariance cov, of which each component covariance is a fixed
         multiple) are pre-psf.  The family covariance need not be
@@ -105,20 +107,26 @@ def gauss_model_ksums(flux, So, dv, du, Sw, detAtinv):
     ])
 
 
-_EXP_COMPS = None
+_PROFILE_COMPS = {}
+
+
+def get_profile_comps(name):
+    """flux fractions and relative T factors of the ngmix gaussian
+    expansion of the named profile ('exp': 6 gaussians, 'dev': 10
+    gaussians), normalized to total T = 1"""
+    if name not in _PROFILE_COMPS:
+        gm = GMixModel([0, 0, 0, 0, 1.0, 1.0], name)
+        d = gm.get_data()
+        fracs = d['p'] / d['p'].sum()
+        cTs = d['irr'] + d['icc']
+        _PROFILE_COMPS[name] = list(zip(fracs, cTs))
+    return _PROFILE_COMPS[name]
 
 
 def get_exp_comps():
     """flux fractions and relative T factors of the ngmix 6-gaussian
     exponential expansion, normalized to total T = 1"""
-    global _EXP_COMPS
-    if _EXP_COMPS is None:
-        gm = GMixModel([0, 0, 0, 0, 1.0, 1.0], 'exp')
-        d = gm.get_data()
-        fracs = d['p'] / d['p'].sum()
-        cTs = d['irr'] + d['icc']
-        _EXP_COMPS = list(zip(fracs, cTs))
-    return _EXP_COMPS
+    return get_profile_comps('exp')
 
 
 def model_comps(model, Tsmooth):
@@ -146,13 +154,13 @@ def model_comps(model, Tsmooth):
             np.array([c[0, 1]]),
             np.array([c[1, 1]]),
         )
-    elif model['type'] == 'exp':
+    elif model['type'] in ('exp', 'dev'):
         if 'cov' in model:
             Sfam = model['cov']
         else:
             Sfam = cov_from_e(model['e1'], model['e2'], model['T'])
         smooth = Tsmooth / 2
-        comps = get_exp_comps()
+        comps = get_profile_comps(model['type'])
         n = len(comps)
         fracs = np.zeros(n)
         So00 = np.zeros(n)
@@ -187,10 +195,10 @@ def model_ksums(model, band, dv, du, Sw, detAtinv, Tsmooth):
     return sums
 
 
-def exp_model_valid(Sfam, Sw, Tsmooth):
+def mixture_model_valid(name, Sfam, Sw, Tsmooth):
     """
-    check that an exp family covariance gives well defined weighted
-    sums: every component must have positive definite total
+    check that a mixture family covariance gives well defined
+    weighted sums: every component must have positive definite total
     covariance C = Sw + cT Sfam + smoothing.  This is weaker than
     positive definiteness of Sfam itself: the smoothing and the
     weight regularize the model family the same way they regularize
@@ -198,9 +206,14 @@ def exp_model_valid(Sfam, Sw, Tsmooth):
     past one remain valid states.
     """
     smooth_cov = np.diag([Tsmooth / 2, Tsmooth / 2])
-    for frac, cT in get_exp_comps():
+    for frac, cT in get_profile_comps(name):
         C = Sw + cT * Sfam + smooth_cov
         if (C[0, 0] <= 0 or C[1, 1] <= 0
                 or det2(C) <= 1.0e-6 * C[0, 0] * C[1, 1]):
             return False
     return True
+
+
+def exp_model_valid(Sfam, Sw, Tsmooth):
+    """mixture_model_valid for the exponential family"""
+    return mixture_model_valid('exp', Sfam, Sw, Tsmooth)

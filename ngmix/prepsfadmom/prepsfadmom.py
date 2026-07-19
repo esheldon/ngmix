@@ -40,7 +40,9 @@ from ..moments import fwhm_to_T, e2mom
 from ..shape import e1e2_to_g1g2
 from ..util import get_ratio_error
 from .prepsfadmom_nb import admom_ksums, admom_finalize
-from .models import model_ksums, cov_from_e, exp_model_valid, det2
+from .models import (
+    model_ksums, cov_from_e, mixture_model_valid, det2,
+)
 from .errors import flux_var_delta, model_sandwich
 from .prep import choose_fwhm_smooth, prep_epoch, DEFAULT_SMOOTH_FAC
 import ngmix.flags
@@ -84,9 +86,11 @@ def run_prepsf_admom(
         single value for the pre-PSF T, in which case the rest of the
         parameters are generated.  If not sent, a default guess is used.
     model: str, optional
-        The object model: 'gauss' (default), 'exp' or 'star'.  With
-        'gauss' the fit is the standard adaptive moments fixed point.
-        With 'exp' the ngmix 6-gaussian exponential expansion is fit
+        The object model: 'gauss' (default), 'exp', 'dev' or
+        'star'.  With 'gauss' the fit is the standard adaptive
+        moments fixed point.  With 'exp' (or 'dev') the ngmix
+        6-gaussian exponential (10-gaussian de Vaucouleurs)
+        expansion is fit
         by matching its weighted moments to the measured ones; T, e1
         and e2 are then the exponential family parameters and the
         fluxes are total model fluxes rather than gaussian aperture
@@ -248,9 +252,11 @@ class PAdmomFitter(object):
     Parameters
     ----------
     model: str, optional
-        The object model: 'gauss' (default), 'exp' or 'star'.  With
-        'gauss' the fit is the standard adaptive moments fixed point.
-        With 'exp' the ngmix 6-gaussian exponential expansion is fit
+        The object model: 'gauss' (default), 'exp', 'dev' or
+        'star'.  With 'gauss' the fit is the standard adaptive
+        moments fixed point.  With 'exp' (or 'dev') the ngmix
+        6-gaussian exponential (10-gaussian de Vaucouleurs)
+        expansion is fit
         by matching its weighted moments to the measured ones; T, e1
         and e2 are then the exponential family parameters and the
         fluxes are total model fluxes rather than gaussian aperture
@@ -357,9 +363,9 @@ class PAdmomFitter(object):
         rng=None,
     ):
 
-        if model not in ('gauss', 'exp', 'star'):
+        if model not in ('gauss', 'exp', 'dev', 'star'):
             raise ValueError(
-                f"bad model '{model}', expected 'gauss', 'exp' "
+                f"bad model '{model}', expected 'gauss', 'exp', 'dev' "
                 "or 'star'"
             )
         self.model = model
@@ -449,7 +455,7 @@ class PAdmomFitter(object):
         the adaptive moments iteration, accumulating the k-space sums
         over all epochs
         """
-        if self.model == 'exp':
+        if self.model in ('exp', 'dev'):
             return self._run_admom_exp(epochs, nband, guess_gmix, Tsmooth)
         elif self.model == 'star':
             return self._run_admom_star(epochs, nband, guess_gmix, Tsmooth)
@@ -588,7 +594,7 @@ class PAdmomFitter(object):
 
         flags = 0
         numiter = 0
-        unit_state = {'type': 'exp', 'cov': Sfam, 'F': np.ones(1)}
+        unit_state = {'type': self.model, 'cov': Sfam, 'F': np.ones(1)}
 
         # last accepted plain (unboosted, undamped) shift, for the
         # extrapolation ratio; None whenever a fresh pair is needed
@@ -681,7 +687,12 @@ class PAdmomFitter(object):
                 denom = np.sum(prev_shift * prev_shift)
                 if denom > 0:
                     rho = np.sum(raw_shift * prev_shift) / denom
-                    if 0.2 < rho < 0.9:
+                    # the upper limit must admit the slowly
+                    # contracting T mode of the dev family at large
+                    # size (rho approaches 1); overshoots from a
+                    # noisy ratio estimate are caught by the
+                    # validity damping
+                    if 0.2 < rho < 0.99:
                         shift = raw_shift / (1 - rho)
                         boosted = True
 
@@ -690,7 +701,8 @@ class PAdmomFitter(object):
             accepted = False
             for idamp in range(10):
                 prop = Sfam + shift
-                if exp_model_valid(prop, newSigma, Tsmooth):
+                if mixture_model_valid(
+                        self.model, prop, newSigma, Tsmooth):
                     accepted = True
                     break
                 shift = 0.5 * shift
@@ -726,7 +738,7 @@ class PAdmomFitter(object):
             flags = ngmix.flags.MAXITER
 
         model_state = {
-            'type': 'exp', 'cov': Sfam, 'F': np.ones(nband),
+            'type': self.model, 'cov': Sfam, 'F': np.ones(nband),
         }
         return self._get_result(
             epochs=epochs, nband=nband, flags=flags, numiter=numiter,
@@ -845,7 +857,7 @@ class PAdmomFitter(object):
                 # same rule as the exp family
                 Sgal = Sigma - np.diag([Tsmooth / 2, Tsmooth / 2])
                 shape_ok = Tgal > 0 and det2(Sgal) > 0
-            elif model_state['type'] == 'exp':
+            elif model_state['type'] in ('exp', 'dev'):
                 Sfam = model_state['cov']
                 Tgal = Sfam[0, 0] + Sfam[1, 1]
                 M1 = Sfam[1, 1] - Sfam[0, 0]
@@ -1084,8 +1096,8 @@ class PAdmomFitter(object):
                 rawvars = fvars
             else:
                 rawvars, fam_cov = model_sandwich(
-                    'exp', model_state['cov'], Sigma, Tsmooth,
-                    sums, cov, fsums, fvars, fmcovs,
+                    model_state['type'], model_state['cov'], Sigma,
+                    Tsmooth, sums, cov, fsums, fvars, fmcovs,
                 )
             flux_vars = rawvars / upred ** 2
         return sums, cov, fluxes, flux_vars, fam_cov

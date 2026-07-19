@@ -658,17 +658,18 @@ def test_prepsfadmom_noise_multiband():
 
 def _make_exp_mix_obs(
     e1, e2, T, flux, psf_fwhm, gs_wcs, dim=48,
-    offset_pix=(0.0, 0.0), noise=1.0e-9, rng=None,
+    offset_pix=(0.0, 0.0), noise=1.0e-9, rng=None, model='exp',
 ):
     """
-    render the ngmix 6-gaussian exponential expansion exactly, each
-    component convolved with the gaussian psf analytically
+    render the ngmix gaussian expansion of the named profile
+    exactly, each component convolved with the gaussian psf
+    analytically
     """
-    from ngmix.prepsfadmom.models import get_exp_comps, cov_from_e
+    from ngmix.prepsfadmom.models import get_profile_comps, cov_from_e
 
     Tpsf = fwhm_to_T(psf_fwhm)
     parts = []
-    for frac, cT in get_exp_comps():
+    for frac, cT in get_profile_comps(model):
         Sigma = cov_from_e(e1, e2, cT * T) + np.diag([Tpsf / 2] * 2)
         parts.append(_cov_to_gauss(Sigma, flux * frac))
     obj = galsim.Add(parts)
@@ -1124,7 +1125,7 @@ def test_prepsfadmom_model_errors():
     model error conditions raise
     """
     with pytest.raises(ValueError):
-        PAdmomFitter(model='dev')
+        PAdmomFitter(model='not-a-model')
 
     gs_wcs = galsim.PixelScale(0.25).jacobian()
     obs = _make_obs(0.1, -0.05, 0.6, 3.5, 0.9, gs_wcs)
@@ -1145,7 +1146,7 @@ def test_prepsfadmom_model_ksums_kernel_parity():
     non-trivial k-space area factor
     """
     from ngmix.prepsfadmom.models import (
-        model_ksums, gauss_model_ksums, get_exp_comps, cov_from_e,
+        model_ksums, gauss_model_ksums, get_profile_comps, cov_from_e,
     )
 
     Tsmooth = 0.35
@@ -1162,13 +1163,15 @@ def test_prepsfadmom_model_ksums_kernel_parity():
         {'type': 'star', 'cov_sm': smooth_cov, 'F': F},
         {'type': 'exp', 'e1': 0.2, 'e2': -0.1, 'T': 0.8, 'F': F},
         {'type': 'exp', 'cov': Sfam, 'F': F},
+        {'type': 'dev', 'e1': 0.2, 'e2': -0.1, 'T': 0.8, 'F': F},
+        {'type': 'dev', 'cov': Sfam, 'F': F},
     ]
 
     for model in models:
         for band in range(F.size):
-            if model['type'] == 'exp':
+            if model['type'] in ('exp', 'dev'):
                 expected = np.zeros(6)
-                for frac, cT in get_exp_comps():
+                for frac, cT in get_profile_comps(model['type']):
                     So = cT * Sfam + smooth_cov
                     expected += gauss_model_ksums(
                         model['F'][band] * frac, So, dv, du, Sw, detAtinv,
@@ -1247,3 +1250,30 @@ def test_prepsfadmom_ksums_nonpos_weight_guard():
     )
     assert np.all(np.isfinite(sums))
     assert np.all(sums == 0)
+
+
+def test_prepsfadmom_model_dev():
+    """
+    noiseless exact 10-gaussian de Vaucouleurs: the moment matched
+    family parameters and the total flux are recovered, including
+    with an offset center and a sheared wcs
+    """
+    e1_true, e2_true, T_true, flux_true = 0.1, -0.05, 0.5, 4.0
+
+    gs_wcs = galsim.ShearWCS(
+        0.25, galsim.Shear(g1=-0.1, g2=0.06),
+    ).jacobian()
+
+    obs = _make_exp_mix_obs(
+        e1_true, e2_true, T_true, flux_true, 0.9, gs_wcs,
+        offset_pix=(0.4, -0.3), model='dev', dim=96,
+    )
+    res = run_prepsf_admom(
+        obs, guess=0.4, model='dev', rng=np.random.RandomState(3),
+    )
+    assert res['flags'] == 0
+    assert res['model'] == 'dev'
+    assert np.abs(res['e1'] - e1_true) < 1.0e-2
+    assert np.abs(res['e2'] - e2_true) < 1.0e-2
+    assert np.abs(res['T'] / T_true - 1) < 2.0e-2
+    assert np.abs(res['flux'] / flux_true - 1) < 1.0e-2

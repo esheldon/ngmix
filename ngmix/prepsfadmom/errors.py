@@ -107,8 +107,8 @@ def _model_pred_mbasis(model_type, Sfam, Sigma, Tsmooth):
     detAtinv; the ratios and the log derivative are the same for
     every epoch and band
     """
-    if model_type == 'exp':
-        state = {'type': 'exp', 'cov': Sfam, 'F': np.ones(1)}
+    if model_type in ('exp', 'dev'):
+        state = {'type': model_type, 'cov': Sfam, 'F': np.ones(1)}
     else:
         # single gaussian family, used to validate against the
         # analytic gauss delta method
@@ -148,7 +148,7 @@ def model_sandwich(
     Parameters
     ----------
     model_type: str
-        'exp', or 'gauss' for validation
+        'exp' or 'dev', or 'gauss' for validation
     Sfam: (2, 2) array
         The converged family covariance
     Sigma: (2, 2) array
