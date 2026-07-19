@@ -839,7 +839,12 @@ class PAdmomFitter(object):
                 Tgal = Twt - Tsmooth
                 M1 = Sigma[1, 1] - Sigma[0, 0]
                 M2 = 2 * Sigma[0, 1]
-                shape_ok = Tgal > 0
+                # det > 0 with positive trace is |e| < 1: a positive
+                # size with a degenerate galaxy covariance after the
+                # smoothing is subtracted has no defined shape, the
+                # same rule as the exp family
+                Sgal = Sigma - np.diag([Tsmooth / 2, Tsmooth / 2])
+                shape_ok = Tgal > 0 and det2(Sgal) > 0
             elif model_state['type'] == 'exp':
                 Sfam = model_state['cov']
                 Tgal = Sfam[0, 0] + Sfam[1, 1]
