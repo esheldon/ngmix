@@ -36,7 +36,7 @@ Model dicts:
         positive definite: the components only enter the sums through
         their smoothed covariances, so mildly negative sizes are well
         defined, allowing unbiased scatter through zero size (see
-        exp_model_valid)
+        mixture_model_valid)
 """
 import numpy as np
 
@@ -123,12 +123,6 @@ def get_profile_comps(name):
     return _PROFILE_COMPS[name]
 
 
-def get_exp_comps():
-    """flux fractions and relative T factors of the ngmix 6-gaussian
-    exponential expansion, normalized to total T = 1"""
-    return get_profile_comps('exp')
-
-
 def model_comps(model, Tsmooth):
     """
     the gaussian components of a model in the smoothed plane
@@ -212,8 +206,3 @@ def mixture_model_valid(name, Sfam, Sw, Tsmooth):
                 or det2(C) <= 1.0e-6 * C[0, 0] * C[1, 1]):
             return False
     return True
-
-
-def exp_model_valid(Sfam, Sw, Tsmooth):
-    """mixture_model_valid for the exponential family"""
-    return mixture_model_valid('exp', Sfam, Sw, Tsmooth)

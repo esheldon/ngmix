@@ -456,7 +456,9 @@ class PAdmomFitter(object):
         over all epochs
         """
         if self.model in ('exp', 'dev'):
-            return self._run_admom_exp(epochs, nband, guess_gmix, Tsmooth)
+            return self._run_admom_mixture(
+                epochs, nband, guess_gmix, Tsmooth,
+            )
         elif self.model == 'star':
             return self._run_admom_star(epochs, nband, guess_gmix, Tsmooth)
 
@@ -543,9 +545,10 @@ class PAdmomFitter(object):
             Sigma=Sigma, v0=v0, u0=u0, Tsmooth=Tsmooth,
         )
 
-    def _run_admom_exp(self, epochs, nband, guess_gmix, Tsmooth):
+    def _run_admom_mixture(self, epochs, nband, guess_gmix, Tsmooth):
         """
-        fit the 6-gaussian exponential expansion by moment matching.
+        fit a fixed-ratio gaussian mixture family ('exp' or 'dev')
+        by moment matching.
         The weight follows the standard deweight iteration on the
         measured moments, and the family covariance is shifted by the
         difference of the deweight-mapped measured and predicted
@@ -559,7 +562,7 @@ class PAdmomFitter(object):
         family size can scatter through zero and the ellipticity is
         not clipped.  A proposed update is accepted when every
         smoothed component gives a positive definite total covariance
-        (exp_model_valid); otherwise the step is damped, and the fit
+        (mixture_model_valid); otherwise the step is damped, and the fit
         is flagged if no valid step is found.  The etol convergence
         criterion applies to the raw family covariance shift relative
         to the weight T.
