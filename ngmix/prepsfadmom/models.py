@@ -65,6 +65,13 @@ def cov_from_e(e1, e2, T):
     ])
 
 
+def mom_from_cov(S):
+    """moments (M1, M2, T) = (<uu - vv>, 2<vu>, <vv + uu>) from a
+    covariance matrix [[Ivv, Ivu], [Ivu, Iuu]], the inverse of
+    cov_from_e up to the T normalization of the shapes"""
+    return S[1, 1] - S[0, 0], 2 * S[0, 1], S[0, 0] + S[1, 1]
+
+
 def gauss_model_ksums(flux, So, dv, du, Sw, detAtinv):
     """
     closed-form weighted moment sums of a gaussian model

@@ -41,7 +41,7 @@ from ..shape import e1e2_to_g1g2
 from ..util import get_ratio_error
 from .prepsfadmom_nb import admom_ksums, admom_finalize
 from .models import (
-    model_ksums, cov_from_e, mixture_model_valid, det2,
+    model_ksums, cov_from_e, mom_from_cov, mixture_model_valid, det2,
 )
 from .errors import flux_var_delta, model_sandwich
 from .prep import choose_fwhm_smooth, prep_epoch, DEFAULT_SMOOTH_FAC
@@ -458,7 +458,64 @@ class PAdmomFitter(object):
             )
         elif self.model == 'star':
             return self._run_admom_star(epochs, nband, guess_gmix, Tsmooth)
+        else:
+            return self._run_admom_gauss(epochs, nband, guess_gmix, Tsmooth)
 
+    def _measure_step(self, epochs, Sigma, v0, u0, vorig, uorig):
+        """
+        one measurement pass under the current weight, shared by the
+        gauss and mixture iterations: validate the weight, accumulate
+        the k-space sums, update the center, and assemble the measured
+        moment matrix.  Returns (flags, v0, u0, dv, du, M); the
+        iteration cannot continue when flags is nonzero, and M is None
+        in that case
+
+        The center update refers the second moments to the updated
+        center with the exact centroid correction
+        <(x - d)_i (x - d)_j> = <x_i x_j> - d_i d_j.  The weight
+        center lags by one iteration, which vanishes at the fixed
+        point
+        """
+        if (Sigma[0, 0] <= 0 or Sigma[1, 1] <= 0
+                or det2(Sigma) < GMIX_LOW_DETVAL):
+            return ngmix.flags.LOW_DET, v0, u0, 0.0, 0.0, None
+
+        sums = self._accumulate(epochs, Sigma, v0, u0)
+
+        if sums[5] <= 0:
+            return ngmix.flags.NONPOS_FLUX, v0, u0, 0.0, 0.0, None
+
+        finv = 1.0 / sums[5]
+        dv = sums[0] * finv
+        du = sums[1] * finv
+        v0 += dv
+        u0 += du
+
+        if (abs(v0 - vorig) > self.shiftmax
+                or abs(u0 - uorig) > self.shiftmax):
+            return ngmix.flags.CEN_SHIFT, v0, u0, dv, du, None
+
+        M1 = sums[2] * finv - (du * du - dv * dv)
+        M2 = sums[3] * finv - 2 * dv * du
+        T = sums[4] * finv - (dv * dv + du * du)
+
+        if T <= 0:
+            # the measured moment matrix is not positive definite
+            # and cannot be deweighted into a valid next weight
+            return ngmix.flags.NONPOS_SIZE, v0, u0, dv, du, None
+
+        M = np.array([
+            [0.5 * (T - M1), 0.5 * M2],
+            [0.5 * M2, 0.5 * (T + M1)],
+        ])
+        return 0, v0, u0, dv, du, M
+
+    def _run_admom_gauss(self, epochs, nband, guess_gmix, Tsmooth):
+        """
+        the standard adaptive moments fixed point: deweight the
+        measured moments into the next weight until the weight stops
+        changing
+        """
         cen_guess = guess_gmix.get_cen()
         v0 = cen_guess[0]
         u0 = cen_guess[1]
@@ -475,47 +532,12 @@ class PAdmomFitter(object):
         for i in range(self.maxiter):
             numiter = i + 1
 
-            if (Sigma[0, 0] <= 0 or Sigma[1, 1] <= 0
-                    or det2(Sigma) < GMIX_LOW_DETVAL):
-                flags = ngmix.flags.LOW_DET
+            flags, v0, u0, dv, du, M = self._measure_step(
+                epochs, Sigma, v0, u0, vorig, uorig,
+            )
+            if flags != 0:
                 break
 
-            sums = self._accumulate(epochs, Sigma, v0, u0)
-
-            if sums[5] <= 0:
-                flags = ngmix.flags.NONPOS_FLUX
-                break
-
-            # update the center, and refer the second moments to the
-            # updated center with the exact centroid correction
-            # <(x - d)_i (x - d)_j> = <x_i x_j> - d_i d_j.  The weight
-            # center lags by one iteration, which vanishes at the fixed
-            # point
-            finv = 1.0 / sums[5]
-            dv = sums[0] * finv
-            du = sums[1] * finv
-            v0 += dv
-            u0 += du
-
-            if (abs(v0 - vorig) > self.shiftmax
-                    or abs(u0 - uorig) > self.shiftmax):
-                flags = ngmix.flags.CEN_SHIFT
-                break
-
-            M1 = sums[2] * finv - (du * du - dv * dv)
-            M2 = sums[3] * finv - 2 * dv * du
-            T = sums[4] * finv - (dv * dv + du * du)
-
-            if T <= 0:
-                # the measured moment matrix is not positive definite
-                # and cannot be deweighted into a valid next weight
-                flags = ngmix.flags.NONPOS_SIZE
-                break
-
-            M = np.array([
-                [0.5 * (T - M1), 0.5 * M2],
-                [0.5 * M2, 0.5 * (T + M1)],
-            ])
             newSigma, flags = deweight(M, Sigma)
             if flags != 0:
                 break
@@ -595,7 +617,6 @@ class PAdmomFitter(object):
 
         flags = 0
         numiter = 0
-        unit_state = {'type': self.model, 'cov': Sfam, 'F': np.ones(1)}
 
         # last accepted plain (unboosted, undamped) shift, for the
         # extrapolation ratio; None whenever a fresh pair is needed
@@ -604,109 +625,25 @@ class PAdmomFitter(object):
         for i in range(self.maxiter):
             numiter = i + 1
 
-            if (Sigma[0, 0] <= 0 or Sigma[1, 1] <= 0
-                    or det2(Sigma) < GMIX_LOW_DETVAL):
-                flags = ngmix.flags.LOW_DET
-                break
-
-            sums = self._accumulate(epochs, Sigma, v0, u0)
-
-            if sums[5] <= 0:
-                flags = ngmix.flags.NONPOS_FLUX
-                break
-
-            finv = 1.0 / sums[5]
-            dv = sums[0] * finv
-            du = sums[1] * finv
-            v0 += dv
-            u0 += du
-
-            if (abs(v0 - vorig) > self.shiftmax
-                    or abs(u0 - uorig) > self.shiftmax):
-                flags = ngmix.flags.CEN_SHIFT
-                break
-
-            M1 = sums[2] * finv - (du * du - dv * dv)
-            M2 = sums[3] * finv - 2 * dv * du
-            Tm = sums[4] * finv - (dv * dv + du * du)
-
-            if Tm <= 0:
-                flags = ngmix.flags.NONPOS_SIZE
-                break
-
-            M = np.array([
-                [0.5 * (Tm - M1), 0.5 * M2],
-                [0.5 * M2, 0.5 * (Tm + M1)],
-            ])
-            newSigma, dflags = deweight(M, Sigma)
-            if dflags != 0:
-                flags = dflags
-                break
-
-            # the model predicted moment ratios; with a common center
-            # and common structure across epochs these are the same
-            # for every epoch, so one closed-form evaluation suffices
-            unit_state['cov'] = Sfam
-            psums = model_ksums(
-                unit_state, 0, 0.0, 0.0, Sigma, 1.0, Tsmooth,
+            flags, v0, u0, dv, du, M = self._measure_step(
+                epochs, Sigma, v0, u0, vorig, uorig,
             )
-            pinv = 1.0 / psums[5]
-            Mp1 = psums[2] * pinv
-            Mp2 = psums[3] * pinv
-            Tp = psums[4] * pinv
-            Mpred = np.array([
-                [0.5 * (Tp - Mp1), 0.5 * Mp2],
-                [0.5 * Mp2, 0.5 * (Tp + Mp1)],
-            ])
-            Sp, pflags = deweight(Mpred, Sigma)
+            if flags != 0:
+                break
 
-            if pflags == 0:
-                # shift the family covariance by the deweight-mapped
-                # difference of the measured and predicted moments
-                shift = newSigma - Sp
-            else:
-                # gain-1 fallback on the weighted moment ratios,
-                # composed in matrix form: scale by the T ratio and
-                # shift the anisotropy by the ratio differences
-                Tf = Sfam[0, 0] + Sfam[1, 1]
-                fac = Tm / Tp
-                de1 = M1 / Tm - Mp1 / Tp
-                de2 = M2 / Tm - Mp2 / Tp
-                shift = (fac - 1) * Sfam + 0.5 * fac * Tf * np.array([
-                    [-de1, de2],
-                    [de2, de1],
-                ])
+            newSigma, flags = deweight(M, Sigma)
+            if flags != 0:
+                break
 
-            # Steffensen-style extrapolation: the iteration converges
-            # linearly with a steady ratio, so two successive plain
-            # steps give the ratio and the remaining geometric series
-            # can be summed in one boosted step.  Guarded to the
-            # primary update branch and a stable ratio range
-            raw_shift = shift
-            boosted = False
-            if pflags == 0 and prev_shift is not None:
-                denom = np.sum(prev_shift * prev_shift)
-                if denom > 0:
-                    rho = np.sum(raw_shift * prev_shift) / denom
-                    # the upper limit must admit the slowly
-                    # contracting T mode of the dev family at large
-                    # size (rho approaches 1); overshoots from a
-                    # noisy ratio estimate are caught by the
-                    # validity damping
-                    if 0.2 < rho < 0.99:
-                        shift = raw_shift / (1 - rho)
-                        boosted = True
-
-            # accept the largest step, damping if needed, for which
-            # the smoothed model components stay positive definite
-            accepted = False
-            for idamp in range(10):
-                prop = Sfam + shift
-                if mixture_model_valid(
-                        self.model, prop, newSigma, Tsmooth):
-                    accepted = True
-                    break
-                shift = 0.5 * shift
+            raw_shift, pflags = self._model_shift(
+                Sfam, M, Sigma, newSigma, Tsmooth,
+            )
+            shift, boosted = self._steffensen_boost(
+                raw_shift, prev_shift, pflags,
+            )
+            prop, idamp, accepted = self._damped_step(
+                Sfam, shift, newSigma, Tsmooth,
+            )
             if not accepted:
                 flags = ngmix.flags.LOW_DET
                 break
@@ -746,6 +683,87 @@ class PAdmomFitter(object):
             Sigma=Sigma, v0=v0, u0=u0, Tsmooth=Tsmooth,
             model_state=model_state,
         )
+
+    def _model_shift(self, Sfam, M, Sigma, newSigma, Tsmooth):
+        """
+        the raw fixed point shift of the family covariance: the
+        deweight-mapped difference of the measured and model
+        predicted moments.  Returns (shift, pflags); when the
+        prediction cannot be deweighted (pflags nonzero) the shift
+        is the gain-1 fallback on the weighted moment ratios
+        """
+        # the model predicted moment ratios; with a common center
+        # and common structure across epochs these are the same
+        # for every epoch, so one closed-form evaluation suffices
+        unit_state = {'type': self.model, 'cov': Sfam, 'F': np.ones(1)}
+        psums = model_ksums(
+            unit_state, 0, 0.0, 0.0, Sigma, 1.0, Tsmooth,
+        )
+        pinv = 1.0 / psums[5]
+        Mp1 = psums[2] * pinv
+        Mp2 = psums[3] * pinv
+        Tp = psums[4] * pinv
+        Mpred = np.array([
+            [0.5 * (Tp - Mp1), 0.5 * Mp2],
+            [0.5 * Mp2, 0.5 * (Tp + Mp1)],
+        ])
+        Sp, pflags = deweight(Mpred, Sigma)
+
+        if pflags == 0:
+            # shift the family covariance by the deweight-mapped
+            # difference of the measured and predicted moments
+            shift = newSigma - Sp
+        else:
+            # gain-1 fallback on the weighted moment ratios,
+            # composed in matrix form: scale by the T ratio and
+            # shift the anisotropy by the ratio differences
+            M1, M2, Tm = mom_from_cov(M)
+            Tf = Sfam[0, 0] + Sfam[1, 1]
+            fac = Tm / Tp
+            de1 = M1 / Tm - Mp1 / Tp
+            de2 = M2 / Tm - Mp2 / Tp
+            shift = (fac - 1) * Sfam + 0.5 * fac * Tf * np.array([
+                [-de1, de2],
+                [de2, de1],
+            ])
+        return shift, pflags
+
+    def _steffensen_boost(self, raw_shift, prev_shift, pflags):
+        """
+        Steffensen-style extrapolation: the iteration converges
+        linearly with a steady ratio, so two successive plain steps
+        give the ratio and the remaining geometric series can be
+        summed in one boosted step.  Guarded to the primary update
+        branch and a stable ratio range.  Returns (shift, boosted)
+        """
+        if pflags == 0 and prev_shift is not None:
+            denom = np.sum(prev_shift * prev_shift)
+            if denom > 0:
+                rho = np.sum(raw_shift * prev_shift) / denom
+                # the upper limit must admit the slowly
+                # contracting T mode of the dev family at large
+                # size (rho approaches 1); overshoots from a
+                # noisy ratio estimate are caught by the
+                # validity damping
+                if 0.2 < rho < 0.99:
+                    return raw_shift / (1 - rho), True
+        return raw_shift, False
+
+    def _damped_step(self, Sfam, shift, newSigma, Tsmooth):
+        """
+        accept the largest step, damping if needed, for which the
+        smoothed model components stay positive definite.  Returns
+        (prop, idamp, accepted)
+        """
+        accepted = False
+        for idamp in range(10):
+            prop = Sfam + shift
+            if mixture_model_valid(
+                    self.model, prop, newSigma, Tsmooth):
+                accepted = True
+                break
+            shift = 0.5 * shift
+        return prop, idamp, accepted
 
     def _run_admom_star(self, epochs, nband, guess_gmix, Tsmooth):
         """
@@ -847,32 +865,9 @@ class PAdmomFitter(object):
             res['sums'] = sums
             res['sums_cov'] = sums_cov
 
-            Twt = Sigma[0, 0] + Sigma[1, 1]
-            if model_state is None:
-                Tgal = Twt - Tsmooth
-                M1 = Sigma[1, 1] - Sigma[0, 0]
-                M2 = 2 * Sigma[0, 1]
-                # det > 0 with positive trace is |e| < 1: a positive
-                # size with a degenerate galaxy covariance after the
-                # smoothing is subtracted has no defined shape, the
-                # same rule as the exp family
-                Sgal = Sigma - np.diag([Tsmooth / 2, Tsmooth / 2])
-                shape_ok = Tgal > 0 and det2(Sgal) > 0
-            elif model_state['type'] in ('exp', 'dev'):
-                Sfam = model_state['cov']
-                Tgal = Sfam[0, 0] + Sfam[1, 1]
-                M1 = Sfam[1, 1] - Sfam[0, 0]
-                M2 = 2 * Sfam[0, 1]
-                # the family covariance can scatter out of positive
-                # definite, where the shape is undefined
-                shape_ok = Tgal > 0 and det2(Sfam) > 0
-            else:
-                # star: a delta function has no size or shape
-                Tgal = 0.0
-                M1 = 0.0
-                M2 = 0.0
-                shape_ok = False
-
+            M1, M2, Tgal, shape_ok = self._shape_state(
+                model_state, Sigma, Tsmooth,
+            )
             res['T'] = Tgal
 
             res['flux'] = fluxes
@@ -884,104 +879,16 @@ class PAdmomFitter(object):
             else:
                 res['flux_flags'] |= ngmix.flags.NONPOS_VAR
 
-            if model_state is not None and model_state['type'] == 'star':
-                # T is fixed at zero by the model, not measured
-                pass
-            elif model_state is not None:
-                # exp: from the family covariance sandwich
-                if fam_cov[2, 2] > 0:
-                    res['T_err'] = np.sqrt(fam_cov[2, 2])
-                else:
-                    res['T_flags'] |= ngmix.flags.NONPOS_VAR
-            elif sums_cov[4, 4] > 0 and sums_cov[5, 5] > 0:
-                # the sums include the weight, so need a factor of two
-                # to correct, as in real-space adaptive moments
-                res['T_err'] = 4 * get_ratio_error(
-                    sums[4], sums[5],
-                    sums_cov[4, 4], sums_cov[5, 5], sums_cov[4, 5],
-                )
-            else:
-                res['T_flags'] |= ngmix.flags.NONPOS_VAR
+            self._set_T_err(res, model_state, fam_cov, sums, sums_cov)
 
             res['pars'] = np.array([
                 v0, u0, M1, M2, Tgal, np.sum(fluxes),
             ])
 
-            if model_state is not None and model_state['type'] == 'star':
-                # a delta function has no shape; this is by
-                # construction, not a failure, so the overall flags
-                # stay clean, but e_flags still marks the
-                # ellipticities unusable
-                res['e_flags'] |= ngmix.flags.NONPOS_SIZE
-            elif shape_ok:
-                res['e1'] = M1 / Tgal
-                res['e2'] = M2 / Tgal
-                res['e'] = np.array([res['e1'], res['e2']])
-
-                e1err = np.nan
-                e2err = np.nan
-                e12cov = np.nan
-                if model_state is not None:
-                    # exp: linearize e = M/T over the family
-                    # covariance sandwich
-                    ev1 = (
-                        fam_cov[0, 0]
-                        - 2 * res['e1'] * fam_cov[0, 2]
-                        + res['e1'] ** 2 * fam_cov[2, 2]
-                    ) / Tgal ** 2
-                    ev2 = (
-                        fam_cov[1, 1]
-                        - 2 * res['e2'] * fam_cov[1, 2]
-                        + res['e2'] ** 2 * fam_cov[2, 2]
-                    ) / Tgal ** 2
-                    if ev1 > 0 and ev2 > 0:
-                        e1err = np.sqrt(ev1)
-                        e2err = np.sqrt(ev2)
-                        e12cov = (
-                            fam_cov[0, 1]
-                            - res['e1'] * fam_cov[1, 2]
-                            - res['e2'] * fam_cov[0, 2]
-                            + res['e1'] * res['e2'] * fam_cov[2, 2]
-                        ) / Tgal ** 2
-                elif sums_cov[2, 2] > 0 and sums_cov[3, 3] > 0:
-                    # the lever arm Twt/Tgal accounts for the smoothing
-                    # subtraction in the denominator of e = M1/Tgal
-                    lever = Twt / Tgal
-                    e1err = lever * 2 * get_ratio_error(
-                        sums[2], sums[4],
-                        sums_cov[2, 2], sums_cov[4, 4], sums_cov[2, 4],
-                    )
-                    e2err = lever * 2 * get_ratio_error(
-                        sums[3], sums[4],
-                        sums_cov[3, 3], sums_cov[4, 4], sums_cov[3, 4],
-                    )
-                    # the covariance of the two moment ratios with the
-                    # common denominator, consistent with get_ratio_var
-                    r1 = sums[2] / sums[4]
-                    r2 = sums[3] / sums[4]
-                    e12cov = (lever * 2) ** 2 * (
-                        sums_cov[2, 3] - r1 * sums_cov[3, 4]
-                        - r2 * sums_cov[2, 4] + r1 * r2 * sums_cov[4, 4]
-                    ) / sums[4] ** 2
-
-                if (np.isfinite(e1err) and np.isfinite(e2err)
-                        and np.isfinite(e12cov)):
-                    res['e1err'] = e1err
-                    res['e2err'] = e2err
-                    res['e_err'] = np.array([e1err, e2err])
-                    res['e_cov'] = np.array([
-                        [e1err ** 2, e12cov],
-                        [e12cov, e2err ** 2],
-                    ])
-                else:
-                    res['flags'] |= ngmix.flags.NONPOS_SHAPE_VAR
-                    res['e_flags'] |= ngmix.flags.NONPOS_SHAPE_VAR
-            else:
-                # a converged fit can have non-positive size after the
-                # smoothing is subtracted; the fluxes and T are still
-                # usable but the shape is undefined
-                res['flags'] |= ngmix.flags.NONPOS_SIZE
-                res['e_flags'] |= ngmix.flags.NONPOS_SIZE
+            self._set_shape(
+                res, model_state, shape_ok, M1, M2, Tgal, Sigma,
+                fam_cov, sums, sums_cov,
+            )
 
         # propagate fitting failures, but not the post-hoc NONPOS_SIZE
         # or NONPOS_SHAPE_VAR set above, for which T and flux are still
@@ -997,6 +904,144 @@ class PAdmomFitter(object):
         res['e_flagstr'] = ngmix.flags.get_flags_str(res['e_flags'])
 
         return res
+
+    def _shape_state(self, model_state, Sigma, Tsmooth):
+        """
+        the galaxy moments (M1, M2, Tgal) and whether the shape M/Tgal
+        is defined, per model type.  det > 0 with positive trace is
+        |e| < 1: a non positive definite galaxy covariance has no
+        defined shape
+        """
+        if model_state is None:
+            # gauss: the converged weight with the smoothing
+            # subtracted.  The round smoothing shifts only the
+            # diagonal, so it drops out of M1 and M2 and only T
+            # needs the subtraction
+            Sgal = Sigma - np.diag([Tsmooth / 2, Tsmooth / 2])
+            M1, M2, Twt = mom_from_cov(Sigma)
+            Tgal = Twt - Tsmooth
+            shape_ok = Tgal > 0 and det2(Sgal) > 0
+        elif model_state['type'] in ('exp', 'dev'):
+            # the family covariance can scatter out of positive
+            # definite, where the shape is undefined
+            Sfam = model_state['cov']
+            M1, M2, Tgal = mom_from_cov(Sfam)
+            shape_ok = Tgal > 0 and det2(Sfam) > 0
+        else:
+            # star: a delta function has no size or shape
+            M1 = 0.0
+            M2 = 0.0
+            Tgal = 0.0
+            shape_ok = False
+        return M1, M2, Tgal, shape_ok
+
+    def _set_T_err(self, res, model_state, fam_cov, sums, sums_cov):
+        """
+        set the T error in the result, or NONPOS_VAR in T_flags
+        """
+        if model_state is not None and model_state['type'] == 'star':
+            # T is fixed at zero by the model, not measured
+            pass
+        elif model_state is not None:
+            # exp: from the family covariance sandwich
+            if fam_cov[2, 2] > 0:
+                res['T_err'] = np.sqrt(fam_cov[2, 2])
+            else:
+                res['T_flags'] |= ngmix.flags.NONPOS_VAR
+        elif sums_cov[4, 4] > 0 and sums_cov[5, 5] > 0:
+            # the sums include the weight, so need a factor of two
+            # to correct, as in real-space adaptive moments
+            res['T_err'] = 4 * get_ratio_error(
+                sums[4], sums[5],
+                sums_cov[4, 4], sums_cov[5, 5], sums_cov[4, 5],
+            )
+        else:
+            res['T_flags'] |= ngmix.flags.NONPOS_VAR
+
+    def _set_shape(
+        self, res, model_state, shape_ok, M1, M2, Tgal, Sigma,
+        fam_cov, sums, sums_cov,
+    ):
+        """
+        set the ellipticities and their errors in the result, or the
+        flag bits recording why they are unusable
+        """
+        if model_state is not None and model_state['type'] == 'star':
+            # a delta function has no shape; this is by
+            # construction, not a failure, so the overall flags
+            # stay clean, but e_flags still marks the
+            # ellipticities unusable
+            res['e_flags'] |= ngmix.flags.NONPOS_SIZE
+        elif shape_ok:
+            res['e1'] = M1 / Tgal
+            res['e2'] = M2 / Tgal
+            res['e'] = np.array([res['e1'], res['e2']])
+
+            e1err = np.nan
+            e2err = np.nan
+            e12cov = np.nan
+            if model_state is not None:
+                # exp: linearize e = M/T over the family
+                # covariance sandwich
+                ev1 = (
+                    fam_cov[0, 0]
+                    - 2 * res['e1'] * fam_cov[0, 2]
+                    + res['e1'] ** 2 * fam_cov[2, 2]
+                ) / Tgal ** 2
+                ev2 = (
+                    fam_cov[1, 1]
+                    - 2 * res['e2'] * fam_cov[1, 2]
+                    + res['e2'] ** 2 * fam_cov[2, 2]
+                ) / Tgal ** 2
+                if ev1 > 0 and ev2 > 0:
+                    e1err = np.sqrt(ev1)
+                    e2err = np.sqrt(ev2)
+                    e12cov = (
+                        fam_cov[0, 1]
+                        - res['e1'] * fam_cov[1, 2]
+                        - res['e2'] * fam_cov[0, 2]
+                        + res['e1'] * res['e2'] * fam_cov[2, 2]
+                    ) / Tgal ** 2
+            elif sums_cov[2, 2] > 0 and sums_cov[3, 3] > 0:
+                # the lever arm Twt/Tgal accounts for the smoothing
+                # subtraction in the denominator of e = M1/Tgal
+                Twt = Sigma[0, 0] + Sigma[1, 1]
+                lever = Twt / Tgal
+                e1err = lever * 2 * get_ratio_error(
+                    sums[2], sums[4],
+                    sums_cov[2, 2], sums_cov[4, 4], sums_cov[2, 4],
+                )
+                e2err = lever * 2 * get_ratio_error(
+                    sums[3], sums[4],
+                    sums_cov[3, 3], sums_cov[4, 4], sums_cov[3, 4],
+                )
+                # the covariance of the two moment ratios with the
+                # common denominator, consistent with get_ratio_var
+                r1 = sums[2] / sums[4]
+                r2 = sums[3] / sums[4]
+                e12cov = (lever * 2) ** 2 * (
+                    sums_cov[2, 3] - r1 * sums_cov[3, 4]
+                    - r2 * sums_cov[2, 4] + r1 * r2 * sums_cov[4, 4]
+                ) / sums[4] ** 2
+
+            if (np.isfinite(e1err) and np.isfinite(e2err)
+                    and np.isfinite(e12cov)):
+                res['e1err'] = e1err
+                res['e2err'] = e2err
+                res['e_err'] = np.array([e1err, e2err])
+                res['e_cov'] = np.array([
+                    [e1err ** 2, e12cov],
+                    [e12cov, e2err ** 2],
+                ])
+            else:
+                res['flags'] |= ngmix.flags.NONPOS_SHAPE_VAR
+                res['e_flags'] |= ngmix.flags.NONPOS_SHAPE_VAR
+        else:
+            # a converged fit can have non-positive size after the
+            # smoothing is subtracted; the fluxes and T are still
+            # usable but the shape is undefined
+            res['flags'] |= ngmix.flags.NONPOS_SIZE
+            res['e_flags'] |= ngmix.flags.NONPOS_SIZE
 
     def _accumulate(self, epochs, Sigma, v0, u0):
         """
