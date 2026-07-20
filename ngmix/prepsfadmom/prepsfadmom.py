@@ -52,7 +52,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAXITER = 200
 DEFAULT_SHIFTMAX = 5.0  # pixels for scale=1
 DEFAULT_ETOL = 1.0e-5
-DEFAULT_TTOL = 1.0e-3
 DEFAULT_CENTOL = 1.0e-4  # pixels for scale=1
 
 
@@ -66,7 +65,6 @@ def run_prepsf_admom(
     maxiter=DEFAULT_MAXITER,
     shiftmax=DEFAULT_SHIFTMAX,
     etol=DEFAULT_ETOL,
-    Ttol=DEFAULT_TTOL,
     cen_tol=DEFAULT_CENTOL,
     no_psf=False,
     use_noise_image=False,
@@ -121,10 +119,11 @@ def run_prepsf_admom(
         Largest allowed shift in the centroid, relative to the initial
         guess.  Default 5.0 (5 pixels if the jacobian scale is 1)
     etol: float, optional
-        absolute tolerance in e1 or e2 to determine convergence,
-        default 1.0e-5
-    Ttol: float, optional
-        relative tolerance in T to determine convergence, default 1.0e-3
+        relative tolerance on the fixed point residual to determine
+        convergence: the largest element of the covariance update
+        step (the weight for 'gauss', the family covariance for
+        'exp'/'dev') must fall below etol times the trace of the
+        updated weight.  Default 1.0e-5
     cen_tol: float, optional
         absolute tolerance in the center to determine convergence,
         default 1.0e-4 (1.0e-4 pixels if the jacobian scale is 1)
@@ -158,7 +157,6 @@ def run_prepsf_admom(
         maxiter=maxiter,
         shiftmax=shiftmax,
         etol=etol,
-        Ttol=Ttol,
         cen_tol=cen_tol,
         use_noise_image=use_noise_image,
         rng=rng,
@@ -287,10 +285,11 @@ class PAdmomFitter(object):
         Largest allowed shift in the centroid, relative to the initial
         guess.  Default 5.0 (5 pixels if the jacobian scale is 1)
     etol: float, optional
-        absolute tolerance in e1 or e2 to determine convergence,
-        default 1.0e-5
-    Ttol: float, optional
-        relative tolerance in T to determine convergence, default 1.0e-3
+        relative tolerance on the fixed point residual to determine
+        convergence: the largest element of the covariance update
+        step (the weight for 'gauss', the family covariance for
+        'exp'/'dev') must fall below etol times the trace of the
+        updated weight.  Default 1.0e-5
     cen_tol: float, optional
         absolute tolerance in the center to determine convergence,
         default 1.0e-4 (1.0e-4 pixels if the jacobian scale is 1)
@@ -357,7 +356,6 @@ class PAdmomFitter(object):
         maxiter=DEFAULT_MAXITER,
         shiftmax=DEFAULT_SHIFTMAX,
         etol=DEFAULT_ETOL,
-        Ttol=DEFAULT_TTOL,
         cen_tol=DEFAULT_CENTOL,
         use_noise_image=False,
         rng=None,
@@ -376,7 +374,6 @@ class PAdmomFitter(object):
         self.maxiter = maxiter
         self.shiftmax = shiftmax
         self.etol = etol
-        self.Ttol = Ttol
         self.cen_tol = cen_tol
         self.use_noise_image = use_noise_image
         self.rng = rng
@@ -473,7 +470,6 @@ class PAdmomFitter(object):
         uorig = u0
 
         flags = 0
-        e1old = e2old = Told = np.nan
         numiter = 0
 
         for i in range(self.maxiter):
@@ -511,32 +507,34 @@ class PAdmomFitter(object):
             T = sums[4] * finv - (dv * dv + du * du)
 
             if T <= 0:
+                # the measured moment matrix is not positive definite
+                # and cannot be deweighted into a valid next weight
                 flags = ngmix.flags.NONPOS_SIZE
-                break
-
-            e1 = M1 / T
-            e2 = M2 / T
-
-            # the centroid correction decouples the center from the
-            # moments, so the center must be tested explicitly
-            if (abs(e1 - e1old) < self.etol
-                    and abs(e2 - e2old) < self.etol
-                    and abs(T / Told - 1) < self.Ttol
-                    and abs(dv) < self.cen_tol
-                    and abs(du) < self.cen_tol):
                 break
 
             M = np.array([
                 [0.5 * (T - M1), 0.5 * M2],
                 [0.5 * M2, 0.5 * (T + M1)],
             ])
-            Sigma, flags = deweight(M, Sigma)
+            newSigma, flags = deweight(M, Sigma)
             if flags != 0:
                 break
 
-            e1old = e1
-            e2old = e2
-            Told = T
+            # converge on the weight fixed point residual, the same
+            # test as the mixture loop.  The centroid correction
+            # decouples the center from the moments, so the center
+            # must be tested explicitly
+            shift = newSigma - Sigma
+            scale = newSigma[0, 0] + newSigma[1, 1]
+            converged = (
+                np.abs(shift).max() < self.etol * scale
+                and abs(dv) < self.cen_tol
+                and abs(du) < self.cen_tol
+            )
+            Sigma = newSigma
+
+            if converged:
+                break
         else:
             flags = ngmix.flags.MAXITER
 
