@@ -1277,3 +1277,71 @@ def test_prepsfadmom_model_dev():
     assert np.abs(res['e2'] - e2_true) < 1.0e-2
     assert np.abs(res['T'] / T_true - 1) < 2.0e-2
     assert np.abs(res['flux'] / flux_true - 1) < 1.0e-2
+
+
+def test_prepsfadmom_robustness_vs_admom():
+    """
+    engine-level robustness against regular real-space adaptive
+    moments on identical noisy observations.  Hard failures (flux
+    and T unusable) occur at the same rate as regular admom
+    failures, while the post-hoc undefined-shape case (deweighted
+    galaxy covariance not positive definite, e_flags set with T
+    and flux still usable) is the separate price of pre-psf shapes
+    at the resolution limit.  Reference rates from a 2000-trial
+    grid: hard-failure rates agree within 0.02 for s2n 5-50 and
+    T/Tpsf 0.1-2; shape availability at the cells below is
+    0.38, 0.88 and 0.44
+    """
+    rng = np.random.RandomState(771)
+    gs_wcs = galsim.ShearWCS(0.2, galsim.Shear(g1=0, g2=0)).jacobian()
+    psf_fwhm = 0.8
+    Tpsf = fwhm_to_T(psf_fwhm)
+    ntrial = 150
+
+    for s2n, trat, shape_min in [
+        (10, 0.25, 0.20),
+        (10, 1.00, 0.75),
+        (7, 0.50, 0.30),
+    ]:
+        T = trat * Tpsf
+
+        # noise for the target matched-filter s2n, from a round
+        # noiseless template at this size
+        obs0 = _make_obs(0, 0, T, 1.0, psf_fwhm, gs_wcs)
+        noise = np.sqrt(np.sum(obs0.image ** 2)) / s2n
+
+        npa_flux = npa_T = npa_shape = nam = 0
+        for k in range(ntrial):
+            e1, e2 = rng.uniform(-0.3, 0.3, size=2)
+            off = rng.uniform(-0.5, 0.5, size=2)
+            obs = _make_obs(
+                e1, e2, T, 1.0, psf_fwhm, gs_wcs,
+                offset_pix=off, noise=noise, rng=rng,
+            )
+
+            pres = run_prepsf_admom(
+                obs, guess=T, model='gauss',
+                rng=np.random.RandomState(rng.randint(2 ** 31)),
+            )
+            npa_flux += (pres['flux_flags'] == 0)
+            npa_T += (pres['T_flags'] == 0)
+            npa_shape += (pres['e_flags'] == 0)
+
+            ares = ngmix.admom.run_admom(
+                obs, guess=T + Tpsf,
+                rng=np.random.RandomState(rng.randint(2 ** 31)),
+            )
+            nam += (ares['flags'] == 0)
+
+        # shape usable implies T usable
+        assert npa_shape <= npa_T
+
+        # hard-failure robustness matches regular admom
+        assert abs(npa_flux - nam) <= 0.06 * ntrial
+
+        # both engines nearly always give usable flux/T here
+        assert npa_flux >= 0.90 * ntrial
+        assert nam >= 0.90 * ntrial
+
+        # pre-psf shape availability floor for this cell
+        assert npa_shape >= shape_min * ntrial
