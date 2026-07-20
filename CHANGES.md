@@ -2,6 +2,13 @@
 
 ### New features
 
+    - The prepsfmom fitters (KSigmaMom, PGaussMom) accept
+      use_noise_image=True, estimating the noise power per Fourier
+      mode from the noise image attached to the observation instead
+      of assuming white noise from the weight map.  Since these
+      fitters use a fixed weight, the resulting covariances are exact
+      for stationary correlated noise, such as that induced by
+      metacal.
     - Allow fwhm as size for Moffat galsim fitter
     - Added method scale_T() to gausian mixtures.
     - Added new metacal psf reconvolution method 'azgauss',

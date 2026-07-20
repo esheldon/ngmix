@@ -4,6 +4,7 @@ import pytest
 import time
 from flaky import flaky
 from numpy.testing import assert_allclose
+from scipy.ndimage import gaussian_filter
 
 from ngmix.prepsfmom import (
     KSigmaMom, PGaussMom,
@@ -97,6 +98,236 @@ def test_prepsfmom_raises_nonsquare(cls, prepsfmom_caching):
         fitter.go(obs)
 
     assert "square" in str(e.value)
+
+
+def _make_noise_image_data(rng, sigma):
+    """
+    gaussian galaxy and psf observation for the noise image tests
+    """
+    image_size = 48
+    cen = (image_size - 1) / 2
+    scale = 0.25
+
+    gal = galsim.Gaussian(fwhm=0.9).shear(g1=-0.1, g2=0.2).withFlux(400)
+    psf = galsim.Gaussian(fwhm=0.8)
+    im0 = galsim.Convolve([gal, psf]).drawImage(
+        nx=image_size, ny=image_size, scale=scale,
+    ).array
+    psf_im = psf.drawImage(nx=33, ny=33, scale=scale).array
+
+    jac = Jacobian(y=cen, x=cen, dudx=scale, dudy=0, dvdx=0, dvdy=scale)
+    pjac = Jacobian(y=16, x=16, dudx=scale, dudy=0, dvdx=0, dvdy=scale)
+    psf_obs = Observation(image=psf_im, jacobian=pjac)
+
+    wgt = np.ones_like(im0) / sigma ** 2
+    return im0, wgt, jac, psf_obs
+
+
+@pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
+def test_prepsfmom_noise_image_white(cls, prepsfmom_caching):
+    """
+    for white noise, the per-mode noise power measured from an attached
+    noise image agrees with the weight map errors in the mean over
+    realizations, and the measured moments are unchanged
+    """
+    nreal = 20
+    rng = np.random.RandomState(seed=100)
+
+    sigma = 0.06
+    im0, wgt, jac, psf_obs = _make_noise_image_data(rng, sigma)
+    im = im0 + rng.normal(scale=sigma, size=im0.shape)
+
+    obs = Observation(image=im, weight=wgt, jacobian=jac, psf=psf_obs)
+    res = cls(2.0).go(obs)
+    assert res['flags'] == 0
+
+    fitter = cls(2.0, use_noise_image=True)
+    errs = {key: [] for key in ['flux_err', 'T_err']}
+    for i in range(nreal):
+        nobs = Observation(
+            image=im, weight=wgt, jacobian=jac, psf=psf_obs,
+            noise=rng.normal(scale=sigma, size=im.shape),
+        )
+        nres = fitter.go(nobs)
+        assert nres['flags'] == 0
+
+        # the noise image affects only the errors
+        for key in ['flux', 'T', 'e1', 'e2']:
+            assert_allclose(nres[key], res[key], rtol=0, atol=0)
+
+        for key in errs:
+            assert_allclose(nres[key], res[key], rtol=0.3, atol=0)
+            errs[key].append(nres[key])
+
+    for key in errs:
+        assert_allclose(np.mean(errs[key]), res[key], rtol=0.05, atol=0)
+
+
+@pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
+def test_prepsfmom_noise_image_correlated(cls, prepsfmom_caching):
+    """
+    for correlated noise, the per-mode errors match the observed
+    scatter, which is exact up to trial statistics since the weight is
+    fixed, while the white noise assumption underestimates the scatter
+    badly
+    """
+    ntrial = 200
+    filt_sigma = 1.25
+    rng = np.random.RandomState(seed=3232)
+
+    # pixel std for s/n ~ 40 with white noise; the correlated noise
+    # boosts the power at the scales of the kernel by roughly the
+    # effective area of the filter, so its pixel std is scaled down to
+    # keep a similar effective s/n
+    im0, _, jac, psf_obs = _make_noise_image_data(rng, 1.0)
+    sigma_corr = np.sqrt(np.sum(im0 ** 2)) / 40.0 / 4.0
+    wgt = np.ones_like(im0) / sigma_corr ** 2
+
+    # the pixel std of a filtered unit white field, for normalization
+    fac = gaussian_filter(
+        rng.normal(size=(2000, 2000)), filt_sigma, mode='wrap',
+    ).std()
+
+    def _corr_noise():
+        return gaussian_filter(
+            rng.normal(size=im0.shape), filt_sigma, mode='wrap',
+        ) * (sigma_corr / fac)
+
+    fitter = cls(2.0, use_noise_image=True)
+
+    fluxes, fluxerrs, e1s, e1errs = [], [], [], []
+    for i in range(ntrial):
+        nobs = Observation(
+            image=im0 + _corr_noise(), weight=wgt, jacobian=jac,
+            psf=psf_obs, noise=_corr_noise(),
+        )
+        nres = fitter.go(nobs)
+        assert nres['flags'] == 0
+        fluxes.append(nres['flux'])
+        fluxerrs.append(nres['flux_err'])
+        e1s.append(nres['e1'])
+        e1errs.append(nres['e_err'][0])
+
+        if i == 0:
+            # the white noise errors depend only on the weight map and
+            # kernels, so one fit gives them for all trials
+            wres = cls(2.0).go(nobs)
+            assert wres['flags'] == 0
+            werr = wres['flux_err']
+
+    assert_allclose(np.std(fluxes), np.mean(fluxerrs), rtol=0.15, atol=0)
+    assert_allclose(np.std(e1s), np.mean(e1errs), rtol=0.15, atol=0)
+
+    # the white noise assumption underestimates the scatter badly
+    assert np.std(fluxes) / werr > 2.0
+
+
+@pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
+def test_prepsfmom_noise_image_color(cls, prepsfmom_caching):
+    """
+    colors from fluxes measured with the same pre-psf aperture are
+    absolutely calibrated, both the value and the error: the fixed
+    aperture factor cancels in the flux ratio, the per-band psfs do
+    not enter, and the flux errors are exact for the fixed weight.
+    The noise is correlated and the errors use the attached noise
+    images
+    """
+    ntrial = 200
+    filt_sigma = 1.25
+    rng = np.random.RandomState(seed=8712)
+
+    image_size = 48
+    cen = (image_size - 1) / 2
+    scale = 0.25
+
+    band_fluxes = [400.0, 600.0]
+    gal = galsim.Gaussian(fwhm=0.9).shear(g1=-0.1, g2=0.2)
+    # different psfs in the two bands; the pre-psf aperture makes the
+    # color independent of them
+    psfs = [
+        galsim.Gaussian(fwhm=0.9).shear(g1=0.05, g2=-0.03),
+        galsim.Gaussian(fwhm=0.8).shear(g1=-0.02, g2=0.04),
+    ]
+
+    jac = Jacobian(y=cen, x=cen, dudx=scale, dudy=0, dvdx=0, dvdy=scale)
+    pjac = Jacobian(y=16, x=16, dudx=scale, dudy=0, dvdx=0, dvdy=scale)
+
+    ims0 = []
+    psf_obss = []
+    for flux, psf in zip(band_fluxes, psfs):
+        ims0.append(
+            galsim.Convolve(gal.withFlux(flux), psf).drawImage(
+                nx=image_size, ny=image_size, scale=scale,
+            ).array
+        )
+        psf_im = psf.drawImage(nx=33, ny=33, scale=scale).array
+        psf_obss.append(Observation(image=psf_im, jacobian=pjac))
+
+    # effective s/n ~ 40 and 30 in the two bands; see the correlated
+    # noise test for the scaling of the pixel std
+    sigmas = [
+        np.sqrt(np.sum(ims0[0] ** 2)) / 40.0 / 4.0,
+        np.sqrt(np.sum(ims0[1] ** 2)) / 30.0 / 4.0,
+    ]
+
+    # the pixel std of a filtered unit white field, for normalization
+    fac = gaussian_filter(
+        rng.normal(size=(2000, 2000)), filt_sigma, mode='wrap',
+    ).std()
+
+    def _corr_noise(sigma):
+        return gaussian_filter(
+            rng.normal(size=ims0[0].shape), filt_sigma, mode='wrap',
+        ) * (sigma / fac)
+
+    fitter = cls(2.0, use_noise_image=True)
+
+    color_true = -2.5 * np.log10(band_fluxes[0] / band_fluxes[1])
+    colors, color_errs = [], []
+    for i in range(ntrial):
+        fluxes = []
+        fracerr2 = 0.0
+        for im0, sigma, psf_obs in zip(ims0, sigmas, psf_obss):
+            obs = Observation(
+                image=im0 + _corr_noise(sigma),
+                weight=np.ones_like(im0) / sigma ** 2,
+                jacobian=jac,
+                psf=psf_obs,
+                noise=_corr_noise(sigma),
+            )
+            res = fitter.go(obs)
+            assert res['flags'] == 0
+            fluxes.append(res['flux'])
+            fracerr2 += (res['flux_err'] / res['flux']) ** 2
+
+        colors.append(-2.5 * np.log10(fluxes[0] / fluxes[1]))
+        color_errs.append(2.5 / np.log(10) * np.sqrt(fracerr2))
+
+    colors = np.array(colors)
+
+    # the aperture flux ratio equals the true flux ratio, so the mean
+    # color is unbiased; the tolerance is statistical
+    assert np.abs(np.mean(colors) - color_true) < (
+        4 * np.std(colors) / np.sqrt(ntrial)
+    )
+
+    # the band noises are independent and the flux errors are exact,
+    # so the propagated color error matches the observed scatter
+    # absolutely
+    assert_allclose(np.std(colors), np.mean(color_errs), rtol=0.15, atol=0)
+
+
+@pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
+def test_prepsfmom_noise_image_raises(cls, prepsfmom_caching):
+    """
+    use_noise_image requires obs.noise to be set
+    """
+    rng = np.random.RandomState(seed=45)
+    sigma = 0.06
+    im0, wgt, jac, psf_obs = _make_noise_image_data(rng, sigma)
+    obs = Observation(image=im0, weight=wgt, jacobian=jac, psf=psf_obs)
+    with pytest.raises(ValueError):
+        cls(2.0, use_noise_image=True).go(obs)
 
 
 @pytest.mark.parametrize("cls", [KSigmaMom, PGaussMom])
