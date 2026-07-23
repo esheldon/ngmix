@@ -31,8 +31,15 @@
       model={'type': 'bdf', 'TdByTe': 1.0}; string model names
       remain valid for the other models.  Results gain fracdev,
       flux_exp, flux_dev and flux_gls_cov; the split is per band,
-      so bulge and disk colors are measured.  The flux and
-      structure errors are conditional on the converged split.
+      so bulge and disk colors are measured.  The flux, structure
+      and fracdev errors come from a joint sandwich over the
+      coupled (structure, split) estimating equations, including
+      the analytic cross covariance of the split noise with the
+      moment sums (the split and the T sums are strongly
+      anti-correlated and the coupled responses nearly cancel, so
+      the cross terms are essential).  The errors match the robust
+      MC scatter at the ~10 percent level for both the free and
+      shrunk split.
     - prepsfadmom accepts fixcen=True, holding the center fixed at
       the guess for any model.
     - prepsfadmom results carry the gauss (converged-weight) shape

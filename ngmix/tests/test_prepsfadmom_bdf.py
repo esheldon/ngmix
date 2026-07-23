@@ -275,8 +275,12 @@ def test_fixcen():
 def test_bdf_noise():
     """
     noisy fits converge without failures, the split is unbiased,
-    and the reported flux errors are within the documented
-    conditional-underprediction bounds
+    and the joint-sandwich errors match the core of the scatter.
+
+    The scatter comparison uses the robust (MAD) width: the free
+    split at this noise has a small nonlinear runaway tail that
+    inflates the plain standard deviation, which no first order
+    error can or should reproduce
     """
     rng = np.random.RandomState(31)
     noise_sigma = 0.15
@@ -298,10 +302,11 @@ def test_bdf_noise():
             nfail += 1
             continue
         vals.append((res['fracdev'], res['flux'], res['T']))
-        perr.append(res['flux_err'])
+        perr.append((res['flux_err'], res['fracdev_err']))
 
     assert nfail <= 2
     vals = np.array(vals)
+    perr = np.array(perr)
 
     # unbiased within a few sigma of the mean
     fd_err = vals[:, 0].std() / np.sqrt(vals.shape[0])
@@ -309,11 +314,14 @@ def test_bdf_noise():
     flux_err = vals[:, 1].std() / np.sqrt(vals.shape[0])
     assert abs(vals[:, 1].mean() - 100.0) < 4 * flux_err
 
-    # the sandwich flux errors are conditional on the split, so
-    # they underpredict the total scatter; they must still be the
-    # right order
-    ratio = vals[:, 1].std() / np.mean(perr)
-    assert 0.8 < ratio < 4.0
+    def mad_sigma(x):
+        return 1.4826 * np.median(np.abs(x - np.median(x)))
+
+    ratio = mad_sigma(vals[:, 1]) / np.median(perr[:, 0])
+    assert 0.7 < ratio < 1.4
+
+    ratio = mad_sigma(vals[:, 0]) / np.median(perr[:, 1])
+    assert 0.7 < ratio < 1.4
 
 
 def test_gauss_entries():
@@ -355,6 +363,34 @@ def test_gauss_entries():
         assert abs(r['gauss_e1'] - rg['gauss_e1']) < 1.0e-4
         assert abs(r['gauss_e2'] - rg['gauss_e2']) < 1.0e-4
         assert abs(r['gauss_T'] / rg['gauss_T'] - 1) < 1.0e-3
+
+
+def test_model_sandwich_guard():
+    """
+    an indefinite family covariance (saddle: det of the smoothed
+    components negative) produces nan predictions; the sandwich
+    detects it and returns (None, None) instead of warning and
+    propagating nan
+    """
+    import warnings
+    from ngmix.prepsfadmom.errors import model_sandwich
+
+    Sfam = np.array([[5.0, 0.0], [0.0, -5.0]])
+    Sigma = np.diag([0.3, 0.3])
+    sums = np.array([0.0, 0.0, 0.0, 0.0, 1.0, 1.0])
+    cov = np.eye(6)
+    fsums = np.ones(1)
+    fvars = np.ones(1)
+    fmcovs = np.zeros((1, 3))
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        rawvars, fam_cov = model_sandwich(
+            'exp', Sfam, Sigma, 0.2,
+            sums, cov, fsums, fvars, fmcovs,
+        )
+    assert rawvars is None
+    assert fam_cov is None
 
 
 def test_mixture_regression():

@@ -19,7 +19,7 @@ import numpy as np
 
 from .models import model_ksums
 
-__all__ = ['flux_var_delta', 'model_sandwich']
+__all__ = ['flux_var_delta', 'model_sandwich', 'bdf_joint_sandwich']
 
 
 def flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
@@ -123,6 +123,12 @@ def _model_pred_mbasis(model_type, Sfam, Sigma, Tsmooth):
             'F': np.ones(1),
         }
     s = model_ksums(state, 0, 0.0, 0.0, Sigma, 1.0, Tsmooth)
+    if not s[5] > 0:
+        # a state at or past the validity boundary (e.g. a
+        # perturbed family covariance whose smoothed components
+        # are indefinite) has no usable prediction; nan compares
+        # false so it lands here too
+        return None, None
     return s[2:5] / s[5], np.log(s[5])
 
 
@@ -173,6 +179,11 @@ def model_sandwich(
         response; scale by the same normalization as the raw sums
     fam_cov: (3, 3) array
         The covariance of the family (M1, M2, T) parameters
+
+    Returns (None, None) when the sandwich cannot be evaluated (a
+    model prediction at or past the validity boundary, or a
+    singular response matrix); callers should fall back to the
+    fixed weight variances and flag the structure errors
     """
     Tw = Sigma[0, 0] + Sigma[1, 1]
     h = 1.0e-6 * Tw
@@ -194,6 +205,8 @@ def model_sandwich(
         rm, lm = _model_pred_mbasis(
             model_type, _mbasis_cov(*famm), Sigma, Tsmooth,
         )
+        if rp is None or rm is None:
+            return None, None
         B[:, i] = (rp - rm) / (2 * h)
         dlnu[i] = (lp - lm) / (2 * h)
 
@@ -211,7 +224,10 @@ def model_sandwich(
         + np.outer(mvec, mvec) * cff
     ) / sfj ** 2
 
-    Binv = np.linalg.inv(B)
+    try:
+        Binv = np.linalg.inv(B)
+    except np.linalg.LinAlgError:
+        return None, None
     fam_cov = Binv @ cmm @ Binv.T
     a = np.linalg.solve(B.T, dlnu)
 
@@ -226,3 +242,179 @@ def model_sandwich(
             - 2 * fsums[band] * acmf
         )
     return var_raw, fam_cov
+
+
+def bdf_joint_sandwich(
+    model_state, Sigma, Tsmooth, sums, cov, fsums, fvars, fmcovs,
+    split_grad, shrink_k, fd_var_data,
+    eta_scov=None, eta_fcovs=None,
+):
+    """
+    the sandwich for the bdf model with the flux split treated as
+    an estimated parameter, removing the conditional-on-the-split
+    underprediction of the errors.
+
+    The estimating equations add to the family condition the split
+    condition fd = k g(Sfam; data), with k the (deterministic)
+    shrinkage factor and g the split estimator.  At the model
+    consistent point the coupled first order response is
+
+        dSfam = Pinv (dM - k c eta),   P = B + k outer(c, G)
+        dfd   = k (G . dSfam + eta)
+
+    where B and c are the derivatives of the predicted moment
+    ratios over the family covariance and the split, G is the
+    split estimator's response to the family covariance (supplied
+    by the caller, since it depends on the estimator: the GLS in
+    the single-object fitter, the two-aperture solve in the
+    deblender), dM is the measured ratio fluctuation and eta the
+    split's own data noise with variance fd_var_data (the
+    conditional variance).  The flux rows gain the dlnN/dfd term.
+
+    The cross covariance of eta with the moment and flux sums is
+    essential: both are linear functionals of the same noise and
+    the T component is strongly anti-correlated with the split
+    (the coupled loop amplifies each input several fold but the
+    two amplified paths nearly cancel).  Without the cross terms
+    the errors are overpredicted by factors of a few.  The caller
+    supplies them via eta_scov/eta_fcovs; when omitted they are
+    taken as zero, which should only be used as a fallback.
+
+    Parameters
+    ----------
+    model_state: dict
+        the converged bdf model state ('cov', 'fracdev', 'TdByTe')
+    Sigma, Tsmooth, sums, cov, fsums, fvars, fmcovs:
+        as for model_sandwich
+    split_grad: array of size 3
+        d fd_gls / d (M1, M2, T) of the family covariance, at the
+        model consistent point
+    shrink_k: float
+        the shrinkage factor (1 with no prior, 0 frozen)
+    fd_var_data: float
+        the conditional variance of the measured split
+    eta_scov: array of size 3, optional
+        Cov(eta, s[2:5]) of the accumulated (M1, M2, T) sums, in
+        the same normalization as sums/cov
+    eta_fcovs: array of size nband, optional
+        Cov(eta, fs_band) of the per-band flux sums
+
+    Returns
+    -------
+    var_raw, fam_cov, fd_var: flux sum variances (scale like
+    model_sandwich), the family covariance and the total split
+    variance; (None, None, None) when the sandwich cannot be
+    evaluated
+    """
+    Sfam = model_state['cov']
+    fd = model_state['fracdev']
+
+    Tw = Sigma[0, 0] + Sigma[1, 1]
+    h = 1.0e-6 * Tw
+    fam0 = np.array([
+        Sfam[1, 1] - Sfam[0, 0], 2 * Sfam[0, 1],
+        Sfam[0, 0] + Sfam[1, 1],
+    ])
+
+    def pred(famvec, fdval):
+        state = dict(model_state)
+        state['fracdev'] = fdval
+        return _model_pred_mbasis(
+            state, _mbasis_cov(*famvec), Sigma, Tsmooth,
+        )
+
+    B = np.zeros((3, 3))
+    dlnu = np.zeros(3)
+    for i in range(3):
+        famp = fam0.copy()
+        famm = fam0.copy()
+        famp[i] += h
+        famm[i] -= h
+        rp, lp = pred(famp, fd)
+        rm, lm = pred(famm, fd)
+        if rp is None or rm is None:
+            return None, None, None
+        B[:, i] = (rp - rm) / (2 * h)
+        dlnu[i] = (lp - lm) / (2 * h)
+
+    hfd = 1.0e-4
+    rp, lp = pred(fam0, fd + hfd)
+    rm, lm = pred(fam0, fd - hfd)
+    if rp is None or rm is None:
+        return None, None, None
+    c = (rp - rm) / (2 * hfd)
+    dlnu_fd = (lp - lm) / (2 * hfd)
+
+    # measured ratio fluctuation covariance, as in model_sandwich
+    sfj = sums[5]
+    mvec = np.array([
+        Sigma[1, 1] - Sigma[0, 0], 2 * Sigma[0, 1], Tw,
+    ]) / 2
+    css = cov[2:5, 2:5]
+    csf = cov[2:5, 5]
+    cff = cov[5, 5]
+    cmm = (
+        css - np.outer(mvec, csf) - np.outer(csf, mvec)
+        + np.outer(mvec, mvec) * cff
+    ) / sfj ** 2
+
+    G = np.asarray(split_grad, dtype='f8')
+    k = float(shrink_k)
+    P = B + k * np.outer(c, G)
+    try:
+        Pinv = np.linalg.inv(P)
+    except np.linalg.LinAlgError:
+        return None, None, None
+
+    # the maps [dSfam; dfd] = LM dM + Le eta
+    LM = np.zeros((4, 3))
+    Le = np.zeros(4)
+    LM[:3] = Pinv
+    Le[:3] = -k * (Pinv @ c)
+    LM[3] = k * (G @ Pinv)
+    Le[3] = k * (1.0 - k * (G @ (Pinv @ c)))
+
+    fdv = max(float(fd_var_data), 0.0)
+
+    # the full input covariance of (dM, eta); the eta crosses come
+    # from the same template-times-kernel overlap sums as the flux
+    # covariances and are supplied by the caller
+    if eta_fcovs is None:
+        efc = np.zeros(fsums.size)
+    else:
+        efc = np.asarray(eta_fcovs, dtype='f8')
+    if eta_scov is None:
+        cme = np.zeros(3)
+    else:
+        ceta_f = efc.sum()
+        cme = (np.asarray(eta_scov, dtype='f8') - mvec * ceta_f) / sfj
+
+    Cx = np.zeros((4, 4))
+    Cx[:3, :3] = cmm
+    Cx[3, 3] = fdv
+    Cx[:3, 3] = cme
+    Cx[3, :3] = cme
+
+    Amap = np.hstack([LM, Le[:, None]])
+    joint = Amap @ Cx @ Amap.T
+    fam_cov = joint[:3, :3]
+    fd_var = joint[3, 3]
+
+    # flux response: dF_b/F_b = dfs_b/fs_b - q . (dSfam, dfd)
+    q = np.concatenate([dlnu, [dlnu_fd]])
+    a = q @ Amap     # coefficients on (dM, eta)
+    u = a[:3]
+    ue = a[3]
+    aca = a @ Cx @ a
+
+    var_raw = np.zeros(fsums.size)
+    for band in range(fsums.size):
+        acmf = (
+            (u @ fmcovs[band] - (u @ mvec) * fvars[band]) / sfj
+            + ue * efc[band]
+        )
+        var_raw[band] = (
+            fvars[band] + fsums[band] ** 2 * aca
+            - 2 * fsums[band] * acmf
+        )
+    return var_raw, fam_cov, fd_var

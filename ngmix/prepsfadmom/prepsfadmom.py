@@ -40,12 +40,16 @@ from ..moments import fwhm_to_T, e2mom
 from ..shape import e1e2_to_g1g2
 from ..util import get_ratio_error
 from .prepsfadmom_nb import admom_ksums, admom_finalize
+from ..fastexp_nb import FASTEXP_MAX_CHI2
 from numpy import fft
 from .models import (
     model_ksums, cov_from_e, mom_from_cov, mixture_model_valid, det2,
     get_profile_comps,
 )
-from .errors import flux_var_delta, model_sandwich
+from .errors import (
+    flux_var_delta, model_sandwich, bdf_joint_sandwich,
+    _mbasis_cov,
+)
 from .prep import choose_fwhm_smooth, prep_epoch, DEFAULT_SMOOTH_FAC
 import ngmix.flags
 
@@ -1003,11 +1007,39 @@ class PAdmomFitter(object):
             'type': 'bdf', 'cov': Sfam, 'F': np.ones(nband),
             'fracdev': self._fracdev, 'TdByTe': self.TdByTe,
         }
+
+        # the joint-sandwich inputs: the split estimator's
+        # structure response, the shrinkage factor, the
+        # conditional split variance and the cross covariance of
+        # the split noise with the moment and flux sums
+        self._bdf_err = None
+        if flags == 0 and F2 is not None:
+            fd_gls, fd_var = _combined_split(F2, fcovs)
+            if fd_var is not None and fd_var > 0:
+                G = self._bdf_split_response(
+                    epochs, nband, Sfam, F2, v0, u0,
+                )
+                eta_scov, eta_fcovs = self._bdf_noise_cross(
+                    epochs, nband, Sfam, Sigma, F2, fcovs,
+                )
+                if G is not None and eta_scov is not None:
+                    self._bdf_err = (
+                        G, self._bdf_shrink_k(fd_var), fd_var,
+                        eta_scov, eta_fcovs,
+                    )
+
+        self._bdf_fd_var_total = None
         res = self._get_result(
             epochs=epochs, nband=nband, flags=flags, numiter=numiter,
             Sigma=Sigma, v0=v0, u0=u0, Tsmooth=Tsmooth,
             model_state=model_state,
         )
+        res['fracdev_err'] = np.nan
+        if self._bdf_fd_var_total is not None:
+            if self._bdf_fd_var_total > 0:
+                res['fracdev_err'] = np.sqrt(
+                    self._bdf_fd_var_total,
+                )
         res['fracdev'] = self._fracdev
         res['TdByTe'] = self.TdByTe
         res['fracdev_gls'] = np.nan
@@ -1062,6 +1094,165 @@ class PAdmomFitter(object):
         w0 = 1.0 / sigma0 ** 2
         return (fd_gls * w + fracdev0 * w0) / (w + w0)
 
+    def _bdf_templates(self, epoch, Sfam, phase):
+        """
+        the exp and dev unit-flux templates on the epoch's
+        retained modes at the given family covariance, with the
+        fold factor and centering phase applied
+        """
+        kv = epoch['kv']
+        ku = epoch['ku']
+        ts = []
+        for spec, S in (
+            ('exp', Sfam), ('dev', self.TdByTe * Sfam),
+        ):
+            amp = np.zeros(kv.size)
+            for frac, cT in get_profile_comps(spec):
+                q = (
+                    cT * S[0, 0] * kv * kv
+                    + 2 * cT * S[0, 1] * kv * ku
+                    + cT * S[1, 1] * ku * ku
+                )
+                amp += frac * np.exp(-0.5 * q)
+            ts.append(amp * epoch['fold'] * phase)
+        return ts
+
+    def _bdf_split_response(self, epochs, nband, Sfam, F2, v0, u0):
+        """
+        d fd_gls / d (M1, M2, T) of the family covariance at the
+        model consistent point: the GLS split of the converged
+        model itself, re-solved with templates at perturbed
+        structure.  Central differences over the mbasis
+        """
+        Tw = Sfam[0, 0] + Sfam[1, 1] + self.TdByTe * (
+            Sfam[0, 0] + Sfam[1, 1]
+        )
+        h = 1.0e-6 * max(Tw, 1.0e-3)
+        fam0 = np.array([
+            Sfam[1, 1] - Sfam[0, 0], 2 * Sfam[0, 1],
+            Sfam[0, 0] + Sfam[1, 1],
+        ])
+
+        def split_at(famvec):
+            Sp = _mbasis_cov(*famvec)
+            A = np.zeros((nband, 2, 2))
+            b = np.zeros((nband, 2))
+            for epoch in epochs:
+                alpha, beta = get_phase_angles(epoch, v0, u0)
+                f1d = fft.fftfreq(epoch['dim']) * (2.0 * np.pi)
+                ang = (
+                    f1d[epoch['iy']] * alpha
+                    + f1d[epoch['ix']] * beta
+                )
+                phase = np.cos(ang) - 1j * np.sin(ang)
+                tp = self._bdf_templates(epoch, Sp, phase)
+                t0 = self._bdf_templates(epoch, Sfam, phase)
+                band = epoch['band']
+                model = F2[band, 0] * t0[0] + F2[band, 1] * t0[1]
+                g = 1.0 / epoch['err_fac2']
+                for a in range(2):
+                    b[band, a] += np.sum(
+                        (np.conj(tp[a]) * model).real * g,
+                    )
+                    for cc in range(2):
+                        A[band, a, cc] += np.sum(
+                            (np.conj(tp[a]) * tp[cc]).real * g,
+                        )
+            E = 0.0
+            D = 0.0
+            for band in range(nband):
+                Fb = np.linalg.solve(A[band], b[band])
+                E += Fb[0]
+                D += Fb[1]
+            S = E + D
+            return D / S if S != 0 else None
+
+        G = np.zeros(3)
+        for i in range(3):
+            famp = fam0.copy()
+            famm = fam0.copy()
+            famp[i] += h
+            famm[i] -= h
+            fp = split_at(famp)
+            fm = split_at(famm)
+            if fp is None or fm is None:
+                return None
+            G[i] = (fp - fm) / (2 * h)
+        return G
+
+    def _bdf_noise_cross(self, epochs, nband, Sfam, Sigma, F2, fcovs):
+        """
+        the analytic cross covariance of the split noise eta with
+        the accumulated moment and flux sums.
+
+        Both are linear functionals of the same retained modes:
+        the sums use the adaptive-weight moment kernels, the split
+        the GLS of the templates with weights 1/err_fac2.  With
+        Var(mode) = err_fac2 the noise power cancels in the cross
+        term, leaving the pure template-times-kernel overlap
+
+            Cov(b_a, s_c) = sum_epochs fac df2 sum_i t_a(i) kern_c(i)
+
+        mapped through the per-band GLS inverse and the combined
+        split derivative.  These cross terms are essential in the
+        joint sandwich: the T kernel and the split direction are
+        strongly anti-correlated and the coupled amplified paths
+        nearly cancel.
+
+        Returns
+        -------
+        eta_scov: size 3, Cov(eta, s[2:5]) in sums normalization
+        eta_fcovs: size nband, Cov(eta, fs_band)
+        """
+        X = np.zeros((nband, 2, 4))
+        for epoch in epochs:
+            kv = epoch['kv']
+            ku = epoch['ku']
+            Sv = Sigma[0, 0] * kv + Sigma[0, 1] * ku
+            Su = Sigma[0, 1] * kv + Sigma[1, 1] * ku
+            chi2 = kv * Sv + ku * Su
+            wk = np.exp(-0.5 * np.clip(chi2, 0, FASTEXP_MAX_CHI2))
+            wk[(chi2 > FASTEXP_MAX_CHI2) | (chi2 < 0)] = 0.0
+            vvk = (Sigma[0, 0] - Sv * Sv) * wk
+            vuk = (Sigma[0, 1] - Sv * Su) * wk
+            uuk = (Sigma[1, 1] - Su * Su) * wk
+            kern = (uuk - vvk, 2 * vuk, uuk + vvk, wk)
+
+            ts = self._bdf_templates(epoch, Sfam, 1.0)
+            fac = epoch['weight'] * epoch['detAtinv'] * epoch['df2']
+            band = epoch['band']
+            for a in range(2):
+                for c in range(4):
+                    X[band, a, c] += fac * np.sum(ts[a] * kern[c])
+
+        D = F2[:, 1].sum()
+        S = F2.sum()
+        if S == 0:
+            return None, None
+        fd = D / S
+
+        eta_scov = np.zeros(3)
+        eta_fcovs = np.zeros(nband)
+        for band in range(nband):
+            CF = fcovs[band] @ X[band]
+            w = ((1.0 - fd) * CF[1] - fd * CF[0]) / S
+            eta_scov += w[:3]
+            eta_fcovs[band] = w[3]
+        return eta_scov, eta_fcovs
+
+    def _bdf_shrink_k(self, fd_var):
+        """
+        the shrinkage factor d fd_used / d fd_gls
+        """
+        if self.fracdev_shrink is None:
+            return 1.0
+        _, sigma0 = self.fracdev_shrink
+        if sigma0 == 0:
+            return 0.0
+        if fd_var is None or fd_var <= 0:
+            return 1.0
+        return sigma0 ** 2 / (sigma0 ** 2 + fd_var)
+
     def _solve_bdf_fluxes(self, epochs, nband, Sfam, v0, u0):
         """
         per-band GLS fit of the exp and dev templates (dev at
@@ -1082,26 +1273,13 @@ class PAdmomFitter(object):
         A = np.zeros((nband, 2, 2))
         b = np.zeros((nband, 2))
 
-        Sdev = self.TdByTe * Sfam
         for epoch in epochs:
-            kv = epoch['kv']
-            ku = epoch['ku']
             alpha, beta = get_phase_angles(epoch, v0, u0)
             f1d = fft.fftfreq(epoch['dim']) * (2.0 * np.pi)
             ang = f1d[epoch['iy']] * alpha + f1d[epoch['ix']] * beta
             phase = np.cos(ang) - 1j * np.sin(ang)
 
-            ts = []
-            for spec, S in (('exp', Sfam), ('dev', Sdev)):
-                amp = np.zeros(kv.size)
-                for frac, cT in get_profile_comps(spec):
-                    q = (
-                        cT * S[0, 0] * kv * kv
-                        + 2 * cT * S[0, 1] * kv * ku
-                        + cT * S[1, 1] * ku * ku
-                    )
-                    amp += frac * np.exp(-0.5 * q)
-                ts.append(amp * epoch['fold'] * phase)
+            ts = self._bdf_templates(epoch, Sfam, phase)
 
             g = 1.0 / epoch['err_fac2']
             kim = epoch['kim']
@@ -1314,7 +1492,7 @@ class PAdmomFitter(object):
             pass
         elif model_state is not None:
             # exp: from the family covariance sandwich
-            if fam_cov[2, 2] > 0:
+            if fam_cov is not None and fam_cov[2, 2] > 0:
                 res['T_err'] = np.sqrt(fam_cov[2, 2])
             else:
                 res['T_flags'] |= ngmix.flags.NONPOS_VAR
@@ -1392,7 +1570,11 @@ class PAdmomFitter(object):
             e1err = np.nan
             e2err = np.nan
             e12cov = np.nan
-            if model_state is not None:
+            if model_state is not None and fam_cov is None:
+                # the family sandwich failed; the errors stay nan
+                # and the flags are set below
+                pass
+            elif model_state is not None:
                 # exp: linearize e = M/T over the family
                 # covariance sandwich
                 ev1 = (
@@ -1557,10 +1739,34 @@ class PAdmomFitter(object):
                     spec = model_state
                 else:
                     spec = model_state['type']
-                rawvars, fam_cov = model_sandwich(
-                    spec, model_state['cov'], Sigma,
-                    Tsmooth, sums, cov, fsums, fvars, fmcovs,
-                )
+                rawvars = None
+                fam_cov = None
+                if (model_state['type'] == 'bdf'
+                        and getattr(self, '_bdf_err', None)
+                        is not None):
+                    G, k, fdv, eta_scov, eta_fcovs = self._bdf_err
+                    rawvars, fam_cov, fd_var_tot = (
+                        bdf_joint_sandwich(
+                            model_state, Sigma, Tsmooth, sums,
+                            cov, fsums, fvars, fmcovs,
+                            split_grad=G, shrink_k=k,
+                            fd_var_data=fdv,
+                            eta_scov=eta_scov,
+                            eta_fcovs=eta_fcovs,
+                        )
+                    )
+                    self._bdf_fd_var_total = fd_var_tot
+                if rawvars is None:
+                    rawvars, fam_cov = model_sandwich(
+                        spec, model_state['cov'], Sigma,
+                        Tsmooth, sums, cov, fsums, fvars, fmcovs,
+                    )
+                if rawvars is None:
+                    # the sandwich could not be evaluated; fall
+                    # back to the fixed weight variances, with the
+                    # structure errors flagged downstream
+                    rawvars = fvars
+                    fam_cov = None
             flux_vars = rawvars / upred ** 2
         return sums, cov, fluxes, flux_vars, fam_cov
 
