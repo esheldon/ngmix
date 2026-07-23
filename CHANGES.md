@@ -22,6 +22,31 @@
       around the fixed point of the iteration), removing the ~sqrt(2)
       underestimate of the flux scatter from the fixed weight
       assumption.  The reported s2n is correspondingly smaller.
+    - prepsfadmom supports the composite exp plus dev model
+      ('bdf'): shared center and ellipticity, the dev size a fixed
+      TdByTe times the exp size, with the per-band flux split
+      between the components (fracdev) fit by a two-template GLS
+      solve on the Fourier modes, interleaved with the family
+      adaptive step.  The model is specified as a dict,
+      model={'type': 'bdf', 'TdByTe': 1.0}; string model names
+      remain valid for the other models.  Results gain fracdev,
+      flux_exp, flux_dev and flux_gls_cov; the split is per band,
+      so bulge and disk colors are measured.  The flux and
+      structure errors are conditional on the converged split.
+    - prepsfadmom accepts fixcen=True, holding the center fixed at
+      the guess for any model.
+    - prepsfadmom results carry the gauss (converged-weight) shape
+      estimator entries gauss_e1/gauss_e2/gauss_T with errors and
+      gauss_e_flags for every model: the weight iteration is model
+      independent, so these come for free with the family and bdf
+      fits and are identical to the model='gauss' shapes.
+    - The bdf model supports optional fracdev shrinkage via the
+      'fracdev0' and 'fracdev_sigma0' spec entries: the model
+      split is regularized toward fracdev0 by the inverse-variance
+      blend with the conditional GLS split error, stabilizing
+      faint fits (the free split can run away below s2n ~ 25);
+      the reported component fluxes and fracdev_gls stay the raw
+      linear solutions.  fracdev_sigma0=0 freezes the model split.
     - prepsfadmom accepts model='exp' and model='star' in addition to
       the default 'gauss'.  With 'exp' the ngmix 6-gaussian exponential
       expansion is fit by moment matching with an adaptive moments style

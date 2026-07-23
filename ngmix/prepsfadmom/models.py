@@ -37,6 +37,14 @@ Model dicts:
         their smoothed covariances, so mildly negative sizes are well
         defined, allowing unbiased scatter through zero size (see
         mixture_model_valid)
+    {'type': 'bdf', 'cov': (2,2), 'F': (nband,),
+     'fracdev':, 'TdByTe':}
+        the composite exp plus dev model: both families share the
+        center and the family covariance (so the ellipticity), the
+        dev component covariance is TdByTe times the exp one, and
+        fracdev is the dev share of the total flux.  At fixed
+        fracdev and TdByTe this is a fixed-ratio 16-gaussian
+        mixture and all of the machinery above applies
 """
 import numpy as np
 
@@ -130,6 +138,31 @@ def get_profile_comps(name):
     return _PROFILE_COMPS[name]
 
 
+def bdf_comps(fracdev, TdByTe):
+    """
+    flux fractions and relative T factors of the composite exp plus
+    dev mixture: the exp table scaled by 1 - fracdev plus the dev
+    table with sizes scaled by TdByTe and fluxes by fracdev.  The
+    scale parameter of the composite is the exp family T
+    """
+    return (
+        [((1 - fracdev) * f, cT)
+         for f, cT in get_profile_comps('exp')]
+        + [(fracdev * f, TdByTe * cT)
+           for f, cT in get_profile_comps('dev')]
+    )
+
+
+def _mixture_comps(model):
+    """
+    the (frac, cT) component table for a mixture model dict or
+    spec; see the module docstring
+    """
+    if model['type'] == 'bdf':
+        return bdf_comps(model['fracdev'], model['TdByTe'])
+    return get_profile_comps(model['type'])
+
+
 def model_comps(model, Tsmooth):
     """
     the gaussian components of a model in the smoothed plane
@@ -155,13 +188,13 @@ def model_comps(model, Tsmooth):
             np.array([c[0, 1]]),
             np.array([c[1, 1]]),
         )
-    elif model['type'] in ('exp', 'dev'):
+    elif model['type'] in ('exp', 'dev', 'bdf'):
         if 'cov' in model:
             Sfam = model['cov']
         else:
             Sfam = cov_from_e(model['e1'], model['e2'], model['T'])
         smooth = Tsmooth / 2
-        comps = get_profile_comps(model['type'])
+        comps = _mixture_comps(model)
         n = len(comps)
         fracs = np.zeros(n)
         So00 = np.zeros(n)
@@ -196,7 +229,7 @@ def model_ksums(model, band, dv, du, Sw, detAtinv, Tsmooth):
     return sums
 
 
-def mixture_model_valid(name, Sfam, Sw, Tsmooth):
+def mixture_model_valid(model, Sfam, Sw, Tsmooth):
     """
     check that a mixture family covariance gives well defined
     weighted sums: every component must have positive definite total
@@ -205,9 +238,20 @@ def mixture_model_valid(name, Sfam, Sw, Tsmooth):
     weight regularize the model family the same way they regularize
     the data, so mildly negative sizes and ellipticities slightly
     past one remain valid states.
+
+    model is a family name ('exp', 'dev') or a model spec dict; for
+    'bdf' the dict must carry 'TdByTe' (the flux split does not
+    affect validity)
     """
+    if isinstance(model, str):
+        comps = get_profile_comps(model)
+    elif model['type'] == 'bdf':
+        comps = bdf_comps(model.get('fracdev', 0.5), model['TdByTe'])
+    else:
+        comps = get_profile_comps(model['type'])
+
     smooth_cov = np.diag([Tsmooth / 2, Tsmooth / 2])
-    for frac, cT in get_profile_comps(name):
+    for frac, cT in comps:
         C = Sw + cT * Sfam + smooth_cov
         if (C[0, 0] <= 0 or C[1, 1] <= 0
                 or det2(C) <= 1.0e-6 * C[0, 0] * C[1, 1]):

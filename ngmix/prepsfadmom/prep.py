@@ -165,6 +165,11 @@ def prep_epoch(
         err_fac2: array
             the per mode noise power times |smooth/kpsf|^2, for the
             noise propagation
+        fold: array
+            the smoothing profile folded with the conjugate
+            symmetry weights at the retained modes, the same factor
+            already applied to kim; model templates built against
+            kim must carry it too
         weight: float
             the epoch combination weight, from the weight map
     Callers may attach additional entries; the fitting machinery
@@ -275,6 +280,7 @@ def prep_epoch(
         'detAtinv': grids['detAtinv'],
         'df2': 1.0 / dim ** 2,
         'err_fac2': err_fac2,
+        'fold': grids['fold'],
         # the relative epoch weights always come from the weight
         # maps, even when the noise power comes from a noise image
         'weight': 1.0 / (tot_var * eff_pad_factor ** 2),

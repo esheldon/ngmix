@@ -105,9 +105,14 @@ def _model_pred_mbasis(model_type, Sfam, Sigma, Tsmooth):
     the predicted weighted moment ratios (M1, M2, T) and the log of
     the unit flux prediction for a model family covariance, at unit
     detAtinv; the ratios and the log derivative are the same for
-    every epoch and band
+    every epoch and band.  model_type is a family name or a model
+    spec dict (required for 'bdf', which needs fracdev and TdByTe)
     """
-    if model_type in ('exp', 'dev'):
+    if isinstance(model_type, dict):
+        state = dict(model_type)
+        state['cov'] = Sfam
+        state['F'] = np.ones(1)
+    elif model_type in ('exp', 'dev'):
         state = {'type': model_type, 'cov': Sfam, 'F': np.ones(1)}
     else:
         # single gaussian family, used to validate against the
@@ -147,8 +152,11 @@ def model_sandwich(
 
     Parameters
     ----------
-    model_type: str
-        'exp' or 'dev', or 'gauss' for validation
+    model_type: str or dict
+        'exp' or 'dev', or 'gauss' for validation; a model spec
+        dict for 'bdf' (the sandwich then treats fracdev and
+        TdByTe as fixed, so the errors are conditional on the
+        flux split)
     Sfam: (2, 2) array
         The converged family covariance
     Sigma: (2, 2) array
