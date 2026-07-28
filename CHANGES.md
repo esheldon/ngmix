@@ -9,6 +9,9 @@
       fitters use a fixed weight, the resulting covariances are exact
       for stationary correlated noise, such as that induced by
       metacal.
+    - A similar update for the Fitters that use LM, taking in
+      a noise image to estimate the noise power per mode and
+      give good errors even in the presence of correlated noise.
     - Allow fwhm as size for Moffat galsim fitter
     - Added method scale_T() to gausian mixtures.
     - Added new metacal psf reconvolution method 'azgauss',
