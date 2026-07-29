@@ -28,6 +28,7 @@ __all__ = ['calc_noise_cov', 'apply_noise_cov']
 import numpy as np
 
 from .. import gmix
+from ..gexceptions import GMixRangeError
 from .leastsqbound import _test_cov, _get_def_stuff
 
 # absolute floors for the numerical derivative steps; the
@@ -62,11 +63,19 @@ def apply_noise_cov(fit_model, result):
     if pcov0 is None or not np.all(np.isfinite(pcov0)):
         return
 
-    cov = calc_noise_cov(
-        fit_model=fit_model, pars=result['pars'], pars_cov0=pcov0,
-    )
-
     npars = result['pars'].size
+    try:
+        cov = calc_noise_cov(
+            fit_model=fit_model, pars=result['pars'],
+            pars_cov0=pcov0,
+        )
+    except GMixRangeError:
+        # the central-difference step left the valid gmix domain:
+        # the solution sits at a parameter boundary (T near the
+        # domain edge, |g| near 1), where the sandwich is not
+        # evaluable
+        cov = np.full((npars, npars), np.nan)
+
     if not np.all(np.isfinite(cov)):
         cflags = _test_cov(np.diag(np.full(npars, -1.0)))
     else:
