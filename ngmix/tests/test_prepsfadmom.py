@@ -1027,9 +1027,10 @@ def test_prepsfadmommodel_sandwich_gauss_anchor():
     fmcovs = rng.normal(size=(2, 3)) * 0.1
 
     raw_delta = flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs)
-    raw_sw, fam_cov = model_sandwich(
+    raw_sw, fam_cov, fcov_raw = model_sandwich(
         'gauss', Sfam, Sigma, Tsmooth, sums, cov, fsums, fvars, fmcovs,
     )
+    assert np.allclose(np.diag(fcov_raw), raw_sw, rtol=0, atol=0)
     assert np.allclose(raw_sw, raw_delta, rtol=1.0e-5, atol=0)
 
     # B = 1/4 for the single gaussian family, so the family
@@ -1345,3 +1346,66 @@ def test_prepsfadmom_robustness_vs_admom():
 
         # pre-psf shape availability floor for this cell
         assert npa_shape >= shape_min * ntrial
+
+
+def test_prepsfadmom_model_flux_cov():
+    """
+    the cross-band flux covariance from the shared family response
+    (result['flux_cov']) matches the empirical covariance over
+    noise realizations; the independence combination over-predicts
+    the color variance by the shared term
+    """
+    ntrial = 400
+    rng = np.random.RandomState(6021)
+    gs_wcs = galsim.PixelScale(0.25).jacobian()
+
+    e1t, e2t, Tt = 0.1, -0.05, 0.6
+    fluxes_true = [3.5, 5.0]
+    obs0 = _make_obs(e1t, e2t, Tt, fluxes_true[0], 0.9, gs_wcs)
+    noise = np.sqrt(np.sum(obs0.image ** 2)) / 12.0
+
+    fitter = PAdmomFitter(rng=rng, model='exp')
+
+    fpairs, rcovs = [], []
+    for i in range(ntrial):
+        mbobs = MultiBandObsList()
+        for ft in fluxes_true:
+            obs = _make_obs(
+                e1t, e2t, Tt, ft, 0.9, gs_wcs,
+                noise=noise, rng=rng,
+            )
+            ol = ObsList()
+            ol.append(obs)
+            mbobs.append(ol)
+        res = fitter.go(mbobs, guess=0.6)
+        if res['flags'] != 0:
+            continue
+        fpairs.append(res['flux'])
+        rcovs.append(res['flux_cov'])
+    fpairs = np.array(fpairs)
+    rcovs = np.array(rcovs)
+    assert len(fpairs) > 0.9 * ntrial
+
+    # reported diagonal is flux_err ** 2 by construction; check the
+    # off diagonal against the empirical cross-band covariance
+    emp = np.cov(fpairs.T)
+    rep = rcovs.mean(axis=0)
+    se01 = np.sqrt(
+        (emp[0, 0] * emp[1, 1] + emp[0, 1] ** 2) / len(fpairs)
+    )
+    assert np.abs(rep[0, 1] - emp[0, 1]) < 4 * se01
+    # the shared family response correlates the bands positively
+    assert rep[0, 1] > 3 * se01
+
+    # color variance: the covariance-aware prediction matches the
+    # empirical log-ratio variance; independence over-predicts
+    lr = np.log(fpairs[:, 0] / fpairs[:, 1])
+    f0, f1 = fpairs[:, 0].mean(), fpairs[:, 1].mean()
+    pred_cov = (
+        rep[0, 0] / f0 ** 2 + rep[1, 1] / f1 ** 2
+        - 2 * rep[0, 1] / (f0 * f1)
+    )
+    pred_ind = rep[0, 0] / f0 ** 2 + rep[1, 1] / f1 ** 2
+    ratio = pred_cov / lr.var()
+    assert 0.75 < ratio < 1.3
+    assert pred_ind / lr.var() > ratio * 1.1

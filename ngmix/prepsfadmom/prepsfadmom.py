@@ -1402,7 +1402,8 @@ class PAdmomFitter(object):
         }
 
         if flags == 0:
-            sums, sums_cov, fluxes, flux_vars, fam_cov = self._finalize(
+            (sums, sums_cov, fluxes, flux_vars, fam_cov,
+             flux_cov) = self._finalize(
                 epochs, nband, Sigma, v0, u0, Tsmooth,
                 model_state=model_state,
             )
@@ -1415,6 +1416,10 @@ class PAdmomFitter(object):
             res['T'] = Tgal
 
             res['flux'] = fluxes
+            if flux_cov is not None:
+                # the full cross-band flux covariance from the
+                # shared family response; what color errors need
+                res['flux_cov'] = flux_cov
             if np.all(flux_vars > 0):
                 res['flux_err'] = np.sqrt(flux_vars)
                 res['s2n'] = np.sqrt(
@@ -1721,6 +1726,10 @@ class PAdmomFitter(object):
             flux_vars = (2 * knrm / wsums) ** 2 * flux_var_delta(
                 Sigma, sums, cov, fsums, fvars, fmcovs,
             )
+            # the cross-band covariance is only assembled on the
+            # model paths (model_sandwich); the plain gauss delta
+            # path reports per-band variances only
+            flux_cov = None
         else:
             upred = np.zeros(nband)
             for epoch in epochs:
@@ -1730,10 +1739,12 @@ class PAdmomFitter(object):
                     epoch['detAtinv'], Tsmooth,
                 )[5]
             fluxes = fsums / upred
+            fcov_raw = None
             if model_state['type'] == 'star':
                 # the weight is frozen for stars, so the fixed weight
-                # variance is exact
+                # variance is exact and the bands are independent
                 rawvars = fvars
+                fcov_raw = np.diag(fvars)
             else:
                 if model_state['type'] == 'bdf':
                     spec = model_state
@@ -1757,7 +1768,7 @@ class PAdmomFitter(object):
                     )
                     self._bdf_fd_var_total = fd_var_tot
                 if rawvars is None:
-                    rawvars, fam_cov = model_sandwich(
+                    rawvars, fam_cov, fcov_raw = model_sandwich(
                         spec, model_state['cov'], Sigma,
                         Tsmooth, sums, cov, fsums, fvars, fmcovs,
                     )
@@ -1767,8 +1778,14 @@ class PAdmomFitter(object):
                     # structure errors flagged downstream
                     rawvars = fvars
                     fam_cov = None
+                    fcov_raw = None
             flux_vars = rawvars / upred ** 2
-        return sums, cov, fluxes, flux_vars, fam_cov
+            if fcov_raw is not None:
+                uinv = 1.0 / upred
+                flux_cov = fcov_raw * np.outer(uinv, uinv)
+            else:
+                flux_cov = None
+        return sums, cov, fluxes, flux_vars, fam_cov, flux_cov
 
     def _get_guess(self, mb_obs, guess, Tsmooth):
         if isinstance(guess, GMix):

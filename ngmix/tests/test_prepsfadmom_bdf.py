@@ -385,7 +385,7 @@ def test_model_sandwich_guard():
 
     with warnings.catch_warnings():
         warnings.simplefilter('error')
-        rawvars, fam_cov = model_sandwich(
+        rawvars, fam_cov, _ = model_sandwich(
             'exp', Sfam, Sigma, 0.2,
             sums, cov, fsums, fvars, fmcovs,
         )
