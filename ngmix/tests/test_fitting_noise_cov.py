@@ -187,6 +187,26 @@ def test_noise_cov_multiband():
         assert abs(pulls[:, band].std() - 1) < 0.25
 
 
+def test_noise_cov_boundary_flags():
+    """a solution at the parameter-space boundary makes a stepped
+    derivative model unevaluable (here |g| stepping past 1); the
+    sandwich must set the covariance flags, not raise"""
+    from ngmix.fitting.noise_cov import apply_noise_cov
+
+    rng = np.random.RandomState(91)
+    mbobs = _make_obs(rng, 8.0)
+    prior = _get_prior(rng)
+    fitter = ngmix.fitting.Fitter(model='exp', prior=prior)
+    guess = np.array([0.0, 0.0, 0.0, 0.0, TGUESS, FLUX])
+    res = fitter.go(obs=mbobs, guess=guess)
+    assert res['flags'] == 0
+
+    res['pars'][2] = 1.0 - 5.0e-5
+    apply_noise_cov(fit_model=res, result=res)
+    assert res['flags'] != 0
+    assert 'bad noise covariance' in res['errmsg']
+
+
 def test_noise_cov_requires_noise():
     """use_noise_image without an attached noise image raises"""
     rng = np.random.RandomState(71)
