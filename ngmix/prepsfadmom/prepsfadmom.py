@@ -460,6 +460,7 @@ class PAdmomFitter(object):
         cen_tol=DEFAULT_CENTOL,
         use_noise_image=False,
         fixcen=False,
+        full_errors=False,
         rng=None,
     ):
 
@@ -467,6 +468,19 @@ class PAdmomFitter(object):
             _parse_model_spec(model)
         )
         self.fixcen = fixcen
+        self.full_errors = full_errors
+        if full_errors:
+            if self.model not in ('gauss', 'exp', 'dev'):
+                raise ValueError(
+                    'full_errors supports the gauss, exp and '
+                    f'dev models, got {self.model!r}'
+                )
+            if ap_rad != 0:
+                raise ValueError(
+                    'full_errors requires ap_rad=0: the '
+                    'influence-kernel transfer assumes no '
+                    'apodization'
+                )
         self.fwhm_smooth = fwhm_smooth
         self.smooth_fac = smooth_fac
         self.pad_factor = pad_factor
@@ -520,12 +534,18 @@ class PAdmomFitter(object):
         epochs = []
         for band, obslist in enumerate(mb_obs):
             for tobs in obslist:
-                epochs.append(prep_epoch(
+                ep = prep_epoch(
                     tobs, band=band, fwhm_smooth=fwhm_smooth,
                     pad_factor=self.pad_factor, ap_rad=self.ap_rad,
                     use_noise_image=self.use_noise_image,
                     no_psf=no_psf,
-                ))
+                    store_transfer=self.full_errors,
+                )
+                if self.full_errors:
+                    # the influence-kernel covariance needs the
+                    # per-pixel variances
+                    ep['obs_weight'] = tobs.weight
+                epochs.append(ep)
 
         if len(epochs) == 0:
             raise ValueError('no epochs sent')
@@ -1442,6 +1462,64 @@ class PAdmomFitter(object):
             self._set_gauss_entries(
                 res, Sigma, Tsmooth, sums, sums_cov,
             )
+
+        if (
+            self.full_errors and flags == 0
+            and (
+                (model_state is None and self.model == 'gauss')
+                or (
+                    model_state is not None
+                    and model_state['type'] in ('exp', 'dev')
+                )
+            )
+        ):
+            # the full (fixed-point) errors: differentiate the
+            # actual update at the actual data, staying calibrated
+            # under model mismatch where the model_sandwich errors
+            # under-predict (T by ~17 percent and flux by ~11
+            # percent for dev truth fit with exp).  On a guarded
+            # branch the sandwich errors are kept
+            from .full_errors import padmom_full_covariance
+
+            fe = padmom_full_covariance(
+                self, epochs, nband, model_state, Sigma,
+                v0, u0, Tsmooth,
+            )
+            if fe is not None:
+                res['flux_err'] = fe['flux_err']
+                res['flux_cov'] = fe['flux_cov']
+                res['s2n'] = fe['s2n']
+                fam_cov = fe['fam_cov']
+                if fam_cov[2, 2] > 0:
+                    res['T_err'] = np.sqrt(fam_cov[2, 2])
+                Tgal = res['T']
+                if (
+                    np.isfinite(res['e1']) and Tgal > 0
+                    and fam_cov[2, 2] > 0
+                ):
+                    ev1 = (
+                        fam_cov[0, 0]
+                        - 2 * res['e1'] * fam_cov[0, 2]
+                        + res['e1'] ** 2 * fam_cov[2, 2]
+                    ) / Tgal ** 2
+                    ev2 = (
+                        fam_cov[1, 1]
+                        - 2 * res['e2'] * fam_cov[1, 2]
+                        + res['e2'] ** 2 * fam_cov[2, 2]
+                    ) / Tgal ** 2
+                    if ev1 > 0 and ev2 > 0:
+                        e12 = (
+                            fam_cov[0, 1]
+                            - res['e1'] * fam_cov[1, 2]
+                            - res['e2'] * fam_cov[0, 2]
+                            + res['e1'] * res['e2']
+                            * fam_cov[2, 2]
+                        ) / Tgal ** 2
+                        res['e1err'] = np.sqrt(ev1)
+                        res['e2err'] = np.sqrt(ev2)
+                        res['e_cov'] = np.array([
+                            [ev1, e12], [e12, ev2],
+                        ])
 
         # propagate fitting failures, but not the post-hoc NONPOS_SIZE
         # or NONPOS_SHAPE_VAR set above, for which T and flux are still

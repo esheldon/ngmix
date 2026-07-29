@@ -109,7 +109,7 @@ def choose_fwhm_smooth(
 
 def prep_epoch(
     obs, band=0, fwhm_smooth=0.0, pad_factor=4, ap_rad=1.5,
-    use_noise_image=False, no_psf=False,
+    use_noise_image=False, no_psf=False, store_transfer=False,
 ):
     """
     prepare the k-space data for one observation: FFT the image and
@@ -137,6 +137,13 @@ def prep_epoch(
     no_psf: bool, optional
         If True, allow an observation without a psf; only the pixel
         window function is deconvolved.  Default False.
+    store_transfer: bool, optional
+        If True, store the linear image->kim transfer at the
+        retained modes ('ktransfer'), needed by the full_errors
+        influence-kernel machinery; costs ~25 percent of the prep
+        time and one complex array per epoch, so it is opt-in.
+        Requires ap_rad=0 (ktransfer is None otherwise).
+        Default False.
 
     Returns
     -------
@@ -263,6 +270,24 @@ def prep_epoch(
     # and the deconvolution
     err_fac2 = grids['fold2'] * pnoise / np.abs(kpsf) ** 2
 
+    # the linear image->kim transfer at the retained modes: the
+    # coefficient of image pixel (0, 0), with other pixels
+    # differing by the mode phases.  Used by the influence-kernel
+    # error propagation (full_errors).  Only exact without
+    # apodization, where the map is diagonal in k up to the
+    # placement phase
+    if ap_rad > 0 or not store_transfer:
+        ktransfer = None
+    else:
+        f1d = fft.fftfreq(dim) * (2.0 * np.pi)
+        r00 = im_row - obs.jacobian.row0
+        c00 = im_col - obs.jacobian.col0
+        ktransfer = grids['fold'] * np.exp(
+            -1j * (
+                f1d[grids['iy']] * r00 + f1d[grids['ix']] * c00
+            )
+        ) / kpsf
+
     return {
         'band': band,
         'kim': kim,
@@ -281,6 +306,7 @@ def prep_epoch(
         'df2': 1.0 / dim ** 2,
         'err_fac2': err_fac2,
         'fold': grids['fold'],
+        'ktransfer': ktransfer,
         # the relative epoch weights always come from the weight
         # maps, even when the noise power comes from a noise image
         'weight': 1.0 / (tot_var * eff_pad_factor ** 2),
