@@ -6,6 +6,7 @@ __all__ = ['Fitter', 'CoellipFitter', 'PSFFluxFitter']
 import logging
 
 from .leastsqbound import run_leastsq
+from .noise_cov import apply_noise_cov
 from .. import gmix
 from ..defaults import DEFAULT_LM_PARS
 from .results import FitModel, CoellipFitModel, PSFFluxFitModel
@@ -25,12 +26,22 @@ class Fitter(object):
         A prior for fitting
     fit_pars: dict
         Parameters to send to the leastsq fitting routine
+    use_noise_image: bool, optional
+        If True, replace the chi^2-scaled LM covariance with the
+        noise-power sandwich covariance, with the per-mode noise
+        power measured from the noise image attached to each
+        observation (obs.noise).  Use this to get accurate
+        parameter errors in the presence of stationary correlated
+        noise, such as that induced by coadding or metacal.  The
+        noise image must be an independent realization of the
+        noise, in the same frame as the image.  Default False.
     """
 
-    def __init__(self, model, prior=None, fit_pars=None):
+    def __init__(self, model, prior=None, fit_pars=None, use_noise_image=False):
         self.prior = prior
         self.model = gmix.get_model_num(model)
         self.model_name = gmix.get_model_name(self.model)
+        self.use_noise_image = use_noise_image
 
         if fit_pars is not None:
             self.fit_pars = fit_pars.copy()
@@ -57,6 +68,15 @@ class Fitter(object):
 
         fit_model = self._make_fit_model(obs=obs, guess=guess)
 
+        if self.use_noise_image:
+            for obslist in fit_model.obs:
+                for tobs in obslist:
+                    if not tobs.has_noise():
+                        raise ValueError(
+                            'obs.noise must be set when '
+                            'use_noise_image=True'
+                        )
+
         result = run_leastsq(
             fit_model.calc_fdiff,
             guess=guess,
@@ -64,6 +84,9 @@ class Fitter(object):
             bounds=fit_model.bounds,
             **self.fit_pars
         )
+
+        if self.use_noise_image:
+            apply_noise_cov(fit_model=fit_model, result=result)
 
         fit_model.set_fit_result(result)
         return fit_model

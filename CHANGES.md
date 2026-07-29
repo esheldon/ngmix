@@ -1,4 +1,28 @@
-## v2.4.1 (not yet released)
+## v2.4.2 (not yet released)
+
+### New features
+
+    - The prepsfmom fitters (KSigmaMom, PGaussMom) accept
+      use_noise_image=True, estimating the noise power per Fourier
+      mode from the noise image attached to the observation instead
+      of assuming white noise from the weight map.  Since these
+      fitters use a fixed weight, the resulting covariances are exact
+      for stationary correlated noise, such as that induced by
+      metacal.
+    - A similar update for the Fitters that use LM, taking in
+      a noise image to estimate the noise power per mode and
+      give good errors even in the presence of correlated noise.
+
+### New features
+
+    - Allow fwhm as size for Moffat galsim fitter
+    - Added method scale_T() to gausian mixtures.
+    - Added new metacal psf reconvolution method 'azgauss',
+      which is a noise-robust version of the old 'gauss'
+      method.
+
+
+## v2.4.1
 
 ### New features
 
