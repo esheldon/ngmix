@@ -18,6 +18,8 @@ value image over the flux and is formed by the caller.
 import numpy as np
 from numba import njit
 
+from ..fastexp_nb import fexp, FASTEXP_MAX_CHI2
+
 TWO_PI = 2.0 * np.pi
 
 
@@ -67,9 +69,12 @@ def deriv_images(gpars, dcov, vv, uu, area, out):
             qv = (icc * dv - irc * du) / det
             qu = (-irc * dv + irr * du) / det
             chi2 = dv * qv + du * qu
-            if chi2 > 50.0 or chi2 < 0.0:
+            # the same fast exp and clip as the fdiff renders:
+            # the fit's objective is the clipped fastexp model,
+            # so its response derivatives are too
+            if chi2 > FASTEXP_MAX_CHI2 or chi2 < 0.0:
                 continue
-            val = norm * np.exp(-0.5 * chi2)
+            val = norm * fexp(-0.5 * chi2)
 
             out[0, ipix] += val
             out[1, ipix] += val * qv

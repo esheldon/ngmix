@@ -250,8 +250,11 @@ def _dmodel(fit_model, pars, ipar, band, obs):
         gm = gmix.make_gmix_model(band_pars, fit_model.model)
         if obs.has_psf_gmix():
             gm = gm.convolve(obs.psf.gmix)
+        # the same fast exp and clip as the fdiff renders,
+        # consistent with the fit's objective
         ims.append(gm.make_image(
             obs.image.shape, jacobian=obs.jacobian,
+            fast_exp=True,
         ))
     return (ims[0] - ims[1]) / (2 * step)
 
