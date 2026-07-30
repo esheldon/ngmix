@@ -59,6 +59,44 @@ def test_fastexp_c2_conditions():
         coeffs = coeffs[1:] * np.arange(1, coeffs.size)
 
 
+def test_apod_window():
+    """
+    the truncation apodization window is 1 at the start of the
+    band, 0 at the end, monotonic, and joins with zero slope at
+    both ends so apodized gaussians are smooth in their parameters
+    """
+    from ngmix.fastexp_nb import (
+        FASTEXP_APOD_CHI2, FASTEXP_MAX_CHI2,
+        apod_window, apod_window_deriv,
+    )
+
+    assert apod_window(FASTEXP_APOD_CHI2) == 1.0
+    assert apod_window(FASTEXP_MAX_CHI2) == 0.0
+    assert apod_window_deriv(FASTEXP_APOD_CHI2) == 0.0
+    assert apod_window_deriv(FASTEXP_MAX_CHI2) == 0.0
+
+    chi2 = np.linspace(
+        FASTEXP_APOD_CHI2, FASTEXP_MAX_CHI2, 1001,
+    )
+    wvals = np.array([apod_window(c) for c in chi2])
+    assert np.all(np.diff(wvals) < 0)
+
+    # the analytic derivative matches central differences
+    eps = 1.0e-6
+    for c in np.linspace(
+        FASTEXP_APOD_CHI2 + 0.1, FASTEXP_MAX_CHI2 - 0.1, 20,
+    ):
+        fd = (apod_window(c + eps) - apod_window(c - eps)) / (2 * eps)
+        assert abs(apod_window_deriv(c) - fd) < 1.0e-8
+
+    # second derivative vanishes at both ends, so the join is C2
+    for c in (FASTEXP_APOD_CHI2, FASTEXP_MAX_CHI2):
+        d2 = (
+            apod_window_deriv(c + eps) - apod_window_deriv(c - eps)
+        ) / (2 * eps)
+        assert abs(d2) < 1.0e-5
+
+
 def test_fastexp_smooth_at_boundaries():
     """
     no steps in the value or first derivative at the half integer

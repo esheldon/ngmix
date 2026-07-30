@@ -79,6 +79,12 @@ def _make_smooth_exp_coeffs():
 
 FASTEXP_MAX_CHI2 = 25.0
 
+# gaussian evaluations are apodized rather than cut: apod_window
+# is 1 below FASTEXP_APOD_CHI2 and rolls off smoothly to 0 at
+# FASTEXP_MAX_CHI2
+FASTEXP_APOD_CHI2 = 20.0
+_APOD_IWIDTH = 1.0 / (FASTEXP_MAX_CHI2 - FASTEXP_APOD_CHI2)
+
 # we limit to chi squared of 25, which means an argument of
 # -0.5*25. Use -15 to be safe
 _EXP_IVALS, _EXP_LOOKUP = _make_exp_lookup(
@@ -86,6 +92,47 @@ _EXP_IVALS, _EXP_LOOKUP = _make_exp_lookup(
     maxval=0,
 )
 _EXP_I0 = _EXP_IVALS[0]
+
+
+@njit
+def apod_window(chi2):
+    """
+    smooth apodization window for the chi^2 truncation of gaussian
+    evaluations
+
+    A quintic smoothstep going from 1 at FASTEXP_APOD_CHI2 to 0 at
+    FASTEXP_MAX_CHI2 with zero first and second derivatives at both
+    ends, so an apodized gaussian is C2 in its parameters where the
+    plain truncation has a step at the boundary
+
+    no range checking is done here: only apply the window for chi2
+    in [FASTEXP_APOD_CHI2, FASTEXP_MAX_CHI2]
+
+    Parameters
+    ----------
+    chi2: number
+        the chi^2 argument of the gaussian
+    """
+    u = (FASTEXP_MAX_CHI2 - chi2) * _APOD_IWIDTH
+    return u * u * u * (10.0 + u * (-15.0 + 6.0 * u))
+
+
+@njit
+def apod_window_deriv(chi2):
+    """
+    derivative of apod_window with respect to chi^2
+
+    no range checking is done here: only apply the window for chi2
+    in [FASTEXP_APOD_CHI2, FASTEXP_MAX_CHI2]
+
+    Parameters
+    ----------
+    chi2: number
+        the chi^2 argument of the gaussian
+    """
+    u = (FASTEXP_MAX_CHI2 - chi2) * _APOD_IWIDTH
+    umu = u * (1.0 - u)
+    return -30.0 * umu * umu * _APOD_IWIDTH
 
 
 @njit

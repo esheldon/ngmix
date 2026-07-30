@@ -19,6 +19,14 @@
       with the finite diff derivatives, but should otherwise not
       affect the fits in any noticeable way.  The old exp5 is still
       available but no longer aliased to fexp
+    - apodize the fast gaussian evaluations smoothly to zero between
+      chi^2 of 20 and 25 rather than cutting at 25.  The cut made the
+      model step by exp(-12.5) at the boundary, so parameter
+      derivatives picked up a spike wherever a step moved the
+      boundary.  With the apodization the rendered models are twice
+      differentiable in the parameters everywhere; the window costs
+      about a percent in the pixel loop and removes 1.5e-5 of a round
+      gaussian's flux where the cut removed 3.7e-6
 
 ### New features
 
