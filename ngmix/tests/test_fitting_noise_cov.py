@@ -188,9 +188,11 @@ def test_noise_cov_multiband():
 
 
 def test_noise_cov_boundary_flags():
-    """a solution at the parameter-space boundary makes a stepped
-    derivative model unevaluable (here |g| stepping past 1); the
-    sandwich must set the covariance flags, not raise"""
+    """a solution at the parameter-space boundary makes the
+    derivative model unevaluable (the gmix construction guards
+    |g| near 1, for the analytic path and the stepped one
+    alike); the sandwich must set the covariance flags, not
+    raise"""
     from ngmix.fitting.noise_cov import apply_noise_cov
 
     rng = np.random.RandomState(91)
@@ -205,6 +207,82 @@ def test_noise_cov_boundary_flags():
     apply_noise_cov(fit_model=res, result=res)
     assert res['flags'] != 0
     assert 'bad noise covariance' in res['errmsg']
+
+
+@pytest.mark.parametrize('model', ['gauss', 'exp', 'dev'])
+def test_noise_cov_analytic_vs_fd(model):
+    """the analytic derivative images agree with the central
+    differences away from the boundary, both image by image and
+    through the assembled sandwich covariance"""
+    from ngmix.fitting import noise_cov
+    from ngmix.fitting.noise_cov import (
+        calc_noise_cov, _dmodel_images,
+    )
+
+    rng = np.random.RandomState(55)
+    mbobs = _make_obs(rng, 4.0, nband=2)
+    prior = _get_prior(rng)
+    fitter = ngmix.fitting.Fitter(model=model, prior=prior)
+    guess = np.array([0.0, 0.0, 0.0, 0.0, TGUESS, FLUX, FLUX])
+    fit_model = fitter.go(obs=mbobs, guess=guess)
+    assert fit_model['flags'] == 0
+    pars = fit_model['pars']
+    npars = pars.size
+    nshape = npars - 2
+
+    for band in range(2):
+        kpars = list(range(nshape)) + [nshape + band]
+        for obs in fit_model.obs[band]:
+            ana = _dmodel_images(
+                fit_model=fit_model, pars=pars, band=band,
+                obs=obs, kpars=kpars,
+            )
+            ref = _dmodel_images(
+                fit_model=fit_model, pars=pars, band=band,
+                obs=obs, kpars=kpars, force_fd=True,
+            )
+            # close but not identical: bitwise equality
+            # would mean the analytic branch silently fell
+            # back to the finite differences
+            assert not np.array_equal(ana[0], ref[0])
+            # compare away from the fastexp chi^2 clip ring,
+            # where the stepped evaluation differentiates the
+            # migrating truncation boundary and the analytic
+            # derivative is the better-defined object.  The
+            # value image is the flux derivative times the flux
+            val = ana[-1]
+            inside = val > 1.0e-4 * val.max()
+            for a, r in zip(ana, ref):
+                # the stepped reference differentiates the
+                # fastexp lookup-table kinks, an intrinsic
+                # noise floor of a few 1e-4 of scale
+                scale = np.abs(r).max()
+                assert np.allclose(
+                    a[inside], r[inside], atol=2.0e-3 * scale,
+                )
+
+    cov = calc_noise_cov(
+        fit_model=fit_model, pars=pars,
+        pars_cov0=fit_model['pars_cov0'],
+    )
+    saved = noise_cov._ANALYTIC_MODELS
+    noise_cov._ANALYTIC_MODELS = ()
+    try:
+        ref = calc_noise_cov(
+            fit_model=fit_model, pars=pars,
+            pars_cov0=fit_model['pars_cov0'],
+        )
+    finally:
+        noise_cov._ANALYTIC_MODELS = saved
+    assert np.allclose(
+        np.sqrt(np.diag(cov)), np.sqrt(np.diag(ref)),
+        rtol=1.0e-3,
+    )
+    # off-diagonal deviations measured against the error scale:
+    # elementwise relative tolerances blow up on the near-zero
+    # correlation elements
+    escale = np.sqrt(np.outer(np.diag(ref), np.diag(ref)))
+    assert np.all(np.abs(cov - ref) < 2.0e-3 * escale)
 
 
 def test_noise_cov_requires_noise():
