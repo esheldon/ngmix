@@ -1,7 +1,9 @@
 import numpy
 from numpy import array, nan
 from numba import njit
-from ..fastexp_nb import fexp, FASTEXP_MAX_CHI2
+from ..fastexp_nb import (
+    fexp, FASTEXP_MAX_CHI2, FASTEXP_APOD_CHI2, apod_window,
+)
 
 # need to make this a pure python exception
 from ..gexceptions import GMixRangeError
@@ -29,6 +31,11 @@ def gauss2d_eval_pixel_fast(gauss, pixel):
     evaluate a 2-d gaussian at the specified location, using
     the fast exponential
 
+    The evaluation is apodized smoothly to zero between
+    FASTEXP_APOD_CHI2 and FASTEXP_MAX_CHI2 rather than cut, so the
+    value is C2 in the parameters with no step at the truncation
+    boundary
+
     parameters
     ----------
     gauss2d: gauss2d structure
@@ -50,6 +57,8 @@ def gauss2d_eval_pixel_fast(gauss, pixel):
 
     if chi2 < FASTEXP_MAX_CHI2 and chi2 >= 0.0:
         model_val = gauss["pnorm"] * fexp(-0.5 * chi2) * pixel["area"]
+        if chi2 > FASTEXP_APOD_CHI2:
+            model_val *= apod_window(chi2)
 
     return model_val
 

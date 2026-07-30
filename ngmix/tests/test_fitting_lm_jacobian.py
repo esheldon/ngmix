@@ -4,7 +4,7 @@ Dfun in leastsqbound for the simple models.
 
 The referee is the central difference of calc_fdiff itself: the
 analytic jacobian must be the derivative of the actual objective,
-fast exponential and chi^2 clip included.
+fast exponential and apodized chi^2 truncation included.
 """
 import numpy as np
 import pytest
@@ -41,26 +41,6 @@ def _get_nprior(fit_model, pars):
     )
 
 
-def _get_inside_mask(fit_model, pars, jac):
-    """mask of pixel rows away from the fastexp chi^2 clip ring,
-    where the stepped reference differentiates the migrating
-    truncation boundary and the analytic derivative is the better
-    defined object.  The model value at each pixel is the flux
-    derivative times the flux"""
-    npp = _get_nprior(fit_model, pars)
-    vals = np.zeros(fit_model.fdiff_size)
-    start = npp
-    for band in range(fit_model.nband):
-        flux = pars[5 + band]
-        for obs in fit_model.obs[band]:
-            sl = slice(start, start + obs.pixels.size)
-            vals[sl] = jac[sl, 5 + band] * flux / obs.pixels['ierr']
-            start += obs.pixels.size
-    inside = vals > 1.0e-4 * vals.max()
-    inside[:npp] = False
-    return inside
-
-
 def _compare_jacobians(fit_model, pars):
     ana = fit_model.calc_jacobian(pars)
     ref = _fd_jacobian(fit_model, pars)
@@ -71,23 +51,21 @@ def _compare_jacobians(fit_model, pars):
     npp = _get_nprior(fit_model, pars)
     assert np.allclose(ana[:npp], ref[:npp], rtol=1.0e-5, atol=5.0e-6)
 
-    inside = _get_inside_mask(fit_model, pars, ana)
-    assert inside.sum() > 100
+    # the smooth fexp and the apodized truncation make the model
+    # twice differentiable in the parameters everywhere, so every
+    # pixel row is compared.  The remaining differences are the
+    # fexp derivative approximation (~3e-5 relative) and the fd
+    # truncation error; the measured max is 3e-5 of the column
+    # scale.  These bounds are tight enough to catch a missing
+    # window-slope term in the apodization band, which shows at
+    # the few 1e-4 level
     for ipar in range(pars.size):
-        # the fastexp table has tiny value jumps at its segment
-        # boundaries; a difference step crossing one inflates the
-        # stepped reference by jump / (2 step) at isolated
-        # pixels, up to a percent of scale.  Away from those
-        # crossings the agreement is a few 1e-4 of scale, so
-        # require the bulk within 2e-3, every pixel within 3e-2,
-        # and the column rms within 5e-3
-        a = ana[inside, ipar]
-        r = ref[inside, ipar]
+        a = ana[npp:, ipar]
+        r = ref[npp:, ipar]
         scale = np.abs(r).max()
         d = np.abs(a - r)
-        assert np.mean(d <= 2.0e-3 * scale) > 0.995
-        assert np.all(d <= 3.0e-2 * scale)
-        assert np.sqrt(np.sum(d ** 2) / np.sum(r ** 2)) < 5.0e-3
+        assert np.all(d <= 1.0e-4 * scale)
+        assert np.sqrt(np.sum(d ** 2) / np.sum(r ** 2)) < 5.0e-5
 
 
 @pytest.mark.parametrize('model', ['gauss', 'exp', 'dev'])

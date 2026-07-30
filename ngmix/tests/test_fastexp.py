@@ -3,7 +3,9 @@ import numpy as np
 from numba import njit
 import pytest
 
-from ngmix.fastexp_nb import fexp
+from ngmix.fastexp_nb import (
+    fexp, _make_smooth_exp_coeffs, _EXP5_SMOOTH_COEFFS,
+)
 
 # test values between -15 and 0
 vals = [-7.8864744, -4.2333561, -11.02660361, -9.07802778,
@@ -13,6 +15,109 @@ vals = [-7.8864744, -4.2333561, -11.02660361, -9.07802778,
 @pytest.mark.parametrize('x', vals)
 def test_fastexp_smoke(x):
     assert np.allclose(np.exp(x), fexp(x), rtol=4.0e-5)
+
+
+def test_fastexp_accuracy():
+    x = np.linspace(-15.0, 0.0, 100_000)
+    relerr = np.array([fexp(xx) for xx in x]) / np.exp(x) - 1
+    assert np.abs(relerr).max() < 2.5e-6
+
+    # the error oscillates in sign, so models rendered with fexp are
+    # not scaled by the mean error
+    assert np.abs(relerr.mean()) < 1.0e-7
+
+
+def test_fastexp_matches_coeffs():
+    """
+    the literals compiled into exp5_smooth match _EXP5_SMOOTH_COEFFS,
+    which in turn match the generator
+    """
+    gen = _make_smooth_exp_coeffs()
+    assert np.abs(gen / _EXP5_SMOOTH_COEFFS - 1).max() < 1.0e-10
+
+    rng = np.random.RandomState(31415)
+    for x in rng.uniform(low=-15, high=0, size=100):
+        ival = int(x - 0.5)
+        f = x - ival
+        expected = np.exp(ival) * np.polyval(
+            _EXP5_SMOOTH_COEFFS[::-1], f,
+        )
+        assert abs(fexp(x) / expected - 1) < 1.0e-14
+
+
+def test_fastexp_c2_conditions():
+    """
+    the polynomial and its first two derivatives satisfy
+    P(1/2) = e P(-1/2) etc., which makes the piecewise function C2 at
+    the half integer break points
+    """
+    coeffs = _EXP5_SMOOTH_COEFFS.copy()
+    for _ in range(3):
+        left = np.polyval(coeffs[::-1], 0.5)
+        right = np.exp(1.0) * np.polyval(coeffs[::-1], -0.5)
+        assert abs(left / right - 1) < 1.0e-13
+        coeffs = coeffs[1:] * np.arange(1, coeffs.size)
+
+
+def test_apod_window():
+    """
+    the truncation apodization window is 1 at the start of the
+    band, 0 at the end, monotonic, and joins with zero slope at
+    both ends so apodized gaussians are smooth in their parameters
+    """
+    from ngmix.fastexp_nb import (
+        FASTEXP_APOD_CHI2, FASTEXP_MAX_CHI2,
+        apod_window, apod_window_deriv,
+    )
+
+    assert apod_window(FASTEXP_APOD_CHI2) == 1.0
+    assert apod_window(FASTEXP_MAX_CHI2) == 0.0
+    assert apod_window_deriv(FASTEXP_APOD_CHI2) == 0.0
+    assert apod_window_deriv(FASTEXP_MAX_CHI2) == 0.0
+
+    chi2 = np.linspace(
+        FASTEXP_APOD_CHI2, FASTEXP_MAX_CHI2, 1001,
+    )
+    wvals = np.array([apod_window(c) for c in chi2])
+    assert np.all(np.diff(wvals) < 0)
+
+    # the analytic derivative matches central differences
+    eps = 1.0e-6
+    for c in np.linspace(
+        FASTEXP_APOD_CHI2 + 0.1, FASTEXP_MAX_CHI2 - 0.1, 20,
+    ):
+        fd = (apod_window(c + eps) - apod_window(c - eps)) / (2 * eps)
+        assert abs(apod_window_deriv(c) - fd) < 1.0e-8
+
+    # second derivative vanishes at both ends, so the join is C2
+    for c in (FASTEXP_APOD_CHI2, FASTEXP_MAX_CHI2):
+        d2 = (
+            apod_window_deriv(c + eps) - apod_window_deriv(c - eps)
+        ) / (2 * eps)
+        assert abs(d2) < 1.0e-5
+
+
+def test_fastexp_smooth_at_boundaries():
+    """
+    no steps in the value or first derivative at the half integer
+    break points of the lookup table
+    """
+    eps = 1.0e-6
+    for bnd in np.arange(-14.5, 0.0, 1.0):
+        scale = np.exp(bnd)
+
+        vleft = fexp(bnd - eps)
+        vmid = fexp(bnd)
+        vright = fexp(bnd + eps)
+
+        # the change across the break point is the smooth change
+        # ~ 2 * eps * exp(bnd), not a step
+        assert abs(vright - vleft) < 5.0 * eps * scale
+
+        # the one sided derivatives agree
+        dleft = (vmid - vleft) / eps
+        dright = (vright - vmid) / eps
+        assert abs(dright - dleft) < 1.0e-4 * scale
 
 
 @njit
