@@ -120,14 +120,13 @@ def calc_noise_cov(fit_model, pars, pars_cov0):
     for band in range(nband):
         kpars = list(range(nshape)) + [nshape + band]
         for obs in fit_model.obs[band]:
+            dimages = _dmodel_images(
+                fit_model=fit_model, pars=pars, band=band,
+                obs=obs, kpars=kpars,
+            )
             kernels = [
-                np.fft.fft2(
-                    obs.weight * _dmodel(
-                        fit_model=fit_model, pars=pars, ipar=a,
-                        band=band, obs=obs,
-                    )
-                )
-                for a in kpars
+                np.fft.fft2(obs.weight * dim)
+                for dim in dimages
             ]
             p = np.abs(np.fft.fft2(obs.noise)) ** 2
             n = obs.image.size
@@ -141,6 +140,101 @@ def calc_noise_cov(fit_model, pars, pars_cov0):
                         B[kpars[ib], kpars[ia]] += val
 
     return pars_cov0 @ B @ pars_cov0
+
+
+# the simple models whose band parameters are
+# [cen1, cen2, g1, g2, T, flux] with a shared shape across the
+# fixed mixture components, for which the derivative images are
+# analytic; other models use the central differences
+_ANALYTIC_MODELS = ('gauss', 'exp', 'dev')
+
+
+def _dmodel_images(fit_model, pars, band, obs, kpars,
+                   force_fd=False):
+    """the derivative images of the convolved model for the
+    given parameter indices: a single analytic pass for the
+    simple models (every derivative of a rendered gaussian
+    shares the render's exponential, replacing the twelve
+    renders of the stepped evaluation), central differences
+    otherwise"""
+    if force_fd \
+            or fit_model.model_name not in _ANALYTIC_MODELS:
+        return [
+            _dmodel(
+                fit_model=fit_model, pars=pars, ipar=a,
+                band=band, obs=obs,
+            )
+            for a in kpars
+        ]
+
+    from .noise_cov_nb import deriv_images
+
+    band_pars = fit_model.get_band_pars(pars=pars, band=band)
+    g1, g2, T, flux = band_pars[2:6]
+
+    gm0 = gmix.make_gmix_model(band_pars, fit_model.model)
+    if obs.has_psf_gmix():
+        gmc = gm0.convolve(obs.psf.gmix)
+        npsf = len(obs.psf.gmix)
+    else:
+        gmc = gm0
+        npsf = 1
+    gpars = gmc.get_full_pars().reshape(-1, 6)
+    # the model-component covariances, aligned with the
+    # model-major composed ordering of convolve
+    modcov = np.repeat(
+        gm0.get_full_pars().reshape(-1, 6)[:, 3:6], npsf,
+        axis=0,
+    )
+
+    # d(e1, e2)/d(g1, g2) for the distortion e = 2 g / (1 + g^2)
+    gsq = g1 * g1 + g2 * g2
+    f = 2.0 / (1.0 + gsq)
+    dfac = -f / (1.0 + gsq)
+    de1dg1 = f + 2.0 * g1 * g1 * dfac
+    de1dg2 = 2.0 * g1 * g2 * dfac
+    de2dg1 = de1dg2
+    de2dg2 = f + 2.0 * g2 * g2 * dfac
+
+    # dSigma_k/dg_i = (T_k / 2) [[-de1, de2], [de2, de1]]/dg_i
+    # and dSigma_k/dT = Sigma_k / T, from
+    # Sigma_k = (T_k / 2) [[1 - e1, e2], [e2, 1 + e1]]
+    Tk = modcov[:, 0] + modcov[:, 2]
+    dcov = np.zeros((gpars.shape[0], 3, 3))
+    for i, (de1, de2) in enumerate(
+        ((de1dg1, de2dg1), (de1dg2, de2dg2)),
+    ):
+        dcov[:, i, 0] = -0.5 * Tk * de1
+        dcov[:, i, 1] = 0.5 * Tk * de2
+        dcov[:, i, 2] = 0.5 * Tk * de1
+    dcov[:, 2, :] = modcov / T
+
+    dims = obs.image.shape
+    rows, cols = np.mgrid[0:dims[0], 0:dims[1]]
+    vv, uu = obs.jacobian.get_vu(
+        row=rows.ravel().astype('f8'),
+        col=cols.ravel().astype('f8'),
+    )
+    out = np.zeros((6, vv.size))
+    deriv_images(
+        gpars, dcov, vv, uu, obs.jacobian.area, out,
+    )
+
+    # out rows: value, cen1, cen2, g1, g2, T; the flux
+    # derivative is the value image over the flux (the model is
+    # linear in flux).  kpars is the shape parameters followed
+    # by this band's flux
+    images = [
+        out[k].reshape(dims) for k in (1, 2, 3, 4, 5)
+    ]
+    if flux != 0.0:
+        images.append(out[0].reshape(dims) / flux)
+    else:
+        images.append(_dmodel(
+            fit_model=fit_model, pars=pars, ipar=kpars[-1],
+            band=band, obs=obs,
+        ))
+    return images
 
 
 def _dmodel(fit_model, pars, ipar, band, obs):
