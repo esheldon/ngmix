@@ -12,6 +12,13 @@
     - A similar update for the Fitters that use LM, taking in
       a noise image to estimate the noise power per mode and
       give good errors even in the presence of correlated noise.
+    - replace the fast exponential (fexp), which had steps in its
+      derivatives, with a standard form based on Chebyshev polynomials.  Same
+      speed, but 17 times more accurate and twice differentiable.  This
+      fixes some issues we had comparing the analytical derivatives
+      with the finite diff derivatives, but should otherwise not
+      affect the fits in any noticeable way.  The old exp5 is still
+      available but no longer aliased to fexp
 
 ### New features
 
