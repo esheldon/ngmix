@@ -34,6 +34,42 @@ def _smooth(im, kernel):
     return fftconvolve(im, kernel, mode='same')
 
 
+def _off_clip_ring(fit_model, pars, band, obs, margin=0.2):
+    """
+    mask of pixels away from the chi^2 = FASTEXP_MAX_CHI2
+    truncation boundary of every composed gaussian.  The
+    central-difference reference renders the clipped model, so it
+    differentiates the migrating truncation boundary; that is a
+    property of the clipped objective, not of the derivative
+    approximation under test.  The fd steps move the rings by
+    |dchi2| < 0.03, well inside the margin
+    """
+    from ngmix.fastexp_nb import FASTEXP_MAX_CHI2
+
+    band_pars = fit_model.get_band_pars(pars=pars, band=band)
+    gm = ngmix.gmix.make_gmix_model(band_pars, fit_model.model)
+    if obs.has_psf_gmix():
+        gm = gm.convolve(obs.psf.gmix)
+    gpars = gm.get_full_pars().reshape(-1, 6)
+
+    dims = obs.image.shape
+    rows, cols = np.mgrid[0:dims[0], 0:dims[1]]
+    vv, uu = obs.jacobian.get_vu(
+        row=rows.ravel().astype('f8'),
+        col=cols.ravel().astype('f8'),
+    )
+    off = np.ones(vv.size, dtype=bool)
+    for _, vc, uc, irr, irc, icc in gpars:
+        det = irr * icc - irc * irc
+        dv = vv - vc
+        du = uu - uc
+        chi2 = (
+            icc * dv ** 2 - 2 * irc * dv * du + irr * du ** 2
+        ) / det
+        off &= np.abs(chi2 - FASTEXP_MAX_CHI2) > margin
+    return off.reshape(dims)
+
+
 def _make_obs(rng, sigma, kernel=None, nband=1, with_noise=True):
     import galsim
 
@@ -245,20 +281,21 @@ def test_noise_cov_analytic_vs_fd(model):
             # would mean the analytic branch silently fell
             # back to the finite differences
             assert not np.array_equal(ana[0], ref[0])
-            # compare away from the fastexp chi^2 clip ring,
-            # where the stepped evaluation differentiates the
-            # migrating truncation boundary and the analytic
-            # derivative is the better-defined object.  The
-            # value image is the flux derivative times the flux
-            val = ana[-1]
-            inside = val > 1.0e-4 * val.max()
+            # compare away from the chi^2 truncation rings of
+            # the composed gaussians, which the differences
+            # differentiate (see _off_clip_ring).  With the
+            # smooth fexp the only remaining differences are
+            # its derivative approximation (~3e-5 relative)
+            # and the fd truncation error
+            off_ring = _off_clip_ring(
+                fit_model=fit_model, pars=pars, band=band,
+                obs=obs,
+            )
             for a, r in zip(ana, ref):
-                # the stepped reference differentiates the
-                # fastexp lookup-table kinks, an intrinsic
-                # noise floor of a few 1e-4 of scale
                 scale = np.abs(r).max()
                 assert np.allclose(
-                    a[inside], r[inside], atol=2.0e-3 * scale,
+                    a[off_ring], r[off_ring],
+                    atol=1.0e-4 * scale,
                 )
 
     cov = calc_noise_cov(
@@ -276,13 +313,13 @@ def test_noise_cov_analytic_vs_fd(model):
         noise_cov._ANALYTIC_MODELS = saved
     assert np.allclose(
         np.sqrt(np.diag(cov)), np.sqrt(np.diag(ref)),
-        rtol=1.0e-3,
+        rtol=2.0e-4,
     )
     # off-diagonal deviations measured against the error scale:
     # elementwise relative tolerances blow up on the near-zero
     # correlation elements
     escale = np.sqrt(np.outer(np.diag(ref), np.diag(ref)))
-    assert np.all(np.abs(cov - ref) < 2.0e-3 * escale)
+    assert np.all(np.abs(cov - ref) < 4.0e-4 * escale)
 
 
 def test_noise_cov_requires_noise():
