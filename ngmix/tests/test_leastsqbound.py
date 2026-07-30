@@ -248,7 +248,14 @@ def test_leastsqbound_bad_data(fit_model, psf_noise):
             prior=prior,
         )
 
-    fitter = ngmix.fitting.Fitter(model=fit_model, prior=prior)
+    # this test exercises the error handling of the finite
+    # difference path in run_leastsq, where steps onto out of
+    # range parameters produce non-finite fdiff values.  With
+    # the analytic jacobian these garbage fits instead converge
+    # numerically and report their enormous chi^2
+    fitter = ngmix.fitting.Fitter(
+        model=fit_model, prior=prior, analytic_jacobian=False,
+    )
     runner = ngmix.runners.Runner(
         fitter=fitter,
         guesser=guesser,
