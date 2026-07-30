@@ -92,10 +92,12 @@ def deriv_images(gpars, dcov, vv, uu, area, out):
         for ipix in range(npix):
             dv = vv[ipix] - vcen
             du = uu[ipix] - ucen
+
             # Q delta
             qv = w11 * dv + w12 * du
             qu = w12 * dv + w22 * du
             chi2 = dv * qv + du * qu
+
             # the same fast exp and apodized truncation as the
             # fdiff renders: the fit's objective is the apodized
             # fastexp model, so its response derivatives are too
@@ -114,8 +116,12 @@ def deriv_images(gpars, dcov, vv, uu, area, out):
             out[0, ipix] += val
             out[1, ipix] += valc * qv
             out[2, ipix] += valc * qu
+
             for a in range(3):
-                quad = qv * qv * dcov[ig, a, 0] \
-                    + 2.0 * qv * qu * dcov[ig, a, 1] \
+                quad = (
+                    qv * qv * dcov[ig, a, 0]
+                    + 2.0 * qv * qu * dcov[ig, a, 1]
                     + qu * qu * dcov[ig, a, 2]
+                )
+
                 out[3 + a, ipix] += 0.5 * (valc * quad - val * trs[a])

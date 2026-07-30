@@ -58,6 +58,7 @@ def apply_noise_cov(fit_model, result):
         return
 
     npars = result['pars'].size
+
     try:
         cov = calc_noise_cov(
             fit_model=fit_model, pars=result['pars'],
@@ -138,12 +139,14 @@ def calc_noise_cov(fit_model, pars, pars_cov0):
 
 def _dmodel_images(fit_model, pars, band, obs, kpars,
                    force_fd=False):
-    """the derivative images of the convolved model for the
+    """
+    the derivative images of the convolved model for the
     given parameter indices: a single analytic pass for the
     simple models (every derivative of a rendered gaussian
     shares the render's exponential, replacing the twelve
     renders of the stepped evaluation), central differences
-    otherwise"""
+    otherwise
+    """
     if force_fd \
             or fit_model.model_name not in SIMPLE_ANALYTIC_MODELS:
         return [
@@ -198,8 +201,10 @@ def _dmodel_images(fit_model, pars, band, obs, kpars,
 
 
 def _dmodel(fit_model, pars, ipar, band, obs):
-    """central difference derivative image of the convolved model
-    with respect to one parameter"""
+    """
+    central difference derivative image of the convolved model
+    with respect to one parameter
+    """
     step = get_step(pars=pars, ipar=ipar, nband=fit_model.nband)
 
     ims = []

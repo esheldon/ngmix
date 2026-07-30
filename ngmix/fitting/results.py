@@ -486,18 +486,16 @@ class FitModel(dict):
 
     def calc_jacobian(self, pars):
         """
-        The jacobian of calc_fdiff with respect to the parameters
-        (not to be confused with the WCS jacobian): the prior
-        rows first, then each observation's pixel rows
-        d model / d par * sqrt(weight).  Only available for the
-        simple models, see SIMPLE_ANALYTIC_MODELS.
+        The jacobian of calc_fdiff with respect to the parameters (not to be
+        confused with the WCS jacobian): the prior rows first, then each
+        observation's pixel rows d model / d par * sqrt(weight).  Only
+        available for the simple models, see SIMPLE_ANALYTIC_MODELS.
 
-        The pixel rows use the same fast exponential and chi^2
-        clip as the fdiff renders, so this is the exact
-        derivative of the fit objective.  Parameters for which
-        the model or a difference step of the prior is out of
-        range give a zero jacobian, the analog of the constant
-        LOWVAL fdiff from calc_fdiff.
+        The pixel rows use the same fast exponential and apodized render as the
+        fdiff renders, so this is the exact derivative of the fit objective.
+        Parameters for which the model or a difference step of the prior is out
+        of range give a zero jacobian, the analog of the constant LOWVAL fdiff
+        from calc_fdiff.
 
         Parameters
         ----------
