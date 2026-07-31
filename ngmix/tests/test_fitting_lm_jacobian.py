@@ -125,6 +125,39 @@ def test_lm_jacobian_range_error():
         assert np.all(jac == 0)
 
 
+def test_lm_jacobian_prior_zero_prob():
+    """a parameter far enough outside a TwoSidedErf wall
+    underflows the prior probability to exactly zero, making
+    that fdiff row infinite; the corresponding jacobian rows
+    must be zeros, not the nan of a blind inf - inf difference"""
+    import warnings
+
+    rng = np.random.RandomState(25)
+    mbobs = _make_obs(rng, 8.0)
+    prior = _get_prior(rng)
+    fitter = ngmix.fitting.Fitter(model='gauss', prior=prior)
+    guess = np.array([0.0, 0.0, 0.0, 0.0, TGUESS, FLUX])
+    fit_model = fitter.go(obs=mbobs, guess=guess)
+    assert fit_model['flags'] == 0
+
+    # 50 widths past the T prior wall at 1e3, where the
+    # probability is exactly 0 and lnp is -inf
+    pars = fit_model['pars'].copy()
+    pars[4] = 1.0e3 + 50.0
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', RuntimeWarning)
+        jac = fit_model.calc_jacobian(pars)
+
+    assert np.all(np.isfinite(jac))
+    # the T prior row is zeroed for every parameter
+    assert np.all(jac[3] == 0)
+    # the other prior rows and the pixel rows are still filled
+    npp = _get_nprior(fit_model, pars)
+    assert np.any(jac[:npp] != 0)
+    assert np.any(jac[npp:] != 0)
+
+
 def test_lm_jacobian_bad_model():
     """only the simple models have the analytic jacobian"""
     rng = np.random.RandomState(23)
