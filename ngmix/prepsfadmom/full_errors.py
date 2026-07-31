@@ -281,6 +281,9 @@ def padmom_full_covariance(
     PAdmomFitter state: the m=1 case of the coupled estimating
     equations, differentiating the actual plain update step at
     the actual data with no model-consistency substitution.
+    The dense products run under single_core_blas: ngmix is a
+    single core library, and they are large enough for a
+    threaded BLAS to fan out.
     Unlike model_sandwich this stays calibrated under model
     mismatch, where the sandwich under-predicts T errors by ~17
     percent and flux errors by ~11 percent for dev truth fit
@@ -295,6 +298,19 @@ def padmom_full_covariance(
     s2n, or None when the evaluation at the solution takes a
     guarded branch (the caller keeps the model_sandwich errors)
     """
+    from ..util import single_core_blas
+
+    with single_core_blas():
+        return _padmom_full_covariance(
+            fitter=fitter, epochs=epochs, nband=nband,
+            model_state=model_state, Sigma=Sigma, v0=v0, u0=u0,
+            Tsmooth=Tsmooth,
+        )
+
+
+def _padmom_full_covariance(
+    fitter, epochs, nband, model_state, Sigma, v0, u0, Tsmooth,
+):
     from .prepsfadmom import model_ksums
     from .prepsfadmom_nb import admom_ksums
 
