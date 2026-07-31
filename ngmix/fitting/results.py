@@ -590,6 +590,14 @@ class FitModel(dict):
         fs = np.zeros(self.n_prior_pars)
         n = self.prior.fill_fdiff(pars, f0)
 
+        # a zero probability prior row (lnp = -inf, as when a
+        # parameter sits far enough outside a TwoSidedErf wall
+        # that the probability underflows to exactly zero) makes
+        # that objective row infinite: no finite derivative
+        # exists there, so such rows get zeros, consistent with
+        # the GMixRangeError convention of calc_jacobian
+        good0 = np.isfinite(f0[:n])
+
         p = pars.copy()
         for ipar in range(self.npars):
             step = STEP_PRIOR * max(1.0, abs(pars[ipar]))
@@ -609,7 +617,10 @@ class FitModel(dict):
                         'parameter %d' % ipar
                     )
 
-            jac[:n, ipar] = (fs[:n] - f0[:n]) / step
+            good = good0 & np.isfinite(fs[:n])
+            d = np.zeros(n)
+            d[good] = (fs[:n][good] - f0[:n][good]) / step
+            jac[:n, ipar] = d
 
         return n
 
