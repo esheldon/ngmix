@@ -30,15 +30,9 @@ import numpy as np
 from .. import gmix
 from ..gexceptions import GMixRangeError
 from .leastsqbound import _test_cov, _get_def_stuff
-
-# absolute floors for the numerical derivative steps; the
-# centroid pars are in sky units, T in arcsec^2, flux in
-# image units
-STEP_CEN = 1.0e-3
-STEP_SHAPE = 1.0e-4
-STEP_STRUCT_MIN = 1.0e-4
-STEP_FLUX_MIN = 1.0e-6
-STEP_FRAC = 1.0e-3
+from .results import (
+    SIMPLE_ANALYTIC_MODELS, get_model_deriv_data, get_step,
+)
 
 
 def apply_noise_cov(fit_model, result):
@@ -64,6 +58,7 @@ def apply_noise_cov(fit_model, result):
         return
 
     npars = result['pars'].size
+
     try:
         cov = calc_noise_cov(
             fit_model=fit_model, pars=result['pars'],
@@ -142,23 +137,18 @@ def calc_noise_cov(fit_model, pars, pars_cov0):
     return pars_cov0 @ B @ pars_cov0
 
 
-# the simple models whose band parameters are
-# [cen1, cen2, g1, g2, T, flux] with a shared shape across the
-# fixed mixture components, for which the derivative images are
-# analytic; other models use the central differences
-_ANALYTIC_MODELS = ('gauss', 'exp', 'dev')
-
-
 def _dmodel_images(fit_model, pars, band, obs, kpars,
                    force_fd=False):
-    """the derivative images of the convolved model for the
+    """
+    the derivative images of the convolved model for the
     given parameter indices: a single analytic pass for the
     simple models (every derivative of a rendered gaussian
     shares the render's exponential, replacing the twelve
     renders of the stepped evaluation), central differences
-    otherwise"""
+    otherwise
+    """
     if force_fd \
-            or fit_model.model_name not in _ANALYTIC_MODELS:
+            or fit_model.model_name not in SIMPLE_ANALYTIC_MODELS:
         return [
             _dmodel(
                 fit_model=fit_model, pars=pars, ipar=a,
@@ -167,7 +157,7 @@ def _dmodel_images(fit_model, pars, band, obs, kpars,
             for a in kpars
         ]
 
-    from .noise_cov_nb import deriv_images
+    from .derivs_nb import deriv_images
 
     band_pars = fit_model.get_band_pars(pars=pars, band=band)
     g1, g2, T, flux = band_pars[2:6]
@@ -175,39 +165,11 @@ def _dmodel_images(fit_model, pars, band, obs, kpars,
     gm0 = gmix.make_gmix_model(band_pars, fit_model.model)
     if obs.has_psf_gmix():
         gmc = gm0.convolve(obs.psf.gmix)
-        npsf = len(obs.psf.gmix)
     else:
         gmc = gm0
-        npsf = 1
-    gpars = gmc.get_full_pars().reshape(-1, 6)
-    # the model-component covariances, aligned with the
-    # model-major composed ordering of convolve
-    modcov = np.repeat(
-        gm0.get_full_pars().reshape(-1, 6)[:, 3:6], npsf,
-        axis=0,
+    gpars, dcov = get_model_deriv_data(
+        gm0=gm0, gmc=gmc, g1=g1, g2=g2, T=T,
     )
-
-    # d(e1, e2)/d(g1, g2) for the distortion e = 2 g / (1 + g^2)
-    gsq = g1 * g1 + g2 * g2
-    f = 2.0 / (1.0 + gsq)
-    dfac = -f / (1.0 + gsq)
-    de1dg1 = f + 2.0 * g1 * g1 * dfac
-    de1dg2 = 2.0 * g1 * g2 * dfac
-    de2dg1 = de1dg2
-    de2dg2 = f + 2.0 * g2 * g2 * dfac
-
-    # dSigma_k/dg_i = (T_k / 2) [[-de1, de2], [de2, de1]]/dg_i
-    # and dSigma_k/dT = Sigma_k / T, from
-    # Sigma_k = (T_k / 2) [[1 - e1, e2], [e2, 1 + e1]]
-    Tk = modcov[:, 0] + modcov[:, 2]
-    dcov = np.zeros((gpars.shape[0], 3, 3))
-    for i, (de1, de2) in enumerate(
-        ((de1dg1, de2dg1), (de1dg2, de2dg2)),
-    ):
-        dcov[:, i, 0] = -0.5 * Tk * de1
-        dcov[:, i, 1] = 0.5 * Tk * de2
-        dcov[:, i, 2] = 0.5 * Tk * de1
-    dcov[:, 2, :] = modcov / T
 
     dims = obs.image.shape
     rows, cols = np.mgrid[0:dims[0], 0:dims[1]]
@@ -217,7 +179,8 @@ def _dmodel_images(fit_model, pars, band, obs, kpars,
     )
     out = np.zeros((6, vv.size))
     deriv_images(
-        gpars, dcov, vv, uu, obs.jacobian.area, out,
+        gpars, dcov, vv, uu,
+        np.full(vv.size, obs.jacobian.area), out,
     )
 
     # out rows: value, cen1, cen2, g1, g2, T; the flux
@@ -238,9 +201,11 @@ def _dmodel_images(fit_model, pars, band, obs, kpars,
 
 
 def _dmodel(fit_model, pars, ipar, band, obs):
-    """central difference derivative image of the convolved model
-    with respect to one parameter"""
-    step = _get_step(pars=pars, ipar=ipar, nband=fit_model.nband)
+    """
+    central difference derivative image of the convolved model
+    with respect to one parameter
+    """
+    step = get_step(pars=pars, ipar=ipar, nband=fit_model.nband)
 
     ims = []
     for sign in (1, -1):
@@ -250,23 +215,10 @@ def _dmodel(fit_model, pars, ipar, band, obs):
         gm = gmix.make_gmix_model(band_pars, fit_model.model)
         if obs.has_psf_gmix():
             gm = gm.convolve(obs.psf.gmix)
-        # the same fast exp and clip as the fdiff renders,
-        # consistent with the fit's objective
+        # the same fast exp and apodized truncation as the fdiff
+        # renders, consistent with the fit's objective
         ims.append(gm.make_image(
             obs.image.shape, jacobian=obs.jacobian,
             fast_exp=True,
         ))
     return (ims[0] - ims[1]) / (2 * step)
-
-
-def _get_step(pars, ipar, nband):
-    npars = pars.size
-    nshape = npars - nband
-    if ipar < 2:
-        return STEP_CEN
-    elif ipar < 4:
-        return STEP_SHAPE
-    elif ipar < nshape:
-        return max(STEP_STRUCT_MIN, STEP_FRAC * abs(pars[ipar]))
-    else:
-        return max(STEP_FLUX_MIN, STEP_FRAC * abs(pars[ipar]))

@@ -9,7 +9,10 @@ from .leastsqbound import run_leastsq
 from .noise_cov import apply_noise_cov
 from .. import gmix
 from ..defaults import DEFAULT_LM_PARS
-from .results import FitModel, CoellipFitModel, PSFFluxFitModel
+from .results import (
+    FitModel, CoellipFitModel, PSFFluxFitModel,
+    SIMPLE_ANALYTIC_MODELS,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -35,13 +38,23 @@ class Fitter(object):
         noise, such as that induced by coadding or metacal.  The
         noise image must be an independent realization of the
         noise, in the same frame as the image.  Default False.
+    analytic_jacobian: bool, optional
+        If True, the least squares fitting uses the analytic
+        jacobian of the fdiff vector for the simple models
+        gauss, exp and dev, rather than the finite difference
+        approximation.  This is the exact derivative of the
+        objective and needs far fewer function evaluations.
+        Other models always use the finite differences.
+        Default True.
     """
 
-    def __init__(self, model, prior=None, fit_pars=None, use_noise_image=False):
+    def __init__(self, model, prior=None, fit_pars=None, use_noise_image=False,
+                 analytic_jacobian=True):
         self.prior = prior
         self.model = gmix.get_model_num(model)
         self.model_name = gmix.get_model_name(self.model)
         self.use_noise_image = use_noise_image
+        self.analytic_jacobian = analytic_jacobian
 
         if fit_pars is not None:
             self.fit_pars = fit_pars.copy()
@@ -77,11 +90,18 @@ class Fitter(object):
                             'use_noise_image=True'
                         )
 
+        if (self.analytic_jacobian
+                and self.model_name in SIMPLE_ANALYTIC_MODELS):
+            dfun = fit_model.calc_jacobian
+        else:
+            dfun = None
+
         result = run_leastsq(
             fit_model.calc_fdiff,
             guess=guess,
             n_prior_pars=fit_model.n_prior_pars,
             bounds=fit_model.bounds,
+            Dfun=dfun,
             **self.fit_pars
         )
 

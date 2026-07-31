@@ -245,44 +245,40 @@ def test_noise_cov_analytic_vs_fd(model):
             # would mean the analytic branch silently fell
             # back to the finite differences
             assert not np.array_equal(ana[0], ref[0])
-            # compare away from the fastexp chi^2 clip ring,
-            # where the stepped evaluation differentiates the
-            # migrating truncation boundary and the analytic
-            # derivative is the better-defined object.  The
-            # value image is the flux derivative times the flux
-            val = ana[-1]
-            inside = val > 1.0e-4 * val.max()
+            # the apodized truncation and smooth fexp make the
+            # model C2 in the parameters everywhere, so every
+            # pixel is compared, including the former clip
+            # boundary.  The remaining differences are the fexp
+            # derivative approximation (~3e-5 relative) and the
+            # fd truncation error
             for a, r in zip(ana, ref):
-                # the stepped reference differentiates the
-                # fastexp lookup-table kinks, an intrinsic
-                # noise floor of a few 1e-4 of scale
                 scale = np.abs(r).max()
                 assert np.allclose(
-                    a[inside], r[inside], atol=2.0e-3 * scale,
+                    a, r, atol=1.0e-4 * scale,
                 )
 
     cov = calc_noise_cov(
         fit_model=fit_model, pars=pars,
         pars_cov0=fit_model['pars_cov0'],
     )
-    saved = noise_cov._ANALYTIC_MODELS
-    noise_cov._ANALYTIC_MODELS = ()
+    saved = noise_cov.SIMPLE_ANALYTIC_MODELS
+    noise_cov.SIMPLE_ANALYTIC_MODELS = ()
     try:
         ref = calc_noise_cov(
             fit_model=fit_model, pars=pars,
             pars_cov0=fit_model['pars_cov0'],
         )
     finally:
-        noise_cov._ANALYTIC_MODELS = saved
+        noise_cov.SIMPLE_ANALYTIC_MODELS = saved
     assert np.allclose(
         np.sqrt(np.diag(cov)), np.sqrt(np.diag(ref)),
-        rtol=1.0e-3,
+        rtol=5.0e-5,
     )
     # off-diagonal deviations measured against the error scale:
     # elementwise relative tolerances blow up on the near-zero
     # correlation elements
     escale = np.sqrt(np.outer(np.diag(ref), np.diag(ref)))
-    assert np.all(np.abs(cov - ref) < 2.0e-3 * escale)
+    assert np.all(np.abs(cov - ref) < 1.0e-4 * escale)
 
 
 def test_noise_cov_requires_noise():

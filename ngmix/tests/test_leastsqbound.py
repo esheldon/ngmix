@@ -172,7 +172,16 @@ def test_leastsqbound_bounds(fracdev_bounds):
         except ngmix.BootPSFFailure:
             allflags[i] = 1
 
-    assert np.any(allflags != 0)
+    if fracdev_bounds is None:
+        assert np.any(allflags == 0)
+    else:
+        # the sim galaxy is an exp, so the true fracdev is 0,
+        # exactly on the bound, where the arcsin bounds transform
+        # is singular.  How that surfaces depends on the scipy
+        # version (older hit maxfev, newer converge and fail the
+        # covariance eigenvalue test), so only assert failure,
+        # not the specific flag
+        assert np.any(allflags != 0)
 
 
 def test_leastsqbound_errors():
@@ -248,7 +257,14 @@ def test_leastsqbound_bad_data(fit_model, psf_noise):
             prior=prior,
         )
 
-    fitter = ngmix.fitting.Fitter(model=fit_model, prior=prior)
+    # this test exercises the error handling of the finite
+    # difference path in run_leastsq, where steps onto out of
+    # range parameters produce non-finite fdiff values.  With
+    # the analytic jacobian these garbage fits instead converge
+    # numerically and report their enormous chi^2
+    fitter = ngmix.fitting.Fitter(
+        model=fit_model, prior=prior, analytic_jacobian=False,
+    )
     runner = ngmix.runners.Runner(
         fitter=fitter,
         guesser=guesser,
