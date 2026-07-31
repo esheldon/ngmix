@@ -484,6 +484,146 @@ class FitModel(dict):
 
         return nprior
 
+    def calc_jacobian(self, pars):
+        """
+        The jacobian of calc_fdiff with respect to the parameters (not to be
+        confused with the WCS jacobian): the prior rows first, then each
+        observation's pixel rows d model / d par * sqrt(weight).  Only
+        available for the simple models, see SIMPLE_ANALYTIC_MODELS.
+
+        The pixel rows use the same fast exponential and apodized render as the
+        fdiff renders, so this is the exact derivative of the fit objective.
+        Parameters for which the model or a difference step of the prior is out
+        of range give a zero jacobian, the analog of the constant LOWVAL fdiff
+        from calc_fdiff.
+
+        Parameters
+        ----------
+        pars: array
+            Array of parameters
+
+        Returns
+        -------
+        jac: (fdiff_size, npars) array
+        """
+        from .derivs_nb import deriv_images
+
+        if self.model_name not in SIMPLE_ANALYTIC_MODELS:
+            raise ValueError(
+                'analytic jacobian is not available for model '
+                '%s' % self.model_name
+            )
+
+        jac = np.zeros((self.fdiff_size, self.npars))
+        try:
+            # as in calc_fdiff, the pixel rows begin after the
+            # rows actually filled by the prior, which can be
+            # fewer than the n_prior_pars slots
+            start = self._fill_prior_jacobian(pars=pars, jac=jac)
+
+            # fill the existing mixture buffers, as in calc_fdiff
+            self._fill_gmix_all(pars)
+
+            for band in range(self.nband):
+                band_pars = self.get_band_pars(pars=pars, band=band)
+                g1, g2, T, flux = band_pars[2:6]
+                if T == 0.0 or flux == 0.0:
+                    # the fractional-T and linear-flux forms of
+                    # the derivatives are not evaluable exactly
+                    # at zero, a measure zero point for LM steps
+                    raise GMixRangeError('zero T or flux')
+
+                fluxcol = 5 + band
+
+                for i, obs in enumerate(self.obs[band]):
+                    gmc = self._gmix_all[band][i]
+                    if self.dopsf:
+                        gm0 = self._gmix_all0[band][i]
+                    else:
+                        # without a psf only the composed buffer
+                        # is filled, and it is the model itself
+                        gm0 = gmc
+                    gpars, dcov = get_model_deriv_data(
+                        gm0=gm0, gmc=gmc, g1=g1, g2=g2, T=T,
+                    )
+                    pixels = obs.pixels
+                    out = np.zeros((6, pixels.size))
+                    deriv_images(
+                        gpars, dcov, pixels['v'], pixels['u'],
+                        pixels['area'], out,
+                    )
+
+                    # out rows are [value, cen1, cen2, g1, g2, T];
+                    # the flux derivative is the value over the
+                    # flux, the model being linear in the flux
+                    ierr = pixels['ierr']
+                    sl = slice(start, start + pixels.size)
+                    for k in range(5):
+                        jac[sl, k] = out[1 + k] * ierr
+                    jac[sl, fluxcol] = out[0] * (ierr / flux)
+
+                    start += pixels.size
+
+        except GMixRangeError:
+            jac[:] = 0.0
+
+        return jac
+
+    def _fill_prior_jacobian(self, pars, jac):
+        """
+        Fill the prior rows of the jacobian by forward
+        differencing prior.fill_fdiff; these are cheap scalar
+        evaluations.  The priors are smooth double precision
+        functions with none of the fastexp table noise of the
+        pixel path, so the steps can sit near the sqrt(machine
+        epsilon) optimum, where a one sided difference is
+        accurate to ~1e-7.  Falls back to a backward difference
+        when the step leaves the prior's domain, as when a
+        parameter sits against a bound.
+
+        returns the row after the last prior row
+        """
+        if self.prior is None:
+            return 0
+
+        f0 = np.zeros(self.n_prior_pars)
+        fs = np.zeros(self.n_prior_pars)
+        n = self.prior.fill_fdiff(pars, f0)
+
+        # a zero probability prior row (lnp = -inf, as when a
+        # parameter sits far enough outside a TwoSidedErf wall
+        # that the probability underflows to exactly zero) makes
+        # that objective row infinite: no finite derivative
+        # exists there, so such rows get zeros, consistent with
+        # the GMixRangeError convention of calc_jacobian
+        good0 = np.isfinite(f0[:n])
+
+        p = pars.copy()
+        for ipar in range(self.npars):
+            step = STEP_PRIOR * max(1.0, abs(pars[ipar]))
+
+            p[:] = pars
+            p[ipar] = pars[ipar] + step
+            try:
+                self.prior.fill_fdiff(p, fs)
+            except GMixRangeError:
+                try:
+                    step = -step
+                    p[ipar] = pars[ipar] + step
+                    self.prior.fill_fdiff(p, fs)
+                except GMixRangeError:
+                    raise GMixRangeError(
+                        'prior not evaluable within a step of '
+                        'parameter %d' % ipar
+                    )
+
+            good = good0 & np.isfinite(fs[:n])
+            d = np.zeros(n)
+            d[good] = (fs[:n][good] - f0[:n][good]) / step
+            jac[:n, ipar] = d
+
+        return n
+
 
 class CoellipFitModel(FitModel):
     """
@@ -772,6 +912,102 @@ class PSFFluxFitModel(dict):
             self.eff_npix = npix
 
         return self.eff_npix
+
+
+# the simple models whose band parameters are
+# [cen1, cen2, g1, g2, T, flux] with a shared shape across the
+# fixed mixture components, for which the derivatives of the
+# model with respect to the parameters are analytic
+SIMPLE_ANALYTIC_MODELS = ('gauss', 'exp', 'dev')
+
+# absolute floors for the numerical derivative steps of the
+# rendered model, sized for the noise of the fastexp table; the
+# centroid pars are in sky units, T in arcsec^2, flux in
+# image units
+STEP_CEN = 1.0e-3
+STEP_SHAPE = 1.0e-4
+STEP_STRUCT_MIN = 1.0e-4
+STEP_FLUX_MIN = 1.0e-6
+STEP_FRAC = 1.0e-3
+
+# the relative step for differencing the smooth prior
+# functions, near the sqrt(machine epsilon) optimum
+STEP_PRIOR = 1.0e-8
+
+
+def get_step(pars, ipar, nband):
+    """
+    the step for numerical derivatives with respect to the
+    indicated parameter
+    """
+    npars = pars.size
+    nshape = npars - nband
+    if ipar < 2:
+        return STEP_CEN
+    elif ipar < 4:
+        return STEP_SHAPE
+    elif ipar < nshape:
+        return max(STEP_STRUCT_MIN, STEP_FRAC * abs(pars[ipar]))
+    else:
+        return max(STEP_FLUX_MIN, STEP_FRAC * abs(pars[ipar]))
+
+
+def get_model_deriv_data(gm0, gmc, g1, g2, T):
+    """
+    the composed gaussians and the derivatives of their
+    covariances with respect to the model shape and size, for
+    the simple models with a shared shape across the mixture
+    components
+
+    Parameters
+    ----------
+    gm0: GMix
+        The pre-psf model mixture for the band
+    gmc: GMix
+        The composed mixture, model convolved with the psf, or
+        the model itself when there is no psf
+    g1, g2, T: float
+        The model shape and size parameters
+
+    Returns
+    -------
+    gpars: (ngauss, 6) array
+        The composed gaussians as [p, v, u, irr, irc, icc]
+    dcov: (ngauss, 3, 3) array
+        d(irr, irc, icc) of each composed gaussian with respect
+        to [g1, g2, T]
+    """
+    gpars = gmc.get_full_pars().reshape(-1, 6)
+    modpars = gm0.get_full_pars().reshape(-1, 6)
+    npsf = gpars.shape[0] // modpars.shape[0]
+
+    # the model-component covariances, aligned with the
+    # model-major composed ordering of convolve
+    modcov = np.repeat(modpars[:, 3:6], npsf, axis=0)
+
+    # d(e1, e2)/d(g1, g2) for the distortion e = 2 g / (1 + g^2)
+    gsq = g1 * g1 + g2 * g2
+    f = 2.0 / (1.0 + gsq)
+    dfac = -f / (1.0 + gsq)
+    de1dg1 = f + 2.0 * g1 * g1 * dfac
+    de1dg2 = 2.0 * g1 * g2 * dfac
+    de2dg1 = de1dg2
+    de2dg2 = f + 2.0 * g2 * g2 * dfac
+
+    # dSigma_k/dg_i = (T_k / 2) [[-de1, de2], [de2, de1]]/dg_i
+    # and dSigma_k/dT = Sigma_k / T, from
+    # Sigma_k = (T_k / 2) [[1 - e1, e2], [e2, 1 + e1]]
+    Tk = modcov[:, 0] + modcov[:, 2]
+    dcov = np.zeros((gpars.shape[0], 3, 3))
+    for i, (de1, de2) in enumerate(
+        ((de1dg1, de2dg1), (de1dg2, de2dg2)),
+    ):
+        dcov[:, i, 0] = -0.5 * Tk * de1
+        dcov[:, i, 1] = 0.5 * Tk * de2
+        dcov[:, i, 2] = 0.5 * Tk * de1
+    dcov[:, 2, :] = modcov / T
+
+    return gpars, dcov
 
 
 def get_band_pars(model, pars, band):

@@ -261,15 +261,15 @@ def test_noise_cov_analytic_vs_fd(model):
         fit_model=fit_model, pars=pars,
         pars_cov0=fit_model['pars_cov0'],
     )
-    saved = noise_cov._ANALYTIC_MODELS
-    noise_cov._ANALYTIC_MODELS = ()
+    saved = noise_cov.SIMPLE_ANALYTIC_MODELS
+    noise_cov.SIMPLE_ANALYTIC_MODELS = ()
     try:
         ref = calc_noise_cov(
             fit_model=fit_model, pars=pars,
             pars_cov0=fit_model['pars_cov0'],
         )
     finally:
-        noise_cov._ANALYTIC_MODELS = saved
+        noise_cov.SIMPLE_ANALYTIC_MODELS = saved
     assert np.allclose(
         np.sqrt(np.diag(cov)), np.sqrt(np.diag(ref)),
         rtol=5.0e-5,
