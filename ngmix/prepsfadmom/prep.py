@@ -431,3 +431,19 @@ def _zero_pad_and_compute_rfft(im, cen_row, cen_col, target_dim, ap_rad):
         return _zero_pad_and_compute_rfft_impl(
             im, cen_row, cen_col, target_dim, ap_rad,
         )
+
+
+def get_phase_angles(epoch, v0, u0):
+    """
+    get the centering phase angles per unit row/col frequency
+
+    The base phase (drow, dcol) centers the fft at the image jacobian
+    center; the (v0, u0) sky offsets are converted to pixel offsets
+    with the jacobian.  The phase for a mode is then
+    exp(i (f1d[iy] alpha + f1d[ix] beta)) which is applied inside the
+    numba kernels using two 1d phasor arrays.
+    """
+    A = epoch['Atinv']
+    alpha = epoch['drow'] + A[0, 0] * v0 + A[1, 0] * u0
+    beta = epoch['dcol'] + A[0, 1] * v0 + A[1, 1] * u0
+    return alpha, beta

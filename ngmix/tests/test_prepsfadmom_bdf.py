@@ -67,16 +67,36 @@ def make_bdf_obs(
 
 def test_model_spec_api():
     """
-    string and dict specs are equivalent; bad specs raise clearly
+    string, dict and object specs are equivalent; bad specs raise
+    clearly
     """
+    from ngmix.prepsfadmom import (
+        ExpModel, DevModel, GaussModel, StarModel, BDFModel,
+        FamilyModel,
+    )
+
     f1 = PAdmomFitter(model='exp')
     f2 = PAdmomFitter(model={'type': 'exp'})
-    assert f1.model == f2.model == 'exp'
-    assert f1.TdByTe is None
+    f2b = PAdmomFitter(model=ExpModel())
+    assert f1.model.name == f2.model.name == f2b.model.name == 'exp'
+    assert isinstance(f1.model, ExpModel)
+    assert isinstance(f1.model, FamilyModel)
+    assert isinstance(PAdmomFitter(model='dev').model, DevModel)
+    assert isinstance(PAdmomFitter(model='gauss').model, GaussModel)
+    assert isinstance(PAdmomFitter(model='star').model, StarModel)
+
+    # a model instance passes through unchanged
+    em = ExpModel()
+    assert PAdmomFitter(model=em).model is em
 
     f3 = PAdmomFitter(model={'type': 'bdf', 'TdByTe': 1.5})
-    assert f3.model == 'bdf'
-    assert f3.TdByTe == 1.5
+    assert f3.model.name == 'bdf'
+    assert f3.model.TdByTe == 1.5
+    f3b = PAdmomFitter(model=BDFModel(TdByTe=1.5))
+    assert f3b.model.TdByTe == 1.5
+
+    with pytest.raises(ValueError, match='bad family'):
+        FamilyModel('gauss')
 
     with pytest.raises(ValueError, match='TdByTe'):
         PAdmomFitter(model={'type': 'bdf'})
@@ -91,12 +111,17 @@ def test_model_spec_api():
     with pytest.raises(ValueError, match="'type'"):
         PAdmomFitter(model={'TdByTe': 1.0})
 
+    with pytest.raises(ValueError, match='positive'):
+        BDFModel(TdByTe=-1.0)
+
     f4 = PAdmomFitter(model={
         'type': 'bdf', 'TdByTe': 1.0,
         'fracdev0': 0.0, 'fracdev_sigma0': 0.3,
     })
-    assert f4.fracdev_shrink == (0.0, 0.3)
-    assert f3.fracdev_shrink is None
+    assert f4.model.fracdev_shrink == (0.0, 0.3)
+    assert f3.model.fracdev_shrink is None
+    f4b = BDFModel(TdByTe=1.0, fracdev0=0.0, fracdev_sigma0=0.3)
+    assert f4b.fracdev_shrink == (0.0, 0.3)
 
     with pytest.raises(ValueError, match='shrinkage'):
         PAdmomFitter(model={
@@ -111,6 +136,48 @@ def test_model_spec_api():
             'type': 'bdf', 'TdByTe': 1.0,
             'fracdev0': 0.0, 'fracdev_sigma0': -0.1,
         })
+    with pytest.raises(ValueError, match='shrinkage'):
+        BDFModel(TdByTe=1.0, fracdev0=0.0)
+
+
+def test_model_object_reuse():
+    """
+    model instances are immutable configuration: an instance shared
+    between fitters and reused across fits gives results identical
+    to fresh instances (no per-run state lives on the model or the
+    fitter)
+    """
+    from ngmix.prepsfadmom import BDFModel
+
+    kw = dict(
+        fracdev=0.4, T=0.4, g1=0.05, g2=-0.03, flux=100.0,
+        noise_sigma=0.5, TdByTe=1.0,
+    )
+
+    model = BDFModel(TdByTe=1.0)
+    res = []
+    for seed in (5, 5, 99, 5):
+        obs = make_bdf_obs(rng=np.random.RandomState(seed), **kw)
+        fitter = PAdmomFitter(
+            model=model, rng=np.random.RandomState(3),
+        )
+        res.append(fitter.go(obs, guess=0.4))
+
+    fresh_fitter = PAdmomFitter(
+        model=BDFModel(TdByTe=1.0), rng=np.random.RandomState(3),
+    )
+    obs = make_bdf_obs(rng=np.random.RandomState(5), **kw)
+    fresh = fresh_fitter.go(obs, guess=0.4)
+
+    assert fresh['flags'] == 0
+    for r in (res[0], res[1], res[3]):
+        assert r['flags'] == 0
+        assert r['fracdev'] == fresh['fracdev']
+        assert np.array_equal(r['pars'], fresh['pars'])
+        assert np.array_equal(r['flux_err'], fresh['flux_err'])
+    # different data through the same shared instance really did
+    # run a different fit
+    assert res[2]['fracdev'] != fresh['fracdev']
 
 
 def test_bdf_shrinkage():

@@ -49,11 +49,52 @@ Model dicts:
 import numpy as np
 
 from ..gmix import GMixModel
+from ..gmix.gmix_nb import GMIX_LOW_DETVAL
+import ngmix.flags
 
 
 def det2(M):
     """determinant of a 2x2 matrix"""
     return M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]
+
+
+def deweight(M, Sigma):
+    """
+    deweight the measured moments, returning the new weight covariance
+
+    Sigma_new = (M^{-1} - Sigma^{-1})^{-1}
+    """
+    detm = det2(M)
+    if detm <= GMIX_LOW_DETVAL:
+        return Sigma, ngmix.flags.LOW_DET
+
+    detw = det2(Sigma)
+    if detw <= GMIX_LOW_DETVAL:
+        return Sigma, ngmix.flags.LOW_DET
+
+    idetm = 1.0 / detm
+    idetw = 1.0 / detw
+
+    # inverse of a 2x2 [[a, b], [b, c]] is [[c, -b], [-b, a]]/det
+    Nvv = M[1, 1] * idetm - Sigma[1, 1] * idetw
+    Nuu = M[0, 0] * idetm - Sigma[0, 0] * idetw
+    Nvu = -M[0, 1] * idetm + Sigma[0, 1] * idetw
+
+    # a positive determinant is not sufficient for a 2x2 symmetric
+    # matrix: both eigenvalues negative also gives det > 0.  That
+    # happens when the measured moments exceed the weight in both
+    # eigendirections (e.g. heavy neighbor contamination), and the
+    # inverse would be a negative definite weight
+    detn = Nvv * Nuu - Nvu * Nvu
+    if detn <= GMIX_LOW_DETVAL or Nvv <= 0 or Nuu <= 0:
+        return Sigma, ngmix.flags.LOW_DET
+
+    idetn = 1.0 / detn
+    newSigma = np.array([
+        [Nuu * idetn, -Nvu * idetn],
+        [-Nvu * idetn, Nvv * idetn],
+    ])
+    return newSigma, 0
 
 
 def inv2(M):

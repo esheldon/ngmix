@@ -24,7 +24,7 @@ fit with exp).
 """
 import numpy as np
 
-from .prepsfadmom import get_phase_angles
+from .prep import get_phase_angles
 
 __all__ = [
     'moment_kernels', 'dsums_dtheta', 'influence_kernels',
@@ -245,7 +245,7 @@ def dw_derivs(M, Sigma):
     Sigma^-1)^-1 with d(newSigma) = S(new)[S(M^-1) dM -
     S(Sigma^-1) dSigma] in the sym3 basis.  Returns (newSigma,
     DW_M, DW_S, ok)"""
-    from .prepsfadmom import deweight
+    from .models import deweight
 
     newS, flags = deweight(M, Sigma)
     if flags != 0:
@@ -311,7 +311,7 @@ def padmom_full_covariance(
 def _padmom_full_covariance(
     fitter, epochs, nband, model_state, Sigma, v0, u0, Tsmooth,
 ):
-    from .prepsfadmom import model_ksums
+    from .models import model_ksums
     from .prepsfadmom_nb import admom_ksums
 
     if model_state is None:
@@ -337,8 +337,6 @@ def _padmom_full_covariance(
     Ds = []
     facs = []
     for ep in epochs:
-        from .prepsfadmom import get_phase_angles
-
         alpha, beta = get_phase_angles(ep, v0, u0)
         s = np.zeros(6)
         admom_ksums(
@@ -533,7 +531,7 @@ def _padmom_full_covariance(
             )
 
         # health: the plain step must be undamped and accepted
-        prop, idamp, accepted = fitter._damped_step(
+        prop, idamp, accepted = fitter.model.damped_step(
             Sfam, sym3_mat(shift), newSw, Tsmooth,
         )
         if not accepted or idamp > 0:

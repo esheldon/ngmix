@@ -27,6 +27,15 @@
       differentiable in the parameters everywhere; the window costs
       about a percent in the pixel loop and removes 1.5e-5 of a round
       gaussian's flux where the cut removed 3.7e-6
+    - The pre-PSF adaptive moments fitter (PAdmomFitter,
+      run_prepsf_admom) accepts model objects that carry the
+      per-model configuration and algorithms: GaussModel, ExpModel,
+      DevModel, BDFModel and StarModel, e.g.
+      model=BDFModel(TdByTe=1.0).  Strings and the dict spec still
+      work and construct the same objects.  Model instances are
+      immutable and reusable, and the per-fit state no longer lives
+      on the fitter, so fitters and models can be shared across
+      fits.  Results are unchanged.
 
 ### New features
 
