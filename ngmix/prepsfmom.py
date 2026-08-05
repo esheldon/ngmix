@@ -471,12 +471,13 @@ def _zero_pad_image(im, target_dim):
         pad_width_after = twice_pad_width - pad_width_before
         pads.append((pad_width_before, pad_width_after))
 
-    im_padded = np.pad(
-        im,
-        pads,
-        mode='constant',
-        constant_values=0,
-    )
+    # zeros + slice assignment; np.pad does the same copy with
+    # far more per-call overhead
+    im_padded = np.zeros((target_dim,) * im.ndim, dtype=im.dtype)
+    im_padded[tuple(
+        slice(p0, p0 + dim)
+        for dim, (p0, _) in zip(im.shape, pads)
+    )] = im
 
     return im_padded, pads[0][0], pads[1][0]
 

@@ -16,8 +16,10 @@ model derivatives, and reduces exactly to flux_var_delta for a
 single gaussian family.
 """
 import numpy as np
+from numba import njit
 
-from .models import model_ksums
+from .models import model_ksums, get_profile_comps
+from .models_nb import gauss_comps_ksums
 
 __all__ = ['flux_var_delta', 'model_sandwich', 'bdf_joint_sandwich']
 
@@ -132,6 +134,91 @@ def _model_pred_mbasis(model_type, Sfam, Sigma, Tsmooth):
     return s[2:5] / s[5], np.log(s[5])
 
 
+_FAMILY_COMP_CACHE = {}
+
+
+def _family_comp_arrays(model_type):
+    """
+    the (fracs, cT) component arrays for the plain string families,
+    for the compiled sandwich derivative path; None for model spec
+    dicts (bdf), which keep the general path.  A gauss family is the
+    single component (1, 1): with cT = 1 the smoothed component
+    covariance cT * Sfam + Tsmooth/2 reproduces the gauss branch of
+    _model_pred_mbasis exactly (multiplication by 1 is exact)
+    """
+    if not isinstance(model_type, str):
+        return None
+    hit = _FAMILY_COMP_CACHE.get(model_type)
+    if hit is None:
+        if model_type == 'gauss':
+            hit = (np.ones(1), np.ones(1))
+        else:
+            comps = get_profile_comps(model_type)
+            hit = (
+                np.array([c[0] for c in comps]),
+                np.array([c[1] for c in comps]),
+            )
+        _FAMILY_COMP_CACHE[model_type] = hit
+    return hit
+
+
+@njit
+def _sandwich_preds_nb(
+    fracs, cts, fam0, h, sw00, sw01, sw11, Tsmooth, preds,
+):
+    """
+    the six perturbed model predictions of the model_sandwich
+    central differences, fused: per (axis i, sign si) the family
+    covariance from the perturbed (M1, M2, T), the smoothed
+    components, and the closed-form weighted sums.  Fills
+    preds[i, si] = (M1, M2, T ratios, S_F); the logs and the
+    difference quotients stay in the caller so the libm calls and
+    the arithmetic order match the general path exactly.  Returns 0
+    when any prediction is invalid (S_F not positive)
+    """
+    n = fracs.size
+    smooth = Tsmooth / 2
+    So00 = np.zeros(n)
+    So01 = np.zeros(n)
+    So11 = np.zeros(n)
+    dvz = np.zeros(n)
+    duz = np.zeros(n)
+    sums = np.zeros(6)
+    for i in range(3):
+        for si in range(2):
+            m1 = fam0[0]
+            m2 = fam0[1]
+            tt = fam0[2]
+            d = h if si == 0 else -h
+            if i == 0:
+                m1 = m1 + d
+            elif i == 1:
+                m2 = m2 + d
+            else:
+                tt = tt + d
+            sf00 = 0.5 * (tt - m1)
+            sf01 = 0.5 * m2
+            sf11 = 0.5 * (tt + m1)
+            for k in range(n):
+                cT = cts[k]
+                So00[k] = cT * sf00 + smooth
+                So01[k] = cT * sf01
+                So11[k] = cT * sf11 + smooth
+            for k in range(6):
+                sums[k] = 0.0
+            gauss_comps_ksums(
+                fracs, So00, So01, So11, dvz, duz,
+                sw00, sw01, sw11, 1.0, sums,
+            )
+            if not sums[5] > 0:
+                return 0
+            preds[i, si, 0] = sums[2] / sums[5]
+            preds[i, si, 1] = sums[3] / sums[5]
+            preds[i, si, 2] = sums[4] / sums[5]
+            preds[i, si, 3] = sums[5]
+    return 1
+
+
 def model_sandwich(
     model_type, Sfam, Sigma, Tsmooth, sums, cov, fsums, fvars, fmcovs,
 ):
@@ -203,21 +290,40 @@ def model_sandwich(
 
     B = np.zeros((3, 3))
     dlnu = np.zeros(3)
-    for i in range(3):
-        famp = fam0.copy()
-        famm = fam0.copy()
-        famp[i] += h
-        famm[i] -= h
-        rp, lp = _model_pred_mbasis(
-            model_type, _mbasis_cov(*famp), Sigma, Tsmooth,
+    comp_arrays = _family_comp_arrays(model_type)
+    if comp_arrays is not None:
+        # plain string family: the fused compiled evaluation of the
+        # six perturbed predictions (identical arithmetic)
+        fracs, cts = comp_arrays
+        preds = np.zeros((3, 2, 4))
+        ok = _sandwich_preds_nb(
+            fracs, cts, fam0, h,
+            Sigma[0, 0], Sigma[0, 1], Sigma[1, 1], Tsmooth, preds,
         )
-        rm, lm = _model_pred_mbasis(
-            model_type, _mbasis_cov(*famm), Sigma, Tsmooth,
-        )
-        if rp is None or rm is None:
+        if not ok:
             return None, None, None
-        B[:, i] = (rp - rm) / (2 * h)
-        dlnu[i] = (lp - lm) / (2 * h)
+        for i in range(3):
+            B[:, i] = (preds[i, 0, :3] - preds[i, 1, :3]) / (2 * h)
+            dlnu[i] = (
+                np.log(preds[i, 0, 3]) - np.log(preds[i, 1, 3])
+            ) / (2 * h)
+    else:
+        # model spec dict (bdf): the general path
+        for i in range(3):
+            famp = fam0.copy()
+            famm = fam0.copy()
+            famp[i] += h
+            famm[i] -= h
+            rp, lp = _model_pred_mbasis(
+                model_type, _mbasis_cov(*famp), Sigma, Tsmooth,
+            )
+            rm, lm = _model_pred_mbasis(
+                model_type, _mbasis_cov(*famm), Sigma, Tsmooth,
+            )
+            if rp is None or rm is None:
+                return None, None, None
+            B[:, i] = (rp - rm) / (2 * h)
+            dlnu[i] = (lp - lm) / (2 * h)
 
     # the noise fluctuation of the measured ratios,
     # dM = (dS_M - mvec dS_F) / S_F, in terms of the raw sums
