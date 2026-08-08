@@ -107,6 +107,99 @@ def choose_fwhm_smooth(
     return smooth_fac * T_to_fwhm(Tmax)
 
 
+def _pad_center(shape, cen_row, cen_col, target_dim):
+    """the center location in the zero-padded frame (the pads of
+    prepsfmom._zero_pad_image, without building the padded image)"""
+    pad_row_before = (target_dim - shape[0]) // 2
+    pad_col_before = (target_dim - shape[1]) // 2
+    return cen_row + pad_row_before, cen_col + pad_col_before
+
+
+def prep_epoch_scalars(
+    obs, band=0, fwhm_smooth=0.0, pad_factor=4, no_psf=False,
+):
+    """
+    the scalar half of prep_epoch, computable without any FFTs:
+    dims, pad phase centers, weights and jacobian factors.  Used
+    by prep_epoch itself and by device-prep paths that compute
+    the k arrays elsewhere and only need the epoch scalars on the
+    host (the array entries of the returned epoch are None).
+
+    Returns
+    -------
+    epoch, aux
+        epoch is the prep_epoch dict with kim/iy/ix/kv/ku/
+        err_fac2/fold/ktransfer set to None; aux carries the
+        intermediates the array computation needs (Tsmooth,
+        psf_obs, target_dim, tot_var, eff_pad_factor).
+    """
+    Tsmooth = fwhm_to_T(fwhm_smooth) if fwhm_smooth > 0 else 0.0
+
+    psf_obs = _check_obs_and_get_psf_obs(obs, no_psf)
+
+    wmsk = obs.weight > 0
+    if not np.any(wmsk):
+        raise ValueError('no positive weight pixels in observation')
+    tot_var = np.sum(1.0 / obs.weight[wmsk])
+
+    if psf_obs is not None:
+        max_dim = max(obs.image.shape + psf_obs.image.shape)
+    else:
+        max_dim = max(obs.image.shape)
+    target_dim = int(max_dim * pad_factor)
+    eff_pad_factor = target_dim / np.sqrt(
+        obs.image.shape[0] * obs.image.shape[1]
+    )
+    dim = target_dim
+
+    im_row, im_col = _pad_center(
+        obs.image.shape, obs.jacobian.row0, obs.jacobian.col0,
+        target_dim,
+    )
+    if psf_obs is not None:
+        psf_row, psf_col = _pad_center(
+            psf_obs.image.shape,
+            psf_obs.jacobian.row0, psf_obs.jacobian.col0,
+            target_dim,
+        )
+    else:
+        psf_row = 0.0
+        psf_col = 0.0
+
+    jac = obs.jacobian
+    Atinv = np.linalg.inv(
+        [[jac.dvdrow, jac.dvdcol], [jac.dudrow, jac.dudcol]]
+    ).T
+    detAtinv = np.abs(np.linalg.det(Atinv))
+
+    epoch = {
+        'band': band,
+        'kim': None,
+        'iy': None,
+        'ix': None,
+        'dim': dim,
+        'kv': None,
+        'ku': None,
+        'Atinv': Atinv,
+        'drow': im_row - psf_row,
+        'dcol': im_col - psf_col,
+        'detAtinv': detAtinv,
+        'df2': 1.0 / dim ** 2,
+        'err_fac2': None,
+        'fold': None,
+        'ktransfer': None,
+        'weight': 1.0 / (tot_var * eff_pad_factor ** 2),
+    }
+    aux = {
+        'Tsmooth': Tsmooth,
+        'psf_obs': psf_obs,
+        'target_dim': target_dim,
+        'tot_var': tot_var,
+        'eff_pad_factor': eff_pad_factor,
+    }
+    return epoch, aux
+
+
 def prep_epoch(
     obs, band=0, fwhm_smooth=0.0, pad_factor=4, ap_rad=1.5,
     use_noise_image=False, no_psf=False, store_transfer=False,
@@ -182,25 +275,20 @@ def prep_epoch(
     Callers may attach additional entries; the fitting machinery
     reads only the ones above.
     """
-    Tsmooth = fwhm_to_T(fwhm_smooth) if fwhm_smooth > 0 else 0.0
-
-    psf_obs = _check_obs_and_get_psf_obs(obs, no_psf)
-
-    wmsk = obs.weight > 0
-    if not np.any(wmsk):
-        raise ValueError('no positive weight pixels in observation')
-    tot_var = np.sum(1.0 / obs.weight[wmsk])
-
-    if psf_obs is not None:
-        max_dim = max(obs.image.shape + psf_obs.image.shape)
-    else:
-        max_dim = max(obs.image.shape)
-    target_dim = int(max_dim * pad_factor)
+    # the scalar half (dims, pad centers, weights) is shared with
+    # the device-prep path; the array computations below fill in
+    # the rest
+    epoch, aux = prep_epoch_scalars(
+        obs, band=band, fwhm_smooth=fwhm_smooth,
+        pad_factor=pad_factor, no_psf=no_psf,
+    )
+    Tsmooth = aux['Tsmooth']
+    psf_obs = aux['psf_obs']
+    target_dim = aux['target_dim']
+    tot_var = aux['tot_var']
     # the square of this is the ratio of padded to unpadded pixel
     # counts, used to scale the noise
-    eff_pad_factor = target_dim / np.sqrt(
-        obs.image.shape[0] * obs.image.shape[1]
-    )
+    eff_pad_factor = aux['eff_pad_factor']
 
     # the image is real, so we work with the rfft half plane;
     # conjugate modes are folded in with the symmetry weights
