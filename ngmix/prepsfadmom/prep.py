@@ -235,7 +235,10 @@ def prep_epoch(
         retained modes ('ktransfer'), needed by the full_errors
         influence-kernel machinery; costs ~25 percent of the prep
         time and one complex array per epoch, so it is opt-in.
-        Requires ap_rad=0 (ktransfer is None otherwise).
+        With apodization the stored transfer maps the *masked*
+        image to kim; the influence-kernel consumer applies the
+        apodization mask in pixel space (see
+        full_errors.influence_kernels), where it is diagonal.
         Default False.
 
     Returns
@@ -361,10 +364,12 @@ def prep_epoch(
     # the linear image->kim transfer at the retained modes: the
     # coefficient of image pixel (0, 0), with other pixels
     # differing by the mode phases.  Used by the influence-kernel
-    # error propagation (full_errors).  Only exact without
-    # apodization, where the map is diagonal in k up to the
-    # placement phase
-    if ap_rad > 0 or not store_transfer:
+    # error propagation (full_errors).  With apodization this is
+    # the transfer of the *masked* image; the image->kim map
+    # factorizes as ktransfer(k) e^{-ik.x} m(x), so the consumer
+    # applies the mask in pixel space, where it is diagonal
+    # (influence_kernels reads the 'ap_rad' entry below)
+    if not store_transfer:
         ktransfer = None
     else:
         f1d = fft.fftfreq(dim) * (2.0 * np.pi)
@@ -395,6 +400,9 @@ def prep_epoch(
         'err_fac2': err_fac2,
         'fold': grids['fold'],
         'ktransfer': ktransfer,
+        # the stamp apodization radius, needed by the
+        # influence-kernel consumer to apply the pixel-space mask
+        'ap_rad': ap_rad,
         # the relative epoch weights always come from the weight
         # maps, even when the noise power comes from a noise image
         'weight': 1.0 / (tot_var * eff_pad_factor ** 2),

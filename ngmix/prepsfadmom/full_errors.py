@@ -7,8 +7,11 @@ with closed-form kernels (the admom_ksums accumulators), so their
 exact covariance under the pixel noise follows from real-space
 influence kernels: each sum's kernel is assembled on the k grid,
 carried to the image plane through the stored image->kim transfer
-(epoch['ktransfer'], exact for the unapodized prep) and
-contracted with the per-pixel variance from the weight map.  The
+(epoch['ktransfer']) and contracted with the per-pixel variance
+from the weight map.  Apodization enters exactly: the masked
+prep's image->kim map factorizes as ktransfer(k) e^{-ik.x} m(x),
+so influence_kernels applies the mask in pixel space, where it
+is diagonal.  The
 kernel derivatives with respect to the weight covariance and
 center are also closed form, allowing the data sums to be
 linearized about a solution so that fixed-point Jacobians never
@@ -151,34 +154,51 @@ def influence_kernels(epoch, G, shape, reference=False):
     of the given shape, via the epoch's stored image->kim
     transfer.  The half-plane mode set is Hermitian-completed and
     inverted with irfft2; reference=True uses the brute full-grid
-    fft2 construction instead (for validation)
+    fft2 construction instead (for validation).
+
+    With an apodized prep (epoch['ap_rad'] > 0) the stored
+    transfer maps the masked image to kim, so the image->kim map
+    factorizes as ktransfer(k) e^{-ik.x} m(x): the apodization
+    mask is diagonal in pixel space and is applied here, making
+    the kernels exact under apodization
 
     Parameters
     ----------
     epoch: dict
-        A prep_epoch dict with ktransfer set (unapodized prep)
+        A prep_epoch dict with ktransfer set
+        (store_transfer=True)
     G: (nk, nmodes) complex array
         Stacked kernels, e.g. from moment_kernels
     shape: (ny, nx)
-        The image shape to restrict to
+        The image shape to restrict to; must be the shape the
+        prep apodized (the observation's image shape)
     """
     if epoch.get('ktransfer') is None:
         raise ValueError(
             'epoch has no ktransfer: influence kernels require '
-            'the unapodized (ap_rad=0) prep with '
-            'store_transfer=True'
+            'a prep with store_transfer=True'
         )
     dim = epoch['dim']
     iy, ix = epoch['iy'], epoch['ix']
     ny, nx = shape
     A = G * epoch['ktransfer']
 
+    ap_rad = float(epoch.get('ap_rad', 0.0))
+    if ap_rad > 0:
+        from ..prepsfmom import _build_square_apodization_mask
+
+        mask = np.ones(shape)
+        _build_square_apodization_mask(ap_rad, mask)
+    else:
+        mask = None
+
     if reference:
         full = np.zeros(
             (G.shape[0], dim, dim), dtype=complex,
         )
         full[:, iy, ix] = A
-        return np.fft.fft2(full, axes=(-2, -1)).real[:, :ny, :nx]
+        h = np.fft.fft2(full, axes=(-2, -1)).real[:, :ny, :nx]
+        return h * mask if mask is not None else h
 
     # Re[fft2(A)] = fft2(C) with the Hermitian completion
     # C(k) = (A(k) + conj(A(-k))) / 2; on the rfft half plane the
@@ -197,7 +217,8 @@ def influence_kernels(epoch, G, shape, reference=False):
     h = np.fft.irfft2(
         np.conj(C), s=(dim, dim), axes=(-2, -1),
     ) * dim ** 2
-    return h[:, :ny, :nx]
+    h = h[:, :ny, :nx]
+    return h * mask if mask is not None else h
 
 
 def sums_cov(hs, weight):

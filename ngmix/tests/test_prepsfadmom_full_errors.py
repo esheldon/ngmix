@@ -81,6 +81,95 @@ def test_full_errors_ktransfer_impulse():
     )
 
 
+def test_full_errors_influence_fd_apodized():
+    """with an apodized prep the influence kernels equal the
+    exact response of the sums to single-pixel perturbations:
+    the sums are linear in the image, so the finite difference
+    is exact and the comparison is tight.  Covers interior
+    pixels, taper-band pixels and the corner"""
+    from ngmix.prepsfadmom.prep import prep_epoch
+
+    rng = np.random.RandomState(31)
+    obs = _make_obs(rng)
+    ap_rad = 2.0
+    ep = prep_epoch(
+        obs, band=0, fwhm_smooth=FWHM_SMOOTH, ap_rad=ap_rad,
+        store_transfer=True,
+    )
+    assert ep['ktransfer'] is not None
+    assert ep['ap_rad'] == ap_rad
+
+    Sw = np.array([[0.5, 0.05], [0.05, 0.6]])
+    v0, u0 = 0.13, -0.21
+    G = moment_kernels(ep, Sw, v0, u0)
+    h = influence_kernels(ep, G, obs.image.shape)
+
+    s0 = (G @ ep['kim']).real
+    # interior, taper band, deep taper, corner
+    for (py, px) in ((24, 22), (8, 24), (3, 24), (1, 1)):
+        pobs = obs.copy()
+        with pobs.writeable():
+            pobs.image[py, px] += 1.0
+        pep = prep_epoch(
+            pobs, band=0, fwhm_smooth=FWHM_SMOOTH,
+            ap_rad=ap_rad, store_transfer=False,
+        )
+        ds = (G @ pep['kim']).real - s0
+        assert np.allclose(
+            ds, h[:, py, px], rtol=1e-8, atol=1e-13,
+        ), (py, px)
+
+
+def test_full_errors_sums_cov_empirical_apodized():
+    """the masked influence-kernel covariance matches the
+    empirical covariance of the sums over noise draws through
+    the apodized prep, where the unmasked kernels overpredict.
+    The strong taper and the off-center kernel put weight in the
+    m < 1 band so the comparison discriminates"""
+    from ngmix.prepsfadmom.prep import prep_epoch
+
+    rng = np.random.RandomState(37)
+    obs = _make_obs(rng)
+    ap_rad = 3.0
+    ep = prep_epoch(
+        obs, band=0, fwhm_smooth=FWHM_SMOOTH, ap_rad=ap_rad,
+        store_transfer=True,
+    )
+    Sw = np.array([[0.5, 0.05], [0.05, 0.6]])
+    # kernel center 10 px toward the stamp edge, in the taper
+    v0, u0 = 2.0, 0.0
+    G = moment_kernels(ep, Sw, v0, u0)
+
+    h = influence_kernels(ep, G, obs.image.shape)
+    cov = sums_cov(h, obs.weight)
+
+    # the unmasked kernels, for the discrimination assert
+    ep_um = dict(ep)
+    ep_um['ap_rad'] = 0.0
+    h_um = influence_kernels(ep_um, G, obs.image.shape)
+    cov_um = sums_cov(h_um, obs.weight)
+
+    draws = []
+    for _ in range(4000):
+        nobs = ngmix.Observation(
+            rng.normal(scale=3.0, size=obs.image.shape),
+            weight=obs.weight.copy(),
+            jacobian=obs.jacobian.copy(),
+            psf=obs.psf.copy(),
+        )
+        nep = prep_epoch(
+            nobs, band=0, fwhm_smooth=FWHM_SMOOTH,
+            ap_rad=ap_rad,
+        )
+        draws.append(nep['kim'])
+    S = (np.array(draws) @ G.T).real
+    covE = np.cov(S.T)
+    dd = np.sqrt(np.diag(cov) / np.diag(covE))
+    assert np.all(np.abs(dd - 1) < 0.08)
+    dd_um = np.sqrt(np.diag(cov_um) / np.diag(covE))
+    assert dd_um.max() > 1.2
+
+
 def test_full_errors_kernels_vs_admom_ksums():
     """the closed-form kernels reproduce admom_ksums to the
     accuracy of its table exponential"""
@@ -224,15 +313,15 @@ def _make_gal_obs(rng, profile, noise=3.0):
 
 
 def test_padmom_full_errors_validation():
-    """full_errors requires exp/dev and ap_rad=0"""
+    """full_errors requires gauss/exp/dev; apodization is
+    supported (the mask enters the influence kernels)"""
     import pytest
     from ngmix.prepsfadmom import PAdmomFitter
 
     with pytest.raises(ValueError):
         PAdmomFitter(model='star', full_errors=True, ap_rad=0)
-    with pytest.raises(ValueError):
-        PAdmomFitter(model='exp', full_errors=True, ap_rad=1.5)
     PAdmomFitter(model='exp', full_errors=True, ap_rad=0)
+    PAdmomFitter(model='exp', full_errors=True, ap_rad=1.5)
     PAdmomFitter(model='gauss', full_errors=True, ap_rad=0)
 
 
@@ -291,6 +380,37 @@ def test_padmom_full_errors_mismatch_mc():
     rT = T0.std() / np.sqrt(np.mean(Tf0 ** 2))
     rF = F0.std() / np.sqrt(np.mean(Ff0 ** 2))
     # the sandwich reads ~1.17 (T) and ~1.11 (flux) here
+    assert 0.8 < rT < 1.15
+    assert 0.85 < rF < 1.15
+
+
+def test_padmom_full_errors_apodized_mc():
+    """the production apodization (ap_rad=1.5) with full
+    errors: dev truth fit with exp stays calibrated"""
+    from ngmix.prepsfadmom import PAdmomFitter
+
+    ntrial = 200
+    rng = np.random.RandomState(41)
+    T0, Tf0, F0, Ff0 = [], [], [], []
+    for k in range(ntrial):
+        obs = _make_gal_obs(rng, 'dev')
+        f1 = PAdmomFitter(
+            model='exp', ap_rad=1.5, full_errors=True,
+            rng=np.random.RandomState(k),
+        )
+        res = f1.go(obs, guess=0.5)
+        if res['flags'] != 0 or res['T_flags'] != 0:
+            continue
+        T0.append(res['T'])
+        Tf0.append(res['T_err'])
+        F0.append(res['flux'])
+        Ff0.append(res['flux_err'])
+    T0, Tf0 = np.array(T0), np.array(Tf0)
+    F0, Ff0 = np.array(F0), np.array(Ff0)
+    assert len(T0) > 0.9 * ntrial
+
+    rT = T0.std() / np.sqrt(np.mean(Tf0 ** 2))
+    rF = F0.std() / np.sqrt(np.mean(Ff0 ** 2))
     assert 0.8 < rT < 1.15
     assert 0.85 < rF < 1.15
 

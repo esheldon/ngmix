@@ -475,12 +475,6 @@ class PAdmomFitter(object):
                     'full_errors supports the gauss, exp and '
                     f'dev models, got {self.model!r}'
                 )
-            if ap_rad != 0:
-                raise ValueError(
-                    'full_errors requires ap_rad=0: the '
-                    'influence-kernel transfer assumes no '
-                    'apodization'
-                )
         self.fwhm_smooth = fwhm_smooth
         self.smooth_fac = smooth_fac
         self.pad_factor = pad_factor
