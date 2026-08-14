@@ -5,7 +5,9 @@ from .. import gmix
 from ..gexceptions import GMixRangeError
 from ..defaults import PDEF, CDEF, LOWVAL, BIGVAL, copy_if_needed
 from ..observation import Observation, ObsList, get_mb_obs
-from ..gmix.gmix_nb import gmix_convolve_fill, fill_fdiff
+from ..gmix.gmix_nb import (
+    gmix_convolve_fill, fill_fdiff_status, GMIX_STATUS_MESSAGES,
+)
 from ..gmix import GMixList, MultiBandGMixList
 from ..flags import ZERO_DOF, DIV_ZERO, BAD_VAR
 
@@ -454,9 +456,16 @@ class FitModel(dict):
             start = self._fill_priors(pars=pars, fdiff=fdiff)
 
             for pixels, gm in zip(self._pixels_list, self._gmix_data_list):
-                fill_fdiff(
+                # status form: the numba runtime leaks per raise,
+                # and this call rejects invalid parameters at
+                # high rate on hard data (norms not settable)
+                status = fill_fdiff_status(
                     gm, pixels, fdiff, start,
                 )
+                if status != 0:
+                    raise GMixRangeError(
+                        GMIX_STATUS_MESSAGES[status]
+                    )
 
                 start += pixels.size
 

@@ -15,6 +15,7 @@ __all__ = [
 ]
 import numpy as np
 from ..jacobian import Jacobian, UnitJacobian
+from ..gexceptions import GMixRangeError
 from ..shape import Shape, e1e2_to_g1g2
 from .. import shape
 from .. import moments
@@ -22,6 +23,8 @@ from .. import moments
 from ..gmix import gmix_nb
 from ..gmix.gmix_nb import (
     _gmix_fill_functions,
+    _gmix_fill_functions_status,
+    GMIX_STATUS_MESSAGES,
     gmix_set_norms,
     gmix_convolve_fill,
     get_cm_Tfactor,
@@ -440,9 +443,19 @@ class GMix(object):
         self._pars[:] = pars
 
         gm = self.get_data()
-        self._fill_func(
-            gm, self._pars,
-        )
+        if self._fill_func_status is not None:
+            # the numba runtime leaks a small allocation on every
+            # exception raised from compiled code, and fitters
+            # reject invalid parameters through here at high rate
+            # on hard data: use the status fill and raise from
+            # python (see gmix_nb.GMIX_STATUS_MESSAGES)
+            status = self._fill_func_status(gm, self._pars)
+            if status != 0:
+                raise GMixRangeError(GMIX_STATUS_MESSAGES[status])
+        else:
+            self._fill_func(
+                gm, self._pars,
+            )
 
     def copy(self):
         """
@@ -908,6 +921,11 @@ class GMix(object):
             raise ValueError("bad model: '%s'" % self._model_name)
 
         self._fill_func = _gmix_fill_functions[self._model_name]
+        # the non-raising fill for the hot fitting loops; None
+        # for models without one (the raising fill is used)
+        self._fill_func_status = _gmix_fill_functions_status.get(
+            self._model_name
+        )
 
     def __len__(self):
         return self._ngauss
