@@ -22,8 +22,8 @@ from .models import model_ksums, get_profile_comps
 from .models_nb import gauss_comps_ksums
 
 __all__ = [
-    'flux_var_delta', 'model_sandwich', 'bdf_joint_sandwich',
-    'joint_flux_s2n',
+    'flux_var_delta', 'flux_cov_delta', 'model_sandwich',
+    'bdf_joint_sandwich', 'joint_flux_s2n',
 ]
 
 
@@ -107,6 +107,35 @@ def flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
     The variance of the per band flux sums including the weight
     response; scale by the same normalization as the raw flux sums.
     """
+    return np.diag(flux_cov_delta(
+        Sigma, sums, cov, fsums, fvars, fmcovs,
+    )).copy()
+
+
+def flux_cov_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
+    """
+    full cross-band covariance of the raw per band flux sums,
+    including the first order response of the adaptive weight to
+    the noise (the delta method); the diagonal is flux_var_delta.
+
+    The fluctuation dF_b is proportional to
+    dS_Fb - r_b dS_F + r_b b . dS_M (see flux_var_delta): the
+    joint flux and moment sum responses are shared by all bands,
+    and only the band's own flux sum dS_Fb is band-specific, so
+    the cross-band covariance assembles in closed form from the
+    same scalars as the variances -- the outer products of the
+    band shares with the shared response, plus each band's own
+    cross terms.  No inversions beyond the 2x2 weight
+
+    Parameters
+    ----------
+    As for flux_var_delta
+
+    Returns
+    -------
+    (nband, nband) covariance of the raw per band flux sums;
+    scale by the same normalization as the raw flux sums
+    """
     Winv = np.linalg.inv(Sigma)
     # tr(Winv dS_M) = b . dS in the (M1, M2, T) sums basis
     b = np.array([
@@ -123,11 +152,16 @@ def flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
     # r = S_Fb / S_F the band share of the joint flux sum
     r = fsums / sums[5]
     bcb = b @ cmm @ b
-    return (
-        fvars
-        + r ** 2 * (cff + bcb - 2 * (b @ cmf))
-        + 2 * r * (fmcovs @ b - fvars)
-    )
+    s = cff + bcb - 2 * (b @ cmf)
+    g = fmcovs @ b - fvars
+
+    fcov = np.outer(r, r) * s + np.outer(r, g) + np.outer(g, r)
+    # the diagonal via the original variance expression, keeping
+    # the per-band variances bitwise identical to flux_var_delta
+    # as it stood before the cross-band assembly
+    idx = np.arange(fsums.size)
+    fcov[idx, idx] = fvars + r ** 2 * s + 2 * r * g
+    return fcov
 
 
 def _mbasis_cov(M1, M2, T):

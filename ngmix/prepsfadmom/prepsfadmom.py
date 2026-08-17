@@ -47,7 +47,7 @@ from .models import (
     get_profile_comps,
 )
 from .errors import (
-    flux_var_delta, model_sandwich, bdf_joint_sandwich,
+    flux_cov_delta, model_sandwich, bdf_joint_sandwich,
     joint_flux_s2n, _mbasis_cov,
 )
 from .prep import choose_fwhm_smooth, prep_epoch, DEFAULT_SMOOTH_FAC
@@ -1809,13 +1809,16 @@ class PAdmomFitter(object):
         fam_cov = None
         if model_state is None:
             fluxes = 2 * knrm * fsums / wsums
-            flux_vars = (2 * knrm / wsums) ** 2 * flux_var_delta(
+            # the analytic delta method, with the cross-band
+            # covariance from the shared weight response assembled
+            # in closed form; the diagonal is the flux_var_delta
+            # variances unchanged
+            fcov_raw = flux_cov_delta(
                 Sigma, sums, cov, fsums, fvars, fmcovs,
             )
-            # the cross-band covariance is only assembled on the
-            # model paths (model_sandwich); the plain gauss delta
-            # path reports per-band variances only
-            flux_cov = None
+            uband = 2 * knrm / wsums
+            flux_vars = uband ** 2 * np.diag(fcov_raw)
+            flux_cov = fcov_raw * np.outer(uband, uband)
         else:
             upred = np.zeros(nband)
             for epoch in epochs:

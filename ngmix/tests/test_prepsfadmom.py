@@ -660,12 +660,11 @@ def test_prepsfadmom_covariance_aware_s2n():
     """
     the total flux s/n is the joint (Wald) value wherever the
     cross-band flux covariance is available: on the model paths
-    s2n satisfies sqrt(F^T C^-1 F) with the reported flux_cov and
-    sits below the independent-band quadrature sum (positive
-    shared-response correlation).  The plain gauss delta path
-    assembles no cross-band covariance and keeps the quadrature
-    value; the star path's covariance is exactly diagonal so the
-    joint value equals the quadrature one
+    and the plain gauss delta path s2n satisfies
+    sqrt(F^T C^-1 F) with the reported flux_cov and sits below
+    the independent-band quadrature sum (positive shared-response
+    correlation).  The star path's covariance is exactly diagonal
+    so the joint value equals the quadrature one
     """
     rng = np.random.RandomState(1234)
     gs_wcs = galsim.PixelScale(0.25).jacobian()
@@ -691,22 +690,21 @@ def test_prepsfadmom_covariance_aware_s2n():
     def quad_of(res):
         return np.sqrt(np.sum((res['flux'] / res['flux_err']) ** 2))
 
-    for kw in ({'model': 'exp'}, {'model': 'exp', 'full_errors': True}):
+    for kw in (
+        {'model': 'exp'},
+        {'model': 'exp', 'full_errors': True},
+        {'model': 'gauss'},
+    ):
         fitter = PAdmomFitter(rng=np.random.RandomState(5), **kw)
         res = fitter.go(mbobs, guess=0.6)
         assert res['flags'] == 0
         C = res['flux_cov']
         assert C[0, 1] > 0
+        assert np.allclose(np.diag(C), res['flux_err'] ** 2)
         F = res['flux']
         expected = np.sqrt(F @ np.linalg.solve(C, F))
         assert np.allclose(res['s2n'], expected)
         assert res['s2n'] < quad_of(res)
-
-    fitter = PAdmomFitter(model='gauss', rng=np.random.RandomState(5))
-    res = fitter.go(mbobs, guess=0.6)
-    assert res['flags'] == 0
-    assert res.get('flux_cov') is None
-    assert np.allclose(res['s2n'], quad_of(res))
 
     fitter = PAdmomFitter(model='star', rng=np.random.RandomState(5))
     res = fitter.go(mbobs, guess=0.6)
@@ -1063,11 +1061,12 @@ def test_prepsfadmom_e_cov(model):
 def test_prepsfadmommodel_sandwich_gauss_anchor():
     """
     the model sandwich evaluated for a single gaussian family reduces
-    exactly to the analytic gauss delta method, for arbitrary inputs,
-    and the family response is dSfam = 4 dM
+    exactly to the analytic gauss delta method, for arbitrary inputs
+    -- the full cross-band covariance included -- and the family
+    response is dSfam = 4 dM
     """
     from ngmix.prepsfadmom.errors import (
-        flux_var_delta, model_sandwich,
+        flux_var_delta, flux_cov_delta, model_sandwich,
     )
 
     rng = np.random.RandomState(9)
@@ -1085,11 +1084,19 @@ def test_prepsfadmommodel_sandwich_gauss_anchor():
     fmcovs = rng.normal(size=(2, 3)) * 0.1
 
     raw_delta = flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs)
+    fcov_delta = flux_cov_delta(
+        Sigma, sums, cov, fsums, fvars, fmcovs,
+    )
     raw_sw, fam_cov, fcov_raw = model_sandwich(
         'gauss', Sfam, Sigma, Tsmooth, sums, cov, fsums, fvars, fmcovs,
     )
     assert np.allclose(np.diag(fcov_raw), raw_sw, rtol=0, atol=0)
     assert np.allclose(raw_sw, raw_delta, rtol=1.0e-5, atol=0)
+    # the closed-form cross-band assembly agrees with the sandwich
+    # off the diagonal too, and its diagonal is flux_var_delta
+    # bitwise
+    assert np.all(np.diag(fcov_delta) == raw_delta)
+    assert np.allclose(fcov_delta, fcov_raw, rtol=1.0e-5, atol=0)
 
     # B = 1/4 for the single gaussian family, so the family
     # covariance is 16 times the measured ratio covariance
