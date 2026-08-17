@@ -656,6 +656,64 @@ def test_prepsfadmom_noise_multiband():
         assert np.abs(ratio - 1) < 0.15
 
 
+def test_prepsfadmom_covariance_aware_s2n():
+    """
+    the total flux s/n is the joint (Wald) value wherever the
+    cross-band flux covariance is available: on the model paths
+    s2n satisfies sqrt(F^T C^-1 F) with the reported flux_cov and
+    sits below the independent-band quadrature sum (positive
+    shared-response correlation).  The plain gauss delta path
+    assembles no cross-band covariance and keeps the quadrature
+    value; the star path's covariance is exactly diagonal so the
+    joint value equals the quadrature one
+    """
+    rng = np.random.RandomState(1234)
+    gs_wcs = galsim.PixelScale(0.25).jacobian()
+
+    e1_true, e2_true, T_true = 0.2, -0.1, 0.6
+    band_fluxes = [3.5, 5.5]
+    psf_fwhms = [0.9, 0.8]
+
+    noises = []
+    for flux, pf, s2n in zip(band_fluxes, psf_fwhms, [15.0, 25.0]):
+        obs0 = _make_obs(e1_true, e2_true, T_true, flux, pf, gs_wcs)
+        noises.append(np.sqrt(np.sum(obs0.image ** 2)) / s2n)
+
+    mbobs = MultiBandObsList()
+    for flux, pf, noise in zip(band_fluxes, psf_fwhms, noises):
+        obslist = ObsList()
+        obslist.append(_make_obs(
+            e1_true, e2_true, T_true, flux, pf, gs_wcs,
+            noise=noise, rng=rng,
+        ))
+        mbobs.append(obslist)
+
+    def quad_of(res):
+        return np.sqrt(np.sum((res['flux'] / res['flux_err']) ** 2))
+
+    for kw in ({'model': 'exp'}, {'model': 'exp', 'full_errors': True}):
+        fitter = PAdmomFitter(rng=np.random.RandomState(5), **kw)
+        res = fitter.go(mbobs, guess=0.6)
+        assert res['flags'] == 0
+        C = res['flux_cov']
+        assert C[0, 1] > 0
+        F = res['flux']
+        expected = np.sqrt(F @ np.linalg.solve(C, F))
+        assert np.allclose(res['s2n'], expected)
+        assert res['s2n'] < quad_of(res)
+
+    fitter = PAdmomFitter(model='gauss', rng=np.random.RandomState(5))
+    res = fitter.go(mbobs, guess=0.6)
+    assert res['flags'] == 0
+    assert res.get('flux_cov') is None
+    assert np.allclose(res['s2n'], quad_of(res))
+
+    fitter = PAdmomFitter(model='star', rng=np.random.RandomState(5))
+    res = fitter.go(mbobs, guess=0.6)
+    assert res['flags'] == 0
+    assert np.allclose(res['s2n'], quad_of(res))
+
+
 def _make_exp_mix_obs(
     e1, e2, T, flux, psf_fwhm, gs_wcs, dim=48,
     offset_pix=(0.0, 0.0), noise=1.0e-9, rng=None, model='exp',

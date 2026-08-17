@@ -48,7 +48,7 @@ from .models import (
 )
 from .errors import (
     flux_var_delta, model_sandwich, bdf_joint_sandwich,
-    _mbasis_cov,
+    joint_flux_s2n, _mbasis_cov,
 )
 from .prep import choose_fwhm_smooth, prep_epoch, DEFAULT_SMOOTH_FAC
 import ngmix.flags
@@ -301,7 +301,12 @@ class PAdmomResult(dict):
         is an array if the input was a MultiBandObsList, otherwise a
         scalar.  Errors are in flux_err.
     s2n: float
-        The flux s/n, combined over bands in quadrature.
+        The total flux s/n.  Where the cross-band flux covariance
+        is available (flux_cov) this is the covariance-aware
+        joint value sqrt(F^T C^-1 F), pricing the cross-band
+        correlations from the shared structure response;
+        otherwise the independent-band quadrature sum, which is
+        exact on the diagonal paths (e.g. stars).
     fwhm_smooth: float
         The smoothing fwhm that was used
     pars: array
@@ -1436,9 +1441,18 @@ class PAdmomFitter(object):
                 res['flux_cov'] = flux_cov
             if np.all(flux_vars > 0):
                 res['flux_err'] = np.sqrt(flux_vars)
-                res['s2n'] = np.sqrt(
-                    np.sum((res['flux'] / res['flux_err']) ** 2)
-                )
+                # covariance-aware total s/n where the cross-band
+                # covariance exists; the quadrature sum is the
+                # fallback (and is exact on the diagonal paths,
+                # e.g. stars)
+                s2n = None
+                if flux_cov is not None:
+                    s2n = joint_flux_s2n(fluxes, flux_cov)
+                if s2n is None:
+                    s2n = np.sqrt(
+                        np.sum((res['flux'] / res['flux_err']) ** 2)
+                    )
+                res['s2n'] = s2n
             else:
                 res['flux_flags'] |= ngmix.flags.NONPOS_VAR
 

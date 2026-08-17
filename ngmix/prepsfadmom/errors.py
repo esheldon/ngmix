@@ -21,7 +21,43 @@ from numba import njit
 from .models import model_ksums, get_profile_comps
 from .models_nb import gauss_comps_ksums
 
-__all__ = ['flux_var_delta', 'model_sandwich', 'bdf_joint_sandwich']
+__all__ = [
+    'flux_var_delta', 'model_sandwich', 'bdf_joint_sandwich',
+    'joint_flux_s2n',
+]
+
+
+def joint_flux_s2n(F, fcov):
+    """
+    the covariance-aware total flux s/n sqrt(F^T C^-1 F) from the
+    fluxes and their cross-band covariance (the Wald significance
+    of the flux vector).  The statistic is invariant to per-band
+    rescaling, so raw flux sums with the raw covariance equal
+    physical fluxes with the physical covariance.  Returns None
+    when the covariance is not positive definite or the form is
+    not finite; the caller falls back to the independent-band
+    quadrature sum
+
+    Parameters
+    ----------
+    F: (nband,) array
+        The fluxes (or raw flux sums)
+    fcov: (nband, nband) array
+        Their covariance, in matching units
+
+    Returns
+    -------
+    float or None
+    """
+    try:
+        L = np.linalg.cholesky(fcov)
+    except np.linalg.LinAlgError:
+        return None
+    z = np.linalg.solve(L, F)
+    q = z @ z
+    if not np.isfinite(q):
+        return None
+    return np.sqrt(q)
 
 
 def flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs):

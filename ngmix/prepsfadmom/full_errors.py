@@ -28,6 +28,7 @@ fit with exp).
 import numpy as np
 
 from .prepsfadmom import get_phase_angles
+from .errors import joint_flux_s2n
 
 __all__ = [
     'moment_kernels', 'dsums_dtheta', 'influence_kernels',
@@ -642,7 +643,9 @@ def _padmom_full_covariance(
         var = np.diag(flux_cov)
         if np.any(var <= 0) or not np.all(np.isfinite(fam_cov)):
             return None
-        s2n = np.sqrt(np.sum(F ** 2 / var))
+        s2n = joint_flux_s2n(F, flux_cov)
+        if s2n is None:
+            s2n = np.sqrt(np.sum(F ** 2 / var))
         return {
             'flux_cov': flux_cov,
             'flux_err': np.sqrt(var),
@@ -731,7 +734,9 @@ def _padmom_full_covariance(
     var = np.diag(flux_cov)
     if np.any(var <= 0) or not np.all(np.isfinite(fam_cov)):
         return None
-    s2n = np.sqrt(np.sum(F ** 2 / var))
+    s2n = joint_flux_s2n(F, flux_cov)
+    if s2n is None:
+        s2n = np.sqrt(np.sum(F ** 2 / var))
     return {
         'flux_cov': flux_cov,
         'flux_err': np.sqrt(var),
