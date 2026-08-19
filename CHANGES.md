@@ -27,20 +27,6 @@
       differentiable in the parameters everywhere; the window costs
       about a percent in the pixel loop and removes 1.5e-5 of a round
       gaussian's flux where the cut removed 3.7e-6
-
-### New features
-
-    - Allow fwhm as size for Moffat galsim fitter
-    - Added method scale_T() to gausian mixtures.
-    - Added new metacal psf reconvolution method 'azgauss',
-      which is a noise-robust version of the old 'gauss'
-      method.
-
-
-## v2.4.1
-
-### New features
-
     - Added ngmix.prepsfadmom with PAdmomFitter/run_prepsf_admom,
       adaptive moments measured in Fourier space.  The PSF is
       deconvolved and a common round gaussian smoothing is applied for
@@ -48,60 +34,16 @@
       fitting over multiple epochs and bands with a common center and
       covariance, measuring fluxes per band with a common pre-seeing
       aperture, so colors are independent of the per-band PSFs.
+      prepsfadmom accepts use_noise_image=True as with other prepsfmom
+      Can fit gauss, exp, dev, or bdf
     - The pre-PSF moment fitters (prepsfmom and prepsfadmom) now
       accept non-square images, which are zero padded to square
       internally.
-    - prepsfadmom accepts use_noise_image=True, estimating the noise
-      power per Fourier mode from the noise image attached to each
-      observation instead of assuming white noise from the weight map.
-      This makes the error estimates correct for stationary correlated
-      noise, such as that induced by metacal.
-    - The prepsfadmom flux errors include the first order response of
-      the adaptive weight to the noise (a delta method expansion
-      around the fixed point of the iteration), removing the ~sqrt(2)
-      underestimate of the flux scatter from the fixed weight
-      assumption.  The reported s2n is correspondingly smaller.
-    - prepsfadmom supports the composite exp plus dev model
-      ('bdf'): shared center and ellipticity, the dev size a fixed
-      TdByTe times the exp size, with the per-band flux split
-      between the components (fracdev) fit by a two-template GLS
-      solve on the Fourier modes, interleaved with the family
-      adaptive step.  The model is specified as a dict,
-      model={'type': 'bdf', 'TdByTe': 1.0}; string model names
-      remain valid for the other models.  Results gain fracdev,
-      flux_exp, flux_dev and flux_gls_cov; the split is per band,
-      so bulge and disk colors are measured.  The flux, structure
-      and fracdev errors come from a joint sandwich over the
-      coupled (structure, split) estimating equations, including
-      the analytic cross covariance of the split noise with the
-      moment sums (the split and the T sums are strongly
-      anti-correlated and the coupled responses nearly cancel, so
-      the cross terms are essential).  The errors match the robust
-      MC scatter at the ~10 percent level for both the free and
-      shrunk split.
-    - prepsfadmom accepts fixcen=True, holding the center fixed at
-      the guess for any model.
-    - prepsfadmom results carry the gauss (converged-weight) shape
-      estimator entries gauss_e1/gauss_e2/gauss_T with errors and
-      gauss_e_flags for every model: the weight iteration is model
-      independent, so these come for free with the family and bdf
-      fits and are identical to the model='gauss' shapes.
-    - The bdf model supports optional fracdev shrinkage via the
-      'fracdev0' and 'fracdev_sigma0' spec entries: the model
-      split is regularized toward fracdev0 by the inverse-variance
-      blend with the conditional GLS split error, stabilizing
-      faint fits (the free split can run away below s2n ~ 25);
-      the reported component fluxes and fracdev_gls stay the raw
-      linear solutions.  fracdev_sigma0=0 freezes the model split.
-    - prepsfadmom accepts model='exp' and model='star' in addition to
-      the default 'gauss'.  With 'exp' the ngmix 6-gaussian exponential
-      expansion is fit by moment matching with an adaptive moments style
-      update.  With 'star' the object is a pre-psf delta function with
-      only the center and per band fluxes fit.
-    - The model='exp' flux, T and shape errors use a sandwich over
-      the moment matching conditions with closed form model
-      derivatives, matching the observed scatter at the ~5 percent
-      level at s/n 20.
+
+## v2.4.1
+
+### New features
+
     - Allow fwhm as size for Moffat galsim fitter
     - Added method scale_T() to gausian mixtures.
     - Added new metacal psf reconvolution method 'azgauss',
