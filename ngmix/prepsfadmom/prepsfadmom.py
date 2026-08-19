@@ -61,71 +61,6 @@ DEFAULT_ETOL = 1.0e-5
 DEFAULT_CENTOL = 1.0e-4  # pixels for scale=1
 
 
-def _parse_model_spec(model):
-    """
-    normalize a model specification to (type, TdByTe, shrink).
-    A string names the type; the dict form is {'type': name} plus,
-    for 'bdf' only, the required 'TdByTe' entry (the dev to exp
-    size ratio) and the optional shrinkage pair 'fracdev0' and
-    'fracdev_sigma0' (see run_prepsf_admom).  shrink is
-    (fracdev0, sigma0) or None.  Unknown types and unexpected
-    entries raise
-    """
-    if isinstance(model, str):
-        model = {'type': model}
-    else:
-        model = dict(model)
-
-    if 'type' not in model:
-        raise ValueError("model dict must have a 'type' entry")
-    mtype = model['type']
-    if mtype not in ('gauss', 'exp', 'dev', 'star', 'bdf'):
-        raise ValueError(
-            f"bad model '{mtype}', expected 'gauss', 'exp', 'dev', "
-            "'star' or 'bdf'"
-        )
-
-    shrink = None
-    if mtype == 'bdf':
-        if 'TdByTe' not in model:
-            raise ValueError(
-                "the bdf model requires a 'TdByTe' entry, e.g. "
-                "model={'type': 'bdf', 'TdByTe': 1.0}"
-            )
-        TdByTe = float(model['TdByTe'])
-        if TdByTe <= 0:
-            raise ValueError(f'TdByTe must be positive, got {TdByTe}')
-        allowed = {'type', 'TdByTe', 'fracdev0', 'fracdev_sigma0'}
-
-        has0 = 'fracdev0' in model
-        hass = 'fracdev_sigma0' in model
-        if has0 != hass:
-            raise ValueError(
-                "the bdf shrinkage requires both 'fracdev0' and "
-                "'fracdev_sigma0' (or neither)"
-            )
-        if has0:
-            fracdev0 = float(model['fracdev0'])
-            sigma0 = float(model['fracdev_sigma0'])
-            if sigma0 < 0:
-                raise ValueError(
-                    f'fracdev_sigma0 must be non-negative, got '
-                    f'{sigma0}'
-                )
-            shrink = (fracdev0, sigma0)
-    else:
-        TdByTe = None
-        allowed = {'type'}
-
-    extra = set(model) - allowed
-    if extra:
-        raise ValueError(
-            f"unexpected model entries {sorted(extra)} for "
-            f"'{mtype}'"
-        )
-    return mtype, TdByTe, shrink
-
-
 def run_prepsf_admom(
     obs, guess=None,
     model='gauss',
@@ -1900,6 +1835,71 @@ class PAdmomFitter(object):
         if self.rng is None:
             self.rng = np.random.RandomState()
         return self.rng
+
+
+def _parse_model_spec(model):
+    """
+    normalize a model specification to (type, TdByTe, shrink).
+    A string names the type; the dict form is {'type': name} plus,
+    for 'bdf' only, the required 'TdByTe' entry (the dev to exp
+    size ratio) and the optional shrinkage pair 'fracdev0' and
+    'fracdev_sigma0' (see run_prepsf_admom).  shrink is
+    (fracdev0, sigma0) or None.  Unknown types and unexpected
+    entries raise
+    """
+    if isinstance(model, str):
+        model = {'type': model}
+    else:
+        model = dict(model)
+
+    if 'type' not in model:
+        raise ValueError("model dict must have a 'type' entry")
+    mtype = model['type']
+    if mtype not in ('gauss', 'exp', 'dev', 'star', 'bdf'):
+        raise ValueError(
+            f"bad model '{mtype}', expected 'gauss', 'exp', 'dev', "
+            "'star' or 'bdf'"
+        )
+
+    shrink = None
+    if mtype == 'bdf':
+        if 'TdByTe' not in model:
+            raise ValueError(
+                "the bdf model requires a 'TdByTe' entry, e.g. "
+                "model={'type': 'bdf', 'TdByTe': 1.0}"
+            )
+        TdByTe = float(model['TdByTe'])
+        if TdByTe <= 0:
+            raise ValueError(f'TdByTe must be positive, got {TdByTe}')
+        allowed = {'type', 'TdByTe', 'fracdev0', 'fracdev_sigma0'}
+
+        has0 = 'fracdev0' in model
+        hass = 'fracdev_sigma0' in model
+        if has0 != hass:
+            raise ValueError(
+                "the bdf shrinkage requires both 'fracdev0' and "
+                "'fracdev_sigma0' (or neither)"
+            )
+        if has0:
+            fracdev0 = float(model['fracdev0'])
+            sigma0 = float(model['fracdev_sigma0'])
+            if sigma0 < 0:
+                raise ValueError(
+                    f'fracdev_sigma0 must be non-negative, got '
+                    f'{sigma0}'
+                )
+            shrink = (fracdev0, sigma0)
+    else:
+        TdByTe = None
+        allowed = {'type'}
+
+    extra = set(model) - allowed
+    if extra:
+        raise ValueError(
+            f"unexpected model entries {sorted(extra)} for "
+            f"'{mtype}'"
+        )
+    return mtype, TdByTe, shrink
 
 
 def _combined_split(F2, fcovs):
