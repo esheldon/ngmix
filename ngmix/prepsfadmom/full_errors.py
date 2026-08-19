@@ -359,7 +359,6 @@ def _padmom_full_covariance(
     Ds = []
     facs = []
     for ep in epochs:
-        from .prepsfadmom import get_phase_angles
 
         alpha, beta = get_phase_angles(ep, v0, u0)
         s = np.zeros(6)
