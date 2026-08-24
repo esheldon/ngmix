@@ -27,6 +27,8 @@
       differentiable in the parameters everywhere; the window costs
       about a percent in the pixel loop and removes 1.5e-5 of a round
       gaussian's flux where the cut removed 3.7e-6
+    - The pre-PSF moment fitters (prepsfmom) now accept non-square
+      images, which are zero padded to square internally.
 
 ### New features
 
