@@ -40,6 +40,14 @@
       accept non-square images, which are zero padded to square
       internally.
 
+### New features
+
+    - Allow fwhm as size for Moffat galsim fitter
+    - Added method scale_T() to gausian mixtures.
+    - Added new metacal psf reconvolution method 'azgauss',
+      which is a noise-robust version of the old 'gauss'
+      method.
+
 ## v2.4.1
 
 ### New features
