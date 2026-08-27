@@ -173,6 +173,71 @@ def gmix_get_e1e2T(gmix):
     return e1, e2, T
 
 
+# status codes for the non-raising validity/fill paths.  The
+# numba runtime leaks a small allocation on EVERY exception
+# raised from compiled code (numba 0.66; see the memory-leak
+# note in the fitting module), so the hot fitting loops call
+# _status variants that return these codes and raise
+# GMixRangeError from python; the raising functions here wrap
+# the same cores, so there is one numeric implementation
+GMIX_STATUS_MESSAGES = {
+    1: "g >= 1",
+    2: "det too low",
+    3: "T too low",
+}
+
+
+def get_status_message(status):
+    """
+    the message for a gmix status code (GMIX_STATUS_MESSAGES),
+    with a fallback for unknown codes.  All python-level raises
+    from status codes go through this function
+    """
+    return GMIX_STATUS_MESSAGES.get(
+        status, "unknown gmix status %d" % status,
+    )
+
+
+@njit
+def gmix_status_raise(status):
+    """
+    raise GMixRangeError for a nonzero status code; no-op for
+    zero.  All jitted raises from status codes go through this
+    function.
+
+    numba requires exception messages to be compile-time
+    constants, so this function cannot look the message up in
+    GMIX_STATUS_MESSAGES at runtime; the branches below MUST
+    mirror that dict (enforced by test_gmix_status_messages),
+    and any new code needs an entry in both places
+    """
+    if status == 0:
+        return
+    elif status == 1:
+        raise GMixRangeError("g >= 1")
+    elif status == 2:
+        raise GMixRangeError("det too low")
+    elif status == 3:
+        raise GMixRangeError("T too low")
+    else:
+        raise GMixRangeError("unknown gmix status")
+
+
+@njit
+def gmix_set_norms_status(gmix):
+    """
+    set all norms for gaussians in the input gaussian mixture,
+    returning a nonzero status code (GMIX_STATUS_MESSAGES)
+    instead of raising when a gaussian is not usable.  Stops at
+    the first bad gaussian, as the raising version does
+    """
+    for gauss in gmix:
+        status = gauss2d_set_norm_status(gauss)
+        if status != 0:
+            return status
+    return 0
+
+
 @njit
 def gmix_set_norms(gmix):
     """
@@ -183,8 +248,35 @@ def gmix_set_norms(gmix):
     gmix:
        gaussian mixture
     """
-    for gauss in gmix:
-        gauss2d_set_norm(gauss)
+    status = gmix_set_norms_status(gmix)
+    if status != 0:
+        gmix_status_raise(status)
+
+
+@njit
+def gauss2d_set_norm_status(gauss):
+    """
+    set the normalization and normalized variances, returning a
+    nonzero status code (GMIX_STATUS_MESSAGES) instead of
+    raising when the gaussian is not usable
+    """
+    if gauss["det"] < GMIX_LOW_DETVAL:
+        return 2
+
+    T = gauss["irr"] + gauss["icc"]
+    if T <= GMIX_LOW_DETVAL:
+        return 3
+
+    idet = 1.0 / gauss["det"]
+    gauss["drr"] = gauss["irr"] * idet
+    gauss["drc"] = gauss["irc"] * idet
+    gauss["dcc"] = gauss["icc"] * idet
+    gauss["norm"] = 1.0 / (2 * numpy.pi * numpy.sqrt(gauss["det"]))
+
+    gauss["pnorm"] = gauss["p"] * gauss["norm"]
+
+    gauss["norm_set"] = 1
+    return 0
 
 
 @njit
@@ -199,23 +291,9 @@ def gauss2d_set_norm(gauss):
     gauss: a 2-d gaussian structure
         See gmix.py
     """
-
-    if gauss["det"] < GMIX_LOW_DETVAL:
-        raise GMixRangeError("det too low")
-
-    T = gauss["irr"] + gauss["icc"]
-    if T <= GMIX_LOW_DETVAL:
-        raise GMixRangeError("T too low")
-
-    idet = 1.0 / gauss["det"]
-    gauss["drr"] = gauss["irr"] * idet
-    gauss["drc"] = gauss["irc"] * idet
-    gauss["dcc"] = gauss["icc"] * idet
-    gauss["norm"] = 1.0 / (2 * numpy.pi * numpy.sqrt(gauss["det"]))
-
-    gauss["pnorm"] = gauss["p"] * gauss["norm"]
-
-    gauss["norm_set"] = 1
+    status = gauss2d_set_norm_status(gauss)
+    if status != 0:
+        gmix_status_raise(status)
 
 
 @njit
@@ -305,11 +383,11 @@ _fvals_gauss = array([1.0])
 
 
 @njit
-def gmix_fill_simple(gmix, pars, fvals, pvals):
+def gmix_fill_simple_status(gmix, pars, fvals, pvals):
     """
-    fill a simple (6 parameter) gaussian mixture model
-
-    no error checking done here
+    fill a simple (6 parameter) gaussian mixture model,
+    returning a nonzero status code (GMIX_STATUS_MESSAGES)
+    instead of raising for invalid shape parameters
     """
 
     row = pars[0]
@@ -319,7 +397,9 @@ def gmix_fill_simple(gmix, pars, fvals, pvals):
     T = pars[4]
     flux = pars[5]
 
-    e1, e2 = g1g2_to_e1e2(g1, g2)
+    e1, e2, status = g1g2_to_e1e2_status(g1, g2)
+    if status != 0:
+        return status
 
     n_gauss = gmix.size
     for i in range(n_gauss):
@@ -338,6 +418,19 @@ def gmix_fill_simple(gmix, pars, fvals, pvals):
             T_i_2 * e2,
             T_i_2 * (1 + e1),
         )
+    return 0
+
+
+@njit
+def gmix_fill_simple(gmix, pars, fvals, pvals):
+    """
+    fill a simple (6 parameter) gaussian mixture model
+
+    no error checking done here
+    """
+    status = gmix_fill_simple_status(gmix, pars, fvals, pvals)
+    if status != 0:
+        gmix_status_raise(status)
 
 
 @njit
@@ -370,6 +463,47 @@ def gmix_fill_gauss(gmix, pars):
     fill a gaussian model
     """
     gmix_fill_simple(gmix, pars, _fvals_gauss, _pvals_gauss)
+
+
+@njit
+def gmix_fill_exp_status(gmix, pars):
+    """
+    fill an exponential model; nonzero status instead of raising
+    """
+    return gmix_fill_simple_status(
+        gmix, pars, _fvals_exp, _pvals_exp,
+    )
+
+
+@njit
+def gmix_fill_dev_status(gmix, pars):
+    """
+    fill a dev model; nonzero status instead of raising
+    """
+    return gmix_fill_simple_status(
+        gmix, pars, _fvals_dev, _pvals_dev,
+    )
+
+
+@njit
+def gmix_fill_turb_status(gmix, pars):
+    """
+    fill a turbulent psf model; nonzero status instead of
+    raising
+    """
+    return gmix_fill_simple_status(
+        gmix, pars, _fvals_turb, _pvals_turb,
+    )
+
+
+@njit
+def gmix_fill_gauss_status(gmix, pars):
+    """
+    fill a gaussian model; nonzero status instead of raising
+    """
+    return gmix_fill_simple_status(
+        gmix, pars, _fvals_gauss, _pvals_gauss,
+    )
 
 
 @njit
@@ -605,6 +739,16 @@ _gmix_fill_functions = {
     "full": gmix_fill_full,
 }
 
+# the non-raising fills for the hot fitting loops (see
+# GMIX_STATUS_MESSAGES); models without an entry fall back to
+# the raising fill
+_gmix_fill_functions_status = {
+    "exp": gmix_fill_exp_status,
+    "dev": gmix_fill_dev_status,
+    "turb": gmix_fill_turb_status,
+    "gauss": gmix_fill_gauss_status,
+}
+
 
 @njit
 def gmix_convolve_fill(self, gmix, psf):
@@ -650,15 +794,15 @@ def gmix_convolve_fill(self, gmix, psf):
 
 
 @njit
-def g1g2_to_e1e2(g1, g2):
+def g1g2_to_e1e2_status(g1, g2):
     """
-    convert g to e
+    convert g to e, returning (e1, e2, status) with status 1
+    (GMIX_STATUS_MESSAGES) instead of raising for g >= 1
     """
-
     g = numpy.sqrt(g1 * g1 + g2 * g2)
 
     if g >= 1:
-        raise GMixRangeError("g >= 1")
+        return 0.0, 0.0, 1
 
     if g == 0.0:
         e1 = 0.0
@@ -675,6 +819,17 @@ def g1g2_to_e1e2(g1, g2):
         e1 = fac * g1
         e2 = fac * g2
 
+    return e1, e2, 0
+
+
+@njit
+def g1g2_to_e1e2(g1, g2):
+    """
+    convert g to e
+    """
+    e1, e2, status = g1g2_to_e1e2_status(g1, g2)
+    if status != 0:
+        gmix_status_raise(status)
     return e1, e2
 
 
@@ -875,6 +1030,37 @@ def get_loglike(gmix, pixels):
 
 
 @njit
+def fill_fdiff_status(gmix, pixels, fdiff, start):
+    """
+    fill fdiff array (model-data)/err, returning a nonzero
+    status code (GMIX_STATUS_MESSAGES) instead of raising when
+    the mixture norms are not settable
+
+    parameters
+    ----------
+    gmix: gaussian mixture
+        See gmix.py
+    pixels: array if pixel structs
+        u,v,val,ierr
+    fdiff: array
+        Array to fill, should be same length as pixels
+    """
+
+    if gmix["norm_set"][0] == 0:
+        status = gmix_set_norms_status(gmix)
+        if status != 0:
+            return status
+
+    n_pixels = pixels.shape[0]
+    for ipixel in range(n_pixels):
+        pixel = pixels[ipixel]
+
+        model_val = gmix_eval_pixel_fast(gmix, pixel)
+        fdiff[start + ipixel] = (model_val - pixel["val"]) * pixel["ierr"]
+    return 0
+
+
+@njit
 def fill_fdiff(gmix, pixels, fdiff, start):
     """
     fill fdiff array (model-data)/err
@@ -888,16 +1074,9 @@ def fill_fdiff(gmix, pixels, fdiff, start):
     fdiff: array
         Array to fill, should be same length as pixels
     """
-
-    if gmix["norm_set"][0] == 0:
-        gmix_set_norms(gmix)
-
-    n_pixels = pixels.shape[0]
-    for ipixel in range(n_pixels):
-        pixel = pixels[ipixel]
-
-        model_val = gmix_eval_pixel_fast(gmix, pixel)
-        fdiff[start + ipixel] = (model_val - pixel["val"]) * pixel["ierr"]
+    status = fill_fdiff_status(gmix, pixels, fdiff, start)
+    if status != 0:
+        gmix_status_raise(status)
 
 
 @njit

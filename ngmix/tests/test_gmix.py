@@ -745,3 +745,31 @@ def test_gmix_scale_T(model):
 
     with pytest.raises(ValueError):
         gm.scale_T(-1.0)
+
+
+def test_gmix_status_messages():
+    """
+    the jitted raiser cannot look messages up at runtime (numba
+    requires constant exception messages), so its branches must
+    mirror GMIX_STATUS_MESSAGES; this test enforces that, and
+    the unknown-code fallbacks
+    """
+    from ngmix.gmix.gmix_nb import (
+        GMIX_STATUS_MESSAGES,
+        get_status_message,
+        gmix_status_raise,
+    )
+    from ngmix import GMixRangeError
+
+    # zero is a no-op
+    gmix_status_raise(0)
+
+    for status, message in GMIX_STATUS_MESSAGES.items():
+        assert get_status_message(status) == message
+        with pytest.raises(GMixRangeError, match=message):
+            gmix_status_raise(status)
+
+    # unknown codes have a fallback in both paths
+    assert 'unknown' in get_status_message(99)
+    with pytest.raises(GMixRangeError, match='unknown'):
+        gmix_status_raise(99)
