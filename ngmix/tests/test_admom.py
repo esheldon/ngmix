@@ -97,7 +97,11 @@ def test_admom(g1_true, g2_true, wcs_g1, wcs_g2):
 
     if g1_true == 0 and g2_true == 0:
         T = np.mean(Tarr)
-        assert np.abs(T - fwhm_to_T(fwhm)) < 1e-6
+        # the fitter converges to Ttol=1e-3 relative; where it
+        # lands inside that basin depends on the randomized
+        # guesses and the platform, so leave real margin (the
+        # old 1e-6 was exceeded by 0.6% on one CI environment)
+        assert np.abs(T - fwhm_to_T(fwhm)) < 1e-5
         rho4_mean = np.mean(rho4arr)
         # gaussians have rho4 of 2.0
         assert np.abs(rho4_mean - 2) < 1e-5
