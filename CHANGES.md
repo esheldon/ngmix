@@ -40,6 +40,16 @@
       accept non-square images, which are zero padded to square
       internally.
 
+### Bug fixes
+
+    - Work around a memory leak in the numba runtime, which leaks a
+      small allocation on every exception raised from compiled code.
+      Fitters reject invalid parameters at high rate on hard data,
+      so the hot paths (gaussian mixture fill, set_norms, fill_fdiff)
+      now use non-raising _status variants that return an error code,
+      and the GMixRangeError is raised from python.  The raising
+      versions remain and are wrappers around the _status versions.
+
 ### New features
 
     - Allow fwhm as size for Moffat galsim fitter
