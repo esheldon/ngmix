@@ -6,7 +6,7 @@ from ..gexceptions import GMixRangeError
 from ..defaults import PDEF, CDEF, LOWVAL, BIGVAL, copy_if_needed
 from ..observation import Observation, ObsList, get_mb_obs
 from ..gmix.gmix_nb import (
-    gmix_convolve_fill, fill_fdiff_status, GMIX_STATUS_MESSAGES,
+    gmix_convolve_fill, fill_fdiff_status, get_status_message,
 )
 from ..gmix import GMixList, MultiBandGMixList
 from ..flags import ZERO_DOF, DIV_ZERO, BAD_VAR
@@ -464,7 +464,7 @@ class FitModel(dict):
                 )
                 if status != 0:
                     raise GMixRangeError(
-                        GMIX_STATUS_MESSAGES[status]
+                        get_status_message(status)
                     )
 
                 start += pixels.size
