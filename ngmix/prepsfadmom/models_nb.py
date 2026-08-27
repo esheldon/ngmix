@@ -10,6 +10,13 @@ O(ngroup^2) models per sweep, each with several components.
 import numpy as np
 from numba import njit
 
+# a total covariance with det <= DET_REL_TOL * C00 * C11 is treated as
+# singular: the determinant is a difference of two products and at
+# that relative size it is rounding noise (a runaway weight with
+# entries of 1e20 produced determinants that were exact multiples of
+# 2**65, including zero)
+DET_REL_TOL = 1.0e-12
+
 
 @njit
 def gauss_comps_ksums(
@@ -19,7 +26,10 @@ def gauss_comps_ksums(
     weighted moment sums of a set of gaussian components
 
     Non positive definite total covariances produce nan sums, which
-    callers treat as a failed evaluation.
+    callers treat as a failed evaluation.  This includes a total
+    covariance that is singular or numerically singular (see
+    DET_REL_TOL); numba raises ZeroDivisionError on 1/0, so the
+    check is explicit rather than left to the arithmetic.
 
     Parameters
     ----------
@@ -47,6 +57,11 @@ def gauss_comps_ksums(
         C01 = sw01 + So01[k]
         C11 = sw11 + So11[k]
         det = C00 * C11 - C01 * C01
+
+        if not (C00 > 0.0 and det > DET_REL_TOL * C00 * C11):
+            for j in range(6):
+                sums[j] = np.nan
+            return
 
         idet = 1.0 / det
         Ci00 = C11 * idet
