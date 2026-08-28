@@ -24,7 +24,7 @@ from ..gmix import gmix_nb
 from ..gmix.gmix_nb import (
     _gmix_fill_functions,
     _gmix_fill_functions_status,
-    GMIX_STATUS_MESSAGES,
+    get_status_message,
     gmix_set_norms,
     gmix_convolve_fill,
     get_cm_Tfactor,
@@ -451,7 +451,7 @@ class GMix(object):
             # python (see gmix_nb.GMIX_STATUS_MESSAGES)
             status = self._fill_func_status(gm, self._pars)
             if status != 0:
-                raise GMixRangeError(GMIX_STATUS_MESSAGES[status])
+                raise GMixRangeError(get_status_message(status))
         else:
             self._fill_func(
                 gm, self._pars,

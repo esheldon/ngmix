@@ -187,6 +187,42 @@ GMIX_STATUS_MESSAGES = {
 }
 
 
+def get_status_message(status):
+    """
+    the message for a gmix status code (GMIX_STATUS_MESSAGES),
+    with a fallback for unknown codes.  All python-level raises
+    from status codes go through this function
+    """
+    return GMIX_STATUS_MESSAGES.get(
+        status, "unknown gmix status %d" % status,
+    )
+
+
+@njit
+def gmix_status_raise(status):
+    """
+    raise GMixRangeError for a nonzero status code; no-op for
+    zero.  All jitted raises from status codes go through this
+    function.
+
+    numba requires exception messages to be compile-time
+    constants, so this function cannot look the message up in
+    GMIX_STATUS_MESSAGES at runtime; the branches below MUST
+    mirror that dict (enforced by test_gmix_status_messages),
+    and any new code needs an entry in both places
+    """
+    if status == 0:
+        return
+    elif status == 1:
+        raise GMixRangeError("g >= 1")
+    elif status == 2:
+        raise GMixRangeError("det too low")
+    elif status == 3:
+        raise GMixRangeError("T too low")
+    else:
+        raise GMixRangeError("unknown gmix status")
+
+
 @njit
 def gmix_set_norms_status(gmix):
     """
@@ -213,10 +249,8 @@ def gmix_set_norms(gmix):
        gaussian mixture
     """
     status = gmix_set_norms_status(gmix)
-    if status == 2:
-        raise GMixRangeError("det too low")
-    elif status == 3:
-        raise GMixRangeError("T too low")
+    if status != 0:
+        gmix_status_raise(status)
 
 
 @njit
@@ -258,10 +292,8 @@ def gauss2d_set_norm(gauss):
         See gmix.py
     """
     status = gauss2d_set_norm_status(gauss)
-    if status == 2:
-        raise GMixRangeError("det too low")
-    elif status == 3:
-        raise GMixRangeError("T too low")
+    if status != 0:
+        gmix_status_raise(status)
 
 
 @njit
@@ -398,7 +430,7 @@ def gmix_fill_simple(gmix, pars, fvals, pvals):
     """
     status = gmix_fill_simple_status(gmix, pars, fvals, pvals)
     if status != 0:
-        raise GMixRangeError("g >= 1")
+        gmix_status_raise(status)
 
 
 @njit
@@ -796,8 +828,10 @@ def g1g2_to_e1e2(g1, g2):
     convert g to e
     """
     e1, e2, status = g1g2_to_e1e2_status(g1, g2)
+
     if status != 0:
-        raise GMixRangeError("g >= 1")
+        gmix_status_raise(status)
+
     return e1, e2
 
 
@@ -1043,10 +1077,8 @@ def fill_fdiff(gmix, pixels, fdiff, start):
         Array to fill, should be same length as pixels
     """
     status = fill_fdiff_status(gmix, pixels, fdiff, start)
-    if status == 2:
-        raise GMixRangeError("det too low")
-    elif status == 3:
-        raise GMixRangeError("T too low")
+    if status != 0:
+        gmix_status_raise(status)
 
 
 @njit
