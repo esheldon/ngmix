@@ -60,7 +60,34 @@ def flux_cov_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
     """
     full cross-band covariance of the raw per band flux sums,
     including the first order response of the adaptive weight to
-    the noise (the delta method); the diagonal is flux_var_delta.
+    the noise (the delta method).
+
+    docs for flux_var_delta (diagonal of flux_cov_delta)
+    ----------------------------------------------------
+
+    The converged weight satisfies the fixed point conditions
+    M(Sigma) = Sigma / 2, where M is the measured weighted covariance,
+    a ratio of the joint moment sums.  By the implicit function
+    theorem the weight fluctuation is dSigma = -J^-1 dM with
+    J = dM/dSigma - 1/2.  For the gaussian implied by the converged
+    weight, dM/dSigma = 1/4 exactly at the fixed point, for any
+    ellipticity and smoothing, so dSigma = 4 dM.  The flux
+    normalization (proportional to sqrt(det Sigma)) and the kernel
+    response of the flux sum combine to dln F = tr(Sigma^-1 dM), and
+    for a single band the fixed weight flux fluctuation cancels
+    exactly, leaving
+
+        dF / F = tr(Sigma^-1 dS_M) / S_F
+
+    in terms of the second moment sum fluctuations alone.  For a
+    round gaussian with matched weight and white noise this doubles
+    the fixed weight variance.  With multiple bands the band flux sum
+    and the joint conditions are distinct and their cross covariances
+    enter; the band flux sums covary only with their own epochs'
+    contribution to the joint sums.
+
+    docs for flux_cov_delta (this function)
+    ---------------------------------------
 
     The fluctuation dF_b is proportional to
     dS_Fb - r_b dS_F + r_b b . dS_M (see flux_var_delta): the
