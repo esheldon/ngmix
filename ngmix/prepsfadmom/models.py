@@ -138,28 +138,14 @@ def get_profile_comps(name):
     return _PROFILE_COMPS[name]
 
 
-def bdf_comps(fracdev, TdByTe):
-    """
-    flux fractions and relative T factors of the composite exp plus
-    dev mixture: the exp table scaled by 1 - fracdev plus the dev
-    table with sizes scaled by TdByTe and fluxes by fracdev.  The
-    scale parameter of the composite is the exp family T
-    """
-    return (
-        [((1 - fracdev) * f, cT)
-         for f, cT in get_profile_comps('exp')]
-        + [(fracdev * f, TdByTe * cT)
-           for f, cT in get_profile_comps('dev')]
-    )
-
-
 def _mixture_comps(model):
     """
     the (frac, cT) component table for a mixture model dict or
     spec; see the module docstring
     """
-    if model['type'] == 'bdf':
-        return bdf_comps(model['fracdev'], model['TdByTe'])
+    # TODO: Turn back on for other models
+    # if model['type'] == 'bdf':
+    #     return bdf_comps(model['fracdev'], model['TdByTe'])
     return get_profile_comps(model['type'])
 
 
@@ -188,24 +174,25 @@ def model_comps(model, Tsmooth):
             np.array([c[0, 1]]),
             np.array([c[1, 1]]),
         )
-    elif model['type'] in ('exp', 'dev', 'bdf'):
-        if 'cov' in model:
-            Sfam = model['cov']
-        else:
-            Sfam = cov_from_e(model['e1'], model['e2'], model['T'])
-        smooth = Tsmooth / 2
-        comps = _mixture_comps(model)
-        n = len(comps)
-        fracs = np.zeros(n)
-        So00 = np.zeros(n)
-        So01 = np.zeros(n)
-        So11 = np.zeros(n)
-        for k, (frac, cT) in enumerate(comps):
-            fracs[k] = frac
-            So00[k] = cT * Sfam[0, 0] + smooth
-            So01[k] = cT * Sfam[0, 1]
-            So11[k] = cT * Sfam[1, 1] + smooth
-        return fracs, So00, So01, So11
+    # TODO: Turn back on for other models
+    # elif model['type'] in ('exp', 'dev', 'bdf'):
+    #     if 'cov' in model:
+    #         Sfam = model['cov']
+    #     else:
+    #         Sfam = cov_from_e(model['e1'], model['e2'], model['T'])
+    #     smooth = Tsmooth / 2
+    #     comps = _mixture_comps(model)
+    #     n = len(comps)
+    #     fracs = np.zeros(n)
+    #     So00 = np.zeros(n)
+    #     So01 = np.zeros(n)
+    #     So11 = np.zeros(n)
+    #     for k, (frac, cT) in enumerate(comps):
+    #         fracs[k] = frac
+    #         So00[k] = cT * Sfam[0, 0] + smooth
+    #         So01[k] = cT * Sfam[0, 1]
+    #         So11[k] = cT * Sfam[1, 1] + smooth
+    #     return fracs, So00, So01, So11
     else:
         raise ValueError(f"bad model type: '{model['type']}'")
 
@@ -245,8 +232,9 @@ def mixture_model_valid(model, Sfam, Sw, Tsmooth):
     """
     if isinstance(model, str):
         comps = get_profile_comps(model)
-    elif model['type'] == 'bdf':
-        comps = bdf_comps(model.get('fracdev', 0.5), model['TdByTe'])
+    # TODO: Turn back on for other models
+    # elif model['type'] == 'bdf':
+    #     comps = bdf_comps(model.get('fracdev', 0.5), model['TdByTe'])
     else:
         comps = get_profile_comps(model['type'])
 

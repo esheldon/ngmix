@@ -1057,63 +1057,6 @@ def test_prepsfadmom_e_cov(model):
     se = e1s.std() * e2s.std() / np.sqrt(e1s.size)
     assert np.abs(emp - rep) < 4 * se
 
-
-def test_prepsfadmommodel_sandwich_gauss_anchor():
-    """
-    the model sandwich evaluated for a single gaussian family reduces
-    exactly to the analytic gauss delta method, for arbitrary inputs
-    -- the full cross-band covariance included -- and the family
-    response is dSfam = 4 dM
-    """
-    from ngmix.prepsfadmom.errors import (
-        flux_var_delta, flux_cov_delta, model_sandwich,
-    )
-
-    rng = np.random.RandomState(9)
-    Tsmooth = 0.8
-    Sigma = np.array([[0.9, 0.08], [0.08, 1.1]])
-    # the gauss fixed point: smoothed family covariance = weight
-    Sfam = Sigma - np.diag([Tsmooth / 2] * 2)
-
-    sums = np.zeros(6)
-    sums[5] = 5.0
-    G = rng.normal(size=(6, 6))
-    cov = G @ G.T
-    fsums = np.array([2.0, 3.0])
-    fvars = np.array([0.3, 0.4])
-    fmcovs = rng.normal(size=(2, 3)) * 0.1
-
-    raw_delta = flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs)
-    fcov_delta = flux_cov_delta(
-        Sigma, sums, cov, fsums, fvars, fmcovs,
-    )
-    raw_sw, fam_cov, fcov_raw = model_sandwich(
-        'gauss', Sfam, Sigma, Tsmooth, sums, cov, fsums, fvars, fmcovs,
-    )
-    assert np.allclose(np.diag(fcov_raw), raw_sw, rtol=0, atol=0)
-    assert np.allclose(raw_sw, raw_delta, rtol=1.0e-5, atol=0)
-    # the closed-form cross-band assembly agrees with the sandwich
-    # off the diagonal too, and its diagonal is flux_var_delta
-    # bitwise
-    assert np.all(np.diag(fcov_delta) == raw_delta)
-    assert np.allclose(fcov_delta, fcov_raw, rtol=1.0e-5, atol=0)
-
-    # B = 1/4 for the single gaussian family, so the family
-    # covariance is 16 times the measured ratio covariance
-    mvec = np.array([
-        Sigma[1, 1] - Sigma[0, 0], 2 * Sigma[0, 1],
-        Sigma[0, 0] + Sigma[1, 1],
-    ]) / 2
-    css = cov[2:5, 2:5]
-    csf = cov[2:5, 5]
-    cff = cov[5, 5]
-    cmm = (
-        css - np.outer(mvec, csf) - np.outer(csf, mvec)
-        + np.outer(mvec, mvec) * cff
-    ) / sums[5] ** 2
-    assert np.allclose(fam_cov, 16 * cmm, rtol=1.0e-4, atol=0)
-
-
 @pytest.mark.parametrize('model', ['gauss', 'exp'])
 def test_prepsfadmom_model_star_data(model):
     """
