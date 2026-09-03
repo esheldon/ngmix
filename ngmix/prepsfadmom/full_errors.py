@@ -344,6 +344,13 @@ def _padmom_full_covariance(
         if mtype not in ('exp', 'dev'):
             return None
 
+    # TODO: remove for other models
+    if mtype != "gauss":
+        raise RuntimeError(
+            "model types besides Gauss are not supported "
+            "for full covariance for pre-psf admom!"
+        )
+
     nep = len(epochs)
     fixcen = fitter.fixcen
     ncen = 0 if fixcen else 2

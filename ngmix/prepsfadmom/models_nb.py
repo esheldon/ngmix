@@ -97,3 +97,72 @@ def gauss_comps_ksums(
         sums[3] += sflux * 2 * vu
         sums[4] += sflux * (uu + vv)
         sums[5] += sflux
+
+
+def model_comps(model, Tsmooth):
+    """
+    the gaussian components of a model in the smoothed plane
+
+    Parameters
+    ----------
+    model: dict
+        model dict, see the module docstring
+    Tsmooth: float
+        T of the gaussian smoothing
+
+    Returns
+    -------
+    fracs, So00, So01, So11: arrays
+        per component flux fractions and covariances in the smoothed
+        plane
+    """
+    # TODO: Turn back on for other models
+    # if model['type'] in ('gauss', 'star'):
+    if model['type'] in ('gauss',):
+        c = model['cov_sm']
+        return (
+            np.ones(1),
+            np.array([c[0, 0]]),
+            np.array([c[0, 1]]),
+            np.array([c[1, 1]]),
+        )
+    # TODO: Turn back on for other models
+    # elif model['type'] in ('exp', 'dev', 'bdf'):
+    #     if 'cov' in model:
+    #         Sfam = model['cov']
+    #     else:
+    #         Sfam = cov_from_e(model['e1'], model['e2'], model['T'])
+    #     smooth = Tsmooth / 2
+    #     comps = _mixture_comps(model)
+    #     n = len(comps)
+    #     fracs = np.zeros(n)
+    #     So00 = np.zeros(n)
+    #     So01 = np.zeros(n)
+    #     So11 = np.zeros(n)
+    #     for k, (frac, cT) in enumerate(comps):
+    #         fracs[k] = frac
+    #         So00[k] = cT * Sfam[0, 0] + smooth
+    #         So01[k] = cT * Sfam[0, 1]
+    #         So11[k] = cT * Sfam[1, 1] + smooth
+    #     return fracs, So00, So01, So11
+    else:
+        raise ValueError(f"bad model type: '{model['type']}'")
+
+
+def model_ksums(model, band, dv, du, Sw, detAtinv, Tsmooth):
+    """
+    closed-form weighted moment sums of an object model, dispatching
+    on the model type, evaluated via the numba kernel
+    """
+    from .models_nb import gauss_comps_ksums
+
+    fracs, So00, So01, So11 = model_comps(model, Tsmooth)
+    F = model['F'][band] * fracs
+    n = F.size
+    sums = np.zeros(6)
+    gauss_comps_ksums(
+        F, So00, So01, So11,
+        np.full(n, float(dv)), np.full(n, float(du)),
+        Sw[0, 0], Sw[0, 1], Sw[1, 1], float(detAtinv), sums,
+    )
+    return sums
