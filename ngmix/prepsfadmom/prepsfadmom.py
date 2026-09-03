@@ -405,10 +405,15 @@ class PAdmomFitter:
         )
         self.fixcen = fixcen
         self.full_errors = full_errors
-        if full_errors and self.model not in ('gauss', 'exp', 'dev'):
-            raise ValueError(
-                'full_errors supports the gauss, exp and '
-                f'dev models, got {self.model!r}'
+        # TODO: Put this back for full errors
+        # if full_errors and self.model not in ('gauss', 'exp', 'dev'):
+        #     raise ValueError(
+        #         'full_errors supports the gauss, exp and '
+        #         f'dev models, got {self.model!r}'
+        #     )
+        if full_errors:
+            raise RuntimeError(
+                "pre-psf admom does not currently support full errors!"
             )
         self.fwhm_smooth = fwhm_smooth
         self.smooth_fac = smooth_fac
@@ -740,64 +745,6 @@ class PAdmomFitter:
             self._set_gauss_entries(
                 res, Sigma, Tsmooth, sums, sums_cov,
             )
-
-        if (
-            self.full_errors and flags == 0
-            and (
-                (model_state is None and self.model == 'gauss')
-                or (
-                    model_state is not None
-                    and model_state['type'] in ('exp', 'dev')
-                )
-            )
-        ):
-            # the full (fixed-point) errors: differentiate the
-            # actual update at the actual data, staying calibrated
-            # under model mismatch where the model_sandwich errors
-            # under-predict (T by ~17 percent and flux by ~11
-            # percent for dev truth fit with exp).  On a guarded
-            # branch the sandwich errors are kept
-            from .full_errors import padmom_full_covariance
-
-            fe = padmom_full_covariance(
-                self, epochs, nband, model_state, Sigma,
-                v0, u0, Tsmooth,
-            )
-            if fe is not None:
-                res['flux_err'] = fe['flux_err']
-                res['flux_cov'] = fe['flux_cov']
-                res['s2n'] = fe['s2n']
-                fam_cov = fe['fam_cov']
-                if fam_cov[2, 2] > 0:
-                    res['T_err'] = np.sqrt(fam_cov[2, 2])
-                Tgal = res['T']
-                if (
-                    np.isfinite(res['e1']) and Tgal > 0
-                    and fam_cov[2, 2] > 0
-                ):
-                    ev1 = (
-                        fam_cov[0, 0]
-                        - 2 * res['e1'] * fam_cov[0, 2]
-                        + res['e1'] ** 2 * fam_cov[2, 2]
-                    ) / Tgal ** 2
-                    ev2 = (
-                        fam_cov[1, 1]
-                        - 2 * res['e2'] * fam_cov[1, 2]
-                        + res['e2'] ** 2 * fam_cov[2, 2]
-                    ) / Tgal ** 2
-                    if ev1 > 0 and ev2 > 0:
-                        e12 = (
-                            fam_cov[0, 1]
-                            - res['e1'] * fam_cov[1, 2]
-                            - res['e2'] * fam_cov[0, 2]
-                            + res['e1'] * res['e2']
-                            * fam_cov[2, 2]
-                        ) / Tgal ** 2
-                        res['e1err'] = np.sqrt(ev1)
-                        res['e2err'] = np.sqrt(ev2)
-                        res['e_cov'] = np.array([
-                            [ev1, e12], [e12, ev2],
-                        ])
 
         # propagate fitting failures, but not the post-hoc NONPOS_SIZE
         # or NONPOS_SHAPE_VAR set above, for which T and flux are still
