@@ -40,7 +40,6 @@ from ..moments import fwhm_to_T, e2mom
 from ..shape import e1e2_to_g1g2
 from ..util import get_ratio_error
 from .prepsfadmom_nb import admom_ksums, admom_finalize
-from numpy import fft
 from .models import mom_from_cov, det2
 from .errors import (
     flux_cov_delta,
@@ -506,17 +505,26 @@ class PAdmomFitter:
         over all epochs
         """
         if self.model in ('exp', 'dev'):
-            raise RuntimeError("exp and dev models are not currently supported for pre-psf admom!")
+            raise RuntimeError(
+                "exp and dev models are not currently "
+                "supported for pre-psf admom!"
+            )
             # return self._run_admom_mixture(
             #     epochs, nband, guess_gmix, Tsmooth,
             # )
         elif self.model == 'bdf':
-            raise RuntimeError("bdf models are not currently supported for pre-psf admom!")
+            raise RuntimeError(
+                "bdf models are not currently "
+                "supported for pre-psf admom!"
+            )
             # return self._run_admom_bdf(
             #     epochs, nband, guess_gmix, Tsmooth,
             # )
         elif self.model == 'star':
-            raise RuntimeError("star models are not currently supported for pre-psf admom!")
+            raise RuntimeError(
+                "star models are not currently "
+                "supported for pre-psf admom!"
+            )
             # return self._run_admom_star(epochs, nband, guess_gmix, Tsmooth)
         else:
             return self._run_admom_gauss(epochs, nband, guess_gmix, Tsmooth)

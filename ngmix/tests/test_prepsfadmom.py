@@ -759,6 +759,7 @@ def test_prepsfadmom_e_cov(model):
     se = e1s.std() * e2s.std() / np.sqrt(e1s.size)
     assert np.abs(emp - rep) < 4 * se
 
+
 # TODO: put back with other models
 # @pytest.mark.parametrize('model', ['gauss', 'exp'])
 @pytest.mark.parametrize('model', ['gauss'])

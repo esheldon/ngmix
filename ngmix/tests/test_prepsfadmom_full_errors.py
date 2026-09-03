@@ -315,7 +315,6 @@ def _make_gal_obs(rng, profile, noise=3.0):
 def test_padmom_full_errors_validation():
     """full_errors requires gauss/exp/dev; apodization is
     supported (the mask enters the influence kernels)"""
-    import pytest
     from ngmix.prepsfadmom import PAdmomFitter
 
     # TODO: put back with other models

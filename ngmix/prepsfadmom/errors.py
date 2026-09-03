@@ -22,7 +22,7 @@ from .models import model_ksums, get_profile_comps
 from .models_nb import gauss_comps_ksums
 
 __all__ = [
-    'flux_var_delta', 'flux_cov_delta',
+    'flux_cov_delta',
     'joint_flux_s2n',
 ]
 
