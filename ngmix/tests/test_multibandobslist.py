@@ -125,7 +125,7 @@ def test_multibandobslist_s2n():
         mbobs.append(obslist)
 
     s2n = mbobs.get_s2n()
-    assert s2n == numer / np.sqrt(denom)
+    assert np.allclose(s2n, numer / np.sqrt(denom))
 
 
 def test_multibandobslist_s2n_zeroweight():

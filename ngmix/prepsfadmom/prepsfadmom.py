@@ -41,6 +41,7 @@ from ..shape import e1e2_to_g1g2
 from ..util import get_ratio_error
 from .prepsfadmom_nb import admom_ksums, admom_finalize
 from .models import mom_from_cov, det2
+from .models_nb import model_ksums  # noqa: F401
 from .errors import (
     flux_cov_delta,
     joint_flux_s2n,
