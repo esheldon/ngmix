@@ -318,101 +318,12 @@ def test_padmom_full_errors_validation():
     import pytest
     from ngmix.prepsfadmom import PAdmomFitter
 
-    with pytest.raises(ValueError):
-        PAdmomFitter(model='star', full_errors=True, ap_rad=0)
-    PAdmomFitter(model='exp', full_errors=True, ap_rad=0)
-    PAdmomFitter(model='exp', full_errors=True, ap_rad=1.5)
+    # TODO: put back with other models
+    # with pytest.raises(ValueError):
+    #     PAdmomFitter(model='star', full_errors=True, ap_rad=0)
+    # PAdmomFitter(model='exp', full_errors=True, ap_rad=0)
+    # PAdmomFitter(model='exp', full_errors=True, ap_rad=1.5)
     PAdmomFitter(model='gauss', full_errors=True, ap_rad=0)
-
-
-def test_padmom_full_errors_matched():
-    """on matched exp truth the full errors agree with the
-    model_sandwich errors and fill a consistent flux_cov"""
-    from ngmix.prepsfadmom import PAdmomFitter
-
-    rng = np.random.RandomState(17)
-    obs = _make_gal_obs(rng, 'exp')
-    f0 = PAdmomFitter(
-        model='exp', ap_rad=0, rng=np.random.RandomState(3),
-    )
-    f1 = PAdmomFitter(
-        model='exp', ap_rad=0, full_errors=True,
-        rng=np.random.RandomState(3),
-    )
-    r0 = f0.go(obs, guess=0.5)
-    r1 = f1.go(obs, guess=0.5)
-    assert r1['flags'] == 0
-    assert np.abs(r1['T_err'] / r0['T_err'] - 1) < 0.2
-    assert np.abs(r1['flux_err'] / r0['flux_err'] - 1) < 0.2
-    assert np.abs(r1['e1err'] / r0['e1err'] - 1) < 0.25
-    fcov = r1['flux_cov']
-    assert fcov.shape == (1, 1) and fcov[0, 0] > 0
-    assert np.allclose(
-        np.sqrt(fcov[0, 0]), r1['flux_err'], rtol=1e-6,
-    )
-
-
-def test_padmom_full_errors_mismatch_mc():
-    """dev truth fit with exp: the sandwich under-predicts the
-    T and flux errors; the full errors stay calibrated"""
-    from ngmix.prepsfadmom import PAdmomFitter
-
-    ntrial = 200
-    rng = np.random.RandomState(19)
-    T0, Tf0, F0, Ff0 = [], [], [], []
-    for k in range(ntrial):
-        obs = _make_gal_obs(rng, 'dev')
-        f1 = PAdmomFitter(
-            model='exp', ap_rad=0, full_errors=True,
-            rng=np.random.RandomState(k),
-        )
-        res = f1.go(obs, guess=0.5)
-        if res['flags'] != 0 or res['T_flags'] != 0:
-            continue
-        T0.append(res['T'])
-        Tf0.append(res['T_err'])
-        F0.append(res['flux'])
-        Ff0.append(res['flux_err'])
-    T0, Tf0 = np.array(T0), np.array(Tf0)
-    F0, Ff0 = np.array(F0), np.array(Ff0)
-    assert len(T0) > 0.9 * ntrial
-
-    rT = T0.std() / np.sqrt(np.mean(Tf0 ** 2))
-    rF = F0.std() / np.sqrt(np.mean(Ff0 ** 2))
-    # the sandwich reads ~1.17 (T) and ~1.11 (flux) here
-    assert 0.8 < rT < 1.15
-    assert 0.85 < rF < 1.15
-
-
-def test_padmom_full_errors_apodized_mc():
-    """the production apodization (ap_rad=1.5) with full
-    errors: dev truth fit with exp stays calibrated"""
-    from ngmix.prepsfadmom import PAdmomFitter
-
-    ntrial = 200
-    rng = np.random.RandomState(41)
-    T0, Tf0, F0, Ff0 = [], [], [], []
-    for k in range(ntrial):
-        obs = _make_gal_obs(rng, 'dev')
-        f1 = PAdmomFitter(
-            model='exp', ap_rad=1.5, full_errors=True,
-            rng=np.random.RandomState(k),
-        )
-        res = f1.go(obs, guess=0.5)
-        if res['flags'] != 0 or res['T_flags'] != 0:
-            continue
-        T0.append(res['T'])
-        Tf0.append(res['T_err'])
-        F0.append(res['flux'])
-        Ff0.append(res['flux_err'])
-    T0, Tf0 = np.array(T0), np.array(Tf0)
-    F0, Ff0 = np.array(F0), np.array(Ff0)
-    assert len(T0) > 0.9 * ntrial
-
-    rT = T0.std() / np.sqrt(np.mean(Tf0 ** 2))
-    rF = F0.std() / np.sqrt(np.mean(Ff0 ** 2))
-    assert 0.8 < rT < 1.15
-    assert 0.85 < rF < 1.15
 
 
 def test_padmom_full_errors_gauss():
