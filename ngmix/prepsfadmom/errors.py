@@ -73,7 +73,19 @@ def flux_cov_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
 
     Parameters
     ----------
-    As for flux_var_delta
+    Sigma: 2x2 array
+        The converged weight covariance
+    sums: array of size 6
+        The accumulated joint sums
+    cov: array (6, 6)
+        The covariance of the joint sums
+    fsums: array of size nband
+        The accumulated per band flux sums
+    fvars: array of size nband
+        The variances of the per band flux sums
+    fmcovs: array (nband, 3)
+        The covariance of the joint (M1, M2, T) sums with the per
+        band flux sums
 
     Returns
     -------
