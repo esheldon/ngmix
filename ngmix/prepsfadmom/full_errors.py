@@ -1,29 +1,37 @@
 """
-Building blocks for full (fixed-point) error propagation of the
-pre-PSF adaptive moments machinery.
+Full (fixed-point) error propagation for the pre-PSF adaptive
+moments machinery.
 
 The weighted moment sums are linear in the prepped k-space image
 with closed-form kernels (the admom_ksums accumulators), so their
 exact covariance under the pixel noise follows from real-space
-influence kernels: each sum's kernel is assembled on the k grid,
-carried to the image plane through the stored image->kim transfer
-(epoch['ktransfer']) and contracted with the per-pixel variance
-from the weight map.  Apodization enters exactly: the masked
-prep's image->kim map factorizes as ktransfer(k) e^{-ik.x} m(x),
-so influence_kernels applies the mask in pixel space, where it
-is diagonal.  The
+influence kernels (influence in the sense of Hampel 1974): each
+sum's kernel is assembled on the k grid, carried to the image
+plane through the stored image->kim transfer (epoch['ktransfer'])
+and contracted with the per-pixel variance from the weight map.
+Apodization enters exactly: the masked prep's image->kim map
+factorizes as ktransfer(k) e^{-ik.x} m(x), so influence_kernels
+applies the mask in pixel space, where it is diagonal.  The
 kernel derivatives with respect to the weight covariance and
 center are also closed form, allowing the data sums to be
 linearized about a solution so that fixed-point Jacobians never
-touch the data modes.
+touch the data modes.  This construction, including the exact
+apodization treatment, was derived for this code.
 
-These pieces are consumed by deblenders (kdeblend full_errors)
-and are the basis for full errors of the single-object fitter.
-Unlike the model_sandwich error path, covariances built from
-them make no model-consistency substitution, so they remain
-calibrated under model mismatch, where the sandwich structure
-errors under-predict (T by ~12 percent for real morphologies
-fit with exp).
+The building blocks are consumed by deblenders (kdeblend
+full_errors); padmom_full_covariance assembles them into the full
+covariance of the single-object fitter (full_errors=True).
+Unlike the model_sandwich error path (see errors.py for the
+sandwich definition and references), covariances built from them
+make no model-consistency substitution, so they remain calibrated
+under model mismatch, where the sandwich structure errors
+under-predict (T by ~12 percent for real morphologies fit with
+exp).
+
+References
+----------
+Hampel (1974), "The influence curve and its role in robust
+    estimation", JASA 69, 383
 """
 import numpy as np
 
@@ -87,8 +95,8 @@ def dsums_dtheta(epoch, Sw, v0, u0):
     the analytic (6, 5) derivative of the data sums with respect
     to theta = (Sw00, Sw01, Sw11, v, u), contracted with the
     epoch's kim.  The kernel derivatives are exact; finite
-    differences against admom_ksums itself only agree to ~1e-3
-    because of its table exponential
+    differences against admom_ksums itself only agree to ~1e-5
+    because of its polynomial fastexp approximation
     """
     Sv, Su, base, yf, xf, dim, (wvv, wvu, wuu) = _ingredients(
         epoch, Sw, v0, u0,
@@ -300,9 +308,11 @@ def padmom_full_covariance(
 ):
     """
     the full (fixed-point) covariance for a converged
-    PAdmomFitter state: the m=1 case of the coupled estimating
-    equations, differentiating the actual plain update step at
-    the actual data with no model-consistency substitution.
+    PAdmomFitter state: the single-object case of the coupled
+    estimating equations (the multi-object version lives in
+    kdeblend full_errors), differentiating the actual plain
+    update step at the actual data with no model-consistency
+    substitution.
     The dense products run under single_core_blas: ngmix is a
     single core library, and they are large enough for a
     threaded BLAS to fan out.

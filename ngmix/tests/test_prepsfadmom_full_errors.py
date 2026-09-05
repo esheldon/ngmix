@@ -172,7 +172,7 @@ def test_full_errors_sums_cov_empirical_apodized():
 
 def test_full_errors_kernels_vs_admom_ksums():
     """the closed-form kernels reproduce admom_ksums to the
-    accuracy of its table exponential"""
+    accuracy of its fastexp approximation"""
     from ngmix.prepsfadmom.prepsfadmom import get_phase_angles
     from ngmix.prepsfadmom.prepsfadmom_nb import admom_ksums
 

@@ -4,16 +4,44 @@ first order error propagation for the pre-PSF adaptive moments fits
 The fits are M-estimators: the parameters solve moment conditions
 that are ratios of weighted moment sums, linear in the data.  The
 covariances here propagate the noise of those sums through the fixed
-point conditions (the delta method / sandwich covariance), so they
-include the response of the adaptively fitted weight to the noise,
-not just the fixed weight term.
+point conditions using the "sandwich" covariance, the standard first
+order covariance of an estimator theta defined by estimating
+equations g(theta; data) = 0:
 
-flux_var_delta evaluates the response analytically for the gaussian
-implied by the converged weight (the model='gauss' fitter and the
-deblender's gauss objects); model_sandwich evaluates the full
-sandwich for the moment matched model families with closed form
-model derivatives, and reduces exactly to flux_var_delta for a
-single gaussian family.
+    Cov(theta) = J^-1 Cov(g) J^-T,    J = dg/dtheta
+
+(the noise of the conditions bracketed by the inverse response,
+hence the name; Huber 1967; White 1982; see Stefanski & Boos 2002
+for the general recipe).  Because the conditions include the weight
+fixed point, these covariances carry the response of the adaptive
+weight (Bernstein & Jarvis 2002; Hirata & Seljak 2003) to the
+noise, not just the fixed weight term.
+
+flux_var_delta and flux_cov_delta evaluate the response analytically
+for the gaussian implied by the converged weight (the model='gauss'
+fitter and the deblender's gauss objects); model_sandwich evaluates
+the full sandwich for the moment matched model families with closed
+form model derivatives, reducing exactly to flux_var_delta for a
+single gaussian family; bdf_joint_sandwich extends it with the flux
+split as an estimated parameter; joint_flux_s2n is the
+covariance-aware total flux significance.  The sandwich formalism is
+standard; the closed forms here (the exact gaussian fixed point
+response, the cross-band assembly and the split cross terms) were
+derived for this code, not taken from the literature.
+
+References
+----------
+Huber (1967), "The behavior of maximum likelihood estimates under
+    nonstandard conditions", Proc. Fifth Berkeley Symp. Math.
+    Statist. Prob. 1, 221
+White (1982), "Maximum likelihood estimation of misspecified
+    models", Econometrica 50, 1
+Stefanski & Boos (2002), "The calculus of M-estimation", Amer.
+    Statist. 56, 29
+Bernstein & Jarvis (2002), "Shapes and shears, stars and smears:
+    optimal measurements for weak lensing", AJ 123, 583
+Hirata & Seljak (2003), "Shear calibration biases in weak-lensing
+    surveys", MNRAS 343, 459
 """
 import numpy as np
 from numba import njit
@@ -63,15 +91,18 @@ def joint_flux_s2n(F, fcov):
 def flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
     """
     variance of the raw per-band flux sums, including the first order
-    response of the adaptive weight to the noise (the delta method)
+    response of the adaptive weight to the noise; the diagonal of
+    flux_cov_delta
 
-    The converged weight satisfies the fixed point conditions
-    M(Sigma) = Sigma / 2, where M is the measured weighted covariance,
-    a ratio of the joint moment sums.  By the implicit function
+    The converged weight satisfies the adaptive moments fixed point
+    conditions M(Sigma) = Sigma / 2 (Bernstein & Jarvis 2002; Hirata
+    & Seljak 2003), where M is the measured weighted covariance, a
+    ratio of the joint moment sums.  By the implicit function
     theorem the weight fluctuation is dSigma = -J^-1 dM with
     J = dM/dSigma - 1/2.  For the gaussian implied by the converged
     weight, dM/dSigma = 1/4 exactly at the fixed point, for any
-    ellipticity and smoothing, so dSigma = 4 dM.  The flux
+    ellipticity and smoothing (an identity derived for this code),
+    so dSigma = 4 dM.  The flux
     normalization (proportional to sqrt(det Sigma)) and the kernel
     response of the flux sum combine to dln F = tr(Sigma^-1 dM), and
     for a single band the fixed weight flux fluctuation cancels
@@ -156,9 +187,10 @@ def flux_cov_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
     g = fmcovs @ b - fvars
 
     fcov = np.outer(r, r) * s + np.outer(r, g) + np.outer(g, r)
-    # the diagonal via the original variance expression, keeping
-    # the per-band variances bitwise identical to flux_var_delta
-    # as it stood before the cross-band assembly
+    # the band flux-sum noises are independent across bands, so
+    # fvars enters only on the diagonal, written in the direct
+    # per-band variance form to keep it bitwise identical to the
+    # historic flux_var_delta
     idx = np.arange(fsums.size)
     fcov[idx, idx] = fvars + r ** 2 * s + 2 * r * g
     return fcov
@@ -307,9 +339,9 @@ def model_sandwich(
         dF_b/F_b = dfs_b/fs_b - (dln N/dSfam) . dSfam
 
     where dM is the noise fluctuation of the measured moment ratios.
-    B and the normalization derivative are evaluated in closed form
-    (by central differences on the analytic predictions), so unlike
-    the gauss delta method there is no gaussian approximation beyond
+    B and the normalization derivative are evaluated by central
+    differences on the closed form model predictions, so unlike the
+    gauss delta method there is no gaussian approximation beyond
     replacing the data by the converged model; for a single gaussian
     family this reduces exactly to flux_var_delta.
 
@@ -524,7 +556,7 @@ def bdf_joint_sandwich(
         rp, lp = pred(famp, fd)
         rm, lm = pred(famm, fd)
         if rp is None or rm is None:
-            return None, None, None, None
+            return None, None, None
         B[:, i] = (rp - rm) / (2 * h)
         dlnu[i] = (lp - lm) / (2 * h)
 
