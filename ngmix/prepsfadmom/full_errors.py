@@ -585,6 +585,8 @@ def _padmom_full_covariance(
                 dout[:, c] = (p - m) / (2 * hs)
 
         Mpred = sym3_mat(MBASIS_TO_SYM @ mp0)
+        # Sp: the deweight image of the predicted moments, as in
+        # _model_shift
         Sp, DWp_M, DWp_S, pok = dw_derivs(Mpred, wt_cov)
         if pok:
             # shift = new_wt_cov - Sp; fam_cov' = fam_cov + shift

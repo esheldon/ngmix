@@ -294,9 +294,9 @@ def _sandwich_preds_nb(
     """
     n = fracs.size
     smooth = Tsmooth / 2
-    So00 = np.zeros(n)
-    So01 = np.zeros(n)
-    So11 = np.zeros(n)
+    cov_sm00 = np.zeros(n)
+    cov_sm01 = np.zeros(n)
+    cov_sm11 = np.zeros(n)
     dvz = np.zeros(n)
     duz = np.zeros(n)
     sums = np.zeros(6)
@@ -317,13 +317,13 @@ def _sandwich_preds_nb(
             sf11 = 0.5 * (tt + m1)
             for k in range(n):
                 cT = cts[k]
-                So00[k] = cT * sf00 + smooth
-                So01[k] = cT * sf01
-                So11[k] = cT * sf11 + smooth
+                cov_sm00[k] = cT * sf00 + smooth
+                cov_sm01[k] = cT * sf01
+                cov_sm11[k] = cT * sf11 + smooth
             for k in range(6):
                 sums[k] = 0.0
             gauss_comps_ksums(
-                fracs, So00, So01, So11, dvz, duz,
+                fracs, cov_sm00, cov_sm01, cov_sm11, dvz, duz,
                 sw00, sw01, sw11, 1.0, sums,
             )
             if not sums[5] > 0:

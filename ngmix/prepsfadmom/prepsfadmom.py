@@ -778,6 +778,8 @@ class PAdmomFitter(object):
             [0.5 * (Tp - Mp1), 0.5 * Mp2],
             [0.5 * Mp2, 0.5 * (Tp + Mp1)],
         ])
+        # Sp: the family covariance implied by the predicted
+        # moments (the deweight image of Mpred)
         Sp, pflags = deweight(Mpred, wt_cov)
 
         if pflags == 0:

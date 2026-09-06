@@ -20,7 +20,7 @@ DET_REL_TOL = 1.0e-12
 
 @njit
 def gauss_comps_ksums(
-    F, So00, So01, So11, dv, du, sw00, sw01, sw11, detAtinv, sums,
+    F, cov_sm00, cov_sm01, cov_sm11, dv, du, sw00, sw01, sw11, detAtinv, sums,
 ):
     """
     weighted moment sums of a set of gaussian components
@@ -35,7 +35,7 @@ def gauss_comps_ksums(
     ----------
     F: array
         per component total fluxes
-    So00, So01, So11: arrays
+    cov_sm00, cov_sm01, cov_sm11: arrays
         per component covariances in the smoothed plane
     dv, du: arrays
         per component offsets of the component center from the
@@ -53,9 +53,9 @@ def gauss_comps_ksums(
     nrm = 2 * np.pi * detAtinv
 
     for k in range(F.size):
-        C00 = sw00 + So00[k]
-        C01 = sw01 + So01[k]
-        C11 = sw11 + So11[k]
+        C00 = sw00 + cov_sm00[k]
+        C01 = sw01 + cov_sm01[k]
+        C11 = sw11 + cov_sm11[k]
         det = C00 * C11 - C01 * C01
 
         if not (C00 > 0.0 and det > DET_REL_TOL * C00 * C11):
@@ -78,14 +78,15 @@ def gauss_comps_ksums(
         mu0 = sw00 * Cd0 + sw01 * Cd1
         mu1 = sw01 * Cd0 + sw11 * Cd1
 
-        # Sp = wt_cov C^-1 So
+        # Sp: the second moments of the product gaussian,
+        # Sp = wt_cov C^-1 cov_sm
         A00 = sw00 * Ci00 + sw01 * Ci01
         A01 = sw00 * Ci01 + sw01 * Ci11
         A10 = sw01 * Ci00 + sw11 * Ci01
         A11 = sw01 * Ci01 + sw11 * Ci11
-        Sp00 = A00 * So00[k] + A01 * So01[k]
-        Sp01 = A00 * So01[k] + A01 * So11[k]
-        Sp11 = A10 * So01[k] + A11 * So11[k]
+        Sp00 = A00 * cov_sm00[k] + A01 * cov_sm01[k]
+        Sp01 = A00 * cov_sm01[k] + A01 * cov_sm11[k]
+        Sp11 = A10 * cov_sm01[k] + A11 * cov_sm11[k]
 
         vv = Sp00 + mu0 * mu0
         vu = Sp01 + mu0 * mu1

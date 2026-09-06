@@ -1239,9 +1239,10 @@ def test_prepsfadmom_model_ksums_kernel_parity():
             if model['type'] in ('exp', 'dev'):
                 expected = np.zeros(6)
                 for frac, cT in get_profile_comps(model['type']):
-                    So = cT * fam_cov + smooth_cov
+                    cov_sm = cT * fam_cov + smooth_cov
                     expected += gauss_model_ksums(
-                        model['F'][band] * frac, So, dv, du, wt_cov, detAtinv,
+                        model['F'][band] * frac, cov_sm, dv, du, wt_cov,
+                        detAtinv,
                     )
             else:
                 expected = gauss_model_ksums(
