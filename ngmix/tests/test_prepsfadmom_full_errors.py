@@ -99,9 +99,9 @@ def test_full_errors_influence_fd_apodized():
     assert ep['ktransfer'] is not None
     assert ep['ap_rad'] == ap_rad
 
-    Sw = np.array([[0.5, 0.05], [0.05, 0.6]])
+    wt_cov = np.array([[0.5, 0.05], [0.05, 0.6]])
     v0, u0 = 0.13, -0.21
-    G = moment_kernels(ep, Sw, v0, u0)
+    G = moment_kernels(ep, wt_cov, v0, u0)
     h = influence_kernels(ep, G, obs.image.shape)
 
     s0 = (G @ ep['kim']).real
@@ -135,10 +135,10 @@ def test_full_errors_sums_cov_empirical_apodized():
         obs, band=0, fwhm_smooth=FWHM_SMOOTH, ap_rad=ap_rad,
         store_transfer=True,
     )
-    Sw = np.array([[0.5, 0.05], [0.05, 0.6]])
+    wt_cov = np.array([[0.5, 0.05], [0.05, 0.6]])
     # kernel center 10 px toward the stamp edge, in the taper
     v0, u0 = 2.0, 0.0
-    G = moment_kernels(ep, Sw, v0, u0)
+    G = moment_kernels(ep, wt_cov, v0, u0)
 
     h = influence_kernels(ep, G, obs.image.shape)
     cov = sums_cov(h, obs.weight)
@@ -179,10 +179,10 @@ def test_full_errors_kernels_vs_admom_ksums():
     rng = np.random.RandomState(7)
     obs = _make_obs(rng)
     ep = _prep(obs)
-    Sw = np.array([[0.5, 0.05], [0.05, 0.6]])
+    wt_cov = np.array([[0.5, 0.05], [0.05, 0.6]])
     v0, u0 = 0.13, -0.21
 
-    G = moment_kernels(ep, Sw, v0, u0)
+    G = moment_kernels(ep, wt_cov, v0, u0)
     kim = (
         rng.normal(size=ep['kim'].shape)
         + 1j * rng.normal(size=ep['kim'].shape)
@@ -191,7 +191,7 @@ def test_full_errors_kernels_vs_admom_ksums():
     alpha, beta = get_phase_angles(ep, v0, u0)
     admom_ksums(
         kim, ep['iy'], ep['ix'], ep['dim'], alpha, beta,
-        ep['kv'], ep['ku'], Sw[0, 0], Sw[0, 1], Sw[1, 1],
+        ep['kv'], ep['ku'], wt_cov[0, 0], wt_cov[0, 1], wt_cov[1, 1],
         ep['df2'], sums,
     )
     assert np.allclose(
@@ -205,26 +205,26 @@ def test_full_errors_dsums_dtheta():
     rng = np.random.RandomState(9)
     obs = _make_obs(rng)
     ep = _prep(obs)
-    Sw0 = np.array([[0.5, 0.05], [0.05, 0.6]])
+    wt_cov0 = np.array([[0.5, 0.05], [0.05, 0.6]])
     v0, u0 = 0.13, -0.21
 
-    D = dsums_dtheta(ep, Sw0, v0, u0)
+    D = dsums_dtheta(ep, wt_cov0, v0, u0)
     Dfd = np.zeros((6, 5))
     hs = [1e-5, 1e-5, 1e-5, 1e-6, 1e-6]
     for t in range(5):
         for sign in (1, -1):
-            Sw = Sw0.copy()
+            wt_cov = wt_cov0.copy()
             v, u = v0, u0
             if t < 3:
                 r, c = [(0, 0), (0, 1), (1, 1)][t]
-                Sw[r, c] += sign * hs[t]
-                Sw[c, r] = Sw[r, c]
+                wt_cov[r, c] += sign * hs[t]
+                wt_cov[c, r] = wt_cov[r, c]
             elif t == 3:
                 v = v0 + sign * hs[t]
             else:
                 u = u0 + sign * hs[t]
             sums = (
-                moment_kernels(ep, Sw, v, u) @ ep['kim']
+                moment_kernels(ep, wt_cov, v, u) @ ep['kim']
             ).real
             Dfd[:, t] += sign * sums / (2 * hs[t])
     rel = np.abs(D - Dfd) / (np.abs(Dfd) + 1e-8)
@@ -237,8 +237,8 @@ def test_full_errors_influence_rfft_vs_reference():
     rng = np.random.RandomState(11)
     obs = _make_obs(rng)
     ep = _prep(obs)
-    Sw = np.array([[0.5, 0.05], [0.05, 0.6]])
-    G = moment_kernels(ep, Sw, 0.1, -0.1)
+    wt_cov = np.array([[0.5, 0.05], [0.05, 0.6]])
+    G = moment_kernels(ep, wt_cov, 0.1, -0.1)
 
     h_ref = influence_kernels(
         ep, G, obs.image.shape, reference=True,
@@ -253,8 +253,8 @@ def test_full_errors_sums_cov_empirical():
     rng = np.random.RandomState(13)
     obs = _make_obs(rng)
     ep = _prep(obs)
-    Sw = np.array([[0.5, 0.05], [0.05, 0.6]])
-    G = moment_kernels(ep, Sw, 0.0, 0.0)
+    wt_cov = np.array([[0.5, 0.05], [0.05, 0.6]])
+    G = moment_kernels(ep, wt_cov, 0.0, 0.0)
 
     h = influence_kernels(ep, G, obs.image.shape)
     cov = sums_cov(h, obs.weight)

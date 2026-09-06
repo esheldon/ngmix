@@ -47,14 +47,14 @@ __all__ = [
 WK_CHI2_MAX = 25.0
 
 
-def _ingredients(epoch, Sw, v0, u0):
+def _ingredients(epoch, wt_cov, v0, u0):
     """the shared per-epoch pieces of the kernel expressions"""
     alpha, beta = get_phase_angles(epoch, v0, u0)
     dim = epoch['dim']
     iy = epoch['iy'].astype(np.int64)
     ix = epoch['ix'].astype(np.int64)
     kv, ku = epoch['kv'], epoch['ku']
-    wvv, wvu, wuu = Sw[0, 0], Sw[0, 1], Sw[1, 1]
+    wvv, wvu, wuu = wt_cov[0, 0], wt_cov[0, 1], wt_cov[1, 1]
 
     Sv = wvv * kv + wvu * ku
     Su = wvu * kv + wuu * ku
@@ -71,7 +71,7 @@ def _ingredients(epoch, Sw, v0, u0):
     return Sv, Su, base, yf, xf, dim, (wvv, wvu, wuu)
 
 
-def moment_kernels(epoch, Sw, v0, u0):
+def moment_kernels(epoch, wt_cov, v0, u0):
     """
     the (6, nmodes) complex moment kernels G with
     sums = Re(G @ kim)
@@ -82,7 +82,7 @@ def moment_kernels(epoch, Sw, v0, u0):
     ----------
     epoch: dict
         A prep_epoch dict
-    Sw: (2, 2) array
+    wt_cov: (2, 2) array
         The weight covariance
     v0, u0: float
         The center offset in the epoch's phase convention (as for
@@ -94,7 +94,7 @@ def moment_kernels(epoch, Sw, v0, u0):
         The kernels for the [v, u, M1, M2, T, flux] sums
     """
     Sv, Su, base, _, _, _, (wvv, wvu, wuu) = _ingredients(
-        epoch, Sw, v0, u0,
+        epoch, wt_cov, v0, u0,
     )
     G = np.empty((6, Sv.size), dtype=complex)
     G[0] = 1j * Sv * base
@@ -106,10 +106,10 @@ def moment_kernels(epoch, Sw, v0, u0):
     return G
 
 
-def dsums_dtheta(epoch, Sw, v0, u0):
+def dsums_dtheta(epoch, wt_cov, v0, u0):
     """
     the analytic (6, 5) derivative of the data sums with respect
-    to theta = (Sw00, Sw01, Sw11, v, u)
+    to theta = (wt_cov[0, 0], wt_cov[0, 1], wt_cov[1, 1], v, u)
 
     Contracted with the epoch's kim.  The kernel derivatives are
     exact; finite differences against admom_ksums itself only
@@ -120,7 +120,7 @@ def dsums_dtheta(epoch, Sw, v0, u0):
     ----------
     epoch: dict
         A prep_epoch dict
-    Sw: (2, 2) array
+    wt_cov: (2, 2) array
         The weight covariance
     v0, u0: float
         The center offset (as for get_phase_angles)
@@ -131,7 +131,7 @@ def dsums_dtheta(epoch, Sw, v0, u0):
         d(sums)/d(theta)
     """
     Sv, Su, base, yf, xf, dim, (wvv, wvu, wuu) = _ingredients(
-        epoch, Sw, v0, u0,
+        epoch, wt_cov, v0, u0,
     )
     kv, ku = epoch['kv'], epoch['ku']
     kim = epoch['kim']
@@ -517,7 +517,7 @@ def _padmom_full_covariance(
     dm3[2] = dratio(4) - 2 * (dv * ddv + du * ddu)
 
     Mmat = sym3_mat(MBASIS_TO_SYM @ m3)
-    newSw, DWm_M, DWm_S, ok = dw_derivs(Mmat, wt_cov)
+    new_wt_cov, DWm_M, DWm_S, ok = dw_derivs(Mmat, wt_cov)
     if not ok:
         return None
     dsym_dsums = MBASIS_TO_SYM @ dm3
@@ -587,7 +587,7 @@ def _padmom_full_covariance(
         Mpred = sym3_mat(MBASIS_TO_SYM @ mp0)
         Sp, DWp_M, DWp_S, pok = dw_derivs(Mpred, wt_cov)
         if pok:
-            # shift = newSw - Sp; fam_cov' = fam_cov + shift
+            # shift = new_wt_cov - Sp; fam_cov' = fam_cov + shift
             Phi_s[ifam:ifam + 3] = DWm_M @ dsym_dsums
             Phi_x[ifam:ifam + 3, ifam:ifam + 3] = (
                 np.eye(3)
@@ -598,8 +598,8 @@ def _padmom_full_covariance(
                 - DWp_M @ MBASIS_TO_SYM @ dmp_dsw - DWp_S
             )
             shift = np.array([
-                newSw[0, 0] - Sp[0, 0], newSw[0, 1] - Sp[0, 1],
-                newSw[1, 1] - Sp[1, 1],
+                new_wt_cov[0, 0] - Sp[0, 0], new_wt_cov[0, 1] - Sp[0, 1],
+                new_wt_cov[1, 1] - Sp[1, 1],
             ])
         else:
             # gain-1 fallback on the ratios
@@ -663,7 +663,7 @@ def _padmom_full_covariance(
 
         # health: the plain step must be undamped and accepted
         prop, idamp, accepted = fitter._damped_step(
-            fam_cov, sym3_mat(shift), newSw, Tsmooth,
+            fam_cov, sym3_mat(shift), new_wt_cov, Tsmooth,
         )
         if not accepted or idamp > 0:
             return None

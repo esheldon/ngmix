@@ -1218,7 +1218,7 @@ def test_prepsfadmom_model_ksums_kernel_parity():
 
     Tsmooth = 0.35
     smooth_cov = np.diag([Tsmooth / 2, Tsmooth / 2])
-    Sw = np.array([[0.31, 0.04], [0.04, 0.27]])
+    wt_cov = np.array([[0.31, 0.04], [0.04, 0.27]])
     dv, du = 0.83, -1.21
     detAtinv = 3.7
     F = np.array([2.5, 1.5])
@@ -1241,15 +1241,16 @@ def test_prepsfadmom_model_ksums_kernel_parity():
                 for frac, cT in get_profile_comps(model['type']):
                     So = cT * fam_cov + smooth_cov
                     expected += gauss_model_ksums(
-                        model['F'][band] * frac, So, dv, du, Sw, detAtinv,
+                        model['F'][band] * frac, So, dv, du, wt_cov, detAtinv,
                     )
             else:
                 expected = gauss_model_ksums(
-                    model['F'][band], model['cov_sm'], dv, du, Sw, detAtinv,
+                    model['F'][band], model['cov_sm'], dv, du, wt_cov,
+                    detAtinv,
                 )
 
             sums = model_ksums(
-                model, band, dv, du, Sw, detAtinv, Tsmooth,
+                model, band, dv, du, wt_cov, detAtinv, Tsmooth,
             )
             assert np.allclose(sums, expected, rtol=1.0e-12, atol=1.0e-14)
 

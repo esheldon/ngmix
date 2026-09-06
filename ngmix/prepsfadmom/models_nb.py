@@ -78,7 +78,7 @@ def gauss_comps_ksums(
         mu0 = sw00 * Cd0 + sw01 * Cd1
         mu1 = sw01 * Cd0 + sw11 * Cd1
 
-        # Sp = Sw C^-1 So
+        # Sp = wt_cov C^-1 So
         A00 = sw00 * Ci00 + sw01 * Ci01
         A01 = sw00 * Ci01 + sw01 * Ci11
         A10 = sw01 * Ci00 + sw11 * Ci01

@@ -7,14 +7,14 @@ which are linear in the image, so model contributions can be computed
 gaussian models and fixed-ratio mixtures of gaussians the weighted
 sums follow from the product-gaussian identities.
 
-For weight W (covariance Sw, unit peak, centered at the object being
+For weight W (covariance wt_cov, unit peak, centered at the object being
 measured) and a model gaussian (flux F, covariance So in the
 smoothed-deconvolved plane) at offset d,
 
-    C = Sw + So
+    C = wt_cov + So
     s_flux = F exp(-d^T C^-1 d / 2) / (2 pi detAtinv sqrt(det C))
-    mu     = Sw C^-1 d              first moments
-    <x x^T> = Sw C^-1 So + mu mu^T  second moments
+    mu     = wt_cov C^-1 d              first moments
+    <x x^T> = wt_cov C^-1 So + mu mu^T  second moments
 
 in exactly the units of the admom_ksums output.
 
@@ -80,7 +80,7 @@ def mom_from_cov(S):
     return S[1, 1] - S[0, 0], 2 * S[0, 1], S[0, 0] + S[1, 1]
 
 
-def gauss_model_ksums(flux, So, dv, du, Sw, detAtinv):
+def gauss_model_ksums(flux, So, dv, du, wt_cov, detAtinv):
     """
     closed-form weighted moment sums of a gaussian model
 
@@ -92,7 +92,7 @@ def gauss_model_ksums(flux, So, dv, du, Sw, detAtinv):
         model covariance in the smoothed-deconvolved plane
     dv, du: float
         offset of the model center from the weight center
-    Sw: (2, 2) array
+    wt_cov: (2, 2) array
         the weight covariance
     detAtinv: float
         the k-space area factor of the epoch
@@ -102,7 +102,7 @@ def gauss_model_ksums(flux, So, dv, du, Sw, detAtinv):
     sums: array of size 6
         [v, u, M1, M2, T, flux] sums in the units of admom_ksums
     """
-    C = Sw + So
+    C = wt_cov + So
     Cinv = inv2(C)
     d = np.array([dv, du])
     Cd = Cinv @ d
@@ -111,8 +111,8 @@ def gauss_model_ksums(flux, So, dv, du, Sw, detAtinv):
         2 * np.pi * detAtinv * np.sqrt(det2(C))
     )
 
-    mu = Sw @ Cd
-    Sp = Sw @ Cinv @ So
+    mu = wt_cov @ Cd
+    Sp = wt_cov @ Cinv @ So
     vv = Sp[0, 0] + mu[0] * mu[0]
     vu = Sp[0, 1] + mu[0] * mu[1]
     uu = Sp[1, 1] + mu[1] * mu[1]
@@ -210,7 +210,7 @@ def model_comps(model, Tsmooth):
         raise ValueError(f"bad model type: '{model['type']}'")
 
 
-def model_ksums(model, band, dv, du, Sw, detAtinv, Tsmooth):
+def model_ksums(model, band, dv, du, wt_cov, detAtinv, Tsmooth):
     """
     closed-form weighted moment sums of an object model, dispatching
     on the model type, evaluated via the numba kernel
@@ -224,16 +224,16 @@ def model_ksums(model, band, dv, du, Sw, detAtinv, Tsmooth):
     gauss_comps_ksums(
         F, So00, So01, So11,
         np.full(n, float(dv)), np.full(n, float(du)),
-        Sw[0, 0], Sw[0, 1], Sw[1, 1], float(detAtinv), sums,
+        wt_cov[0, 0], wt_cov[0, 1], wt_cov[1, 1], float(detAtinv), sums,
     )
     return sums
 
 
-def mixture_model_valid(model, fam_cov, Sw, Tsmooth):
+def mixture_model_valid(model, fam_cov, wt_cov, Tsmooth):
     """
     check that a mixture family covariance gives well defined
     weighted sums: every component must have positive definite total
-    covariance C = Sw + cT fam_cov + smoothing.  This is weaker than
+    covariance C = wt_cov + cT fam_cov + smoothing.  This is weaker than
     positive definiteness of fam_cov itself: the smoothing and the
     weight regularize the model family the same way they regularize
     the data, so mildly negative sizes and ellipticities slightly
@@ -252,7 +252,7 @@ def mixture_model_valid(model, fam_cov, Sw, Tsmooth):
 
     smooth_cov = np.diag([Tsmooth / 2, Tsmooth / 2])
     for frac, cT in comps:
-        C = Sw + cT * fam_cov + smooth_cov
+        C = wt_cov + cT * fam_cov + smooth_cov
         if (C[0, 0] <= 0 or C[1, 1] <= 0
                 or det2(C) <= 1.0e-6 * C[0, 0] * C[1, 1]):
             return False
