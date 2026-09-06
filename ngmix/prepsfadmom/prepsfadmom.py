@@ -6,9 +6,9 @@ real-space moment sums are evaluated in k-space against the
 PSF-deconvolved FFT of the image, using derivatives of the elliptical
 gaussian weight
 
-    W(k) = exp(-k^T Sigma k / 2)
+    W(k) = exp(-k^T wt_cov k / 2)
 
-where Sigma is the real-space covariance matrix of the weight.  Because
+where wt_cov is the real-space covariance matrix of the weight.  Because
 the moment sums are linear in the image, multiple epochs and bands can
 be accumulated for a joint fit with a common center and covariance; the
 per-band fluxes are then measured with the common converged weight,
@@ -523,7 +523,7 @@ class PAdmomFitter(object):
         else:
             return self._run_admom_gauss(epochs, nband, guess_gmix, Tsmooth)
 
-    def _measure_step(self, epochs, Sigma, v0, u0, vorig, uorig):
+    def _measure_step(self, epochs, wt_cov, v0, u0, vorig, uorig):
         """
         one measurement pass under the current weight, shared by the
         gauss and mixture iterations: validate the weight, accumulate
@@ -538,11 +538,11 @@ class PAdmomFitter(object):
         center lags by one iteration, which vanishes at the fixed
         point
         """
-        if (Sigma[0, 0] <= 0 or Sigma[1, 1] <= 0
-                or det2(Sigma) < GMIX_LOW_DETVAL):
+        if (wt_cov[0, 0] <= 0 or wt_cov[1, 1] <= 0
+                or det2(wt_cov) < GMIX_LOW_DETVAL):
             return ngmix.flags.LOW_DET, v0, u0, 0.0, 0.0, None
 
-        sums = self._accumulate(epochs, Sigma, v0, u0)
+        sums = self._accumulate(epochs, wt_cov, v0, u0)
 
         if sums[5] <= 0:
             return ngmix.flags.NONPOS_FLUX, v0, u0, 0.0, 0.0, None
@@ -592,7 +592,7 @@ class PAdmomFitter(object):
         u0 = cen_guess[1]
         e1g, e2g, Tg = guess_gmix.get_e1e2T()
         irr, irc, icc = e2mom(e1g, e2g, Tg + Tsmooth)
-        Sigma = np.array([[irr, irc], [irc, icc]])
+        wt_cov = np.array([[irr, irc], [irc, icc]])
 
         vorig = v0
         uorig = u0
@@ -604,12 +604,12 @@ class PAdmomFitter(object):
             numiter = i + 1
 
             flags, v0, u0, dv, du, M = self._measure_step(
-                epochs, Sigma, v0, u0, vorig, uorig,
+                epochs, wt_cov, v0, u0, vorig, uorig,
             )
             if flags != 0:
                 break
 
-            newSigma, flags = deweight(M, Sigma)
+            new_wt_cov, flags = deweight(M, wt_cov)
             if flags != 0:
                 break
 
@@ -617,14 +617,14 @@ class PAdmomFitter(object):
             # test as the mixture loop.  The centroid correction
             # decouples the center from the moments, so the center
             # must be tested explicitly
-            shift = newSigma - Sigma
-            scale = newSigma[0, 0] + newSigma[1, 1]
+            shift = new_wt_cov - wt_cov
+            scale = new_wt_cov[0, 0] + new_wt_cov[1, 1]
             converged = (
                 np.abs(shift).max() < self.etol * scale
                 and abs(dv) < self.cen_tol
                 and abs(du) < self.cen_tol
             )
-            Sigma = newSigma
+            wt_cov = new_wt_cov
 
             if converged:
                 break
@@ -633,7 +633,7 @@ class PAdmomFitter(object):
 
         return self._get_result(
             epochs=epochs, nband=nband, flags=flags, numiter=numiter,
-            Sigma=Sigma, v0=v0, u0=u0, Tsmooth=Tsmooth,
+            wt_cov=wt_cov, v0=v0, u0=u0, Tsmooth=Tsmooth,
         )
 
     def _run_admom_mixture(self, epochs, nband, guess_gmix, Tsmooth):
@@ -680,7 +680,7 @@ class PAdmomFitter(object):
         u0 = cen_guess[1]
         e1g, e2g, Tg = guess_gmix.get_e1e2T()
         irr, irc, icc = e2mom(e1g, e2g, Tg + Tsmooth)
-        Sigma = np.array([[irr, irc], [irc, icc]])
+        wt_cov = np.array([[irr, irc], [irc, icc]])
         Sfam = cov_from_e(e1g, e2g, Tg)
 
         vorig = v0
@@ -697,23 +697,23 @@ class PAdmomFitter(object):
             numiter = i + 1
 
             flags, v0, u0, dv, du, M = self._measure_step(
-                epochs, Sigma, v0, u0, vorig, uorig,
+                epochs, wt_cov, v0, u0, vorig, uorig,
             )
             if flags != 0:
                 break
 
-            newSigma, flags = deweight(M, Sigma)
+            new_wt_cov, flags = deweight(M, wt_cov)
             if flags != 0:
                 break
 
             raw_shift, pflags = self._model_shift(
-                Sfam, M, Sigma, newSigma, Tsmooth,
+                Sfam, M, wt_cov, new_wt_cov, Tsmooth,
             )
             shift, boosted = self._steffensen_boost(
                 raw_shift, prev_shift, pflags,
             )
             prop, idamp, accepted = self._damped_step(
-                Sfam, shift, newSigma, Tsmooth,
+                Sfam, shift, new_wt_cov, Tsmooth,
             )
             if not accepted:
                 flags = ngmix.flags.LOW_DET
@@ -726,7 +726,7 @@ class PAdmomFitter(object):
             else:
                 prev_shift = None
 
-            scale = newSigma[0, 0] + newSigma[1, 1]
+            scale = new_wt_cov[0, 0] + new_wt_cov[1, 1]
             # convergence requires an undamped step and is tested on
             # the raw fixed-point residual, not the boosted step: a
             # damped step can be small only because it was shortened
@@ -739,7 +739,7 @@ class PAdmomFitter(object):
                 and abs(du) < self.cen_tol
             )
             Sfam = prop
-            Sigma = newSigma
+            wt_cov = new_wt_cov
 
             if converged:
                 break
@@ -751,11 +751,11 @@ class PAdmomFitter(object):
         }
         return self._get_result(
             epochs=epochs, nband=nband, flags=flags, numiter=numiter,
-            Sigma=Sigma, v0=v0, u0=u0, Tsmooth=Tsmooth,
+            wt_cov=wt_cov, v0=v0, u0=u0, Tsmooth=Tsmooth,
             model_state=model_state,
         )
 
-    def _model_shift(self, Sfam, M, Sigma, newSigma, Tsmooth):
+    def _model_shift(self, Sfam, M, wt_cov, new_wt_cov, Tsmooth):
         """
         the raw fixed point shift of the family covariance: the
         deweight-mapped difference of the measured and model
@@ -768,7 +768,7 @@ class PAdmomFitter(object):
         # for every epoch, so one closed-form evaluation suffices
         unit_state = self._unit_state(Sfam)
         psums = model_ksums(
-            unit_state, 0, 0.0, 0.0, Sigma, 1.0, Tsmooth,
+            unit_state, 0, 0.0, 0.0, wt_cov, 1.0, Tsmooth,
         )
         pinv = 1.0 / psums[5]
         Mp1 = psums[2] * pinv
@@ -778,12 +778,12 @@ class PAdmomFitter(object):
             [0.5 * (Tp - Mp1), 0.5 * Mp2],
             [0.5 * Mp2, 0.5 * (Tp + Mp1)],
         ])
-        Sp, pflags = deweight(Mpred, Sigma)
+        Sp, pflags = deweight(Mpred, wt_cov)
 
         if pflags == 0:
             # shift the family covariance by the deweight-mapped
             # difference of the measured and predicted moments
-            shift = newSigma - Sp
+            shift = new_wt_cov - Sp
         else:
             # gain-1 fallback on the weighted moment ratios,
             # composed in matrix form: scale by the T ratio and
@@ -820,7 +820,7 @@ class PAdmomFitter(object):
                     return raw_shift / (1 - rho), True
         return raw_shift, False
 
-    def _damped_step(self, Sfam, shift, newSigma, Tsmooth):
+    def _damped_step(self, Sfam, shift, new_wt_cov, Tsmooth):
         """
         accept the largest step, damping if needed, for which the
         smoothed model components stay positive definite.  Returns
@@ -830,7 +830,7 @@ class PAdmomFitter(object):
         for idamp in range(10):
             prop = Sfam + shift
             if mixture_model_valid(
-                    self._model_spec(), prop, newSigma, Tsmooth):
+                    self._model_spec(), prop, new_wt_cov, Tsmooth):
                 accepted = True
                 break
             shift = 0.5 * shift
@@ -881,7 +881,7 @@ class PAdmomFitter(object):
         u0 = cen_guess[1]
         e1g, e2g, Tg = guess_gmix.get_e1e2T()
         irr, irc, icc = e2mom(e1g, e2g, Tg + Tsmooth)
-        Sigma = np.array([[irr, irc], [irc, icc]])
+        wt_cov = np.array([[irr, irc], [irc, icc]])
         Sfam = cov_from_e(e1g, e2g, Tg)
 
         vorig = v0
@@ -899,23 +899,23 @@ class PAdmomFitter(object):
             numiter = i + 1
 
             flags, v0, u0, dv, du, M = self._measure_step(
-                epochs, Sigma, v0, u0, vorig, uorig,
+                epochs, wt_cov, v0, u0, vorig, uorig,
             )
             if flags != 0:
                 break
 
-            newSigma, flags = deweight(M, Sigma)
+            new_wt_cov, flags = deweight(M, wt_cov)
             if flags != 0:
                 break
 
             raw_shift, pflags = self._model_shift(
-                Sfam, M, Sigma, newSigma, Tsmooth,
+                Sfam, M, wt_cov, new_wt_cov, Tsmooth,
             )
             shift, boosted = self._steffensen_boost(
                 raw_shift, prev_shift, pflags,
             )
             prop, idamp, accepted = self._damped_step(
-                Sfam, shift, newSigma, Tsmooth,
+                Sfam, shift, new_wt_cov, Tsmooth,
             )
             if not accepted:
                 flags = ngmix.flags.LOW_DET
@@ -927,7 +927,7 @@ class PAdmomFitter(object):
                 prev_shift = None
 
             Sfam = prop
-            Sigma = newSigma
+            wt_cov = new_wt_cov
 
             # the flux reassignment at the updated structure; the
             # band-summed split drives the composite table
@@ -944,7 +944,7 @@ class PAdmomFitter(object):
             dfd = abs(newfd - self._fracdev)
             self._fracdev = newfd
 
-            scale = newSigma[0, 0] + newSigma[1, 1]
+            scale = new_wt_cov[0, 0] + new_wt_cov[1, 1]
             converged = (
                 idamp == 0
                 and np.abs(raw_shift).max() < self.etol * scale
@@ -974,7 +974,7 @@ class PAdmomFitter(object):
                     epochs, nband, Sfam, F2, v0, u0,
                 )
                 eta_scov, eta_fcovs = self._bdf_noise_cross(
-                    epochs, nband, Sfam, Sigma, F2, fcovs,
+                    epochs, nband, Sfam, wt_cov, F2, fcovs,
                 )
                 if G is not None and eta_scov is not None:
                     self._bdf_err = (
@@ -985,7 +985,7 @@ class PAdmomFitter(object):
         self._bdf_fd_var_total = None
         res = self._get_result(
             epochs=epochs, nband=nband, flags=flags, numiter=numiter,
-            Sigma=Sigma, v0=v0, u0=u0, Tsmooth=Tsmooth,
+            wt_cov=wt_cov, v0=v0, u0=u0, Tsmooth=Tsmooth,
             model_state=model_state,
         )
         res['fracdev_err'] = np.nan
@@ -1134,7 +1134,7 @@ class PAdmomFitter(object):
             G[i] = (fp - fm) / (2 * h)
         return G
 
-    def _bdf_noise_cross(self, epochs, nband, Sfam, Sigma, F2, fcovs):
+    def _bdf_noise_cross(self, epochs, nband, Sfam, wt_cov, F2, fcovs):
         """
         the analytic cross covariance of the split noise eta with
         the accumulated moment and flux sums.
@@ -1162,14 +1162,14 @@ class PAdmomFitter(object):
         for epoch in epochs:
             kv = epoch['kv']
             ku = epoch['ku']
-            Sv = Sigma[0, 0] * kv + Sigma[0, 1] * ku
-            Su = Sigma[0, 1] * kv + Sigma[1, 1] * ku
+            Sv = wt_cov[0, 0] * kv + wt_cov[0, 1] * ku
+            Su = wt_cov[0, 1] * kv + wt_cov[1, 1] * ku
             chi2 = kv * Sv + ku * Su
             wk = np.exp(-0.5 * np.clip(chi2, 0, FASTEXP_MAX_CHI2))
             wk[(chi2 > FASTEXP_MAX_CHI2) | (chi2 < 0)] = 0.0
-            vvk = (Sigma[0, 0] - Sv * Sv) * wk
-            vuk = (Sigma[0, 1] - Sv * Su) * wk
-            uuk = (Sigma[1, 1] - Su * Su) * wk
+            vvk = (wt_cov[0, 0] - Sv * Sv) * wk
+            vuk = (wt_cov[0, 1] - Sv * Su) * wk
+            uuk = (wt_cov[1, 1] - Su * Su) * wk
             kern = (uuk - vvk, 2 * vuk, uuk + vvk, wk)
 
             ts = self._bdf_templates(epoch, Sfam, 1.0)
@@ -1265,14 +1265,14 @@ class PAdmomFitter(object):
         u0 = cen_guess[1]
         vorig = v0
         uorig = u0
-        Sigma = np.diag([Tsmooth / 2, Tsmooth / 2])
+        wt_cov = np.diag([Tsmooth / 2, Tsmooth / 2])
 
         flags = 0
         numiter = 0
         for i in range(self.maxiter):
             numiter = i + 1
 
-            sums = self._accumulate(epochs, Sigma, v0, u0)
+            sums = self._accumulate(epochs, wt_cov, v0, u0)
 
             if sums[5] <= 0:
                 flags = ngmix.flags.NONPOS_FLUX
@@ -1304,12 +1304,12 @@ class PAdmomFitter(object):
         }
         return self._get_result(
             epochs=epochs, nband=nband, flags=flags, numiter=numiter,
-            Sigma=Sigma, v0=v0, u0=u0, Tsmooth=Tsmooth,
+            wt_cov=wt_cov, v0=v0, u0=u0, Tsmooth=Tsmooth,
             model_state=model_state,
         )
 
     def _get_result(
-        self, epochs, nband, flags, numiter, Sigma, v0, u0, Tsmooth,
+        self, epochs, nband, flags, numiter, wt_cov, v0, u0, Tsmooth,
         model_state=None,
     ):
         """
@@ -1350,22 +1350,22 @@ class PAdmomFitter(object):
             'flux_err': np.zeros(nband) + np.nan,
             'flux_flags': 0,
             's2n': np.nan,
-            'wt_irr': Sigma[0, 0],
-            'wt_irc': Sigma[0, 1],
-            'wt_icc': Sigma[1, 1],
+            'wt_irr': wt_cov[0, 0],
+            'wt_irc': wt_cov[0, 1],
+            'wt_icc': wt_cov[1, 1],
         }
 
         if flags == 0:
             (sums, sums_cov, fluxes, flux_vars, fam_cov,
              flux_cov) = self._finalize(
-                epochs, nband, Sigma, v0, u0, Tsmooth,
+                epochs, nband, wt_cov, v0, u0, Tsmooth,
                 model_state=model_state,
             )
             res['sums'] = sums
             res['sums_cov'] = sums_cov
 
             M1, M2, Tgal, shape_ok = self._shape_state(
-                model_state, Sigma, Tsmooth,
+                model_state, wt_cov, Tsmooth,
             )
             res['T'] = Tgal
 
@@ -1398,12 +1398,12 @@ class PAdmomFitter(object):
             ])
 
             self._set_shape(
-                res, model_state, shape_ok, M1, M2, Tgal, Sigma,
+                res, model_state, shape_ok, M1, M2, Tgal, wt_cov,
                 fam_cov, sums, sums_cov,
             )
 
             self._set_gauss_entries(
-                res, Sigma, Tsmooth, sums, sums_cov,
+                res, wt_cov, Tsmooth, sums, sums_cov,
             )
 
         if (
@@ -1425,7 +1425,7 @@ class PAdmomFitter(object):
             from .full_errors import padmom_full_covariance
 
             fe = padmom_full_covariance(
-                self, epochs, nband, model_state, Sigma,
+                self, epochs, nband, model_state, wt_cov,
                 v0, u0, Tsmooth,
             )
             if fe is not None:
@@ -1479,7 +1479,7 @@ class PAdmomFitter(object):
 
         return res
 
-    def _shape_state(self, model_state, Sigma, Tsmooth):
+    def _shape_state(self, model_state, wt_cov, Tsmooth):
         """
         the galaxy moments (M1, M2, Tgal) and whether the shape M/Tgal
         is defined, per model type.  det > 0 with positive trace is
@@ -1491,8 +1491,8 @@ class PAdmomFitter(object):
             # subtracted.  The round smoothing shifts only the
             # diagonal, so it drops out of M1 and M2 and only T
             # needs the subtraction
-            Sgal = Sigma - np.diag([Tsmooth / 2, Tsmooth / 2])
-            M1, M2, Twt = mom_from_cov(Sigma)
+            Sgal = wt_cov - np.diag([Tsmooth / 2, Tsmooth / 2])
+            M1, M2, Twt = mom_from_cov(wt_cov)
             Tgal = Twt - Tsmooth
             shape_ok = Tgal > 0 and det2(Sgal) > 0
         elif model_state['type'] in ('exp', 'dev', 'bdf'):
@@ -1532,7 +1532,7 @@ class PAdmomFitter(object):
         else:
             res['T_flags'] |= ngmix.flags.NONPOS_VAR
 
-    def _set_gauss_entries(self, res, Sigma, Tsmooth, sums, sums_cov):
+    def _set_gauss_entries(self, res, wt_cov, Tsmooth, sums, sums_cov):
         """
         the gauss (converged-weight) shape estimator entries,
         available for free with every model: the weight iteration
@@ -1543,8 +1543,8 @@ class PAdmomFitter(object):
         model the weight is frozen at the smoothing and the
         entries stay flagged
         """
-        Sgal = Sigma - np.diag([Tsmooth / 2, Tsmooth / 2])
-        Twt = Sigma[0, 0] + Sigma[1, 1]
+        Sgal = wt_cov - np.diag([Tsmooth / 2, Tsmooth / 2])
+        Twt = wt_cov[0, 0] + wt_cov[1, 1]
         Tgal = Twt - Tsmooth
         res['gauss_T'] = Tgal
 
@@ -1575,7 +1575,7 @@ class PAdmomFitter(object):
             res['gauss_e_flags'] |= ngmix.flags.NONPOS_SHAPE_VAR
 
     def _set_shape(
-        self, res, model_state, shape_ok, M1, M2, Tgal, Sigma,
+        self, res, model_state, shape_ok, M1, M2, Tgal, wt_cov,
         fam_cov, sums, sums_cov,
     ):
         """
@@ -1625,7 +1625,7 @@ class PAdmomFitter(object):
             elif sums_cov[2, 2] > 0 and sums_cov[3, 3] > 0:
                 # the lever arm Twt/Tgal accounts for the smoothing
                 # subtraction in the denominator of e = M1/Tgal
-                Twt = Sigma[0, 0] + Sigma[1, 1]
+                Twt = wt_cov[0, 0] + wt_cov[1, 1]
                 lever = Twt / Tgal
                 e1err = lever * 2 * get_ratio_error(
                     sums[2], sums[4],
@@ -1663,7 +1663,7 @@ class PAdmomFitter(object):
             res['flags'] |= ngmix.flags.NONPOS_SIZE
             res['e_flags'] |= ngmix.flags.NONPOS_SIZE
 
-    def _accumulate(self, epochs, Sigma, v0, u0):
+    def _accumulate(self, epochs, wt_cov, v0, u0):
         """
         accumulate the k-space moment sums over epochs
 
@@ -1677,13 +1677,13 @@ class PAdmomFitter(object):
             admom_ksums(
                 epoch['kim'], epoch['iy'], epoch['ix'], epoch['dim'],
                 alpha, beta, epoch['kv'], epoch['ku'],
-                Sigma[0, 0], Sigma[0, 1], Sigma[1, 1], epoch['df2'],
+                wt_cov[0, 0], wt_cov[0, 1], wt_cov[1, 1], epoch['df2'],
                 esums,
             )
             sums += epoch['weight'] * epoch['detAtinv'] * esums
         return sums
 
-    def _finalize(self, epochs, nband, Sigma, v0, u0, Tsmooth,
+    def _finalize(self, epochs, nband, wt_cov, v0, u0, Tsmooth,
                   model_state=None):
         """
         get the final accumulated sums, their covariance, and the
@@ -1701,12 +1701,12 @@ class PAdmomFitter(object):
 
         The flux normalization: the raw flux sum corresponds to a
         weighted flux with an effective real-space kernel of peak value
-        1/(2 pi sqrt(det(Sigma)) detAtinv).  We normalize to a unit peak
+        1/(2 pi sqrt(det(wt_cov)) detAtinv).  We normalize to a unit peak
         kernel, and the factor of 2 converts the gaussian-weighted flux
         to the total flux at the fixed point of the iteration.  The
         smoothing preserves flux, so this also holds when smoothing.
         """
-        knrm = 2 * np.pi * np.sqrt(det2(Sigma))
+        knrm = 2 * np.pi * np.sqrt(det2(wt_cov))
 
         sums = np.zeros(6)
         cov = np.zeros((6, 6))
@@ -1725,7 +1725,7 @@ class PAdmomFitter(object):
             admom_finalize(
                 epoch['kim'], epoch['iy'], epoch['ix'], epoch['dim'],
                 alpha, beta, epoch['kv'], epoch['ku'],
-                Sigma[0, 0], Sigma[0, 1], Sigma[1, 1], epoch['df2'],
+                wt_cov[0, 0], wt_cov[0, 1], wt_cov[1, 1], epoch['df2'],
                 epoch['err_fac2'],
                 esums, ecov,
             )
@@ -1749,7 +1749,7 @@ class PAdmomFitter(object):
             # in closed form; the diagonal is the flux_var_delta
             # variances unchanged
             fcov_raw = flux_cov_delta(
-                Sigma, sums, cov, fsums, fvars, fmcovs,
+                wt_cov, sums, cov, fsums, fvars, fmcovs,
             )
             uband = 2 * knrm / wsums
             flux_vars = uband ** 2 * np.diag(fcov_raw)
@@ -1759,7 +1759,7 @@ class PAdmomFitter(object):
             for epoch in epochs:
                 fac = epoch['weight'] * epoch['detAtinv']
                 upred[epoch['band']] += fac * model_ksums(
-                    model_state, epoch['band'], 0.0, 0.0, Sigma,
+                    model_state, epoch['band'], 0.0, 0.0, wt_cov,
                     epoch['detAtinv'], Tsmooth,
                 )[5]
             fluxes = fsums / upred
@@ -1782,7 +1782,7 @@ class PAdmomFitter(object):
                     G, k, fdv, eta_scov, eta_fcovs = self._bdf_err
                     rawvars, fam_cov, fd_var_tot = (
                         bdf_joint_sandwich(
-                            model_state, Sigma, Tsmooth, sums,
+                            model_state, wt_cov, Tsmooth, sums,
                             cov, fsums, fvars, fmcovs,
                             split_grad=G, shrink_k=k,
                             fd_var_data=fdv,
@@ -1793,7 +1793,7 @@ class PAdmomFitter(object):
                     self._bdf_fd_var_total = fd_var_tot
                 if rawvars is None:
                     rawvars, fam_cov, fcov_raw = model_sandwich(
-                        spec, model_state['cov'], Sigma,
+                        spec, model_state['cov'], wt_cov,
                         Tsmooth, sums, cov, fsums, fvars, fmcovs,
                     )
                 if rawvars is None:
@@ -1939,27 +1939,27 @@ def get_phase_angles(epoch, v0, u0):
     return alpha, beta
 
 
-def deweight(M, Sigma):
+def deweight(M, wt_cov):
     """
     deweight the measured moments, returning the new weight covariance
 
-    Sigma_new = (M^{-1} - Sigma^{-1})^{-1}
+    wt_cov_new = (M^{-1} - wt_cov^{-1})^{-1}
     """
     detm = det2(M)
     if detm <= GMIX_LOW_DETVAL:
-        return Sigma, ngmix.flags.LOW_DET
+        return wt_cov, ngmix.flags.LOW_DET
 
-    detw = det2(Sigma)
+    detw = det2(wt_cov)
     if detw <= GMIX_LOW_DETVAL:
-        return Sigma, ngmix.flags.LOW_DET
+        return wt_cov, ngmix.flags.LOW_DET
 
     idetm = 1.0 / detm
     idetw = 1.0 / detw
 
     # inverse of a 2x2 [[a, b], [b, c]] is [[c, -b], [-b, a]]/det
-    Nvv = M[1, 1] * idetm - Sigma[1, 1] * idetw
-    Nuu = M[0, 0] * idetm - Sigma[0, 0] * idetw
-    Nvu = -M[0, 1] * idetm + Sigma[0, 1] * idetw
+    Nvv = M[1, 1] * idetm - wt_cov[1, 1] * idetw
+    Nuu = M[0, 0] * idetm - wt_cov[0, 0] * idetw
+    Nvu = -M[0, 1] * idetm + wt_cov[0, 1] * idetw
 
     # a positive determinant is not sufficient for a 2x2 symmetric
     # matrix: both eigenvalues negative also gives det > 0.  That
@@ -1968,11 +1968,11 @@ def deweight(M, Sigma):
     # inverse would be a negative definite weight
     detn = Nvv * Nuu - Nvu * Nvu
     if detn <= GMIX_LOW_DETVAL or Nvv <= 0 or Nuu <= 0:
-        return Sigma, ngmix.flags.LOW_DET
+        return wt_cov, ngmix.flags.LOW_DET
 
     idetn = 1.0 / detn
-    newSigma = np.array([
+    new_wt_cov = np.array([
         [Nuu * idetn, -Nvu * idetn],
         [-Nvu * idetn, Nvv * idetn],
     ])
-    return newSigma, 0
+    return new_wt_cov, 0

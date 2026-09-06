@@ -7,7 +7,6 @@ import ngmix
 from ngmix.moments import fwhm_to_T
 from ngmix import Jacobian, Observation, ObsList, MultiBandObsList
 from ngmix.prepsfadmom import run_prepsf_admom, PAdmomFitter
-import ngmix.flags
 
 
 GSPARAMS = galsim.GSParams(
@@ -28,15 +27,15 @@ def _gauss_cov(e1, e2, T):
     ])
 
 
-def _cov_to_gauss(Sigma, flux):
+def _cov_to_gauss(wt_cov, flux):
     """
     galsim gaussian with the given covariance matrix
     """
-    T = Sigma[0, 0] + Sigma[1, 1]
-    e1 = (Sigma[1, 1] - Sigma[0, 0]) / T
-    e2 = 2 * Sigma[0, 1] / T
+    T = wt_cov[0, 0] + wt_cov[1, 1]
+    e1 = (wt_cov[1, 1] - wt_cov[0, 0]) / T
+    e2 = 2 * wt_cov[0, 1] / T
     return galsim.Gaussian(
-        sigma=np.linalg.det(Sigma) ** 0.25, gsparams=GSPARAMS,
+        sigma=np.linalg.det(wt_cov) ** 0.25, gsparams=GSPARAMS,
     ).shear(e1=e1, e2=e2) * flux
 
 
@@ -50,8 +49,8 @@ def _make_obs(
     galsim fft rendering error
     """
     Tpsf = fwhm_to_T(psf_fwhm)
-    Sigma = _gauss_cov(e1, e2, T) + np.diag([Tpsf / 2, Tpsf / 2])
-    obj = _cov_to_gauss(Sigma, flux)
+    wt_cov = _gauss_cov(e1, e2, T) + np.diag([Tpsf / 2, Tpsf / 2])
+    obj = _cov_to_gauss(wt_cov, flux)
     psf = galsim.Gaussian(fwhm=psf_fwhm, gsparams=GSPARAMS)
 
     cen = (dim - 1) / 2
@@ -175,7 +174,9 @@ def test_prepsfadmom_exp_pixel_handling():
         nx=fdim, ny=fdim, scale=scale / fine, method='no_pixel').array
     obs_fine = Observation(
         im_fine,
-        jacobian=ngmix.DiagonalJacobian(scale=scale / fine, row=fcen, col=fcen),
+        jacobian=ngmix.DiagonalJacobian(
+            scale=scale / fine, row=fcen, col=fcen,
+        ),
     )
     amres = ngmix.admom.run_admom(obs_fine, guess=0.5, rng=rng)
     assert amres['flags'] == 0
@@ -726,8 +727,8 @@ def _make_exp_mix_obs(
     Tpsf = fwhm_to_T(psf_fwhm)
     parts = []
     for frac, cT in get_profile_comps(model):
-        Sigma = cov_from_e(e1, e2, cT * T) + np.diag([Tpsf / 2] * 2)
-        parts.append(_cov_to_gauss(Sigma, flux * frac))
+        wt_cov = cov_from_e(e1, e2, cT * T) + np.diag([Tpsf / 2] * 2)
+        parts.append(_cov_to_gauss(wt_cov, flux * frac))
     obj = galsim.Add(parts)
     psf = galsim.Gaussian(fwhm=psf_fwhm, gsparams=GSPARAMS)
 
@@ -1071,9 +1072,9 @@ def test_prepsfadmommodel_sandwich_gauss_anchor():
 
     rng = np.random.RandomState(9)
     Tsmooth = 0.8
-    Sigma = np.array([[0.9, 0.08], [0.08, 1.1]])
+    wt_cov = np.array([[0.9, 0.08], [0.08, 1.1]])
     # the gauss fixed point: smoothed family covariance = weight
-    Sfam = Sigma - np.diag([Tsmooth / 2] * 2)
+    Sfam = wt_cov - np.diag([Tsmooth / 2] * 2)
 
     sums = np.zeros(6)
     sums[5] = 5.0
@@ -1083,12 +1084,12 @@ def test_prepsfadmommodel_sandwich_gauss_anchor():
     fvars = np.array([0.3, 0.4])
     fmcovs = rng.normal(size=(2, 3)) * 0.1
 
-    raw_delta = flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs)
+    raw_delta = flux_var_delta(wt_cov, sums, cov, fsums, fvars, fmcovs)
     fcov_delta = flux_cov_delta(
-        Sigma, sums, cov, fsums, fvars, fmcovs,
+        wt_cov, sums, cov, fsums, fvars, fmcovs,
     )
     raw_sw, fam_cov, fcov_raw = model_sandwich(
-        'gauss', Sfam, Sigma, Tsmooth, sums, cov, fsums, fvars, fmcovs,
+        'gauss', Sfam, wt_cov, Tsmooth, sums, cov, fsums, fvars, fmcovs,
     )
     assert np.allclose(np.diag(fcov_raw), raw_sw, rtol=0, atol=0)
     assert np.allclose(raw_sw, raw_delta, rtol=1.0e-5, atol=0)
@@ -1101,8 +1102,8 @@ def test_prepsfadmommodel_sandwich_gauss_anchor():
     # B = 1/4 for the single gaussian family, so the family
     # covariance is 16 times the measured ratio covariance
     mvec = np.array([
-        Sigma[1, 1] - Sigma[0, 0], 2 * Sigma[0, 1],
-        Sigma[0, 0] + Sigma[1, 1],
+        wt_cov[1, 1] - wt_cov[0, 0], 2 * wt_cov[0, 1],
+        wt_cov[0, 0] + wt_cov[1, 1],
     ]) / 2
     css = cov[2:5, 2:5]
     csf = cov[2:5, 5]
@@ -1281,16 +1282,16 @@ def test_prepsfadmom_e_flags():
 def test_prepsfadmom_deweight_nonpos():
     """
     measured moments exceeding the weight in both eigendirections
-    give N = M^-1 - Sigma^-1 negative definite with positive
+    give N = M^-1 - wt_cov^-1 negative definite with positive
     determinant; deweight must flag instead of returning a negative
     definite weight, which would drive chi2 < 0 in the k-sum kernels
     and index the fastexp lookup table out of range
     """
     from ngmix.prepsfadmom import deweight
 
-    Sigma = np.diag([0.5, 0.5])
+    wt_cov = np.diag([0.5, 0.5])
     M = np.diag([1.0, 1.0])
-    newSigma, flags = deweight(M, Sigma)
+    new_wt_cov, flags = deweight(M, wt_cov)
     assert flags != 0
 
 

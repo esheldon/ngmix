@@ -327,36 +327,36 @@ def sym3_mat(v):
     return np.array([[v[0], v[1]], [v[1], v[2]]])
 
 
-def dw_derivs(M, Sigma):
+def dw_derivs(M, wt_cov):
     """
     the deweight map and its derivatives
 
-    newSigma = (M^-1 - Sigma^-1)^-1 with
-    d(newSigma) = S(new)[S(M^-1) dM - S(Sigma^-1) dSigma] in the
+    new_wt_cov = (M^-1 - wt_cov^-1)^-1 with
+    d(new_wt_cov) = S(new)[S(M^-1) dM - S(wt_cov^-1) d(wt_cov)] in the
     sym3 basis.
 
     Returns
     -------
-    newSigma: (2, 2) array or None
+    new_wt_cov: (2, 2) array or None
         The deweighted covariance
     DW_M: (3, 3) array or None
-        d(newSigma)/dM in the sym3 basis
+        d(new_wt_cov)/dM in the sym3 basis
     DW_S: (3, 3) array or None
-        d(newSigma)/dSigma in the sym3 basis
+        d(new_wt_cov)/d(wt_cov) in the sym3 basis
     ok: bool
         False when the deweight is flagged; the others are then
         None
     """
     from .prepsfadmom import deweight
 
-    newS, flags = deweight(M, Sigma)
+    newS, flags = deweight(M, wt_cov)
     if flags != 0:
         return None, None, None, False
     Snew = sym_sandwich(newS)
     return (
         newS,
         Snew @ sym_sandwich(sym_inv(M)),
-        -(Snew @ sym_sandwich(sym_inv(Sigma))),
+        -(Snew @ sym_sandwich(sym_inv(wt_cov))),
         True,
     )
 
@@ -376,7 +376,7 @@ SYM_TO_MBASIS = np.array([
 
 
 def padmom_full_covariance(
-    fitter, epochs, nband, model_state, Sigma, v0, u0, Tsmooth,
+    fitter, epochs, nband, model_state, wt_cov, v0, u0, Tsmooth,
 ):
     """
     the full (fixed-point) covariance for a converged
@@ -411,7 +411,7 @@ def padmom_full_covariance(
     model_state: dict or None
         The converged family state; None for the plain gauss
         path
-    Sigma: (2, 2) array
+    wt_cov: (2, 2) array
         The converged weight covariance
     v0, u0: float
         The converged center
@@ -432,13 +432,13 @@ def padmom_full_covariance(
     with single_core_blas():
         return _padmom_full_covariance(
             fitter=fitter, epochs=epochs, nband=nband,
-            model_state=model_state, Sigma=Sigma, v0=v0, u0=u0,
+            model_state=model_state, wt_cov=wt_cov, v0=v0, u0=u0,
             Tsmooth=Tsmooth,
         )
 
 
 def _padmom_full_covariance(
-    fitter, epochs, nband, model_state, Sigma, v0, u0, Tsmooth,
+    fitter, epochs, nband, model_state, wt_cov, v0, u0, Tsmooth,
 ):
     """the body of padmom_full_covariance; see that docstring"""
     from .prepsfadmom import model_ksums
@@ -473,11 +473,11 @@ def _padmom_full_covariance(
         admom_ksums(
             ep['kim'], ep['iy'], ep['ix'], ep['dim'],
             alpha, beta, ep['kv'], ep['ku'],
-            Sigma[0, 0], Sigma[0, 1], Sigma[1, 1], ep['df2'],
+            wt_cov[0, 0], wt_cov[0, 1], wt_cov[1, 1], ep['df2'],
             s,
         )
         esums.append(s)
-        Ds.append(dsums_dtheta(ep, Sigma, v0, u0))
+        Ds.append(dsums_dtheta(ep, wt_cov, v0, u0))
         facs.append(ep['weight'] * ep['detAtinv'])
 
     sums = np.zeros(6)
@@ -517,7 +517,7 @@ def _padmom_full_covariance(
     dm3[2] = dratio(4) - 2 * (dv * ddv + du * ddu)
 
     Mmat = sym3_mat(MBASIS_TO_SYM @ m3)
-    newSw, DWm_M, DWm_S, ok = dw_derivs(Mmat, Sigma)
+    newSw, DWm_M, DWm_S, ok = dw_derivs(Mmat, wt_cov)
     if not ok:
         return None
     dsym_dsums = MBASIS_TO_SYM @ dm3
@@ -542,7 +542,7 @@ def _padmom_full_covariance(
         sfam3 = np.array([
             Sfam[0, 0], Sfam[0, 1], Sfam[1, 1],
         ])
-        hs = 1.0e-6 * max(Sigma[0, 0] + Sigma[1, 1], 0.1)
+        hs = 1.0e-6 * max(wt_cov[0, 0] + wt_cov[1, 1], 0.1)
 
         def mp3_of(sf3, sw3):
             st = dict(model_state)
@@ -559,7 +559,7 @@ def _padmom_full_covariance(
             ])
 
         sw3 = np.array([
-            Sigma[0, 0], Sigma[0, 1], Sigma[1, 1],
+            wt_cov[0, 0], wt_cov[0, 1], wt_cov[1, 1],
         ])
         mp0 = mp3_of(sfam3, sw3)
         if mp0 is None:
@@ -585,7 +585,7 @@ def _padmom_full_covariance(
                 dout[:, c] = (p - m) / (2 * hs)
 
         Mpred = sym3_mat(MBASIS_TO_SYM @ mp0)
-        Sp, DWp_M, DWp_S, pok = dw_derivs(Mpred, Sigma)
+        Sp, DWp_M, DWp_S, pok = dw_derivs(Mpred, wt_cov)
         if pok:
             # shift = newSw - Sp; Sfam' = Sfam + shift
             Phi_s[ifam:ifam + 3] = DWm_M @ dsym_dsums
@@ -691,7 +691,7 @@ def _padmom_full_covariance(
         w = ep.get('obs_weight')
         if w is None:
             return None
-        G = moment_kernels(ep, Sigma, v0, u0)
+        G = moment_kernels(ep, wt_cov, v0, u0)
         h = influence_kernels(ep, G, w.shape)
         covS[
             iep * 6:(iep + 1) * 6, iep * 6:(iep + 1) * 6,
@@ -712,7 +712,7 @@ def _padmom_full_covariance(
 
     # fluxes, following the _finalize normalization: the model
     # paths use F_b = fs_b / upred_b; the plain gauss path uses
-    # F_b = 2 knrm fs_b / ws_b with knrm = 2 pi sqrt(det Sigma)
+    # F_b = 2 knrm fs_b / ws_b with knrm = 2 pi sqrt(det wt_cov)
     fs = np.zeros(nband)
     for ep, s, fac in zip(epochs, esums, facs):
         fs[ep['band']] += fac * s[5]
@@ -721,12 +721,12 @@ def _padmom_full_covariance(
         ws = np.zeros(nband)
         for ep in epochs:
             ws[ep['band']] += ep['weight']
-        detS = Sigma[0, 0] * Sigma[1, 1] - Sigma[0, 1] ** 2
+        detS = wt_cov[0, 0] * wt_cov[1, 1] - wt_cov[0, 1] ** 2
         cnorm = 4.0 * np.pi * np.sqrt(detS)
         F = cnorm * fs / ws
         # d ln cnorm / d(sw3)
         dlnc = np.array([
-            Sigma[1, 1], -2.0 * Sigma[0, 1], Sigma[0, 0],
+            wt_cov[1, 1], -2.0 * wt_cov[0, 1], wt_cov[0, 0],
         ]) / (2.0 * detS)
 
         RF = np.zeros((nband, 6 * nep))
@@ -765,7 +765,7 @@ def _padmom_full_covariance(
     for ep in epochs:
         fac = ep['weight'] * ep['detAtinv']
         upred[ep['band']] += fac * model_ksums(
-            model_state, ep['band'], 0.0, 0.0, Sigma,
+            model_state, ep['band'], 0.0, 0.0, wt_cov,
             ep['detAtinv'], Tsmooth,
         )[5]
     if np.any(upred == 0):
@@ -773,7 +773,7 @@ def _padmom_full_covariance(
     F = fs / upred
 
     # d(upred)/d(state): family and weight channels by micro-FD
-    hs2 = 1.0e-6 * max(Sigma[0, 0] + Sigma[1, 1], 0.1)
+    hs2 = 1.0e-6 * max(wt_cov[0, 0] + wt_cov[1, 1], 0.1)
 
     def upred_of(sf3, sw3v):
         st = dict(model_state)
@@ -792,7 +792,7 @@ def _padmom_full_covariance(
         return out
 
     sw3 = np.array([
-        Sigma[0, 0], Sigma[0, 1], Sigma[1, 1],
+        wt_cov[0, 0], wt_cov[0, 1], wt_cov[1, 1],
     ])
     if is_mix:
         sf3 = np.array([

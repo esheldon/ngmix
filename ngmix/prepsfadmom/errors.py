@@ -64,9 +64,8 @@ def joint_flux_s2n(F, fcov):
 
     The Wald significance (Wald 1943) of the flux vector given its
     cross-band covariance.  The statistic is invariant to per-band
-    rescaling,
-    so raw flux sums with the raw covariance give the same result
-    as physical fluxes with the physical covariance.
+    rescaling, so raw flux sums with the raw covariance give the
+    same result as physical fluxes with the physical covariance.
 
     Parameters
     ----------
@@ -93,26 +92,26 @@ def joint_flux_s2n(F, fcov):
     return np.sqrt(q)
 
 
-def flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
+def flux_var_delta(wt_cov, sums, cov, fsums, fvars, fmcovs):
     """
     variance of the raw per-band flux sums, including the adaptive
     weight response; the diagonal of flux_cov_delta
 
     The converged weight satisfies the adaptive moments fixed point
-    conditions M(Sigma) = Sigma / 2 (Bernstein & Jarvis 2002; Hirata
+    conditions M(wt_cov) = wt_cov / 2 (Bernstein & Jarvis 2002; Hirata
     & Seljak 2003), where M is the measured weighted covariance, a
     ratio of the joint moment sums.  By the implicit function
-    theorem the weight fluctuation is dSigma = -J^-1 dM with
-    J = dM/dSigma - 1/2.  For the gaussian implied by the converged
-    weight, dM/dSigma = 1/4 exactly at the fixed point, for any
+    theorem the weight fluctuation is d(wt_cov) = -J^-1 dM with
+    J = dM/d(wt_cov) - 1/2.  For the gaussian implied by the converged
+    weight, dM/d(wt_cov) = 1/4 exactly at the fixed point, for any
     ellipticity and smoothing (an identity derived for this code),
-    so dSigma = 4 dM.  The flux
-    normalization (proportional to sqrt(det Sigma)) and the kernel
-    response of the flux sum combine to dln F = tr(Sigma^-1 dM), and
+    so d(wt_cov) = 4 dM.  The flux
+    normalization (proportional to sqrt(det wt_cov)) and the kernel
+    response of the flux sum combine to dln F = tr(wt_cov^-1 dM), and
     for a single band the fixed weight flux fluctuation cancels
     exactly, leaving
 
-        dF / F = tr(Sigma^-1 dS_M) / S_F
+        dF / F = tr(wt_cov^-1 dS_M) / S_F
 
     in terms of the second moment sum fluctuations alone.  For a
     round gaussian with matched weight and white noise this doubles
@@ -123,7 +122,7 @@ def flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
 
     Parameters
     ----------
-    Sigma: 2x2 array
+    wt_cov: 2x2 array
         The converged weight covariance
     sums: array of size 6
         The accumulated joint sums
@@ -145,11 +144,11 @@ def flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
         raw flux sums
     """
     return np.diag(flux_cov_delta(
-        Sigma, sums, cov, fsums, fvars, fmcovs,
+        wt_cov, sums, cov, fsums, fvars, fmcovs,
     )).copy()
 
 
-def flux_cov_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
+def flux_cov_delta(wt_cov, sums, cov, fsums, fvars, fmcovs):
     """
     full cross-band covariance of the raw per band flux sums,
     including the adaptive weight response; the diagonal is
@@ -166,7 +165,7 @@ def flux_cov_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
 
     Parameters
     ----------
-    Sigma, sums, cov, fsums, fvars, fmcovs:
+    wt_cov, sums, cov, fsums, fvars, fmcovs:
         As for flux_var_delta
 
     Returns
@@ -175,7 +174,7 @@ def flux_cov_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
         The covariance of the raw per band flux sums; scale by
         the same normalization as the raw flux sums
     """
-    Winv = np.linalg.inv(Sigma)
+    Winv = np.linalg.inv(wt_cov)
     # tr(Winv dS_M) = b . dS in the (M1, M2, T) sums basis
     b = np.array([
         0.5 * (Winv[1, 1] - Winv[0, 0]),
@@ -212,7 +211,7 @@ def _mbasis_cov(M1, M2, T):
     ])
 
 
-def _model_pred_mbasis(model_type, Sfam, Sigma, Tsmooth):
+def _model_pred_mbasis(model_type, Sfam, wt_cov, Tsmooth):
     """
     the predicted weighted moment ratios (M1, M2, T) and the log
     of the unit flux prediction for a model family covariance
@@ -237,7 +236,7 @@ def _model_pred_mbasis(model_type, Sfam, Sigma, Tsmooth):
             'cov_sm': Sfam + np.diag([Tsmooth / 2, Tsmooth / 2]),
             'F': np.ones(1),
         }
-    s = model_ksums(state, 0, 0.0, 0.0, Sigma, 1.0, Tsmooth)
+    s = model_ksums(state, 0, 0.0, 0.0, wt_cov, 1.0, Tsmooth)
     if not s[5] > 0:
         # a state at or past the validity boundary (e.g. a
         # perturbed family covariance whose smoothed components
@@ -337,14 +336,14 @@ def _sandwich_preds_nb(
 
 
 def model_sandwich(
-    model_type, Sfam, Sigma, Tsmooth, sums, cov, fsums, fvars, fmcovs,
+    model_type, Sfam, wt_cov, Tsmooth, sums, cov, fsums, fvars, fmcovs,
 ):
     """
     first order (sandwich) errors for the moment matched model fits
 
     The estimating equations are the weight condition
-    M_meas(Sigma) = Sigma/2, the family condition
-    M_pred(Sigma, Sfam) = M_meas, and per band F_b N_b = fs_b with
+    M_meas(wt_cov) = wt_cov/2, the family condition
+    M_pred(wt_cov, Sfam) = M_meas, and per band F_b N_b = fs_b with
     N_b the unit flux model prediction.  Evaluated with the data
     replaced by the converged model, the Jacobian is block
     triangular: the family and flux conditions lose their explicit
@@ -369,7 +368,7 @@ def model_sandwich(
         flux split)
     Sfam: (2, 2) array
         The converged family covariance
-    Sigma: (2, 2) array
+    wt_cov: (2, 2) array
         The converged weight covariance
     Tsmooth: float
         The smoothing T
@@ -398,7 +397,7 @@ def model_sandwich(
     back to the fixed weight variances and flag the structure
     errors
     """
-    Tw = Sigma[0, 0] + Sigma[1, 1]
+    Tw = wt_cov[0, 0] + wt_cov[1, 1]
     h = 1.0e-6 * Tw
     fam0 = np.array([
         Sfam[1, 1] - Sfam[0, 0], 2 * Sfam[0, 1],
@@ -415,7 +414,7 @@ def model_sandwich(
         preds = np.zeros((3, 2, 4))
         ok = _sandwich_preds_nb(
             fracs, cts, fam0, h,
-            Sigma[0, 0], Sigma[0, 1], Sigma[1, 1], Tsmooth, preds,
+            wt_cov[0, 0], wt_cov[0, 1], wt_cov[1, 1], Tsmooth, preds,
         )
         if not ok:
             return None, None, None
@@ -432,10 +431,10 @@ def model_sandwich(
             famp[i] += h
             famm[i] -= h
             rp, lp = _model_pred_mbasis(
-                model_type, _mbasis_cov(*famp), Sigma, Tsmooth,
+                model_type, _mbasis_cov(*famp), wt_cov, Tsmooth,
             )
             rm, lm = _model_pred_mbasis(
-                model_type, _mbasis_cov(*famm), Sigma, Tsmooth,
+                model_type, _mbasis_cov(*famm), wt_cov, Tsmooth,
             )
             if rp is None or rm is None:
                 return None, None, None
@@ -446,7 +445,7 @@ def model_sandwich(
     # dM = (dS_M - mvec dS_F) / S_F, in terms of the raw sums
     sfj = sums[5]
     mvec = np.array([
-        Sigma[1, 1] - Sigma[0, 0], 2 * Sigma[0, 1], Tw,
+        wt_cov[1, 1] - wt_cov[0, 0], 2 * wt_cov[0, 1], Tw,
     ]) / 2
     css = cov[2:5, 2:5]
     csf = cov[2:5, 5]
@@ -483,7 +482,7 @@ def model_sandwich(
 
 
 def bdf_joint_sandwich(
-    model_state, Sigma, Tsmooth, sums, cov, fsums, fvars, fmcovs,
+    model_state, wt_cov, Tsmooth, sums, cov, fsums, fvars, fmcovs,
     split_grad, shrink_k, fd_var_data,
     eta_scov=None, eta_fcovs=None,
 ):
@@ -522,7 +521,7 @@ def bdf_joint_sandwich(
     ----------
     model_state: dict
         the converged bdf model state ('cov', 'fracdev', 'TdByTe')
-    Sigma, Tsmooth, sums, cov, fsums, fvars, fmcovs:
+    wt_cov, Tsmooth, sums, cov, fsums, fvars, fmcovs:
         as for model_sandwich
     split_grad: array of size 3
         d fd_gls / d (M1, M2, T) of the family covariance, at the
@@ -552,7 +551,7 @@ def bdf_joint_sandwich(
     Sfam = model_state['cov']
     fd = model_state['fracdev']
 
-    Tw = Sigma[0, 0] + Sigma[1, 1]
+    Tw = wt_cov[0, 0] + wt_cov[1, 1]
     h = 1.0e-6 * Tw
     fam0 = np.array([
         Sfam[1, 1] - Sfam[0, 0], 2 * Sfam[0, 1],
@@ -563,7 +562,7 @@ def bdf_joint_sandwich(
         state = dict(model_state)
         state['fracdev'] = fdval
         return _model_pred_mbasis(
-            state, _mbasis_cov(*famvec), Sigma, Tsmooth,
+            state, _mbasis_cov(*famvec), wt_cov, Tsmooth,
         )
 
     B = np.zeros((3, 3))
@@ -591,7 +590,7 @@ def bdf_joint_sandwich(
     # measured ratio fluctuation covariance, as in model_sandwich
     sfj = sums[5]
     mvec = np.array([
-        Sigma[1, 1] - Sigma[0, 0], 2 * Sigma[0, 1], Tw,
+        wt_cov[1, 1] - wt_cov[0, 0], 2 * wt_cov[0, 1], Tw,
     ]) / 2
     css = cov[2:5, 2:5]
     csf = cov[2:5, 5]
