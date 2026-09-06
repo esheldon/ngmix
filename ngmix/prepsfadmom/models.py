@@ -190,9 +190,9 @@ def model_comps(model, Tsmooth):
         )
     elif model['type'] in ('exp', 'dev', 'bdf'):
         if 'cov' in model:
-            Sfam = model['cov']
+            fam_cov = model['cov']
         else:
-            Sfam = cov_from_e(model['e1'], model['e2'], model['T'])
+            fam_cov = cov_from_e(model['e1'], model['e2'], model['T'])
         smooth = Tsmooth / 2
         comps = _mixture_comps(model)
         n = len(comps)
@@ -202,9 +202,9 @@ def model_comps(model, Tsmooth):
         So11 = np.zeros(n)
         for k, (frac, cT) in enumerate(comps):
             fracs[k] = frac
-            So00[k] = cT * Sfam[0, 0] + smooth
-            So01[k] = cT * Sfam[0, 1]
-            So11[k] = cT * Sfam[1, 1] + smooth
+            So00[k] = cT * fam_cov[0, 0] + smooth
+            So01[k] = cT * fam_cov[0, 1]
+            So11[k] = cT * fam_cov[1, 1] + smooth
         return fracs, So00, So01, So11
     else:
         raise ValueError(f"bad model type: '{model['type']}'")
@@ -229,12 +229,12 @@ def model_ksums(model, band, dv, du, Sw, detAtinv, Tsmooth):
     return sums
 
 
-def mixture_model_valid(model, Sfam, Sw, Tsmooth):
+def mixture_model_valid(model, fam_cov, Sw, Tsmooth):
     """
     check that a mixture family covariance gives well defined
     weighted sums: every component must have positive definite total
-    covariance C = Sw + cT Sfam + smoothing.  This is weaker than
-    positive definiteness of Sfam itself: the smoothing and the
+    covariance C = Sw + cT fam_cov + smoothing.  This is weaker than
+    positive definiteness of fam_cov itself: the smoothing and the
     weight regularize the model family the same way they regularize
     the data, so mildly negative sizes and ellipticities slightly
     past one remain valid states.
@@ -252,7 +252,7 @@ def mixture_model_valid(model, Sfam, Sw, Tsmooth):
 
     smooth_cov = np.diag([Tsmooth / 2, Tsmooth / 2])
     for frac, cT in comps:
-        C = Sw + cT * Sfam + smooth_cov
+        C = Sw + cT * fam_cov + smooth_cov
         if (C[0, 0] <= 0 or C[1, 1] <= 0
                 or det2(C) <= 1.0e-6 * C[0, 0] * C[1, 1]):
             return False

@@ -421,7 +421,7 @@ def padmom_full_covariance(
     Returns
     -------
     res: dict or None
-        Entries flux_cov (nband, nband), flux_err, fam_cov (the
+        Entries flux_cov (nband, nband), flux_err, fam_err_cov (the
         (M1, M2, T) family covariance for the structure errors)
         and s2n; None when the model is unsupported or the
         evaluation at the solution takes a guarded branch (the
@@ -538,9 +538,9 @@ def _padmom_full_covariance(
     Phi_x[isw:isw + 3, isw:isw + 3] = DWm_S
 
     if is_mix:
-        Sfam = model_state['cov']
+        fam_cov = model_state['cov']
         sfam3 = np.array([
-            Sfam[0, 0], Sfam[0, 1], Sfam[1, 1],
+            fam_cov[0, 0], fam_cov[0, 1], fam_cov[1, 1],
         ])
         hs = 1.0e-6 * max(wt_cov[0, 0] + wt_cov[1, 1], 0.1)
 
@@ -587,7 +587,7 @@ def _padmom_full_covariance(
         Mpred = sym3_mat(MBASIS_TO_SYM @ mp0)
         Sp, DWp_M, DWp_S, pok = dw_derivs(Mpred, wt_cov)
         if pok:
-            # shift = newSw - Sp; Sfam' = Sfam + shift
+            # shift = newSw - Sp; fam_cov' = fam_cov + shift
             Phi_s[ifam:ifam + 3] = DWm_M @ dsym_dsums
             Phi_x[ifam:ifam + 3, ifam:ifam + 3] = (
                 np.eye(3)
@@ -663,7 +663,7 @@ def _padmom_full_covariance(
 
         # health: the plain step must be undamped and accepted
         prop, idamp, accepted = fitter._damped_step(
-            Sfam, sym3_mat(shift), newSw, Tsmooth,
+            fam_cov, sym3_mat(shift), newSw, Tsmooth,
         )
         if not accepted or idamp > 0:
             return None
@@ -708,7 +708,7 @@ def _padmom_full_covariance(
         cblock = covX[ifam:ifam + 3, ifam:ifam + 3]
     else:
         cblock = covX[isw:isw + 3, isw:isw + 3]
-    fam_cov = SYM_TO_MBASIS @ cblock @ SYM_TO_MBASIS.T
+    fam_err_cov = SYM_TO_MBASIS @ cblock @ SYM_TO_MBASIS.T
 
     # fluxes, following the _finalize normalization: the model
     # paths use F_b = fs_b / upred_b; the plain gauss path uses
@@ -748,7 +748,7 @@ def _padmom_full_covariance(
         flux_cov = RF @ covS @ RF.T
 
         var = np.diag(flux_cov)
-        if np.any(var <= 0) or not np.all(np.isfinite(fam_cov)):
+        if np.any(var <= 0) or not np.all(np.isfinite(fam_err_cov)):
             return None
         s2n = joint_flux_s2n(F, flux_cov)
         if s2n is None:
@@ -756,7 +756,7 @@ def _padmom_full_covariance(
         return {
             'flux_cov': flux_cov,
             'flux_err': np.sqrt(var),
-            'fam_cov': fam_cov,
+            'fam_err_cov': fam_err_cov,
             's2n': s2n,
         }
 
@@ -839,7 +839,7 @@ def _padmom_full_covariance(
     flux_cov = RF @ covS @ RF.T
 
     var = np.diag(flux_cov)
-    if np.any(var <= 0) or not np.all(np.isfinite(fam_cov)):
+    if np.any(var <= 0) or not np.all(np.isfinite(fam_err_cov)):
         return None
     s2n = joint_flux_s2n(F, flux_cov)
     if s2n is None:
@@ -847,6 +847,6 @@ def _padmom_full_covariance(
     return {
         'flux_cov': flux_cov,
         'flux_err': np.sqrt(var),
-        'fam_cov': fam_cov,
+        'fam_err_cov': fam_err_cov,
         's2n': s2n,
     }

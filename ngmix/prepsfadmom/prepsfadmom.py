@@ -647,7 +647,7 @@ class PAdmomFitter(object):
         family this reduces exactly to the standard deweight update.
         The smoothing covariance cancels in the difference.
 
-        The family state is the covariance matrix Sfam, which is not
+        The family state is the covariance matrix fam_cov, which is not
         constrained to be positive definite: the model only enters
         the sums through the smoothed component covariances, so the
         family size can scatter through zero and the ellipticity is
@@ -681,7 +681,7 @@ class PAdmomFitter(object):
         e1g, e2g, Tg = guess_gmix.get_e1e2T()
         irr, irc, icc = e2mom(e1g, e2g, Tg + Tsmooth)
         wt_cov = np.array([[irr, irc], [irc, icc]])
-        Sfam = cov_from_e(e1g, e2g, Tg)
+        fam_cov = cov_from_e(e1g, e2g, Tg)
 
         vorig = v0
         uorig = u0
@@ -707,13 +707,13 @@ class PAdmomFitter(object):
                 break
 
             raw_shift, pflags = self._model_shift(
-                Sfam, M, wt_cov, new_wt_cov, Tsmooth,
+                fam_cov, M, wt_cov, new_wt_cov, Tsmooth,
             )
             shift, boosted = self._steffensen_boost(
                 raw_shift, prev_shift, pflags,
             )
             prop, idamp, accepted = self._damped_step(
-                Sfam, shift, new_wt_cov, Tsmooth,
+                fam_cov, shift, new_wt_cov, Tsmooth,
             )
             if not accepted:
                 flags = ngmix.flags.LOW_DET
@@ -738,7 +738,7 @@ class PAdmomFitter(object):
                 and abs(dv) < self.cen_tol
                 and abs(du) < self.cen_tol
             )
-            Sfam = prop
+            fam_cov = prop
             wt_cov = new_wt_cov
 
             if converged:
@@ -747,7 +747,7 @@ class PAdmomFitter(object):
             flags = ngmix.flags.MAXITER
 
         model_state = {
-            'type': self.model, 'cov': Sfam, 'F': np.ones(nband),
+            'type': self.model, 'cov': fam_cov, 'F': np.ones(nband),
         }
         return self._get_result(
             epochs=epochs, nband=nband, flags=flags, numiter=numiter,
@@ -755,7 +755,7 @@ class PAdmomFitter(object):
             model_state=model_state,
         )
 
-    def _model_shift(self, Sfam, M, wt_cov, new_wt_cov, Tsmooth):
+    def _model_shift(self, fam_cov, M, wt_cov, new_wt_cov, Tsmooth):
         """
         the raw fixed point shift of the family covariance: the
         deweight-mapped difference of the measured and model
@@ -766,7 +766,7 @@ class PAdmomFitter(object):
         # the model predicted moment ratios; with a common center
         # and common structure across epochs these are the same
         # for every epoch, so one closed-form evaluation suffices
-        unit_state = self._unit_state(Sfam)
+        unit_state = self._unit_state(fam_cov)
         psums = model_ksums(
             unit_state, 0, 0.0, 0.0, wt_cov, 1.0, Tsmooth,
         )
@@ -789,11 +789,11 @@ class PAdmomFitter(object):
             # composed in matrix form: scale by the T ratio and
             # shift the anisotropy by the ratio differences
             M1, M2, Tm = mom_from_cov(M)
-            Tf = Sfam[0, 0] + Sfam[1, 1]
+            Tf = fam_cov[0, 0] + fam_cov[1, 1]
             fac = Tm / Tp
             de1 = M1 / Tm - Mp1 / Tp
             de2 = M2 / Tm - Mp2 / Tp
-            shift = (fac - 1) * Sfam + 0.5 * fac * Tf * np.array([
+            shift = (fac - 1) * fam_cov + 0.5 * fac * Tf * np.array([
                 [-de1, de2],
                 [de2, de1],
             ])
@@ -820,7 +820,7 @@ class PAdmomFitter(object):
                     return raw_shift / (1 - rho), True
         return raw_shift, False
 
-    def _damped_step(self, Sfam, shift, new_wt_cov, Tsmooth):
+    def _damped_step(self, fam_cov, shift, new_wt_cov, Tsmooth):
         """
         accept the largest step, damping if needed, for which the
         smoothed model components stay positive definite.  Returns
@@ -828,7 +828,7 @@ class PAdmomFitter(object):
         """
         accepted = False
         for idamp in range(10):
-            prop = Sfam + shift
+            prop = fam_cov + shift
             if mixture_model_valid(
                     self._model_spec(), prop, new_wt_cov, Tsmooth):
                 accepted = True
@@ -849,11 +849,11 @@ class PAdmomFitter(object):
             }
         return self.model
 
-    def _unit_state(self, Sfam):
+    def _unit_state(self, fam_cov):
         """
         a unit-flux model state dict at the given family covariance
         """
-        state = {'type': self.model, 'cov': Sfam, 'F': np.ones(1)}
+        state = {'type': self.model, 'cov': fam_cov, 'F': np.ones(1)}
         if self.model == 'bdf':
             state['fracdev'] = self._fracdev
             state['TdByTe'] = self.TdByTe
@@ -882,7 +882,7 @@ class PAdmomFitter(object):
         e1g, e2g, Tg = guess_gmix.get_e1e2T()
         irr, irc, icc = e2mom(e1g, e2g, Tg + Tsmooth)
         wt_cov = np.array([[irr, irc], [irc, icc]])
-        Sfam = cov_from_e(e1g, e2g, Tg)
+        fam_cov = cov_from_e(e1g, e2g, Tg)
 
         vorig = v0
         uorig = u0
@@ -909,13 +909,13 @@ class PAdmomFitter(object):
                 break
 
             raw_shift, pflags = self._model_shift(
-                Sfam, M, wt_cov, new_wt_cov, Tsmooth,
+                fam_cov, M, wt_cov, new_wt_cov, Tsmooth,
             )
             shift, boosted = self._steffensen_boost(
                 raw_shift, prev_shift, pflags,
             )
             prop, idamp, accepted = self._damped_step(
-                Sfam, shift, new_wt_cov, Tsmooth,
+                fam_cov, shift, new_wt_cov, Tsmooth,
             )
             if not accepted:
                 flags = ngmix.flags.LOW_DET
@@ -926,13 +926,13 @@ class PAdmomFitter(object):
             else:
                 prev_shift = None
 
-            Sfam = prop
+            fam_cov = prop
             wt_cov = new_wt_cov
 
             # the flux reassignment at the updated structure; the
             # band-summed split drives the composite table
             F2, fcovs = self._solve_bdf_fluxes(
-                epochs, nband, Sfam, v0, u0,
+                epochs, nband, fam_cov, v0, u0,
             )
             fd_gls, fd_var = _combined_split(F2, fcovs)
             if fd_gls is None:
@@ -958,7 +958,7 @@ class PAdmomFitter(object):
             flags = ngmix.flags.MAXITER
 
         model_state = {
-            'type': 'bdf', 'cov': Sfam, 'F': np.ones(nband),
+            'type': 'bdf', 'cov': fam_cov, 'F': np.ones(nband),
             'fracdev': self._fracdev, 'TdByTe': self.TdByTe,
         }
 
@@ -971,10 +971,10 @@ class PAdmomFitter(object):
             fd_gls, fd_var = _combined_split(F2, fcovs)
             if fd_var is not None and fd_var > 0:
                 G = self._bdf_split_response(
-                    epochs, nband, Sfam, F2, v0, u0,
+                    epochs, nband, fam_cov, F2, v0, u0,
                 )
                 eta_scov, eta_fcovs = self._bdf_noise_cross(
-                    epochs, nband, Sfam, wt_cov, F2, fcovs,
+                    epochs, nband, fam_cov, wt_cov, F2, fcovs,
                 )
                 if G is not None and eta_scov is not None:
                     self._bdf_err = (
@@ -1048,7 +1048,7 @@ class PAdmomFitter(object):
         w0 = 1.0 / sigma0 ** 2
         return (fd_gls * w + fracdev0 * w0) / (w + w0)
 
-    def _bdf_templates(self, epoch, Sfam, phase):
+    def _bdf_templates(self, epoch, fam_cov, phase):
         """
         the exp and dev unit-flux templates on the epoch's
         retained modes at the given family covariance, with the
@@ -1058,7 +1058,7 @@ class PAdmomFitter(object):
         ku = epoch['ku']
         ts = []
         for spec, S in (
-            ('exp', Sfam), ('dev', self.TdByTe * Sfam),
+            ('exp', fam_cov), ('dev', self.TdByTe * fam_cov),
         ):
             amp = np.zeros(kv.size)
             for frac, cT in get_profile_comps(spec):
@@ -1071,20 +1071,20 @@ class PAdmomFitter(object):
             ts.append(amp * epoch['fold'] * phase)
         return ts
 
-    def _bdf_split_response(self, epochs, nband, Sfam, F2, v0, u0):
+    def _bdf_split_response(self, epochs, nband, fam_cov, F2, v0, u0):
         """
         d fd_gls / d (M1, M2, T) of the family covariance at the
         model consistent point: the GLS split of the converged
         model itself, re-solved with templates at perturbed
         structure.  Central differences over the mbasis
         """
-        Tw = Sfam[0, 0] + Sfam[1, 1] + self.TdByTe * (
-            Sfam[0, 0] + Sfam[1, 1]
+        Tw = fam_cov[0, 0] + fam_cov[1, 1] + self.TdByTe * (
+            fam_cov[0, 0] + fam_cov[1, 1]
         )
         h = 1.0e-6 * max(Tw, 1.0e-3)
         fam0 = np.array([
-            Sfam[1, 1] - Sfam[0, 0], 2 * Sfam[0, 1],
-            Sfam[0, 0] + Sfam[1, 1],
+            fam_cov[1, 1] - fam_cov[0, 0], 2 * fam_cov[0, 1],
+            fam_cov[0, 0] + fam_cov[1, 1],
         ])
 
         def split_at(famvec):
@@ -1100,7 +1100,7 @@ class PAdmomFitter(object):
                 )
                 phase = np.cos(ang) - 1j * np.sin(ang)
                 tp = self._bdf_templates(epoch, Sp, phase)
-                t0 = self._bdf_templates(epoch, Sfam, phase)
+                t0 = self._bdf_templates(epoch, fam_cov, phase)
                 band = epoch['band']
                 model = F2[band, 0] * t0[0] + F2[band, 1] * t0[1]
                 g = 1.0 / epoch['err_fac2']
@@ -1134,7 +1134,7 @@ class PAdmomFitter(object):
             G[i] = (fp - fm) / (2 * h)
         return G
 
-    def _bdf_noise_cross(self, epochs, nband, Sfam, wt_cov, F2, fcovs):
+    def _bdf_noise_cross(self, epochs, nband, fam_cov, wt_cov, F2, fcovs):
         """
         the analytic cross covariance of the split noise eta with
         the accumulated moment and flux sums.
@@ -1172,7 +1172,7 @@ class PAdmomFitter(object):
             uuk = (wt_cov[1, 1] - Su * Su) * wk
             kern = (uuk - vvk, 2 * vuk, uuk + vvk, wk)
 
-            ts = self._bdf_templates(epoch, Sfam, 1.0)
+            ts = self._bdf_templates(epoch, fam_cov, 1.0)
             fac = epoch['weight'] * epoch['detAtinv'] * epoch['df2']
             band = epoch['band']
             for a in range(2):
@@ -1207,7 +1207,7 @@ class PAdmomFitter(object):
             return 1.0
         return sigma0 ** 2 / (sigma0 ** 2 + fd_var)
 
-    def _solve_bdf_fluxes(self, epochs, nband, Sfam, v0, u0):
+    def _solve_bdf_fluxes(self, epochs, nband, fam_cov, v0, u0):
         """
         per-band GLS fit of the exp and dev templates (dev at
         TdByTe times the family covariance) to the retained modes,
@@ -1233,7 +1233,7 @@ class PAdmomFitter(object):
             ang = f1d[epoch['iy']] * alpha + f1d[epoch['ix']] * beta
             phase = np.cos(ang) - 1j * np.sin(ang)
 
-            ts = self._bdf_templates(epoch, Sfam, phase)
+            ts = self._bdf_templates(epoch, fam_cov, phase)
 
             g = 1.0 / epoch['err_fac2']
             kim = epoch['kim']
@@ -1356,7 +1356,7 @@ class PAdmomFitter(object):
         }
 
         if flags == 0:
-            (sums, sums_cov, fluxes, flux_vars, fam_cov,
+            (sums, sums_cov, fluxes, flux_vars, fam_err_cov,
              flux_cov) = self._finalize(
                 epochs, nband, wt_cov, v0, u0, Tsmooth,
                 model_state=model_state,
@@ -1391,7 +1391,7 @@ class PAdmomFitter(object):
             else:
                 res['flux_flags'] |= ngmix.flags.NONPOS_VAR
 
-            self._set_T_err(res, model_state, fam_cov, sums, sums_cov)
+            self._set_T_err(res, model_state, fam_err_cov, sums, sums_cov)
 
             res['pars'] = np.array([
                 v0, u0, M1, M2, Tgal, np.sum(fluxes),
@@ -1399,7 +1399,7 @@ class PAdmomFitter(object):
 
             self._set_shape(
                 res, model_state, shape_ok, M1, M2, Tgal, wt_cov,
-                fam_cov, sums, sums_cov,
+                fam_err_cov, sums, sums_cov,
             )
 
             self._set_gauss_entries(
@@ -1432,31 +1432,31 @@ class PAdmomFitter(object):
                 res['flux_err'] = fe['flux_err']
                 res['flux_cov'] = fe['flux_cov']
                 res['s2n'] = fe['s2n']
-                fam_cov = fe['fam_cov']
-                if fam_cov[2, 2] > 0:
-                    res['T_err'] = np.sqrt(fam_cov[2, 2])
+                fam_err_cov = fe['fam_err_cov']
+                if fam_err_cov[2, 2] > 0:
+                    res['T_err'] = np.sqrt(fam_err_cov[2, 2])
                 Tgal = res['T']
                 if (
                     np.isfinite(res['e1']) and Tgal > 0
-                    and fam_cov[2, 2] > 0
+                    and fam_err_cov[2, 2] > 0
                 ):
                     ev1 = (
-                        fam_cov[0, 0]
-                        - 2 * res['e1'] * fam_cov[0, 2]
-                        + res['e1'] ** 2 * fam_cov[2, 2]
+                        fam_err_cov[0, 0]
+                        - 2 * res['e1'] * fam_err_cov[0, 2]
+                        + res['e1'] ** 2 * fam_err_cov[2, 2]
                     ) / Tgal ** 2
                     ev2 = (
-                        fam_cov[1, 1]
-                        - 2 * res['e2'] * fam_cov[1, 2]
-                        + res['e2'] ** 2 * fam_cov[2, 2]
+                        fam_err_cov[1, 1]
+                        - 2 * res['e2'] * fam_err_cov[1, 2]
+                        + res['e2'] ** 2 * fam_err_cov[2, 2]
                     ) / Tgal ** 2
                     if ev1 > 0 and ev2 > 0:
                         e12 = (
-                            fam_cov[0, 1]
-                            - res['e1'] * fam_cov[1, 2]
-                            - res['e2'] * fam_cov[0, 2]
+                            fam_err_cov[0, 1]
+                            - res['e1'] * fam_err_cov[1, 2]
+                            - res['e2'] * fam_err_cov[0, 2]
                             + res['e1'] * res['e2']
-                            * fam_cov[2, 2]
+                            * fam_err_cov[2, 2]
                         ) / Tgal ** 2
                         res['e1err'] = np.sqrt(ev1)
                         res['e2err'] = np.sqrt(ev2)
@@ -1498,9 +1498,9 @@ class PAdmomFitter(object):
         elif model_state['type'] in ('exp', 'dev', 'bdf'):
             # the family covariance can scatter out of positive
             # definite, where the shape is undefined
-            Sfam = model_state['cov']
-            M1, M2, Tgal = mom_from_cov(Sfam)
-            shape_ok = Tgal > 0 and det2(Sfam) > 0
+            fam_cov = model_state['cov']
+            M1, M2, Tgal = mom_from_cov(fam_cov)
+            shape_ok = Tgal > 0 and det2(fam_cov) > 0
         else:
             # star: a delta function has no size or shape
             M1 = 0.0
@@ -1509,7 +1509,7 @@ class PAdmomFitter(object):
             shape_ok = False
         return M1, M2, Tgal, shape_ok
 
-    def _set_T_err(self, res, model_state, fam_cov, sums, sums_cov):
+    def _set_T_err(self, res, model_state, fam_err_cov, sums, sums_cov):
         """
         set the T error in the result, or NONPOS_VAR in T_flags
         """
@@ -1518,8 +1518,8 @@ class PAdmomFitter(object):
             pass
         elif model_state is not None:
             # exp: from the family covariance sandwich
-            if fam_cov is not None and fam_cov[2, 2] > 0:
-                res['T_err'] = np.sqrt(fam_cov[2, 2])
+            if fam_err_cov is not None and fam_err_cov[2, 2] > 0:
+                res['T_err'] = np.sqrt(fam_err_cov[2, 2])
             else:
                 res['T_flags'] |= ngmix.flags.NONPOS_VAR
         elif sums_cov[4, 4] > 0 and sums_cov[5, 5] > 0:
@@ -1576,7 +1576,7 @@ class PAdmomFitter(object):
 
     def _set_shape(
         self, res, model_state, shape_ok, M1, M2, Tgal, wt_cov,
-        fam_cov, sums, sums_cov,
+        fam_err_cov, sums, sums_cov,
     ):
         """
         set the ellipticities and their errors in the result, or the
@@ -1596,7 +1596,7 @@ class PAdmomFitter(object):
             e1err = np.nan
             e2err = np.nan
             e12cov = np.nan
-            if model_state is not None and fam_cov is None:
+            if model_state is not None and fam_err_cov is None:
                 # the family sandwich failed; the errors stay nan
                 # and the flags are set below
                 pass
@@ -1604,23 +1604,23 @@ class PAdmomFitter(object):
                 # exp: linearize e = M/T over the family
                 # covariance sandwich
                 ev1 = (
-                    fam_cov[0, 0]
-                    - 2 * res['e1'] * fam_cov[0, 2]
-                    + res['e1'] ** 2 * fam_cov[2, 2]
+                    fam_err_cov[0, 0]
+                    - 2 * res['e1'] * fam_err_cov[0, 2]
+                    + res['e1'] ** 2 * fam_err_cov[2, 2]
                 ) / Tgal ** 2
                 ev2 = (
-                    fam_cov[1, 1]
-                    - 2 * res['e2'] * fam_cov[1, 2]
-                    + res['e2'] ** 2 * fam_cov[2, 2]
+                    fam_err_cov[1, 1]
+                    - 2 * res['e2'] * fam_err_cov[1, 2]
+                    + res['e2'] ** 2 * fam_err_cov[2, 2]
                 ) / Tgal ** 2
                 if ev1 > 0 and ev2 > 0:
                     e1err = np.sqrt(ev1)
                     e2err = np.sqrt(ev2)
                     e12cov = (
-                        fam_cov[0, 1]
-                        - res['e1'] * fam_cov[1, 2]
-                        - res['e2'] * fam_cov[0, 2]
-                        + res['e1'] * res['e2'] * fam_cov[2, 2]
+                        fam_err_cov[0, 1]
+                        - res['e1'] * fam_err_cov[1, 2]
+                        - res['e2'] * fam_err_cov[0, 2]
+                        + res['e1'] * res['e2'] * fam_err_cov[2, 2]
                     ) / Tgal ** 2
             elif sums_cov[2, 2] > 0 and sums_cov[3, 3] > 0:
                 # the lever arm Twt/Tgal accounts for the smoothing
@@ -1741,7 +1741,7 @@ class PAdmomFitter(object):
             fmcovs[band] += fac ** 2 * nfac * ecov[2:5, 5]
             wsums[band] += epoch['weight']
 
-        fam_cov = None
+        fam_err_cov = None
         if model_state is None:
             fluxes = 2 * knrm * fsums / wsums
             # the analytic delta method, with the cross-band
@@ -1775,12 +1775,12 @@ class PAdmomFitter(object):
                 else:
                     spec = model_state['type']
                 rawvars = None
-                fam_cov = None
+                fam_err_cov = None
                 if (model_state['type'] == 'bdf'
                         and getattr(self, '_bdf_err', None)
                         is not None):
                     G, k, fdv, eta_scov, eta_fcovs = self._bdf_err
-                    rawvars, fam_cov, fd_var_tot = (
+                    rawvars, fam_err_cov, fd_var_tot = (
                         bdf_joint_sandwich(
                             model_state, wt_cov, Tsmooth, sums,
                             cov, fsums, fvars, fmcovs,
@@ -1792,7 +1792,7 @@ class PAdmomFitter(object):
                     )
                     self._bdf_fd_var_total = fd_var_tot
                 if rawvars is None:
-                    rawvars, fam_cov, fcov_raw = model_sandwich(
+                    rawvars, fam_err_cov, fcov_raw = model_sandwich(
                         spec, model_state['cov'], wt_cov,
                         Tsmooth, sums, cov, fsums, fvars, fmcovs,
                     )
@@ -1801,7 +1801,7 @@ class PAdmomFitter(object):
                     # back to the fixed weight variances, with the
                     # structure errors flagged downstream
                     rawvars = fvars
-                    fam_cov = None
+                    fam_err_cov = None
                     fcov_raw = None
             flux_vars = rawvars / upred ** 2
             if fcov_raw is not None:
@@ -1809,7 +1809,7 @@ class PAdmomFitter(object):
                 flux_cov = fcov_raw * np.outer(uinv, uinv)
             else:
                 flux_cov = None
-        return sums, cov, fluxes, flux_vars, fam_cov, flux_cov
+        return sums, cov, fluxes, flux_vars, fam_err_cov, flux_cov
 
     def _get_guess(self, mb_obs, guess, Tsmooth):
         if isinstance(guess, GMix):

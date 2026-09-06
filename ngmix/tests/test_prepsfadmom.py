@@ -1064,7 +1064,7 @@ def test_prepsfadmommodel_sandwich_gauss_anchor():
     the model sandwich evaluated for a single gaussian family reduces
     exactly to the analytic gauss delta method, for arbitrary inputs
     -- the full cross-band covariance included -- and the family
-    response is dSfam = 4 dM
+    response is d(fam_cov) = 4 dM
     """
     from ngmix.prepsfadmom.errors import (
         flux_var_delta, flux_cov_delta, model_sandwich,
@@ -1074,7 +1074,7 @@ def test_prepsfadmommodel_sandwich_gauss_anchor():
     Tsmooth = 0.8
     wt_cov = np.array([[0.9, 0.08], [0.08, 1.1]])
     # the gauss fixed point: smoothed family covariance = weight
-    Sfam = wt_cov - np.diag([Tsmooth / 2] * 2)
+    fam_cov = wt_cov - np.diag([Tsmooth / 2] * 2)
 
     sums = np.zeros(6)
     sums[5] = 5.0
@@ -1088,8 +1088,8 @@ def test_prepsfadmommodel_sandwich_gauss_anchor():
     fcov_delta = flux_cov_delta(
         wt_cov, sums, cov, fsums, fvars, fmcovs,
     )
-    raw_sw, fam_cov, fcov_raw = model_sandwich(
-        'gauss', Sfam, wt_cov, Tsmooth, sums, cov, fsums, fvars, fmcovs,
+    raw_sw, fam_err_cov, fcov_raw = model_sandwich(
+        'gauss', fam_cov, wt_cov, Tsmooth, sums, cov, fsums, fvars, fmcovs,
     )
     assert np.allclose(np.diag(fcov_raw), raw_sw, rtol=0, atol=0)
     assert np.allclose(raw_sw, raw_delta, rtol=1.0e-5, atol=0)
@@ -1112,7 +1112,7 @@ def test_prepsfadmommodel_sandwich_gauss_anchor():
         css - np.outer(mvec, csf) - np.outer(csf, mvec)
         + np.outer(mvec, mvec) * cff
     ) / sums[5] ** 2
-    assert np.allclose(fam_cov, 16 * cmm, rtol=1.0e-4, atol=0)
+    assert np.allclose(fam_err_cov, 16 * cmm, rtol=1.0e-4, atol=0)
 
 
 @pytest.mark.parametrize('model', ['gauss', 'exp'])
@@ -1223,15 +1223,15 @@ def test_prepsfadmom_model_ksums_kernel_parity():
     detAtinv = 3.7
     F = np.array([2.5, 1.5])
 
-    Sfam = cov_from_e(0.2, -0.1, 0.8)
+    fam_cov = cov_from_e(0.2, -0.1, 0.8)
     models = [
         {'type': 'gauss', 'cov_sm': cov_from_e(0.1, -0.05, 0.6) + smooth_cov,
          'F': F},
         {'type': 'star', 'cov_sm': smooth_cov, 'F': F},
         {'type': 'exp', 'e1': 0.2, 'e2': -0.1, 'T': 0.8, 'F': F},
-        {'type': 'exp', 'cov': Sfam, 'F': F},
+        {'type': 'exp', 'cov': fam_cov, 'F': F},
         {'type': 'dev', 'e1': 0.2, 'e2': -0.1, 'T': 0.8, 'F': F},
-        {'type': 'dev', 'cov': Sfam, 'F': F},
+        {'type': 'dev', 'cov': fam_cov, 'F': F},
     ]
 
     for model in models:
@@ -1239,7 +1239,7 @@ def test_prepsfadmom_model_ksums_kernel_parity():
             if model['type'] in ('exp', 'dev'):
                 expected = np.zeros(6)
                 for frac, cT in get_profile_comps(model['type']):
-                    So = cT * Sfam + smooth_cov
+                    So = cT * fam_cov + smooth_cov
                     expected += gauss_model_ksums(
                         model['F'][band] * frac, So, dv, du, Sw, detAtinv,
                     )

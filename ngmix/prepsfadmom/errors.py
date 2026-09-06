@@ -211,7 +211,7 @@ def _mbasis_cov(M1, M2, T):
     ])
 
 
-def _model_pred_mbasis(model_type, Sfam, wt_cov, Tsmooth):
+def _model_pred_mbasis(model_type, fam_cov, wt_cov, Tsmooth):
     """
     the predicted weighted moment ratios (M1, M2, T) and the log
     of the unit flux prediction for a model family covariance
@@ -224,16 +224,16 @@ def _model_pred_mbasis(model_type, Sfam, wt_cov, Tsmooth):
     """
     if isinstance(model_type, dict):
         state = dict(model_type)
-        state['cov'] = Sfam
+        state['cov'] = fam_cov
         state['F'] = np.ones(1)
     elif model_type in ('exp', 'dev'):
-        state = {'type': model_type, 'cov': Sfam, 'F': np.ones(1)}
+        state = {'type': model_type, 'cov': fam_cov, 'F': np.ones(1)}
     else:
         # single gaussian family, used to validate against the
         # analytic gauss delta method
         state = {
             'type': 'gauss',
-            'cov_sm': Sfam + np.diag([Tsmooth / 2, Tsmooth / 2]),
+            'cov_sm': fam_cov + np.diag([Tsmooth / 2, Tsmooth / 2]),
             'F': np.ones(1),
         }
     s = model_ksums(state, 0, 0.0, 0.0, wt_cov, 1.0, Tsmooth)
@@ -256,7 +256,7 @@ def _family_comp_arrays(model_type):
     Used by the compiled sandwich derivative path; None for model
     spec dicts (bdf), which keep the general path.  A gauss family
     is the single component (1, 1): with cT = 1 the smoothed
-    component covariance cT * Sfam + Tsmooth/2 reproduces the
+    component covariance cT * fam_cov + Tsmooth/2 reproduces the
     gauss branch of _model_pred_mbasis exactly (multiplication by
     1 is exact)
     """
@@ -336,21 +336,21 @@ def _sandwich_preds_nb(
 
 
 def model_sandwich(
-    model_type, Sfam, wt_cov, Tsmooth, sums, cov, fsums, fvars, fmcovs,
+    model_type, fam_cov, wt_cov, Tsmooth, sums, cov, fsums, fvars, fmcovs,
 ):
     """
     first order (sandwich) errors for the moment matched model fits
 
     The estimating equations are the weight condition
     M_meas(wt_cov) = wt_cov/2, the family condition
-    M_pred(wt_cov, Sfam) = M_meas, and per band F_b N_b = fs_b with
+    M_pred(wt_cov, fam_cov) = M_meas, and per band F_b N_b = fs_b with
     N_b the unit flux model prediction.  Evaluated with the data
     replaced by the converged model, the Jacobian is block
     triangular: the family and flux conditions lose their explicit
     weight dependence, leaving
 
-        dSfam = B^-1 dM,    B = dM_pred/dSfam
-        dF_b/F_b = dfs_b/fs_b - (dln N/dSfam) . dSfam
+        d(fam_cov) = B^-1 dM,    B = dM_pred/d(fam_cov)
+        dF_b/F_b = dfs_b/fs_b - (dln N/d(fam_cov)) . d(fam_cov)
 
     where dM is the noise fluctuation of the measured moment ratios.
     B and the normalization derivative are evaluated by central
@@ -366,7 +366,7 @@ def model_sandwich(
         dict for 'bdf' (the sandwich then treats fracdev and
         TdByTe as fixed, so the errors are conditional on the
         flux split)
-    Sfam: (2, 2) array
+    fam_cov: (2, 2) array
         The converged family covariance
     wt_cov: (2, 2) array
         The converged weight covariance
@@ -380,7 +380,7 @@ def model_sandwich(
     var_raw: array of size nband
         The variance of the per band flux sums including the family
         response; scale by the same normalization as the raw sums
-    fam_cov: (3, 3) array
+    fam_err_cov: (3, 3) array
         The covariance of the family (M1, M2, T) parameters
     fcov_raw: (nband, nband) array
         The full covariance of the per band flux sums, whose
@@ -400,8 +400,8 @@ def model_sandwich(
     Tw = wt_cov[0, 0] + wt_cov[1, 1]
     h = 1.0e-6 * Tw
     fam0 = np.array([
-        Sfam[1, 1] - Sfam[0, 0], 2 * Sfam[0, 1],
-        Sfam[0, 0] + Sfam[1, 1],
+        fam_cov[1, 1] - fam_cov[0, 0], 2 * fam_cov[0, 1],
+        fam_cov[0, 0] + fam_cov[1, 1],
     ])
 
     B = np.zeros((3, 3))
@@ -459,7 +459,7 @@ def model_sandwich(
         Binv = np.linalg.inv(B)
     except np.linalg.LinAlgError:
         return None, None, None
-    fam_cov = Binv @ cmm @ Binv.T
+    fam_err_cov = Binv @ cmm @ Binv.T
     a = np.linalg.solve(B.T, dlnu)
 
     # dF_b is proportional to dS_Fb - fs_b a . dM; the band flux
@@ -478,7 +478,7 @@ def model_sandwich(
         + np.diag(fvars)
     )
     var_raw = np.diag(fcov_raw).copy()
-    return var_raw, fam_cov, fcov_raw
+    return var_raw, fam_err_cov, fcov_raw
 
 
 def bdf_joint_sandwich(
@@ -492,12 +492,12 @@ def bdf_joint_sandwich(
     underprediction of the errors.
 
     The estimating equations add to the family condition the split
-    condition fd = k g(Sfam; data), with k the (deterministic)
+    condition fd = k g(fam_cov; data), with k the (deterministic)
     shrinkage factor and g the split estimator.  At the model
     consistent point the coupled first order response is
 
-        dSfam = Pinv (dM - k c eta),   P = B + k outer(c, G)
-        dfd   = k (G . dSfam + eta)
+        d(fam_cov) = Pinv (dM - k c eta),   P = B + k outer(c, G)
+        dfd   = k (G . d(fam_cov) + eta)
 
     where B and c are the derivatives of the predicted moment
     ratios over the family covariance and the split, G is the
@@ -541,21 +541,21 @@ def bdf_joint_sandwich(
     var_raw: array of size nband
         The per band flux sum variances; scale as for
         model_sandwich
-    fam_cov: (3, 3) array
+    fam_err_cov: (3, 3) array
         The covariance of the family (M1, M2, T) parameters
     fd_var: float
         The total variance of the split
 
     All three are None when the sandwich cannot be evaluated
     """
-    Sfam = model_state['cov']
+    fam_cov = model_state['cov']
     fd = model_state['fracdev']
 
     Tw = wt_cov[0, 0] + wt_cov[1, 1]
     h = 1.0e-6 * Tw
     fam0 = np.array([
-        Sfam[1, 1] - Sfam[0, 0], 2 * Sfam[0, 1],
-        Sfam[0, 0] + Sfam[1, 1],
+        fam_cov[1, 1] - fam_cov[0, 0], 2 * fam_cov[0, 1],
+        fam_cov[0, 0] + fam_cov[1, 1],
     ])
 
     def pred(famvec, fdval):
@@ -608,7 +608,7 @@ def bdf_joint_sandwich(
     except np.linalg.LinAlgError:
         return None, None, None
 
-    # the maps [dSfam; dfd] = LM dM + Le eta
+    # the maps [d(fam_cov); dfd] = LM dM + Le eta
     LM = np.zeros((4, 3))
     Le = np.zeros(4)
     LM[:3] = Pinv
@@ -639,10 +639,10 @@ def bdf_joint_sandwich(
 
     Amap = np.hstack([LM, Le[:, None]])
     joint = Amap @ Cx @ Amap.T
-    fam_cov = joint[:3, :3]
+    fam_err_cov = joint[:3, :3]
     fd_var = joint[3, 3]
 
-    # flux response: dF_b/F_b = dfs_b/fs_b - q . (dSfam, dfd)
+    # flux response: dF_b/F_b = dfs_b/fs_b - q . (d(fam_cov), dfd)
     q = np.concatenate([dlnu, [dlnu_fd]])
     a = q @ Amap     # coefficients on (dM, eta)
     u = a[:3]
@@ -659,4 +659,4 @@ def bdf_joint_sandwich(
             fvars[band] + fsums[band] ** 2 * aca
             - 2 * fsums[band] * acmf
         )
-    return var_raw, fam_cov, fd_var
+    return var_raw, fam_err_cov, fd_var

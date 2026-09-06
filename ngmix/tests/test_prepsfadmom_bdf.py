@@ -375,7 +375,7 @@ def test_model_sandwich_guard():
     import warnings
     from ngmix.prepsfadmom.errors import model_sandwich
 
-    Sfam = np.array([[5.0, 0.0], [0.0, -5.0]])
+    fam_cov = np.array([[5.0, 0.0], [0.0, -5.0]])
     wt_cov = np.diag([0.3, 0.3])
     sums = np.array([0.0, 0.0, 0.0, 0.0, 1.0, 1.0])
     cov = np.eye(6)
@@ -385,12 +385,12 @@ def test_model_sandwich_guard():
 
     with warnings.catch_warnings():
         warnings.simplefilter('error')
-        rawvars, fam_cov, _ = model_sandwich(
-            'exp', Sfam, wt_cov, 0.2,
+        rawvars, fam_err_cov, _ = model_sandwich(
+            'exp', fam_cov, wt_cov, 0.2,
             sums, cov, fsums, fvars, fmcovs,
         )
     assert rawvars is None
-    assert fam_cov is None
+    assert fam_err_cov is None
 
 
 def test_bdf_joint_sandwich_guard():
