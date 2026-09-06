@@ -48,6 +48,7 @@ WK_CHI2_MAX = 25.0
 
 
 def _ingredients(epoch, Sw, v0, u0):
+    """the shared per-epoch pieces of the kernel expressions"""
     alpha, beta = get_phase_angles(epoch, v0, u0)
     dim = epoch['dim']
     iy = epoch['iy'].astype(np.int64)
@@ -72,10 +73,25 @@ def _ingredients(epoch, Sw, v0, u0):
 
 def moment_kernels(epoch, Sw, v0, u0):
     """
-    the (6, nmodes) complex kernels G with sums = Re(G @ kim):
-    the admom_ksums accumulators in closed form, at weight
-    covariance Sw and center offset (v0, u0) in the epoch's
-    phase convention (as for get_phase_angles)
+    the (6, nmodes) complex moment kernels G with
+    sums = Re(G @ kim)
+
+    The admom_ksums accumulators in closed form.
+
+    Parameters
+    ----------
+    epoch: dict
+        A prep_epoch dict
+    Sw: (2, 2) array
+        The weight covariance
+    v0, u0: float
+        The center offset in the epoch's phase convention (as for
+        get_phase_angles)
+
+    Returns
+    -------
+    G: (6, nmodes) complex array
+        The kernels for the [v, u, M1, M2, T, flux] sums
     """
     Sv, Su, base, _, _, _, (wvv, wvu, wuu) = _ingredients(
         epoch, Sw, v0, u0,
@@ -93,10 +109,26 @@ def moment_kernels(epoch, Sw, v0, u0):
 def dsums_dtheta(epoch, Sw, v0, u0):
     """
     the analytic (6, 5) derivative of the data sums with respect
-    to theta = (Sw00, Sw01, Sw11, v, u), contracted with the
-    epoch's kim.  The kernel derivatives are exact; finite
-    differences against admom_ksums itself only agree to ~1e-5
-    because of its polynomial fastexp approximation
+    to theta = (Sw00, Sw01, Sw11, v, u)
+
+    Contracted with the epoch's kim.  The kernel derivatives are
+    exact; finite differences against admom_ksums itself only
+    agree to ~1e-5 because of its polynomial fastexp
+    approximation.
+
+    Parameters
+    ----------
+    epoch: dict
+        A prep_epoch dict
+    Sw: (2, 2) array
+        The weight covariance
+    v0, u0: float
+        The center offset (as for get_phase_angles)
+
+    Returns
+    -------
+    D: (6, 5) array
+        d(sums)/d(theta)
     """
     Sv, Su, base, yf, xf, dim, (wvv, wvu, wuu) = _ingredients(
         epoch, Sw, v0, u0,
@@ -159,17 +191,18 @@ def dsums_dtheta(epoch, Sw, v0, u0):
 def influence_kernels(epoch, G, shape, reference=False):
     """
     real-space influence kernels for a stacked set of k-space
-    kernels: h[a](x) = d(sum_a)/d(image[x]) on the image support
-    of the given shape, via the epoch's stored image->kim
-    transfer.  The half-plane mode set is Hermitian-completed and
-    inverted with irfft2; reference=True uses the brute full-grid
-    fft2 construction instead (for validation).
+    kernels
+
+    h[a](x) = d(sum_a)/d(image[x]) on the image support of the
+    given shape, via the epoch's stored image->kim transfer.  The
+    half-plane mode set is Hermitian-completed and inverted with
+    irfft2.
 
     With an apodized prep (epoch['ap_rad'] > 0) the stored
     transfer maps the masked image to kim, so the image->kim map
-    factorizes as ktransfer(k) e^{-ik.x} m(x): the apodization
+    factorizes as ktransfer(k) e^{-ik.x} m(x); the apodization
     mask is diagonal in pixel space and is applied here, making
-    the kernels exact under apodization
+    the kernels exact under apodization.
 
     Parameters
     ----------
@@ -181,6 +214,14 @@ def influence_kernels(epoch, G, shape, reference=False):
     shape: (ny, nx)
         The image shape to restrict to; must be the shape the
         prep apodized (the observation's image shape)
+    reference: bool, optional
+        If True, use the brute full-grid fft2 construction
+        instead of the rfft path (for validation).  Default False
+
+    Returns
+    -------
+    h: (nk, ny, nx) array
+        The influence kernels
     """
     if epoch.get('ktransfer') is None:
         raise ValueError(
@@ -232,9 +273,23 @@ def influence_kernels(epoch, G, shape, reference=False):
 
 def sums_cov(hs, weight):
     """
-    the covariance of the stacked sums from their real-space
-    influence kernels and the per-pixel variance of the weight
-    map (zero-weight pixels carry no noise)
+    the covariance of the stacked sums
+
+    From the real-space influence kernels and the per-pixel
+    variance of the weight map; zero-weight pixels carry no
+    noise.
+
+    Parameters
+    ----------
+    hs: (nk, ny, nx) array
+        Influence kernels, e.g. from influence_kernels
+    weight: (ny, nx) array
+        The inverse variance weight map
+
+    Returns
+    -------
+    cov: (nk, nk) array
+        The covariance of the sums
     """
     var = np.where(
         weight > 0, 1.0 / np.clip(weight, 1.0e-300, None), 0.0,
@@ -260,6 +315,7 @@ def sym_sandwich(A):
 
 
 def sym_inv(A):
+    """inverse of a symmetric 2x2 matrix"""
     det = A[0, 0] * A[1, 1] - A[0, 1] ** 2
     return np.array([
         [A[1, 1], -A[0, 1]], [-A[0, 1], A[0, 0]],
@@ -267,14 +323,30 @@ def sym_inv(A):
 
 
 def sym3_mat(v):
+    """the symmetric 2x2 matrix from its (00, 01, 11) components"""
     return np.array([[v[0], v[1]], [v[1], v[2]]])
 
 
 def dw_derivs(M, Sigma):
-    """deweight and its derivatives: newSigma = (M^-1 -
-    Sigma^-1)^-1 with d(newSigma) = S(new)[S(M^-1) dM -
-    S(Sigma^-1) dSigma] in the sym3 basis.  Returns (newSigma,
-    DW_M, DW_S, ok)"""
+    """
+    the deweight map and its derivatives
+
+    newSigma = (M^-1 - Sigma^-1)^-1 with
+    d(newSigma) = S(new)[S(M^-1) dM - S(Sigma^-1) dSigma] in the
+    sym3 basis.
+
+    Returns
+    -------
+    newSigma: (2, 2) array or None
+        The deweighted covariance
+    DW_M: (3, 3) array or None
+        d(newSigma)/dM in the sym3 basis
+    DW_S: (3, 3) array or None
+        d(newSigma)/dSigma in the sym3 basis
+    ok: bool
+        False when the deweight is flagged; the others are then
+        None
+    """
     from .prepsfadmom import deweight
 
     newS, flags = deweight(M, Sigma)
@@ -308,27 +380,52 @@ def padmom_full_covariance(
 ):
     """
     the full (fixed-point) covariance for a converged
-    PAdmomFitter state: the single-object case of the coupled
-    estimating equations (the multi-object version lives in
-    kdeblend full_errors), differentiating the actual plain
-    update step at the actual data with no model-consistency
-    substitution.
+    PAdmomFitter state
+
+    The single-object case of the coupled estimating equations
+    (the multi-object version lives in kdeblend full_errors).
+    The actual plain update step is differentiated at the actual
+    data with no model-consistency substitution, so unlike
+    model_sandwich this stays calibrated under model mismatch,
+    where the sandwich under-predicts T errors by ~17 percent and
+    flux errors by ~11 percent for dev truth fit with exp
+    (MC 2026-07-29).
+
     The dense products run under single_core_blas: ngmix is a
-    single core library, and they are large enough for a
-    threaded BLAS to fan out.
-    Unlike model_sandwich this stays calibrated under model
-    mismatch, where the sandwich under-predicts T errors by ~17
-    percent and flux errors by ~11 percent for dev truth fit
-    with exp (MC 2026-07-29).
+    single core library, and they are large enough for a threaded
+    BLAS to fan out.
 
     Requires epochs prepped with store_transfer=True and an
     'obs_weight' entry per epoch (attached by the fitter when
     full_errors is set).
 
-    Returns a dict with flux_cov (nband, nband), fam_cov (the
-    (M1, M2, T) family covariance for the structure errors) and
-    s2n, or None when the evaluation at the solution takes a
-    guarded branch (the caller keeps the model_sandwich errors)
+    Parameters
+    ----------
+    fitter: PAdmomFitter
+        The fitter, for the fixcen setting and the step
+        validation
+    epochs: list of dict
+        The prep_epoch dicts
+    nband: int
+        The number of bands
+    model_state: dict or None
+        The converged family state; None for the plain gauss
+        path
+    Sigma: (2, 2) array
+        The converged weight covariance
+    v0, u0: float
+        The converged center
+    Tsmooth: float
+        The smoothing T
+
+    Returns
+    -------
+    res: dict or None
+        Entries flux_cov (nband, nband), flux_err, fam_cov (the
+        (M1, M2, T) family covariance for the structure errors)
+        and s2n; None when the model is unsupported or the
+        evaluation at the solution takes a guarded branch (the
+        caller keeps the model_sandwich errors)
     """
     from ..util import single_core_blas
 
@@ -343,6 +440,7 @@ def padmom_full_covariance(
 def _padmom_full_covariance(
     fitter, epochs, nband, model_state, Sigma, v0, u0, Tsmooth,
 ):
+    """the body of padmom_full_covariance; see that docstring"""
     from .prepsfadmom import model_ksums
     from .prepsfadmom_nb import admom_ksums
 

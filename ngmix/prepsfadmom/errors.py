@@ -42,6 +42,9 @@ Bernstein & Jarvis (2002), "Shapes and shears, stars and smears:
     optimal measurements for weak lensing", AJ 123, 583
 Hirata & Seljak (2003), "Shear calibration biases in weak-lensing
     surveys", MNRAS 343, 459
+Wald (1943), "Tests of statistical hypotheses concerning several
+    parameters when the number of observations is large", Trans.
+    Amer. Math. Soc. 54, 426
 """
 import numpy as np
 from numba import njit
@@ -57,14 +60,13 @@ __all__ = [
 
 def joint_flux_s2n(F, fcov):
     """
-    the covariance-aware total flux s/n sqrt(F^T C^-1 F) from the
-    fluxes and their cross-band covariance (the Wald significance
-    of the flux vector).  The statistic is invariant to per-band
-    rescaling, so raw flux sums with the raw covariance equal
-    physical fluxes with the physical covariance.  Returns None
-    when the covariance is not positive definite or the form is
-    not finite; the caller falls back to the independent-band
-    quadrature sum
+    the covariance-aware total flux s/n sqrt(F^T C^-1 F)
+
+    The Wald significance (Wald 1943) of the flux vector given its
+    cross-band covariance.  The statistic is invariant to per-band
+    rescaling,
+    so raw flux sums with the raw covariance give the same result
+    as physical fluxes with the physical covariance.
 
     Parameters
     ----------
@@ -75,7 +77,10 @@ def joint_flux_s2n(F, fcov):
 
     Returns
     -------
-    float or None
+    s2n: float or None
+        The joint s/n, or None when the covariance is not positive
+        definite or the form is not finite; callers fall back to
+        the independent-band quadrature sum
     """
     try:
         L = np.linalg.cholesky(fcov)
@@ -90,9 +95,8 @@ def joint_flux_s2n(F, fcov):
 
 def flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
     """
-    variance of the raw per-band flux sums, including the first order
-    response of the adaptive weight to the noise; the diagonal of
-    flux_cov_delta
+    variance of the raw per-band flux sums, including the adaptive
+    weight response; the diagonal of flux_cov_delta
 
     The converged weight satisfies the adaptive moments fixed point
     conditions M(Sigma) = Sigma / 2 (Bernstein & Jarvis 2002; Hirata
@@ -135,8 +139,10 @@ def flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
 
     Returns
     -------
-    The variance of the per band flux sums including the weight
-    response; scale by the same normalization as the raw flux sums.
+    var: array of size nband
+        The variance of the per band flux sums including the
+        weight response; scale by the same normalization as the
+        raw flux sums
     """
     return np.diag(flux_cov_delta(
         Sigma, sums, cov, fsums, fvars, fmcovs,
@@ -146,26 +152,28 @@ def flux_var_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
 def flux_cov_delta(Sigma, sums, cov, fsums, fvars, fmcovs):
     """
     full cross-band covariance of the raw per band flux sums,
-    including the first order response of the adaptive weight to
-    the noise (the delta method); the diagonal is flux_var_delta.
+    including the adaptive weight response; the diagonal is
+    flux_var_delta
 
     The fluctuation dF_b is proportional to
-    dS_Fb - r_b dS_F + r_b b . dS_M (see flux_var_delta): the
-    joint flux and moment sum responses are shared by all bands,
+    dS_Fb - r_b dS_F + r_b b . dS_M (see flux_var_delta).  The
+    joint flux and moment sum responses are shared by all bands
     and only the band's own flux sum dS_Fb is band-specific, so
     the cross-band covariance assembles in closed form from the
-    same scalars as the variances -- the outer products of the
-    band shares with the shared response, plus each band's own
-    cross terms.  No inversions beyond the 2x2 weight
+    same scalars as the variances: the outer products of the band
+    shares with the shared response, plus each band's own cross
+    terms.  No inversions beyond the 2x2 weight are needed.
 
     Parameters
     ----------
-    As for flux_var_delta
+    Sigma, sums, cov, fsums, fvars, fmcovs:
+        As for flux_var_delta
 
     Returns
     -------
-    (nband, nband) covariance of the raw per band flux sums;
-    scale by the same normalization as the raw flux sums
+    fcov: (nband, nband) array
+        The covariance of the raw per band flux sums; scale by
+        the same normalization as the raw flux sums
     """
     Winv = np.linalg.inv(Sigma)
     # tr(Winv dS_M) = b . dS in the (M1, M2, T) sums basis
@@ -206,11 +214,14 @@ def _mbasis_cov(M1, M2, T):
 
 def _model_pred_mbasis(model_type, Sfam, Sigma, Tsmooth):
     """
-    the predicted weighted moment ratios (M1, M2, T) and the log of
-    the unit flux prediction for a model family covariance, at unit
-    detAtinv; the ratios and the log derivative are the same for
-    every epoch and band.  model_type is a family name or a model
-    spec dict (required for 'bdf', which needs fracdev and TdByTe)
+    the predicted weighted moment ratios (M1, M2, T) and the log
+    of the unit flux prediction for a model family covariance
+
+    Evaluated at unit detAtinv; the ratios and the log derivative
+    are the same for every epoch and band.  model_type is a family
+    name or a model spec dict (required for 'bdf', which needs
+    fracdev and TdByTe).  Returns (None, None) for a state with no
+    usable prediction
     """
     if isinstance(model_type, dict):
         state = dict(model_type)
@@ -241,12 +252,14 @@ _FAMILY_COMP_CACHE = {}
 
 def _family_comp_arrays(model_type):
     """
-    the (fracs, cT) component arrays for the plain string families,
-    for the compiled sandwich derivative path; None for model spec
-    dicts (bdf), which keep the general path.  A gauss family is the
-    single component (1, 1): with cT = 1 the smoothed component
-    covariance cT * Sfam + Tsmooth/2 reproduces the gauss branch of
-    _model_pred_mbasis exactly (multiplication by 1 is exact)
+    the (fracs, cT) component arrays for the plain string families
+
+    Used by the compiled sandwich derivative path; None for model
+    spec dicts (bdf), which keep the general path.  A gauss family
+    is the single component (1, 1): with cT = 1 the smoothed
+    component covariance cT * Sfam + Tsmooth/2 reproduces the
+    gauss branch of _model_pred_mbasis exactly (multiplication by
+    1 is exact)
     """
     if not isinstance(model_type, str):
         return None
@@ -270,13 +283,15 @@ def _sandwich_preds_nb(
 ):
     """
     the six perturbed model predictions of the model_sandwich
-    central differences, fused: per (axis i, sign si) the family
-    covariance from the perturbed (M1, M2, T), the smoothed
-    components, and the closed-form weighted sums.  Fills
-    preds[i, si] = (M1, M2, T ratios, S_F); the logs and the
+    central differences, fused into one compiled pass
+
+    Per (axis i, sign si) this builds the family covariance from
+    the perturbed (M1, M2, T), the smoothed components, and the
+    closed-form weighted sums, filling
+    preds[i, si] = (M1, M2, T ratios, S_F).  The logs and the
     difference quotients stay in the caller so the libm calls and
-    the arithmetic order match the general path exactly.  Returns 0
-    when any prediction is invalid (S_F not positive)
+    the arithmetic order match the general path exactly.  Returns
+    1, or 0 when any prediction is invalid (S_F not positive)
     """
     n = fracs.size
     smooth = Tsmooth / 2
@@ -524,10 +539,15 @@ def bdf_joint_sandwich(
 
     Returns
     -------
-    var_raw, fam_cov, fd_var: flux sum variances (scale like
-    model_sandwich), the family covariance and the total split
-    variance; (None, None, None) when the sandwich cannot be
-    evaluated
+    var_raw: array of size nband
+        The per band flux sum variances; scale as for
+        model_sandwich
+    fam_cov: (3, 3) array
+        The covariance of the family (M1, M2, T) parameters
+    fd_var: float
+        The total variance of the split
+
+    All three are None when the sandwich cannot be evaluated
     """
     Sfam = model_state['cov']
     fd = model_state['fracdev']
