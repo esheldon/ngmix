@@ -531,22 +531,34 @@ def bdf_joint_sandwich(
     an estimated parameter, removing the conditional-on-the-split
     underprediction of the errors.
 
-    The estimating equations add to the family condition the split
-    condition fd = k g(fam_cov; data), with k the (deterministic)
-    shrinkage factor and g the split estimator.  At the model
-    consistent point the coupled first order response is
+    Notation follows flux_cov_delta and model_sandwich: d denotes
+    a noise fluctuation and dM the noise in the measured moment
+    ratios (M1, M2, T).  The estimating equations are the family
+    condition M_pred(fam_cov, fd) = M_meas of model_sandwich plus
+    the split condition fd = k g(fam_cov; data), with fd the dev
+    flux fraction, k the (deterministic) shrinkage factor of the
+    fitter's split prior and g the split estimator.
+    Differentiating both at the model consistent point,
+
+        B d(fam_cov) + c dfd = dM
+        dfd = k (G . d(fam_cov) + eta)
+
+    with B = dM_pred/d(fam_cov) and c = dM_pred/dfd (central
+    differences of the closed form predictions, as in
+    model_sandwich), G = dg/d(fam_cov) (supplied by the caller,
+    since it depends on the estimator: the GLS in the
+    single-object fitter, the two-aperture solve in the
+    deblender), and eta the split estimator's own data noise,
+    with conditional variance fd_var_data.  Substituting the
+    second equation into the first gives the coupled response
 
         d(fam_cov) = Pinv (dM - k c eta),   P = B + k outer(c, G)
         dfd   = k (G . d(fam_cov) + eta)
 
-    where B and c are the derivatives of the predicted moment
-    ratios over the family covariance and the split, G is the
-    split estimator's response to the family covariance (supplied
-    by the caller, since it depends on the estimator: the GLS in
-    the single-object fitter, the two-aperture solve in the
-    deblender), dM is the measured ratio fluctuation and eta the
-    split's own data noise with variance fd_var_data (the
-    conditional variance).  The flux rows gain the dlnN/dfd term.
+    which reduces to model_sandwich at k = 0 (split frozen).  The
+    flux rows follow model_sandwich, with the normalization now
+    responding to both channels:
+    dF_b/F_b = dfs_b/fs_b - dlnN . (d(fam_cov), dfd).
 
     The cross covariance of eta with the moment and flux sums is
     essential: both are linear functionals of the same noise and
@@ -605,6 +617,9 @@ def bdf_joint_sandwich(
             state, cov_from_mom(*famvec), wt_cov, Tsmooth,
         )
 
+    # B, c: the predicted-ratio derivatives of the docstring, and
+    # the flux normalization responses dlnu, dlnu_fd, by central
+    # differences of the closed form predictions
     B = np.zeros((3, 3))
     dlnu = np.zeros(3)
     for i in range(3):
@@ -627,7 +642,9 @@ def bdf_joint_sandwich(
     c = (rp - rm) / (2 * hfd)
     dlnu_fd = (lp - lm) / (2 * hfd)
 
-    # measured ratio fluctuation covariance, as in model_sandwich
+    # Cov(dM): expand dM = (dS_M - mvec dS_F) / S_F as in
+    # flux_cov_delta, with mvec the (M1, M2, T) components of the
+    # fixed point M = wt_cov / 2
     sfj = sums[5]
     mvec = np.array([
         wt_cov[1, 1] - wt_cov[0, 0], 2 * wt_cov[0, 1], Tw,
@@ -640,6 +657,7 @@ def bdf_joint_sandwich(
         + np.outer(mvec, mvec) * cff
     ) / sfj ** 2
 
+    # the coupled response operator of the docstring
     G = np.asarray(split_grad, dtype='f8')
     k = float(shrink_k)
     P = B + k * np.outer(c, G)
@@ -648,7 +666,8 @@ def bdf_joint_sandwich(
     except np.linalg.LinAlgError:
         return None, None, None
 
-    # the maps [d(fam_cov); dfd] = LM dM + Le eta
+    # the coupled response written as linear maps on the two
+    # noise inputs, [d(fam_cov); dfd] = LM dM + Le eta
     LM = np.zeros((4, 3))
     Le = np.zeros(4)
     LM[:3] = Pinv
@@ -668,6 +687,10 @@ def bdf_joint_sandwich(
     if eta_scov is None:
         cme = np.zeros(3)
     else:
+        # Cov(eta, dM) from the supplied sum crosses, using the
+        # same expansion of dM; Cov(eta, dS_F) is the sum of the
+        # band crosses since each band's flux noise enters the
+        # joint flux sum exactly once
         ceta_f = efc.sum()
         cme = (np.asarray(eta_scov, dtype='f8') - mvec * ceta_f) / sfj
 
@@ -689,6 +712,10 @@ def bdf_joint_sandwich(
     ue = a[3]
     aca = a @ Cx @ a
 
+    # Var of the raw flux fluctuation dfs_b - fs_b a . (dM, eta):
+    # fvars is the direct term, aca the amplified joint response,
+    # and acmf = Cov(dfs_b, a . (dM, eta)) via the dM expansion
+    # and Cov(dfs_b, dS_F) = Var(dfs_b), as in flux_cov_delta
     var_raw = np.zeros(fsums.size)
     for band in range(fsums.size):
         acmf = (
