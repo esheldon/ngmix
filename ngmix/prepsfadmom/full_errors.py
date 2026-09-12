@@ -32,6 +32,8 @@ References
 ----------
 Hampel (1974), "The influence curve and its role in robust
     estimation", JASA 69, 383
+
+Research for the errors was aided significantly by Claude Code
 """
 import numpy as np
 

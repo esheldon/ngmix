@@ -45,6 +45,8 @@ Hirata & Seljak (2003), "Shear calibration biases in weak-lensing
 Wald (1943), "Tests of statistical hypotheses concerning several
     parameters when the number of observations is large", Trans.
     Amer. Math. Soc. 54, 426
+
+Research for the errors was aided significantly by Claude Code
 """
 import numpy as np
 from numba import njit
