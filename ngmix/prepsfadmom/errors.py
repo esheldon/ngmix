@@ -231,11 +231,12 @@ def flux_cov_delta(wt_cov, sums, cov, fsums, fvars, fmcovs):
 
     fcov = np.outer(r, r) * s + np.outer(r, g) + np.outer(g, r)
     # the band flux-sum noises are independent across bands, so
-    # fvars enters only on the diagonal, written in the direct
-    # per-band variance form to keep it bitwise identical to the
-    # historic flux_var_delta
+    # their variances enter only on the diagonal: the outer
+    # products above already carry the shared joint-sum noise and
+    # the band cross terms for every pair, while
+    # Cov(dS_Fbi, dS_Fbj) vanishes for i != j
     idx = np.arange(fsums.size)
-    fcov[idx, idx] = fvars + r ** 2 * s + 2 * r * g
+    fcov[idx, idx] += fvars
     return fcov
 
 
