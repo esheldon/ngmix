@@ -53,6 +53,9 @@ def gauss_comps_ksums(
     nrm = 2 * np.pi * detAtinv
 
     for k in range(F.size):
+        # the product-gaussian identities of models.py, expanded
+        # in scalars.  C is the sum of the weight and model
+        # covariances, the only combination in which they enter
         C00 = sw00 + cov_sm00[k]
         C01 = sw01 + cov_sm01[k]
         C11 = sw11 + cov_sm11[k]
@@ -71,10 +74,14 @@ def gauss_comps_ksums(
         Cd0 = Ci00 * dv[k] + Ci01 * du[k]
         Cd1 = Ci01 * dv[k] + Ci11 * du[k]
 
+        # total weighted flux: the two-gaussian overlap integral,
+        # a gaussian density with covariance C evaluated at the
+        # center offset (dv, du)
         sflux = F[k] * np.exp(
             -0.5 * (dv[k] * Cd0 + du[k] * Cd1)
         ) / (nrm * np.sqrt(det))
 
+        # mu: the mean of the product gaussian, wt_cov C^-1 d
         mu0 = sw00 * Cd0 + sw01 * Cd1
         mu1 = sw01 * Cd0 + sw11 * Cd1
 
@@ -88,6 +95,7 @@ def gauss_comps_ksums(
         Sp01 = A00 * cov_sm01[k] + A01 * cov_sm11[k]
         Sp11 = A10 * cov_sm01[k] + A11 * cov_sm11[k]
 
+        # raw second moments about the weight center: Sp + mu mu^T
         vv = Sp00 + mu0 * mu0
         vu = Sp01 + mu0 * mu1
         uu = Sp11 + mu1 * mu1

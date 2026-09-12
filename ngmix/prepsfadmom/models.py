@@ -5,7 +5,7 @@ The adaptive moments machinery only consumes weighted moment sums,
 which are linear in the image, so model contributions can be computed
 (or subtracted) in closed form without rendering images.  For
 gaussian models and fixed-ratio mixtures of gaussians the weighted
-sums follow from the product-gaussian identities.
+sums follow from the product-gaussian identities (Bromiley 2003).
 
 For weight W (covariance wt_cov, unit peak, centered at the object being
 measured) and a model gaussian (flux F, covariance cov_sm in the
@@ -45,6 +45,12 @@ Model dicts:
         fracdev is the dev share of the total flux.  At fixed
         fracdev and TdByTe this is a fixed-ratio 16-gaussian
         mixture and all of the machinery above applies
+
+References
+----------
+Bromiley, P. A. (2003), Products and Convolutions of Gaussian
+    Probability Density Functions, Tina-Vision Memo 2003-003,
+    University of Manchester
 """
 import numpy as np
 
@@ -65,19 +71,53 @@ def inv2(M):
 
 
 def cov_from_e(e1, e2, T):
-    """covariance matrix [[Ivv, Ivu], [Ivu, Iuu]] from
-    distortion-convention shape parameters, e1 = <uu - vv>/T"""
-    return 0.5 * np.array([
-        [T * (1 - e1), T * e2],
-        [T * e2, T * (1 + e1)],
+    """
+    covariance matrix from distortion-convention shape parameters
+
+    Parameters
+    ----------
+    e1, e2: float
+        distortion-convention shapes, e1 = <uu - vv> / T and
+        e2 = 2 <vu> / T
+    T: float
+        the second moment size <vv + uu>
+
+    Returns
+    -------
+    cov: (2, 2) array
+        the covariance matrix [[Ivv, Ivu], [Ivu, Iuu]]
+    """
+    Ivv = T * (1 - e1)
+    Ivu = T * e2
+    Iuu = T * (1 + e1)
+
+    cov = 0.5 * np.array([
+        [Ivv, Ivu],
+        [Ivu, Iuu],
     ])
+    return cov
 
 
-def mom_from_cov(S):
-    """moments (M1, M2, T) = (<uu - vv>, 2<vu>, <vv + uu>) from a
-    covariance matrix [[Ivv, Ivu], [Ivu, Iuu]], the inverse of
-    cov_from_e up to the T normalization of the shapes"""
-    return S[1, 1] - S[0, 0], 2 * S[0, 1], S[0, 0] + S[1, 1]
+def mom_from_cov(cov):
+    """
+    moments from a covariance matrix; the inverse of cov_from_e
+    up to the T normalization of the shapes
+
+    Parameters
+    ----------
+    cov: (2, 2) array
+        covariance matrix [[Ivv, Ivu], [Ivu, Iuu]]
+
+    Returns
+    -------
+    M1, M2, T: float
+        M1 = Iuu - Ivv, M2 = 2 Ivu, T = Ivv + Iuu
+    """
+    M1 = cov[1, 1] - cov[0, 0]
+    M2 = 2 * cov[0, 1]
+    T = cov[0, 0] + cov[1, 1]
+
+    return M1, M2, T
 
 
 def gauss_model_ksums(flux, cov_sm, dv, du, wt_cov, detAtinv):
@@ -107,13 +147,22 @@ def gauss_model_ksums(flux, cov_sm, dv, du, wt_cov, detAtinv):
     d = np.array([dv, du])
     Cd = Cinv @ d
 
+    # the product of the weight and model gaussians is an
+    # unnormalized gaussian (see the module docstring).  Its
+    # integral, the total weighted flux, is the two-gaussian
+    # overlap integral: a gaussian density with the summed
+    # covariance C evaluated at the center offset d, so the
+    # flux falls off as a gaussian in the offset.  Units are
+    # those of the admom_ksums output
     sflux = flux * np.exp(-0.5 * d @ Cd) / (
         2 * np.pi * detAtinv * np.sqrt(det2(C))
     )
 
+    # mu: the mean of the product gaussian, wt_cov C^-1 d
     mu = wt_cov @ Cd
     # Sp: the second moments of the product gaussian
     Sp = wt_cov @ Cinv @ cov_sm
+    # raw second moments about the weight center: Sp + mu mu^T
     vv = Sp[0, 0] + mu[0] * mu[0]
     vu = Sp[0, 1] + mu[0] * mu[1]
     uu = Sp[1, 1] + mu[1] * mu[1]
@@ -127,9 +176,15 @@ _PROFILE_COMPS = {}
 
 
 def get_profile_comps(name):
-    """flux fractions and relative T factors of the ngmix gaussian
+    """
+    flux fractions and relative T factors of the ngmix gaussian
     expansion of the named profile ('exp': 6 gaussians, 'dev': 10
-    gaussians), normalized to total T = 1"""
+    gaussians), normalized to total T = 1
+
+    The table is derived from a GMixModel rather than duplicating
+    the expansion constants here, so it cannot drift from the
+    ngmix tables; it is computed once per profile and cached.
+    """
     if name not in _PROFILE_COMPS:
         gm = GMixModel([0, 0, 0, 0, 1.0, 1.0], name)
         d = gm.get_data()
