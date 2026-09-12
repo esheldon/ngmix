@@ -174,6 +174,8 @@ def model_gauss_components(model, Tsmooth):
     """
     the gaussian components of a model in the smoothed plane
 
+    exported for use in kdeblend
+
     Parameters
     ----------
     model: dict
