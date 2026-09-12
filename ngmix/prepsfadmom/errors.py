@@ -51,6 +51,7 @@ Research for the errors was aided significantly by Claude Code
 import numpy as np
 from numba import njit
 
+from ..moments import cov_from_mom
 from .models import model_ksums, get_profile_comps
 from .models_nb import gauss_comps_ksums
 
@@ -184,7 +185,7 @@ def flux_cov_delta(wt_cov, sums, cov, fsums, fvars, fmcovs):
 
     which writes the trace as a dot product over the (M1, M2, T)
     components: tr(wt_cov^-1 dS_M) = b . dS_M, with dS_M mapped
-    to its 2x2 matrix form as in _mbasis_cov.  The joint noises
+    to its 2x2 matrix form as in cov_from_mom.  The joint noises
     dS_F and dS_M are shared by all bands and only dS_Fb is
     band-specific, so the cross-band covariance assembles in
     closed form from the same scalars as the variances: the
@@ -238,14 +239,6 @@ def flux_cov_delta(wt_cov, sums, cov, fsums, fvars, fmcovs):
     idx = np.arange(fsums.size)
     fcov[idx, idx] += fvars
     return fcov
-
-
-def _mbasis_cov(M1, M2, T):
-    """covariance matrix from (M1, M2, T) moment components"""
-    return 0.5 * np.array([
-        [T - M1, M2],
-        [M2, T + M1],
-    ])
 
 
 def _model_pred_mbasis(model_type, fam_cov, wt_cov, Tsmooth):
@@ -478,10 +471,10 @@ def model_sandwich(
             famp[i] += h
             famm[i] -= h
             rp, lp = _model_pred_mbasis(
-                model_type, _mbasis_cov(*famp), wt_cov, Tsmooth,
+                model_type, cov_from_mom(*famp), wt_cov, Tsmooth,
             )
             rm, lm = _model_pred_mbasis(
-                model_type, _mbasis_cov(*famm), wt_cov, Tsmooth,
+                model_type, cov_from_mom(*famm), wt_cov, Tsmooth,
             )
             if rp is None or rm is None:
                 return None, None, None
@@ -609,7 +602,7 @@ def bdf_joint_sandwich(
         state = dict(model_state)
         state['fracdev'] = fdval
         return _model_pred_mbasis(
-            state, _mbasis_cov(*famvec), wt_cov, Tsmooth,
+            state, cov_from_mom(*famvec), wt_cov, Tsmooth,
         )
 
     B = np.zeros((3, 3))

@@ -445,6 +445,27 @@ def mom_from_cov(cov):
     return M1, M2, T
 
 
+def cov_from_mom(M1, M2, T):
+    """
+    covariance matrix from (M1, M2, T) moment components; the
+    inverse of mom_from_cov
+
+    Parameters
+    ----------
+    M1, M2, T: float
+        the moments, M1 = Iuu - Ivv, M2 = 2 Ivu, T = Ivv + Iuu
+
+    Returns
+    -------
+    cov: (2, 2) array
+        the covariance matrix [[Ivv, Ivu], [Ivu, Iuu]]
+    """
+    return 0.5 * np.array([
+        [T - M1, M2],
+        [M2, T + M1],
+    ])
+
+
 def make_mom_result(sums, sums_cov, sums_norm=None):
     """Make a fitting results dict from a set of unnormalized moments.
 

@@ -42,14 +42,14 @@ from ..util import get_ratio_error
 from .prepsfadmom_nb import admom_ksums, admom_finalize
 from ..fastexp_nb import FASTEXP_MAX_CHI2
 from numpy import fft
-from ..moments import cov_from_e, mom_from_cov
+from ..moments import cov_from_e, mom_from_cov, cov_from_mom
 from .models import (
     model_ksums, mixture_model_valid, det2,
     get_profile_comps,
 )
 from .errors import (
     flux_cov_delta, model_sandwich, bdf_joint_sandwich,
-    joint_flux_s2n, _mbasis_cov,
+    joint_flux_s2n,
 )
 from .prep import choose_fwhm_smooth, prep_epoch, DEFAULT_SMOOTH_FAC
 import ngmix.flags
@@ -1091,7 +1091,7 @@ class PAdmomFitter(object):
         ])
 
         def split_at(famvec):
-            Sp = _mbasis_cov(*famvec)
+            Sp = cov_from_mom(*famvec)
             A = np.zeros((nband, 2, 2))
             b = np.zeros((nband, 2))
             for epoch in epochs:

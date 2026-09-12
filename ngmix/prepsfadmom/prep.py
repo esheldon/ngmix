@@ -318,7 +318,7 @@ def prep_epoch(
     # the k grids, mode selection and smoothing profile are shared
     # between fits with the same stamp geometry, so they are cached
     jac = obs.jacobian
-    grids = _get_kspace_grids(
+    grids = get_kspace_grids(
         dim, jac.dvdrow, jac.dvdcol, jac.dudrow, jac.dudcol,
         float(Tsmooth),
     )
@@ -410,7 +410,7 @@ def prep_epoch(
 
 
 @functools.lru_cache(maxsize=16)
-def _get_kspace_grids(dim, dvdrow, dvdcol, dudrow, dudcol, Tsmooth):
+def get_kspace_grids(dim, dvdrow, dvdcol, dudrow, dudcol, Tsmooth):
     """
     get the k grids in sky coordinates over the rfft half plane, the
     selection of modes where the smoothing kernel is significant, and
@@ -418,6 +418,8 @@ def _get_kspace_grids(dim, dvdrow, dvdcol, dudrow, dudcol, Tsmooth):
     These only depend on the stamp geometry and smoothing, so they are
     cached and shared between fits; the returned arrays are marked
     read-only.
+
+    Exported for use in kdeblend.
     """
     half = dim // 2 + 1
     f1d = fft.fftfreq(dim) * (2.0 * np.pi)

@@ -63,7 +63,7 @@ def det2(M):
     return M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]
 
 
-def inv2(M):
+def _inv2(M):
     """inverse of a symmetric 2x2 matrix"""
     return np.array([
         [M[1, 1], -M[0, 1]],
@@ -94,7 +94,7 @@ def gauss_model_ksums(flux, cov_sm, dv, du, wt_cov, detAtinv):
         [v, u, M1, M2, T, flux] sums in the units of admom_ksums
     """
     C = wt_cov + cov_sm
-    Cinv = inv2(C)
+    Cinv = _inv2(C)
     d = np.array([dv, du])
     Cd = Cinv @ d
 

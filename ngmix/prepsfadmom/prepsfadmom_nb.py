@@ -16,9 +16,11 @@ from ..fastexp_nb import fexp, FASTEXP_MAX_CHI2
 
 
 @njit
-def _fill_phasors(dim, ang, pre, pim):
+def fill_phasors(dim, ang, pre, pim):
     """
     fill the 1d phasors exp(i * f1d * ang) where f1d = 2 pi fftfreq(dim)
+
+    Exported for use in kdeblend.
     """
     fac = 2.0 * np.pi * ang / dim
     half = (dim + 1) // 2
@@ -65,8 +67,8 @@ def admom_ksums(
     pyim = np.empty(dim)
     pxre = np.empty(dim)
     pxim = np.empty(dim)
-    _fill_phasors(dim, alpha, pyre, pyim)
-    _fill_phasors(dim, beta, pxre, pxim)
+    fill_phasors(dim, alpha, pyre, pyim)
+    fill_phasors(dim, beta, pxre, pxim)
 
     s0 = 0.0
     sv = 0.0
@@ -152,8 +154,8 @@ def admom_finalize(
     pyim = np.empty(dim)
     pxre = np.empty(dim)
     pxim = np.empty(dim)
-    _fill_phasors(dim, alpha, pyre, pyim)
-    _fill_phasors(dim, beta, pxre, pxim)
+    fill_phasors(dim, alpha, pyre, pyim)
+    fill_phasors(dim, beta, pxre, pxim)
 
     s0 = 0.0
     sv = 0.0

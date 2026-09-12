@@ -49,8 +49,12 @@ __all__ = [
 WK_CHI2_MAX = 25.0
 
 
-def _ingredients(epoch, wt_cov, v0, u0):
-    """the shared per-epoch pieces of the kernel expressions"""
+def kernel_ingredients(epoch, wt_cov, v0, u0):
+    """
+    the shared per-epoch pieces of the kernel expressions
+
+    Exported for use in kdeblend.
+    """
     alpha, beta = get_phase_angles(epoch, v0, u0)
     dim = epoch['dim']
     iy = epoch['iy'].astype(np.int64)
@@ -95,7 +99,7 @@ def moment_kernels(epoch, wt_cov, v0, u0):
     G: (6, nmodes) complex array
         The kernels for the [v, u, M1, M2, T, flux] sums
     """
-    Sv, Su, base, _, _, _, (wvv, wvu, wuu) = _ingredients(
+    Sv, Su, base, _, _, _, (wvv, wvu, wuu) = kernel_ingredients(
         epoch, wt_cov, v0, u0,
     )
     G = np.empty((6, Sv.size), dtype=complex)
@@ -132,7 +136,7 @@ def dsums_dtheta(epoch, wt_cov, v0, u0):
     D: (6, 5) array
         d(sums)/d(theta)
     """
-    Sv, Su, base, yf, xf, dim, (wvv, wvu, wuu) = _ingredients(
+    Sv, Su, base, yf, xf, dim, (wvv, wvu, wuu) = kernel_ingredients(
         epoch, wt_cov, v0, u0,
     )
     kv, ku = epoch['kv'], epoch['ku']
@@ -305,7 +309,7 @@ def sums_cov(hs, weight):
 # update algebra (used here and by the kdeblend full errors)
 # ---------------------------------------------------------------
 
-def sym_sandwich(A):
+def _sym_sandwich(A):
     """the 3x3 matrix S with vec(A X A) = S vec(X) for symmetric
     2x2 X in the (00, 01, 11) component basis"""
     a, b, c = A[0, 0], A[0, 1], A[1, 1]
@@ -316,7 +320,7 @@ def sym_sandwich(A):
     ])
 
 
-def sym_inv(A):
+def _sym_inv(A):
     """inverse of a symmetric 2x2 matrix"""
     det = A[0, 0] * A[1, 1] - A[0, 1] ** 2
     return np.array([
@@ -354,23 +358,23 @@ def dw_derivs(M, wt_cov):
     newS, flags = deweight(M, wt_cov)
     if flags != 0:
         return None, None, None, False
-    Snew = sym_sandwich(newS)
+    Snew = _sym_sandwich(newS)
     return (
         newS,
-        Snew @ sym_sandwich(sym_inv(M)),
-        -(Snew @ sym_sandwich(sym_inv(wt_cov))),
+        Snew @ _sym_sandwich(_sym_inv(M)),
+        -(Snew @ _sym_sandwich(_sym_inv(wt_cov))),
         True,
     )
 
 
 # map from (M1, M2, T) moment components to the sym3 covariance
 # components (c00, c01, c11) and back
-MBASIS_TO_SYM = 0.5 * np.array([
+_MBASIS_TO_SYM = 0.5 * np.array([
     [-1.0, 0.0, 1.0],
     [0.0, 1.0, 0.0],
     [1.0, 0.0, 1.0],
 ])
-SYM_TO_MBASIS = np.array([
+_SYM_TO_MBASIS = np.array([
     [-1.0, 0.0, 1.0],
     [0.0, 2.0, 0.0],
     [1.0, 0.0, 1.0],
@@ -518,11 +522,11 @@ def _padmom_full_covariance(
     dm3[1] = dratio(3) - 2 * (dv * ddu + du * ddv)
     dm3[2] = dratio(4) - 2 * (dv * ddv + du * ddu)
 
-    Mmat = sym3_mat(MBASIS_TO_SYM @ m3)
+    Mmat = sym3_mat(_MBASIS_TO_SYM @ m3)
     new_wt_cov, DWm_M, DWm_S, ok = dw_derivs(Mmat, wt_cov)
     if not ok:
         return None
-    dsym_dsums = MBASIS_TO_SYM @ dm3
+    dsym_dsums = _MBASIS_TO_SYM @ dm3
 
     # Phi_s: d(new state)/d(joint sums); Phi_x: the direct state
     # dependence.  The sums' own state dependence enters through
@@ -586,7 +590,7 @@ def _padmom_full_covariance(
                     return None
                 dout[:, c] = (p - m) / (2 * hs)
 
-        Mpred = sym3_mat(MBASIS_TO_SYM @ mp0)
+        Mpred = sym3_mat(_MBASIS_TO_SYM @ mp0)
         # Sp: the deweight image of the predicted moments, as in
         # _model_shift
         Sp, DWp_M, DWp_S, pok = dw_derivs(Mpred, wt_cov)
@@ -595,11 +599,11 @@ def _padmom_full_covariance(
             Phi_s[ifam:ifam + 3] = DWm_M @ dsym_dsums
             Phi_x[ifam:ifam + 3, ifam:ifam + 3] = (
                 np.eye(3)
-                - DWp_M @ MBASIS_TO_SYM @ dmp_dsfam
+                - DWp_M @ _MBASIS_TO_SYM @ dmp_dsfam
             )
             Phi_x[ifam:ifam + 3, isw:isw + 3] = (
                 DWm_S
-                - DWp_M @ MBASIS_TO_SYM @ dmp_dsw - DWp_S
+                - DWp_M @ _MBASIS_TO_SYM @ dmp_dsw - DWp_S
             )
             shift = np.array([
                 new_wt_cov[0, 0] - Sp[0, 0], new_wt_cov[0, 1] - Sp[0, 1],
@@ -712,7 +716,7 @@ def _padmom_full_covariance(
         cblock = covX[ifam:ifam + 3, ifam:ifam + 3]
     else:
         cblock = covX[isw:isw + 3, isw:isw + 3]
-    fam_err_cov = SYM_TO_MBASIS @ cblock @ SYM_TO_MBASIS.T
+    fam_err_cov = _SYM_TO_MBASIS @ cblock @ _SYM_TO_MBASIS.T
 
     # fluxes, following the _finalize normalization: the model
     # paths use F_b = fs_b / upred_b; the plain gauss path uses
