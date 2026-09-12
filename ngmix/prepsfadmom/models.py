@@ -170,7 +170,7 @@ def _mixture_comps(model):
     return get_profile_comps(model['type'])
 
 
-def model_comps(model, Tsmooth):
+def model_gauss_components(model, Tsmooth):
     """
     the gaussian components of a model in the smoothed plane
 
@@ -224,7 +224,7 @@ def model_ksums(model, band, dv, du, wt_cov, detAtinv, Tsmooth):
     """
     from .models_nb import gauss_comps_ksums
 
-    fracs, cov_sm00, cov_sm01, cov_sm11 = model_comps(model, Tsmooth)
+    fracs, cov_sm00, cov_sm01, cov_sm11 = model_gauss_components(model, Tsmooth)
     F = model['F'][band] * fracs
     n = F.size
     sums = np.zeros(6)
