@@ -154,14 +154,41 @@ def flux_cov_delta(wt_cov, sums, cov, fsums, fvars, fmcovs):
     including the adaptive weight response; the diagonal is
     flux_var_delta
 
-    The fluctuation dF_b is proportional to
-    dS_Fb - r_b dS_F + r_b b . dS_M (see flux_var_delta).  The
-    joint flux and moment sum responses are shared by all bands
-    and only the band's own flux sum dS_Fb is band-specific, so
-    the cross-band covariance assembles in closed form from the
-    same scalars as the variances: the outer products of the band
-    shares with the shared response, plus each band's own cross
-    terms.  No inversions beyond the 2x2 weight are needed.
+    Notation: admom_ksums accumulates the weighted moment sums
+    over all bands and epochs (the joint sums); S_M denotes the
+    triplet of second-moment sums (S_M1, S_M2, S_T), S_F the
+    joint flux sum, and S_Fb band b's own flux sum.  M is the
+    2x2 measured weighted covariance, built from the moment
+    ratios S_M / S_F.  d denotes the noise fluctuation of a
+    quantity: dS_M is the noise in the moment sums, dM the
+    resulting noise in M.
+
+    The band flux fluctuation follows from the weight response
+    dln F = tr(wt_cov^-1 dM) derived in flux_var_delta by adding
+    the band's own fixed-weight noise dS_Fb / S_Fb, expanding
+    dM = (dS_M - M dS_F) / S_F, and using tr(wt_cov^-1 M) = 1 at
+    the adaptive moments fixed point M = wt_cov / 2 (Bernstein &
+    Jarvis 2002; Hirata & Seljak 2003):
+
+        dF_b  propto  dS_Fb - r_b dS_F + r_b b . dS_M
+
+    Here r_b = S_Fb / S_F, the fraction of the joint flux sum
+    contributed by band b, scales the shared joint-sum noise
+    down to the band.  b is the constant 3-vector
+
+        b = ((Winv_uu - Winv_vv) / 2,
+             Winv_vu,
+             (Winv_vv + Winv_uu) / 2),    Winv = wt_cov^-1
+
+    which writes the trace as a dot product over the (M1, M2, T)
+    components: tr(wt_cov^-1 dS_M) = b . dS_M, with dS_M mapped
+    to its 2x2 matrix form as in _mbasis_cov.  The joint noises
+    dS_F and dS_M are shared by all bands and only dS_Fb is
+    band-specific, so the cross-band covariance assembles in
+    closed form from the same scalars as the variances: the
+    outer products of the band shares with the shared response,
+    plus each band's own cross terms.  No inversions beyond the
+    2x2 weight are needed.
 
     Parameters
     ----------
@@ -182,12 +209,19 @@ def flux_cov_delta(wt_cov, sums, cov, fsums, fvars, fmcovs):
         0.5 * (Winv[0, 0] + Winv[1, 1]),
     ])
 
+    # blocks of the joint-sum covariance: moment-moment,
+    # moment-flux and flux-flux
     cmm = cov[2:5, 2:5]
     cmf = cov[2:5, 5]
     cff = cov[5, 5]
 
-    # dF_b is proportional to dS_Fb - r dS_F + r b . dS_M with
-    # r = S_Fb / S_F the band share of the joint flux sum
+    # dF_b propto dS_Fb + r_b (b . dS_M - dS_F), see the
+    # docstring.  s is the variance of the shared response,
+    #   s = Var(b . dS_M - dS_F)
+    # and g_b its covariance with the band's own flux-sum noise,
+    #   g_b = Cov(dS_Fb, b . dS_M - dS_F)
+    # which uses Cov(dS_Fb, dS_F) = Var(dS_Fb) = fvars_b: the
+    # band flux noise enters the joint flux sum exactly once
     r = fsums / sums[5]
     bcb = b @ cmm @ b
     s = cff + bcb - 2 * (b @ cmf)
@@ -342,22 +376,32 @@ def model_sandwich(
     first order (sandwich) errors for the moment matched model fits
 
     The estimating equations are the weight condition
-    M_meas(wt_cov) = wt_cov/2, the family condition
-    M_pred(wt_cov, fam_cov) = M_meas, and per band F_b N_b = fs_b with
-    N_b the unit flux model prediction.  Evaluated with the data
-    replaced by the converged model, the Jacobian is block
-    triangular: the family and flux conditions lose their explicit
-    weight dependence, leaving
+    M_meas(wt_cov) = wt_cov/2 (the adaptive moments fixed point;
+    Bernstein & Jarvis 2002; Hirata & Seljak 2003), the family
+    condition
+    M_pred(wt_cov, fam_cov) = M_meas, and per band the flux
+    condition F_b N_b = fs_b, where fs_b is the band's measured
+    raw flux sum (the fsums argument) and N_b(wt_cov, fam_cov)
+    is the model prediction of that sum at unit flux, so
+    F_b = fs_b / N_b.  As in flux_cov_delta, d denotes a noise
+    fluctuation: dM is the noise in the measured moment ratios
+    M_meas, dfs_b the noise in the band's flux sum.
+
+    Evaluated with the data replaced by the converged model, the
+    Jacobian is block triangular: the family and flux conditions
+    lose their explicit weight dependence, leaving
 
         d(fam_cov) = B^-1 dM,    B = dM_pred/d(fam_cov)
         dF_b/F_b = dfs_b/fs_b - (dln N/d(fam_cov)) . d(fam_cov)
 
-    where dM is the noise fluctuation of the measured moment ratios.
-    B and the normalization derivative are evaluated by central
-    differences on the closed form model predictions, so unlike the
-    gauss delta method there is no gaussian approximation beyond
-    replacing the data by the converged model; for a single gaussian
-    family this reduces exactly to flux_var_delta.
+    the second line being the fluctuation of F_b = fs_b / N_b:
+    the direct flux-sum noise plus the normalization's response
+    to the fitted family covariance.  B and the normalization
+    derivative are evaluated by central differences on the closed
+    form model predictions, so unlike the gauss delta method
+    there is no gaussian approximation beyond replacing the data
+    by the converged model; for a single gaussian family this
+    reduces exactly to flux_var_delta.
 
     Parameters
     ----------
