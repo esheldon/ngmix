@@ -395,6 +395,77 @@ def g2mom(g1, g2, T):
     return Irr, Irc, Icc
 
 
+def cov_from_e(e1, e2, T):
+    """
+    covariance matrix from distortion-convention shape parameters
+
+    Parameters
+    ----------
+    e1, e2: float
+        distortion-convention shapes, e1 = <uu - vv> / T and
+        e2 = 2 <vu> / T
+    T: float
+        the second moment size <vv + uu>
+
+    Returns
+    -------
+    cov: (2, 2) array
+        the covariance matrix [[Ivv, Ivu], [Ivu, Iuu]]
+    """
+    Ivv = T * (1 - e1)
+    Ivu = T * e2
+    Iuu = T * (1 + e1)
+
+    cov = 0.5 * np.array([
+        [Ivv, Ivu],
+        [Ivu, Iuu],
+    ])
+    return cov
+
+
+def mom_from_cov(cov):
+    """
+    moments from a covariance matrix; the inverse of cov_from_e
+    up to the T normalization of the shapes
+
+    Parameters
+    ----------
+    cov: (2, 2) array
+        covariance matrix [[Ivv, Ivu], [Ivu, Iuu]]
+
+    Returns
+    -------
+    M1, M2, T: float
+        M1 = Iuu - Ivv, M2 = 2 Ivu, T = Ivv + Iuu
+    """
+    M1 = cov[1, 1] - cov[0, 0]
+    M2 = 2 * cov[0, 1]
+    T = cov[0, 0] + cov[1, 1]
+
+    return M1, M2, T
+
+
+def cov_from_mom(M1, M2, T):
+    """
+    covariance matrix from (M1, M2, T) moment components; the
+    inverse of mom_from_cov
+
+    Parameters
+    ----------
+    M1, M2, T: float
+        the moments, M1 = Iuu - Ivv, M2 = 2 Ivu, T = Ivv + Iuu
+
+    Returns
+    -------
+    cov: (2, 2) array
+        the covariance matrix [[Ivv, Ivu], [Ivu, Iuu]]
+    """
+    return 0.5 * np.array([
+        [T - M1, M2],
+        [M2, T + M1],
+    ])
+
+
 def make_mom_result(sums, sums_cov, sums_norm=None):
     """Make a fitting results dict from a set of unnormalized moments.
 

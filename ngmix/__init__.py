@@ -53,6 +53,7 @@ from . import admom
 from . import gaussmom
 from . import ksigmamom
 from . import prepsfmom
+from . import prepsfadmom
 from . import observation
 from .observation import Observation, ObsList, MultiBandObsList
 
