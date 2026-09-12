@@ -447,9 +447,6 @@ def _padmom_full_covariance(
     fitter, epochs, nband, model_state, wt_cov, v0, u0, Tsmooth,
 ):
     """the body of padmom_full_covariance; see that docstring"""
-    from .prepsfadmom import model_ksums
-    from .prepsfadmom_nb import admom_ksums
-
     if model_state is None:
         # the plain gauss path passes no model state
         mtype = 'gauss'
@@ -458,6 +455,9 @@ def _padmom_full_covariance(
         if mtype not in ('exp', 'dev'):
             return None
 
+    # the packed state: [center (unless fixcen)], [family
+    # covariance for the mixture families], weight covariance,
+    # each symmetric 2x2 carried as 3 components
     nep = len(epochs)
     fixcen = fitter.fixcen
     ncen = 0 if fixcen else 2
@@ -468,12 +468,160 @@ def _padmom_full_covariance(
     ifam = ncen
     isw = ncen + nfam
 
-    # per-epoch data sums, derivatives and accumulation factors
+    # the data sums at the converged state are the linearization
+    # point; everything downstream is ratios, so the joint flux
+    # sum must be positive
+    esums, Ds, facs, sums = _epoch_sums_and_derivs(
+        epochs, wt_cov, v0, u0,
+    )
+    if not sums[5] > 0:
+        return None
+
+    # the update consumes the measured moment ratios, not the
+    # raw sums; a non-positive measured T has no deweight
+    ddv, ddu, m3, dm3 = _measured_moment_response(sums, fixcen)
+    if m3[2] <= 0:
+        return None
+
+    # the weight update is the deweight of the measured moments;
+    # DWm_M, DWm_S are its derivatives with respect to the
+    # measured matrix and the weight
+    Mmat = sym3_mat(_MBASIS_TO_SYM @ m3)
+    new_wt_cov, DWm_M, DWm_S, ok = dw_derivs(Mmat, wt_cov)
+    if not ok:
+        return None
+    dsym_dsums = _MBASIS_TO_SYM @ dm3
+
+    # Phi_s: d(new state)/d(joint sums); Phi_x: the direct state
+    # dependence.  The sums' own state dependence enters through
+    # the analytic kernel derivatives in the J assembly
+    Phi_s = np.zeros((npar, 6))
+    Phi_x = np.zeros((npar, npar))
+
+    if not fixcen:
+        # the center update is the measured centroid ratio itself
+        Phi_s[icen] = ddv
+        Phi_s[icen + 1] = ddu
+        Phi_x[icen, icen] = 1.0
+        Phi_x[icen + 1, icen + 1] = 1.0
+
+    # weight rows: the deweight chained through the measured
+    # ratios (the sums channel) and its direct weight dependence
+    Phi_s[isw:isw + 3] = DWm_M @ dsym_dsums
+    Phi_x[isw:isw + 3, isw:isw + 3] = DWm_S
+
+    if is_mix:
+        # family rows: the model-matching condition couples the
+        # family covariance to the measured moments through the
+        # model prediction; see _fill_family_rows
+        ok = _fill_family_rows(
+            Phi_s=Phi_s, Phi_x=Phi_x, ifam=ifam, isw=isw,
+            model_state=model_state, wt_cov=wt_cov,
+            new_wt_cov=new_wt_cov, Tsmooth=Tsmooth, m3=m3,
+            dm3=dm3, dsym_dsums=dsym_dsums, DWm_M=DWm_M,
+            DWm_S=DWm_S, fitter=fitter,
+        )
+        if not ok:
+            return None
+
+    # J = Phi_x + Phi_s dS/dx: the direct state dependence plus
+    # the sums channel, with dS/dx from the analytic kernel
+    # derivatives; D columns are (sw3, v, u) -> state order
+    Dstate = np.zeros((6, npar))
+    for D, fac in zip(Ds, facs):
+        if not fixcen:
+            Dstate[:, icen] += fac * D[:, 3]
+            Dstate[:, icen + 1] += fac * D[:, 4]
+        Dstate[:, isw:isw + 3] += fac * D[:, 0:3]
+    J = Phi_x + Phi_s @ Dstate
+
+    # A = B_Phi: the update's direct response to each epoch's
+    # sums, Phi_s scaled by the epoch accumulation factor
+    A = np.zeros((npar, 6 * nep))
+    for iep, fac in enumerate(facs):
+        A[:, iep * 6:(iep + 1) * 6] = Phi_s * fac
+
+    # the exact noise covariance of the data sums; epochs carry
+    # independent noise, so it is block diagonal
+    covS = _data_sums_cov(epochs, wt_cov, v0, u0)
+    if covS is None:
+        return None
+
+    # the fixed point response dx = (I - J)^-1 B_Phi dS by the
+    # implicit function theorem, and its covariance
+    Mm = np.eye(npar) - J
+    Tx = np.linalg.solve(Mm, A)
+    covX = Tx @ covS @ Tx.T
+
+    # the family covariance in the (M1, M2, T) basis for the
+    # structure errors; for gauss the family is the weight minus
+    # the constant smoothing
+    if is_mix:
+        cblock = covX[ifam:ifam + 3, ifam:ifam + 3]
+    else:
+        cblock = covX[isw:isw + 3, isw:isw + 3]
+    fam_err_cov = _SYM_TO_MBASIS @ cblock @ _SYM_TO_MBASIS.T
+
+    # fluxes, following the _finalize normalization F_b = fs_b / N_b:
+    # the plain gauss path has N_b = ws_b / (4 pi sqrt(det wt_cov))
+    # and the model paths N_b = upred_b, the predicted unit flux sum
+    fs = np.zeros(nband)
+    for ep, s, fac in zip(epochs, esums, facs):
+        fs[ep['band']] += fac * s[5]
+
+    if is_mix:
+        norm = _model_flux_norm(
+            epochs=epochs, model_state=model_state, wt_cov=wt_cov,
+            Tsmooth=Tsmooth, nband=nband, npar=npar, ifam=ifam,
+            isw=isw,
+        )
+    else:
+        norm = _gauss_flux_norm(
+            epochs=epochs, wt_cov=wt_cov, nband=nband, npar=npar,
+            isw=isw,
+        )
+    if norm is None:
+        return None
+    N, dlnN = norm
+    F = fs / N
+
+    # the fluxes are not state coordinates: derived rows
+    # dq = (dq/dS + dq/dx R) dS, assembled in _flux_covariance
+    flux_cov = _flux_covariance(
+        F=F, N=N, dlnN=dlnN, epochs=epochs, Ds=Ds, facs=facs,
+        Tx=Tx, covS=covS, fixcen=fixcen, icen=icen, isw=isw,
+        npar=npar, nband=nband,
+    )
+
+    # a non-positive variance or non-finite family covariance
+    # marks a failed evaluation; the s/n falls back to the
+    # quadrature sum when the covariance is not positive definite
+    var = np.diag(flux_cov)
+    if np.any(var <= 0) or not np.all(np.isfinite(fam_err_cov)):
+        return None
+    s2n = joint_flux_s2n(F, flux_cov)
+    if s2n is None:
+        s2n = np.sqrt(np.sum(F ** 2 / var))
+    return {
+        'flux_cov': flux_cov,
+        'flux_err': np.sqrt(var),
+        'fam_err_cov': fam_err_cov,
+        's2n': s2n,
+    }
+
+
+def _epoch_sums_and_derivs(epochs, wt_cov, v0, u0):
+    """
+    the per-epoch weighted data sums, their analytic derivatives
+    with respect to (wt_cov, v, u), the accumulation factors
+    weight * detAtinv, and the accumulated joint sums
+    """
+    from .prepsfadmom_nb import admom_ksums
+
     esums = []
     Ds = []
     facs = []
     for ep in epochs:
-
         alpha, beta = get_phase_angles(ep, v0, u0)
         s = np.zeros(6)
         admom_ksums(
@@ -489,12 +637,18 @@ def _padmom_full_covariance(
     sums = np.zeros(6)
     for s, fac in zip(esums, facs):
         sums += fac * s
-    if not sums[5] > 0:
-        return None
-    finv = 1.0 / sums[5]
+    return esums, Ds, facs, sums
 
-    # the measured moments with the centroid correction; dv, du
-    # are tiny at the converged point but kept exactly
+
+def _measured_moment_response(sums, fixcen):
+    """
+    the centroid corrected measured moment ratios m3 = (M1, M2, T)
+    and their derivative dm3 = d(m3)/d(sums), including the
+    centroid correction chain; also the centroid ratio derivatives
+    ddv, ddu for the center rows.  The corrections dv, du are tiny
+    at the converged point but kept exactly
+    """
+    finv = 1.0 / sums[5]
     if fixcen:
         dv = du = 0.0
     else:
@@ -505,10 +659,7 @@ def _padmom_full_covariance(
         sums[3] * finv - 2 * dv * du,
         sums[4] * finv - (dv * dv + du * du),
     ])
-    if m3[2] <= 0:
-        return None
 
-    # d(m3)/d(sums) including the centroid correction chain
     def dratio(j):
         out = np.zeros(6)
         out[j] = finv
@@ -521,177 +672,199 @@ def _padmom_full_covariance(
     dm3[0] = dratio(2) - 2 * du * ddu + 2 * dv * ddv
     dm3[1] = dratio(3) - 2 * (dv * ddu + du * ddv)
     dm3[2] = dratio(4) - 2 * (dv * ddv + du * ddu)
+    return ddv, ddu, m3, dm3
 
-    Mmat = sym3_mat(_MBASIS_TO_SYM @ m3)
-    new_wt_cov, DWm_M, DWm_S, ok = dw_derivs(Mmat, wt_cov)
-    if not ok:
-        return None
-    dsym_dsums = _MBASIS_TO_SYM @ dm3
 
-    # Phi_s: d(new state)/d(joint sums); Phi_x: the direct state
-    # dependence.  The sums' own state dependence enters through
-    # the analytic kernel derivatives in the J assembly
-    Phi_s = np.zeros((npar, 6))
-    Phi_x = np.zeros((npar, npar))
+def _fill_family_rows(
+    Phi_s, Phi_x, ifam, isw, model_state, wt_cov, new_wt_cov,
+    Tsmooth, m3, dm3, dsym_dsums, DWm_M, DWm_S, fitter,
+):
+    """
+    fill the family rows of Phi_s and Phi_x for the mixture
+    families: the responses of the family condition to the data
+    sums, the family covariance and the weight, on the main
+    (deweighted prediction) branch or the gain-1 fallback branch,
+    followed by the plain-step health check.  Returns False when
+    a model prediction is invalid or the converged evaluation is
+    on a guarded branch the analytic derivatives do not cover;
+    the caller then keeps the model_sandwich errors
+    """
+    from .models import model_ksums
 
-    if not fixcen:
-        Phi_s[icen] = ddv
-        Phi_s[icen + 1] = ddu
-        Phi_x[icen, icen] = 1.0
-        Phi_x[icen + 1, icen + 1] = 1.0
+    fam_cov = model_state['cov']
+    sfam3 = np.array([
+        fam_cov[0, 0], fam_cov[0, 1], fam_cov[1, 1],
+    ])
+    hs = 1.0e-6 * max(wt_cov[0, 0] + wt_cov[1, 1], 0.1)
 
-    Phi_s[isw:isw + 3] = DWm_M @ dsym_dsums
-    Phi_x[isw:isw + 3, isw:isw + 3] = DWm_S
-
-    if is_mix:
-        fam_cov = model_state['cov']
-        sfam3 = np.array([
-            fam_cov[0, 0], fam_cov[0, 1], fam_cov[1, 1],
-        ])
-        hs = 1.0e-6 * max(wt_cov[0, 0] + wt_cov[1, 1], 0.1)
-
-        def mp3_of(sf3, sw3):
-            st = dict(model_state)
-            st['cov'] = sym3_mat(sf3)
-            st['F'] = np.ones(1)
-            ps = model_ksums(
-                st, 0, 0.0, 0.0, sym3_mat(sw3), 1.0, Tsmooth,
-            )
-            if not ps[5] > 0:
-                return None
-            pinv = 1.0 / ps[5]
-            return np.array([
-                ps[2] * pinv, ps[3] * pinv, ps[4] * pinv,
-            ])
-
-        sw3 = np.array([
-            wt_cov[0, 0], wt_cov[0, 1], wt_cov[1, 1],
-        ])
-        mp0 = mp3_of(sfam3, sw3)
-        if mp0 is None:
-            return None
-        dmp_dsfam = np.zeros((3, 3))
-        dmp_dsw = np.zeros((3, 3))
-        for c in range(3):
-            for target, dout in (
-                (sfam3, dmp_dsfam), (sw3, dmp_dsw),
-            ):
-                tp = target.copy()
-                tm = target.copy()
-                tp[c] += hs
-                tm[c] -= hs
-                if target is sfam3:
-                    p = mp3_of(tp, sw3)
-                    m = mp3_of(tm, sw3)
-                else:
-                    p = mp3_of(sfam3, tp)
-                    m = mp3_of(sfam3, tm)
-                if p is None or m is None:
-                    return None
-                dout[:, c] = (p - m) / (2 * hs)
-
-        Mpred = sym3_mat(_MBASIS_TO_SYM @ mp0)
-        # Sp: the deweight image of the predicted moments, as in
-        # _model_shift
-        Sp, DWp_M, DWp_S, pok = dw_derivs(Mpred, wt_cov)
-        if pok:
-            # shift = new_wt_cov - Sp; fam_cov' = fam_cov + shift
-            Phi_s[ifam:ifam + 3] = DWm_M @ dsym_dsums
-            Phi_x[ifam:ifam + 3, ifam:ifam + 3] = (
-                np.eye(3)
-                - DWp_M @ _MBASIS_TO_SYM @ dmp_dsfam
-            )
-            Phi_x[ifam:ifam + 3, isw:isw + 3] = (
-                DWm_S
-                - DWp_M @ _MBASIS_TO_SYM @ dmp_dsw - DWp_S
-            )
-            shift = np.array([
-                new_wt_cov[0, 0] - Sp[0, 0], new_wt_cov[0, 1] - Sp[0, 1],
-                new_wt_cov[1, 1] - Sp[1, 1],
-            ])
-        else:
-            # gain-1 fallback on the ratios
-            Tm = m3[2]
-            Tp = mp0[2]
-            Tf = sfam3[0] + sfam3[2]
-            fac = Tm / Tp
-            de1 = m3[0] / Tm - mp0[0] / Tp
-            de2 = m3[1] / Tm - mp0[1] / Tp
-            base = 0.5 * fac * Tf
-            shift = np.array([
-                (fac - 1) * sfam3[0] - base * de1,
-                (fac - 1) * sfam3[1] + base * de2,
-                (fac - 1) * sfam3[2] + base * de1,
-            ])
-            sgn = np.array([-1.0, 1.0, 1.0])
-            dfac_dm = np.array([0.0, 0.0, 1.0 / Tp])
-            dfac_dp = np.array([0.0, 0.0, -fac / Tp])
-            dde1_dm = np.array([
-                1.0 / Tm, 0.0, -m3[0] / Tm ** 2,
-            ])
-            dde2_dm = np.array([
-                0.0, 1.0 / Tm, -m3[1] / Tm ** 2,
-            ])
-            dde1_dp = np.array([
-                -1.0 / Tp, 0.0, mp0[0] / Tp ** 2,
-            ])
-            dde2_dp = np.array([
-                0.0, -1.0 / Tp, mp0[1] / Tp ** 2,
-            ])
-            dde_dm = [dde1_dm, dde2_dm, dde1_dm]
-            dde_dp = [dde1_dp, dde2_dp, dde1_dp]
-            dsh_dm = np.zeros((3, 3))
-            dsh_dp = np.zeros((3, 3))
-            for r in range(3):
-                de_r = de1 if r != 1 else de2
-                dsh_dm[r] = (
-                    sfam3[r] * dfac_dm
-                    + sgn[r] * 0.5 * Tf * de_r * dfac_dm
-                    + sgn[r] * base * dde_dm[r]
-                )
-                dsh_dp[r] = (
-                    sfam3[r] * dfac_dp
-                    + sgn[r] * 0.5 * Tf * de_r * dfac_dp
-                    + sgn[r] * base * dde_dp[r]
-                )
-            dsh_dsfam = np.zeros((3, 3))
-            tr = np.array([1.0, 0.0, 1.0])
-            for r in range(3):
-                dsh_dsfam[r, r] += fac - 1.0
-                de_r = de1 if r != 1 else de2
-                dsh_dsfam[r] += sgn[r] * 0.5 * fac * de_r * tr
-            Phi_s[ifam:ifam + 3] = dsh_dm @ dm3
-            Phi_x[ifam:ifam + 3, ifam:ifam + 3] = (
-                np.eye(3)
-                + dsh_dsfam + dsh_dp @ dmp_dsfam
-            )
-            Phi_x[ifam:ifam + 3, isw:isw + 3] = (
-                dsh_dp @ dmp_dsw
-            )
-
-        # health: the plain step must be undamped and accepted
-        prop, idamp, accepted = fitter._damped_step(
-            fam_cov, sym3_mat(shift), new_wt_cov, Tsmooth,
+    def mp3_of(sf3, sw3):
+        """the predicted (M1, M2, T) moment ratios of the family
+        under the given weight"""
+        st = dict(model_state)
+        st['cov'] = sym3_mat(sf3)
+        st['F'] = np.ones(1)
+        ps = model_ksums(
+            st, 0, 0.0, 0.0, sym3_mat(sw3), 1.0, Tsmooth,
         )
-        if not accepted or idamp > 0:
+        if not ps[5] > 0:
             return None
+        pinv = 1.0 / ps[5]
+        return np.array([
+            ps[2] * pinv, ps[3] * pinv, ps[4] * pinv,
+        ])
 
-    # J: the state dependence of the sums through the analytic
-    # kernel derivatives, D columns (sw3, v, u) -> state order
-    Dstate = np.zeros((6, npar))
-    for D, fac in zip(Ds, facs):
-        if not fixcen:
-            Dstate[:, icen] += fac * D[:, 3]
-            Dstate[:, icen + 1] += fac * D[:, 4]
-        Dstate[:, isw:isw + 3] += fac * D[:, 0:3]
-    J = Phi_x + Phi_s @ Dstate
+    sw3 = np.array([
+        wt_cov[0, 0], wt_cov[0, 1], wt_cov[1, 1],
+    ])
+    mp0 = mp3_of(sfam3, sw3)
+    if mp0 is None:
+        return False
 
-    # A: the data response per epoch
-    A = np.zeros((npar, 6 * nep))
-    for iep, fac in enumerate(facs):
-        A[:, iep * 6:(iep + 1) * 6] = Phi_s * fac
+    # d(predicted ratios)/d(fam_cov) and /d(wt_cov) by micro
+    # central differences of the closed form predictions
+    dmp_dsfam = np.zeros((3, 3))
+    dmp_dsw = np.zeros((3, 3))
+    for c in range(3):
+        for target, dout in (
+            (sfam3, dmp_dsfam), (sw3, dmp_dsw),
+        ):
+            tp = target.copy()
+            tm = target.copy()
+            tp[c] += hs
+            tm[c] -= hs
+            if target is sfam3:
+                p = mp3_of(tp, sw3)
+                m = mp3_of(tm, sw3)
+            else:
+                p = mp3_of(sfam3, tp)
+                m = mp3_of(sfam3, tm)
+            if p is None or m is None:
+                return False
+            dout[:, c] = (p - m) / (2 * hs)
 
-    # Cov(S) from the influence kernels and the weight maps
+    Mpred = sym3_mat(_MBASIS_TO_SYM @ mp0)
+    # Sp: the deweight image of the predicted moments, as in
+    # _model_shift
+    Sp, DWp_M, DWp_S, pok = dw_derivs(Mpred, wt_cov)
+    if pok:
+        # shift = new_wt_cov - Sp; fam_cov' = fam_cov + shift
+        Phi_s[ifam:ifam + 3] = DWm_M @ dsym_dsums
+        Phi_x[ifam:ifam + 3, ifam:ifam + 3] = (
+            np.eye(3)
+            - DWp_M @ _MBASIS_TO_SYM @ dmp_dsfam
+        )
+        Phi_x[ifam:ifam + 3, isw:isw + 3] = (
+            DWm_S
+            - DWp_M @ _MBASIS_TO_SYM @ dmp_dsw - DWp_S
+        )
+        shift = np.array([
+            new_wt_cov[0, 0] - Sp[0, 0], new_wt_cov[0, 1] - Sp[0, 1],
+            new_wt_cov[1, 1] - Sp[1, 1],
+        ])
+    else:
+        shift, dsh_dm, dsh_dp, dsh_dsfam = _gain1_shift_derivs(
+            m3, mp0, sfam3,
+        )
+        Phi_s[ifam:ifam + 3] = dsh_dm @ dm3
+        Phi_x[ifam:ifam + 3, ifam:ifam + 3] = (
+            np.eye(3)
+            + dsh_dsfam + dsh_dp @ dmp_dsfam
+        )
+        Phi_x[ifam:ifam + 3, isw:isw + 3] = (
+            dsh_dp @ dmp_dsw
+        )
+
+    # health: the plain step must be undamped and accepted
+    prop, idamp, accepted = fitter._damped_step(
+        fam_cov, sym3_mat(shift), new_wt_cov, Tsmooth,
+    )
+    if not accepted or idamp > 0:
+        return False
+    return True
+
+
+def _gain1_shift_derivs(m3, mp0, sfam3):
+    """
+    the family shift and its derivatives on the gain-1 fallback
+    branch, taken when the deweight of the predicted moments is
+    not evaluable.  The fallback matches the measured and
+    predicted moment ratios directly: with Tm = m3[2],
+    Tp = mp0[2] and Tf the family T,
+
+        fac   = Tm / Tp
+        de_i  = m3_i / Tm - mp0_i / Tp
+        base  = fac Tf / 2
+        shift = ((fac - 1) sfam3_0 - base de1,
+                 (fac - 1) sfam3_1 + base de2,
+                 (fac - 1) sfam3_2 + base de1)
+
+    as in the _model_shift fallback of prepsfadmom.py.  Returns
+    the shift and its derivatives with respect to the measured
+    ratios (dsh_dm), the predicted ratios (dsh_dp) and the packed
+    family covariance (dsh_dsfam), by direct differentiation of
+    the expressions above
+    """
+    Tm = m3[2]
+    Tp = mp0[2]
+    Tf = sfam3[0] + sfam3[2]
+    fac = Tm / Tp
+    de1 = m3[0] / Tm - mp0[0] / Tp
+    de2 = m3[1] / Tm - mp0[1] / Tp
+    base = 0.5 * fac * Tf
+    shift = np.array([
+        (fac - 1) * sfam3[0] - base * de1,
+        (fac - 1) * sfam3[1] + base * de2,
+        (fac - 1) * sfam3[2] + base * de1,
+    ])
+    sgn = np.array([-1.0, 1.0, 1.0])
+    dfac_dm = np.array([0.0, 0.0, 1.0 / Tp])
+    dfac_dp = np.array([0.0, 0.0, -fac / Tp])
+    dde1_dm = np.array([
+        1.0 / Tm, 0.0, -m3[0] / Tm ** 2,
+    ])
+    dde2_dm = np.array([
+        0.0, 1.0 / Tm, -m3[1] / Tm ** 2,
+    ])
+    dde1_dp = np.array([
+        -1.0 / Tp, 0.0, mp0[0] / Tp ** 2,
+    ])
+    dde2_dp = np.array([
+        0.0, -1.0 / Tp, mp0[1] / Tp ** 2,
+    ])
+    dde_dm = [dde1_dm, dde2_dm, dde1_dm]
+    dde_dp = [dde1_dp, dde2_dp, dde1_dp]
+    dsh_dm = np.zeros((3, 3))
+    dsh_dp = np.zeros((3, 3))
+    for r in range(3):
+        de_r = de1 if r != 1 else de2
+        dsh_dm[r] = (
+            sfam3[r] * dfac_dm
+            + sgn[r] * 0.5 * Tf * de_r * dfac_dm
+            + sgn[r] * base * dde_dm[r]
+        )
+        dsh_dp[r] = (
+            sfam3[r] * dfac_dp
+            + sgn[r] * 0.5 * Tf * de_r * dfac_dp
+            + sgn[r] * base * dde_dp[r]
+        )
+    dsh_dsfam = np.zeros((3, 3))
+    tr = np.array([1.0, 0.0, 1.0])
+    for r in range(3):
+        dsh_dsfam[r, r] += fac - 1.0
+        de_r = de1 if r != 1 else de2
+        dsh_dsfam[r] += sgn[r] * 0.5 * fac * de_r * tr
+    return shift, dsh_dm, dsh_dp, dsh_dsfam
+
+
+def _data_sums_cov(epochs, wt_cov, v0, u0):
+    """
+    the exact covariance of the per-epoch data sums from the
+    real-space influence kernels and the pixel weight maps;
+    epoch-block-diagonal (independent noise per epoch).  None
+    when an epoch is missing the stored transfer or the weight
+    map
+    """
+    nep = len(epochs)
     covS = np.zeros((6 * nep, 6 * nep))
     for iep, ep in enumerate(epochs):
         if ep.get('ktransfer') is None:
@@ -704,71 +877,44 @@ def _padmom_full_covariance(
         covS[
             iep * 6:(iep + 1) * 6, iep * 6:(iep + 1) * 6,
         ] = sums_cov(h, w)
+    return covS
 
-    Mm = np.eye(npar) - J
-    Tx = np.linalg.solve(Mm, A)
-    covX = Tx @ covS @ Tx.T
 
-    # the family covariance in the (M1, M2, T) basis for the
-    # structure errors; for gauss the family is the weight minus
-    # the constant smoothing
-    if is_mix:
-        cblock = covX[ifam:ifam + 3, ifam:ifam + 3]
-    else:
-        cblock = covX[isw:isw + 3, isw:isw + 3]
-    fam_err_cov = _SYM_TO_MBASIS @ cblock @ _SYM_TO_MBASIS.T
+def _gauss_flux_norm(epochs, wt_cov, nband, npar, isw):
+    """
+    the per-band flux normalization of the plain gauss path,
+    N_b = ws_b / (4 pi sqrt(det wt_cov)) so that F_b = fs_b / N_b
+    matches the _finalize normalization, and d(ln N)/d(state),
+    which enters only through the det factor: the epoch weights
+    are constants
+    """
+    ws = np.zeros(nband)
+    for ep in epochs:
+        ws[ep['band']] += ep['weight']
+    detS = wt_cov[0, 0] * wt_cov[1, 1] - wt_cov[0, 1] ** 2
+    cnorm = 4.0 * np.pi * np.sqrt(detS)
+    N = ws / cnorm
+    # d ln cnorm / d(sw3); d ln N = -d ln cnorm
+    dlnc = np.array([
+        wt_cov[1, 1], -2.0 * wt_cov[0, 1], wt_cov[0, 0],
+    ]) / (2.0 * detS)
+    dlnN = np.zeros((nband, npar))
+    dlnN[:, isw:isw + 3] = -dlnc[None, :]
+    return N, dlnN
 
-    # fluxes, following the _finalize normalization: the model
-    # paths use F_b = fs_b / upred_b; the plain gauss path uses
-    # F_b = 2 knrm fs_b / ws_b with knrm = 2 pi sqrt(det wt_cov)
-    fs = np.zeros(nband)
-    for ep, s, fac in zip(epochs, esums, facs):
-        fs[ep['band']] += fac * s[5]
 
-    if not is_mix:
-        ws = np.zeros(nband)
-        for ep in epochs:
-            ws[ep['band']] += ep['weight']
-        detS = wt_cov[0, 0] * wt_cov[1, 1] - wt_cov[0, 1] ** 2
-        cnorm = 4.0 * np.pi * np.sqrt(detS)
-        F = cnorm * fs / ws
-        # d ln cnorm / d(sw3)
-        dlnc = np.array([
-            wt_cov[1, 1], -2.0 * wt_cov[0, 1], wt_cov[0, 0],
-        ]) / (2.0 * detS)
+def _model_flux_norm(
+    epochs, model_state, wt_cov, Tsmooth, nband, npar, ifam, isw,
+):
+    """
+    the per-band flux normalization of the mixture model paths,
+    N_b = upred_b, the model predicted unit flux sum exactly as
+    _finalize computes it, and d(ln N)/d(state) by micro central
+    differences of the closed form predictions.  None when a
+    prediction is zero
+    """
+    from .models import model_ksums
 
-        RF = np.zeros((nband, 6 * nep))
-        for iep, ep in enumerate(epochs):
-            b = ep['band']
-            RF[b, iep * 6 + 5] += cnorm * facs[iep] / ws[b]
-        gx = np.zeros((nband, npar))
-        for iep, ep in enumerate(epochs):
-            b = ep['band']
-            D = Ds[iep]
-            row = np.zeros(npar)
-            if not fixcen:
-                row[icen] = D[5, 3]
-                row[icen + 1] = D[5, 4]
-            row[isw:isw + 3] = D[5, 0:3]
-            gx[b] += cnorm * facs[iep] * row / ws[b]
-        gx[:, isw:isw + 3] += F[:, None] * dlnc[None, :]
-        RF = RF + gx @ Tx
-        flux_cov = RF @ covS @ RF.T
-
-        var = np.diag(flux_cov)
-        if np.any(var <= 0) or not np.all(np.isfinite(fam_err_cov)):
-            return None
-        s2n = joint_flux_s2n(F, flux_cov)
-        if s2n is None:
-            s2n = np.sqrt(np.sum(F ** 2 / var))
-        return {
-            'flux_cov': flux_cov,
-            'flux_err': np.sqrt(var),
-            'fam_err_cov': fam_err_cov,
-            's2n': s2n,
-        }
-
-    # upred exactly as _finalize computes it
     upred = np.zeros(nband)
     for ep in epochs:
         fac = ep['weight'] * ep['detAtinv']
@@ -778,17 +924,12 @@ def _padmom_full_covariance(
         )[5]
     if np.any(upred == 0):
         return None
-    F = fs / upred
 
-    # d(upred)/d(state): family and weight channels by micro-FD
-    hs2 = 1.0e-6 * max(wt_cov[0, 0] + wt_cov[1, 1], 0.1)
+    hs = 1.0e-6 * max(wt_cov[0, 0] + wt_cov[1, 1], 0.1)
 
     def upred_of(sf3, sw3v):
         st = dict(model_state)
-        if is_mix:
-            st['cov'] = sym3_mat(sf3)
-        else:
-            st['cov_sm'] = sym3_mat(sw3v)
+        st['cov'] = sym3_mat(sf3)
         out = np.zeros(nband)
         for ep in epochs:
             fac = ep['weight'] * ep['detAtinv']
@@ -802,36 +943,47 @@ def _padmom_full_covariance(
     sw3 = np.array([
         wt_cov[0, 0], wt_cov[0, 1], wt_cov[1, 1],
     ])
-    if is_mix:
-        sf3 = np.array([
-            model_state['cov'][0, 0], model_state['cov'][0, 1],
-            model_state['cov'][1, 1],
-        ])
-    else:
-        sf3 = None
+    sf3 = np.array([
+        model_state['cov'][0, 0], model_state['cov'][0, 1],
+        model_state['cov'][1, 1],
+    ])
     dup_dstate = np.zeros((nband, npar))
     for c in range(3):
         swp = sw3.copy()
         swm = sw3.copy()
-        swp[c] += hs2
-        swm[c] -= hs2
+        swp[c] += hs
+        swm[c] -= hs
         dup_dstate[:, isw + c] = (
             upred_of(sf3, swp) - upred_of(sf3, swm)
-        ) / (2 * hs2)
-        if is_mix:
-            sfp = sf3.copy()
-            sfm = sf3.copy()
-            sfp[c] += hs2
-            sfm[c] -= hs2
-            dup_dstate[:, ifam + c] = (
-                upred_of(sfp, sw3) - upred_of(sfm, sw3)
-            ) / (2 * hs2)
+        ) / (2 * hs)
+        sfp = sf3.copy()
+        sfm = sf3.copy()
+        sfp[c] += hs
+        sfm[c] -= hs
+        dup_dstate[:, ifam + c] = (
+            upred_of(sfp, sw3) - upred_of(sfm, sw3)
+        ) / (2 * hs)
 
-    # flux response over the data-sum space
+    dlnN = dup_dstate / upred[:, None]
+    return upred, dlnN
+
+
+def _flux_covariance(
+    F, N, dlnN, epochs, Ds, facs, Tx, covS, fixcen, icen, isw,
+    npar, nband,
+):
+    """
+    covariance of the fluxes F_b = fs_b / N_b: the direct
+    flux-sum channel plus the chain through the state (the own
+    kernel and center responses of the flux sums via Tx, minus
+    the normalization response F dlnN), contracted with the
+    data-sum covariance
+    """
+    nep = len(epochs)
     RF = np.zeros((nband, 6 * nep))
     for iep, ep in enumerate(epochs):
         b = ep['band']
-        RF[b, iep * 6 + 5] += facs[iep] / upred[b]
+        RF[b, iep * 6 + 5] += facs[iep] / N[b]
     gx = np.zeros((nband, npar))
     for iep, ep in enumerate(epochs):
         b = ep['band']
@@ -841,20 +993,7 @@ def _padmom_full_covariance(
             row[icen] = D[5, 3]
             row[icen + 1] = D[5, 4]
         row[isw:isw + 3] = D[5, 0:3]
-        gx[b] += facs[iep] * row / upred[b]
-    gx -= (F / upred)[:, None] * dup_dstate
+        gx[b] += facs[iep] * row / N[b]
+    gx -= F[:, None] * dlnN
     RF = RF + gx @ Tx
-    flux_cov = RF @ covS @ RF.T
-
-    var = np.diag(flux_cov)
-    if np.any(var <= 0) or not np.all(np.isfinite(fam_err_cov)):
-        return None
-    s2n = joint_flux_s2n(F, flux_cov)
-    if s2n is None:
-        s2n = np.sqrt(np.sum(F ** 2 / var))
-    return {
-        'flux_cov': flux_cov,
-        'flux_err': np.sqrt(var),
-        'fam_err_cov': fam_err_cov,
-        's2n': s2n,
-    }
+    return RF @ covS @ RF.T
