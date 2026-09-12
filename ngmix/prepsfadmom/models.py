@@ -55,6 +55,7 @@ Bromiley, P. A. (2003), Products and Convolutions of Gaussian
 import numpy as np
 
 from ..gmix import GMixModel
+from ..moments import cov_from_e
 
 
 def det2(M):
@@ -68,56 +69,6 @@ def inv2(M):
         [M[1, 1], -M[0, 1]],
         [-M[0, 1], M[0, 0]],
     ]) / det2(M)
-
-
-def cov_from_e(e1, e2, T):
-    """
-    covariance matrix from distortion-convention shape parameters
-
-    Parameters
-    ----------
-    e1, e2: float
-        distortion-convention shapes, e1 = <uu - vv> / T and
-        e2 = 2 <vu> / T
-    T: float
-        the second moment size <vv + uu>
-
-    Returns
-    -------
-    cov: (2, 2) array
-        the covariance matrix [[Ivv, Ivu], [Ivu, Iuu]]
-    """
-    Ivv = T * (1 - e1)
-    Ivu = T * e2
-    Iuu = T * (1 + e1)
-
-    cov = 0.5 * np.array([
-        [Ivv, Ivu],
-        [Ivu, Iuu],
-    ])
-    return cov
-
-
-def mom_from_cov(cov):
-    """
-    moments from a covariance matrix; the inverse of cov_from_e
-    up to the T normalization of the shapes
-
-    Parameters
-    ----------
-    cov: (2, 2) array
-        covariance matrix [[Ivv, Ivu], [Ivu, Iuu]]
-
-    Returns
-    -------
-    M1, M2, T: float
-        M1 = Iuu - Ivv, M2 = 2 Ivu, T = Ivv + Iuu
-    """
-    M1 = cov[1, 1] - cov[0, 0]
-    M2 = 2 * cov[0, 1]
-    T = cov[0, 0] + cov[1, 1]
-
-    return M1, M2, T
 
 
 def gauss_model_ksums(flux, cov_sm, dv, du, wt_cov, detAtinv):

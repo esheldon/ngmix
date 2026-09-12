@@ -42,8 +42,9 @@ from ..util import get_ratio_error
 from .prepsfadmom_nb import admom_ksums, admom_finalize
 from ..fastexp_nb import FASTEXP_MAX_CHI2
 from numpy import fft
+from ..moments import cov_from_e, mom_from_cov
 from .models import (
-    model_ksums, cov_from_e, mom_from_cov, mixture_model_valid, det2,
+    model_ksums, mixture_model_valid, det2,
     get_profile_comps,
 )
 from .errors import (

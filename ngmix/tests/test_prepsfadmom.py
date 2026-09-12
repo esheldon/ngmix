@@ -722,7 +722,8 @@ def _make_exp_mix_obs(
     exactly, each component convolved with the gaussian psf
     analytically
     """
-    from ngmix.prepsfadmom.models import get_profile_comps, cov_from_e
+    from ngmix.prepsfadmom.models import get_profile_comps
+    from ngmix.moments import cov_from_e
 
     Tpsf = fwhm_to_T(psf_fwhm)
     parts = []
@@ -1213,8 +1214,9 @@ def test_prepsfadmom_model_ksums_kernel_parity():
     non-trivial k-space area factor
     """
     from ngmix.prepsfadmom.models import (
-        model_ksums, gauss_model_ksums, get_profile_comps, cov_from_e,
+        model_ksums, gauss_model_ksums, get_profile_comps,
     )
+    from ngmix.moments import cov_from_e
 
     Tsmooth = 0.35
     smooth_cov = np.diag([Tsmooth / 2, Tsmooth / 2])
