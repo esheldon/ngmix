@@ -98,28 +98,73 @@ def flux_var_delta(wt_cov, sums, cov, fsums, fvars, fmcovs):
     variance of the raw per-band flux sums, including the adaptive
     weight response; the diagonal of flux_cov_delta
 
-    The converged weight satisfies the adaptive moments fixed point
-    conditions M(wt_cov) = wt_cov / 2 (Bernstein & Jarvis 2002; Hirata
-    & Seljak 2003), where M is the measured weighted covariance, a
-    ratio of the joint moment sums.  By the implicit function
-    theorem the weight fluctuation is d(wt_cov) = -J^-1 dM with
-    J = dM/d(wt_cov) - 1/2.  For the gaussian implied by the converged
-    weight, dM/d(wt_cov) = 1/4 exactly at the fixed point, for any
-    ellipticity and smoothing (an identity derived for this code),
-    so d(wt_cov) = 4 dM.  The flux
-    normalization (proportional to sqrt(det wt_cov)) and the kernel
-    response of the flux sum combine to dln F = tr(wt_cov^-1 dM), and
-    for a single band the fixed weight flux fluctuation cancels
+    Notation: W = wt_cov is the weight covariance and S the
+    covariance of the object in the smoothed plane (cov_sm in
+    models.py).  S_F is the joint flux sum and S_M the 2x2 matrix
+    of joint second moment sums, so the measured weighted
+    covariance is the ratio M = S_M / S_F.  d denotes a noise
+    fluctuation.
+
+    The fixed point.  The converged weight satisfies the adaptive
+    moments condition M(W) = W / 2 (Bernstein & Jarvis 2002; Hirata
+    & Seljak 2003).  Noise shifts M at fixed weight by dM, and the
+    weight moves by dW to restore the condition:
+
+        dM + (dM/dW) dW = dW / 2
+
+    which is the implicit function theorem, dW = -J^-1 dM with
+    J = dM/dW - 1/2.
+
+    The response dM/dW.  It is evaluated for the gaussian implied
+    by the converged weight.  For a gaussian object the weighted
+    covariance is that of the product of the weight and object
+    gaussians (see models.py),
+
+        M^-1 = W^-1 + S^-1
+
+    The fixed point M = W / 2 then requires S = W: the weight
+    matches the object.  Varying W at fixed S,
+
+        d(M^-1) = -W^-1 dW W^-1
+        dM = -M d(M^-1) M = M W^-1 dW W^-1 M = dW / 4
+
+    using M W^-1 = 1/2 at the fixed point.  This is a matrix
+    identity, so it holds for any ellipticity, and the smoothing is
+    part of S, so for any smoothing (the identity was derived for
+    this code).  Thus J = 1/4 - 1/2 = -1/4 and
+
+        dW = 4 dM
+
+    The flux.  The flux sum of a gaussian object is the overlap
+    integral S_F = F / (2 pi sqrt(det(W + S))) (see models.py), so
+    the flux of the gaussian implied by the weight, S = W, is
+    F = 4 pi sqrt(det W) S_F.  Its fluctuation has three parts: the
+    noise in S_F at fixed weight, the change of S_F as the weight
+    moves over the fixed data, and the change of the normalization
+    sqrt(det W):
+
+        dln F = dS_F / S_F
+                - tr((W + S)^-1 dW) / 2
+                + tr(W^-1 dW) / 2
+
+    With S = W the two weight terms combine to tr(W^-1 dW) / 4,
+    which is tr(W^-1 dM) by dW = 4 dM.  The noise in the ratio
+    M = S_M / S_F is dM = (dS_M - M dS_F) / S_F, and
+    tr(W^-1 M) = 1 at the fixed point, so
+
+        dln F = dS_F / S_F + tr(W^-1 dS_M) / S_F - dS_F / S_F
+
+    For a single band the fixed weight flux fluctuation cancels
     exactly, leaving
 
-        dF / F = tr(wt_cov^-1 dS_M) / S_F
+        dF / F = tr(W^-1 dS_M) / S_F
 
     in terms of the second moment sum fluctuations alone.  For a
     round gaussian with matched weight and white noise this doubles
     the fixed weight variance.  With multiple bands the band flux sum
     and the joint conditions are distinct and their cross covariances
     enter; the band flux sums covary only with their own epochs'
-    contribution to the joint sums.
+    contribution to the joint sums (see flux_cov_delta).
 
     Parameters
     ----------
