@@ -35,7 +35,7 @@
       covariance, measuring fluxes per band with a common pre-seeing
       aperture, so colors are independent of the per-band PSFs.
       prepsfadmom accepts use_noise_image=True as with other prepsfmom
-      Can fit gauss, exp, dev, or bdf
+      Can fit gauss, exp, dev, or star
     - The pre-PSF moment fitters (prepsfmom and prepsfadmom) now
       accept non-square images, which are zero padded to square
       internally.

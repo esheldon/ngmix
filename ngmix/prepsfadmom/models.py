@@ -37,14 +37,6 @@ Model dicts:
         their smoothed covariances, so mildly negative sizes are well
         defined, allowing unbiased scatter through zero size (see
         mixture_model_valid)
-    {'type': 'bdf', 'cov': (2,2), 'F': (nband,),
-     'fracdev':, 'TdByTe':}
-        the composite exp plus dev model: both families share the
-        center and the family covariance (so the ellipticity), the
-        dev component covariance is TdByTe times the exp one, and
-        fracdev is the dev share of the total flux.  At fixed
-        fracdev and TdByTe this is a fixed-ratio 16-gaussian
-        mixture and all of the machinery above applies
 
 References
 ----------
@@ -145,28 +137,11 @@ def get_profile_comps(name):
     return _PROFILE_COMPS[name]
 
 
-def bdf_comps(fracdev, TdByTe):
-    """
-    flux fractions and relative T factors of the composite exp plus
-    dev mixture: the exp table scaled by 1 - fracdev plus the dev
-    table with sizes scaled by TdByTe and fluxes by fracdev.  The
-    scale parameter of the composite is the exp family T
-    """
-    return (
-        [((1 - fracdev) * f, cT)
-         for f, cT in get_profile_comps('exp')]
-        + [(fracdev * f, TdByTe * cT)
-           for f, cT in get_profile_comps('dev')]
-    )
-
-
 def _mixture_comps(model):
     """
-    the (frac, cT) component table for a mixture model dict or
-    spec; see the module docstring
+    the (frac, cT) component table for a mixture model dict; see
+    the module docstring
     """
-    if model['type'] == 'bdf':
-        return bdf_comps(model['fracdev'], model['TdByTe'])
     return get_profile_comps(model['type'])
 
 
@@ -197,7 +172,7 @@ def model_gauss_components(model, Tsmooth):
             np.array([c[0, 1]]),
             np.array([c[1, 1]]),
         )
-    elif model['type'] in ('exp', 'dev', 'bdf'):
+    elif model['type'] in ('exp', 'dev'):
         if 'cov' in model:
             fam_cov = model['cov']
         else:
@@ -226,7 +201,9 @@ def model_ksums(model, band, dv, du, wt_cov, detAtinv, Tsmooth):
     """
     from .models_nb import gauss_comps_ksums
 
-    fracs, cov_sm00, cov_sm01, cov_sm11 = model_gauss_components(model, Tsmooth)
+    fracs, cov_sm00, cov_sm01, cov_sm11 = model_gauss_components(
+        model, Tsmooth,
+    )
     F = model['F'][band] * fracs
     n = F.size
     sums = np.zeros(6)
@@ -248,14 +225,11 @@ def mixture_model_valid(model, fam_cov, wt_cov, Tsmooth):
     the data, so mildly negative sizes and ellipticities slightly
     past one remain valid states.
 
-    model is a family name ('exp', 'dev') or a model spec dict; for
-    'bdf' the dict must carry 'TdByTe' (the flux split does not
-    affect validity)
+    model is a family name ('exp', 'dev') or a model dict with a
+    'type' entry holding the name
     """
     if isinstance(model, str):
         comps = get_profile_comps(model)
-    elif model['type'] == 'bdf':
-        comps = bdf_comps(model.get('fracdev', 0.5), model['TdByTe'])
     else:
         comps = get_profile_comps(model['type'])
 
