@@ -46,7 +46,9 @@ Bromiley, P. A. (2003), Products and Convolutions of Gaussian
 """
 import numpy as np
 
-from ..gmix import GMixModel
+from ..gmix.gmix_nb import (
+    _pvals_exp, _fvals_exp, _pvals_dev, _fvals_dev,
+)
 from ..moments import cov_from_e
 
 
@@ -55,67 +57,13 @@ def det2(M):
     return M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]
 
 
-def _inv2(M):
-    """inverse of a symmetric 2x2 matrix"""
-    return np.array([
-        [M[1, 1], -M[0, 1]],
-        [-M[0, 1], M[0, 0]],
-    ]) / det2(M)
-
-
-def gauss_model_ksums(flux, cov_sm, dv, du, wt_cov, detAtinv):
-    """
-    closed-form weighted moment sums of a gaussian model
-
-    Parameters
-    ----------
-    flux: float
-        total flux of the model
-    cov_sm: (2, 2) array
-        model covariance in the smoothed-deconvolved plane
-    dv, du: float
-        offset of the model center from the weight center
-    wt_cov: (2, 2) array
-        the weight covariance
-    detAtinv: float
-        the k-space area factor of the epoch
-
-    Returns
-    -------
-    sums: array of size 6
-        [v, u, M1, M2, T, flux] sums in the units of admom_ksums
-    """
-    C = wt_cov + cov_sm
-    Cinv = _inv2(C)
-    d = np.array([dv, du])
-    Cd = Cinv @ d
-
-    # the product of the weight and model gaussians is an
-    # unnormalized gaussian (see the module docstring).  Its
-    # integral, the total weighted flux, is the two-gaussian
-    # overlap integral: a gaussian density with the summed
-    # covariance C evaluated at the center offset d, so the
-    # flux falls off as a gaussian in the offset.  Units are
-    # those of the admom_ksums output
-    sflux = flux * np.exp(-0.5 * d @ Cd) / (
-        2 * np.pi * detAtinv * np.sqrt(det2(C))
-    )
-
-    # mu: the mean of the product gaussian, wt_cov C^-1 d
-    mu = wt_cov @ Cd
-    # Sp: the second moments of the product gaussian
-    Sp = wt_cov @ Cinv @ cov_sm
-    # raw second moments about the weight center: Sp + mu mu^T
-    vv = Sp[0, 0] + mu[0] * mu[0]
-    vu = Sp[0, 1] + mu[0] * mu[1]
-    uu = Sp[1, 1] + mu[1] * mu[1]
-
-    return sflux * np.array([
-        mu[0], mu[1], uu - vv, 2 * vu, uu + vv, 1.0,
-    ])
-
-
-_PROFILE_COMPS = {}
+# (flux fraction, relative T) per gaussian of the ngmix expansions;
+# the fractions sum to one and the T factors are normalized to
+# total T = 1
+_PROFILE_COMPS = {
+    'exp': list(zip(_pvals_exp.tolist(), _fvals_exp.tolist())),
+    'dev': list(zip(_pvals_dev.tolist(), _fvals_dev.tolist())),
+}
 
 
 def get_profile_comps(name):
@@ -124,25 +72,21 @@ def get_profile_comps(name):
     expansion of the named profile ('exp': 6 gaussians, 'dev': 10
     gaussians), normalized to total T = 1
 
-    The table is derived from a GMixModel rather than duplicating
-    the expansion constants here, so it cannot drift from the
-    ngmix tables; it is computed once per profile and cached.
+    These are the expansion tables of ngmix.gmix.gmix_nb, the same
+    ones GMixModel uses.
+
+    Parameters
+    ----------
+    name: str
+        'exp' or 'dev'
+
+    Returns
+    -------
+    comps: list of (frac, cT)
+        one entry per gaussian: its fraction of the total flux and
+        its T relative to the total T
     """
-    if name not in _PROFILE_COMPS:
-        gm = GMixModel([0, 0, 0, 0, 1.0, 1.0], name)
-        d = gm.get_data()
-        fracs = d['p'] / d['p'].sum()
-        cTs = d['irr'] + d['icc']
-        _PROFILE_COMPS[name] = list(zip(fracs, cTs))
     return _PROFILE_COMPS[name]
-
-
-def _mixture_comps(model):
-    """
-    the (frac, cT) component table for a mixture model dict; see
-    the module docstring
-    """
-    return get_profile_comps(model['type'])
 
 
 def model_gauss_components(model, Tsmooth):
@@ -178,7 +122,7 @@ def model_gauss_components(model, Tsmooth):
         else:
             fam_cov = cov_from_e(model['e1'], model['e2'], model['T'])
         smooth = Tsmooth / 2
-        comps = _mixture_comps(model)
+        comps = get_profile_comps(model['type'])
         n = len(comps)
         fracs = np.zeros(n)
         cov_sm00 = np.zeros(n)

@@ -1206,16 +1206,66 @@ def test_prepsfadmom_model_errors():
         )
 
 
+def _gauss_model_ksums(flux, cov_sm, dv, du, wt_cov, detAtinv):
+    """
+    reference python implementation of the closed-form weighted
+    moment sums of a gaussian model, for validating the numba kernel
+    (see the ngmix.prepsfadmom.models docstring for the formulas)
+
+    Parameters
+    ----------
+    flux: float
+        total flux of the model
+    cov_sm: (2, 2) array
+        model covariance in the smoothed-deconvolved plane
+    dv, du: float
+        offset of the model center from the weight center
+    wt_cov: (2, 2) array
+        the weight covariance
+    detAtinv: float
+        the k-space area factor of the epoch
+
+    Returns
+    -------
+    sums: array of size 6
+        [v, u, M1, M2, T, flux] sums in the units of admom_ksums
+    """
+    C = wt_cov + cov_sm
+    Cinv = np.linalg.inv(C)
+    d = np.array([dv, du])
+    Cd = Cinv @ d
+
+    # the product of the weight and model gaussians is an
+    # unnormalized gaussian.  Its integral, the total weighted
+    # flux, is the two-gaussian overlap integral: a gaussian
+    # density with the summed covariance C evaluated at the center
+    # offset d
+    sflux = flux * np.exp(-0.5 * d @ Cd) / (
+        2 * np.pi * detAtinv * np.sqrt(np.linalg.det(C))
+    )
+
+    # mu: the mean of the product gaussian, wt_cov C^-1 d
+    mu = wt_cov @ Cd
+    # Sp: the second moments of the product gaussian
+    Sp = wt_cov @ Cinv @ cov_sm
+    # raw second moments about the weight center: Sp + mu mu^T
+    vv = Sp[0, 0] + mu[0] * mu[0]
+    vu = Sp[0, 1] + mu[0] * mu[1]
+    uu = Sp[1, 1] + mu[1] * mu[1]
+
+    return sflux * np.array([
+        mu[0], mu[1], uu - vv, 2 * vu, uu + vv, 1.0,
+    ])
+
+
 def test_prepsfadmom_model_ksums_kernel_parity():
     """
     the numba kernel backed model_ksums must match the python
-    gauss_model_ksums reference summed over components, for all model
-    types and both exp parametrizations, with offsets and a
+    _gauss_model_ksums reference summed over components, for all
+    model types and both exp parametrizations, with offsets and a
     non-trivial k-space area factor
     """
-    from ngmix.prepsfadmom.models import (
-        model_ksums, gauss_model_ksums, get_profile_comps,
-    )
+    from ngmix.prepsfadmom.models import model_ksums, get_profile_comps
     from ngmix.moments import cov_from_e
 
     Tsmooth = 0.35
@@ -1242,12 +1292,12 @@ def test_prepsfadmom_model_ksums_kernel_parity():
                 expected = np.zeros(6)
                 for frac, cT in get_profile_comps(model['type']):
                     cov_sm = cT * fam_cov + smooth_cov
-                    expected += gauss_model_ksums(
+                    expected += _gauss_model_ksums(
                         model['F'][band] * frac, cov_sm, dv, du, wt_cov,
                         detAtinv,
                     )
             else:
-                expected = gauss_model_ksums(
+                expected = _gauss_model_ksums(
                     model['F'][band], model['cov_sm'], dv, du, wt_cov,
                     detAtinv,
                 )
