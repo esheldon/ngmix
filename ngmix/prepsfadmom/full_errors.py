@@ -84,6 +84,47 @@ def moment_kernels(epoch, wt_cov, v0, u0):
 
     The admom_ksums accumulators in closed form.
 
+    Derivation
+    ----------
+    Write W for wt_cov, k = (kv, ku) for a mode, and
+
+        S = W k                (the vector (Sv, Su))
+        chi2 = k^T W k
+        wk = exp(-chi2 / 2)
+
+    wk is the Fourier transform of the real-space gaussian weight
+    of covariance W.  Multiplying the weight by a coordinate in
+    real space is a k derivative in Fourier space, x_i -> i d/dk_i
+    in the sign convention of the centering phase, and
+
+        d(wk)/dk_i = -S_i wk
+        d^2(wk)/dk_i dk_j = (S_i S_j - W_ij) wk
+
+    so the weighted first and second moments have kernels
+
+        x_i      ->  i S_i wk
+        x_i x_j  ->  (W_ij - S_i S_j) wk
+
+    The six sums are these in the [v, u, M1, M2, T, flux] basis,
+    with M1 = uu - vv, M2 = 2 vu, T = uu + vv:
+
+        v:    i Sv
+        u:    i Su
+        M1:   (W_uu - W_vv) - (Su^2 - Sv^2)
+        M2:   2 (W_vu - Sv Su)
+        T:    (W_uu + W_vv) - (Su^2 + Sv^2)
+        flux: 1
+
+    each times base = wk * phase * df2, where phase centers the
+    weight on (v0, u0) and df2 is the fft normalization (see
+    kernel_ingredients).
+
+    The modes are the rfft half plane.  The image is real, so
+    the omitted half plane contributes the complex conjugate of
+    each term and the full-plane sum is twice the real part; that
+    factor is already folded into kim as the conjugate symmetry
+    weights (get_kspace_grids), leaving sums = Re(G @ kim).
+
     Parameters
     ----------
     epoch: dict
@@ -122,6 +163,40 @@ def dsums_dtheta(epoch, wt_cov, v0, u0):
     agree to ~1e-5 because of its polynomial fastexp
     approximation.
 
+    Derivation
+    ----------
+    Each kernel is G_a = c_a(S, W) wk phase df2 in the notation of
+    moment_kernels, and the sum is Re(G_a @ kim), so the
+    derivative of a sum is the derivative of its kernel
+    contracted with the same kim.
+
+    Weight covariance.  Only c_a and wk depend on W.  With
+    S = W k and chi2 = k^T W k,
+
+        dSv/dW_vv = kv    dSv/dW_vu = ku    dSv/dW_uu = 0
+        dSu/dW_vv = 0     dSu/dW_vu = kv    dSu/dW_uu = ku
+        dchi2/d(W_vv, W_vu, W_uu) = (kv^2, 2 kv ku, ku^2)
+
+    and by the product rule
+
+        dG_a/dW = (dc_a/dW - c_a dchi2/dW / 2) wk phase df2
+
+    The dc table below is dc_a/dW for the c_a of moment_kernels,
+    using the dS/dW above; e.g. for T,
+    c = (W_uu + W_vv) - (Su^2 + Sv^2) gives
+    dc/dW_vv = 1 - 2 Sv kv.  The chi2 < WK_CHI2_MAX support cut
+    is held fixed (wk is exp(-12.5) there).
+
+    Center.  Only the phase depends on the center:
+    phase = exp(2 pi i (alpha yf + beta xf) / dim), so
+
+        dG_a/dalpha = (2 pi i yf / dim) G_a
+        dG_a/dbeta  = (2 pi i xf / dim) G_a
+
+    and (alpha, beta) are linear in (v, u) through the jacobian
+    (get_phase_angles), giving the chain rule with the constant
+    2x2 matrix pj = d(alpha, beta)/d(v, u).
+
     Parameters
     ----------
     epoch: dict
@@ -142,6 +217,7 @@ def dsums_dtheta(epoch, wt_cov, v0, u0):
     kv, ku = epoch['kv'], epoch['ku']
     kim = epoch['kim']
 
+    # the kernel coefficients c_a of moment_kernels
     c = [
         1j * Sv, 1j * Su,
         (wuu - wvv) - (Su ** 2 - Sv ** 2),
@@ -150,6 +226,7 @@ def dsums_dtheta(epoch, wt_cov, v0, u0):
         np.ones_like(Sv),
     ]
     zero = np.zeros_like(Sv)
+    # dc[a] = dc_a/d(W_vv, W_vu, W_uu)
     dc = {
         0: [1j * kv, 1j * ku, zero],
         1: [zero, 1j * kv, 1j * ku],
@@ -170,6 +247,7 @@ def dsums_dtheta(epoch, wt_cov, v0, u0):
         ],
         5: [zero, zero, zero],
     }
+    # dchi2/d(W_vv, W_vu, W_uu)
     dchi = [kv * kv, 2 * kv * ku, ku * ku]
 
     # d(alpha, beta)/d(v, u) is linear; measure it exactly
@@ -183,9 +261,11 @@ def dsums_dtheta(epoch, wt_cov, v0, u0):
 
     D = np.zeros((6, 5))
     for a in range(6):
+        # weight covariance columns: product rule on c_a * wk
         for w in range(3):
             dG = (dc[a][w] - 0.5 * c[a] * dchi[w]) * base
             D[a, w] = (dG @ kim).real
+        # center columns: d/d(alpha, beta) then the chain to (v, u)
         Ga = c[a] * base
         dSa = ((2j * np.pi / dim) * yf * Ga @ kim).real
         dSb = ((2j * np.pi / dim) * xf * Ga @ kim).real
@@ -310,8 +390,17 @@ def sums_cov(hs, weight):
 # ---------------------------------------------------------------
 
 def _sym_sandwich(A):
-    """the 3x3 matrix S with vec(A X A) = S vec(X) for symmetric
-    2x2 X in the (00, 01, 11) component basis"""
+    """
+    the 3x3 matrix S with vec(A X A) = S vec(X) for symmetric
+    2x2 A, X in the (00, 01, 11) component basis
+
+    Each row is the corresponding component of A X A written
+    out; with A = [[a, b], [b, c]] and X = [[x0, x1], [x1, x2]],
+
+        (A X A)_00 = a^2 x0 + 2 a b x1 + b^2 x2
+        (A X A)_01 = a b x0 + (a c + b^2) x1 + b c x2
+        (A X A)_11 = b^2 x0 + 2 b c x1 + c^2 x2
+    """
     a, b, c = A[0, 0], A[0, 1], A[1, 1]
     return np.array([
         [a * a, 2 * a * b, b * b],
@@ -340,6 +429,22 @@ def dw_derivs(M, wt_cov):
     new_wt_cov = (M^-1 - wt_cov^-1)^-1 with
     d(new_wt_cov) = S(new)[S(M^-1) dM - S(wt_cov^-1) d(wt_cov)] in the
     sym3 basis.
+
+    Derivation
+    ----------
+    Write N for new_wt_cov and W for wt_cov, so
+    N^-1 = M^-1 - W^-1.  The differential of a matrix inverse is
+    d(A^-1) = -A^-1 dA A^-1.  Applying it to each inverse,
+
+        d(N^-1) = -M^-1 dM M^-1 + W^-1 dW W^-1
+        dN = -N d(N^-1) N
+           = N M^-1 dM M^-1 N - N W^-1 dW W^-1 N
+
+    Every term has the form A X A with A symmetric, which in the
+    sym3 basis is the matrix S(A) of _sym_sandwich, giving
+
+        dN/dM = S(N) S(M^-1)
+        dN/dW = -S(N) S(W^-1)
 
     Returns
     -------
