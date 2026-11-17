@@ -669,14 +669,20 @@ def _padmom_full_covariance(
     Phi_x = np.zeros((npar, npar))
 
     if not fixcen:
-        # the center update is the measured centroid ratio itself
+        # center rows.  The update is v' = v + S_v / S_F (and the
+        # same for u): the direct state dependence is the identity
+        # and the sums channel is the centroid ratio derivative
         Phi_s[icen] = ddv
         Phi_s[icen + 1] = ddu
         Phi_x[icen, icen] = 1.0
         Phi_x[icen + 1, icen + 1] = 1.0
 
-    # weight rows: the deweight chained through the measured
-    # ratios (the sums channel) and its direct weight dependence
+    # weight rows.  The update is W' = N(M(S), W), the deweight
+    # of the measured moments M under the current weight W, so
+    #     dW' = dN/dM dM/dS dS + dN/dW dW
+    # the first term is the sums channel (M in the sym3 basis,
+    # chained through the measured ratios) and the second the
+    # direct weight dependence
     Phi_s[isw:isw + 3] = DWm_M @ dsym_dsums
     Phi_x[isw:isw + 3, isw:isw + 3] = DWm_S
 
@@ -732,7 +738,8 @@ def _padmom_full_covariance(
         cblock = covX[isw:isw + 3, isw:isw + 3]
     fam_err_cov = _SYM_TO_MBASIS @ cblock @ _SYM_TO_MBASIS.T
 
-    # fluxes, following the _finalize normalization F_b = fs_b / N_b:
+    # fluxes, following the _finalize normalization
+    # F_b = S_Fb / N_b, with S_Fb the band flux sum (fs below):
     # the plain gauss path has N_b = ws_b / (4 pi sqrt(det wt_cov))
     # and the model paths N_b = upred_b, the predicted unit flux sum
     fs = np.zeros(nband)
@@ -817,6 +824,23 @@ def _measured_moment_response(sums, fixcen):
     centroid correction chain; also the centroid ratio derivatives
     ddv, ddu for the center rows.  The corrections dv, du are tiny
     at the converged point but kept exactly
+
+    With S_j the joint sums in the [v, u, M1, M2, T, flux] order
+    and S_F = S_5 the flux sum,
+
+        dv = S_0 / S_F,  du = S_1 / S_F
+        M1 = S_2 / S_F - (du^2 - dv^2)
+        M2 = S_3 / S_F - 2 dv du
+        T  = S_4 / S_F - (dv^2 + du^2)
+
+    the second terms moving the second moments from the weight
+    center to the measured centroid.  Each ratio r_j = S_j / S_F
+    has
+
+        dr_j = dS_j / S_F - S_j dS_F / S_F^2
+
+    and the rows of dm3 are these plus the product rule on the
+    dv, du terms.
     """
     finv = 1.0 / sums[5]
     if fixcen:
@@ -831,6 +855,7 @@ def _measured_moment_response(sums, fixcen):
     ])
 
     def dratio(j):
+        # d(S_j / S_F)/d(sums)
         out = np.zeros(6)
         out[j] = finv
         out[5] = -sums[j] * finv ** 2
@@ -858,6 +883,56 @@ def _fill_family_rows(
     a model prediction is invalid or the converged evaluation is
     on a guarded branch the analytic derivatives do not cover;
     the caller then keeps the model_sandwich errors
+
+    Derivation
+    ----------
+    Notation
+
+        C       the family covariance (fam_cov)
+        W       the weight covariance (wt_cov)
+        M       the measured moments, a function of the sums S
+        P       the moments the model predicts under the weight,
+                a function P(C, W) of the state only
+        N(., W) the deweight map, N(M, W) = (M^-1 - W^-1)^-1
+
+    The update (_model_shift) moves the family covariance by a
+    shift that vanishes when the measured and predicted moments
+    agree, C' = C + shift.
+
+    Main branch.  The shift is the difference of the deweighted
+    measured and predicted moments,
+
+        shift = N(M, W) - N(P, W)
+
+    N(M, W) is the weight update W' of the caller, so its
+    derivatives are the weight rows (DWm_M, DWm_S).  Writing
+    N_M, N_W for the derivatives of N with respect to its two
+    arguments (dw_derivs), evaluated at M or at P as marked,
+
+        dC' = N_M|M dM/dS dS                           (sums)
+            + [I - N_M|P dP/dC] dC                     (family)
+            + [N_W|M - N_M|P dP/dW - N_W|P] dW         (weight)
+
+    The family term is the identity from C' = C + ... minus the
+    response of the prediction to the family; the weight term has
+    the weight entering the measured deweight directly, and the
+    predicted deweight both through P and directly.
+
+    Fallback branch.  When N(P, W) is not evaluable the shift is
+    built from the moment ratios, shift(m, p, C) with m, p the
+    measured and predicted (M1, M2, T) (see _gain1_shift_derivs),
+    so
+
+        dC' = dshift/dm dm/dS dS                       (sums)
+            + [I + dshift/dC + dshift/dp dp/dC] dC     (family)
+            + [dshift/dp dp/dW] dW                     (weight)
+
+    Here the weight enters only through the prediction.
+
+    dP/dC and dP/dW (dmp_dsfam, dmp_dsw, in the (M1, M2, T)
+    basis) are central differences of the closed-form prediction;
+    _MBASIS_TO_SYM carries them to the sym3 basis that N_M acts
+    on.
     """
     from .models import model_ksums
 
@@ -917,12 +992,16 @@ def _fill_family_rows(
     # _model_shift
     Sp, DWp_M, DWp_S, pok = dw_derivs(Mpred, wt_cov)
     if pok:
-        # shift = new_wt_cov - Sp; fam_cov' = fam_cov + shift
+        # main branch: shift = new_wt_cov - Sp = N(M, W) - N(P, W)
+        # and fam_cov' = fam_cov + shift
+        # sums: N_M|M dM/dS
         Phi_s[ifam:ifam + 3] = DWm_M @ dsym_dsums
+        # family: I - N_M|P dP/dC
         Phi_x[ifam:ifam + 3, ifam:ifam + 3] = (
             np.eye(3)
             - DWp_M @ _MBASIS_TO_SYM @ dmp_dsfam
         )
+        # weight: N_W|M - N_M|P dP/dW - N_W|P
         Phi_x[ifam:ifam + 3, isw:isw + 3] = (
             DWm_S
             - DWp_M @ _MBASIS_TO_SYM @ dmp_dsw - DWp_S
@@ -935,16 +1014,22 @@ def _fill_family_rows(
         shift, dsh_dm, dsh_dp, dsh_dsfam = _gain1_shift_derivs(
             m3, mp0, sfam3,
         )
+        # fallback branch: shift(m, p, C) on the moment ratios
+        # sums: dshift/dm dm/dS
         Phi_s[ifam:ifam + 3] = dsh_dm @ dm3
+        # family: I + dshift/dC + dshift/dp dp/dC
         Phi_x[ifam:ifam + 3, ifam:ifam + 3] = (
             np.eye(3)
             + dsh_dsfam + dsh_dp @ dmp_dsfam
         )
+        # weight: dshift/dp dp/dW
         Phi_x[ifam:ifam + 3, isw:isw + 3] = (
             dsh_dp @ dmp_dsw
         )
 
-    # health: the plain step must be undamped and accepted
+    # health: the plain step must be undamped and accepted; a
+    # damped or rejected step is a different update map than the
+    # one differentiated above
     prop, idamp, accepted = fitter._damped_step(
         fam_cov, sym3_mat(shift), new_wt_cov, Tsmooth,
     )
@@ -973,6 +1058,25 @@ def _gain1_shift_derivs(m3, mp0, sfam3):
     ratios (dsh_dm), the predicted ratios (dsh_dp) and the packed
     family covariance (dsh_dsfam), by direct differentiation of
     the expressions above
+
+    Row r of the shift is
+
+        shift_r = (fac - 1) sfam3_r + sgn_r (fac Tf / 2) de_r
+
+    with sgn = (-1, +1, +1) and de_r = (de1, de2, de1).  fac and
+    de depend on the measured and predicted ratios, Tf and sfam3
+    on the family covariance, so by the product rule
+
+        dshift_r/dm = sfam3_r dfac/dm
+                      + sgn_r (Tf / 2) de_r dfac/dm
+                      + sgn_r (fac Tf / 2) dde_r/dm
+
+    and the same with p for m, while
+
+        dshift_r/dsfam3_c = (fac - 1) delta_rc
+                            + sgn_r (fac / 2) de_r dTf/dsfam3_c
+
+    with dTf/dsfam3 = (1, 0, 1).
     """
     Tm = m3[2]
     Tp = mp0[2]
@@ -987,8 +1091,10 @@ def _gain1_shift_derivs(m3, mp0, sfam3):
         (fac - 1) * sfam3[2] + base * de1,
     ])
     sgn = np.array([-1.0, 1.0, 1.0])
+    # fac = Tm / Tp depends only on the T components
     dfac_dm = np.array([0.0, 0.0, 1.0 / Tp])
     dfac_dp = np.array([0.0, 0.0, -fac / Tp])
+    # de_i = m3_i / Tm - mp0_i / Tp: quotient rule in each ratio
     dde1_dm = np.array([
         1.0 / Tm, 0.0, -m3[0] / Tm ** 2,
     ])
@@ -1018,6 +1124,7 @@ def _gain1_shift_derivs(m3, mp0, sfam3):
             + sgn[r] * base * dde_dp[r]
         )
     dsh_dsfam = np.zeros((3, 3))
+    # dTf/dsfam3
     tr = np.array([1.0, 0.0, 1.0])
     for r in range(3):
         dsh_dsfam[r, r] += fac - 1.0
@@ -1053,10 +1160,18 @@ def _data_sums_cov(epochs, wt_cov, v0, u0):
 def _gauss_flux_norm(epochs, wt_cov, nband, npar, isw):
     """
     the per-band flux normalization of the plain gauss path,
-    N_b = ws_b / (4 pi sqrt(det wt_cov)) so that F_b = fs_b / N_b
+    N_b = ws_b / (4 pi sqrt(det wt_cov)) so that F_b = S_Fb / N_b
     matches the _finalize normalization, and d(ln N)/d(state),
     which enters only through the det factor: the epoch weights
     are constants
+
+    With W = wt_cov, ln N_b = const - ln(det W) / 2, and
+    det W = W_00 W_11 - W_01^2 gives
+
+        d(det W)/d(W_00, W_01, W_11) = (W_11, -2 W_01, W_00)
+        dlnN_b/dW = -(W_11, -2 W_01, W_00) / (2 det W)
+
+    the same for every band.
     """
     ws = np.zeros(nband)
     for ep in epochs:
@@ -1143,17 +1258,43 @@ def _flux_covariance(
     npar, nband,
 ):
     """
-    covariance of the fluxes F_b = fs_b / N_b: the direct
+    covariance of the fluxes F_b = S_Fb / N_b: the direct
     flux-sum channel plus the chain through the state (the own
     kernel and center responses of the flux sums via Tx, minus
     the normalization response F dlnN), contracted with the
     data-sum covariance
+
+    Derivation
+    ----------
+    S_Fb = sum_e fac_e S_e[flux] over the epochs e of band b is
+    the band flux sum, and N_b(x) the normalization.  The flux is
+    a derived quantity q(x, S) in the sense of the module
+    docstring:
+
+        dF_b = dS_Fb / N_b - F_b dlnN_b/dx dx
+
+    The flux sum moves with the noise at fixed kernel and with
+    the kernel at fixed data,
+
+        dS_Fb = sum_e fac_e (dS_e[flux] + dS_e[flux]/dx dx)
+
+    so with dx = R dS (R is Tx),
+
+        dF = (RF0 + gx R) dS
+        RF0[b, (e, flux)] = fac_e / N_b                   dq/dS
+        gx[b] = sum_e fac_e dS_e[flux]/dx / N_b
+                - F_b dlnN_b/dx                           dq/dx
+
+    and Cov(F) = RF Cov(S) RF^T with RF = RF0 + gx R.
     """
     nep = len(epochs)
+    # dq/dS: the flux sum of each epoch feeds its band's flux
     RF = np.zeros((nband, 6 * nep))
     for iep, ep in enumerate(epochs):
         b = ep['band']
         RF[b, iep * 6 + 5] += facs[iep] / N[b]
+    # dq/dx: the flux sums under a moving kernel; row 5 of D is
+    # the flux sum, columns (sw3, v, u) -> state order
     gx = np.zeros((nband, npar))
     for iep, ep in enumerate(epochs):
         b = ep['band']
@@ -1164,6 +1305,8 @@ def _flux_covariance(
             row[icen + 1] = D[5, 4]
         row[isw:isw + 3] = D[5, 0:3]
         gx[b] += facs[iep] * row / N[b]
+    # ... minus the response of the normalization
     gx -= F[:, None] * dlnN
+    # the total response dF = (dq/dS + dq/dx R) dS
     RF = RF + gx @ Tx
     return RF @ covS @ RF.T
