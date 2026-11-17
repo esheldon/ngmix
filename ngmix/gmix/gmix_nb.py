@@ -828,8 +828,10 @@ def g1g2_to_e1e2(g1, g2):
     convert g to e
     """
     e1, e2, status = g1g2_to_e1e2_status(g1, g2)
+
     if status != 0:
         gmix_status_raise(status)
+
     return e1, e2
 
 
