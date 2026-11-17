@@ -24,14 +24,78 @@ covariance of the single-object fitter (full_errors=True).
 Unlike the model_sandwich error path (see errors.py for the
 sandwich definition and references), covariances built from them
 make no model-consistency substitution, so they remain calibrated
-under model mismatch, where the sandwich structure errors
-under-predict (T by ~12 percent for real morphologies fit with
+under model mismatch, where the sandwich errors under-predict
+(T by ~17 percent and flux by ~11 percent for dev truth fit with
 exp).
+
+Derivation
+----------
+Notation
+
+    d       the pixel data
+    S       the data sums, linear in d: S = H d, with the rows of
+            H the influence kernels (influence_kernels)
+    x       the packed state: [center], [family covariance],
+            weight covariance
+    Phi     one update step, new state = Phi(x, S)
+
+The kernels depend on the state through the weight covariance and
+center, so the sums are S(x) = H(x) d.
+
+The estimating equation.  The fitter iterates the update to
+convergence, so the reported state is a fixed point
+
+    x = Phi(x, S(x))
+
+The response to noise.  Noise perturbs the data, d -> d + dd,
+which moves the sums at fixed kernel by dS = H dd, and the fixed
+point moves to x + dx.  Expanding the estimating equation to
+first order,
+
+    dx = Phi_x dx + Phi_S (dS/dx dx + dS)
+
+where
+
+    Phi_x   dPhi/dx at fixed sums, the direct state dependence
+    Phi_S   dPhi/dS at fixed state
+    dS/dx   the motion of the sums under a moving kernel at fixed
+            data (dsums_dtheta)
+
+Collecting the dx terms,
+
+    J = Phi_x + Phi_S dS/dx       total Jacobian of one update
+    (I - J) dx = Phi_S dS
+    dx = R dS,   R = (I - J)^-1 Phi_S
+
+I - J is invertible when the iteration contracts, which is also
+the condition for it to converge.
+
+The covariance.  The estimator is linear in the sums to first
+order, so
+
+    Cov(x) = R Cov(S) R^T
+    Cov(S) = H diag(var) H^T      (sums_cov)
+
+with var the per-pixel variance.  Both Phi_x and Phi_S are
+evaluated at the observed sums, not at sums predicted from the
+converged model; this is what the sandwich path substitutes.
+
+Derived quantities.  A quantity q(x, S) that is not a state
+coordinate, such as a flux (a flux sum over a state-dependent
+normalization), responds as
+
+    dq = (dq/dS + dq/dx R) dS
+
+In padmom_full_covariance the variables are Phi_s (Phi_S), Phi_x,
+Dstate (dS/dx), J, A (Phi_S per epoch, the B_Phi of Sheldon 2026),
+Tx (R), covS and covX.
 
 References
 ----------
 Hampel (1974), "The influence curve and its role in robust
     estimation", JASA 69, 383
+Sheldon (2026), "Measurement covariances under correlated
+    noise", in preparation
 
 Research for the errors was aided significantly by Claude Code
 """
@@ -41,8 +105,9 @@ from .prepsfadmom import get_phase_angles
 from .errors import joint_flux_s2n
 
 __all__ = [
-    'moment_kernels', 'dsums_dtheta', 'influence_kernels',
-    'sums_cov',
+    'WK_CHI2_MAX', 'kernel_ingredients', 'moment_kernels',
+    'dsums_dtheta', 'influence_kernels', 'sums_cov', 'sym3_mat',
+    'dw_derivs', 'padmom_full_covariance',
 ]
 
 # the kernel weight support, matching FASTEXP_MAX_CHI2
