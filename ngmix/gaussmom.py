@@ -20,9 +20,10 @@ class GaussMom(object):
 
     kind = "wmom"
 
-    def __init__(self, fwhm, with_higher_order=False):
+    def __init__(self, fwhm, with_higher_order=False, hom_standard=False):
         self.fwhm = fwhm
         self.with_higher_order = with_higher_order
+        self.hom_standard = hom_standard
         self._set_mompars()
 
     def go(self, obs):
@@ -53,6 +54,7 @@ class GaussMom(object):
 
         res = self.weight.get_weighted_moments(
             obs=obs, with_higher_order=self.with_higher_order,
+            hom_standard=self.hom_standard,
         )
 
         if res['flags'] != 0:

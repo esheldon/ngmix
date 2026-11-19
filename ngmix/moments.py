@@ -58,6 +58,31 @@ MOMENTS_NAME_MAP = {
     # 8th order
     # r^8
     "M44": 16,
+
+    # notation from Zhang et al. 2023b
+    # standardized higher order moments
+
+    # third order
+    # x^3
+    "SM30": 6,
+    # x^2 * y
+    "SM21": 7,
+    # x * y^2
+    "SM12": 8,
+    # y^3
+    "SM03": 9,
+
+    # fourth order
+    # x^4
+    "SM40": 10,
+    # x^3 * y
+    "SM31": 11,
+    # x^2 * y^2
+    "SM22": 12,
+    # x * y^3
+    "SM13": 13,
+    # y^4
+    "SM40": 14,
 }
 
 

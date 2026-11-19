@@ -684,7 +684,7 @@ class GMix(object):
             gm, obs._pixels, fdiff, start,
         )
 
-    def get_weighted_moments(self, obs, maxrad=None, with_higher_order=False):
+    def get_weighted_moments(self, obs, maxrad=None, with_higher_order=False, hom_standard=False):
         """
         Get weighted moments using this mixture as the weight, including
         e1,e2,T,s2n etc.  If you just want the raw moments use
@@ -704,6 +704,9 @@ class GMix(object):
             If set to True, return higher order moments in the sums/sums_cov
             arrays.  See ngmix.moments.MOMENTS_NAME_MAP for a map between
             name and index.
+        hom_standard: bool, optional
+            If set to True and with_higher_order is True, return standardized
+            higher order moments, calculated in a whitened basis. 
 
         Returns
         -------
@@ -713,10 +716,11 @@ class GMix(object):
 
         res = self.get_weighted_sums(
             obs, maxrad=maxrad, with_higher_order=with_higher_order,
+            hom_standard=hom_standard,
         )
         return get_weighted_moments_stats(res)
 
-    def get_weighted_sums(self, obs, maxrad=None, with_higher_order=False, res=None):
+    def get_weighted_sums(self, obs, maxrad=None, with_higher_order=False, res=None, hom_standard=False):
         """
         Get weighted moments using this mixture as the weight.  To
         get more summary statistics use get_weighted_moments or
@@ -751,7 +755,10 @@ class GMix(object):
             maxrad = 100 * sigma
 
         if res is None:
-            dt0 = get_moments_result_dtype(with_higher_order=with_higher_order)
+            dt0 = get_moments_result_dtype(
+                with_higher_order=with_higher_order,
+                hom_standard=hom_standard
+            )
             dt = np.dtype(dt0, align=True)
             resarray = np.zeros(1, dtype=dt)
             res = resarray[0]
@@ -760,7 +767,10 @@ class GMix(object):
 
         # this will add to the sums
         if with_higher_order:
-            gmix_nb.get_higher_order_weighted_sums(wt_gm, obs.pixels, res, maxrad)
+            if hom_standard:
+                gmix_nb.get_standard_higher_order_weighted_sums(wt_gm, obs.pixels, res, maxrad)
+            else:
+                gmix_nb.get_higher_order_weighted_sums(wt_gm, obs.pixels, res, maxrad)
         else:
             gmix_nb.get_weighted_sums(wt_gm, obs.pixels, res, maxrad)
 
@@ -1329,9 +1339,12 @@ def get_weighted_moments_stats(ares):
     return res
 
 
-def get_moments_result_dtype(with_higher_order=False):
+def get_moments_result_dtype(with_higher_order=False, hom_standard=False):
     if with_higher_order:
-        nmom = 17
+        if hom_standard:
+            nmom = 15
+        else:
+            nmom = 17
     else:
         nmom = 6
 
