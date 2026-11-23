@@ -143,19 +143,27 @@ def run_prepsf_admom(
         stationary correlated noise, such as that induced by metacal.
         The noise image must be an independent realization of the
         noise, in the same frame as the image (e.g. as maintained by
-        metacal).  The measured moments are unchanged.  Default False.
+        metacal).  The measured moments are unchanged.  Not used by
+        the full_errors=True errors, which replace these.  Default
+        False.
     fixcen: bool, optional
         If True, the center is held fixed at the guess instead of
         being fit; the moments are measured about that center.
         Default False.
     full_errors: bool, optional
-        If True, replace the flux, T and shape errors with the full
-        fixed-point errors (see full_errors.py), which stay
-        calibrated under model mismatch, and set the cross-band
-        flux_cov.  Supported for the 'gauss', 'exp' and 'dev'
+        If True, replace the flux, T and shape errors, including
+        those of the gauss_* entries, with the full fixed-point
+        errors (see full_errors.py), which stay calibrated under
+        model mismatch, and set the cross-band flux_cov.
+        Supported for the 'gauss', 'exp' and 'dev'
         models.  The fit takes about three times longer.  When the
         full errors cannot be evaluated the default errors are
-        kept.  Default False.
+        kept.  The full errors take the noise from the weight
+        maps, treating the pixels as independent, and do not use
+        the noise image: with use_noise_image=True they replace
+        the noise image based errors, so the two options should
+        not be combined when the noise is correlated.  Default
+        False.
     rng: np.random.RandomState, optional
         Random state used to generate guesses from a T guess and for
         PSF fits when choosing the smoothing automatically.
@@ -324,19 +332,27 @@ class PAdmomFitter(object):
         stationary correlated noise, such as that induced by metacal.
         The noise image must be an independent realization of the
         noise, in the same frame as the image (e.g. as maintained by
-        metacal).  The measured moments are unchanged.  Default False.
+        metacal).  The measured moments are unchanged.  Not used by
+        the full_errors=True errors, which replace these.  Default
+        False.
     fixcen: bool, optional
         If True, the center is held fixed at the guess instead of
         being fit; the moments are measured about that center.
         Default False.
     full_errors: bool, optional
-        If True, replace the flux, T and shape errors with the full
-        fixed-point errors (see full_errors.py), which stay
-        calibrated under model mismatch, and set the cross-band
-        flux_cov.  Supported for the 'gauss', 'exp' and 'dev'
+        If True, replace the flux, T and shape errors, including
+        those of the gauss_* entries, with the full fixed-point
+        errors (see full_errors.py), which stay calibrated under
+        model mismatch, and set the cross-band flux_cov.
+        Supported for the 'gauss', 'exp' and 'dev'
         models.  The fit takes about three times longer.  When the
         full errors cannot be evaluated the default errors are
-        kept.  Default False.
+        kept.  The full errors take the noise from the weight
+        maps, treating the pixels as independent, and do not use
+        the noise image: with use_noise_image=True they replace
+        the noise image based errors, so the two options should
+        not be combined when the noise is correlated.  Default
+        False.
     rng: np.random.RandomState, optional
         Random state used to generate guesses from a T guess and for
         PSF fits when choosing the smoothing automatically.
@@ -1130,29 +1146,36 @@ class PAdmomFitter(object):
                     np.isfinite(res['e1']) and Tgal > 0
                     and fam_err_cov[2, 2] > 0
                 ):
-                    ev1 = (
-                        fam_err_cov[0, 0]
-                        - 2 * res['e1'] * fam_err_cov[0, 2]
-                        + res['e1'] ** 2 * fam_err_cov[2, 2]
-                    ) / Tgal ** 2
-                    ev2 = (
-                        fam_err_cov[1, 1]
-                        - 2 * res['e2'] * fam_err_cov[1, 2]
-                        + res['e2'] ** 2 * fam_err_cov[2, 2]
-                    ) / Tgal ** 2
+                    ev1, ev2, e12 = _e_cov_from_mom_cov(
+                        res['e1'], res['e2'], Tgal, fam_err_cov,
+                    )
                     if ev1 > 0 and ev2 > 0:
-                        e12 = (
-                            fam_err_cov[0, 1]
-                            - res['e1'] * fam_err_cov[1, 2]
-                            - res['e2'] * fam_err_cov[0, 2]
-                            + res['e1'] * res['e2']
-                            * fam_err_cov[2, 2]
-                        ) / Tgal ** 2
                         res['e1err'] = np.sqrt(ev1)
                         res['e2err'] = np.sqrt(ev2)
+                        res['e_err'] = np.array([
+                            res['e1err'], res['e2err'],
+                        ])
                         res['e_cov'] = np.array([
                             [ev1, e12], [e12, ev2],
                         ])
+
+                # the gauss (converged weight) estimator entries,
+                # from the weight block of the same covariance
+                gauss_err_cov = fe['gauss_err_cov']
+                gauss_T = res['gauss_T']
+                if gauss_err_cov[2, 2] > 0:
+                    res['gauss_T_err'] = np.sqrt(gauss_err_cov[2, 2])
+                if (
+                    np.isfinite(res['gauss_e1']) and gauss_T > 0
+                    and gauss_err_cov[2, 2] > 0
+                ):
+                    ev1, ev2, _ = _e_cov_from_mom_cov(
+                        res['gauss_e1'], res['gauss_e2'], gauss_T,
+                        gauss_err_cov,
+                    )
+                    if ev1 > 0 and ev2 > 0:
+                        res['gauss_e1err'] = np.sqrt(ev1)
+                        res['gauss_e2err'] = np.sqrt(ev2)
 
         # propagate fitting failures, but not the post-hoc NONPOS_SIZE
         # or NONPOS_SHAPE_VAR set above, for which T and flux are still
@@ -1628,6 +1651,51 @@ class PAdmomFitter(object):
         if self.rng is None:
             self.rng = np.random.RandomState()
         return self.rng
+
+
+def _e_cov_from_mom_cov(e1, e2, T, mom_cov):
+    """
+    the covariance of the ellipticities e = (M1, M2) / T, linearized
+    over the covariance of the moments
+
+    With de_i = (dM_i - e_i dT) / T,
+
+        Var(e_i) = (C_ii - 2 e_i C_iT + e_i^2 C_TT) / T^2
+        Cov(e_1, e_2) = (C_12 - e_1 C_2T - e_2 C_1T
+                         + e_1 e_2 C_TT) / T^2
+
+    Parameters
+    ----------
+    e1, e2: float
+        The ellipticities
+    T: float
+        The size
+    mom_cov: (3, 3) array
+        The covariance C of (M1, M2, T)
+
+    Returns
+    -------
+    var_e1, var_e2, cov_e1e2: float
+        The variances are not checked for positivity
+    """
+    Tinv2 = 1.0 / T ** 2
+    var_e1 = (
+        mom_cov[0, 0]
+        - 2 * e1 * mom_cov[0, 2]
+        + e1 ** 2 * mom_cov[2, 2]
+    ) * Tinv2
+    var_e2 = (
+        mom_cov[1, 1]
+        - 2 * e2 * mom_cov[1, 2]
+        + e2 ** 2 * mom_cov[2, 2]
+    ) * Tinv2
+    cov_e1e2 = (
+        mom_cov[0, 1]
+        - e1 * mom_cov[1, 2]
+        - e2 * mom_cov[0, 2]
+        + e1 * e2 * mom_cov[2, 2]
+    ) * Tinv2
+    return var_e1, var_e2, cov_e1e2
 
 
 def _check_model(model):

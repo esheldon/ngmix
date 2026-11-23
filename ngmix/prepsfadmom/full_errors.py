@@ -76,7 +76,10 @@ order, so
     Cov(x) = R Cov(S) R^T
     Cov(S) = H diag(var) H^T      (sums_cov)
 
-with var the per-pixel variance.  Both Phi_x and Phi_S are
+with var the per-pixel variance from the weight map.  The pixels
+are treated as independent: a noise image attached to the
+observation (use_noise_image) is not used here, so correlated
+noise is not accounted for in these errors.  Both Phi_x and Phi_S are
 evaluated at the observed sums, not at sums predicted from the
 converged model; this is what the sandwich path substitutes.
 
@@ -622,7 +625,10 @@ def padmom_full_covariance(
 
     Requires epochs prepped with store_transfer=True and an
     'obs_weight' entry per epoch (attached by the fitter when
-    full_errors is set).
+    full_errors is set).  The noise is taken from these weight
+    maps with the pixels treated as independent; the per-mode
+    noise power of a use_noise_image prep (the epoch's err_fac2)
+    is not used.
 
     Parameters
     ----------
@@ -647,10 +653,13 @@ def padmom_full_covariance(
     -------
     res: dict or None
         Entries flux_cov (nband, nband), flux_err, fam_err_cov (the
-        (M1, M2, T) family covariance for the structure errors)
-        and s2n; None when the model is unsupported or the
-        evaluation at the solution takes a guarded branch (the
-        caller keeps the model_sandwich errors)
+        (M1, M2, T) family covariance for the structure errors),
+        gauss_err_cov (the (M1, M2, T) covariance of the converged
+        weight, for the errors of the gauss estimator entries; the
+        same as fam_err_cov for the gauss model) and s2n; None
+        when the model is unsupported or the evaluation at the
+        solution takes a guarded branch (the caller keeps the
+        model_sandwich errors)
     """
     from ..util import single_core_blas
 
@@ -785,14 +794,21 @@ def _padmom_full_covariance(
     Tx = np.linalg.solve(Mm, A)
     covX = Tx @ covS @ Tx.T
 
+    # the weight covariance in the (M1, M2, T) basis, for the
+    # errors of the gauss (converged weight) estimator.  The
+    # estimator is the weight minus the constant smoothing, so
+    # its covariance is that of the weight
+    wblock = covX[isw:isw + 3, isw:isw + 3]
+    gauss_err_cov = _SYM_TO_MBASIS @ wblock @ _SYM_TO_MBASIS.T
+
     # the family covariance in the (M1, M2, T) basis for the
     # structure errors; for gauss the family is the weight minus
     # the constant smoothing
     if is_mix:
         cblock = covX[ifam:ifam + 3, ifam:ifam + 3]
+        fam_err_cov = _SYM_TO_MBASIS @ cblock @ _SYM_TO_MBASIS.T
     else:
-        cblock = covX[isw:isw + 3, isw:isw + 3]
-    fam_err_cov = _SYM_TO_MBASIS @ cblock @ _SYM_TO_MBASIS.T
+        fam_err_cov = gauss_err_cov
 
     # fluxes, following the _finalize normalization
     # F_b = S_Fb / N_b, with S_Fb the band flux sum (fs below):
@@ -839,6 +855,7 @@ def _padmom_full_covariance(
         'flux_cov': flux_cov,
         'flux_err': np.sqrt(var),
         'fam_err_cov': fam_err_cov,
+        'gauss_err_cov': gauss_err_cov,
         's2n': s2n,
     }
 

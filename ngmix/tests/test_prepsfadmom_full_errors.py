@@ -345,6 +345,12 @@ def test_padmom_full_errors_matched():
     assert np.abs(r1['T_err'] / r0['T_err'] - 1) < 0.2
     assert np.abs(r1['flux_err'] / r0['flux_err'] - 1) < 0.2
     assert np.abs(r1['e1err'] / r0['e1err'] - 1) < 0.25
+    # every shape error entry carries the full errors
+    assert r1['e1err'] != r0['e1err']
+    assert np.all(r1['e_err'] == [r1['e1err'], r1['e2err']])
+    assert np.allclose(
+        np.diag(r1['e_cov']), r1['e_err'] ** 2, rtol=1e-12,
+    )
     fcov = r1['flux_cov']
     assert fcov.shape == (1, 1) and fcov[0, 0] > 0
     assert np.allclose(
@@ -379,14 +385,55 @@ def test_run_prepsf_admom_full_errors():
     assert r1['T_err'] != r0['T_err']
 
 
+def test_padmom_full_errors_gauss_entries():
+    """the gauss estimator entries carry the full errors: for
+    the gauss model they are the main entries, and for the
+    mixture models they match the gauss model fit, since the
+    weight iteration does not depend on the family"""
+    from ngmix.prepsfadmom import PAdmomFitter
+
+    rng = np.random.RandomState(31)
+    obs = _make_gal_obs(rng, 'exp')
+
+    def run(model, full_errors):
+        return PAdmomFitter(
+            model=model, ap_rad=0, full_errors=full_errors,
+            rng=np.random.RandomState(3),
+        ).go(obs, guess=0.5)
+
+    pairs = [
+        ('gauss_T_err', 'T_err'),
+        ('gauss_e1err', 'e1err'),
+        ('gauss_e2err', 'e2err'),
+    ]
+
+    rg = run('gauss', True)
+    assert rg['flags'] == 0 and rg['gauss_e_flags'] == 0
+    for gkey, key in pairs:
+        assert np.isfinite(rg[gkey])
+        assert np.allclose(rg[gkey], rg[key], rtol=1e-10), gkey
+
+    for model in ('exp', 'dev'):
+        r0 = run(model, False)
+        r1 = run(model, True)
+        assert r1['flags'] == 0 and r1['gauss_e_flags'] == 0
+        for gkey, key in pairs:
+            # the same as the gauss model fit, up to convergence
+            assert np.allclose(r1[gkey], rg[key], rtol=1e-3), gkey
+            # and not the sandwich values
+            assert r1[gkey] != r0[gkey], gkey
+
+
 def test_padmom_full_errors_mismatch_mc():
     """dev truth fit with exp: the sandwich under-predicts the
-    T and flux errors; the full errors stay calibrated"""
+    T and flux errors; the full errors stay calibrated,
+    including those of the gauss estimator entries"""
     from ngmix.prepsfadmom import PAdmomFitter
 
     ntrial = 200
     rng = np.random.RandomState(19)
     T0, Tf0, F0, Ff0 = [], [], [], []
+    G0, Gf0 = [], []
     for k in range(ntrial):
         obs = _make_gal_obs(rng, 'dev')
         f1 = PAdmomFitter(
@@ -400,15 +447,21 @@ def test_padmom_full_errors_mismatch_mc():
         Tf0.append(res['T_err'])
         F0.append(res['flux'])
         Ff0.append(res['flux_err'])
+        G0.append(res['gauss_T'])
+        Gf0.append(res['gauss_T_err'])
     T0, Tf0 = np.array(T0), np.array(Tf0)
     F0, Ff0 = np.array(F0), np.array(Ff0)
+    G0, Gf0 = np.array(G0), np.array(Gf0)
     assert len(T0) > 0.9 * ntrial
 
     rT = T0.std() / np.sqrt(np.mean(Tf0 ** 2))
     rF = F0.std() / np.sqrt(np.mean(Ff0 ** 2))
-    # the sandwich reads ~1.17 (T) and ~1.11 (flux) here
+    rG = G0.std() / np.sqrt(np.mean(Gf0 ** 2))
+    # the sandwich reads ~1.17 (T), ~1.11 (flux) and ~1.3
+    # (gauss T) here
     assert 0.8 < rT < 1.15
     assert 0.85 < rF < 1.15
+    assert 0.85 < rG < 1.15
 
 
 def test_padmom_full_errors_apodized_mc():
