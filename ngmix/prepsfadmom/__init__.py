@@ -8,9 +8,11 @@ from . import prepsfadmom_nb
 from . import models
 from . import errors
 from . import prep
+from . import full_errors
 
 __all__ = [
     'run_prepsf_admom', 'PAdmomFitter', 'PAdmomResult',
     'get_phase_angles', 'deweight',
     'prepsfadmom', 'prepsfadmom_nb', 'models', 'errors', 'prep',
+    'full_errors',
 ]

@@ -49,6 +49,27 @@ def test_moments_size_roundtrips(to_func, from_func):
     assert np.allclose(val, fval)
 
 
+def test_moments_cov_roundtrips():
+    from ..moments import cov_from_e, mom_from_cov, cov_from_mom
+
+    e1, e2, T = -0.1, 0.2, 1.4
+    cov = cov_from_e(e1, e2, T)
+    assert cov.shape == (2, 2)
+    assert np.allclose(cov, cov.T)
+    # [[Ivv, Ivu], [Ivu, Iuu]] with e1 = (Iuu - Ivv) / T
+    assert np.allclose(cov[0, 0] + cov[1, 1], T)
+    assert np.allclose((cov[1, 1] - cov[0, 0]) / T, e1)
+    assert np.allclose(2 * cov[0, 1] / T, e2)
+
+    M1, M2, Tm = mom_from_cov(cov)
+    assert np.allclose([M1 / Tm, M2 / Tm, Tm], [e1, e2, T])
+
+    assert np.allclose(cov_from_mom(M1, M2, Tm), cov)
+    assert np.allclose(
+        mom_from_cov(cov_from_mom(0.3, -0.05, 1.1)), [0.3, -0.05, 1.1],
+    )
+
+
 def test_moments_mom_roundtrips():
     e1e2T = (-0.1, 0.2, 1.4)
     ivals = (0.3, -0.05, 0.1)

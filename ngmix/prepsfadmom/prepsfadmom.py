@@ -40,7 +40,7 @@ from ..moments import fwhm_to_T, e2mom
 from ..shape import e1e2_to_g1g2
 from ..util import get_ratio_error
 from .prepsfadmom_nb import admom_ksums, admom_finalize
-from ..moments import cov_from_e, mom_from_cov
+from ..moments import cov_from_e, mom_from_cov, cov_from_mom
 from .models import model_ksums, mixture_model_valid, det2
 from .errors import (
     flux_cov_delta, model_sandwich, joint_flux_s2n,
@@ -597,10 +597,7 @@ class PAdmomFitter(object):
             # and cannot be deweighted into a valid next weight
             return ngmix.flags.NONPOS_SIZE, v0, u0, dv, du, None
 
-        M = np.array([
-            [0.5 * (T - M1), 0.5 * M2],
-            [0.5 * M2, 0.5 * (T + M1)],
-        ])
+        M = cov_from_mom(M1, M2, T)
         return 0, v0, u0, dv, du, M
 
     def _run_admom_gauss(self, epochs, nband, guess_gmix, Tsmooth):
@@ -831,10 +828,7 @@ class PAdmomFitter(object):
         Mp1 = psums[2] * pinv
         Mp2 = psums[3] * pinv
         Tp = psums[4] * pinv
-        Mpred = np.array([
-            [0.5 * (Tp - Mp1), 0.5 * Mp2],
-            [0.5 * Mp2, 0.5 * (Tp + Mp1)],
-        ])
+        Mpred = cov_from_mom(Mp1, Mp2, Tp)
         # Sp: the family covariance implied by the predicted
         # moments (the deweight image of Mpred)
         Sp, pflags = deweight(Mpred, wt_cov)

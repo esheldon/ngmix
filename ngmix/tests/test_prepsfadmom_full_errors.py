@@ -464,6 +464,44 @@ def test_padmom_full_errors_mismatch_mc():
     assert 0.85 < rG < 1.15
 
 
+def test_padmom_full_errors_fixcen_epochs_mc():
+    """a fixed center and two epochs: the center drops out of
+    the state and the sums covariance has a block per epoch;
+    dev truth fit with exp stays calibrated"""
+    from ngmix.prepsfadmom import PAdmomFitter
+
+    guess = ngmix.GMixModel(
+        [0.0, 0.0, 0.0, 0.0, 0.5, 1.0], 'gauss',
+    )
+    fitter = PAdmomFitter(
+        model='exp', ap_rad=0, fixcen=True, full_errors=True,
+    )
+    ntrial = 150
+    rng = np.random.RandomState(7)
+    T, Te, F, Fe = [], [], [], []
+    for k in range(ntrial):
+        obslist = ngmix.ObsList()
+        for _ in range(2):
+            obslist.append(_make_gal_obs(rng, 'dev'))
+        res = fitter.go(obslist, guess=guess)
+        if res['flags'] != 0 or res['T_flags'] != 0:
+            continue
+        assert np.all(res['cen'] == 0)
+        T.append(res['T'])
+        Te.append(res['T_err'])
+        F.append(res['flux'])
+        Fe.append(res['flux_err'])
+    T, Te = np.array(T), np.array(Te)
+    F, Fe = np.array(F), np.array(Fe)
+    assert len(T) > 0.9 * ntrial
+
+    rT = T.std() / np.sqrt(np.mean(Te ** 2))
+    rF = F.std() / np.sqrt(np.mean(Fe ** 2))
+    # the sandwich reads ~1.22 (T) and ~1.18 (flux) here
+    assert 0.85 < rT < 1.15
+    assert 0.85 < rF < 1.15
+
+
 def test_padmom_full_errors_apodized_mc():
     """the production apodization (ap_rad=1.5) with full
     errors: dev truth fit with exp stays calibrated"""

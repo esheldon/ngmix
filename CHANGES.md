@@ -34,8 +34,14 @@
       fitting over multiple epochs and bands with a common center and
       covariance, measuring fluxes per band with a common pre-seeing
       aperture, so colors are independent of the per-band PSFs.
-      prepsfadmom accepts use_noise_image=True as with other prepsfmom
-      Can fit gauss, exp, dev, or star
+      The model can be gauss, exp, dev, or star.  As with the other
+      prepsfmom fitters, use_noise_image=True takes the noise power
+      per mode from the attached noise image.  With full_errors=True
+      the errors are instead the full fixed-point covariance, which
+      stays calibrated when the model does not match the object and
+      provides the cross-band flux covariance (flux_cov); these
+      errors take the noise from the weight map and do not use the
+      noise image.
     - The pre-PSF moment fitters (prepsfmom and prepsfadmom) now
       accept non-square images, which are zero padded to square
       internally.
