@@ -53,7 +53,14 @@ from ..moments import cov_from_e
 
 
 def det2(M):
-    """determinant of a 2x2 matrix"""
+    """
+    determinant of a 2x2 matrix
+
+    Parameters
+    ----------
+    M: (2, 2) array
+        The matrix
+    """
     return M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]
 
 
@@ -142,6 +149,27 @@ def model_ksums(model, band, dv, du, wt_cov, detAtinv, Tsmooth):
     """
     closed-form weighted moment sums of an object model, dispatching
     on the model type, evaluated via the numba kernel
+
+    Parameters
+    ----------
+    model: dict
+        Model dict, see the module docstring
+    band: int
+        The band whose flux model['F'][band] is used
+    dv, du: float
+        The offset of the model center from the weight center
+    wt_cov: (2, 2) array
+        The weight covariance
+    detAtinv: float
+        The k-space area factor of the epoch
+    Tsmooth: float
+        The T of the gaussian smoothing
+
+    Returns
+    -------
+    sums: array of size 6
+        The [v, u, M1, M2, T, flux] sums, in the units of the
+        admom_ksums output
     """
     from .models_nb import gauss_comps_ksums
 
@@ -171,6 +199,22 @@ def mixture_model_valid(model, fam_cov, wt_cov, Tsmooth):
 
     model is a family name ('exp', 'dev') or a model dict with a
     'type' entry holding the name
+
+    Parameters
+    ----------
+    model: str or dict
+        The family name ('exp' or 'dev'), or a model dict with a
+        'type' entry holding the name
+    fam_cov: (2, 2) array
+        The family covariance to check
+    wt_cov: (2, 2) array
+        The weight covariance
+    Tsmooth: float
+        The T of the gaussian smoothing
+
+    Returns
+    -------
+    valid: bool
     """
     if isinstance(model, str):
         comps = get_profile_comps(model)

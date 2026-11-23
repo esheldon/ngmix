@@ -108,8 +108,19 @@ def choose_fwhm_smooth(
 
 
 def _pad_center(shape, cen_row, cen_col, target_dim):
-    """the center location in the zero-padded frame (the pads of
-    prepsfmom._zero_pad_image, without building the padded image)"""
+    """
+    the center location in the zero-padded frame (the pads of
+    prepsfmom._zero_pad_image, without building the padded image)
+
+    Parameters
+    ----------
+    shape: (nrow, ncol)
+        The shape of the unpadded image
+    cen_row, cen_col: float
+        The center in the unpadded image
+    target_dim: int
+        The dimension of the padded image
+    """
     pad_row_before = (target_dim - shape[0]) // 2
     pad_col_before = (target_dim - shape[1]) // 2
     return cen_row + pad_row_before, cen_col + pad_col_before
@@ -124,6 +135,20 @@ def prep_epoch_scalars(
     by prep_epoch itself and by device-prep paths that compute
     the k arrays elsewhere and only need the epoch scalars on the
     host (the array entries of the returned epoch are None).
+
+    Parameters
+    ----------
+    obs: Observation
+        The observation; must have a psf set unless no_psf=True
+    band: int, optional
+        The band index stored in the epoch, default 0
+    fwhm_smooth: float, optional
+        The fwhm of the common round gaussian smoothing; 0 disables
+        smoothing.  Default 0
+    pad_factor: int, optional
+        The factor by which to pad the FFTs, default 4
+    no_psf: bool, optional
+        If True, allow an observation without a psf.  Default False
 
     Returns
     -------
@@ -420,6 +445,24 @@ def get_kspace_grids(dim, dvdrow, dvdcol, dudrow, dudcol, Tsmooth):
     read-only.
 
     Exported for use in kdeblend.
+
+    Parameters
+    ----------
+    dim: int
+        The padded fft dimension
+    dvdrow, dvdcol, dudrow, dudcol: float
+        The jacobian elements
+    Tsmooth: float
+        The T of the gaussian smoothing; 0 for no smoothing, in which
+        case all modes are kept
+
+    Returns
+    -------
+    grids: dict
+        Entries kv, ku (sky frequencies at the retained modes), iy, ix
+        (their indices on the rfft half plane), fold (smoothing times
+        the conjugate symmetry weights), fold2 (squared smoothing
+        times the symmetry weights), Atinv and detAtinv
     """
     half = dim // 2 + 1
     f1d = fft.fftfreq(dim) * (2.0 * np.pi)
@@ -495,6 +538,17 @@ def _zero_pad_and_compute_rfft_impl(im, cen_row, cen_col, target_dim, ap_rad):
     """
     zero pad and compute the real fft, returning the fft and the center
     location in the padded image
+
+    Parameters
+    ----------
+    im: 2d array
+        The image
+    cen_row, cen_col: float
+        The center in the unpadded image
+    target_dim: int
+        The dimension of the padded image
+    ap_rad: float
+        The apodization radius in pixels; no apodization if <= 0
     """
     if ap_rad > 0:
         ap_mask = np.ones_like(im)
@@ -512,6 +566,16 @@ def _zero_pad_and_compute_rfft_impl(im, cen_row, cen_col, target_dim, ap_rad):
 def _zero_pad_and_compute_rfft_cached(
     im_tuple, cen_row, cen_col, target_dim, ap_rad
 ):
+    """
+    cached version of _zero_pad_and_compute_rfft_impl
+
+    Parameters
+    ----------
+    im_tuple: tuple of tuples
+        The image as nested tuples, so that it is hashable
+    cen_row, cen_col, target_dim, ap_rad:
+        As for _zero_pad_and_compute_rfft_impl
+    """
     return _zero_pad_and_compute_rfft_impl(
         np.array(im_tuple), cen_row, cen_col, target_dim, ap_rad
     )

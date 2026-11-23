@@ -70,6 +70,7 @@ def run_prepsf_admom(
     no_psf=False,
     use_noise_image=False,
     fixcen=False,
+    full_errors=False,
     rng=None,
 ):
     """
@@ -147,6 +148,14 @@ def run_prepsf_admom(
         If True, the center is held fixed at the guess instead of
         being fit; the moments are measured about that center.
         Default False.
+    full_errors: bool, optional
+        If True, replace the flux, T and shape errors with the full
+        fixed-point errors (see full_errors.py), which stay
+        calibrated under model mismatch, and set the cross-band
+        flux_cov.  Supported for the 'gauss', 'exp' and 'dev'
+        models.  The fit takes about three times longer.  When the
+        full errors cannot be evaluated the default errors are
+        kept.  Default False.
     rng: np.random.RandomState, optional
         Random state used to generate guesses from a T guess and for
         PSF fits when choosing the smoothing automatically.
@@ -167,6 +176,7 @@ def run_prepsf_admom(
         cen_tol=cen_tol,
         use_noise_image=use_noise_image,
         fixcen=fixcen,
+        full_errors=full_errors,
         rng=rng,
     )
     return fitter.go(obs=obs, guess=guess, no_psf=no_psf)
@@ -315,6 +325,18 @@ class PAdmomFitter(object):
         The noise image must be an independent realization of the
         noise, in the same frame as the image (e.g. as maintained by
         metacal).  The measured moments are unchanged.  Default False.
+    fixcen: bool, optional
+        If True, the center is held fixed at the guess instead of
+        being fit; the moments are measured about that center.
+        Default False.
+    full_errors: bool, optional
+        If True, replace the flux, T and shape errors with the full
+        fixed-point errors (see full_errors.py), which stay
+        calibrated under model mismatch, and set the cross-band
+        flux_cov.  Supported for the 'gauss', 'exp' and 'dev'
+        models.  The fit takes about three times longer.  When the
+        full errors cannot be evaluated the default errors are
+        kept.  Default False.
     rng: np.random.RandomState, optional
         Random state used to generate guesses from a T guess and for
         PSF fits when choosing the smoothing automatically.
@@ -475,6 +497,17 @@ class PAdmomFitter(object):
         """
         the adaptive moments iteration, accumulating the k-space sums
         over all epochs
+
+        Parameters
+        ----------
+        epochs: list of dict
+            The prep_epoch dicts, one per epoch
+        nband: int
+            The number of bands
+        guess_gmix: ngmix.GMix
+            The guess, providing the starting center, shape and T
+        Tsmooth: float
+            The T of the gaussian smoothing
         """
         if self.model in ('exp', 'dev'):
             return self._run_admom_mixture(
@@ -499,6 +532,17 @@ class PAdmomFitter(object):
         <(x - d)_i (x - d)_j> = <x_i x_j> - d_i d_j.  The weight
         center lags by one iteration, which vanishes at the fixed
         point
+
+        Parameters
+        ----------
+        epochs: list of dict
+            The prep_epoch dicts, one per epoch
+        wt_cov: (2, 2) array
+            The weight covariance
+        v0, u0: float
+            The current center
+        vorig, uorig: float
+            The starting center, for the shiftmax check
         """
         if (wt_cov[0, 0] <= 0 or wt_cov[1, 1] <= 0
                 or det2(wt_cov) < GMIX_LOW_DETVAL):
@@ -548,6 +592,17 @@ class PAdmomFitter(object):
         the standard adaptive moments fixed point: deweight the
         measured moments into the next weight until the weight stops
         changing
+
+        Parameters
+        ----------
+        epochs: list of dict
+            The prep_epoch dicts, one per epoch
+        nband: int
+            The number of bands
+        guess_gmix: ngmix.GMix
+            The guess, providing the starting center, shape and T
+        Tsmooth: float
+            The T of the gaussian smoothing
         """
         cen_guess = guess_gmix.get_cen()
         v0 = cen_guess[0]
@@ -636,6 +691,17 @@ class PAdmomFitter(object):
             Aktuarietidskr. 16, 64
         [3] A. Sidi (2017), "Vector Extrapolation Methods with
             Applications", SIAM
+
+        Parameters
+        ----------
+        epochs: list of dict
+            The prep_epoch dicts, one per epoch
+        nband: int
+            The number of bands
+        guess_gmix: ngmix.GMix
+            The guess, providing the starting center, shape and T
+        Tsmooth: float
+            The T of the gaussian smoothing
         """
         cen_guess = guess_gmix.get_cen()
         v0 = cen_guess[0]
@@ -724,6 +790,19 @@ class PAdmomFitter(object):
         predicted moments.  Returns (shift, pflags); when the
         prediction cannot be deweighted (pflags nonzero) the shift
         is the gain-1 fallback on the weighted moment ratios
+
+        Parameters
+        ----------
+        fam_cov: (2, 2) array
+            The family covariance
+        M: (2, 2) array
+            The measured weighted moment matrix
+        wt_cov: (2, 2) array
+            The weight covariance under which M was measured
+        new_wt_cov: (2, 2) array
+            The deweight of M
+        Tsmooth: float
+            The T of the gaussian smoothing
         """
         # the model predicted moment ratios; with a common center
         # and common structure across epochs these are the same
@@ -770,6 +849,16 @@ class PAdmomFitter(object):
         give the ratio and the remaining geometric series can be
         summed in one boosted step.  Guarded to the primary update
         branch and a stable ratio range.  Returns (shift, boosted)
+
+        Parameters
+        ----------
+        raw_shift: (2, 2) array
+            The plain shift of this iteration, from _model_shift
+        prev_shift: (2, 2) array or None
+            The plain shift of the previous iteration; None when no
+            plain step is available to form the ratio
+        pflags: int
+            The flags from _model_shift; nonzero on the fallback branch
         """
         if pflags == 0 and prev_shift is not None:
             denom = np.sum(prev_shift * prev_shift)
@@ -789,6 +878,18 @@ class PAdmomFitter(object):
         accept the largest step, damping if needed, for which the
         smoothed model components stay positive definite.  Returns
         (prop, idamp, accepted)
+
+        Parameters
+        ----------
+        fam_cov: (2, 2) array
+            The family covariance
+        shift: (2, 2) array
+            The proposed shift of the family covariance
+        new_wt_cov: (2, 2) array
+            The updated weight covariance, under which validity is
+            checked
+        Tsmooth: float
+            The T of the gaussian smoothing
         """
         accepted = False
         for idamp in range(10):
@@ -803,6 +904,11 @@ class PAdmomFitter(object):
     def _unit_state(self, fam_cov):
         """
         a unit-flux model state dict at the given family covariance
+
+        Parameters
+        ----------
+        fam_cov: (2, 2) array
+            The family covariance
         """
         return {'type': self.model, 'cov': fam_cov, 'F': np.ones(1)}
 
@@ -812,6 +918,17 @@ class PAdmomFitter(object):
         both the object and the matched weight are the smoothing
         gaussian; the weight is frozen and only the center is
         iterated
+
+        Parameters
+        ----------
+        epochs: list of dict
+            The prep_epoch dicts, one per epoch
+        nband: int
+            The number of bands
+        guess_gmix: ngmix.GMix
+            The guess, providing the starting center, shape and T
+        Tsmooth: float
+            The T of the gaussian smoothing
         """
         cen_guess = guess_gmix.get_cen()
         v0 = cen_guess[0]
@@ -870,6 +987,26 @@ class PAdmomFitter(object):
         errors with the converged weight.  model_state, sent for the
         non-gauss models, holds the converged family parameters and
         sets the flux normalization
+
+        Parameters
+        ----------
+        epochs: list of dict
+            The prep_epoch dicts, one per epoch
+        nband: int
+            The number of bands
+        flags: int
+            The flags from the iteration
+        numiter: int
+            The number of iterations taken
+        wt_cov: (2, 2) array
+            The converged weight covariance
+        v0, u0: float
+            The converged center
+        Tsmooth: float
+            The T of the gaussian smoothing
+        model_state: dict, optional
+            The converged model dict (see the models.py module
+            docstring); not sent for the gauss path
         """
 
         res = {
@@ -1038,6 +1175,16 @@ class PAdmomFitter(object):
         is defined, per model type.  det > 0 with positive trace is
         |e| < 1: a non positive definite galaxy covariance has no
         defined shape
+
+        Parameters
+        ----------
+        model_state: dict or None
+            The converged model dict (see the models.py module docstring);
+            None for the plain gauss path
+        wt_cov: (2, 2) array
+            The weight covariance
+        Tsmooth: float
+            The T of the gaussian smoothing
         """
         if model_state is None:
             # gauss: the converged weight with the smoothing
@@ -1065,6 +1212,22 @@ class PAdmomFitter(object):
     def _set_T_err(self, res, model_state, fam_err_cov, sums, sums_cov):
         """
         set the T error in the result, or NONPOS_VAR in T_flags
+
+        Parameters
+        ----------
+        res: dict
+            The result dict, modified in place
+        model_state: dict or None
+            The converged model dict (see the models.py module docstring);
+            None for the plain gauss path
+        fam_err_cov: (3, 3) array or None
+            The covariance of the family (M1, M2, T) from model_sandwich;
+            None for the gauss and star paths, or when the sandwich could
+            not be evaluated
+        sums: array of size 6
+            The joint [v, u, M1, M2, T, flux] sums at the converged weight
+        sums_cov: (6, 6) array
+            The covariance of the sums
         """
         if model_state is not None and model_state['type'] == 'star':
             # T is fixed at zero by the model, not measured
@@ -1095,6 +1258,19 @@ class PAdmomFitter(object):
         ratio errors, as in the gauss model fit.  For the star
         model the weight is frozen at the smoothing and the
         entries stay flagged
+
+        Parameters
+        ----------
+        res: dict
+            The result dict, modified in place
+        wt_cov: (2, 2) array
+            The weight covariance
+        Tsmooth: float
+            The T of the gaussian smoothing
+        sums: array of size 6
+            The joint [v, u, M1, M2, T, flux] sums at the converged weight
+        sums_cov: (6, 6) array
+            The covariance of the sums
         """
         Sgal = wt_cov - np.diag([Tsmooth / 2, Tsmooth / 2])
         Twt = wt_cov[0, 0] + wt_cov[1, 1]
@@ -1134,6 +1310,28 @@ class PAdmomFitter(object):
         """
         set the ellipticities and their errors in the result, or the
         flag bits recording why they are unusable
+
+        Parameters
+        ----------
+        res: dict
+            The result dict, modified in place
+        model_state: dict or None
+            The converged model dict (see the models.py module docstring);
+            None for the plain gauss path
+        shape_ok: bool
+            Whether the shape is defined, from _shape_state
+        M1, M2, Tgal: float
+            The galaxy moments, from _shape_state
+        wt_cov: (2, 2) array
+            The weight covariance
+        fam_err_cov: (3, 3) array or None
+            The covariance of the family (M1, M2, T) from model_sandwich;
+            None for the gauss and star paths, or when the sandwich could
+            not be evaluated
+        sums: array of size 6
+            The joint [v, u, M1, M2, T, flux] sums at the converged weight
+        sums_cov: (6, 6) array
+            The covariance of the sums
         """
         if model_state is not None and model_state['type'] == 'star':
             # a delta function has no shape; this is by
@@ -1222,6 +1420,15 @@ class PAdmomFitter(object):
 
         returns sums [v, u, M1, M2, T, flux], weighted over epochs and
         normalized to sky units
+
+        Parameters
+        ----------
+        epochs: list of dict
+            The prep_epoch dicts, one per epoch
+        wt_cov: (2, 2) array
+            The weight covariance
+        v0, u0: float
+            The center, as sky offsets from the jacobian center
         """
         sums = np.zeros(6)
         esums = np.zeros(6)
@@ -1258,6 +1465,39 @@ class PAdmomFitter(object):
         kernel, and the factor of 2 converts the gaussian-weighted flux
         to the total flux at the fixed point of the iteration.  The
         smoothing preserves flux, so this also holds when smoothing.
+
+        Parameters
+        ----------
+        epochs: list of dict
+            The prep_epoch dicts, one per epoch
+        nband: int
+            The number of bands
+        wt_cov: (2, 2) array
+            The converged weight covariance
+        v0, u0: float
+            The converged center
+        Tsmooth: float
+            The T of the gaussian smoothing
+        model_state: dict, optional
+            The converged model dict (see the models.py module
+            docstring); not sent for the gauss path
+
+        Returns
+        -------
+        sums: array of size 6
+            The joint [v, u, M1, M2, T, flux] sums
+        cov: (6, 6) array
+            The covariance of the sums
+        fluxes: array of size nband
+            The per-band fluxes
+        flux_vars: array of size nband
+            The flux variances
+        fam_err_cov: (3, 3) array or None
+            The covariance of the family (M1, M2, T); None for the gauss
+            and star paths or when the sandwich could not be evaluated
+        flux_cov: (nband, nband) array or None
+            The cross-band flux covariance; None when the sandwich could
+            not be evaluated
         """
         knrm = 2 * np.pi * np.sqrt(det2(wt_cov))
 
@@ -1343,6 +1583,25 @@ class PAdmomFitter(object):
         return sums, cov, fluxes, flux_vars, fam_err_cov, flux_cov
 
     def _get_guess(self, mb_obs, guess, Tsmooth):
+        """
+        get the guess as a gaussian mixture
+
+        Parameters
+        ----------
+        mb_obs: MultiBandObsList
+            The observations, used for the pixel scale
+        guess: ngmix.GMix, float or None
+            A gmix is returned as sent.  A float is a guess for the
+            pre-PSF T, with the center and shape drawn randomly.
+            For None the guess is round and centered, with T the
+            larger of Tsmooth and that of a two pixel fwhm
+        Tsmooth: float
+            The T of the gaussian smoothing
+
+        Returns
+        -------
+        guess_gmix: ngmix.GMix
+        """
         if isinstance(guess, GMix):
             return guess
 
@@ -1363,6 +1622,9 @@ class PAdmomFitter(object):
         return GMixModel(pars, 'gauss')
 
     def _get_rng(self):
+        """
+        get the random state, creating one if none was sent
+        """
         if self.rng is None:
             self.rng = np.random.RandomState()
         return self.rng
@@ -1371,6 +1633,11 @@ class PAdmomFitter(object):
 def _check_model(model):
     """
     check the model name, returning it.  Unknown names raise
+
+    Parameters
+    ----------
+    model: str
+        The model name
     """
     if model not in ('gauss', 'exp', 'dev', 'star'):
         raise ValueError(
@@ -1389,6 +1656,19 @@ def get_phase_angles(epoch, v0, u0):
     with the jacobian.  The phase for a mode is then
     exp(i (f1d[iy] alpha + f1d[ix] beta)) which is applied inside the
     numba kernels using two 1d phasor arrays.
+
+    Parameters
+    ----------
+    epoch: dict
+        A prep_epoch dict
+    v0, u0: float
+        The center, as sky offsets from the jacobian center
+
+    Returns
+    -------
+    alpha, beta: float
+        The phase angles for the row and col frequencies, in pixel
+        units
     """
     A = epoch['Atinv']
     alpha = epoch['drow'] + A[0, 0] * v0 + A[1, 0] * u0
@@ -1401,6 +1681,21 @@ def deweight(M, wt_cov):
     deweight the measured moments, returning the new weight covariance
 
     wt_cov_new = (M^{-1} - wt_cov^{-1})^{-1}
+
+    Parameters
+    ----------
+    M: (2, 2) array
+        The measured weighted moment matrix
+    wt_cov: (2, 2) array
+        The weight covariance under which M was measured
+
+    Returns
+    -------
+    new_wt_cov: (2, 2) array
+        The deweighted covariance; the input wt_cov when flagged
+    flags: int
+        Zero on success, LOW_DET when either input or the result is
+        not positive definite
     """
     detm = det2(M)
     if detm <= GMIX_LOW_DETVAL:

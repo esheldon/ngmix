@@ -352,6 +352,33 @@ def test_padmom_full_errors_matched():
     )
 
 
+def test_run_prepsf_admom_full_errors():
+    """run_prepsf_admom passes full_errors through to the
+    fitter"""
+    from ngmix.prepsfadmom import PAdmomFitter, run_prepsf_admom
+
+    rng = np.random.RandomState(23)
+    obs = _make_gal_obs(rng, 'exp')
+
+    def run(full_errors):
+        return run_prepsf_admom(
+            obs, guess=0.5, model='exp', ap_rad=0,
+            full_errors=full_errors, rng=np.random.RandomState(3),
+        )
+
+    rfit = PAdmomFitter(
+        model='exp', ap_rad=0, full_errors=True,
+        rng=np.random.RandomState(3),
+    ).go(obs, guess=0.5)
+    r0 = run(False)
+    r1 = run(True)
+    assert r1['flags'] == 0
+    for key in ['flux_err', 'T_err', 'e1err', 'e2err', 'flux_cov']:
+        assert np.all(r1[key] == rfit[key]), key
+    # the errors differ from the default sandwich errors
+    assert r1['T_err'] != r0['T_err']
+
+
 def test_padmom_full_errors_mismatch_mc():
     """dev truth fit with exp: the sandwich under-predicts the
     T and flux errors; the full errors stay calibrated"""

@@ -119,6 +119,29 @@ def kernel_ingredients(epoch, wt_cov, v0, u0):
     the shared per-epoch pieces of the kernel expressions
 
     Exported for use in kdeblend.
+
+    Parameters
+    ----------
+    epoch: dict
+        A prep_epoch dict
+    wt_cov: (2, 2) array
+        The weight covariance
+    v0, u0: float
+        The center offset in the epoch's phase convention (as for
+        get_phase_angles)
+
+    Returns
+    -------
+    Sv, Su: arrays
+        The components of wt_cov @ k at each mode
+    base: complex array
+        The weight times the centering phase times df2
+    yf, xf: int arrays
+        The signed row and col frequency indices of each mode
+    dim: int
+        The fft dimension
+    (wvv, wvu, wuu): floats
+        The weight covariance elements
     """
     alpha, beta = get_phase_angles(epoch, v0, u0)
     dim = epoch['dim']
@@ -465,6 +488,11 @@ def _sym_sandwich(A):
         (A X A)_00 = a^2 x0 + 2 a b x1 + b^2 x2
         (A X A)_01 = a b x0 + (a c + b^2) x1 + b c x2
         (A X A)_11 = b^2 x0 + 2 b c x1 + c^2 x2
+
+    Parameters
+    ----------
+    A: (2, 2) array
+        A symmetric matrix
     """
     a, b, c = A[0, 0], A[0, 1], A[1, 1]
     return np.array([
@@ -475,7 +503,14 @@ def _sym_sandwich(A):
 
 
 def _sym_inv(A):
-    """inverse of a symmetric 2x2 matrix"""
+    """
+    inverse of a symmetric 2x2 matrix
+
+    Parameters
+    ----------
+    A: (2, 2) array
+        A symmetric matrix
+    """
     det = A[0, 0] * A[1, 1] - A[0, 1] ** 2
     return np.array([
         [A[1, 1], -A[0, 1]], [-A[0, 1], A[0, 0]],
@@ -483,7 +518,14 @@ def _sym_inv(A):
 
 
 def sym3_mat(v):
-    """the symmetric 2x2 matrix from its (00, 01, 11) components"""
+    """
+    the symmetric 2x2 matrix from its (00, 01, 11) components
+
+    Parameters
+    ----------
+    v: array of size 3
+        The (00, 01, 11) components
+    """
     return np.array([[v[0], v[1]], [v[1], v[2]]])
 
 
@@ -510,6 +552,13 @@ def dw_derivs(M, wt_cov):
 
         dN/dM = S(N) S(M^-1)
         dN/dW = -S(N) S(W^-1)
+
+    Parameters
+    ----------
+    M: (2, 2) array
+        The measured weighted moment matrix
+    wt_cov: (2, 2) array
+        The weight covariance under which M was measured
 
     Returns
     -------
@@ -616,7 +665,14 @@ def padmom_full_covariance(
 def _padmom_full_covariance(
     fitter, epochs, nband, model_state, wt_cov, v0, u0, Tsmooth,
 ):
-    """the body of padmom_full_covariance; see that docstring"""
+    """
+    the body of padmom_full_covariance; see that docstring
+
+    Parameters
+    ----------
+    fitter, epochs, nband, model_state, wt_cov, v0, u0, Tsmooth:
+        As for padmom_full_covariance
+    """
     if model_state is None:
         # the plain gauss path passes no model state
         mtype = 'gauss'
@@ -792,6 +848,26 @@ def _epoch_sums_and_derivs(epochs, wt_cov, v0, u0):
     the per-epoch weighted data sums, their analytic derivatives
     with respect to (wt_cov, v, u), the accumulation factors
     weight * detAtinv, and the accumulated joint sums
+
+    Parameters
+    ----------
+    epochs: list of dict
+        The prep_epoch dicts, one per epoch
+    wt_cov: (2, 2) array
+        The weight covariance
+    v0, u0: float
+        The center, as sky offsets from the jacobian center
+
+    Returns
+    -------
+    esums: list of arrays of size 6
+        The per-epoch sums
+    Ds: list of (6, 5) arrays
+        The per-epoch dsums_dtheta
+    facs: list of float
+        The per-epoch accumulation factors
+    sums: array of size 6
+        The joint sums, sum_e facs[e] * esums[e]
     """
     from .prepsfadmom_nb import admom_ksums
 
@@ -841,6 +917,23 @@ def _measured_moment_response(sums, fixcen):
 
     and the rows of dm3 are these plus the product rule on the
     dv, du terms.
+
+    Parameters
+    ----------
+    sums: array of size 6
+        The joint [v, u, M1, M2, T, flux] sums
+    fixcen: bool
+        If True the center is not updated and the centroid
+        corrections are zero
+
+    Returns
+    -------
+    ddv, ddu: arrays of size 6
+        d(dv)/d(sums) and d(du)/d(sums)
+    m3: array of size 3
+        The measured (M1, M2, T) ratios
+    dm3: (3, 6) array
+        d(m3)/d(sums)
     """
     finv = 1.0 / sums[5]
     if fixcen:
@@ -855,7 +948,7 @@ def _measured_moment_response(sums, fixcen):
     ])
 
     def dratio(j):
-        # d(S_j / S_F)/d(sums)
+        """d(S_j / S_F)/d(sums) for the sum with index j"""
         out = np.zeros(6)
         out[j] = finv
         out[5] = -sums[j] * finv ** 2
@@ -933,6 +1026,40 @@ def _fill_family_rows(
     basis) are central differences of the closed-form prediction;
     _MBASIS_TO_SYM carries them to the sym3 basis that N_M acts
     on.
+
+    Parameters
+    ----------
+    Phi_s: (npar, 6) array
+        d(new state)/d(joint sums); the family rows are filled in
+        place
+    Phi_x: (npar, npar) array
+        The direct state dependence; the family rows are filled in
+        place
+    ifam: int
+        The index of the first family covariance entry in the packed
+        state
+    isw: int
+        The index of the first weight covariance entry in the packed
+        state
+    model_state: dict
+        The converged model dict
+    wt_cov: (2, 2) array
+        The converged weight covariance
+    new_wt_cov: (2, 2) array
+        The deweight of the measured moments under wt_cov
+    Tsmooth: float
+        The T of the gaussian smoothing
+    m3: array of size 3
+        The measured (M1, M2, T) ratios
+    dm3: (3, 6) array
+        d(m3)/d(sums)
+    dsym_dsums: (3, 6) array
+        dm3 carried to the sym3 basis
+    DWm_M, DWm_S: (3, 3) arrays
+        The derivatives of the deweight of the measured moments with
+        respect to the moments and the weight, from dw_derivs
+    fitter: PAdmomFitter
+        The fitter, for the step validation
     """
     from .models import model_ksums
 
@@ -943,8 +1070,15 @@ def _fill_family_rows(
     hs = 1.0e-6 * max(wt_cov[0, 0] + wt_cov[1, 1], 0.1)
 
     def mp3_of(sf3, sw3):
-        """the predicted (M1, M2, T) moment ratios of the family
-        under the given weight"""
+        """
+        the predicted (M1, M2, T) moment ratios of the family
+        under the given weight
+
+        Parameters
+        ----------
+        sf3, sw3: arrays of size 3
+            The family and weight covariances in the sym3 basis
+        """
         st = dict(model_state)
         st['cov'] = sym3_mat(sf3)
         st['F'] = np.ones(1)
@@ -1077,6 +1211,15 @@ def _gain1_shift_derivs(m3, mp0, sfam3):
                             + sgn_r (fac / 2) de_r dTf/dsfam3_c
 
     with dTf/dsfam3 = (1, 0, 1).
+
+    Parameters
+    ----------
+    m3: array of size 3
+        The measured (M1, M2, T) ratios
+    mp0: array of size 3
+        The predicted (M1, M2, T) ratios
+    sfam3: array of size 3
+        The family covariance in the sym3 basis
     """
     Tm = m3[2]
     Tp = mp0[2]
@@ -1140,6 +1283,19 @@ def _data_sums_cov(epochs, wt_cov, v0, u0):
     epoch-block-diagonal (independent noise per epoch).  None
     when an epoch is missing the stored transfer or the weight
     map
+
+    Parameters
+    ----------
+    epochs: list of dict
+        The prep_epoch dicts, one per epoch
+    wt_cov: (2, 2) array
+        The weight covariance
+    v0, u0: float
+        The center, as sky offsets from the jacobian center
+
+    Returns
+    -------
+    covS: (6 nep, 6 nep) array or None
     """
     nep = len(epochs)
     covS = np.zeros((6 * nep, 6 * nep))
@@ -1172,6 +1328,27 @@ def _gauss_flux_norm(epochs, wt_cov, nband, npar, isw):
         dlnN_b/dW = -(W_11, -2 W_01, W_00) / (2 det W)
 
     the same for every band.
+
+    Parameters
+    ----------
+    epochs: list of dict
+        The prep_epoch dicts, one per epoch
+    wt_cov: (2, 2) array
+        The weight covariance
+    nband: int
+        The number of bands
+    npar: int
+        The size of the packed state
+    isw: int
+        The index of the first weight covariance entry in the packed
+        state
+
+    Returns
+    -------
+    N: array of size nband
+        The normalizations
+    dlnN: (nband, npar) array
+        d(ln N)/d(state)
     """
     ws = np.zeros(nband)
     for ep in epochs:
@@ -1197,6 +1374,34 @@ def _model_flux_norm(
     _finalize computes it, and d(ln N)/d(state) by micro central
     differences of the closed form predictions.  None when a
     prediction is zero
+
+    Parameters
+    ----------
+    epochs: list of dict
+        The prep_epoch dicts, one per epoch
+    model_state: dict
+        The converged model dict
+    wt_cov: (2, 2) array
+        The weight covariance
+    Tsmooth: float
+        The T of the gaussian smoothing
+    nband: int
+        The number of bands
+    npar: int
+        The size of the packed state
+    ifam: int
+        The index of the first family covariance entry in the packed
+        state
+    isw: int
+        The index of the first weight covariance entry in the packed
+        state
+
+    Returns
+    -------
+    N: array of size nband
+        The normalizations
+    dlnN: (nband, npar) array
+        d(ln N)/d(state)
     """
     from .models import model_ksums
 
@@ -1213,6 +1418,8 @@ def _model_flux_norm(
     hs = 1.0e-6 * max(wt_cov[0, 0] + wt_cov[1, 1], 0.1)
 
     def upred_of(sf3, sw3v):
+        """the predicted unit flux sums per band for the family and
+        weight covariances sf3, sw3v in the sym3 basis"""
         st = dict(model_state)
         st['cov'] = sym3_mat(sf3)
         out = np.zeros(nband)
@@ -1286,6 +1493,41 @@ def _flux_covariance(
                 - F_b dlnN_b/dx                           dq/dx
 
     and Cov(F) = RF Cov(S) RF^T with RF = RF0 + gx R.
+
+    Parameters
+    ----------
+    F: array of size nband
+        The fluxes
+    N: array of size nband
+        The flux normalizations
+    dlnN: (nband, npar) array
+        d(ln N)/d(state)
+    epochs: list of dict
+        The prep_epoch dicts, one per epoch
+    Ds: list of (6, 5) arrays
+        The per-epoch dsums_dtheta
+    facs: list of float
+        The per-epoch accumulation factors
+    Tx: (npar, 6 nep) array
+        The state response to the per-epoch sums, R in the module
+        docstring
+    covS: (6 nep, 6 nep) array
+        The covariance of the per-epoch sums
+    fixcen: bool
+        If True the center is not part of the state
+    icen: int
+        The index of the first center entry in the packed state
+    isw: int
+        The index of the first weight covariance entry in the packed
+        state
+    npar: int
+        The size of the packed state
+    nband: int
+        The number of bands
+
+    Returns
+    -------
+    flux_cov: (nband, nband) array
     """
     nep = len(epochs)
     # dq/dS: the flux sum of each epoch feeds its band's flux

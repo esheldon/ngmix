@@ -21,6 +21,15 @@ def fill_phasors(dim, ang, pre, pim):
     fill the 1d phasors exp(i * f1d * ang) where f1d = 2 pi fftfreq(dim)
 
     Exported for use in kdeblend.
+
+    Parameters
+    ----------
+    dim: int
+        The fft dimension
+    ang: float
+        The phase angle in pixel units
+    pre, pim: arrays of size dim
+        Output real and imaginary parts of the phasors
     """
     fac = 2.0 * np.pi * ang / dim
     half = (dim + 1) // 2
@@ -137,8 +146,22 @@ def admom_finalize(
 
     Parameters
     ----------
-    Same as admom_ksums, plus
-
+    kim: complex 1d array
+        deconvolved, smoothed k-space image at the masked modes, with
+        no centering phases applied
+    iy, ix: integer 1d arrays
+        row/col frequency indices of each mode
+    dim: int
+        the fft dimension
+    alpha, beta: float
+        the centering phase angles in pixel units; the phase for a mode
+        is exp(i (f1d[iy] alpha + f1d[ix] beta))
+    kv, ku: 1d arrays
+        the k grids in sky coordinates at the masked modes
+    wvv, wvu, wuu: float
+        the weight covariance matrix
+    df2: float
+        1/dim^2 fft normalization
     err_fac2: 1d array
         The noise power times |smooth/kpsf|^2 at the masked modes: the
         per-mode variance of the raw image fft times the squared

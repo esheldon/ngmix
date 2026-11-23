@@ -295,6 +295,11 @@ def _family_comp_arrays(model_type):
     is the single component (1, 1): with cT = 1 the smoothed
     component covariance is fam_cov + Tsmooth/2, a single gaussian
     (multiplication by 1 is exact)
+
+    Parameters
+    ----------
+    model_type: str
+        'exp', 'dev' or 'gauss'
     """
     hit = _FAMILY_COMP_CACHE.get(model_type)
     if hit is None:
@@ -324,6 +329,24 @@ def _sandwich_preds_nb(
     preds[i, si] = (M1, M2, T ratios, S_F).  The logs and the
     difference quotients are taken by the caller.  Returns 1, or
     0 when any prediction is invalid (S_F not positive)
+
+    Parameters
+    ----------
+    fracs: array
+        Per component flux fractions of the family
+    cts: array
+        Per component T factors relative to the total T
+    fam0: array of size 3
+        The family (M1, M2, T) about which to perturb
+    h: float
+        The central difference step
+    sw00, sw01, sw11: float
+        The weight covariance
+    Tsmooth: float
+        The T of the gaussian smoothing
+    preds: (3, 2, 4) array
+        Output, indexed by perturbed axis, sign (0 for +h, 1 for -h)
+        and the entries (M1, M2, T ratios, S_F)
     """
     n = fracs.size
     smooth = Tsmooth / 2
