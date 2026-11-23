@@ -78,3 +78,26 @@ def get_ratio_error(a, b, var_a, var_b, cov_ab):
     var = np.clip(var, 0.0, np.inf)
     error = np.sqrt(var)
     return error
+
+
+def single_core_blas():
+    """
+    context manager limiting the BLAS thread pools to one thread
+    for the enclosed block.
+
+    ngmix is a single core library: parallelism belongs to the
+    caller, at the process level.  The dense linear algebra of
+    the full-error machinery is large enough for a threaded BLAS
+    to fan out to every core, which oversubscribes process
+    parallel work and measures slower even in a single process.
+    This limits the pools of the already loaded libraries, so
+    unlike the *_NUM_THREADS environment variables it does not
+    depend on import order.  A no-op when threadpoolctl is not
+    installed.
+    """
+    try:
+        from threadpoolctl import threadpool_limits
+    except ImportError:
+        from contextlib import nullcontext
+        return nullcontext()
+    return threadpool_limits(limits=1, user_api='blas')

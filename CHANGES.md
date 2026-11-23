@@ -27,8 +27,24 @@
       differentiable in the parameters everywhere; the window costs
       about a percent in the pixel loop and removes 1.5e-5 of a round
       gaussian's flux where the cut removed 3.7e-6
-    - The pre-PSF moment fitters (prepsfmom) now accept non-square
-      images, which are zero padded to square internally.
+    - Added ngmix.prepsfadmom with PAdmomFitter/run_prepsf_admom,
+      adaptive moments measured in Fourier space.  The PSF is
+      deconvolved and a common round gaussian smoothing is applied for
+      stability, so the fit measures pre-PSF moments.  Supports joint
+      fitting over multiple epochs and bands with a common center and
+      covariance, measuring fluxes per band with a common pre-seeing
+      aperture, so colors are independent of the per-band PSFs.
+      The model can be gauss, exp, dev, or star.  As with the other
+      prepsfmom fitters, use_noise_image=True takes the noise power
+      per mode from the attached noise image.  With full_errors=True
+      the errors are instead the full fixed-point covariance, which
+      stays calibrated when the model does not match the object and
+      provides the cross-band flux covariance (flux_cov); these
+      errors take the noise from the weight map and do not use the
+      noise image.
+    - The pre-PSF moment fitters (prepsfmom and prepsfadmom) now
+      accept non-square images, which are zero padded to square
+      internally.
 
 ### Bug fixes
 
@@ -47,7 +63,6 @@
     - Added new metacal psf reconvolution method 'azgauss',
       which is a noise-robust version of the old 'gauss'
       method.
-
 
 ## v2.4.1
 
