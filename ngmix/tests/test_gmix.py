@@ -9,7 +9,7 @@ from ngmix.gmix import make_gmix_model
 from ngmix.shape import g1g2_to_e1e2
 from ngmix.shape import Shape
 import ngmix.moments
-from ngmix.moments import MOMENTS_NAME_MAP
+from ngmix.moments import MOMENTS_NAME_MAP, MOMENTS_STD_NAME_MAP
 from ngmix import DiagonalJacobian, Observation
 
 
@@ -686,6 +686,176 @@ def test_higher_order_nan():
             continue
         assert np.isnan(res[key])
 
+
+@pytest.mark.parametrize('do_std_higher', [False, True])
+def test_std_higher_order_smoke(do_std_higher):
+    fwhm = 0.9
+    T = ngmix.moments.fwhm_to_T(fwhm)
+    scale = 0.263
+
+    obj = galsim.Gaussian(fwhm=fwhm)
+    im = obj.drawImage(
+        scale=scale,
+    ).array
+
+    cen = (np.array(im.shape) - 1) / 2
+    jacobian = ngmix.DiagonalJacobian(row=cen[0], col=cen[1], scale=scale)
+    obs = Observation(image=im, jacobian=jacobian)
+
+    wt = ngmix.GMixModel(
+        pars=[0, 0, 0, 0, T, 1.0],
+        model='gauss',
+    )
+
+    res = wt.get_weighted_moments(
+        obs, with_higher_order=do_std_higher,
+        standard_higher_order=do_std_higher,
+    )
+    if do_std_higher:
+        assert res['sums'].shape == (15, )
+        assert res['sums_cov'].shape == (15, 15)
+
+        for name, ind in MOMENTS_STD_NAME_MAP.items():
+            # make sure the index is valid
+            res['sums'][ind]
+            assert name in res and np.isfinite(res[name])
+            err_name = f'{name}_err'
+            assert err_name in res and np.isfinite(res[err_name])
+    else:
+        assert res['sums'].shape == (6, )
+        assert res['sums_cov'].shape == (6, 6)
+
+        for name, ind in MOMENTS_STD_NAME_MAP.items():
+            if ind > 5:
+                assert name not in res
+                    
+
+def test_std_higher_order():
+    rng = np.random.RandomState(seed=35)
+    fwhm = 0.9
+    T = ngmix.moments.fwhm_to_T(fwhm)
+    sigma = ngmix.moments.fwhm_to_sigma(fwhm)
+    scale = 0.125
+    image_size = 107
+
+    ntrial = 100
+
+    rho4s = np.zeros(ntrial)
+
+    M4_1 = np.zeros(ntrial)
+    M4_2 = np.zeros(ntrial)
+
+    SM30 = np.zeros(ntrial)
+    SM21 = np.zeros(ntrial)
+    SM12 = np.zeros(ntrial)
+    SM03 = np.zeros(ntrial)
+
+    for i in range(ntrial):
+        obj = galsim.Gaussian(fwhm=fwhm)
+
+        row_offset, col_offset = rng.uniform(low=-0.5, high=0.5, size=2)
+
+        im = obj.drawImage(
+            nx=image_size,
+            ny=image_size,
+            offset=(col_offset, row_offset),
+            scale=scale,
+            method='no_pixel',
+        ).array
+
+        imcen = (np.array(im.shape) - 1) / 2
+
+        cen = imcen + (row_offset, col_offset)
+
+        jacobian = ngmix.DiagonalJacobian(row=cen[0], col=cen[1], scale=scale)
+
+        obs = Observation(image=im, jacobian=jacobian)
+
+        wt = ngmix.GMixModel(
+            pars=[0, 0, 0, 0, T, 1.0],
+            model='gauss',
+        )
+
+        res = wt.get_weighted_moments(obs, with_higher_order=True, standard_higher_order=True)
+
+        # these will be non zero
+        rho4s[i] = res['SM40'] + 2*res['SM22'] + res['SM04']
+
+        # these are ~zero
+        M4_1[i] = res['SM40'] - res['SM04']
+        M4_2[i] = 2*(res['SM31'] + res['SM13'])
+        
+        SM30[i] = res['SM30']
+        SM21[i] = res['SM21']
+        SM12[i] = res['SM12']
+        SM03[i] = res['SM03']
+
+    rho4_mean = rho4s.mean()
+    rho4_std = rho4s.std()
+    print(f'rho4: {rho4_mean:.3g} std: {rho4_std:.3g}')
+    assert np.abs(rho4_mean - 2) < 1e-5
+
+    M4_1_mean = M4_1.mean()
+    assert np.abs(M4_1_mean) < 1e-5
+
+    M4_2_mean = M4_2.mean()
+    assert np.abs(M4_2_mean) < 1e-5
+
+    SM30_mean = SM30.mean()
+    assert np.abs(SM30_mean) < 1e-5
+
+    SM03_mean = SM03.mean()
+    assert np.abs(SM03_mean) < 1e-5
+
+    SM21_mean = SM21.mean()
+    assert np.abs(SM21_mean) < 1e-5
+
+    SM12_mean = SM12.mean()
+    assert np.abs(SM12_mean) < 1e-5
+
+
+def test_std_higher_order_nan():
+    rng = np.random.RandomState(seed=35)
+    fwhm = 0.9
+    T = ngmix.moments.fwhm_to_T(fwhm)
+    scale = 0.125
+    image_size = 107
+
+    obj = galsim.Gaussian(fwhm=fwhm)
+
+    row_offset, col_offset = rng.uniform(low=-0.5, high=0.5, size=2)
+
+    im = obj.drawImage(
+        nx=image_size,
+        ny=image_size,
+        offset=(col_offset, row_offset),
+        scale=scale,
+        method='no_pixel',
+    ).array
+
+    imcen = (np.array(im.shape) - 1) / 2
+
+    cen = imcen + (row_offset, col_offset)
+
+    jacobian = ngmix.DiagonalJacobian(row=cen[0], col=cen[1], scale=scale)
+
+    obs = Observation(image=im, jacobian=jacobian)
+
+    wt = ngmix.GMixModel(
+        pars=[0, 0, 0, 0, T, 1.0],
+        model='gauss',
+    )
+
+    res0 = wt.get_weighted_sums(obs, with_higher_order=True, standard_higher_order=True)
+    res0['sums'][5] = -1
+
+    res = ngmix.gmix.get_weighted_moments_stats(res0)
+
+    for key in MOMENTS_STD_NAME_MAP:
+        if key in ['M00', 'MF']:
+            continue
+        assert np.isnan(res[key])
+        
 
 @pytest.mark.parametrize('model', ['gauss', 'turb', 'coellip5', 'offset5'])
 def test_gmix_scale_T(model):
