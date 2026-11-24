@@ -16,14 +16,18 @@ class GaussMom(object):
         If set to True, return higher order moments in the sums/sums_cov
         arrays.  See ngmix.moments.MOMENTS_NAME_MAP for a map between
         name and index.
+    standard_higher_order: bool, optional
+        If set to True and with_higher_order is True, return standardized
+        higher order moments, calculated in a whitened basis. See
+        ngmix.moments.MOMENTS_STD_NAME_MAP for a map between name and index.
     """
 
     kind = "wmom"
 
-    def __init__(self, fwhm, with_higher_order=False, hom_standard=False):
+    def __init__(self, fwhm, with_higher_order=False, standard_higher_order=False):
         self.fwhm = fwhm
         self.with_higher_order = with_higher_order
-        self.hom_standard = hom_standard
+        self.standard_higher_order = standard_higher_order
         self._set_mompars()
 
     def go(self, obs):
@@ -54,7 +58,7 @@ class GaussMom(object):
 
         res = self.weight.get_weighted_moments(
             obs=obs, with_higher_order=self.with_higher_order,
-            hom_standard=self.hom_standard,
+            standard_higher_order=self.standard_higher_order,
         )
 
         if res['flags'] != 0:

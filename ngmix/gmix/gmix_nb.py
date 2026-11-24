@@ -975,11 +975,13 @@ def get_higher_order_weighted_sums(wt, pixels, res, maxrad):
                 for j in range(nmom):
                     res["sums_cov"][i, j] += w2 * var * F[i] * F[j]
 
+
+
 @njit
-def get_standard_higher_order_weighted_sums(wt, pixels, res, maxrad):
+def get_standardized_higher_order_weighted_sums(wt, pixels, res, maxrad):
     """
-    Do sums for calculating the standardized weighted moments following
-    Zhang et al. 2023b.
+    Do sums for calculating the standardized weighted moments a la
+    Zhang et al. 2023b
 
     Parameters
     ----------
@@ -1002,7 +1004,9 @@ def get_standard_higher_order_weighted_sums(wt, pixels, res, maxrad):
     nmom = F.size
 
     # need to inverse and square root 2nd moment matrix from gaussian weight
-    A_invsqrt, B_invsqrt, C_invsqrt = get_matrix_inverse_squareroot(wt['irr'], wt['irc'], wt['icc'])
+    A_invsqrt, B_invsqrt, C_invsqrt = get_matrix_inverse_squareroot(
+        wt['icc'][0], wt['irc'][0], wt['irr'][0]
+    )
 
     n_pixels = pixels.size
     for i_pixel in range(n_pixels):
@@ -1013,42 +1017,43 @@ def get_standard_higher_order_weighted_sums(wt, pixels, res, maxrad):
         v = pixel["v"] - vcen
         u = pixel["u"] - ucen
 
+        # note v,u are not the u,v of Zhang notation
         u_std = A_invsqrt * u + B_invsqrt * v
         v_std = B_invsqrt * u + C_invsqrt * v
-        
-        r2 = u_std * u_std + v_std * v_std
+
+        r2 = u * u + v * v
         if r2 < maxrad2:
 
-            weight = numpy.exp(-0.5 * r2)
+            weight = gmix_eval_pixel(wt, pixel)
             var = 1.0 / (pixel["ierr"] * pixel["ierr"])
 
             wdata = weight * pixel["val"]
             w2 = weight * weight
 
-            u2 = u_std ** 2
-            v2 = v_std ** 2
-            vu = v_std * u_std
-
             # the order for first 6 matches get_weighted_sums
             F[0] = pixel["v"]
             F[1] = pixel["u"]
-            F[2] = u2 - v2
-            F[3] = 2 * vu
+            F[2] = u * u - v * v
+            F[3] = 2 * v * u
             F[4] = r2
             F[5] = 1.0
-
+            
+            vs2 = v_std ** 2
+            us2 = u_std ** 2
+            vsus = v_std * u_std
+            
             # third
-            F[6] = u2 * u_std
-            F[7] = u2 * v_std
-            F[8] = u_std * v2
-            F[9] = v2 * v_std
+            F[6] = u_std * us2
+            F[7] = v_std * us2
+            F[8] = vs2 * u_std
+            F[9] = vs2 * v_std
 
             # fourth
-            F[10] = u2 * u2
-            F[11] = u2 * vu
-            F[12] = vu * vu
-            F[13] = vu * v2
-            F[14] = v2 * v2
+            F[10] = us2 * us2
+            F[11] = vsus * us2 
+            F[12] = vsus * vsus
+            F[13] = vs2 * vsus
+            F[14] = vs2 * vs2
 
             res["wsum"] += weight
             res["npix"] += 1
