@@ -60,6 +60,45 @@ MOMENTS_NAME_MAP = {
     "M44": 16,
 }
 
+MOMENTS_STD_NAME_MAP = {
+    # v
+    "Mv": 0,
+    # u
+    "Mu": 1,
+    # u^2 - v^2
+    "M1": 2,
+    # v * u
+    "M2": 3,
+    # v^2 + u^2
+    "MT": 4,
+    # 1 (flux)
+    "MF": 5,
+
+    # notation from Zhang et al. 2023b
+    # standardized higher order moments
+
+    # third order
+    # x^3
+    "SM30": 6,
+    # x^2 * y
+    "SM21": 7,
+    # x * y^2
+    "SM12": 8,
+    # y^3
+    "SM03": 9,
+
+    # fourth order
+    # x^4
+    "SM40": 10,
+    # x^3 * y
+    "SM31": 11,
+    # x^2 * y^2
+    "SM22": 12,
+    # x * y^3
+    "SM13": 13,
+    # y^4
+    "SM04": 14,
+}
 
 def sigma_to_fwhm(sigma):
     """
@@ -485,14 +524,14 @@ def make_mom_result(sums, sums_cov, sums_norm=None):
         A dictionary of results.
     """
     # for safety...
-    if len(sums) != 6 and len(sums) != 17:
+    if len(sums) != 6 and len(sums) != 15 and len(sums) != 17:
         raise ValueError(
-            "You must pass exactly 6 or 17 unnormalized moments in the order "
+            "You must pass exactly 6, 15 or 17 unnormalized moments in the order "
             "[Mv, Mu, M1, M2, MT, MF, ...] for ngmix.moments.make_mom_result."
         )
-    if sums_cov.shape != (6, 6) and sums_cov.shape != (17, 17):
+    if sums_cov.shape != (6, 6) and sums_cov.shape != (15, 15) and sums_cov.shape != (17, 17):
         raise ValueError(
-            "You must pass a 6x6 or 17x17 matrix for ngmix.moments.make_mom_result."
+            "You must pass a 6x6, 15x15 or 17x17 matrix for ngmix.moments.make_mom_result."
         )
 
     mv_ind = MOMENTS_NAME_MAP["Mv"]
@@ -620,9 +659,17 @@ def _add_moments_by_name(res):
 
     # add in named sums normalized by flux sum (weight * image).sum()
     # we don't store flags or errors for these
-    mkeys = list(MOMENTS_NAME_MAP.keys())
+    
+    # if nmom==15, use MOMENTS_STD_NAME_MAP
+    if len(sums) == 15:
+        MOM_NAME_MAP = MOMENTS_STD_NAME_MAP
+    # otherwise, use MOMENTS_NAME_MAP
+    else:
+        MOM_NAME_MAP = MOMENTS_NAME_MAP
+        
+    mkeys = list(MOM_NAME_MAP.keys())
     for name in mkeys:
-        ind = MOMENTS_NAME_MAP[name]
+        ind = MOM_NAME_MAP[name]
         if ind > sums.size-1:
             continue
 

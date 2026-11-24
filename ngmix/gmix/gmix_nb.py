@@ -976,6 +976,103 @@ def get_higher_order_weighted_sums(wt, pixels, res, maxrad):
                     res["sums_cov"][i, j] += w2 * var * F[i] * F[j]
 
 
+
+@njit
+def get_standardized_higher_order_weighted_sums(wt, pixels, res, maxrad):
+    """
+    Do sums for calculating the standardized weighted moments a la
+    Zhang et al. 2023b
+
+    Parameters
+    ----------
+    wt: array
+        The gaussian mixture with dtype ngmix.gmix.gmix._gauss2d_dtype
+    pixels: array
+        Array of pixels
+    res: array
+        The result array
+    maxrad: float
+        Maximum radius in u, v coordinates
+    """
+
+    maxrad2 = maxrad ** 2
+
+    vcen = wt["row"][0]
+    ucen = wt["col"][0]
+
+    F = res["F"]
+    nmom = F.size
+
+    # need to inverse and square root 2nd moment matrix from gaussian weight
+    A_invsqrt, B_invsqrt, C_invsqrt = get_matrix_inverse_squareroot(
+        wt['icc'][0], wt['irc'][0], wt['irr'][0]
+    )
+
+    n_pixels = pixels.size
+    for i_pixel in range(n_pixels):
+
+        pixel = pixels[i_pixel]
+
+        # v and u are really dv and du
+        v = pixel["v"] - vcen
+        u = pixel["u"] - ucen
+
+        # note v,u are not the u,v of Zhang notation
+        u_std = A_invsqrt * u + B_invsqrt * v
+        v_std = B_invsqrt * u + C_invsqrt * v
+
+        r2 = u * u + v * v
+        if r2 < maxrad2:
+
+            weight = gmix_eval_pixel(wt, pixel)
+            var = 1.0 / (pixel["ierr"] * pixel["ierr"])
+
+            wdata = weight * pixel["val"]
+            w2 = weight * weight
+
+            # the order for first 6 matches get_weighted_sums
+            F[0] = pixel["v"]
+            F[1] = pixel["u"]
+            F[2] = u * u - v * v
+            F[3] = 2 * v * u
+            F[4] = r2
+            F[5] = 1.0
+            
+            vs2 = v_std ** 2
+            us2 = u_std ** 2
+            vsus = v_std * u_std
+            
+            # third
+            F[6] = u_std * us2
+            F[7] = v_std * us2
+            F[8] = vs2 * u_std
+            F[9] = vs2 * v_std
+
+            # fourth
+            F[10] = us2 * us2
+            F[11] = vsus * us2 
+            F[12] = vsus * vsus
+            F[13] = vs2 * vsus
+            F[14] = vs2 * vs2
+
+            res["wsum"] += weight
+            res["npix"] += 1
+
+            for i in range(nmom):
+                res["sums"][i] += wdata * F[i]
+                for j in range(nmom):
+                    res["sums_cov"][i, j] += w2 * var * F[i] * F[j]
+
+@njit
+def get_matrix_inverse_squareroot(a, b, c):
+    """
+    get the square root of symmetric 2x2 matrix [[a,b],[b,c]]
+    """
+    s = numpy.sqrt(a * c - b * b)          # sqrt(det A)
+    t = numpy.sqrt(a + c + 2 * s)          # trace of the sqrt
+    return (c + s) / (s * t), -b / (s * t), (a + s) / (s * t)
+
+
 @njit
 def get_loglike(gmix, pixels):
     """
