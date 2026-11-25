@@ -8,11 +8,13 @@ reference, and the sums covariance against empirical draws
 """
 import galsim
 import numpy as np
+import pytest
 
 import ngmix
 from ngmix.prepsfadmom.prep import prep_epoch
 from ngmix.prepsfadmom.full_errors import (
     moment_kernels, dsums_dtheta, influence_kernels, sums_cov,
+    noise_autocov_power, sums_cov_noise,
 )
 
 SCALE = 0.2
@@ -275,7 +277,237 @@ def test_full_errors_sums_cov_empirical():
     assert np.all(np.abs(dd - 1) < 0.08)
 
 
-def _make_gal_obs(rng, profile, noise=3.0):
+def _boxcar_noise(rng, shape, sigma):
+    """stationary correlated noise: white noise averaged over a
+    3x3 boxcar, with per-pixel standard deviation sigma"""
+    ny, nx = shape
+    w = rng.normal(size=(ny + 2, nx + 2))
+    n = sum(
+        w[i:i + ny, j:j + nx] for i in range(3) for j in range(3)
+    )
+    return n * (sigma / 3.0)
+
+
+def _boxcar_autocov(sigma):
+    """the autocovariance of _boxcar_noise at lags -2..2"""
+    tri = np.array([1.0, 2.0, 3.0, 2.0, 1.0]) / 3.0
+    return np.outer(tri, tri) * sigma ** 2
+
+
+def _exact_sums_cov(h, acov):
+    """sum_pq h_a(p) C(p - q) h_b(q) by direct convolution"""
+    import scipy.ndimage
+
+    hc = np.array([
+        scipy.ndimage.convolve(hh, acov, mode='constant')
+        for hh in h
+    ])
+    return np.tensordot(h, hc, axes=([1, 2], [1, 2]))
+
+
+def _bad_pixel_weight(weight):
+    """the weight map with bad rows and columns crossing the
+    object"""
+    weight = weight.copy()
+    weight[20:26, :] = 0.0
+    weight[:, 28:31] = 0.0
+    return weight
+
+
+def test_full_errors_sums_cov_noise_white():
+    """a white noise image reproduces the weight map covariance
+    on average"""
+    rng = np.random.RandomState(41)
+    obs = _make_obs(rng)
+    ep = _prep(obs)
+    wt_cov = np.array([[0.5, 0.05], [0.05, 0.6]])
+    G = moment_kernels(ep, wt_cov, 0.0, 0.0)
+    h = influence_kernels(ep, G, obs.image.shape)
+
+    for weight in (obs.weight, _bad_pixel_weight(obs.weight)):
+        cov = sums_cov(h, weight)
+        ntrial = 400
+        mean = np.zeros((6, 6))
+        for _ in range(ntrial):
+            noise = rng.normal(scale=3.0, size=obs.image.shape)
+            covn = sums_cov_noise(h, noise, weight=weight)
+            assert np.allclose(covn, covn.T)
+            mean += covn / ntrial
+        dd = np.diag(mean) / np.diag(cov)
+        assert np.all(np.abs(dd - 1) < 0.06), dd
+
+
+def test_full_errors_sums_cov_noise_correlated():
+    """for correlated noise the noise image covariance matches
+    the exact contraction with the known autocovariance, with
+    and without bad pixels, where the weight map covariance is
+    far too small"""
+    rng = np.random.RandomState(43)
+    obs = _make_obs(rng)
+    ep = _prep(obs)
+    wt_cov = np.array([[0.5, 0.05], [0.05, 0.6]])
+    G = moment_kernels(ep, wt_cov, 0.0, 0.0)
+    h = influence_kernels(ep, G, obs.image.shape)
+    acov = _boxcar_autocov(3.0)
+
+    for weight in (obs.weight, _bad_pixel_weight(obs.weight)):
+        good = weight > 0
+        exact = _exact_sums_cov(h * good, acov)
+        white = sums_cov(h, weight)
+        assert np.all(np.diag(exact) > 3 * np.diag(white))
+
+        ntrial = 400
+        mean = np.zeros((6, 6))
+        for _ in range(ntrial):
+            noise = _boxcar_noise(rng, obs.image.shape, 3.0)
+            # bad pixels of the noise image can hold anything
+            noise[~good] = np.nan
+            mean += sums_cov_noise(h, noise, weight=weight) / ntrial
+        dd = np.diag(mean) / np.diag(exact)
+        assert np.all(np.abs(dd - 1) < 0.06), dd
+        # and the correlation between the T and flux sums
+        sd = np.sqrt(np.diag(exact))
+        assert abs(
+            mean[4, 5] / np.sqrt(mean[4, 4] * mean[5, 5])
+            - exact[4, 5] / (sd[4] * sd[5])
+        ) < 0.03
+
+
+def test_full_errors_noise_autocov_measured():
+    """the lag array measured from a large field matches the
+    known autocovariance, with and without bad pixels, and is
+    zero beyond the correlation length"""
+    from ngmix.prepsfadmom.full_errors import noise_autocov
+
+    rng = np.random.RandomState(61)
+    sigma = 3.0
+    noise = _boxcar_noise(rng, (300, 280), sigma)
+    truth = np.zeros((13, 13))
+    truth[4:9, 4:9] = _boxcar_autocov(sigma)
+
+    weight = np.ones(noise.shape)
+    weight[100:130, :] = 0.0
+    weight[:, 40:44] = 0.0
+    bad = noise.copy()
+    bad[weight == 0] = np.nan
+    for acov in (
+        noise_autocov(noise, max_lag=6),
+        noise_autocov(bad, weight=weight, max_lag=6),
+    ):
+        assert acov.shape == (13, 13)
+        assert np.allclose(acov, acov[::-1, ::-1])
+        assert np.all(np.abs(acov - truth) < 0.03 * sigma ** 2)
+
+    # lags beyond the image are zero
+    small = noise_autocov(noise[:4, :4], max_lag=6)
+    assert small.shape == (13, 13)
+    assert np.all(small[:3] == 0) and np.all(small[:, 10:] == 0)
+    assert small[6, 6] > 0
+
+    assert np.all(noise_autocov(noise, weight=0 * weight) == 0)
+
+
+def test_full_errors_sums_cov_noise_autocov():
+    """a sent autocovariance gives the exact contraction, with
+    no dependence on a noise image; zero lag alone is white
+    noise"""
+    rng = np.random.RandomState(67)
+    obs = _make_obs(rng)
+    ep = _prep(obs)
+    wt_cov = np.array([[0.5, 0.05], [0.05, 0.6]])
+    G = moment_kernels(ep, wt_cov, 0.0, 0.0)
+    h = influence_kernels(ep, G, obs.image.shape)
+    acov = _boxcar_autocov(3.0)
+    # the same with zero padding to larger lags, also beyond
+    # the image
+    big = np.zeros((201, 201))
+    big[98:103, 98:103] = acov
+
+    for weight in (obs.weight, _bad_pixel_weight(obs.weight)):
+        good = weight > 0
+        exact = _exact_sums_cov(h * good, acov)
+        # entries that vanish by symmetry are rounding noise
+        atol = 1.0e-10 * np.abs(exact).max()
+        for a in (acov, big):
+            cov = sums_cov_noise(h, weight=weight, autocov=a)
+            assert np.allclose(cov, exact, rtol=1.0e-8, atol=atol)
+        # the noise image is not used
+        noise = rng.normal(size=obs.image.shape)
+        cov = sums_cov_noise(h, noise, weight=weight, autocov=acov)
+        assert np.allclose(cov, exact, rtol=1.0e-8, atol=atol)
+
+        var = 1.0 / obs.weight.max()
+        white = sums_cov_noise(
+            h, weight=weight, autocov=np.array([[var]]),
+        )
+        assert np.allclose(
+            white, sums_cov(h, weight), rtol=1.0e-8, atol=atol,
+        )
+
+    assert np.all(sums_cov_noise(
+        h, weight=0 * obs.weight, autocov=acov,
+    ) == 0)
+    with pytest.raises(ValueError):
+        sums_cov_noise(h, weight=obs.weight)
+    with pytest.raises(ValueError):
+        sums_cov_noise(h, weight=obs.weight, autocov=np.ones((4, 4)))
+
+
+def test_full_errors_sums_cov_noise_no_good_pixels():
+    """with no good pixels there is no noise estimate and the
+    covariance is zero, without warnings; the single-object
+    assembly then reports that it cannot be evaluated"""
+    import warnings
+    from ngmix.prepsfadmom.full_errors import _data_sums_cov
+
+    rng = np.random.RandomState(47)
+    obs = _make_obs(rng)
+    ep = _prep(obs)
+    wt_cov = np.array([[0.5, 0.05], [0.05, 0.6]])
+    G = moment_kernels(ep, wt_cov, 0.0, 0.0)
+    h = influence_kernels(ep, G, obs.image.shape)
+    noise = rng.normal(scale=3.0, size=obs.image.shape)
+    zweight = np.zeros_like(obs.weight)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        power, shape, good = noise_autocov_power(noise, weight=zweight)
+        assert power is None
+        assert not good.any()
+        cov = sums_cov_noise(h, noise, weight=zweight)
+        assert cov.shape == (6, 6) and np.all(cov == 0)
+
+        # a single good pixel: defined and finite
+        weight1 = zweight.copy()
+        weight1[24, 24] = 1.0 / 9.0
+        cov = sums_cov_noise(h, noise, weight=weight1)
+        assert np.all(np.isfinite(cov))
+        assert np.allclose(
+            cov[5, 5], (h[5, 24, 24] * noise[24, 24]) ** 2,
+        )
+
+        # the single-object assembly: None, so that the fitter
+        # keeps the default errors, with and without a noise
+        # image
+        for with_noise in (False, True):
+            tep = dict(ep)
+            tep['obs_weight'] = zweight
+            if with_noise:
+                tep['obs_noise'] = noise
+            assert _data_sums_cov([tep], wt_cov, 0.0, 0.0) is None
+
+            tep['obs_weight'] = obs.weight
+            covS = _data_sums_cov([tep], wt_cov, 0.0, 0.0)
+            assert covS is not None and covS[5, 5] > 0
+
+        # a noise image that is zero carries no noise either
+        tep = dict(ep)
+        tep['obs_weight'] = obs.weight
+        tep['obs_noise'] = np.zeros_like(noise)
+        assert _data_sums_cov([tep], wt_cov, 0.0, 0.0) is None
+
+
+def _make_gal_obs(rng, profile, noise=3.0, correlated=False):
     psf = galsim.Gaussian(fwhm=PSF_FWHM)
     psf_im = psf.drawImage(
         nx=PSF_DIM, ny=PSF_DIM, scale=SCALE,
@@ -300,11 +532,19 @@ def _make_gal_obs(rng, profile, noise=3.0):
     im = galsim.Convolve(gal, psf).drawImage(
         nx=dim, ny=dim, scale=SCALE,
     ).array
-    im = im + rng.normal(scale=noise, size=im.shape)
+    if correlated:
+        # correlated noise, with an independent realization
+        # attached as the noise image
+        im = im + _boxcar_noise(rng, im.shape, noise)
+        noise_im = _boxcar_noise(rng, im.shape, noise)
+    else:
+        im = im + rng.normal(scale=noise, size=im.shape)
+        noise_im = None
     cen = (dim - 1) / 2
     return ngmix.Observation(
         im,
         weight=np.full(im.shape, 1.0 / noise ** 2),
+        noise=noise_im,
         jacobian=ngmix.DiagonalJacobian(
             scale=SCALE, row=cen, col=cen,
         ),
@@ -500,6 +740,108 @@ def test_padmom_full_errors_fixcen_epochs_mc():
     # the sandwich reads ~1.22 (T) and ~1.18 (flux) here
     assert 0.85 < rT < 1.15
     assert 0.85 < rF < 1.15
+
+
+def test_padmom_full_errors_noise_image_mc():
+    """correlated noise with use_noise_image: the full errors
+    take the noise from the noise image and stay calibrated for
+    dev truth fit with exp, where the weight map errors are far
+    too small"""
+    from ngmix.prepsfadmom import PAdmomFitter
+
+    def run(obs, seed, use_noise_image):
+        return PAdmomFitter(
+            model='exp', ap_rad=1.5, full_errors=True,
+            use_noise_image=use_noise_image,
+            rng=np.random.RandomState(seed),
+        ).go(obs, guess=0.5)
+
+    ntrial = 200
+    rng = np.random.RandomState(53)
+    T, Te, F, Fe = [], [], [], []
+    for k in range(ntrial):
+        obs = _make_gal_obs(rng, 'dev', noise=1.0, correlated=True)
+        res = run(obs, k, True)
+        if res['flags'] != 0 or res['T_flags'] != 0:
+            continue
+        T.append(res['T'])
+        Te.append(res['T_err'])
+        F.append(res['flux'])
+        Fe.append(res['flux_err'])
+    T, Te = np.array(T), np.array(Te)
+    F, Fe = np.array(F), np.array(Fe)
+    assert len(T) > 0.9 * ntrial
+
+    rT = T.std() / np.sqrt(np.mean(Te ** 2))
+    rF = F.std() / np.sqrt(np.mean(Fe ** 2))
+    assert 0.85 < rT < 1.15
+    assert 0.85 < rF < 1.15
+
+    # the same fit with the noise from the weight map, which
+    # holds the per-pixel variance but not the correlations
+    res0 = run(obs, k, False)
+    assert res0['flags'] == 0
+    assert res['flux'] == res0['flux']
+    assert res['flux_err'] > 2 * res0['flux_err']
+    assert res['T_err'] > 2 * res0['T_err']
+
+
+def test_padmom_full_errors_noise_autocov_mc():
+    """correlated noise with a sent autocovariance: the full
+    errors are calibrated as with the noise image, do not depend
+    on the noise image, and scatter much less from object to
+    object"""
+    from ngmix.prepsfadmom import PAdmomFitter, run_prepsf_admom
+
+    acov = _boxcar_autocov(1.0)
+
+    def run(obs, seed, noise_autocov):
+        return PAdmomFitter(
+            model='exp', ap_rad=1.5, full_errors=True,
+            use_noise_image=True, noise_autocov=noise_autocov,
+            rng=np.random.RandomState(seed),
+        ).go(obs, guess=0.5)
+
+    ntrial = 200
+    rng = np.random.RandomState(71)
+    T, Te, F, Fe, Fe_im = [], [], [], [], []
+    for k in range(ntrial):
+        obs = _make_gal_obs(rng, 'dev', noise=1.0, correlated=True)
+        res = run(obs, k, acov)
+        res_im = run(obs, k, None)
+        if (res['flags'] != 0 or res['T_flags'] != 0
+                or res_im['flags'] != 0):
+            continue
+        assert res['flux'] == res_im['flux']
+        T.append(res['T'])
+        Te.append(res['T_err'])
+        F.append(res['flux'])
+        Fe.append(res['flux_err'])
+        Fe_im.append(res_im['flux_err'])
+    T, Te = np.array(T), np.array(Te)
+    F, Fe, Fe_im = np.array(F), np.array(Fe), np.array(Fe_im)
+    assert len(T) > 0.9 * ntrial
+
+    rT = T.std() / np.sqrt(np.mean(Te ** 2))
+    rF = F.std() / np.sqrt(np.mean(Fe ** 2))
+    assert 0.85 < rT < 1.15
+    assert 0.85 < rF < 1.15
+
+    # the same level as the noise image errors, without their
+    # scatter from the estimate of the noise; what is left is
+    # the dependence of the errors on the noisy fit itself
+    assert abs(np.mean(Fe) / np.mean(Fe_im) - 1) < 0.05
+    assert Fe.std() / Fe.mean() < 0.75 * Fe_im.std() / Fe_im.mean()
+
+    # one array for all bands or one per band; the noise image
+    # is not needed
+    res1 = run_prepsf_admom(
+        obs, guess=0.5, model='exp', full_errors=True,
+        noise_autocov=[acov], rng=np.random.RandomState(k),
+    )
+    assert res1['flux_err'] == res['flux_err']
+    with pytest.raises(ValueError):
+        run(obs, k, [acov, acov])
 
 
 def test_padmom_full_errors_apodized_mc():

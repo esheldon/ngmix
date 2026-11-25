@@ -76,12 +76,22 @@ order, so
     Cov(x) = R Cov(S) R^T
     Cov(S) = H diag(var) H^T      (sums_cov)
 
-with var the per-pixel variance from the weight map.  The pixels
-are treated as independent: a noise image attached to the
-observation (use_noise_image) is not used here, so correlated
-noise is not accounted for in these errors.  Both Phi_x and Phi_S are
-evaluated at the observed sums, not at sums predicted from the
-converged model; this is what the sandwich path substitutes.
+with var the per-pixel variance from the weight map, the pixels
+being independent.  For stationary correlated noise, with
+autocovariance C estimated from a noise image,
+
+    Cov(S) = H C H^T              (sums_cov_noise)
+
+which is used when the fitter is run with use_noise_image.  The
+noise image of a small stamp gives a noisy C: the errors of a
+faint isolated object scatter by about 20 percent from the
+estimate alone.  C can instead be measured once from a larger
+region with the same noise (noise_autocov) and sent to the fitter
+as noise_autocov.
+
+Both Phi_x and Phi_S are evaluated at the observed sums, not at
+sums predicted from the converged model; this is what the
+sandwich path substitutes.
 
 Derived quantities.  A quantity q(x, S) that is not a state
 coordinate, such as a flux (a flux sum over a state-dependent
@@ -103,18 +113,31 @@ Sheldon (2026), "Measurement covariances under correlated
 Research for the errors was aided significantly by Claude Code
 """
 import numpy as np
+import scipy.fft
 
 from .prepsfadmom import get_phase_angles
 from .errors import joint_flux_s2n
 
 __all__ = [
     'WK_CHI2_MAX', 'kernel_ingredients', 'moment_kernels',
-    'dsums_dtheta', 'influence_kernels', 'sums_cov', 'sym3_mat',
+    'dsums_dtheta', 'influence_kernels', 'sums_cov',
+    'noise_autocov_power', 'noise_autocov', 'sums_cov_noise',
+    'sym3_mat',
     'dw_derivs', 'padmom_full_covariance',
 ]
 
 # the kernel weight support, matching FASTEXP_MAX_CHI2
 WK_CHI2_MAX = 25.0
+
+# the noise autocovariance is estimated at the lags for which at
+# least this fraction of the good pixels have a good partner
+NOISE_LAG_MIN_PAIR_FRAC = 0.5
+
+# the default largest lag, in pixels, of noise_autocov
+NOISE_AUTOCOV_MAX_LAG = 32
+
+# kernels per fft call in sums_cov_noise, bounding the memory
+SUMS_COV_NOISE_CHUNK = 16
 
 
 def kernel_ingredients(epoch, wt_cov, v0, u0):
@@ -475,6 +498,290 @@ def sums_cov(hs, weight):
     return np.tensordot(hv, hs, axes=([1, 2], [1, 2]))
 
 
+def noise_autocov_power(noise, weight=None):
+    """
+    the noise power spectrum from the autocovariance of a noise
+    image, for sums_cov_noise
+
+    The noise is taken to be stationary, with covariance
+    Cov(n_p, n_q) = C(p - q) between pixels p and q.  C is
+    estimated at each lag d by the average over the pairs of
+    good pixels separated by d,
+
+        C(d) = sum_p g_p g_{p+d} n_p n_{p+d} / N(d)
+        N(d) = sum_p g_p g_{p+d}
+
+    with g the good pixel indicator.  Both sums are
+    autocorrelations, evaluated by fft on a zero padded grid so
+    that no pair wraps around the image.  Dividing by the pair
+    count N(d) rather than the number of pixels makes the
+    estimate unbiased on a finite image with bad pixels; the raw
+    periodogram is the same sum divided by the number of pixels,
+    which is low by N(d) / npix.
+
+    Lags with few pairs are noisy and are dropped (C set to
+    zero): those with N(d) less than NOISE_LAG_MIN_PAIR_FRAC
+    times the number of good pixels, which for an unmasked image
+    keeps lags out to a fraction of the image size.  Correlations
+    on longer scales cannot be measured from the image.
+
+    The returned power is the fft of C on the padded grid; it is
+    real since C is symmetric, but not guaranteed non-negative.
+
+    Parameters
+    ----------
+    noise: (ny, nx) array
+        A realization of the noise in the frame of the image
+    weight: (ny, nx) array, optional
+        The weight map, used only to mark the good pixels,
+        weight > 0.  All pixels are good if not sent
+
+    Returns
+    -------
+    power: (py, px // 2 + 1) array or None
+        The power on the rfft half plane of the padded grid;
+        None when there are no good pixels
+    shape: (py, px)
+        The shape of the padded grid
+    good: (ny, nx) bool array
+        The good pixel indicator
+    """
+    ny, nx = noise.shape
+    if weight is None:
+        good = np.ones((ny, nx), dtype=bool)
+    else:
+        good = weight > 0
+
+    # room for lags out to half the image without wrapping
+    shape = (
+        scipy.fft.next_fast_len(ny + ny // 2, real=True),
+        scipy.fft.next_fast_len(nx + nx // 2, real=True),
+    )
+    ngood = int(good.sum())
+    if ngood == 0:
+        return None, shape, good
+
+    gf = good.astype(float)
+    # bad pixels can hold anything, including non finite values
+    gnoise = np.where(good, noise, 0.0)
+
+    num = scipy.fft.irfft2(
+        np.abs(scipy.fft.rfft2(gnoise, shape)) ** 2, shape,
+    )
+    # the pair counts are integers
+    npair = np.rint(scipy.fft.irfft2(
+        np.abs(scipy.fft.rfft2(gf, shape)) ** 2, shape,
+    ))
+
+    # lags beyond half the image would wrap on the padded grid
+    ly = np.fft.fftfreq(shape[0], d=1.0 / shape[0])[:, None]
+    lx = np.fft.fftfreq(shape[1], d=1.0 / shape[1])[None, :]
+    use = (
+        (np.abs(ly) <= ny // 2) & (np.abs(lx) <= nx // 2)
+        & (npair >= max(1.0, NOISE_LAG_MIN_PAIR_FRAC * ngood))
+    )
+    acov = np.zeros(shape)
+    acov[use] = num[use] / npair[use]
+
+    power = scipy.fft.rfft2(acov).real
+    return power, shape, good
+
+
+def noise_autocov(noise, weight=None, max_lag=NOISE_AUTOCOV_MAX_LAG):
+    """
+    the noise autocovariance from a noise image, as a lag array
+    for sums_cov_noise
+
+    The estimator is that of noise_autocov_power: at each lag the
+    average of the products over the pairs of good pixels, which
+    is unbiased on a finite image with bad pixels.  The result
+    does not depend on the size of the image it is applied to, so
+    it can be measured once on a large region, where it is well
+    determined, and used for every stamp cut from that region.
+
+    Lags with fewer good pairs than NOISE_LAG_MIN_PAIR_FRAC times
+    the number of good pixels are set to zero, as are lags beyond
+    the image.
+
+    Parameters
+    ----------
+    noise: (ny, nx) array
+        A realization of the noise
+    weight: (ny, nx) array, optional
+        The weight map, used only to mark the good pixels,
+        weight > 0.  All pixels are good if not sent
+    max_lag: int, optional
+        The largest lag kept in each direction, in pixels.  The
+        correlations beyond it are taken to be zero.  Default
+        NOISE_AUTOCOV_MAX_LAG
+
+    Returns
+    -------
+    autocov: (2 max_lag + 1, 2 max_lag + 1) array
+        The autocovariance C(dy, dx) at autocov[max_lag + dy,
+        max_lag + dx]; symmetric under (dy, dx) -> (-dy, -dx).
+        Zero when there are no good pixels
+    """
+    max_lag = int(max_lag)
+    if max_lag < 0:
+        raise ValueError(f'max_lag must be >= 0, got {max_lag}')
+
+    ny, nx = noise.shape
+    autocov = np.zeros((2 * max_lag + 1, 2 * max_lag + 1))
+    if weight is None:
+        good = np.ones((ny, nx), dtype=bool)
+    else:
+        good = weight > 0
+    ngood = int(good.sum())
+    if ngood == 0:
+        return autocov
+
+    # room for the lags kept without wrapping
+    ly, lx = min(max_lag, ny - 1), min(max_lag, nx - 1)
+    shape = (
+        scipy.fft.next_fast_len(ny + ly, real=True),
+        scipy.fft.next_fast_len(nx + lx, real=True),
+    )
+    gf = good.astype(float)
+    gnoise = np.where(good, noise, 0.0)
+    num = scipy.fft.irfft2(
+        np.abs(scipy.fft.rfft2(gnoise, shape)) ** 2, shape,
+    )
+    npair = np.rint(scipy.fft.irfft2(
+        np.abs(scipy.fft.rfft2(gf, shape)) ** 2, shape,
+    ))
+
+    iy = np.arange(-ly, ly + 1)
+    ix = np.arange(-lx, lx + 1)
+    grid = np.ix_(iy % shape[0], ix % shape[1])
+    num, npair = num[grid], npair[grid]
+    use = npair >= max(1.0, NOISE_LAG_MIN_PAIR_FRAC * ngood)
+    sub = np.zeros(num.shape)
+    sub[use] = num[use] / npair[use]
+    autocov[
+        max_lag - ly:max_lag + ly + 1, max_lag - lx:max_lag + lx + 1,
+    ] = sub
+    return autocov
+
+
+def _autocov_power(autocov, ny, nx):
+    """
+    the power of a lag array (noise_autocov) on a padded grid for
+    an (ny, nx) image, with room for its lags without wrapping
+
+    Returns
+    -------
+    power: (py, px // 2 + 1) array
+    shape: (py, px)
+    """
+    autocov = np.asarray(autocov, dtype=float)
+    if (autocov.ndim != 2 or autocov.shape[0] % 2 != 1
+            or autocov.shape[1] % 2 != 1):
+        raise ValueError(
+            'autocov must be a 2d array with odd dimensions, '
+            f'got shape {autocov.shape}'
+        )
+    my, mx = (autocov.shape[0] - 1) // 2, (autocov.shape[1] - 1) // 2
+    # lags beyond the image pair no pixels
+    ly, lx = min(my, ny - 1), min(mx, nx - 1)
+    shape = (
+        scipy.fft.next_fast_len(ny + ly, real=True),
+        scipy.fft.next_fast_len(nx + lx, real=True),
+    )
+    iy = np.arange(-ly, ly + 1)
+    ix = np.arange(-lx, lx + 1)
+    acov = np.zeros(shape)
+    acov[np.ix_(iy % shape[0], ix % shape[1])] = autocov[
+        my - ly:my + ly + 1, mx - lx:mx + lx + 1,
+    ]
+    return scipy.fft.rfft2(acov).real, shape
+
+
+def sums_cov_noise(hs, noise=None, weight=None, autocov=None):
+    """
+    the covariance of the stacked sums for stationary correlated
+    noise, from a noise image or a noise autocovariance
+
+    With C the noise autocovariance (see noise_autocov_power),
+
+        Cov(S_a, S_b) = sum_pq h_a(p) C(p - q) h_b(q)
+
+    which is sums_cov with the product h * var replaced by the
+    convolution of h with C.  The convolution is evaluated by fft
+    on a zero padded grid, so nothing wraps around the image.
+
+    C is estimated from the noise image, or taken from autocov
+    when that is sent (see noise_autocov), in which case the
+    noise image is not used.  The estimate from the noise image
+    of a small stamp is noisy; an autocov measured on a larger
+    region with the same noise is not.
+
+    The same quantity is a sum over Fourier modes of the
+    transformed kernels times the power.  Summing the modes
+    directly saves the inverse fft, but needs the transforms of
+    all the kernels at once, which on the padded grid take more
+    than twice the memory of hs; here only one chunk of kernels
+    is in k space at a time.
+
+    Bad pixels (weight <= 0) carry no noise, as in sums_cov: the
+    kernels are set to zero there, and those pixels of the noise
+    image are not used to estimate C.  The weight map is used
+    only for this; the noise level comes from the noise image or
+    autocov.
+
+    Parameters
+    ----------
+    hs: (nk, ny, nx) array
+        Influence kernels, e.g. from influence_kernels
+    noise: (ny, nx) array, optional
+        A realization of the noise in the frame of the image.
+        Required unless autocov is sent
+    weight: (ny, nx) array, optional
+        The weight map, used only to mark the good pixels,
+        weight > 0.  All pixels are good if not sent
+    autocov: 2d array with odd dimensions, optional
+        The noise autocovariance as a lag array centered on zero
+        lag, from noise_autocov.  Used in place of the estimate
+        from the noise image
+
+    Returns
+    -------
+    cov: (nk, nk) array
+        The covariance of the sums.  Zero when there are no good
+        pixels
+    """
+    nk, ny, nx = hs.shape
+    cov = np.zeros((nk, nk))
+
+    if autocov is not None:
+        if weight is None:
+            good = np.ones((ny, nx), dtype=bool)
+        else:
+            good = weight > 0
+        if not good.any():
+            return cov
+        power, shape = _autocov_power(autocov, ny, nx)
+    else:
+        if noise is None:
+            raise ValueError('send noise or autocov')
+        power, shape, good = noise_autocov_power(noise, weight=weight)
+        if power is None:
+            return cov
+
+    hg = hs * good
+    for i0 in range(0, nk, SUMS_COV_NOISE_CHUNK):
+        rows = slice(i0, i0 + SUMS_COV_NOISE_CHUNK)
+        # the convolution of the kernels with C
+        hc = scipy.fft.irfft2(
+            scipy.fft.rfft2(hg[rows], shape, axes=(-2, -1)) * power,
+            shape, axes=(-2, -1),
+        )[:, :ny, :nx]
+        cov[:, rows] = np.tensordot(hg, hc, axes=([1, 2], [1, 2]))
+
+    # symmetric up to rounding
+    return 0.5 * (cov + cov.T)
+
+
 # ---------------------------------------------------------------
 # shared symmetric-matrix differentials for the fixed-point
 # update algebra (used here and by the kdeblend full errors)
@@ -626,9 +933,11 @@ def padmom_full_covariance(
     Requires epochs prepped with store_transfer=True and an
     'obs_weight' entry per epoch (attached by the fitter when
     full_errors is set).  The noise is taken from these weight
-    maps with the pixels treated as independent; the per-mode
-    noise power of a use_noise_image prep (the epoch's err_fac2)
-    is not used.
+    maps with the pixels treated as independent, unless the
+    epochs also carry an 'obs_noise' entry (attached with
+    use_noise_image), in which case it is the stationary
+    correlated noise measured from those noise images; see
+    sums_cov_noise.
 
     Parameters
     ----------
@@ -1295,11 +1604,26 @@ def _gain1_shift_derivs(m3, mp0, sfam3):
 
 def _data_sums_cov(epochs, wt_cov, v0, u0):
     """
-    the exact covariance of the per-epoch data sums from the
-    real-space influence kernels and the pixel weight maps;
-    epoch-block-diagonal (independent noise per epoch).  None
-    when an epoch is missing the stored transfer or the weight
-    map
+    the covariance of the per-epoch data sums from the
+    real-space influence kernels; epoch-block-diagonal
+    (independent noise per epoch).
+
+    The noise comes from the weight map of each epoch, with the
+    pixels independent (sums_cov), unless the epoch carries a
+    noise image in 'obs_noise', in which case it is the
+    stationary correlated noise measured from that image
+    (sums_cov_noise) and the weight map only marks the good
+    pixels.  An epoch carrying a 'noise_autocov' lag array uses
+    that autocovariance in place of the one measured from its
+    noise image.
+
+    None when an epoch is missing the stored transfer or the
+    weight map, or when the flux sum of an epoch has no noise:
+    there are no good pixels under its kernel (or the noise
+    image is zero), and the epoch would enter the errors as
+    noiseless data.  Also None when a variance from the noise
+    image is negative; that estimate is not guaranteed positive
+    (see noise_autocov_power)
 
     Parameters
     ----------
@@ -1324,9 +1648,19 @@ def _data_sums_cov(epochs, wt_cov, v0, u0):
             return None
         G = moment_kernels(ep, wt_cov, v0, u0)
         h = influence_kernels(ep, G, w.shape)
+        noise = ep.get('obs_noise')
+        autocov = ep.get('noise_autocov')
+        if autocov is not None:
+            ecov = sums_cov_noise(h, weight=w, autocov=autocov)
+        elif noise is not None:
+            ecov = sums_cov_noise(h, noise, weight=w)
+        else:
+            ecov = sums_cov(h, w)
+        if np.any(np.diag(ecov) < 0) or not ecov[5, 5] > 0:
+            return None
         covS[
             iep * 6:(iep + 1) * 6, iep * 6:(iep + 1) * 6,
-        ] = sums_cov(h, w)
+        ] = ecov
     return covS
 
 

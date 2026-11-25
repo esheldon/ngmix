@@ -39,9 +39,8 @@
       per mode from the attached noise image.  With full_errors=True
       the errors are instead the full fixed-point covariance, which
       stays calibrated when the model does not match the object and
-      provides the cross-band flux covariance (flux_cov); these
-      errors take the noise from the weight map and do not use the
-      noise image.
+      provides the cross-band flux covariance (flux_cov).  The full
+      errors also honor use_noise_image=True.
     - The pre-PSF moment fitters (prepsfmom and prepsfadmom) now
       accept non-square images, which are zero padded to square
       internally.

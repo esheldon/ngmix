@@ -71,6 +71,7 @@ def run_prepsf_admom(
     use_noise_image=False,
     fixcen=False,
     full_errors=False,
+    noise_autocov=None,
     rng=None,
 ):
     """
@@ -143,9 +144,7 @@ def run_prepsf_admom(
         stationary correlated noise, such as that induced by metacal.
         The noise image must be an independent realization of the
         noise, in the same frame as the image (e.g. as maintained by
-        metacal).  The measured moments are unchanged.  Not used by
-        the full_errors=True errors, which replace these.  Default
-        False.
+        metacal).  The measured moments are unchanged.  Default False.
     fixcen: bool, optional
         If True, the center is held fixed at the guess instead of
         being fit; the moments are measured about that center.
@@ -158,12 +157,20 @@ def run_prepsf_admom(
         Supported for the 'gauss', 'exp' and 'dev'
         models.  The fit takes about three times longer.  When the
         full errors cannot be evaluated the default errors are
-        kept.  The full errors take the noise from the weight
-        maps, treating the pixels as independent, and do not use
-        the noise image: with use_noise_image=True they replace
-        the noise image based errors, so the two options should
-        not be combined when the noise is correlated.  Default
-        False.
+        kept.  The noise is taken from the weight maps, treating
+        the pixels as independent, or with use_noise_image=True
+        from the noise images, as stationary correlated noise; in
+        that case the weight maps only mark the good pixels
+        (weight > 0).  Default False.
+    noise_autocov: array or sequence of arrays, optional
+        The noise autocovariance for the full_errors=True errors,
+        as a lag array from ngmix.prepsfadmom.full_errors
+        noise_autocov: one array for every band, or a sequence
+        with one per band.  Used in place of the autocovariance
+        measured from the noise image of each observation, which
+        is noisy for a small stamp; measure it on a larger region
+        with the same noise.  The weight maps only mark the good
+        pixels.  It does not change the default errors.
     rng: np.random.RandomState, optional
         Random state used to generate guesses from a T guess and for
         PSF fits when choosing the smoothing automatically.
@@ -185,6 +192,7 @@ def run_prepsf_admom(
         use_noise_image=use_noise_image,
         fixcen=fixcen,
         full_errors=full_errors,
+        noise_autocov=noise_autocov,
         rng=rng,
     )
     return fitter.go(obs=obs, guess=guess, no_psf=no_psf)
@@ -332,9 +340,7 @@ class PAdmomFitter(object):
         stationary correlated noise, such as that induced by metacal.
         The noise image must be an independent realization of the
         noise, in the same frame as the image (e.g. as maintained by
-        metacal).  The measured moments are unchanged.  Not used by
-        the full_errors=True errors, which replace these.  Default
-        False.
+        metacal).  The measured moments are unchanged.  Default False.
     fixcen: bool, optional
         If True, the center is held fixed at the guess instead of
         being fit; the moments are measured about that center.
@@ -347,12 +353,20 @@ class PAdmomFitter(object):
         Supported for the 'gauss', 'exp' and 'dev'
         models.  The fit takes about three times longer.  When the
         full errors cannot be evaluated the default errors are
-        kept.  The full errors take the noise from the weight
-        maps, treating the pixels as independent, and do not use
-        the noise image: with use_noise_image=True they replace
-        the noise image based errors, so the two options should
-        not be combined when the noise is correlated.  Default
-        False.
+        kept.  The noise is taken from the weight maps, treating
+        the pixels as independent, or with use_noise_image=True
+        from the noise images, as stationary correlated noise; in
+        that case the weight maps only mark the good pixels
+        (weight > 0).  Default False.
+    noise_autocov: array or sequence of arrays, optional
+        The noise autocovariance for the full_errors=True errors,
+        as a lag array from ngmix.prepsfadmom.full_errors
+        noise_autocov: one array for every band, or a sequence
+        with one per band.  Used in place of the autocovariance
+        measured from the noise image of each observation, which
+        is noisy for a small stamp; measure it on a larger region
+        with the same noise.  The weight maps only mark the good
+        pixels.  It does not change the default errors.
     rng: np.random.RandomState, optional
         Random state used to generate guesses from a T guess and for
         PSF fits when choosing the smoothing automatically.
@@ -411,6 +425,7 @@ class PAdmomFitter(object):
         use_noise_image=False,
         fixcen=False,
         full_errors=False,
+        noise_autocov=None,
         rng=None,
     ):
 
@@ -432,6 +447,7 @@ class PAdmomFitter(object):
         self.etol = etol
         self.cen_tol = cen_tol
         self.use_noise_image = use_noise_image
+        self.noise_autocov = noise_autocov
         self.rng = rng
 
     def go(self, obs, guess=None, no_psf=False):
@@ -473,6 +489,8 @@ class PAdmomFitter(object):
                 'the star model requires positive fwhm_smooth'
             )
 
+        autocovs = self._get_noise_autocovs(len(mb_obs))
+
         epochs = []
         for band, obslist in enumerate(mb_obs):
             for tobs in obslist:
@@ -485,8 +503,14 @@ class PAdmomFitter(object):
                 )
                 if self.full_errors:
                     # the influence-kernel covariance needs the
-                    # per-pixel variances
+                    # per-pixel variances, or with use_noise_image
+                    # the noise image and the good pixels
                     ep['obs_weight'] = tobs.weight
+                    if self.use_noise_image:
+                        ep['obs_noise'] = tobs.noise
+                    if autocovs is not None:
+                        # takes the place of the noise image
+                        ep['noise_autocov'] = autocovs[band]
                 epochs.append(ep)
 
         if len(epochs) == 0:
@@ -1637,6 +1661,23 @@ class PAdmomFitter(object):
         pars[4] = Tguess * (1.0 + rng.uniform(low=-0.1, high=0.1))
         pars[5] = 1.0
         return GMixModel(pars, 'gauss')
+
+    def _get_noise_autocovs(self, nband):
+        """
+        the noise autocovariance of each band, or None when not
+        sent: one array is used for every band
+        """
+        acov = self.noise_autocov
+        if acov is None:
+            return None
+        if isinstance(acov, np.ndarray) and acov.ndim == 2:
+            return [acov] * nband
+        if len(acov) != nband:
+            raise ValueError(
+                f'got {len(acov)} noise_autocov arrays for '
+                f'{nband} bands'
+            )
+        return list(acov)
 
     def _get_rng(self):
         """
